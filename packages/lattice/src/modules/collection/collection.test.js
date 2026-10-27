@@ -19,12 +19,13 @@ const done = { fields: ['done'], read: (task) => task.done };
 function countOpen(view) {
   const keys = view.keys();
   let count = 0;
-  for (let index = 0; index < keys.length; index++) if (!view.get(/** @type {string} */ (keys[index]))?.done) count++;
+  for (let index = 0; index < keys.length; index++)
+    if (!view.get(/** @type {string} */ (keys[index]))?.done) count++;
   return count;
 }
 
 /** @type {import('./collection.js').CollectionSelection<Task, number>} */
-const open = { items: ['done'], read: countOpen };
+const open = { fields: ['done'], read: countOpen };
 
 /**
  * Three tasks: a open, b done, c open.
@@ -61,7 +62,10 @@ afterEach(() => {
 describe('storage', () => {
   test('copies items into frozen records and returns keys and records by identity until they change', () => {
     const source = { label: 'A', done: false };
-    const collection = createCollection([['a', source], ['b', { label: 'B', done: true }]]);
+    const collection = createCollection([
+      ['a', source],
+      ['b', { label: 'B', done: true }],
+    ]);
     const keys = collection.keys();
     const b = collection.get('b');
     expect(collection.get('a')).not.toBe(source);
@@ -85,9 +89,18 @@ describe('storage', () => {
   });
 
   test('rejects keys that are not strings, duplicates, and items that are not objects or have symbol keys', () => {
-    expect(() => createCollection([[/** @type {string} */ (/** @type {unknown} */ (1)), {}]])).toThrow(TypeError);
-    expect(() => createCollection([['a', {}], ['a', {}]])).toThrow(TypeError);
-    expect(() => createCollection([['a', /** @type {object} */ (/** @type {unknown} */ (null))]])).toThrow(TypeError);
+    expect(() =>
+      createCollection([[/** @type {string} */ (/** @type {unknown} */ (1)), {}]]),
+    ).toThrow(TypeError);
+    expect(() =>
+      createCollection([
+        ['a', {}],
+        ['a', {}],
+      ]),
+    ).toThrow(TypeError);
+    expect(() =>
+      createCollection([['a', /** @type {object} */ (/** @type {unknown} */ (null))]]),
+    ).toThrow(TypeError);
     expect(() => createCollection([['a', { [Symbol('x')]: 1 }]])).toThrow(TypeError);
   });
 
@@ -111,7 +124,11 @@ describe('storage', () => {
     collection.reorder(['a', 'b', 'c']);
     expect(collection.keys()).toBe(keys);
     expect(run).toHaveBeenCalledTimes(1);
-    for (const order of [['a', 'b'], ['a', 'a', 'b'], ['a', 'b', 'z']]) {
+    for (const order of [
+      ['a', 'b'],
+      ['a', 'a', 'b'],
+      ['a', 'b', 'z'],
+    ]) {
       expect(() => collection.reorder(order)).toThrow(TypeError);
     }
     expect(collection.keys()).toBe(keys);
@@ -124,8 +141,12 @@ describe('storage', () => {
     collection.watchItem('a', label, run);
     expect(() => collection.update('z', { label: 'Z' })).toThrow(TypeError);
     expect(() => collection.remove('z')).toThrow(TypeError);
-    expect(() => collection.update('a', /** @type {Partial<Task>} */ ({ colour: 'red' }))).toThrow(TypeError);
-    expect(() => collection.update('a', /** @type {Partial<Task>} */ (/** @type {unknown} */ (null)))).toThrow(TypeError);
+    expect(() => collection.update('a', /** @type {Partial<Task>} */ ({ colour: 'red' }))).toThrow(
+      TypeError,
+    );
+    expect(() =>
+      collection.update('a', /** @type {Partial<Task>} */ (/** @type {unknown} */ (null))),
+    ).toThrow(TypeError);
     expect(collection.get('a')).toBe(record);
     expect(run).toHaveBeenCalledTimes(1);
   });
@@ -185,7 +206,10 @@ describe('delivery', () => {
     const collection = tasks();
     /** @type {string[]} */
     const calls = [];
-    collection.watch({ items: ['done'], read: (view) => (calls.push('open'), countOpen(view)) }, () => {});
+    collection.watch(
+      { fields: ['done'], read: (view) => (calls.push('open'), countOpen(view)) },
+      () => {},
+    );
     collection.watchItem('a', done, () => calls.push('a'));
     collection.watchKeys(() => calls.push('keys'));
     calls.length = 0;
@@ -200,7 +224,7 @@ describe('delivery', () => {
     const collection = tasks();
     /** @type {unknown[]} */
     const changes = [];
-    collection.watchKeys((keys, change) => changes.push([keys, change]));
+    collection.watchKeys((keys, _previous, change) => changes.push([keys, change]));
     collection.insert('d', { label: 'D', done: false });
     collection.remove('a');
     collection.reorder(['d', 'c', 'b']);
@@ -215,9 +239,10 @@ describe('delivery', () => {
   test('visits only the changed item and skips collection-wide values whose fields did not change', () => {
     const collection = tasks();
     const reads = vi.fn((/** @type {Task} */ task) => task.label);
-    for (const key of ['a', 'b', 'c']) collection.watchItem(key, { fields: ['label'], read: reads }, () => {});
+    for (const key of ['a', 'b', 'c'])
+      collection.watchItem(key, { fields: ['label'], read: reads }, () => {});
     const derive = vi.fn(countOpen);
-    collection.watch({ items: ['done'], read: derive }, () => {});
+    collection.watch({ fields: ['done'], read: derive }, () => {});
     reads.mockClear();
     derive.mockClear();
     collection.update('b', { label: 'B2' });
@@ -228,10 +253,10 @@ describe('delivery', () => {
   test('re-evaluates collection-wide values on reorder, and equals suppresses an unchanged result', () => {
     const collection = tasks();
     const first = vi.fn();
-    collection.watch({ items: [], read: (view) => view.keys()[0] }, first);
+    collection.watch({ fields: [], read: (view) => view.keys()[0] }, first);
     const count = vi.fn();
     const derive = vi.fn(countOpen);
-    collection.watch({ items: ['done'], read: derive }, count);
+    collection.watch({ fields: ['done'], read: derive }, count);
     derive.mockClear();
     collection.reorder(['c', 'b', 'a']);
     expect(first).toHaveBeenLastCalledWith('c', 'a');
@@ -243,7 +268,7 @@ describe('delivery', () => {
     const collection = tasks();
     const counts = vi.fn();
     const derive = vi.fn(countOpen);
-    collection.watch({ items: ['done'], read: derive }, counts);
+    collection.watch({ fields: ['done'], read: derive }, counts);
     const rows = vi.fn();
     for (const key of ['a', 'b', 'c']) collection.watchItem(key, done, rows);
     derive.mockClear();
@@ -290,7 +315,7 @@ describe('delivery', () => {
   test('skips the commit in progress for a subscription created during delivery', () => {
     const collection = tasks();
     const late = vi.fn();
-    collection.watchKeys((_, change) => {
+    collection.watchKeys((_, _previous, change) => {
       if (change?.inserted.includes('d')) collection.watchItem('d', label, late);
     });
     collection.batch(() => {
@@ -328,21 +353,114 @@ describe('delivery', () => {
   });
 });
 
+describe('membership callback history', () => {
+  test('delivers current keys, previous successful keys and metadata in separate positions', () => {
+    const collection = tasks();
+    const initial = collection.keys();
+    const run = vi.fn();
+    collection.watchKeys(run);
+    expect(run).toHaveBeenLastCalledWith(initial, undefined, undefined);
+    collection.insert('d', { label: 'D', done: false });
+    const inserted = collection.keys();
+    expect(run).toHaveBeenLastCalledWith(inserted, initial, { inserted: ['d'], removed: [] });
+    collection.reorder(['d', 'c', 'b', 'a']);
+    expect(run).toHaveBeenLastCalledWith(collection.keys(), inserted, {
+      inserted: [],
+      removed: [],
+    });
+  });
+
+  test('keeps the last successful keys when a callback throws', () => {
+    const report = vi.fn();
+    const collection = tasks({ report });
+    const initial = collection.keys();
+    const run = vi.fn(
+      /** @type {Parameters<Tasks['watchKeys']>[0]} */ (
+        (_keys, _previous, change) => {
+          if (change?.inserted.includes('d')) throw new Error('presentation');
+        }
+      ),
+    );
+    collection.watchKeys(run);
+    collection.insert('d', { label: 'D', done: false });
+    collection.remove('d');
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenLastCalledWith(collection.keys(), initial, {
+      inserted: [],
+      removed: ['d'],
+    });
+  });
+
+  test('retains the delivered keys when the callback queues another membership write', () => {
+    const collection = tasks();
+    const initial = collection.keys();
+    /** @type {unknown[]} */
+    const seen = [];
+    collection.watchKeys((keys, previous, change) => {
+      seen.push([keys, previous, change]);
+      if (change?.inserted.includes('d')) collection.remove('a');
+    });
+    collection.insert('d', { label: 'D', done: false });
+    const inserted = ['a', 'b', 'c', 'd'];
+    expect(seen).toEqual([
+      [initial, undefined, undefined],
+      [inserted, initial, { inserted: ['d'], removed: [] }],
+      [['b', 'c', 'd'], inserted, { inserted: [], removed: ['a'] }],
+    ]);
+  });
+
+  test('reports replacement even when the key strings are unchanged', () => {
+    const collection = tasks();
+    const initial = collection.keys();
+    const run = vi.fn();
+    collection.watchKeys(run);
+    collection.batch(() => {
+      collection.remove('b');
+      collection.insert('b', { label: 'New B', done: false }, 'c');
+    });
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenLastCalledWith(collection.keys(), initial, {
+      inserted: ['b'],
+      removed: ['b'],
+    });
+  });
+});
+
 describe('subscriptions', () => {
   test('reject watching inside a batch, missing keys and unknown fields', () => {
     const collection = tasks();
-    expect(() => collection.batch(() => collection.watchItem('a', label, () => {}))).toThrow(TypeError);
+    expect(() => collection.batch(() => collection.watchItem('a', label, () => {}))).toThrow(
+      TypeError,
+    );
     expect(() => collection.batch(() => collection.watchKeys(() => {}))).toThrow(TypeError);
     expect(() => collection.batch(() => collection.watch(open, () => {}))).toThrow(TypeError);
     expect(() => collection.watchItem('z', label, () => {})).toThrow(TypeError);
     expect(() =>
-      collection.watchItem('a', /** @type {import('./collection.js').ItemSelection<Task, unknown>} */ ({ fields: [], read: () => 0 }), () => {}),
+      collection.watchItem(
+        'a',
+        /** @type {import('./collection.js').ItemSelection<Task, unknown>} */ ({
+          fields: [],
+          read: () => 0,
+        }),
+        () => {},
+      ),
     ).toThrow(TypeError);
     expect(() =>
-      collection.watchItem('a', /** @type {import('./collection.js').ItemSelection<Task, unknown>} */ (/** @type {unknown} */ ({ fields: ['colour'], read: () => 0 })), () => {}),
+      collection.watchItem(
+        'a',
+        /** @type {import('./collection.js').ItemSelection<Task, unknown>} */ (
+          /** @type {unknown} */ ({ fields: ['colour'], read: () => 0 })
+        ),
+        () => {},
+      ),
     ).toThrow(TypeError);
     expect(() =>
-      collection.watch(/** @type {import('./collection.js').CollectionSelection<Task, unknown>} */ (/** @type {unknown} */ ({ items: [1], read: () => 0 })), () => {}),
+      collection.watch(
+        /** @type {import('./collection.js').CollectionSelection<Task, unknown>} */ (
+          /** @type {unknown} */ ({ fields: [1], read: () => 0 })
+        ),
+        () => {},
+      ),
     ).toThrow(TypeError);
   });
 
@@ -366,7 +484,7 @@ describe('subscriptions', () => {
     collection.watchItem('a', label, run, { signal: controller.signal });
     controller.abort();
     const read = vi.fn(countOpen);
-    collection.watch({ items: ['done'], read }, run, { signal: controller.signal });
+    collection.watch({ fields: ['done'], read }, run, { signal: controller.signal });
     collection.update('a', { label: 'x', done: true });
     expect(run).toHaveBeenCalledTimes(1);
     expect(read).not.toHaveBeenCalled();
@@ -385,7 +503,7 @@ describe('subscriptions', () => {
     expect(() =>
       collection.watch(
         {
-          items: [],
+          fields: [],
           read: () => {
             collection.update('b', { label: 'written' });
             return 0;
@@ -411,7 +529,7 @@ describe('delivery errors', () => {
       if (value === 'boom') throw new Error('row');
     });
     collection.watchItem('a', label, after);
-    collection.watchKeys((_, change) => {
+    collection.watchKeys((_, _previous, change) => {
       if (change !== undefined) throw new Error('keys');
     });
     expect(() => collection.update('a', { label: 'boom' })).not.toThrow();
@@ -594,12 +712,139 @@ describe('transactional removal', () => {
     const references = [];
     (() => {
       const captured = { payload: new Array(1000).fill('acme') };
-      references.push(new WeakRef(captured), new WeakRef(/** @type {object} */ (collection.get('b'))));
+      references.push(
+        new WeakRef(captured),
+        new WeakRef(/** @type {object} */ (collection.get('b'))),
+      );
       collection.watchItem('b', label, () => captured.payload.length);
     })();
     collection.remove('b');
     await collectGarbage();
     expect(references.map((reference) => reference.deref())).toEqual([undefined, undefined]);
+  });
+});
+
+describe('released ownership', () => {
+  test('once-listener cleanup avoids redundant searches during normal abort', () => {
+    const collection = tasks(),
+      controller = new AbortController();
+    const detach = vi.spyOn(controller.signal, 'removeEventListener'),
+      run = vi.fn();
+    for (const key of collection.keys())
+      collection.watchItem(key, label, run, { signal: controller.signal });
+    collection.watchKeys(() => {}, { signal: controller.signal });
+    collection.watch(open, () => {}, { signal: controller.signal });
+    controller.abort();
+    expect(detach).not.toHaveBeenCalled();
+    collection.update('a', { label: 'After abort' });
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
+  test.each([false, true])(
+    'once-listener cleanup preserves initial failure with aborted=%s',
+    (abort) => {
+      const collection = tasks(),
+        controller = new AbortController(),
+        failure = new Error('initial');
+      const detach = vi.spyOn(controller.signal, 'removeEventListener');
+      const run = vi.fn(() => {
+        if (abort) controller.abort();
+        throw failure;
+      });
+      expect(() => collection.watchItem('a', label, run, { signal: controller.signal })).toThrow(
+        failure,
+      );
+      expect(detach).toHaveBeenCalledTimes(abort ? 0 : 1);
+      collection.update('a', { label: 'After failure' });
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(controller.signal.aborted).toBe(abort);
+      controller.abort();
+    },
+  );
+
+  test('removal detaches its abort listener without ending the caller signal', async () => {
+    const controller = new AbortController();
+    let reference = new WeakRef({});
+    (() => {
+      const collection = tasks();
+      reference = new WeakRef(collection);
+      collection.watchItem('a', label, () => {}, { signal: controller.signal });
+      collection.remove('a');
+    })();
+    await collectGarbage();
+    expect(reference.deref()).toBeUndefined();
+    expect(controller.signal.aborted).toBe(false);
+    controller.abort();
+  });
+
+  test.each(['item', 'aggregate', 'removal'])(
+    'releases the last selected value when %s delivery ends its own lifetime',
+    async (kind) => {
+      const collection = tasks();
+      const controller = new AbortController();
+      let reference = new WeakRef({});
+      /**
+       * Ends ownership during successful delivery.
+       * @param {{ done: boolean }} value Selected result.
+       * @returns {void}
+       */
+      const run = (value) => {
+        if (!value.done) return;
+        reference = new WeakRef(value);
+        if (kind === 'removal') collection.remove('a');
+        else controller.abort();
+      };
+      if (kind === 'aggregate') {
+        collection.watch(
+          { fields: ['done'], read: (view) => ({ done: view.get('a')?.done ?? false }) },
+          run,
+          { signal: controller.signal },
+        );
+      } else {
+        collection.watchItem(
+          'a',
+          { fields: ['done'], read: (item) => ({ done: item.done }) },
+          run,
+          { signal: controller.signal },
+        );
+      }
+      collection.update('a', { done: true });
+      await collectGarbage();
+      expect(reference.deref()).toBeUndefined();
+      controller.abort();
+    },
+  );
+
+  test('does not retain old key arrays outside an open batch', async () => {
+    /** @type {Tasks[]} */
+    const collections = [];
+    /** @type {WeakRef<readonly string[]>[]} */
+    const references = [];
+    for (const mode of ['write', 'commit', 'rollback']) {
+      (() => {
+        const collection = tasks();
+        references.push(new WeakRef(collection.keys()));
+        if (mode === 'write') collection.remove('a');
+        else if (mode === 'commit') collection.batch(() => collection.remove('a'));
+        else {
+          expect(() =>
+            collection.batch(() => {
+              collection.remove('a');
+              throw new Error('rollback');
+            }),
+          ).toThrow('rollback');
+          collection.remove('a');
+        }
+        collections.push(collection);
+      })();
+    }
+    await collectGarbage();
+    expect(references.map((reference) => reference.deref())).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(collections.map((collection) => collection.size)).toEqual([2, 2, 2]);
   });
 });
 
@@ -610,7 +855,7 @@ describe('key reuse', () => {
     collection.watchItem('b', label, old);
     /** @type {(import('./collection.js').KeysChange | undefined)[]} */
     const changes = [];
-    collection.watchKeys((_, change) => changes.push(change));
+    collection.watchKeys((_, _previous, change) => changes.push(change));
     collection.batch(() => {
       collection.remove('b');
       collection.insert('b', { label: 'B new', done: false }, 'c');
@@ -648,31 +893,4 @@ describe('key reuse', () => {
     collection.update('c', { label: 'C3' });
     expect(old).toHaveBeenCalledTimes(1);
   });
-});
-
-describe('released ownership', () => {
-  test('once-listener cleanup avoids redundant searches during normal abort', () => {
-    const collection = tasks(), controller = new AbortController();
-    const detach = vi.spyOn(controller.signal, 'removeEventListener'), run = vi.fn();
-    for (const key of collection.keys()) collection.watchItem(key, label, run, { signal: controller.signal });
-    collection.watchKeys(() => {}, { signal: controller.signal });
-    collection.watch(open, () => {}, { signal: controller.signal });
-    controller.abort();
-    expect(detach).not.toHaveBeenCalled();
-    collection.update('a', { label: 'After abort' });
-    expect(run).toHaveBeenCalledTimes(3);
-  });
-
-  test.each([false, true])('once-listener cleanup preserves initial failure with aborted=%s', (abort) => {
-    const collection = tasks(), controller = new AbortController(), failure = new Error('initial');
-    const detach = vi.spyOn(controller.signal, 'removeEventListener');
-    const run = vi.fn(() => { if (abort) controller.abort(); throw failure; });
-    expect(() => collection.watchItem('a', label, run, { signal: controller.signal })).toThrow(failure);
-    expect(detach).toHaveBeenCalledTimes(abort ? 0 : 1);
-    collection.update('a', { label: 'After failure' });
-    expect(run).toHaveBeenCalledTimes(1);
-    expect(controller.signal.aborted).toBe(abort);
-    controller.abort();
-  });
-
 });

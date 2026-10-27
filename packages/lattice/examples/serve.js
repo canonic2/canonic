@@ -13,18 +13,40 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export function serveExamples(port = 4177) {
   const server = http.createServer(async (request, response) => {
     try {
-      if (request.method !== 'GET' && request.method !== 'HEAD') { response.writeHead(405).end(); return; }
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        response.writeHead(405).end();
+        return;
+      }
       let name = decodeURIComponent(new URL(request.url ?? '/', 'http://example.com').pathname);
       if (name === '/') name = '/examples/tasks/';
       if (name.endsWith('/')) name += 'index.html';
       const file = path.resolve(root, `.${name}`);
-      if (!file.startsWith(root + path.sep) || (!name.startsWith('/examples/') && !name.startsWith('/src/'))) { response.writeHead(404).end(); return; }
-      const body = await readFile(file), type = name.endsWith('.html') ? 'text/html' : name.endsWith('.js') ? 'text/javascript' : 'text/plain';
-      response.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-store' });
+      if (
+        !file.startsWith(root + path.sep) ||
+        (!name.startsWith('/examples/') && !name.startsWith('/src/'))
+      ) {
+        response.writeHead(404).end();
+        return;
+      }
+      const body = await readFile(file),
+        type = name.endsWith('.html')
+          ? 'text/html'
+          : name.endsWith('.js')
+            ? 'text/javascript'
+            : 'text/plain';
+      response.writeHead(200, {
+        'Content-Type': `${type}; charset=utf-8`,
+        'Cache-Control': 'no-store',
+      });
       response.end(request.method === 'HEAD' ? undefined : body);
-    } catch { response.writeHead(404).end(); }
+    } catch {
+      response.writeHead(404).end();
+    }
   });
-  return new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', () => resolve(server)); });
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, '127.0.0.1', () => resolve(server));
+  });
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

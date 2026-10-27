@@ -29,7 +29,9 @@ test('treats a non-enumerable key as missing, in both argument orders', () => {
 test('treats objects with different prototypes as unequal', () => {
   expect(shallow(new Map([['a', 1]]), new Map([['a', 1]]))).toBe(true);
   expect(shallow(/** @type {object} */ (new Map()), /** @type {object} */ (new Set()))).toBe(false);
-  expect(shallow(/** @type {object} */ ({}), /** @type {object} */ (Object.create(null)))).toBe(false);
+  expect(shallow(/** @type {object} */ ({}), /** @type {object} */ (Object.create(null)))).toBe(
+    false,
+  );
 });
 
 test('treats identical values as equal and differing kinds as unequal', () => {

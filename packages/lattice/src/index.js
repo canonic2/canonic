@@ -22,3 +22,9 @@ export { shallow } from './modules/store/shallow.js';
 /** @typedef {import('./modules/store/store.js').StoreOptions} StoreOptions */
 
 /** @typedef {import('./modules/store/store.js').WatchOptions} WatchOptions */
+
+/**
+ * Read-and-subscribe access to a store.
+ * @template S The state.
+ * @typedef {import('./modules/store/store.js').StoreReader<S>} StoreReader
+ */

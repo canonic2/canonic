@@ -1,20 +1,24 @@
 # Lattice specifications
 
-The specifications are separated by purpose. Read only the area needed for the task.
+Lattice is a framework for multiple languages and native platforms. Its shared
+direction and platform implementations have separate specification owners.
+Read only the area needed for the task.
 
-| Area | Question | Contents |
-| --- | --- | --- |
-| [Framework](framework/README.md) | What does application code look like, and which approach fits? | State and presentation choices; elements, capabilities, bindings, composition and collection presentation |
-| [Architecture](architecture/README.md) | How is Lattice organized internally? | Store and package implementation design, as drafts for review |
-| [Contracts](contracts/README.md) | What must an implementation guarantee? | Detailed behavior, edge cases, performance, delivery and acceptance evidence |
+| Area                               | Owns                                                                                          | Status                                                            |
+| ---------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [Framework](framework.md)          | Shared purpose, native primitives, behavior definitions, generation and platform boundaries   | Agreed direction; cross-platform implementation remains to design |
+| [JavaScript](javascript/README.md) | JavaScript authoring conventions, contracts, implementation architecture and workload roadmap | Existing implementation and ongoing work                          |
 
-Contracts are agreed. The store core, the keyed collection, the element helpers
-and the selection declaration check are implemented; bindings are written by
-hand on the store, and the other capabilities are not implemented. The
-framework folder defines the element authoring shape, decided by measurement
-in the package's
-[research](../research/README.md); the architecture pages describe the
-implemented code.
+JavaScript is the only implemented language. Swift, Kotlin, Windows and Linux
+support are agreed product scope, not available libraries. Language choices for
+Windows and Linux, platform packaging and implementation order remain open.
 
-Each detailed requirement has one owning contract. The
-[package README](../README.md) owns setup and commands.
+The shared framework specification does not prescribe JavaScript APIs to other
+platforms. Detailed requirements in `javascript/` apply to that implementation
+unless a shared contract explicitly adopts their semantics.
+
+Internal specifications are separate from the reader-facing
+[documentation](../docs/README.md), which currently covers JavaScript.
+[Research](../research/README.md) records measured workloads and their limits;
+JavaScript evidence does not establish native-platform performance. The
+[package README](../README.md) owns current setup and development commands.

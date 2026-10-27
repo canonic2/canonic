@@ -24,7 +24,11 @@ function mount(options = {}) {
   document.body.append(container);
   containers.push(container);
   const lifetime = new AbortController();
-  const filters = mountFilters(container, { report: () => {}, ...options, signal: lifetime.signal });
+  const filters = mountFilters(container, {
+    report: () => {},
+    ...options,
+    signal: lifetime.signal,
+  });
   const fields = [...container.querySelectorAll('acme-filter-field')].map((node) => {
     if (!(node instanceof AcmeFilterField)) throw new Error('expected a filter field');
     return node;
@@ -80,7 +84,11 @@ test('typing in one field updates every field and the summary, and saves the que
   const { fields, summary } = mount({ save });
   type(/** @type {AcmeFilterField} */ (fields[0]), 'acme');
   expect(fields.map((field) => field.value)).toEqual(['acme', 'acme', 'acme']);
-  expect(fields.map((field) => field.shadowRoot?.querySelector('input')?.value)).toEqual(['acme', 'acme', 'acme']);
+  expect(fields.map((field) => field.shadowRoot?.querySelector('input')?.value)).toEqual([
+    'acme',
+    'acme',
+    'acme',
+  ]);
   expect(summary.text).toBe('Matching “acme”');
   expect(save).toHaveBeenCalledExactlyOnceWith('acme');
 });
@@ -172,13 +180,58 @@ test('rolls back a binding whose setup fails, without aborting the caller’s li
   };
   const field = new AcmeFilterField();
   const lifetime = new AbortController();
-  expect(() => bindFilterField(field, filters, { signal: lifetime.signal, report: () => {} })).toThrow(failure);
+  expect(() =>
+    bindFilterField(field, filters, { signal: lifetime.signal, report: () => {} }),
+  ).toThrow(failure);
   expect(lifetime.signal.aborted).toBe(false);
   const inputs = spyOnInputs();
   filters.setQuery('after');
   expect(inputs.value).not.toHaveBeenCalled();
   field.dispatchEvent(new CustomEvent('acme-filter-input', { detail: { value: 'ignored' } }));
   expect(save).toHaveBeenCalledExactlyOnceWith('after');
+});
+
+test('a later mounting failure releases earlier bindings without aborting the caller', () => {
+  const container = document.createElement('div');
+  containers.push(container);
+  const lifetime = new AbortController();
+  const failure = new Error('later field');
+  /** @type {AbortSignal[]} */
+  const acquired = [];
+  const watch = vi.spyOn(AcmeFilterField.prototype, 'value', 'set');
+  watch
+    .mockImplementationOnce(() => {})
+    .mockImplementationOnce(() => {
+      throw failure;
+    });
+  const add = vi.spyOn(EventTarget.prototype, 'addEventListener');
+  expect(() => mountFilters(container, { signal: lifetime.signal, report: () => {} })).toThrow(
+    failure,
+  );
+  for (const [name, , options] of add.mock.calls) {
+    if (name === 'acme-filter-input' && options && typeof options === 'object' && options.signal) {
+      acquired.push(options.signal);
+    }
+  }
+  expect(acquired.length).toBeGreaterThan(0);
+  expect(acquired.every((signal) => signal.aborted)).toBe(true);
+  expect(lifetime.signal.aborted).toBe(false);
+  expect(container.children).toHaveLength(0);
+  lifetime.abort();
+});
+
+test('cleanup attempts the remaining nodes after one removal throws', () => {
+  const report = vi.fn();
+  const { container, fields, lifetime } = mount({ report });
+  const failure = new Error('remove');
+  const last = /** @type {AcmeFilterField} */ (fields.at(-1));
+  vi.spyOn(last, 'remove').mockImplementation(() => {
+    throw failure;
+  });
+  lifetime.abort();
+  expect(container.children).toHaveLength(1);
+  expect(container.firstElementChild).toBe(last);
+  expect(report).toHaveBeenCalledExactlyOnceWith(failure);
 });
 
 test('hands a save that fails after teardown to the platform instead of report', async () => {

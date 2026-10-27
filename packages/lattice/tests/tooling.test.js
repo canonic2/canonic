@@ -87,12 +87,17 @@ test('Oxlint accepts documented code and rejects undocumented declarations and p
 }, 20000);
 
 test('the pure type-check program contains only runtime files, platform declarations and ECMAScript libraries', () => {
-  const listed = run('node_modules/typescript/bin/tsc', ['--project', 'tsconfig.pure.json', '--listFilesOnly']);
+  const listed = run('node_modules/typescript/bin/tsc', [
+    '--project',
+    'tsconfig.pure.json',
+    '--listFilesOnly',
+  ]);
   expect(listed.status, listed.stdout + listed.stderr).toBe(0);
   const files = listed.stdout.trim().split('\n');
   const unexpected = files.filter((file) => {
     const library = /\/typescript\/lib\/lib\.(es\d{4}|es5|decorators)[\w.]*\.d\.ts$/.test(file);
-    const runtime = file.startsWith(join(root, 'src')) && !/\.(browser\.)?test\.js$|\.bench\.js$/.test(file);
+    const runtime =
+      file.startsWith(join(root, 'src')) && !/\.(browser\.)?test\.js$|\.bench\.js$/.test(file);
     return !library && !runtime && file !== join(root, 'types', 'shared-platform.d.ts');
   });
   expect(unexpected).toEqual([]);
@@ -101,8 +106,16 @@ test('the pure type-check program contains only runtime files, platform declarat
 }, 20000);
 
 test('no runtime module imports test support', () => {
-  const runtime = run('node_modules/typescript/bin/tsc', ['--project', 'tsconfig.pure.json', '--listFilesOnly']);
-  const dom = run('node_modules/typescript/bin/tsc', ['--project', 'tsconfig.dom.json', '--listFilesOnly']);
+  const runtime = run('node_modules/typescript/bin/tsc', [
+    '--project',
+    'tsconfig.pure.json',
+    '--listFilesOnly',
+  ]);
+  const dom = run('node_modules/typescript/bin/tsc', [
+    '--project',
+    'tsconfig.dom.json',
+    '--listFilesOnly',
+  ]);
   const files = [...runtime.stdout.trim().split('\n'), ...dom.stdout.trim().split('\n')].filter(
     (file) => file.startsWith(join(root, 'src')) && !file.startsWith(join(root, 'src', 'testing')),
   );

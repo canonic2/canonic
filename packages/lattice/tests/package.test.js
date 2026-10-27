@@ -84,7 +84,8 @@ beforeAll(() => {
     join(consumer, 'package.json'),
     JSON.stringify({ name: 'acme-consumer', private: true, type: 'module' }),
   );
-  for (const file of readdirSync(templates)) copyFileSync(join(templates, file), join(consumer, file));
+  for (const file of readdirSync(templates))
+    copyFileSync(join(templates, file), join(consumer, file));
 }, 120000);
 
 afterAll(() => {
@@ -97,6 +98,7 @@ describe('packed archive', () => {
     expect(archived).toContain('package/src/modules/store/store.js');
     expect(archived).toContain('package/src/modules/elements/elements.js');
     expect(archived).toContain('package/src/modules/collection/collection.js');
+    expect(archived).toContain('package/src/modules/collection/synchronous-result.js');
     expect(archived).not.toContain('package/src/modules/collection/experimental.js');
     expect(archived).toContain('package/src/report.js');
     expect(archived.filter((file) => file.endsWith('.test.js'))).toEqual([]);
@@ -114,11 +116,20 @@ import * as testing from '@canonic2/lattice/testing';
 const store = root.createStore({ count: 0 });
 const seen = [];
 store.watch({ fields: ['count'], read: (state) => state.count }, (value) => seen.push(value));
-store.set({ count: 1 });
+store.update({ count: 1 });
 const items = collection.createCollection([['a', { count: 0 }]]);
+const aggregates = [];
+items.watchAggregate({
+  fields: ['count'], read: item => item.count, initial: () => 0,
+  add: (total, value) => total + value, remove: (total, value) => total - value,
+}, value => aggregates.push(value));
 const counts = [];
 items.watchItem('a', { fields: ['count'], read: (item) => item.count }, (value) => counts.push(value));
 items.update('a', { count: 1 });
+const membership = items.updateMembership;
+membership({ remove: ['a'], insert: [['a', { count: 2 }], ['b', { count: 3 }]] });
+items.update('a', { count: 4 });
+const membershipResult = { keys: [...items.keys()], a: items.get('a').count, b: items.get('b').count };
 let internal = 'imported';
 try {
   await import('@canonic2/lattice/src/modules/store/store.js');
@@ -136,15 +147,23 @@ const checked = testing.checkSelection(
   { fields: ['count'], read: (state) => state.count },
   { zero: { count: 0 } },
 );
+const collectionChecked = testing.checkCollectionSelection(
+  'total',
+  { fields: ['count'], read: (view) => view.get('a').count },
+  { one: items },
+);
 console.log(JSON.stringify({
   root: Object.keys(root).sort(),
   collection: Object.keys(collection).sort(),
   unsupported,
-  shippingHasBulk: 'updateMembership' in items,
+  hasMembership: typeof membership === 'function',
+  aggregates,
+  membershipResult,
   counts,
   elements: Object.keys(elements).sort(),
   testing: Object.keys(testing).sort(),
   unobserved: checked.unobserved,
+  collectionAccessed: collectionChecked.accessed,
   seen,
   shallow: root.shallow([1], [1]),
   internal,
@@ -156,11 +175,14 @@ console.log(JSON.stringify({
       root: ['createStore', 'shallow'],
       collection: ['createCollection'],
       unsupported: 'ERR_PACKAGE_PATH_NOT_EXPORTED',
-      shippingHasBulk: false,
+      hasMembership: true,
+      aggregates: [0, 1, 5, 7],
+      membershipResult: { keys: ['a', 'b'], a: 4, b: 3 },
       counts: [0, 1],
       elements: ['captureInputs', 'defineOnce', 'replayInputs', 'skipUpgradeAttribute'],
-      testing: ['checkSelection'],
+      testing: ['checkCollectionSelection', 'checkSelection'],
       unobserved: [],
+      collectionAccessed: ['count'],
       seen: [0, 1],
       shallow: true,
       internal: 'ERR_PACKAGE_PATH_NOT_EXPORTED',
@@ -186,6 +208,7 @@ describe('TypeScript consumer types', () => {
 
     for (const [file, code] of [
       ['invalid-collection-field.ts', 'TS2322'],
+      ['invalid-collection-membership.ts', 'TS2322'],
       ['invalid-key.ts', 'TS2353'],
       ['invalid-field.ts', 'TS2322'],
       ['invalid-run.ts', "TS2322: Type 'string' is not assignable to type 'number'"],

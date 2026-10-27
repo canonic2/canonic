@@ -18,7 +18,7 @@ is measured as a guard that this machinery causes no extra presentation work,
 not as the subject of the experiment.
 
 The answer decides the authoring shape that
-[element lifecycle](../specs/contracts/element-lifecycle.md) specifies before the
+[element lifecycle](../specs/javascript/contracts/element-lifecycle.md) specifies before the
 framework guide on elements is written. Total work decides: JavaScript
 bookkeeping, DOM changes, browser rendering, memory and idle activity, for the
 same correct, visible behavior. How pleasant a shape is to write does not.
@@ -60,18 +60,18 @@ This is reasoning, not evidence; no exploratory measurement was taken.
 Every variant implements the same element, `<acme-filter-field>`, and must meet
 the whole element lifecycle contract.
 
-| Part | Behavior |
-| --- | --- |
-| Shadow tree | A `<label>` holding a text node and an `<input type="search">`, built once by cloning a template created on the first construction |
-| Stylesheet | One constructed stylesheet created on the first construction and adopted by every instance |
-| `label` | String input reflected to the `label` attribute; writes the label's text node |
-| `value` | String input; compared with the input control's live value, written only when they differ |
-| `placeholder` | String input from the `placeholder` attribute; writes the control's `placeholder` |
-| `disabled` | Boolean input reflected to the `disabled` attribute with HTML presence semantics; writes the control's `disabled` |
-| Intent event | `acme-filter-input`, bubbling and composed, with `detail: { value }`, dispatched on the control's `input` event only while the host is connected |
-| Connection resource | A `ResizeObserver` on the host, created per connection and released through the connection signal, toggling a `compact` class on the label |
-| Move | `connectedMoveCallback` that does nothing, so `moveBefore` keeps the connection |
-| Registration | `defineAcmeFilterField(registry = customElements)` with the contract's guard |
+| Part                | Behavior                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Shadow tree         | A `<label>` holding a text node and an `<input type="search">`, built once by cloning a template created on the first construction               |
+| Stylesheet          | One constructed stylesheet created on the first construction and adopted by every instance                                                       |
+| `label`             | String input reflected to the `label` attribute; writes the label's text node                                                                    |
+| `value`             | String input; compared with the input control's live value, written only when they differ                                                        |
+| `placeholder`       | String input from the `placeholder` attribute; writes the control's `placeholder`                                                                |
+| `disabled`          | Boolean input reflected to the `disabled` attribute with HTML presence semantics; writes the control's `disabled`                                |
+| Intent event        | `acme-filter-input`, bubbling and composed, with `detail: { value }`, dispatched on the control's `input` event only while the host is connected |
+| Connection resource | A `ResizeObserver` on the host, created per connection and released through the connection signal, toggling a `compact` class on the label       |
+| Move                | `connectedMoveCallback` that does nothing, so `moveBefore` keeps the connection                                                                  |
+| Registration        | `defineAcmeFilterField(registry = customElements)` with the contract's guard                                                                     |
 
 Presentation code is shared and imported by every variant: the template and
 node lookup, the stylesheet, the four functions that write an input's value to
@@ -82,13 +82,13 @@ design.
 
 ### Variants
 
-| Variant | Role | Author writes | Lattice-side code |
-| --- | --- | --- | --- |
-| 0. Hand-written class | Control: the contract as it stands, with no shared machinery | A class with private fields, getters and setters per input, capture and replay, connection controller, registration guard | None |
-| 1. Class with helpers | Candidate | A class with hand-written setters, calling helpers for early-input capture and replay, stylesheet adoption and registration | `captureInputs(host, names)` and `replayInputs(host, pending)`, `adoptSheet(root, factory)`, `defineOnce(registry, name, constructor)` |
-| 2. Setup with closures | Candidate | `element({ inputs, attributes, styles, setup(host, root) })`, where `setup` returns one update function per input that closes over node references | One generated class per definition: accessors installed once on its prototype, values in a per-instance array indexed by input, capture and replay, attribute mapping, connection controller when `connected(host, signal)` is declared, registration guard |
-| 3. Setup with shared handlers | Candidate | `element({ inputs, attributes, styles, setup(host, root), update: { label(refs, value) } })`, where `setup` returns an object of node references and `update` holds one function per input, shared by every instance | The same generated class as variant 2, calling `update[input](refs, value)` instead of per-instance closures |
-| 4. Bare element | Diagnostic floor, never adopted | A class that builds the same shadow tree and stylesheet, with no inputs, events or connection work | None |
+| Variant                       | Role                                                         | Author writes                                                                                                                                                                                                        | Lattice-side code                                                                                                                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0. Hand-written class         | Control: the contract as it stands, with no shared machinery | A class with private fields, getters and setters per input, capture and replay, connection controller, registration guard                                                                                            | None                                                                                                                                                                                                                                                        |
+| 1. Class with helpers         | Candidate                                                    | A class with hand-written setters, calling helpers for early-input capture and replay, stylesheet adoption and registration                                                                                          | `captureInputs(host, names)` and `replayInputs(host, pending)`, `adoptSheet(root, factory)`, `defineOnce(registry, name, constructor)`                                                                                                                      |
+| 2. Setup with closures        | Candidate                                                    | `element({ inputs, attributes, styles, setup(host, root) })`, where `setup` returns one update function per input that closes over node references                                                                   | One generated class per definition: accessors installed once on its prototype, values in a per-instance array indexed by input, capture and replay, attribute mapping, connection controller when `connected(host, signal)` is declared, registration guard |
+| 3. Setup with shared handlers | Candidate                                                    | `element({ inputs, attributes, styles, setup(host, root), update: { label(refs, value) } })`, where `setup` returns an object of node references and `update` holds one function per input, shared by every instance | The same generated class as variant 2, calling `update[input](refs, value)` instead of per-instance closures                                                                                                                                                |
+| 4. Bare element               | Diagnostic floor, never adopted                              | A class that builds the same shadow tree and stylesheet, with no inputs, events or connection work                                                                                                                   | None                                                                                                                                                                                                                                                        |
 
 Framework overhead is each candidate's difference from variant 0, which is
 functionally equivalent. The bare element omits required features, so its
@@ -120,53 +120,53 @@ assignments.
 
 ### Workloads
 
-| Workload | Sequence |
-| --- | --- |
-| Typing | A real key press into the first element's control through Playwright's keyboard: native `input` event, intent event, `setQuery`, the binding assigns `value` to every element of the group; the typed element's live value already matches, the others are written |
-| Toggle | A real click on the harness button: `toggleDisabled`, the binding assigns `disabled` to every element, which reflects it |
-| Unchanged | An action that sets the same `query` and `disabled` again, so every binding assigns the current values |
-| Unrelated | `bumpRevision`: no binding reads the field, so nothing should be assigned |
-| Long-lived | Elements created and connected once, then 100 interactions alternating typing and toggle, each in its own frame |
-| Short-lived | Repeated mounting: create and connect the group, one typing interaction, a frame, remove the group; 20 cycles |
-| Lifecycle throughput | Create, connect, assign changed inputs 10 times and remove the group synchronously, with no frame in between; a secondary stress cell, since the browser may skip work for states it never displays |
-| Lifecycle steps | Definition and first construction (cold start), construction, early-input upgrade, connection, reconnection and moves with `moveBefore`, each timed separately |
-| Idle | Connected group, settled, then 2 seconds with no interaction |
+| Workload             | Sequence                                                                                                                                                                                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Typing               | A real key press into the first element's control through Playwright's keyboard: native `input` event, intent event, `setQuery`, the binding assigns `value` to every element of the group; the typed element's live value already matches, the others are written |
+| Toggle               | A real click on the harness button: `toggleDisabled`, the binding assigns `disabled` to every element, which reflects it                                                                                                                                           |
+| Unchanged            | An action that sets the same `query` and `disabled` again, so every binding assigns the current values                                                                                                                                                             |
+| Unrelated            | `bumpRevision`: no binding reads the field, so nothing should be assigned                                                                                                                                                                                          |
+| Long-lived           | Elements created and connected once, then 100 interactions alternating typing and toggle, each in its own frame                                                                                                                                                    |
+| Short-lived          | Repeated mounting: create and connect the group, one typing interaction, a frame, remove the group; 20 cycles                                                                                                                                                      |
+| Lifecycle throughput | Create, connect, assign changed inputs 10 times and remove the group synchronously, with no frame in between; a secondary stress cell, since the browser may skip work for states it never displays                                                                |
+| Lifecycle steps      | Definition and first construction (cold start), construction, early-input upgrade, connection, reconnection and moves with `moveBefore`, each timed separately                                                                                                     |
+| Idle                 | Connected group, settled, then 2 seconds with no interaction                                                                                                                                                                                                       |
 
 Every interactive workload waits for the next frame between interactions, so
 each update is rendered.
 
 ### Sizes
 
-| Size | Meaning |
-| --- | --- |
-| 1 element | A single control |
-| 10 elements | A small group, the representative size |
-| 100 elements | A typical list |
+| Size           | Meaning                                                 |
+| -------------- | ------------------------------------------------------- |
+| 1 element      | A single control                                        |
+| 10 elements    | A small group, the representative size                  |
+| 100 elements   | A typical list                                          |
 | 1,000 elements | Stress, reported as such; never decides the shape alone |
 
 ### Measures
 
-| Measure | What it shows | Evidence |
-| --- | --- | --- |
-| Interaction cost | Main-thread work per interaction, including microtasks, observer callbacks, style, layout and paint that the interaction causes, wherever they run | Profiler: deltas of Chrome DevTools Protocol `Performance.getMetrics` (`TaskDuration`, `ScriptDuration`, `RecalcStyleDuration`, `RecalcStyleCount`, `LayoutDuration`, `LayoutCount`) across a sequence of interactions, divided by their number |
-| Responsiveness, DOM completion | Time from the input event to the last targeted DOM write | Observed timing: `event.timeStamp` of the native `input` event to `performance.now()` at the end of the harness's synchronous delivery |
-| Responsiveness, presentation | Time from the input to the presented frame | Profiler: `EventTiming` events in a trace, in the traced run set only; Event Timing entries in the page do not report interactions under 16 ms, so they are not used. If the trace lacks the event in this Chromium, the record says so and reports the paint opportunity, the next animation frame, labeled as such |
-| Unchanged and unrelated updates | Work avoided, and the bookkeeping spent avoiding it | Observed: assignments, accessor calls, equality checks, presentation calls and write attempts, which should be zero for unchanged values; plus interaction cost for these workloads |
-| Write attempts | Writes the element tried to make | Observed: spies on the control's `value`, `placeholder` and `disabled` setters, `Text.data`, `setAttribute`, `removeAttribute`, `toggleAttribute` and `classList` |
-| Mutations | Changes the DOM recorded | Observed: `MutationObserver` records on the host and its shadow tree, counted separately from write attempts |
-| Lifecycle cost | Definition, construction, early-input upgrade, connection, reconnection, moves and removal | Observed timing with `performance.now()` around each synchronous step, plus interaction cost for the short-lived workload |
-| Memory | Retained memory per instance and retention after teardown | Profiler: `HeapProfiler.collectGarbage`, then `Runtime.getHeapUsage`, with the group connected and after 10 short-lived cycles |
-| Idle impact | Work running with no interaction | Observed: counts of timers, animation frames, observer callbacks and listeners added, from spies; profiler: `TaskDuration` delta over the idle period |
+| Measure                         | What it shows                                                                                                                                      | Evidence                                                                                                                                                                                                                                                                                                             |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Interaction cost                | Main-thread work per interaction, including microtasks, observer callbacks, style, layout and paint that the interaction causes, wherever they run | Profiler: deltas of Chrome DevTools Protocol `Performance.getMetrics` (`TaskDuration`, `ScriptDuration`, `RecalcStyleDuration`, `RecalcStyleCount`, `LayoutDuration`, `LayoutCount`) across a sequence of interactions, divided by their number                                                                      |
+| Responsiveness, DOM completion  | Time from the input event to the last targeted DOM write                                                                                           | Observed timing: `event.timeStamp` of the native `input` event to `performance.now()` at the end of the harness's synchronous delivery                                                                                                                                                                               |
+| Responsiveness, presentation    | Time from the input to the presented frame                                                                                                         | Profiler: `EventTiming` events in a trace, in the traced run set only; Event Timing entries in the page do not report interactions under 16 ms, so they are not used. If the trace lacks the event in this Chromium, the record says so and reports the paint opportunity, the next animation frame, labeled as such |
+| Unchanged and unrelated updates | Work avoided, and the bookkeeping spent avoiding it                                                                                                | Observed: assignments, accessor calls, equality checks, presentation calls and write attempts, which should be zero for unchanged values; plus interaction cost for these workloads                                                                                                                                  |
+| Write attempts                  | Writes the element tried to make                                                                                                                   | Observed: spies on the control's `value`, `placeholder` and `disabled` setters, `Text.data`, `setAttribute`, `removeAttribute`, `toggleAttribute` and `classList`                                                                                                                                                    |
+| Mutations                       | Changes the DOM recorded                                                                                                                           | Observed: `MutationObserver` records on the host and its shadow tree, counted separately from write attempts                                                                                                                                                                                                         |
+| Lifecycle cost                  | Definition, construction, early-input upgrade, connection, reconnection, moves and removal                                                         | Observed timing with `performance.now()` around each synchronous step, plus interaction cost for the short-lived workload                                                                                                                                                                                            |
+| Memory                          | Retained memory per instance and retention after teardown                                                                                          | Profiler: `HeapProfiler.collectGarbage`, then `Runtime.getHeapUsage`, with the group connected and after 10 short-lived cycles                                                                                                                                                                                       |
+| Idle impact                     | Work running with no interaction                                                                                                                   | Observed: counts of timers, animation frames, observer callbacks and listeners added, from spies; profiler: `TaskDuration` delta over the idle period                                                                                                                                                                |
 
 ### Run sets
 
 Instrumentation changes what it measures, so three kinds of page are kept apart:
 
-| Run set | Contains | Excludes |
-| --- | --- | --- |
-| Clean timing | Interaction cost, responsiveness to DOM completion, lifecycle steps, memory, idle `TaskDuration` | Spies, mutation observers, tracing |
-| Counted | Write attempts, mutations, harness counts, presentation calls, idle callback counts, correctness checks | Timings, which are discarded |
-| Traced | Presentation timing and a sample of full traces for inspection | Other timings |
+| Run set      | Contains                                                                                                | Excludes                           |
+| ------------ | ------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Clean timing | Interaction cost, responsiveness to DOM completion, lifecycle steps, memory, idle `TaskDuration`        | Spies, mutation observers, tracing |
+| Counted      | Write attempts, mutations, harness counts, presentation calls, idle callback counts, correctness checks | Timings, which are discarded       |
+| Traced       | Presentation timing and a sample of full traces for inspection                                          | Other timings                      |
 
 - Each sample is a fresh browser context and page that loads exactly one
   variant, so no variant's compiled code or object shapes affect another's.
@@ -189,22 +189,22 @@ a fixed word list. Every variant receives identical sequences.
 Run in every counted page, on fresh elements, for every variant except the bare
 diagnostic, which only checks markup and stylesheet:
 
-| Check | Pass condition |
-| --- | --- |
-| Import | Importing the module defines nothing and creates no stylesheet |
-| Registration | Defining twice with the same definition succeeds; a different constructor under the same name throws |
-| Constructor safety | `document.createElement` succeeds, which the platform only allows when the constructor adds no attributes or children to the host |
-| Early inputs | A pre-upgrade property wins over the attribute, the attribute reflects it, and the getter returns it before the replay runs |
-| Assignment during replay | An assignment after upgrade and before the replay keeps the newer value |
-| No capture | An element upgraded with no early properties queues no replay |
-| Targeted update | Each workload produces exactly the expected presentation calls, write attempts and mutations, decided before any run; the same in every variant |
-| Unchanged and unrelated | Zero presentation calls, zero write attempts and zero mutations |
-| Live value | After typing, assigning the previous property value writes the control; assigning the typed value writes nothing |
-| Disconnected intent | An `input` event on a disconnected element's control dispatches no event |
-| Connection resources | Observe and disconnect counts, from spies on `ResizeObserver`, return to zero after removal and stay at one per element after several reconnections |
-| Move | `moveBefore` keeps the observer: no new observe or disconnect |
-| Idle | No timer, animation frame or listener is added while idle, and no observer callback runs after settling |
-| Output | After a scripted sequence, the shadow markup and host attributes equal an expected snapshot written by hand before any run |
+| Check                    | Pass condition                                                                                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Import                   | Importing the module defines nothing and creates no stylesheet                                                                                      |
+| Registration             | Defining twice with the same definition succeeds; a different constructor under the same name throws                                                |
+| Constructor safety       | `document.createElement` succeeds, which the platform only allows when the constructor adds no attributes or children to the host                   |
+| Early inputs             | A pre-upgrade property wins over the attribute, the attribute reflects it, and the getter returns it before the replay runs                         |
+| Assignment during replay | An assignment after upgrade and before the replay keeps the newer value                                                                             |
+| No capture               | An element upgraded with no early properties queues no replay                                                                                       |
+| Targeted update          | Each workload produces exactly the expected presentation calls, write attempts and mutations, decided before any run; the same in every variant     |
+| Unchanged and unrelated  | Zero presentation calls, zero write attempts and zero mutations                                                                                     |
+| Live value               | After typing, assigning the previous property value writes the control; assigning the typed value writes nothing                                    |
+| Disconnected intent      | An `input` event on a disconnected element's control dispatches no event                                                                            |
+| Connection resources     | Observe and disconnect counts, from spies on `ResizeObserver`, return to zero after removal and stay at one per element after several reconnections |
+| Move                     | `moveBefore` keeps the observer: no new observe or disconnect                                                                                       |
+| Idle                     | No timer, animation frame or listener is added while idle, and no observer callback runs after settling                                             |
+| Output                   | After a scripted sequence, the shadow markup and host attributes equal an expected snapshot written by hand before any run                          |
 
 A variant that fails any check in any page is rejected, whatever its timings.
 
@@ -245,16 +245,17 @@ Settled while building the lab, before any run:
   take several hours on a shared machine. Each interactive workload instead
   measures blocks within one page:
 
-  | Workload | Unit | Warmup | Measured |
-  | --- | --- | --- | --- |
-  | Long-lived | A block of 7 cycles, each a key press into the first element, a click that disables the group and a click that enables it: 21 interactions, with a frame after each | 1 block | 5 blocks |
-  | Short-lived | A block of 5 cycles: mount, focus, one key press, frame, unmount, frame | 1 block | 4 blocks |
-  | Unchanged, unrelated | A block of 10 actions, each followed by a frame | 1 block | 2 blocks |
-  | Lifecycle steps, lifecycle throughput | One repetition | 5 | 10 |
+  | Workload                              | Unit                                                                                                                                                                | Warmup  | Measured |
+  | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------- |
+  | Long-lived                            | A block of 7 cycles, each a key press into the first element, a click that disables the group and a click that enables it: 21 interactions, with a frame after each | 1 block | 5 blocks |
+  | Short-lived                           | A block of 5 cycles: mount, focus, one key press, frame, unmount, frame                                                                                             | 1 block | 4 blocks |
+  | Unchanged, unrelated                  | A block of 10 actions, each followed by a frame                                                                                                                     | 1 block | 2 blocks |
+  | Lifecycle steps, lifecycle throughput | One repetition                                                                                                                                                      | 5       | 10       |
 
   Clean timing uses 20 pages per variant at 10 elements and 10 pages at the
   other sizes. Each block's metric deltas are divided by its number of
   interactions or cycles.
+
 - **Focus.** Clicking the toggle button moves focus to it, so each cycle
   focuses the first element's control before typing. The focus call is the
   same in every variant.
@@ -279,14 +280,14 @@ Settled while building the lab, before any run:
   calls are calls to the shared write functions; the `value` function compares
   with the control's live value before writing.
 
-  | Workload | Assignments | Presentation calls | Write attempts | Mutations | Other |
-  | --- | --- | --- | --- | --- | --- |
-  | Mount | 3N | 2N | 3N: label text, `label` attribute, the observer's `classList.toggle` | 2N | N observers, N observer callbacks |
-  | Typing | N | N | N − 1: every control except the typed one | 0 | |
-  | Disable, enable | N each | N each | 2N each: control `disabled`, host attribute | 2N each | |
-  | Unchanged | 3N | N: the `value` comparisons | 0 | 0 | |
-  | Unrelated | 0 | 0 | 0 | 0 | 1 action |
-  | Idle, 2 seconds | | | 0 | 0 | No timers, frames, listeners, microtasks or observer callbacks |
+  | Workload        | Assignments | Presentation calls         | Write attempts                                                       | Mutations | Other                                                          |
+  | --------------- | ----------- | -------------------------- | -------------------------------------------------------------------- | --------- | -------------------------------------------------------------- |
+  | Mount           | 3N          | 2N                         | 3N: label text, `label` attribute, the observer's `classList.toggle` | 2N        | N observers, N observer callbacks                              |
+  | Typing          | N           | N                          | N − 1: every control except the typed one                            | 0         |                                                                |
+  | Disable, enable | N each      | N each                     | 2N each: control `disabled`, host attribute                          | 2N each   |                                                                |
+  | Unchanged       | 3N          | N: the `value` comparisons | 0                                                                    | 0         |                                                                |
+  | Unrelated       | 0           | 0                          | 0                                                                    | 0         | 1 action                                                       |
+  | Idle, 2 seconds |             |                            | 0                                                                    | 0         | No timers, frames, listeners, microtasks or observer callbacks |
 
 ### Amendment after the smoke runs (2026-10-24)
 
@@ -381,23 +382,23 @@ launch Chromium.
 
 ## Conditions
 
-| Item | Value |
-| --- | --- |
-| Dates | 2026-10-24: timing 15:15–15:50 UTC, counted 15:50–15:53, traced 15:53–15:55, memory 15:55–15:59 |
-| Host | macOS 15 (Darwin 24.6), x86-64, Intel Xeon W-2140B at 3.2 GHz with 16 threads, 64 GB memory, a desktop on mains power. The plan named Apple silicon; the measurements ran on this machine instead |
-| Background load | Other sessions shared the machine. The 1-minute load average rose from 5.5 to 14 during the run sets, and the 15-minute average reached 15 |
-| Runtimes | Node 24.12.0; Chromium 156.0.8078.4 bundled with Playwright 1.64.1, new headless mode, 800 × 600 viewport |
-| Pages | Cross-origin isolated in every timing page; each page a fresh browser context loading one variant |
+| Item            | Value                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dates           | 2026-10-24: timing 15:15–15:50 UTC, counted 15:50–15:53, traced 15:53–15:55, memory 15:55–15:59                                                                                                                                                                                                                                                                                                                      |
+| Host            | macOS 15 (Darwin 24.6), x86-64, Intel Xeon W-2140B at 3.2 GHz with 16 threads, 64 GB memory, a desktop on mains power. The plan named Apple silicon; the measurements ran on this machine instead                                                                                                                                                                                                                    |
+| Background load | Other sessions shared the machine. The 1-minute load average rose from 5.5 to 14 during the run sets, and the 15-minute average reached 15                                                                                                                                                                                                                                                                           |
+| Runtimes        | Node 24.12.0; Chromium 156.0.8078.4 bundled with Playwright 1.64.1, new headless mode, 800 × 600 viewport                                                                                                                                                                                                                                                                                                            |
+| Pages           | Cross-origin isolated in every timing page; each page a fresh browser context loading one variant                                                                                                                                                                                                                                                                                                                    |
 | Measured source | Repository commit `00cff21b5e7c` with the lab's uncommitted sources, identical in all four run sets. SHA-256 prefixes: runner `9601684ffcb0`, page API `aa39d6108afd`, presentation `6be8df69b1b0`, variant 0 `93049ac3b64b`, variant 1 `d524e9a95e2d` with helpers `55f8ff536c94`, variant 2 `d15fc20ba123` with its element module `23e5db0ed8cf`, variant 3 `3114a29f83b1` with its element module `97e134203d86` |
-| Samples | Timing: 20 pages per variant at 10 elements and 10 at each other size. Counted: 3 pages per variant and size. Traced: 5 pages per candidate and size. Memory: 10 pages per variant and size. No page errored |
+| Samples         | Timing: 20 pages per variant at 10 elements and 10 at each other size. Counted: 3 pages per variant and size. Traced: 5 pages per candidate and size. Memory: 10 pages per variant and size. No page errored                                                                                                                                                                                                         |
 
 ### Confirmation and stage 2 (2026-10-24)
 
-| Run | Time, UTC | 1-minute load average, start to end | Notes |
-| --- | --- | --- | --- |
-| Confirmation timing, variants 0 and 1 | 16:46–17:08 | 27 to 62 | `bench.js` gained the stage 2 method at 16:54:06, while this run was in progress. The logged page durations add up to the run's wall-clock time, which places the change during page 39 of 100: pages 1 to 38 loaded the hashed file, page 39 is ambiguous, and pages 40 to 100 loaded the changed file. The change added a method these pages never call; it changed no measured function |
-| Confirmation memory, variants 0 and 1 | 17:08–17:10 | 60 to 59 | |
-| Stage 2, variants 0, 1 and 3 | 17:10–17:13 | 64 to 236 | |
+| Run                                   | Time, UTC   | 1-minute load average, start to end | Notes                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------- | ----------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Confirmation timing, variants 0 and 1 | 16:46–17:08 | 27 to 62                            | `bench.js` gained the stage 2 method at 16:54:06, while this run was in progress. The logged page durations add up to the run's wall-clock time, which places the change during page 39 of 100: pages 1 to 38 loaded the hashed file, page 39 is ambiguous, and pages 40 to 100 loaded the changed file. The change added a method these pages never call; it changed no measured function |
+| Confirmation memory, variants 0 and 1 | 17:08–17:10 | 60 to 59                            |                                                                                                                                                                                                                                                                                                                                                                                            |
+| Stage 2, variants 0, 1 and 3          | 17:10–17:13 | 64 to 236                           |                                                                                                                                                                                                                                                                                                                                                                                            |
 
 Same host, runtimes and isolation as the measured sets. Other sessions loaded
 the machine far beyond its 16 threads during all three runs.
@@ -422,12 +423,12 @@ ran. The authoring shape changed none of the work the browser was asked to do.
 
 ### Primary metric: interaction cost, long-lived, 10 elements
 
-| Variant | Pages | Median ms per interaction | p95 | IQR | vs 0 |
-| --- | --- | --- | --- | --- | --- |
-| 0. Hand-written class | 20 | 2.29 | 2.66 | 0.109 | |
-| 1. Class with helpers | 20 | 2.29 | 2.57 | 0.173 | −0.1% |
-| 2. Setup with closures | 20 | 2.29 | 2.58 | 0.229 | +0.3% |
-| 3. Setup with shared handlers | 20 | 2.23 | 2.61 | 0.190 | −2.7% |
+| Variant                       | Pages | Median ms per interaction | p95  | IQR   | vs 0  |
+| ----------------------------- | ----- | ------------------------- | ---- | ----- | ----- |
+| 0. Hand-written class         | 20    | 2.29                      | 2.66 | 0.109 |       |
+| 1. Class with helpers         | 20    | 2.29                      | 2.57 | 0.173 | −0.1% |
+| 2. Setup with closures        | 20    | 2.29                      | 2.58 | 0.229 | +0.3% |
+| 3. Setup with shared handlers | 20    | 2.23                      | 2.61 | 0.190 | −2.7% |
 
 No candidate differs meaningfully from the control.
 
@@ -436,12 +437,12 @@ No candidate differs meaningfully from the control.
 Reported as the reporting requirements ask; it does not decide the outcome.
 Script work per interaction in the long-lived workload:
 
-| Size | Variant 0, ms | Variant 1 | Variant 2 | Variant 3 |
-| --- | --- | --- | --- | --- |
-| 1 | 0.0674 | −4.4% | −5.1% | −3.7% |
-| 10 | 0.101 | +1.8% | −2.4% | −6.0% |
-| 100 | 0.362 | +3.7% | +3.9% | +5.0% |
-| 1,000 | 3.02 | +1.5% | +1.0% | +4.2% |
+| Size  | Variant 0, ms | Variant 1 | Variant 2 | Variant 3 |
+| ----- | ------------- | --------- | --------- | --------- |
+| 1     | 0.0674        | −4.4%     | −5.1%     | −3.7%     |
+| 10    | 0.101         | +1.8%     | −2.4%     | −6.0%     |
+| 100   | 0.362         | +3.7%     | +3.9%     | +5.0%     |
+| 1,000 | 3.02          | +1.5%     | +1.0%     | +4.2%     |
 
 None of these differences is meaningful. Script duration includes the harness,
 event dispatch and the runner's own page calls, so this method cannot resolve
@@ -450,23 +451,23 @@ interaction.
 
 ### Constraints
 
-| Constraint | Variant 1 | Variant 2 | Variant 3 |
-| --- | --- | --- | --- |
-| Interaction cost, 1 element (variant 0: 1.78 ms) | −5.2%, met | −7.1%, met | −7.1%, met |
-| Short-lived cycle, 10 elements (variant 0: 5.00 ms) | −1.9%, met | +0.2%, met | −0.4%, met |
-| Memory per instance, within 10% | Met at every size | **Not met**: +49.6% at 100, +81.5% at 1,000 | Met: +4.0% at 100, +8.0% at 1,000 |
-| Retained memory after teardown | Met, as read below | Met, as read below | Met, as read below |
-| No idle work | Met | Met | Met |
+| Constraint                                          | Variant 1          | Variant 2                                   | Variant 3                         |
+| --------------------------------------------------- | ------------------ | ------------------------------------------- | --------------------------------- |
+| Interaction cost, 1 element (variant 0: 1.78 ms)    | −5.2%, met         | −7.1%, met                                  | −7.1%, met                        |
+| Short-lived cycle, 10 elements (variant 0: 5.00 ms) | −1.9%, met         | +0.2%, met                                  | −0.4%, met                        |
+| Memory per instance, within 10%                     | Met at every size  | **Not met**: +49.6% at 100, +81.5% at 1,000 | Met: +4.0% at 100, +8.0% at 1,000 |
+| Retained memory after teardown                      | Met, as read below | Met, as read below                          | Met, as read below                |
+| No idle work                                        | Met                | Met                                         | Met                               |
 
 Memory per instance, JavaScript heap, bytes:
 
-| Size | 0 | 1 | 2 | 3 | 4, bare |
-| --- | --- | --- | --- | --- | --- |
-| 1 | 12,628 | 12,512 | 12,972 | 12,072 | 1,084 |
-| 10 | 3,392 | 3,063 | 3,289 | 2,871 | 269 |
-| 100 | 585 | 608 | 876 | 609 | 124 |
-| 1,000 | 336 | 340 | 610 | 363 | 77 |
-| Per added element, from 100 to 1,000 | 308 | 310 | 580 | 336 | 72 |
+| Size                                 | 0      | 1      | 2      | 3      | 4, bare |
+| ------------------------------------ | ------ | ------ | ------ | ------ | ------- |
+| 1                                    | 12,628 | 12,512 | 12,972 | 12,072 | 1,084   |
+| 10                                   | 3,392  | 3,063  | 3,289  | 2,871  | 269     |
+| 100                                  | 585    | 608    | 876    | 609    | 124     |
+| 1,000                                | 336    | 340    | 610    | 363    | 77      |
+| Per added element, from 100 to 1,000 | 308    | 310    | 580    | 336    | 72      |
 
 At 1 and 10 elements the figure is dominated by one-time costs, such as
 compiled code and the shared template, divided by few elements; the cost of
@@ -489,23 +490,23 @@ the results and is left to the owner.
 
 ### Secondary metrics
 
-| Metric, limit | Variant 1 | Variant 2 | Variant 3 |
-| --- | --- | --- | --- |
-| DOM completion, 5% | Within at every size | Within at every size | Within at every size; the largest, +8.8% at 100 elements, is smaller than both IQRs |
-| Lifecycle steps, 10% | Within; the largest, removal +16.1% at 1,000, is smaller than variant 1's IQR | Within | Within |
-| Cold start, 20% | Within: −2.6% to +10.7% | **Exceeded**: +23.8% to +29.3% at every size | **Exceeded**: +24.5% to +27.7% at every size |
-| Lifecycle throughput, 10% | Within | Within | Within |
-| Interaction cost at 100 and 1,000, 10% | Within | Within | Within |
-| Presentation latency, within variation | Within | Within | Within |
+| Metric, limit                          | Variant 1                                                                     | Variant 2                                    | Variant 3                                                                           |
+| -------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------- |
+| DOM completion, 5%                     | Within at every size                                                          | Within at every size                         | Within at every size; the largest, +8.8% at 100 elements, is smaller than both IQRs |
+| Lifecycle steps, 10%                   | Within; the largest, removal +16.1% at 1,000, is smaller than variant 1's IQR | Within                                       | Within                                                                              |
+| Cold start, 20%                        | Within: −2.6% to +10.7%                                                       | **Exceeded**: +23.8% to +29.3% at every size | **Exceeded**: +24.5% to +27.7% at every size                                        |
+| Lifecycle throughput, 10%              | Within                                                                        | Within                                       | Within                                                                              |
+| Interaction cost at 100 and 1,000, 10% | Within                                                                        | Within                                       | Within                                                                              |
+| Presentation latency, within variation | Within                                                                        | Within                                       | Within                                                                              |
 
 Cold start, import plus definition plus first construction, in milliseconds:
 
-| Size | 0 | 1 | 2 | 3 | 4, bare |
-| --- | --- | --- | --- | --- | --- |
-| 1 | 1.17 | 1.14 | 1.48 | 1.47 | 1.06 |
-| 10 | 1.14 | 1.18 | 1.48 | 1.43 | 1.06 |
-| 100 | 1.13 | 1.19 | 1.40 | 1.44 | 1.06 |
-| 1,000 | 1.12 | 1.24 | 1.44 | 1.43 | 1.02 |
+| Size  | 0    | 1    | 2    | 3    | 4, bare |
+| ----- | ---- | ---- | ---- | ---- | ------- |
+| 1     | 1.17 | 1.14 | 1.48 | 1.47 | 1.06    |
+| 10    | 1.14 | 1.18 | 1.48 | 1.43 | 1.06    |
+| 100   | 1.13 | 1.19 | 1.40 | 1.44 | 1.06    |
+| 1,000 | 1.12 | 1.24 | 1.44 | 1.43 | 1.02    |
 
 The generated class costs about 0.3 ms once: evaluating the element module,
 processing the definition and installing accessors. It was measured for one
@@ -534,13 +535,13 @@ Other observations, not limits in the plan:
 
 Variants 0 and 1, repeated with the same method under much heavier load:
 
-| Cell | Variant 0 | Variant 1 | vs 0 | IQR, 0 and 1 |
-| --- | --- | --- | --- | --- |
-| Primary: long-lived, 10 elements, ms per interaction | 2.52 | 2.57 | +1.8% | 0.218, 0.168 |
-| Long-lived, 1 element | 1.95 | 1.96 | +0.6% | 0.053, 0.153 |
-| Short-lived, 10 elements, ms per cycle | 5.72 | 5.64 | −1.3% | 0.401, 0.421 |
-| Cold start, 10 elements, ms | 1.17 | 1.22 | +4.3% | 0.100, 0.060 |
-| Memory per instance, 1,000 elements, bytes | 336 | 340 | +1.1% | 0, 0 |
+| Cell                                                 | Variant 0 | Variant 1 | vs 0  | IQR, 0 and 1 |
+| ---------------------------------------------------- | --------- | --------- | ----- | ------------ |
+| Primary: long-lived, 10 elements, ms per interaction | 2.52      | 2.57      | +1.8% | 0.218, 0.168 |
+| Long-lived, 1 element                                | 1.95      | 1.96      | +0.6% | 0.053, 0.153 |
+| Short-lived, 10 elements, ms per cycle               | 5.72      | 5.64      | −1.3% | 0.401, 0.421 |
+| Cold start, 10 elements, ms                          | 1.17      | 1.22      | +4.3% | 0.100, 0.060 |
+| Memory per instance, 1,000 elements, bytes           | 336       | 340       | +1.1% | 0, 0         |
 
 The primary metric, the constraints, cold start and memory confirm the first
 run: variant 1 matches variant 0, and memory repeated byte for byte. Cells at
@@ -563,11 +564,11 @@ same as for all 100 pages.
 Cold start in milliseconds, 20 pages per cell, with every definition defined
 and the pages isolated:
 
-| Definitions | Variant 0 | Variant 1 | Variant 3 | Variant 3 vs 0 |
-| --- | --- | --- | --- | --- |
-| 1 | 1.25 (IQR 0.055) | 1.34 (+7.6%) | 1.56 (+25.7%) | +0.31 ms, meaningful |
-| 5 | 1.86 (IQR 0.090) | 1.84 (−0.8%) | 2.24 (+20.8%) | +0.38 ms, meaningful |
-| 20 | 3.59 (IQR 0.250) | 3.54 (−1.5%) | 3.63 (+1.1%) | +0.04 ms, within noise |
+| Definitions | Variant 0        | Variant 1    | Variant 3     | Variant 3 vs 0         |
+| ----------- | ---------------- | ------------ | ------------- | ---------------------- |
+| 1           | 1.25 (IQR 0.055) | 1.34 (+7.6%) | 1.56 (+25.7%) | +0.31 ms, meaningful   |
+| 5           | 1.86 (IQR 0.090) | 1.84 (−0.8%) | 2.24 (+20.8%) | +0.38 ms, meaningful   |
+| 20          | 3.59 (IQR 0.250) | 3.54 (−1.5%) | 3.63 (+1.1%)  | +0.04 ms, within noise |
 
 Each added definition cost about the same in every variant: 0.12 ms for
 variant 0, 0.12 ms for variant 1 and 0.11 ms for variant 3, from the
@@ -584,13 +585,13 @@ although the cold-start interquartile ranges stayed small.
 
 ## Correctness
 
-| Variant | Counted pages | Failed checks |
-| --- | --- | --- |
-| 0. Hand-written class | 12 | None |
-| 1. Class with helpers | 12 | None |
-| 2. Setup with closures | 12 | None |
-| 3. Setup with shared handlers | 12 | None |
-| 4. Bare element | 12 | None; markup and stylesheet only |
+| Variant                       | Counted pages | Failed checks                    |
+| ----------------------------- | ------------- | -------------------------------- |
+| 0. Hand-written class         | 12            | None                             |
+| 1. Class with helpers         | 12            | None                             |
+| 2. Setup with closures        | 12            | None                             |
+| 3. Setup with shared handlers | 12            | None                             |
+| 4. Bare element               | 12            | None; markup and stylesheet only |
 
 Every non-bare variant passed import, registration, constructor safety, early
 inputs, assignment during replay, no capture, targeted update counts,
@@ -635,11 +636,11 @@ run sets also passed every check.
 
 Outcome of the decision rule:
 
-| Candidate | Primary metric | Constraints and limits | Outcome |
-| --- | --- | --- | --- |
-| 1. Class with helpers | Matches the control | All met | Adopt |
-| 2. Setup with closures | Matches the control | Memory per instance +50% to +82%; cold start +24% to +29% | Reject |
-| 3. Setup with shared handlers | Matches the control | Cold start +25% to +28%; everything else met | Reject |
+| Candidate                     | Primary metric      | Constraints and limits                                    | Outcome |
+| ----------------------------- | ------------------- | --------------------------------------------------------- | ------- |
+| 1. Class with helpers         | Matches the control | All met                                                   | Adopt   |
+| 2. Setup with closures        | Matches the control | Memory per instance +50% to +82%; cold start +24% to +29% | Reject  |
+| 3. Setup with shared handlers | Matches the control | Cold start +25% to +28%; everything else met              | Reject  |
 
 Timing does not separate the shapes: interaction cost, script duration,
 responsiveness, rendering and lifecycle steps are all within noise of the
@@ -688,10 +689,10 @@ Two adjustments were made while specifying the shape:
 
 Follow-ups:
 
-- [Element lifecycle](../specs/contracts/element-lifecycle.md) specifies the
+- [Element lifecycle](../specs/javascript/contracts/element-lifecycle.md) specifies the
   helpers, the pending-input rules, constructor application of inputs without
   an attribute, and this decision.
-- The [elements guide](../specs/framework/elements.md) shows the authoring
+- The [elements guide](../specs/javascript/framework/elements.md) shows the authoring
   shape.
 - A later stage confirms the shape through the real store and bindings once
   they exist.

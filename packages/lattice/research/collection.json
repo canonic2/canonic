@@ -1,5 +1,2053 @@
 {
   "stage": 6,
+  "integratedFinalCandidate": {
+    "status": "independent bulk allocations pass on f713077; API acceptance pending only Node/Chromium setup/small/bulk timings; no further timing without reserved quiet window or suitable host; aggregate design advances by owner instruction",
+    "independentBulkAllocations": {
+      "sourceHash": "f7130777350dde04d1e11bc9bf6e4843418a86161d882b669ca2d0913291dd74",
+      "runnerHash": "35537fa85301c6d7cd6ab5a8d47cf3aa81b4394d3dc1522fd46765ae13fd9c0d",
+      "rawReportHash": "bac9e75e5f7a85aab0824f8b779d3d3e886bedb289a7152c92671104d2e1799b",
+      "elapsedMs": 5180,
+      "phaseMs": 5138,
+      "ceilingMs": 90000,
+      "profiles": 50,
+      "ratioBounds": {
+        "append": [0.0260323081, 0.0282261502],
+        "removal": [0.0330654562, 0.0353936803],
+        "replacement": [0.052063384, 0.0536811584],
+        "replacementLifetime": [0.1099017089, 0.1137419851],
+        "mixedLifetime": [0.2935555434, 0.3123290832]
+      },
+      "outcome": "all five gates pass; sampling variation retained; no time claim",
+      "sourceDrift": [],
+      "cleanupErrors": 0,
+      "timingAttempts": 0,
+      "heapCaptures": 0,
+      "remaining": "Node/Chromium setup, small-operation and representative bulk timings only; exact prepared timing-only command recorded in Method; reuse allocation report",
+      "timingHandoffCommand": "node packages/lattice/labs/bulk-membership/quiet-window-run.js --quiet-window-confirmed --timings-only --allocation-evidence packages/lattice/labs/bulk-membership/results/2026-10-26T23-54-58-142Z-bulk-allocations/report.json",
+      "acceptance": "pending; preserve implementation; owner advances incremental aggregate proposal while timings await reserved quiet host"
+    },
+    "quietWindowAcceptanceResult": {
+      "recommendation": "withhold supported API acceptance; preserve implementation",
+      "sourceHash": "f7130777350dde04d1e11bc9bf6e4843418a86161d882b669ca2d0913291dd74",
+      "runnerHash": "c16b7de7d7055b813bf38cdf2c1088bbde22193f38a4358f4674a86bb4fe7ab8",
+      "rawReportHash": "7ff8882387af374b1562afab11e281ae634a74e89e9436de78d509ba7898f6b4",
+      "automatedAssessmentHash": "b0d0592cc7d8349681c10112225f395d35234005ad36b19779f438d130a29b9b",
+      "quietWindowConfirmed": true,
+      "admissionMs": 59951,
+      "commandOverallMs": 60058,
+      "admission": {
+        "status": "failed",
+        "observations": 11,
+        "eligibleObservations": 0,
+        "idlePercentRange": [4.8698047071, 31.3609467456],
+        "loadPerCPURange": [1.0993041992, 4.4919433594]
+      },
+      "sourceDrift": [],
+      "cleanupErrors": 0,
+      "targetProcesses": 0,
+      "timingSamples": 0,
+      "setupReplicas": 0,
+      "allocationProfiles": 0,
+      "timings": "Node/Chromium setup/small/bulk all host-deferred",
+      "bulkAllocationConfirmation": "unmeasured after failed admission; no observed allocation failure",
+      "reused": "unaffected exact-revision correctness/consumers/JSDoc; owner-resolved small allocation blockers; closed retention",
+      "attributableRegression": "none established; admission failure is host evidence only",
+      "implementation": "intact and unaccepted; no conditional acceptance commit",
+      "automaticContinuation": false
+    },
+    "quietWindowAcceptancePlan": {
+      "status": "owner quiet window confirmed; prepared command completed 2026-10-26 with admission failure and no performance samples",
+      "sourceHash": "f7130777350dde04d1e11bc9bf6e4843418a86161d882b669ca2d0913291dd74",
+      "controlHash": "1cbd0b38c8a9274c00c5a8f2692319ce84886a659ff69eef5786510fd5b96907",
+      "runnerHash": "c16b7de7d7055b813bf38cdf2c1088bbde22193f38a4358f4674a86bb4fe7ab8",
+      "reuse": "unaffected correctness/consumers/JSDoc, owner-resolved small allocations and closed retention; old measurements retain exact revision scope",
+      "overallCeilingMs": 720000,
+      "phaseCeilingMs": {
+        "admission": 60000,
+        "bulkTiming": 45000,
+        "smallTiming": 150000,
+        "setupTiming": 240000,
+        "bulkAllocations": 90000,
+        "reportCleanup": 120000,
+        "startupMargin": 15000
+      },
+      "expectedMinutesAfterLaunch": [6, 10],
+      "quietWindowReservationMinutes": [15, 20],
+      "admission": "owner confirms paused competing workloads, then one attempt: eight five-second windows, idle >=30%, load1/logicalCPU <=0.75, busy range <=15pp; maximum 60 seconds",
+      "hostFailure": "stop with timings deferred; no automatic retry, further measurements or implementation rejection",
+      "bulkTiming": "Node/Chromium, two fresh sets/runtime; append/remove/replace N=C1000, mixed N1000 C100; one warmup and seven measured actions/variant/cell",
+      "smallTiming": "existing ten controls, three warmups and 15 measured blocks/variant/cell; second fresh set only direct/batched append; tails exploratory",
+      "setupTiming": "three fresh processes/runtime; constructor10/1000 and subscribed100; five warmups and 100 measured blocks/variant/cell; p95 of block-average setup times; all clean replicas pass, conflicts inconclusive",
+      "bulkAllocationProfilesMax": 50,
+      "bulkAllocationCells": "append/removal/replacement actions N=C1000, replacement complete lifetime N=C1000, mixed complete lifetime N1000 C100; five profiles/variant/cell, one action/lifetime/profile",
+      "timerAccounting": "existing numerical limits unchanged; count every actual clock pair when deriving uncertainty bounds",
+      "resourceAllowance": {
+        "freeRamGiB": 4,
+        "artifactDiskGiB": 1,
+        "targetProcesses": "one Node child or one fresh Chromium process tree at a time, plus coordinator",
+        "nodeLifetimesMax": 7,
+        "browserLifetimesMax": 8,
+        "networkOrInstall": false
+      },
+      "excluded": "heaps, retention, passing checks, small-allocation repeats, API redesign, broad matrix and automatic continuation",
+      "completion": "one accept-or-withhold requirement table; keep implementation intact; if accepted finish docs/contracts/architecture and commit only reviewed feature work after inspecting full staged index"
+    },
+    "smallAllocationCorrection": {
+      "sourceHash": "f7130777350dde04d1e11bc9bf6e4843418a86161d882b669ca2d0913291dd74",
+      "predecessorHash": "9643138df205b2215b48726768b8c72b3cf65eacd0f91a06d462b8ded4544b91",
+      "rawReportHash": "abfcd226ddc198dc8008f4e3b6372ada475b28354363cf33cbc7ea01a907b509",
+      "savedSiteAnalysisHash": "82230146d4e9ddf126240a420fd013699b6afe3a5a8eafc5d5729fa7a4ddf160",
+      "mechanism": "count-sized operand arrays, no absent insertion buffers, scalar single removal instead of Set; operation-local only",
+      "elapsedMs": 7094,
+      "ceilingMs": 60000,
+      "profiles": 20,
+      "profilesPerVariantCell": 5,
+      "actionsPerProfile": 1000,
+      "directAppend": {
+        "controlP50": 872.784,
+        "candidateP50": 1047.936,
+        "extraBounds": [93.272, 195.472],
+        "limit": 256,
+        "outcome": "pass in focused diagnostic"
+      },
+      "singleRemoval": {
+        "controlP50": 2534.976,
+        "candidateP50": 2530.132,
+        "extraBounds": [-72.032, 81.084],
+        "limit": 256,
+        "outcome": "pass in focused diagnostic"
+      },
+      "plannerSelfDirectAppend": {
+        "predecessorRange": [506.924, 529.544],
+        "correctedRange": [353.508, 391.992]
+      },
+      "singleRemovalSetSite": {
+        "predecessorRange": [68.248, 80.16],
+        "corrected": "no sampled Set site; constructor absent in source"
+      },
+      "siteAttributionLimit": "inlining/native helpers shift site charges; complete action bounds decide allocation gates, not exact per-expression bytes",
+      "correctness": "affected package-path behavior and consumer fixtures verified after source change",
+      "preparationFailure": "one archive basename collision before browser launch/samples; preserved and repaired with unique archive names",
+      "timing": "not run; requires owner-agreed quiet window with competing workloads paused; no automatic admission attempt",
+      "retention": "closed; no new persistent owner or reopening evidence",
+      "acceptance": "unaccepted; prior large-operation measurements retain original revision scope; no broad profile repetition"
+    },
+    "remainingAcceptanceResult": {
+      "recommendation": "withhold supported API acceptance; preserve implementation; no automatic continuation",
+      "sourceHash": "9643138df205b2215b48726768b8c72b3cf65eacd0f91a06d462b8ded4544b91",
+      "rawReportHash": "99a2d9e8b178940b2ec602606be7d97559439a528866c4070371d990825521ed",
+      "collectionElapsedMs": 96487,
+      "reportingMs": 97468,
+      "overallMs": 193955,
+      "withinReportingAndOverallCeilings": true,
+      "phaseMs": {
+        "allocations": 36439,
+        "hostAdmission": 60003,
+        "bulkDeferredDispatch": 3,
+        "smallDeferredDispatch": 2,
+        "setupDeferredDispatch": 2
+      },
+      "profiles": 70,
+      "allocationEnvelopes": {
+        "batchedAppend": { "extraBytes": [163.68, 249.348], "limit": 256, "outcome": "pass" },
+        "prependTwo": { "extraBytes": [55.96, 225.824], "limit": 256, "outcome": "pass" },
+        "directAppend": { "extraBytes": [249.104, 358.216], "limit": 256, "outcome": "unresolved" },
+        "removeOne": { "extraBytes": [148.912, 294.276], "limit": 256, "outcome": "unresolved" },
+        "bulkAppend": { "ratio": [0.0277040291, 0.0289954917], "limit": 0.35, "outcome": "pass" },
+        "bulkRemoval": { "ratio": [0.0364360826, 0.0408673757], "limit": 0.35, "outcome": "pass" },
+        "mixedLifetime": { "ratio": [0.2912731319, 0.3127447969], "limit": 1.1, "outcome": "pass" }
+      },
+      "hostAdmission": {
+        "outcome": "failed; timings deferred",
+        "samples": 11,
+        "idlePercentRange": [9.2286501377, 60.9682679042],
+        "loadPerCPURange": [6.4926147461, 9.2839050293]
+      },
+      "timingSamples": 0,
+      "setupReplicas": 0,
+      "attributableRegression": "none established; unresolved allocation bounds are not passes",
+      "reused": "passing unchanged correctness/consumers/JSDoc, corrected retention and 20 replacement action/lifetime profiles",
+      "heapOrTestReruns": false,
+      "cleanupErrors": 0,
+      "expansionOrFurtherInvestigation": false
+    },
+    "retentionDecision": {
+      "sourceHash": "9643138df205b2215b48726768b8c72b3cf65eacd0f91a06d462b8ded4544b91",
+      "outcome": "framework-owned retention satisfied; heap investigation closed",
+      "basis": "shared fixture-origin strings; representation-matched lifecycle evidence; repaired structural checks find no obsolete owners or operation scratch after release",
+      "originalTemplateResultPreserved": {
+        "controlBytes": 246720,
+        "candidateBytes": 276952,
+        "deltaBytes": 30232,
+        "originalAllowanceBytes": 24672,
+        "numericalOutcome": "failed; not retrospectively passed"
+      },
+      "runtimeFootprint": "report persistent code/runtime footprint separately from application retention",
+      "reopenOnlyFor": "new evidence of framework-owned leak or attributable excess; supplied string representation or host noise alone is insufficient",
+      "apiAcceptance": "pending remaining allocation and timing gates"
+    },
+    "remainingAcceptanceProposal": {
+      "status": "approved and completed 2026-10-26; timings host-deferred; no expansion or further investigation cycle",
+      "sourceHash": "9643138df205b2215b48726768b8c72b3cf65eacd0f91a06d462b8ded4544b91",
+      "controlHash": "1cbd0b38c8a9274c00c5a8f2692319ce84886a659ff69eef5786510fd5b96907",
+      "entry": "@canonic2/lattice/collection",
+      "reuse": "unchanged passing correctness/consumers/JSDoc, calibrated retention and owner evidence, 20 replacement action/lifetime allocation profiles",
+      "newProfilesMax": 70,
+      "allocationCells": "direct/batched append N10 C1 and prepend N10 C2/remove N100 C1: 1000 fresh actions/profile; bulk append/remove N=C1000 and mixed complete lifetime N1000 C100: one action/lifetime/profile; five profiles/variant/cell",
+      "allocationLimits": {
+        "smallExtraBytesPerAction": 256,
+        "bulkCandidateControlRatio": 0.35,
+        "mixedLifetimeRatio": 1.1
+      },
+      "bulkTiming": "Node/Chromium; append/remove/replace N=C1000 and mixed N1000 C100; two fresh sets/runtime, one checked warmup plus seven fresh actions/variant/cell",
+      "smallTiming": "Node/Chromium; existing ten cells, three warmups plus 15 measured blocks/variant; repeat only direct/batched append in a second fresh set/runtime",
+      "setupTiming": "three fresh processes/runtime; constructors N10/N1000 and subscribed setup N100; five warmups plus 100 measured blocks/variant/cell; p95 of block averages",
+      "setupConflictRule": "all three clean replicas must pass; conflicting replicas inconclusive; two clean failures of same gate establish repeated observed failure, not intrinsic attribution; no fourth replica",
+      "timingLimits": {
+        "membershipMedianRatio": 0.5,
+        "smallBulkMedianPercent": 25,
+        "smallBulkMedianAbsoluteUs": 2,
+        "ordinaryAndMixedMedianPercent": 5,
+        "ordinaryAndMixedMedianAbsoluteUs": 0.5,
+        "observedTailPercent": 10,
+        "observedTailAbsoluteUs": 2
+      },
+      "sampling": "first 20ms accumulated action time, two seconds wall or action cap/block; 100000 cheap/single-change actions, 10000 others; at most 100000 prepared live items; retain original conservative clock/cap bounds",
+      "hostAdmission": "eight consecutive five-second windows within 60 seconds: idle >=30%, load1/logicalCPU <=0.75, busy range <=15 percentage points; monitor during timing",
+      "hostFailure": "defer affected timings, preserve completed clean cells; never reject implementation for host contention; no automatic retry",
+      "totalCeilingMs": 720000,
+      "phaseCeilingMs": {
+        "allocations": 90000,
+        "hostAdmission": 60000,
+        "bulkTiming": 45000,
+        "smallTiming": 150000,
+        "setupTiming": 240000,
+        "reportCleanup": 120000,
+        "startupMargin": 15000
+      },
+      "excluded": "all heaps, retention calibration/replay, passing checks, constructor allocation/D0 profiles, larger matrix",
+      "acceptance": "all remaining gates established on frozen revision; host-deferred timings leave acceptance pending; preserve candidate intact and unsupported"
+    },
+    "replacementStringDiagnosis": {
+      "sourceHash": "9643138df205b2215b48726768b8c72b3cf65eacd0f91a06d462b8ded4544b91",
+      "reportHashBeforeAssessment": "29dc5dc7a9e5a318e9700501c132793eddfdf6ef70ce2f53f3351d60c846818f",
+      "rawCoordinatorMs": 62082,
+      "reportReconciliationMs": 354119,
+      "reportAllowanceExceeded": true,
+      "recordedOverallMs": 416201,
+      "overallCeilingMs": 480000,
+      "phaseMs": { "retention": 59447, "replacementAllocations": 2604 },
+      "heaps": 58,
+      "profiles": 20,
+      "hiddenOwnerCheck": "passed all new captures and existing eight case sequences using per-snapshot structural owners and positive controls; no cross-snapshot identity comparison",
+      "strings": "1000 caller-generated cons-string targets shared with stored fields in both variants; oracle flattens their payloads; wrapper elimination depends on GC history",
+      "unnecessaryFrameworkOwner": "none found; supplied record containers and disposed owners release",
+      "runtimeCorrection": "none; keep field-copy semantics and independent cleanup fixes",
+      "releasedApplicationBytes": {
+        "nodeTemplateDetailed": [278720, 276952],
+        "nodeTemplateUnprobed": [246720, 276952],
+        "nodeFlatDetailed": [246496, 244912],
+        "nodeFlatUnprobed": [246496, 244912],
+        "chromiumFlat": [155272, 154388]
+      },
+      "templateGate": "unprobed Node +30232 bytes still exceeds unchanged 24672-byte allowance; original failure preserved",
+      "replacementActionAllocation": {
+        "nPerVariant": 5,
+        "controlP50": 12438644,
+        "candidateP50": 698516,
+        "ratioBounds": [0.05498135933467164, 0.05671795584081244],
+        "limit": 0.35,
+        "outcome": "pass"
+      },
+      "replacementLifetimeAllocation": {
+        "nPerVariant": 5,
+        "controlP50": 13219868,
+        "candidateP50": 1523112,
+        "ratioBounds": [0.11202060771940556, 0.11682807981878349],
+        "limit": 1.1,
+        "outcome": "pass"
+      },
+      "timing": "deferred; no primary timing or setup work",
+      "acceptance": "unestablished; template-mode byte exceedance, deferred timings and unrelated remaining requirements retain their status"
+    },
+    "correctedContinuationResult": {
+      "recommendation": "reject for this version",
+      "sourceHash": "9643138df205b2215b48726768b8c72b3cf65eacd0f91a06d462b8ded4544b91",
+      "rawCoordinatorMs": 179857,
+      "phaseMs": { "preflightAndHostAdmission": 75247, "retention": 104552 },
+      "heaps": 60,
+      "profiles": 0,
+      "primaryTimingSamples": 0,
+      "setupReplicas": 0,
+      "reportHashBeforeAssessment": "c94d3586c93cbb6d4dd90599bd12a2609a0b9ff4955958a458e0c0a6aa3e249c",
+      "calibration": {
+        "nodeDetectedBytes": 137056,
+        "chromiumDetectedBytes": 133348,
+        "bothViewAndBufferReleased": true,
+        "toleranceBytes": 16384
+      },
+      "chromiumLifecycle": "passed four replacement/rollback/churn cases with stable identities and zero obsolete tracked objects",
+      "nodeExposedWeakRelease": "passed records/keys/methods/signal release and churn milestones",
+      "nodeHiddenRelease": "unresolved: collection heap IDs change across capture sessions; baseline-ID intersections invalid; classifiers miss known live incarnation/subscription objects",
+      "nodeLiveApplicationBytes": {
+        "commitChanged": {
+          "control": 248576,
+          "candidate": 278776,
+          "extra": 30200,
+          "allowance": 24857.6
+        },
+        "commitAbortedHeld": {
+          "control": 246136,
+          "candidate": 276384,
+          "extra": 30248,
+          "allowance": 24613.6
+        }
+      },
+      "liveStorageAttribution": "1000 record-owned concatenated-string wrappers, 32000 shallow bytes; captured application-storage gate failure persists after code/shape separation; intrinsic cause and repeatability unestablished",
+      "timings": "host-inconclusive; admission idle 7.49-25.26%, load1/logicalCPU 1.285-1.534",
+      "allocations": "unmeasured after predeclared live-storage stop; host did not stop retention",
+      "footprint": "code/shape/native/string and raw used-heap categories reported separately; no new byte gate",
+      "reportingAllowanceExceeded": true,
+      "measurementCeilingsExtended": false,
+      "implementation": "unchanged, intact, unaccepted; no new experimental copy; owner final decision pending"
+    },
+    "correctedContinuationProposal": {
+      "status": "approved before measurements; reported with planned live-storage early stop and explicit incomplete requirements",
+      "approvalAmendment": "contention makes affected timings inconclusive; continue independent retention and allocation where valid within existing ceilings; do not rerun unchanged passing tests; leave implementation intact",
+      "totalCeilingMs": 960000,
+      "amendment": "16-minute allowance replaces prior 13-minute allowance only if approved; numerical gates and call/preparation caps unchanged",
+      "phaseCeilingMs": {
+        "preflightAndAdmission": 90000,
+        "retention": 240000,
+        "directSmall": 150000,
+        "bulk": 90000,
+        "setup": 240000,
+        "reportAndCleanup": 150000
+      },
+      "executionOrder": [
+        "preflightAndAdmission",
+        "retention",
+        "directSmall",
+        "bulk",
+        "setup",
+        "reportAndCleanup"
+      ],
+      "hostAdmission": "eight consecutive five-second windows: idle >=30%, load1/logicalCPU <=0.75, busy range <=15 percentage points; 60-second maximum wait",
+      "contention": "preserve affected cells as host-inconclusive; no substitution or extra replica",
+      "calibrationHeapsMax": 4,
+      "replacementRollbackHeapsMax": 40,
+      "churnHeapsMax": 16,
+      "retentionCases": "Node/Chromium x B0/B1 x commit/rollback; N=C=1000; 100 N=100 churn lifetimes/outcome",
+      "smallTiming": "all ten small cells, three warmups plus fifteen blocks; repeat direct/batched append only in a second fresh process/set per runtime",
+      "prependAmendment": "256 fresh matched fixtures/chunk, same 10000-action cap; short cells pass only with conservative p50/p95 candidate upper <=2us and clock uncertainty <=0.1us/action",
+      "smallAllocationProfilesMax": 40,
+      "largeAndLifetimeAllocationProfilesMax": 50,
+      "bulkTiming": "Node/Chromium, two fresh sets, one checked warmup plus seven fresh actions/variant; append/remove/replace N=C=1000, mixed N=1000 C=100",
+      "setup": "three fresh processes per runtime, three cells, five warmups plus one hundred measured blocks per variant; all admitted uncontended replicas must fit",
+      "acceptance": "all requirements established on frozen revision; otherwise recommend rejection with failure, contention, measurement limitation and unmeasured requirements distinguished",
+      "automaticContinuation": false,
+      "implementation": "preserve one integrated candidate, tests and independent cleanup fixes regardless of recommendation"
+    },
+    "correctionCheckpoint": {
+      "calibrationCommit": "33573096938e174ff54198a5a462e641804fbb04",
+      "candidateCommit": "f9aed61b29f0250664d35cb5fe0ab4b283ea00d1",
+      "workingCollectionHash": "9643138df205b2215b48726768b8c72b3cf65eacd0f91a06d462b8ded4544b91",
+      "calibrationProbeHash": "31a297a3ca073c4fd640caf0c9bc812e0832d599fb83d63e815a25a75a434935",
+      "calibrationRunnerHash": "3df11f379e60a3a419820fdf032ea6edf7946a570eae0c6d457f071fc1ec633e",
+      "payloadBytes": 131072,
+      "payload": "Uint8Array with weak view and buffer identities; both must release",
+      "directAppend": "validated single insertion copies order directly; no general per-key loop or two empty removal buffers",
+      "checksAndMeasurements": "no performance measurements on corrected revision; verification reported separately; earlier performance results preserved at original hashes",
+      "acceptance": "unresolved; passing correctness and earlier speedups do not establish remaining requirements",
+      "runtime": "one integrated candidate; independent regular cleanup fixes retained"
+    },
+    "integratedSourceHash": "a34241150895ac77b61cc90094851c8657fd2b0790a7c21ca7ee72c988634c3f",
+    "measuredPrototypeHash": "11448bf7cb9391b3d7751478a7df4006c912aa4f8db5ed0d9844176e789fb0c6",
+    "preservedControlHash": "1cbd0b38c8a9274c00c5a8f2692319ce84886a659ff69eef5786510fd5b96907",
+    "canonicalExecutableHash": "211a9037a90014846aa82788f0cd8556e4bb063c0e460257c53bdfa3256bdd7c",
+    "runtimeSyntaxEquivalentToPrototype": true,
+    "entry": "@canonic2/lattice/collection",
+    "experimentalEntry": false,
+    "checks": "behavioral and consumer coverage is distinct from performance acceptance",
+    "finalAcceptance": {
+      "recommendation": "reject for this version",
+      "elapsedMs": 190663,
+      "loadBefore": [33.50830078125, 43.11572265625, 37.7021484375],
+      "loadAfter": [275.953125, 138.34423828125, 76.80810546875],
+      "attributionLimit": "severe shared-host contention; observed limit failures do not prove intrinsic regressions",
+      "phaseElapsedMs": { "V": 25406, "M": 1375, "T": 163820 },
+      "reportHashBeforeAssessment": "5f127a5296ad8b8e4882727b1417e5726268d3dfec8e0d1cf42bda84158ac100",
+      "bulk": "16 comparisons complete; removal/replacement/mixed pass both sets in both runtimes; append unresolved against IQR rule",
+      "setup": "4 of 18 cells complete; Node N10 p50 exceeds limits in two fresh replicas; planned early stop; no intrinsic-cause claim",
+      "small": "20 cells attempted; Node/Chromium prepend cap-limited; direct append and several browser controls exceed observed limits",
+      "retention": "unresolved: once-only Node calibration intended 128KiB but backing store was 262160 bytes; selected value released; no calibration extension",
+      "attributableCalibrationBytes": [273832, 5856],
+      "mainAndChurnHeaps": 0,
+      "allocationProfiles": 0,
+      "persistentFootprint": "candidate-only calibration absolute categories reported separately; matched control delta unmeasured",
+      "implementation": "intact, unsupported, unaccepted; owner final decision pending"
+    },
+    "acceptanceProposal": {
+      "totalCeilingMs": 780000,
+      "checksCeilingMs": 180000,
+      "timingCeilingMs": 300000,
+      "memoryCeilingMs": 240000,
+      "reportAndCleanupHeadroomMs": 60000,
+      "setupReplicasPerRuntime": 3,
+      "setupMeasuredBlocks": 100,
+      "conflictingSetupReplicas": "inconclusive; recommend rejection for this version",
+      "retentionInterpretation": "approved: application ownership graph under existing byte/release/churn limits, shared code/runtime separately reported; original whole-heap failure preserved",
+      "emptyControlAdequacyClarification": "approved: conservative block-average bounds; empty bulk p50/p95 <=2 microseconds, ordinary empty batch p50 <=0.5 and p95 <=2; clock error <=0.1 per call; numerical gates unchanged",
+      "freshBulkTimingClarification": "approved: fixed individual actions, conservative empty-timer uncertainty; no large calibration loop",
+      "conflictingSetupAttribution": "insufficient acceptance evidence; not proof of intrinsic regression",
+      "rejectedImplementation": "leave reviewed changes intact for owner final decision",
+      "automaticContinuation": false,
+      "incompleteRequiredEvidence": "recommend reject for this version"
+    }
+  },
+  "matchedConstructorDiagnostic": {
+    "date": "2026-10-26",
+    "status": "diagnostic complete; no adoption",
+    "elapsedMs": 95401,
+    "ceilingMs": 300000,
+    "combinedWithPriorRunMs": 216661,
+    "reportHash": "391b3573fe8950a08e7d10c6c53a9c230dee883c66ba9a147bef8ad6871f781d",
+    "revision": "36443c2d104ed03e764d5737b649c91d1bccf2a6",
+    "sourceHashes": {
+      "control": "1cbd0b38c8a9274c00c5a8f2692319ce84886a659ff69eef5786510fd5b96907",
+      "direct": "11448bf7cb9391b3d7751478a7df4006c912aa4f8db5ed0d9844176e789fb0c6",
+      "unusedDiagnostic": "e1b58a4355ca84ba2af7ad093c8b2e36c5c9b7ae7410bcb53eb94e773c23badb"
+    },
+    "host": {
+      "node": "v24.12.0",
+      "os": "24.6.0",
+      "arch": "x64",
+      "cpu": "Intel(R) Xeon(R) W-2140B CPU @ 3.20GHz",
+      "memory": 68719476736,
+      "load": [10.5888671875, 14.71875, 18.265625],
+      "chromium": "156.0.8078.4"
+    },
+    "phaseElapsedMs": { "A": 53560, "B": 31933, "C": 3098, "D": 4198 },
+    "qualification": "15-block p95 exploratory; 40-block tails limited; no automatic continuation",
+    "statColumns": ["n", "p50", "p95", "max", "iqr"],
+    "blockEvidenceColumns": ["minCalls", "maxCalls", "minimumBlockMs", "shortBlocks"],
+    "setup": [
+      {
+        "runtime": "node",
+        "replica": 1,
+        "cell": "constructor-10",
+        "status": "complete",
+        "us": {
+          "B0": [40, 7.07505989583342, 11.93955859374921, 18.133768750000012, 3.352596623346953],
+          "B1": [40, 5.609902901785725, 12.769522321428235, 13.682955078124891, 3.4090130208334433],
+          "D0": [40, 5.426031250000089, 12.511642857142188, 13.504538411458414, 4.1222591145840815]
+        },
+        "blockEvidence": {
+          "B0": [1280, 4352, 20.019588999999883, 0],
+          "B1": [1536, 4352, 20.004618000001756, 0],
+          "D0": [1536, 4352, 20.005988000000343, 0]
+        },
+        "pairedRatios": {
+          "B1": [40, 0.972665307339739, 2.3064109834312054, 2.537014477479173, 0.8972796771333581],
+          "D0": [40, 0.9348347738192606, 2.4054736703532487, 2.600961281878627, 0.9894548790233962]
+        }
+      },
+      {
+        "runtime": "node",
+        "replica": 1,
+        "cell": "constructor-1000",
+        "status": "complete",
+        "us": {
+          "B0": [15, 385.62982692306275, 611.7272499999823, 611.7272499999823, 258.39941339872325],
+          "B1": [15, 373.3516785713878, 785.7539642857319, 785.7539642857319, 131.19191742082864]
+        },
+        "blockEvidence": {
+          "B0": [36, 72, 20.023232000000462, 0],
+          "B1": [28, 72, 20.091753000000608, 0]
+        },
+        "pairedRatios": {
+          "B1": [15, 0.9698966259171075, 1.914776414377463, 1.914776414377463, 0.4996362774880577]
+        }
+      },
+      {
+        "runtime": "node",
+        "replica": 1,
+        "cell": "subscribed-100",
+        "status": "complete",
+        "us": {
+          "B0": [15, 124.82992045456534, 3511.9381249998014, 3511.9381249998014, 33.30743576392416],
+          "B1": [15, 128.26589673914876, 174.91960000000594, 174.91960000000594, 36.521557291693966]
+        },
+        "blockEvidence": {
+          "B0": [8, 208, 20.299490999997033, 0],
+          "B1": [120, 208, 20.201640000002953, 0]
+        },
+        "pairedRatios": {
+          "B1": [
+            15, 0.9782795298164974, 1.4904839819122135, 1.4904839819122135, 0.45403807098962035
+          ]
+        }
+      },
+      {
+        "runtime": "node",
+        "replica": 2,
+        "cell": "constructor-10",
+        "status": "complete",
+        "us": {
+          "B0": [40, 8.720188701922474, 13.712612165178685, 232.6072929687495, 4.141538812099339],
+          "B1": [40, 7.456399857954533, 11.395507486979374, 91.4865595703125, 3.5433812767093062],
+          "D0": [40, 7.287013494318211, 10.57733886718748, 29.372121930803626, 4.355712215909185]
+        },
+        "blockEvidence": {
+          "B0": [256, 4096, 20.057368999999653, 0],
+          "B1": [256, 4096, 20.000559999999496, 0],
+          "D0": [2048, 4352, 20.10692700000027, 0]
+        },
+        "pairedRatios": {
+          "B1": [40, 1.029776099622103, 1.882571481712318, 8.495215006468095, 0.6799395517227577],
+          "D0": [40, 0.9613405583810254, 1.8043241356889697, 4.498653765178789, 0.8624961067468916]
+        }
+      },
+      {
+        "runtime": "node",
+        "replica": 2,
+        "cell": "constructor-1000",
+        "status": "complete",
+        "us": {
+          "B0": [15, 316.23462499997856, 1132.3669374999668, 1132.3669374999668, 271.4438666666357],
+          "B1": [15, 319.37264062503345, 1040.523437499985, 1040.523437499985, 290.24206108598923]
+        },
+        "blockEvidence": {
+          "B0": [32, 68, 20.196750000001884, 0],
+          "B1": [32, 72, 20.05614500000138, 0]
+        },
+        "pairedRatios": {
+          "B1": [15, 0.9820344955797504, 3.2972384170716986, 3.2972384170716986, 1.2086996964962495]
+        }
+      },
+      {
+        "runtime": "node",
+        "replica": 2,
+        "cell": "subscribed-100",
+        "status": "complete",
+        "us": {
+          "B0": [
+            15, 140.91682894735115, 1110.6137499999704, 1110.6137499999704, 42.048103013882624
+          ],
+          "B1": [15, 147.2010131578827, 256.6304750000427, 256.6304750000427, 58.97593442035071]
+        },
+        "blockEvidence": {
+          "B0": [32, 192, 20.086566999998468, 0],
+          "B1": [80, 192, 20.012752000004184, 0]
+        },
+        "pairedRatios": {
+          "B1": [15, 1.0125020947972683, 1.8770813530697046, 1.8770813530697046, 0.4905427479196566]
+        }
+      },
+      {
+        "runtime": "node",
+        "replica": 3,
+        "cell": "constructor-10",
+        "status": "complete",
+        "us": {
+          "B0": [40, 9.041451388888788, 16.992441406250084, 22.705435546874764, 2.9625475260411003],
+          "B1": [40, 6.893673177083226, 18.879739843749732, 24.063432291666114, 3.530213783482454],
+          "D0": [40, 6.441229567307698, 11.32687617187429, 31.951566406250038, 1.8592588304919753]
+        },
+        "blockEvidence": {
+          "B0": [1024, 4352, 20.112648999999806, 0],
+          "B1": [1280, 4096, 20.002575999999863, 0],
+          "D0": [768, 4096, 20.073024999999916, 0]
+        },
+        "pairedRatios": {
+          "B1": [
+            40, 0.8752253047024202, 1.8245663826123348, 2.0181034328684775, 0.3945506723424038
+          ],
+          "D0": [40, 0.730749558241239, 1.4826404967964535, 2.656387644807843, 0.42653894062668907]
+        }
+      },
+      {
+        "runtime": "node",
+        "replica": 3,
+        "cell": "constructor-1000",
+        "status": "complete",
+        "us": {
+          "B0": [15, 339.5369166666721, 1024.779099999978, 1024.779099999978, 221.99186974781702],
+          "B1": [15, 352.3030833332996, 637.7639375000399, 637.7639375000399, 137.90447671567784]
+        },
+        "blockEvidence": {
+          "B0": [20, 72, 20.195970000005218, 0],
+          "B1": [48, 72, 20.055206999999427, 0]
+        },
+        "pairedRatios": {
+          "B1": [15, 1.0311566114728874, 2.05455995305215, 2.05455995305215, 0.8681372748547577]
+        }
+      },
+      {
+        "runtime": "node",
+        "replica": 3,
+        "cell": "subscribed-100",
+        "status": "complete",
+        "us": {
+          "B0": [15, 137.0382828947162, 323.26018749994034, 323.26018749994034, 38.1213264066557],
+          "B1": [15, 139.0734305555586, 203.52142968751252, 203.52142968751252, 24.265189285705446]
+        },
+        "blockEvidence": {
+          "B0": [64, 208, 20.000189000003047, 0],
+          "B1": [112, 200, 20.026574000000437, 0]
+        },
+        "pairedRatios": {
+          "B1": [15, 1.0553265210218798, 1.708083557369786, 1.708083557369786, 0.3441620873210137]
+        }
+      },
+      {
+        "runtime": "chromium",
+        "replica": 1,
+        "cell": "constructor-10",
+        "status": "complete",
+        "us": {
+          "B0": [40, 4.40429687862181, 5.811941976259861, 8.248046902008355, 1.2717957643270132],
+          "B1": [40, 4.743795978891499, 9.457031241618097, 11.84814452426508, 1.7089843716738482],
+          "D0": [40, 4.2166941260036666, 10.164930588669247, 16.08537945763341, 1.2511793953695016]
+        },
+        "blockEvidence": {
+          "B0": [2560, 6144, 20.01500004529953, 0],
+          "B1": [2048, 5120, 20.050000071525574, 0],
+          "D0": [1792, 5888, 20.009999930858612, 0]
+        },
+        "pairedRatios": {
+          "B1": [40, 1.2380719204640356, 2.31000000780279, 2.6764239485969084, 0.6051522323899973],
+          "D0": [40, 0.9962990353941941, 2.49255004420532, 3.9718901972390124, 0.571789546587647]
+        }
+      },
+      {
+        "runtime": "chromium",
+        "replica": 1,
+        "cell": "constructor-1000",
+        "status": "complete",
+        "us": {
+          "B0": [15, 277.9861092567444, 345.333335796992, 345.333335796992, 29.88389960198947],
+          "B1": [15, 282.4999996357494, 374.02777787711887, 374.02777787711887, 91.64828503979189]
+        },
+        "blockEvidence": {
+          "B0": [60, 96, 20.00499987602234, 0],
+          "B1": [60, 100, 20.059999883174896, 0]
+        },
+        "pairedRatios": {
+          "B1": [15, 1.0007225369174544, 1.4704272381085048, 1.4704272381085048, 0.5790532347279848]
+        }
+      },
+      {
+        "runtime": "chromium",
+        "replica": 1,
+        "cell": "subscribed-100",
+        "status": "complete",
+        "us": {
+          "B0": [
+            15, 138.61842100557527, 194.47115866037515, 194.47115866037515, 16.430557891726494
+          ],
+          "B1": [15, 146.27976360775176, 164.17968505993485, 164.17968505993485, 23.504261100439834]
+        },
+        "blockEvidence": {
+          "B0": [104, 160, 20.08499985933304, 0],
+          "B1": [128, 168, 20.109999775886536, 0]
+        },
+        "pairedRatios": {
+          "B1": [15, 1.0552692964369312, 1.186929345874522, 1.186929345874522, 0.15320316809489953]
+        }
+      },
+      {
+        "runtime": "chromium",
+        "replica": 2,
+        "cell": "constructor-10",
+        "status": "complete",
+        "us": {
+          "B0": [40, 7.878906303085387, 38.34960927876333, 50.16927087369064, 9.788060897531418],
+          "B1": [40, 5.765904040474977, 30.627441446995363, 38.94775389926508, 10.667433923420806],
+          "D0": [40, 5.6794084542031795, 26.594238326651976, 31.2963867909275, 5.15610639259274]
+        },
+        "blockEvidence": {
+          "B0": [512, 5376, 20.150000035762787, 0],
+          "B1": [2048, 6144, 20.029999911785126, 0],
+          "D0": [2048, 5888, 20.04499977827072, 0]
+        },
+        "pairedRatios": {
+          "B1": [40, 0.8329749091096008, 3.5361923486082447, 6.922442733337308, 0.9434360140412422],
+          "D0": [40, 0.9103795468946766, 2.7215866991015796, 6.71743954414415, 0.8647012688429203]
+        }
+      },
+      {
+        "runtime": "chromium",
+        "replica": 2,
+        "cell": "constructor-1000",
+        "status": "complete",
+        "us": {
+          "B0": [15, 906.3235293416416, 2397.1874956041574, 2397.1874956041574, 789.444894872998],
+          "B1": [15, 651.2500010430813, 2425.312500447035, 2425.312500447035, 753.5428003529491]
+        },
+        "blockEvidence": {
+          "B0": [28, 76, 20.05999982357025, 0],
+          "B1": [32, 100, 20.330000042915344, 0]
+        },
+        "pairedRatios": {
+          "B1": [15, 0.847398669142953, 7.4185315118404445, 7.4185315118404445, 2.094328882960878]
+        }
+      },
+      {
+        "runtime": "chromium",
+        "replica": 2,
+        "cell": "subscribed-100",
+        "status": "complete",
+        "us": {
+          "B0": [15, 335.937506519258, 959.8611079984241, 959.8611079984241, 338.75557740351985],
+          "B1": [15, 532.6249971985817, 1629.2708391944568, 1629.2708391944568, 580.0480773815742]
+        },
+        "blockEvidence": {
+          "B0": [40, 160, 20.135000109672546, 0],
+          "B1": [40, 136, 20.269999742507935, 0]
+        },
+        "pairedRatios": {
+          "B1": [15, 1.4113547795975576, 12.946775905200258, 12.946775905200258, 3.9053998572960458]
+        }
+      },
+      {
+        "runtime": "chromium",
+        "replica": 3,
+        "cell": "constructor-10",
+        "status": "complete",
+        "us": {
+          "B0": [40, 4.457236868084261, 7.356179010292346, 23.012695368379354, 1.5470378032963104],
+          "B1": [40, 4.300986808773718, 6.323617793476353, 10.55908206035383, 1.292317647454968],
+          "D0": [40, 4.404296930361953, 5.704210062200825, 9.507812489755452, 1.3534007016378822]
+        },
+        "blockEvidence": {
+          "B0": [1024, 6144, 20.139999866485596, 0],
+          "B1": [2048, 6144, 20.004999697208405, 0],
+          "D0": [2560, 6144, 20.005000174045563, 0]
+        },
+        "pairedRatios": {
+          "B1": [
+            40, 0.9645558088550868, 1.4197290650435654, 1.8555433496576892, 0.5229500435980953
+          ],
+          "D0": [40, 0.9900918355176848, 1.443392118264133, 1.512114525816681, 0.5585122212906866]
+        }
+      },
+      {
+        "runtime": "chromium",
+        "replica": 3,
+        "cell": "constructor-1000",
+        "status": "complete",
+        "us": {
+          "B0": [15, 259.4375006854534, 304.4852938722162, 304.4852938722162, 61.05263224034982],
+          "B1": [15, 264.01315707909436, 288.2638888226615, 288.2638888226615, 58.46217277933633]
+        },
+        "blockEvidence": {
+          "B0": [68, 100, 20.0100000500679, 0],
+          "B1": [72, 100, 20.009999990463257, 0]
+        },
+        "pairedRatios": {
+          "B1": [15, 1.034661668142479, 1.360086281073942, 1.360086281073942, 0.43633545235532467]
+        }
+      },
+      {
+        "runtime": "chromium",
+        "replica": 3,
+        "cell": "subscribed-100",
+        "status": "complete",
+        "us": {
+          "B0": [15, 132.2697365754529, 225.66406382247806, 225.66406382247806, 30.773436464369297],
+          "B1": [15, 124.25595202616283, 157.6171899214387, 157.6171899214387, 16.602871930627728]
+        },
+        "blockEvidence": {
+          "B0": [120, 160, 20.089999794960022, 0],
+          "B1": [128, 176, 20.0450000166893, 0]
+        },
+        "pairedRatios": {
+          "B1": [
+            15, 0.9478720861227729, 1.1279420735353496, 1.1279420735353496, 0.30440914392110563
+          ]
+        }
+      }
+    ],
+    "small": [
+      { "runtime": "node", "cell": "C01", "status": "unresolved-minimum", "us": {} },
+      {
+        "runtime": "node",
+        "cell": "C02",
+        "status": "complete",
+        "us": {
+          "B0": [15, 1.4506958188679815, 2.163873275861589, 2.163873275861589, 0.1879234853803069],
+          "B1": [15, 1.8111520050557737, 2.0725798841044405, 2.0725798841044405, 0.2090536334198443]
+        }
+      },
+      {
+        "runtime": "node",
+        "cell": "C07",
+        "status": "complete",
+        "us": {
+          "B0": [
+            15, 0.7563520531391394, 0.8369949448574392, 0.8369949448574392, 0.06889575828446082
+          ],
+          "B1": [15, 0.732677254099018, 0.922298257738599, 0.922298257738599, 0.05789955148662007]
+        }
+      },
+      {
+        "runtime": "chromium",
+        "cell": "C01",
+        "status": "complete",
+        "us": {
+          "B0": [
+            15, 0.4084734002969595, 0.4180940826806952, 0.4180940826806952, 0.007398401478738881
+          ],
+          "B1": [
+            15, 0.24407200230275347, 0.24827492421136382, 0.24827492421136382, 0.005534469625122412
+          ]
+        }
+      },
+      {
+        "runtime": "chromium",
+        "cell": "C02",
+        "status": "complete",
+        "us": {
+          "B0": [15, 1.3069661372962098, 2.209507086327378, 2.209507086327378, 0.09104890409905009],
+          "B1": [15, 1.5364583152547187, 2.179904523978217, 2.179904523978217, 0.10209400808679425]
+        }
+      },
+      {
+        "runtime": "chromium",
+        "cell": "C07",
+        "status": "complete",
+        "us": {
+          "B0": [
+            15, 0.7381337927654386, 0.8218503994696097, 0.8218503994696097, 0.03445421802507509
+          ],
+          "B1": [
+            15, 0.7548309358709676, 0.9810933434524133, 0.9810933434524133, 0.03588520432657949
+          ]
+        }
+      }
+    ],
+    "allocations": [
+      {
+        "cell": "constructor-10",
+        "profilesPerVariant": 5,
+        "bytes": {
+          "B0": {
+            "n": 5,
+            "mean": 4392.1375,
+            "median": 4356.484375,
+            "min": 4341.265625,
+            "max": 4471.078125,
+            "iqr": 105.078125
+          },
+          "B1": {
+            "n": 5,
+            "mean": 4438.5875,
+            "median": 4458.265625,
+            "min": 4293.796875,
+            "max": 4541.984375,
+            "iqr": 71.984375
+          }
+        },
+        "additional": {
+          "mean": 46.45,
+          "median": 101.78125,
+          "min": -154.671875,
+          "max": 198.59375,
+          "iqr": 201.796875
+        }
+      },
+      {
+        "cell": "constructor-1000",
+        "profilesPerVariant": 5,
+        "bytes": {
+          "B0": {
+            "n": 5,
+            "mean": 216839.4,
+            "median": 217041,
+            "min": 211516,
+            "max": 222195,
+            "iqr": 6181
+          },
+          "B1": {
+            "n": 5,
+            "mean": 214654,
+            "median": 214731,
+            "min": 209627,
+            "max": 222816,
+            "iqr": 5214
+          }
+        },
+        "additional": { "mean": -2185.4, "median": -1075, "min": -7414, "max": 2023, "iqr": 5703 }
+      },
+      {
+        "cell": "C02",
+        "profilesPerVariant": 5,
+        "bytes": {
+          "B0": {
+            "n": 5,
+            "mean": 1649.584,
+            "median": 1653.644,
+            "min": 1624.548,
+            "max": 1679.744,
+            "iqr": 38.960000000000036
+          },
+          "B1": {
+            "n": 5,
+            "mean": 1780.2912000000001,
+            "median": 1783.044,
+            "min": 1725.42,
+            "max": 1821.208,
+            "iqr": 69.00800000000004
+          }
+        },
+        "additional": {
+          "mean": 130.70720000000006,
+          "median": 125.87599999999998,
+          "min": 100.87200000000007,
+          "max": 167.56400000000008,
+          "iqr": 52.623999999999796
+        }
+      }
+    ],
+    "traceLimitations": {
+      "inspectorStartStopIncluded": true,
+      "gcObserverResolved": false,
+      "zeroEventsDoesNotMeanNoGC": true,
+      "uniqueVmCauseIdentified": false
+    },
+    "largeDiagnostics": [
+      {
+        "runtime": "node",
+        "workload": "append",
+        "n": 1000,
+        "c": 1000,
+        "observationsPerVariant": 1,
+        "actionMs": { "B0": 28.97059399999999, "B1": 3.6926229999999975 }
+      },
+      {
+        "runtime": "node",
+        "workload": "scatter-remove",
+        "n": 1000,
+        "c": 1000,
+        "observationsPerVariant": 1,
+        "actionMs": { "B1": 4.396869999999993, "B0": 45.685653 }
+      },
+      {
+        "runtime": "node",
+        "workload": "replace",
+        "n": 1000,
+        "c": 1000,
+        "observationsPerVariant": 1,
+        "actionMs": { "B0": 62.76031599999999, "B1": 7.6320380000000085 }
+      },
+      {
+        "runtime": "node",
+        "workload": "mixed",
+        "n": 1000,
+        "c": 100,
+        "observationsPerVariant": 1,
+        "actionMs": { "B1": 4.914217000000008, "B0": 12.556928 }
+      },
+      {
+        "runtime": "chromium",
+        "workload": "append",
+        "n": 1000,
+        "c": 1000,
+        "observationsPerVariant": 1,
+        "actionMs": { "B0": 17.209999978542328, "B1": 1.949999988079071 }
+      },
+      {
+        "runtime": "chromium",
+        "workload": "scatter-remove",
+        "n": 1000,
+        "c": 1000,
+        "observationsPerVariant": 1,
+        "actionMs": { "B1": 4.344999969005585, "B0": 38.93000000715256 }
+      },
+      {
+        "runtime": "chromium",
+        "workload": "replace",
+        "n": 1000,
+        "c": 1000,
+        "observationsPerVariant": 1,
+        "actionMs": { "B0": 43.35000002384186, "B1": 6.3450000286102295 }
+      },
+      {
+        "runtime": "chromium",
+        "workload": "mixed",
+        "n": 1000,
+        "c": 100,
+        "observationsPerVariant": 1,
+        "actionMs": { "B1": 2.314999997615814, "B0": 10.004999995231628 }
+      }
+    ],
+    "unresolved": [
+      "Node C01: B1 warmup 12.432482 ms in 99,968 calls; no primary result",
+      "Exact added constructor bytes unresolved by five sampling profiles",
+      "Unique VM cause and setup/tail non-regression unestablished"
+    ],
+    "cleanupErrors": [],
+    "recommendation": "Keep direct method and operation-local module planner as implementation design; no reorder bridge, adoption or automatic continuation. Preserve original failure and retention proposal."
+  },
+  "directIntegration": {
+    "date": "2026-10-26",
+    "status": "partial; stopped after calibration exposed infeasible repetition schedule",
+    "elapsedMs": 121260,
+    "ceilingMs": 480000,
+    "candidateHash": "11448bf7cb9391b3d7751478a7df4006c912aa4f8db5ed0d9844176e789fb0c6",
+    "controlHash": "1cbd0b38c8a9274c00c5a8f2692319ce84886a659ff69eef5786510fd5b96907",
+    "preservedCandidateHash": "406e39c85a96d6b9b341fc62647c3c33e41324e60d00f8a0f52cc9dbd0d0b116",
+    "candidateSourceBytes": 43553,
+    "sourceIncreaseBytes": 6523,
+    "sourceIncreaseLines": 146,
+    "setupMetric": "microseconds per collection; p95 of normalized block-average setup times, not individual latency",
+    "node": [
+      {
+        "cell": "constructor-10",
+        "samplesPerVariant": 15,
+        "control": {
+          "repetitions": 1024,
+          "p50": 5.9072548828140725,
+          "p95": 47.13022265625,
+          "iqr": 4.929821289060499
+        },
+        "candidate": {
+          "repetitions": 2048,
+          "p50": 11.389441894532837,
+          "p95": 72.36085058593744,
+          "iqr": 11.783026367186977
+        },
+        "result": "p50/p95 exceed allowances; cause unresolved; unequal block sizes and GC pressure limit attribution"
+      },
+      {
+        "cell": "constructor-1000",
+        "samplesPerVariant": 15,
+        "control": {
+          "repetitions": 64,
+          "p50": 399.6583906250635,
+          "p95": 1756.212562499968,
+          "iqr": 349.6114687500267
+        },
+        "candidate": {
+          "repetitions": 8,
+          "p50": 294.004125000356,
+          "p95": 953.0185000003257,
+          "iqr": 253.3158750002258
+        },
+        "result": "observed gate values fit, substantial variation"
+      },
+      {
+        "cell": "subscribed-100",
+        "samplesPerVariant": 15,
+        "control": {
+          "repetitions": 64,
+          "p50": 185.95278124962533,
+          "p95": 352.4979218751696,
+          "iqr": 136.67284375094368
+        },
+        "candidate": {
+          "repetitions": 64,
+          "p50": 198.9242031251024,
+          "p95": 371.69901562447194,
+          "iqr": 142.18800000014653
+        },
+        "result": "p50 exceeds 5%, p95 fits; median difference inside variation"
+      }
+    ],
+    "appendDiagnosticMs": {
+      "calibration": { "control": 9201.578120999999, "candidate": 28.676403999998 },
+      "warmup": { "control": 41472.915289, "candidate": 147.78305600000022 },
+      "primarySamples": 0
+    },
+    "chromium": "unmeasured",
+    "allocationProfiles": 0,
+    "retentionClarification": "proposed only; original whole-heap failure/gates unchanged",
+    "adoption": "not established"
+  },
+  "directConstructorAudit": {
+    "kind": "offline source and saved-sample audit; no new runtime measurement",
+    "canonicalFactoryBodyHashAfterRemovingBulkMethodAndProperty": "d5e1b7d043137524c619e4174db2cb72f2df68eb2ba54eb7327c10eddbfbb2fa",
+    "controlAndCandidateCanonicalBodiesMatch": true,
+    "outerVariableBindingsUnchanged": true,
+    "recordAndIncarnationHelpersUnchanged": true,
+    "outerArrayLiteralsPerFactory": 14,
+    "factoryFunctionDeclarations": { "control": 24, "candidate": 25 },
+    "newPlanScratchDuringConstruction": false,
+    "currentCandidateConstructorAllocatedBytes": "not measured",
+    "formerCandidateClosureShallowBytes": 32,
+    "unusedMethodDiagnosticHash": "e1b58a4355ca84ba2af7ad093c8b2e36c5c9b7ae7410bcb53eb94e773c23badb",
+    "unusedMethodDiagnosticExecuted": false,
+    "setupBlocksBelow20Ms": [
+      { "cell": "constructor-10", "measuredBlocksPerVariant": 15, "control": 14, "candidate": 6 },
+      { "cell": "constructor-1000", "measuredBlocksPerVariant": 15, "control": 5, "candidate": 15 },
+      { "cell": "subscribed-100", "measuredBlocksPerVariant": 15, "control": 13, "candidate": 13 }
+    ],
+    "finding": "Unequal retained chunks/warmup counts and calibration defect confound prior setup ratios; unfavorable raw results preserved, cause unresolved.",
+    "continuation": "complete five-minute amendment proposed for approval; not run"
+  },
+  "replacementHeapOwnership": {
+    "date": "2026-10-26",
+    "kind": "full-replacement ownership diagnostic; not adoption comparison",
+    "status": "captured",
+    "captureElapsedMs": 194086,
+    "ceilingMs": 300000,
+    "reportHash": "263c0c1efc5cf19574844908cd23b21c6a1dd2313c5541f5981b2040c16237fd",
+    "candidateRevision": "dfc342e66eccb33a213fa778541ec5ca304c051f",
+    "candidateHash": "406e39c85a96d6b9b341fc62647c3c33e41324e60d00f8a0f52cc9dbd0d0b116",
+    "controlHash": "1cbd0b38c8a9274c00c5a8f2692319ce84886a659ff69eef5786510fd5b96907",
+    "snapshots": 24,
+    "fixturesPerVariantAndTransaction": 1,
+    "gcObservationsPerSnapshot": 5,
+    "rootInterpretation": "Measured collection identities release after caller drop; remaining code/feedback/templates/shapes/browser timing data have module/runtime roots. Whole used-heap delta is not collection retained size; original gate not waived.",
+    "analysisCorrections": "Decode rope strings; distinguish V8 allocation-site boilerplates from dataset instances using field values/baseline identities; preserve previous audits and all raw heaps.",
+    "realms": [
+      {
+        "variant": "control",
+        "rollback": false,
+        "phases": [
+          {
+            "phase": "baseline",
+            "usedDelta": {
+              "min": 0,
+              "max": 0
+            },
+            "cohorts": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "trackedSurvivors": {},
+            "markerSurvivors": {}
+          },
+          {
+            "phase": "initialized",
+            "usedDelta": {
+              "min": 4078364,
+              "max": 4078364
+            },
+            "shallowSizes": {
+              "collectionObject": 12,
+              "publicMethodClosures": 368,
+              "bulkClosure": 0
+            },
+            "cohorts": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 12
+            },
+            "trackedSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 12
+            },
+            "markerSurvivors": {
+              "collection": true,
+              "owner": true,
+              "oldKeys": true,
+              "oldRecord": true
+            }
+          },
+          {
+            "phase": "replaced",
+            "usedDelta": {
+              "min": 1935532,
+              "max": 1935532
+            },
+            "shallowSizes": {
+              "collectionObject": 12,
+              "publicMethodClosures": 368,
+              "bulkClosure": 0
+            },
+            "cohorts": {
+              "incarnations": 10000,
+              "records": 10001,
+              "subscriptions": 2,
+              "signals": 2,
+              "methods": 12
+            },
+            "trackedSurvivors": {
+              "incarnations": 0,
+              "records": 1,
+              "subscriptions": 2,
+              "signals": 2,
+              "methods": 12
+            },
+            "replacementSurvivors": {
+              "incarnations": 10000,
+              "records": 10001,
+              "subscriptions": 2,
+              "signals": 2,
+              "methods": 12
+            },
+            "markerSurvivors": {
+              "collection": true,
+              "owner": true,
+              "oldKeys": true,
+              "oldRecord": true,
+              "newKeys": true,
+              "newRecord": true
+            }
+          },
+          {
+            "phase": "aborted-held",
+            "usedDelta": {
+              "min": 1894896,
+              "max": 1894896
+            },
+            "shallowSizes": {
+              "collectionObject": 12,
+              "publicMethodClosures": 368,
+              "bulkClosure": 0
+            },
+            "cohorts": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 12
+            },
+            "trackedSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 12
+            },
+            "replacementSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 12
+            },
+            "markerSurvivors": {
+              "collection": true,
+              "owner": false,
+              "oldKeys": false,
+              "oldRecord": false,
+              "newKeys": true,
+              "newRecord": true
+            }
+          },
+          {
+            "phase": "dropped",
+            "usedDelta": {
+              "min": 16024,
+              "max": 16024
+            },
+            "cohorts": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "trackedSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "replacementSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "markerSurvivors": {
+              "collection": false,
+              "owner": false,
+              "oldKeys": false,
+              "oldRecord": false,
+              "newKeys": false,
+              "newRecord": false
+            },
+            "categoryDelta": {
+              "synthetic": 0,
+              "native": 48,
+              "string": 0,
+              "object shape": 0,
+              "code": 15976,
+              "array": 0,
+              "number": 0,
+              "symbol": 0,
+              "object": 0,
+              "closure": 0,
+              "concatenated string": 0
+            },
+            "rootCategories": ["code", "object shape", "native"]
+          },
+          {
+            "phase": "dropped-again",
+            "usedDelta": {
+              "min": 16024,
+              "max": 16024
+            },
+            "cohorts": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "trackedSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "replacementSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "markerSurvivors": {
+              "collection": false,
+              "owner": false,
+              "oldKeys": false,
+              "oldRecord": false,
+              "newKeys": false,
+              "newRecord": false
+            },
+            "categoryDelta": {
+              "synthetic": 0,
+              "native": 48,
+              "string": 0,
+              "object shape": 0,
+              "code": 15976,
+              "array": 0,
+              "number": 0,
+              "symbol": 0,
+              "object": 0,
+              "closure": 0,
+              "concatenated string": 0
+            },
+            "rootCategories": ["code", "object shape", "native"]
+          }
+        ]
+      },
+      {
+        "variant": "candidate",
+        "rollback": false,
+        "phases": [
+          {
+            "phase": "baseline",
+            "usedDelta": {
+              "min": 0,
+              "max": 0
+            },
+            "cohorts": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "trackedSurvivors": {},
+            "markerSurvivors": {}
+          },
+          {
+            "phase": "initialized",
+            "usedDelta": {
+              "min": 4098196,
+              "max": 4098196
+            },
+            "shallowSizes": {
+              "collectionObject": 12,
+              "publicMethodClosures": 400,
+              "bulkClosure": 32
+            },
+            "cohorts": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 13
+            },
+            "trackedSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 13
+            },
+            "markerSurvivors": {
+              "collection": true,
+              "owner": true,
+              "oldKeys": true,
+              "oldRecord": true
+            }
+          },
+          {
+            "phase": "replaced",
+            "usedDelta": {
+              "min": 1929476,
+              "max": 1929476
+            },
+            "shallowSizes": {
+              "collectionObject": 12,
+              "publicMethodClosures": 400,
+              "bulkClosure": 32
+            },
+            "cohorts": {
+              "incarnations": 10000,
+              "records": 10001,
+              "subscriptions": 2,
+              "signals": 2,
+              "methods": 13
+            },
+            "trackedSurvivors": {
+              "incarnations": 0,
+              "records": 1,
+              "subscriptions": 2,
+              "signals": 2,
+              "methods": 13
+            },
+            "replacementSurvivors": {
+              "incarnations": 10000,
+              "records": 10001,
+              "subscriptions": 2,
+              "signals": 2,
+              "methods": 13
+            },
+            "markerSurvivors": {
+              "collection": true,
+              "owner": true,
+              "oldKeys": true,
+              "oldRecord": true,
+              "newKeys": true,
+              "newRecord": true
+            }
+          },
+          {
+            "phase": "aborted-held",
+            "usedDelta": {
+              "min": 1888856,
+              "max": 1888856
+            },
+            "shallowSizes": {
+              "collectionObject": 12,
+              "publicMethodClosures": 400,
+              "bulkClosure": 32
+            },
+            "cohorts": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 13
+            },
+            "trackedSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 13
+            },
+            "replacementSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 13
+            },
+            "markerSurvivors": {
+              "collection": true,
+              "owner": false,
+              "oldKeys": false,
+              "oldRecord": false,
+              "newKeys": true,
+              "newRecord": true
+            }
+          },
+          {
+            "phase": "dropped",
+            "usedDelta": {
+              "min": 36088,
+              "max": 36088
+            },
+            "cohorts": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "trackedSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "replacementSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "markerSurvivors": {
+              "collection": false,
+              "owner": false,
+              "oldKeys": false,
+              "oldRecord": false,
+              "newKeys": false,
+              "newRecord": false
+            },
+            "categoryDelta": {
+              "synthetic": 0,
+              "native": -100,
+              "string": 0,
+              "object shape": 144,
+              "code": 35792,
+              "array": 0,
+              "number": 0,
+              "symbol": 0,
+              "object": 20,
+              "closure": 0,
+              "concatenated string": 0
+            },
+            "rootCategories": ["code", "object shape", "native", "object"]
+          },
+          {
+            "phase": "dropped-again",
+            "usedDelta": {
+              "min": 36088,
+              "max": 36088
+            },
+            "cohorts": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "trackedSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "replacementSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "markerSurvivors": {
+              "collection": false,
+              "owner": false,
+              "oldKeys": false,
+              "oldRecord": false,
+              "newKeys": false,
+              "newRecord": false
+            },
+            "categoryDelta": {
+              "synthetic": 0,
+              "native": -100,
+              "string": 0,
+              "object shape": 144,
+              "code": 35792,
+              "array": 0,
+              "number": 0,
+              "symbol": 0,
+              "object": 20,
+              "closure": 0,
+              "concatenated string": 0
+            },
+            "rootCategories": ["code", "object shape", "native", "object"]
+          }
+        ]
+      },
+      {
+        "variant": "candidate",
+        "rollback": true,
+        "phases": [
+          {
+            "phase": "baseline",
+            "usedDelta": {
+              "min": 0,
+              "max": 0
+            },
+            "cohorts": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "trackedSurvivors": {},
+            "markerSurvivors": {}
+          },
+          {
+            "phase": "initialized",
+            "usedDelta": {
+              "min": 4098212,
+              "max": 4098212
+            },
+            "shallowSizes": {
+              "collectionObject": 12,
+              "publicMethodClosures": 400,
+              "bulkClosure": 32
+            },
+            "cohorts": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 13
+            },
+            "trackedSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 13
+            },
+            "markerSurvivors": {
+              "collection": true,
+              "owner": true,
+              "oldKeys": true,
+              "oldRecord": true
+            }
+          },
+          {
+            "phase": "replaced",
+            "usedDelta": {
+              "min": 4148396,
+              "max": 4148396
+            },
+            "shallowSizes": {
+              "collectionObject": 12,
+              "publicMethodClosures": 400,
+              "bulkClosure": 32
+            },
+            "cohorts": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 13
+            },
+            "trackedSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 13
+            },
+            "replacementSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 13
+            },
+            "markerSurvivors": {
+              "collection": true,
+              "owner": true,
+              "oldKeys": true,
+              "oldRecord": true,
+              "newKeys": true,
+              "newRecord": true
+            }
+          },
+          {
+            "phase": "aborted-held",
+            "usedDelta": {
+              "min": 1511796,
+              "max": 1511796
+            },
+            "shallowSizes": {
+              "collectionObject": 12,
+              "publicMethodClosures": 400,
+              "bulkClosure": 32
+            },
+            "cohorts": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 13
+            },
+            "trackedSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 13
+            },
+            "replacementSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 13
+            },
+            "markerSurvivors": {
+              "collection": true,
+              "owner": false,
+              "oldKeys": true,
+              "oldRecord": true,
+              "newKeys": true,
+              "newRecord": true
+            }
+          },
+          {
+            "phase": "dropped",
+            "usedDelta": {
+              "min": 35956,
+              "max": 35956
+            },
+            "cohorts": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "trackedSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "replacementSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "markerSurvivors": {
+              "collection": false,
+              "owner": false,
+              "oldKeys": false,
+              "oldRecord": false,
+              "newKeys": false,
+              "newRecord": false
+            },
+            "categoryDelta": {
+              "synthetic": 0,
+              "native": 148,
+              "string": 0,
+              "object shape": 144,
+              "code": 35660,
+              "array": 0,
+              "number": 0,
+              "symbol": 0,
+              "object": 20,
+              "closure": 0,
+              "concatenated string": 0
+            },
+            "rootCategories": ["code", "object", "object shape", "native"]
+          },
+          {
+            "phase": "dropped-again",
+            "usedDelta": {
+              "min": 35956,
+              "max": 35956
+            },
+            "cohorts": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "trackedSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "replacementSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "markerSurvivors": {
+              "collection": false,
+              "owner": false,
+              "oldKeys": false,
+              "oldRecord": false,
+              "newKeys": false,
+              "newRecord": false
+            },
+            "categoryDelta": {
+              "synthetic": 0,
+              "native": 148,
+              "string": 0,
+              "object shape": 144,
+              "code": 35660,
+              "array": 0,
+              "number": 0,
+              "symbol": 0,
+              "object": 20,
+              "closure": 0,
+              "concatenated string": 0
+            },
+            "rootCategories": ["code", "object", "object shape", "native"]
+          }
+        ]
+      },
+      {
+        "variant": "control",
+        "rollback": true,
+        "phases": [
+          {
+            "phase": "baseline",
+            "usedDelta": {
+              "min": 0,
+              "max": 0
+            },
+            "cohorts": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "trackedSurvivors": {},
+            "markerSurvivors": {}
+          },
+          {
+            "phase": "initialized",
+            "usedDelta": {
+              "min": 4098756,
+              "max": 4098756
+            },
+            "shallowSizes": {
+              "collectionObject": 12,
+              "publicMethodClosures": 368,
+              "bulkClosure": 0
+            },
+            "cohorts": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 12
+            },
+            "trackedSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 12
+            },
+            "markerSurvivors": {
+              "collection": true,
+              "owner": true,
+              "oldKeys": true,
+              "oldRecord": true
+            }
+          },
+          {
+            "phase": "replaced",
+            "usedDelta": {
+              "min": 4102460,
+              "max": 4102460
+            },
+            "shallowSizes": {
+              "collectionObject": 12,
+              "publicMethodClosures": 368,
+              "bulkClosure": 0
+            },
+            "cohorts": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 12
+            },
+            "trackedSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 12
+            },
+            "replacementSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 10002,
+              "signals": 2,
+              "methods": 12
+            },
+            "markerSurvivors": {
+              "collection": true,
+              "owner": true,
+              "oldKeys": true,
+              "oldRecord": true,
+              "newKeys": true,
+              "newRecord": true
+            }
+          },
+          {
+            "phase": "aborted-held",
+            "usedDelta": {
+              "min": 1465860,
+              "max": 1465860
+            },
+            "shallowSizes": {
+              "collectionObject": 12,
+              "publicMethodClosures": 368,
+              "bulkClosure": 0
+            },
+            "cohorts": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 12
+            },
+            "trackedSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 12
+            },
+            "replacementSurvivors": {
+              "incarnations": 10000,
+              "records": 10000,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 12
+            },
+            "markerSurvivors": {
+              "collection": true,
+              "owner": false,
+              "oldKeys": true,
+              "oldRecord": true,
+              "newKeys": true,
+              "newRecord": true
+            }
+          },
+          {
+            "phase": "dropped",
+            "usedDelta": {
+              "min": 16644,
+              "max": 16644
+            },
+            "cohorts": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "trackedSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "replacementSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "markerSurvivors": {
+              "collection": false,
+              "owner": false,
+              "oldKeys": false,
+              "oldRecord": false,
+              "newKeys": false,
+              "newRecord": false
+            },
+            "categoryDelta": {
+              "synthetic": 0,
+              "native": 316,
+              "string": 0,
+              "object shape": 0,
+              "code": 16576,
+              "array": 0,
+              "number": 0,
+              "symbol": 0,
+              "object": 0,
+              "closure": 0,
+              "concatenated string": 0
+            },
+            "rootCategories": ["object shape", "code", "native"]
+          },
+          {
+            "phase": "dropped-again",
+            "usedDelta": {
+              "min": 16644,
+              "max": 16644
+            },
+            "cohorts": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "trackedSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "replacementSurvivors": {
+              "incarnations": 0,
+              "records": 0,
+              "subscriptions": 0,
+              "signals": 0,
+              "methods": 0
+            },
+            "markerSurvivors": {
+              "collection": false,
+              "owner": false,
+              "oldKeys": false,
+              "oldRecord": false,
+              "newKeys": false,
+              "newRecord": false
+            },
+            "categoryDelta": {
+              "synthetic": 0,
+              "native": 316,
+              "string": 0,
+              "object shape": 0,
+              "code": 16576,
+              "array": 0,
+              "number": 0,
+              "symbol": 0,
+              "object": 0,
+              "closure": 0,
+              "concatenated string": 0
+            },
+            "rootCategories": ["object shape", "code", "native"]
+          }
+        ]
+      }
+    ]
+  },
   "finalAcceptance": {
     "decision": "reject-for-this-version",
     "timing": [
@@ -15,11 +2063,7 @@
           "cpus": 16,
           "node": "v24.12.0",
           "memory": 68719476736,
-          "load": [
-            5.21044921875,
-            6.79052734375,
-            7.15234375
-          ],
+          "load": [5.21044921875, 6.79052734375, 7.15234375],
           "chromium": "156.0.8078.4"
         },
         "engines": [
@@ -591,11 +2635,7 @@
           "cpus": 16,
           "node": "v24.12.0",
           "memory": 68719476736,
-          "load": [
-            7.6630859375,
-            10.56591796875,
-            11.42138671875
-          ],
+          "load": [7.6630859375, 10.56591796875, 11.42138671875],
           "chromium": "156.0.8078.4"
         },
         "engines": [
@@ -1211,11 +3251,7 @@
         "cpu": "Intel(R) Xeon(R) W-2140B CPU @ 3.20GHz",
         "cpus": 16,
         "memory": 68719476736,
-        "load": [
-          22.03515625,
-          14.7587890625,
-          10.66943359375
-        ],
+        "load": [22.03515625, 14.7587890625, 10.66943359375],
         "chromium": "156.0.8078.4"
       },
       "allocation": {
@@ -4998,11 +7034,7 @@
       "durationSeconds": 16.699,
       "processes": 3,
       "profiles": "Separate CPU and allocation, 1000 subscribed 100-item initializations per variant/profile; abort outside window",
-      "allocationDifferencePercent": [
-        0.3,
-        -0.22,
-        0.09
-      ],
+      "allocationDifferencePercent": [0.3, -0.22, 0.09],
       "cpuObservation": "First profiled variant slower in every process; common construction/listener/GC sites",
       "cause": "unresolved",
       "gcObserver": "No delivered events despite GC CPU samples; cannot use empty event arrays as absence-of-GC evidence"
@@ -5413,14 +7445,8 @@
         "uncertainty": {
           "replicates": 2000,
           "blockLength": 10,
-          "p95Ratio95Interval": [
-            0.6500019635569756,
-            1.8962529827979118
-          ],
-          "p95GateExcessUs95Interval": [
-            -99.46191400005,
-            91.89699000004839
-          ]
+          "p95Ratio95Interval": [0.6500019635569756, 1.8962529827979118],
+          "p95GateExcessUs95Interval": [-99.46191400005, 91.89699000004839]
         }
       },
       {
@@ -5472,14 +7498,8 @@
         "uncertainty": {
           "replicates": 2000,
           "blockLength": 10,
-          "p95Ratio95Interval": [
-            0.6272245856922343,
-            1.3907587358361897
-          ],
-          "p95GateExcessUs95Interval": [
-            -102.38875399994458,
-            35.425082000077964
-          ]
+          "p95Ratio95Interval": [0.6272245856922343, 1.3907587358361897],
+          "p95GateExcessUs95Interval": [-102.38875399994458, 35.425082000077964]
         }
       },
       {
@@ -5531,14 +7551,8 @@
         "uncertainty": {
           "replicates": 2000,
           "blockLength": 10,
-          "p95Ratio95Interval": [
-            0.8650963737019911,
-            1.1085068370304516
-          ],
-          "p95GateExcessUs95Interval": [
-            -31.347351000182243,
-            0.9789599999949132
-          ]
+          "p95Ratio95Interval": [0.8650963737019911, 1.1085068370304516],
+          "p95GateExcessUs95Interval": [-31.347351000182243, 0.9789599999949132]
         }
       }
     ],
@@ -5726,7 +7740,10 @@
           "setupUs": { "p50": 87.89197, "p95": 217.28169, "max": 217.28169, "iqr": 2.76846 },
           "teardownUs": { "p50": 44.05461, "p95": 54.2135, "max": 54.2135, "iqr": 1.8023 }
         },
-        "timingGateFailures": ["setup-p95: clear margin beyond both IQRs", "teardown-p95: excess within IQR uncertainty"]
+        "timingGateFailures": [
+          "setup-p95: clear margin beyond both IQRs",
+          "teardown-p95: excess within IQR uncertainty"
+        ]
       }
     ]
   },

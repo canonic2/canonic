@@ -47,13 +47,13 @@ import { fallback, isThenable } from '../../report.js';
  * @typedef {object} Store
  * @property {() => Readonly<S>} get Returns the current snapshot. The same
  *   frozen snapshot is returned until a changing write replaces it.
- * @property {(patch: Partial<S> | ((state: Readonly<S>) => Partial<S>)) => void} set
+ * @property {(patch: Partial<S> | ((state: Readonly<S>) => Partial<S>)) => void} update
  *   Writes the patched fields, or the fields a function of the current
  *   snapshot returns. Each patched value is read once. An unknown key throws a
  *   `TypeError` and changes nothing. When every value is `Object.is`-equal to
  *   the current one, nothing happens. Otherwise one new snapshot becomes
- *   current and, outside a batch, is delivered before `set` returns; errors
- *   from subscribers go to `report`, never out of `set`.
+ *   current and, outside a batch, is delivered before `update` returns; errors
+ *   from subscribers go to `report`, never out of `update`.
  * @property {(fn: () => void) => void} batch Runs `fn` synchronously and
  *   delivers its writes as one commit when the outermost batch returns. If
  *   `fn` throws, the store returns to its snapshot at this batch's start and
@@ -66,6 +66,12 @@ import { fallback, isThenable } from '../../report.js';
  *   the value under `equals`. Throws a `TypeError`, subscribing nothing, inside
  *   a batch or for a field that is not a key of the state. An error from the
  *   initial `read` or `run` propagates and leaves no subscription.
+ */
+
+/**
+ * Read-and-subscribe access without mutation methods. Methods may be detached.
+ * @template S The state.
+ * @typedef {Readonly<Pick<Store<S>, 'get' | 'watch'>>} StoreReader
  */
 
 /**
@@ -144,7 +150,7 @@ export function createStore(initial, options = {}) {
   /** @type {string[]} */
   const touched = [];
   let inactive = 0;
-  /** Whether `set` is reading a patch; a write made then is rejected. */
+  /** Whether `update` is reading a patch; a write made then is rejected. */
   let writing = false;
   const report = options.report ?? fallback;
 
@@ -214,7 +220,7 @@ export function createStore(initial, options = {}) {
             // read and equals may abort this subscription; it is not called afterwards.
             if (!record.active || equals(value, record.last) || !record.active) continue;
             run(value, record.last);
-            record.last = value;
+            if (record.active) record.last = value;
           } catch (error) {
             deliverError(error);
           }
@@ -248,10 +254,10 @@ export function createStore(initial, options = {}) {
     return /** @type {Readonly<S>} */ (/** @type {unknown} */ (current));
   }
 
-  /** @type {Store<S>['set']} */
-  function set(patch) {
+  /** @type {Store<S>['update']} */
+  function update(patch) {
     if (writing) {
-      throw new TypeError('set() cannot be called while another set() is reading its patch.');
+      throw new TypeError('update() cannot be called while another update() is reading its patch.');
     }
     /** @type {string[] | null} */
     let changedKeys = null;
@@ -262,7 +268,7 @@ export function createStore(initial, options = {}) {
     try {
       const values = typeof patch === 'function' ? patch(get()) : patch;
       if (typeof values !== 'object' || values === null) {
-        throw new TypeError('set() needs an object of fields, or a function returning one.');
+        throw new TypeError('update() needs an object of fields, or a function returning one.');
       }
       for (const key in values) {
         if (!Object.hasOwn(values, key)) continue;
@@ -305,7 +311,9 @@ export function createStore(initial, options = {}) {
       try {
         // Checking for a thenable reads `then`, which may throw; both roll back.
         if (isThenable(fn())) {
-          throw new TypeError('batch() needs a synchronous callback; it returned a promise or thenable.');
+          throw new TypeError(
+            'batch() needs a synchronous callback; it returned a promise or thenable.',
+          );
         }
       } catch (error) {
         current = start;
@@ -329,7 +337,9 @@ export function createStore(initial, options = {}) {
   /** @type {Store<S>['watch']} */
   function watch(selection, run, options = {}) {
     if (batchDepth > 0) {
-      throw new TypeError('watch() cannot be called inside batch(); its first value could be rolled back.');
+      throw new TypeError(
+        'watch() cannot be called inside batch(); its first value could be rolled back.',
+      );
     }
     const { fields: declared, read, equals = Object.is } = selection;
     if (!Array.isArray(declared) || declared.length === 0) {
@@ -339,7 +349,9 @@ export function createStore(initial, options = {}) {
     const fields = [...declared];
     for (const field of fields) {
       if (typeof field !== 'string' || !Object.hasOwn(current, field)) {
-        throw new TypeError(`Cannot watch "${String(field)}": it is not a field of this store's state.`);
+        throw new TypeError(
+          `Cannot watch "${String(field)}": it is not a field of this store's state.`,
+        );
       }
     }
     const { signal } = options;
@@ -347,7 +359,9 @@ export function createStore(initial, options = {}) {
     const before = version;
     const value = read(get());
     if (version !== before) {
-      throw new TypeError("A selection's read wrote to the store during watch(); read must be pure.");
+      throw new TypeError(
+        "A selection's read wrote to the store during watch(); read must be pure.",
+      );
     }
     if (signal?.aborted) return;
     /** @type {Subscription} */
@@ -378,5 +392,5 @@ export function createStore(initial, options = {}) {
     }
   }
 
-  return { get, set, batch, watch };
+  return { get, update, batch, watch };
 }

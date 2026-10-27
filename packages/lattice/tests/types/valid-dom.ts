@@ -1,8 +1,14 @@
 /** @file Consumer type fixture: uses of the element helpers that must type-check with the DOM library. */
-import { captureInputs, defineOnce, replayInputs, skipUpgradeAttribute } from '@canonic2/lattice/elements';
+import {
+  captureInputs,
+  defineOnce,
+  replayInputs,
+  skipUpgradeAttribute,
+} from '@canonic2/lattice/elements';
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
-type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Equal<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
 
 export type Imports = [

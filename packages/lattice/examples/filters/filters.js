@@ -13,7 +13,7 @@ import { createStore } from '@canonic2/lattice';
 
 /**
  * @typedef {object} Filters
- * @property {Pick<import('@canonic2/lattice').Store<FiltersState>, 'get' | 'watch'>} state Read-only view.
+ * @property {import('@canonic2/lattice').StoreReader<FiltersState>} state Read-only view.
  * @property {FilterSelections} select The capability's selections.
  * @property {(query: string) => Promise<void> | void} setQuery Sets the query, then saves it.
  * @property {() => void} toggleLocked Locks or unlocks every field.
@@ -46,14 +46,14 @@ export function createFilters({ save }) {
       },
     },
     setQuery(query) {
-      store.set({ query });
+      store.update({ query });
       return save(query);
     },
     toggleLocked() {
-      store.set((state) => ({ locked: !state.locked }));
+      store.update((state) => ({ locked: !state.locked }));
     },
     touch() {
-      store.set((state) => ({ revision: state.revision + 1 }));
+      store.update((state) => ({ revision: state.revision + 1 }));
     },
   };
 }

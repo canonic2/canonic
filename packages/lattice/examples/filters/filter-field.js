@@ -4,7 +4,12 @@
  * value. It dispatches `acme-filter-input` for typing, and observes its own size
  * while connected.
  */
-import { captureInputs, defineOnce, replayInputs, skipUpgradeAttribute } from '@canonic2/lattice/elements';
+import {
+  captureInputs,
+  defineOnce,
+  replayInputs,
+  skipUpgradeAttribute,
+} from '@canonic2/lattice/elements';
 
 /** @type {CSSStyleSheet | null} */
 let sheet = null;
@@ -49,7 +54,10 @@ export class AcmeFilterField extends HTMLElement {
     this.#control.addEventListener('input', this);
     const early = captureInputs(this, ['value']);
     if (early !== null) replayInputs(this, early);
-    const pending = captureInputs(this, ['label', 'disabled'], { label: 'label', disabled: 'disabled' });
+    const pending = captureInputs(this, ['label', 'disabled'], {
+      label: 'label',
+      disabled: 'disabled',
+    });
     if (pending !== null) {
       this.#pending = pending;
       queueMicrotask(() => {

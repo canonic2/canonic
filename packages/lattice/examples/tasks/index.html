@@ -5,16 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Lattice task list example</title>
     <script type="importmap">
-      { "imports": {
-        "@canonic2/lattice": "../../src/index.js",
-        "@canonic2/lattice/collection": "../../src/modules/collection/collection.js",
-        "@canonic2/lattice/elements": "../../src/modules/elements/elements.js"
-      } }
+      {
+        "imports": {
+          "@canonic2/lattice": "../../src/index.js",
+          "@canonic2/lattice/collection": "../../src/modules/collection/collection.js",
+          "@canonic2/lattice/elements": "../../src/modules/elements/elements.js"
+        }
+      }
     </script>
     <style>
-      body { font: 14px system-ui; max-width: 760px; margin: 24px auto; padding: 0 12px; }
-      nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-      output { display: block; margin: 8px 0; }
+      body {
+        font: 14px system-ui;
+        max-width: 760px;
+        margin: 24px auto;
+        padding: 0 12px;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 12px 0;
+      }
+      output {
+        display: block;
+        margin: 8px 0;
+      }
     </style>
   </head>
   <body>
@@ -36,11 +51,21 @@
       const tasks = createTasks(count);
       const lifetime = new AbortController();
       const view = mountTasks(document.querySelector('#app'), { signal: lifetime.signal, tasks });
-      const command = (id, run) => document.getElementById(id).addEventListener('click', run, { signal: lifetime.signal });
+      const command = (id, run) =>
+        document.getElementById(id).addEventListener('click', run, { signal: lifetime.signal });
       command('insert', () => tasks.insert(view.list.firstVisibleKey));
-      command('remove', () => { const key = tasks.state.get().selectedKey; if (key !== null) tasks.remove(key); });
-      command('reuse', () => { const key = tasks.state.get().selectedKey; if (key !== null) tasks.reuse(key); });
-      command('focus', () => { const key = tasks.state.get().selectedKey; if (key !== null) view.focusKey(key); });
+      command('remove', () => {
+        const key = tasks.state.get().selectedKey;
+        if (key !== null) tasks.remove(key);
+      });
+      command('reuse', () => {
+        const key = tasks.state.get().selectedKey;
+        if (key !== null) tasks.reuse(key);
+      });
+      command('focus', () => {
+        const key = tasks.state.get().selectedKey;
+        if (key !== null) view.focusKey(key);
+      });
       command('done', () => tasks.markAll(true));
       command('dispose', () => lifetime.abort());
       window.addEventListener('pagehide', () => lifetime.abort(), { once: true });

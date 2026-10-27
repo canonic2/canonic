@@ -96,7 +96,9 @@ export function skipUpgradeAttribute(pending, attribute) {
 export function replayInputs(host, pending) {
   for (const [name, value] of pending) {
     if (!Reflect.set(host, name, value)) {
-      throw new TypeError(`Cannot replay input "${name}": the element did not accept the assignment.`);
+      throw new TypeError(
+        `Cannot replay input "${name}": the element did not accept the assignment.`,
+      );
     }
   }
 }

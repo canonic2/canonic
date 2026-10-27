@@ -49,7 +49,9 @@ export function bindFilterField(element, filters, { signal, report }) {
     'acme-filter-input',
     (event) => {
       try {
-        const result = filters.setQuery(/** @type {CustomEvent<{ value: string }>} */ (event).detail.value);
+        const result = filters.setQuery(
+          /** @type {CustomEvent<{ value: string }>} */ (event).detail.value,
+        );
         if (typeof result?.then === 'function') Promise.resolve(result).then(undefined, present);
       } catch (error) {
         present(error);

@@ -2,4 +2,4 @@
 import { createStore } from '@canonic2/lattice';
 
 const store = createStore({ count: 0 });
-store.set({ missing: 1 });
+store.update({ missing: 1 });

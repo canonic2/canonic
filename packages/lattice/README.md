@@ -1,25 +1,35 @@
 # Lattice
 
-Lattice is an unpublished native JavaScript package for state and Web Component
-bindings. It has no runtime dependencies.
+Lattice's implemented package provides native JavaScript primitives for state
+and Web Component bindings, with no runtime dependencies. It is unpublished.
+The [framework specifications](specs/framework.md) record the agreed direction
+for multiple languages and native platforms; those implementations and shared
+code generation are not available yet.
 
-The [developer guides](docs/README.md) explain state models, keyed collections,
-list selection and presentation techniques, including when to choose each.
+Supported runtimes are **Node 24.12+** for pure entry points and tooling, and
+**Chromium 133+** for browser use. Embedded hosts qualify by their Chromium
+version. Other browser engines are unsupported; Lattice ships no polyfills.
 
-| Entry point | Exports |
-| --- | --- |
-| `@canonic2/lattice` | The store core: `createStore`, `shallow`, and the `Selection`, `Store`, `StoreOptions` and `WatchOptions` types. Pure: it loads no DOM code and runs in Node |
-| `@canonic2/lattice/collection` | The keyed collection: `createCollection`, and the `Collection`, `CollectionView`, `ItemSelection`, `CollectionSelection`, `KeysChange`, `CollectionOptions` and `CollectionWatchOptions` types. Pure: it loads no DOM code and runs in Node |
-| `@canonic2/lattice/elements` | The element helpers: `captureInputs`, `replayInputs`, `skipUpgradeAttribute` and `defineOnce` |
-| `@canonic2/lattice/testing` | Test support: `checkSelection`, which checks that a selection's `read` uses only its declared fields. For tests only; no runtime module imports it |
+The [guide](docs/README.md) starts with a working browser example and teaches
+state, selections, components and lists step by step. The
+[API reference](docs/api/README.md) collects signatures, options and public types.
 
-Source files run unchanged in modern browsers. There is no production build,
+| Entry point                    | Exports                                                                                                                                                                                                                                                                                                    |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@canonic2/lattice`            | The store core: `createStore`, `shallow`, and the `Selection`, `Store`, `StoreReader`, `StoreOptions` and `WatchOptions` types. Pure: it loads no DOM code and runs in Node                                                                                                                                |
+| `@canonic2/lattice/collection` | The keyed collection: `createCollection`, and the `Collection`, `CollectionReader`, `CollectionView`, `ItemSelection`, `CollectionSelection`, `AggregateSelection`, `MembershipChanges`, `KeysChange`, `CollectionOptions` and `CollectionWatchOptions` types. Pure: it loads no DOM code and runs in Node |
+| `@canonic2/lattice/elements`   | The element helpers: `captureInputs`, `replayInputs`, `skipUpgradeAttribute` and `defineOnce`                                                                                                                                                                                                              |
+| `@canonic2/lattice/testing`    | Test support: `checkSelection` for store/item selections and `checkCollectionSelection` for aggregates. Both check declared field dependencies. For tests only; no runtime module imports them                                                                                                             |
+
+Source files run unchanged in supported runtimes. There is no production build,
 bundler, transpilation or CommonJS entry point. TypeScript checks JavaScript and
 JSDoc with `noEmit`; it does not produce the shipped code.
 
-Collection batches combine delivery into one commit. Each membership insert
-or removal still creates its own frozen keys array, so large membership
-batches pay for those individual order copies.
+Collections support atomic bulk membership through `updateMembership` and
+reversible incremental summaries through `watchAggregate`. See
+[collections](docs/guide/collections.md) and [counts and sums](docs/guide/aggregates.md)
+for when to use each. Ordinary insert/remove still construct their own frozen
+keys arrays; batching combines delivery rather than those individual copies.
 
 ## Using Lattice from TypeScript
 
@@ -51,17 +61,17 @@ pnpm --dir packages/lattice run browser:install
 
 Run categories independently:
 
-| Category                          | Command from the repository root                     |
-| --------------------------------- | ---------------------------------------------------- |
-| Lint, including JSDoc             | `pnpm --dir packages/lattice run lint`               |
-| Apply safe lint fixes             | `pnpm --dir packages/lattice run lint:fix`           |
-| Apply formatting                  | `pnpm --dir packages/lattice run format`             |
-| Check formatting                  | `pnpm --dir packages/lattice run format:check`       |
-| Check JavaScript/JSDoc types: pure, DOM and tooling configurations in turn | `pnpm --dir packages/lattice run typecheck` |
-| Node unit tests                   | `pnpm --dir packages/lattice test`                   |
-| Watch unit tests                  | `pnpm --dir packages/lattice run test:watch`         |
-| Chromium tests through Playwright | `pnpm --dir packages/lattice run test:browser`       |
-| Watch browser tests               | `pnpm --dir packages/lattice run test:browser:watch` |
+| Category                                                                   | Command from the repository root                     |
+| -------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Lint, including JSDoc                                                      | `pnpm --dir packages/lattice run lint`               |
+| Apply safe lint fixes                                                      | `pnpm --dir packages/lattice run lint:fix`           |
+| Apply formatting                                                           | `pnpm --dir packages/lattice run format`             |
+| Check formatting                                                           | `pnpm --dir packages/lattice run format:check`       |
+| Check JavaScript/JSDoc types: pure, DOM and tooling configurations in turn | `pnpm --dir packages/lattice run typecheck`          |
+| Node unit tests                                                            | `pnpm --dir packages/lattice test`                   |
+| Watch unit tests                                                           | `pnpm --dir packages/lattice run test:watch`         |
+| Chromium tests through Playwright                                          | `pnpm --dir packages/lattice run test:browser`       |
+| Watch browser tests                                                        | `pnpm --dir packages/lattice run test:browser:watch` |
 
 Append a test path to the relevant test command for focused verification.
 The unit tests include `tests/package.test.js`, which packs the package with
@@ -81,8 +91,9 @@ incorrect parameter names and a JSDoc type mismatch. TypeScript 6.0.3 is pinned
 to satisfy the JSDoc plugin's current TypeScript compatibility range.
 
 The [specifications](specs/README.md) hold the agreed
-[contracts](specs/contracts/README.md), the element authoring shape in the
-framework folder and draft implementation designs in the architecture folder.
+[JavaScript contracts](specs/javascript/contracts/README.md), the
+[JavaScript authoring model](specs/javascript/framework/README.md) and current
+[JavaScript architecture](specs/javascript/architecture/README.md).
 [Research](research/README.md) records the measurements behind decisions.
 Contributor language, JSDoc and tooling instructions are supplied directly by
 the package's agent rules.

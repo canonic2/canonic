@@ -24,7 +24,10 @@ import { createFilters } from './filters.js';
  * @param {MountOptions} options Lifetime and ports.
  * @returns {import('./filters.js').Filters} The capability, for commands and tests.
  */
-export function mountFilters(container, { signal, count = 3, save = () => {}, report = reportError }) {
+export function mountFilters(
+  container,
+  { signal, count = 3, save = () => {}, report = reportError },
+) {
   defineAcmeFilterField();
   defineAcmeFilterSummary();
   const filters = createFilters({ save });
@@ -36,13 +39,50 @@ export function mountFilters(container, { signal, count = 3, save = () => {}, re
     field.setAttribute('label', `Filter ${index + 1}`);
     return field;
   });
-  const lifetime = { signal, report };
-  for (const field of fields) bindFilterField(field, filters, lifetime);
-  bindFilterSummary(summary, filters, lifetime);
-  container.append(summary, ...fields);
-  signal.addEventListener('abort', () => {
-    summary.remove();
-    for (const field of fields) field.remove();
-  }, { once: true });
+  const own = new AbortController();
+  let ended = false;
+  /**
+   * Present a cleanup failure without replacing a setup failure.
+   * @param {unknown} error Failure to report.
+   * @returns {void}
+   */
+  function present(error) {
+    try {
+      report(error);
+    } catch (failure) {
+      reportError(failure);
+    }
+  }
+  /**
+   * Release bindings before nodes, including when mounting fails.
+   * @returns {void}
+   */
+  function dispose() {
+    if (ended) return;
+    ended = true;
+    signal.removeEventListener('abort', dispose);
+    try {
+      own.abort();
+    } catch (error) {
+      present(error);
+    }
+    for (const element of [summary, ...fields].reverse()) {
+      try {
+        element.remove();
+      } catch (error) {
+        present(error);
+      }
+    }
+  }
+  signal.addEventListener('abort', dispose, { once: true });
+  try {
+    const lifetime = { signal: own.signal, report };
+    for (const field of fields) bindFilterField(field, filters, lifetime);
+    bindFilterSummary(summary, filters, lifetime);
+    if (!ended) container.append(summary, ...fields);
+  } catch (error) {
+    dispose();
+    throw error;
+  }
   return filters;
 }

@@ -49,7 +49,10 @@ test('orders accessed and unobserved fields by declaration, not by access', () =
 
 test('lists several unexpected fields alphabetically and reports the first failing case', () => {
   /** @type {import('../modules/store/store.js').Selection<State, string>} */
-  const leaky = { fields: ['muted'], read: (state) => `${state.unread} ${state.label} ${String(state.muted)}` };
+  const leaky = {
+    fields: ['muted'],
+    read: (state) => `${state.unread} ${state.label} ${String(state.muted)}`,
+  };
   expect(() => checkSelection('leaky', leaky, cases)).toThrow(
     'Selection "leaky", case "muted" (declares muted): read accessed undeclared fields: label, unread.',
   );
@@ -73,7 +76,9 @@ test('records destructuring and in as access', () => {
     fields: ['muted'],
     read: ({ muted, unread }) => muted && unread > 0,
   };
-  expect(() => checkSelection('destructured', destructured, cases)).toThrow('undeclared field: unread');
+  expect(() => checkSelection('destructured', destructured, cases)).toThrow(
+    'undeclared field: unread',
+  );
   /** @type {import('../modules/store/store.js').Selection<State, boolean>} */
   const tested = { fields: ['muted'], read: (state) => 'label' in state };
   expect(() => checkSelection('tested', tested, cases)).toThrow('undeclared field: label');
@@ -91,7 +96,10 @@ test('fails key enumeration and descriptor reads as unsupported, even when read 
         return 0;
       },
     },
-    { fields: ['muted'], read: (state) => (Object.getOwnPropertyDescriptor(state, 'muted') ? 1 : 0) },
+    {
+      fields: ['muted'],
+      read: (state) => (Object.getOwnPropertyDescriptor(state, 'muted') ? 1 : 0),
+    },
     {
       fields: ['muted'],
       read: (state) => {
@@ -128,7 +136,10 @@ test('fails an access to a field the state does not have', () => {
 
 test('ignores inherited members and symbols', () => {
   /** @type {import('../modules/store/store.js').Selection<State, string>} */
-  const formatted = { fields: ['unread'], read: (state) => state.unread.toString() + String(state.hasOwnProperty) };
+  const formatted = {
+    fields: ['unread'],
+    read: (state) => state.unread.toString() + String(state.hasOwnProperty),
+  };
   expect(checkSelection('formatted', formatted, cases).unobserved).toEqual([]);
 });
 
@@ -140,6 +151,8 @@ test('wraps an error read throws with its case, and needs at least one case', ()
       throw new Error('boom');
     },
   };
-  expect(() => checkSelection('failing', failing, cases)).toThrow('Selection "failing", case "muted" (declares label): read threw.');
+  expect(() => checkSelection('failing', failing, cases)).toThrow(
+    'Selection "failing", case "muted" (declares label): read threw.',
+  );
   expect(() => checkSelection('status', status, {})).toThrow('at least one snapshot case');
 });

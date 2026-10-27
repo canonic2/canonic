@@ -21,21 +21,62 @@ import { coordinateTaskList } from './list-view.js';
  */
 export function mountTasks(container, { signal, tasks = createTasks(), report = reportError }) {
   defineTaskList();
-  const list = new TaskList(), summary = document.createElement('output');
+  const list = new TaskList(),
+    summary = document.createElement('output');
   if (signal.aborted) return { tasks, list, summary, render: () => {}, focusKey: () => {} };
-  const failed = new AbortController(), own = AbortSignal.any([signal, failed.signal]);
+  const own = new AbortController();
+  let ended = false;
   /** @type {ReturnType<typeof coordinateTaskList> | null} */
   let retention = null;
-  /** Remove the view's owned DOM when its scope ends. @returns {void} */
+  /**
+   * Present a cleanup failure while preserving the initiating error.
+   * @param {unknown} error Failure to report.
+   * @returns {void}
+   */
+  function present(error) {
+    try {
+      report(error);
+    } catch (failure) {
+      reportError(failure);
+    }
+  }
+  /**
+   * Remove the view's owned DOM when its scope ends.
+   * @returns {void}
+   */
   const remove = () => {
-    try { retention?.dispose(); } catch (error) { try { report(error); } catch (failure) { reportError(failure); } }
-    finally { list.dispose(); list.remove(); summary.remove(); }
+    if (ended) return;
+    ended = true;
+    signal.removeEventListener('abort', remove);
+    try {
+      own.abort();
+    } catch (error) {
+      present(error);
+    }
+    for (const release of [() => list.dispose(), () => list.remove(), () => summary.remove()]) {
+      try {
+        release();
+      } catch (error) {
+        present(error);
+      }
+    }
   };
-  own.addEventListener('abort', remove, { once: true });
+  signal.addEventListener('abort', remove, { once: true });
   try {
-    container.append(summary, list);
-    bindTaskList(list, summary, tasks, own);
-    retention = coordinateTaskList(list, tasks, { signal: own, report });
-  } catch (error) { failed.abort(); throw error; }
-  return { tasks, list, summary, render: retention.render, focusKey: retention.focusKey };
+    bindTaskList({ list, summary }, tasks, { signal: own.signal });
+    if (!ended) {
+      container.append(summary, list);
+      retention = coordinateTaskList(list, tasks, { signal: own.signal, report });
+    }
+  } catch (error) {
+    remove();
+    throw error;
+  }
+  return {
+    tasks,
+    list,
+    summary,
+    render: () => retention?.render(),
+    focusKey: (key) => retention?.focusKey(key),
+  };
 }

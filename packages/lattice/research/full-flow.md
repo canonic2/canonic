@@ -52,10 +52,10 @@ Both variants mount the same elements, unchanged, from the
 [filters example](../examples/filters/): `<acme-filter-field>` and
 `<acme-filter-summary>`.
 
-| Variant | Role | State and wiring |
-| --- | --- | --- |
-| 0. Hand-written wiring | Control | The query, lock and revision in local variables. Actions compare with the current value, update the variable and assign the affected element inputs directly, deriving the summary text and assigning it only when it changed. One listener per field calls the query action, with the same failure presentation as the binding. Teardown aborts one controller, which removes the listeners, and removes the elements |
-| 1. Lattice | Candidate | The filters example unchanged: `createFilters` on `createStore`, `bindFilterField` and `bindFilterSummary`, `mountFilters` |
+| Variant                | Role      | State and wiring                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0. Hand-written wiring | Control   | The query, lock and revision in local variables. Actions compare with the current value, update the variable and assign the affected element inputs directly, deriving the summary text and assigning it only when it changed. One listener per field calls the query action, with the same failure presentation as the binding. Teardown aborts one controller, which removes the listeners, and removes the elements |
+| 1. Lattice             | Candidate | The filters example unchanged: `createFilters` on `createStore`, `bindFilterField` and `bindFilterSummary`, `mountFilters`                                                                                                                                                                                                                                                                                             |
 
 Both have the same visible behavior and the same guarantees the example's
 browser tests check: initial values, updates to every field and the summary,
@@ -65,31 +65,31 @@ before any run. `save` is a no-op in both during measurement.
 
 ### Workloads and sizes
 
-| Workload | Sequence |
-| --- | --- |
-| Setup | Create the capability or the variables, the elements and the wiring, and connect them |
-| Teardown | Abort the lifetime: release the wiring and remove the elements |
-| Typing | A real key press through Playwright into the first field: native `input`, intent event, query action, every field's `value` and the summary's `text` assigned |
-| Lock | A real click on a button that calls the lock action: every field's `disabled` assigned |
-| Unchanged | The query action with the current query, called from the page |
-| Unrelated | The revision action, which no element shows, called from the page |
-| Churn | 20 cycles of mount, one typing interaction, teardown |
+| Workload  | Sequence                                                                                                                                                      |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Setup     | Create the capability or the variables, the elements and the wiring, and connect them                                                                         |
+| Teardown  | Abort the lifetime: release the wiring and remove the elements                                                                                                |
+| Typing    | A real key press through Playwright into the first field: native `input`, intent event, query action, every field's `value` and the summary's `text` assigned |
+| Lock      | A real click on a button that calls the lock action: every field's `disabled` assigned                                                                        |
+| Unchanged | The query action with the current query, called from the page                                                                                                 |
+| Unrelated | The revision action, which no element shows, called from the page                                                                                             |
+| Churn     | 20 cycles of mount, one typing interaction, teardown                                                                                                          |
 
 Sizes: 1, 10 and 100 fields, plus the summary. 10 is the primary size.
 
 ### Measures
 
-| Measure | Evidence |
-| --- | --- |
-| Interaction cost | Profiler: `Performance.getMetrics` deltas of `TaskDuration` and `ScriptDuration` per typing and lock interaction, in blocks of 21 interactions with a frame after each, as in the component authoring lab |
-| Setup and teardown time | Observed: `performance.now()` around each, in cross-origin isolated pages, in batches reaching at least 1,000 fields per repetition, per field |
-| Unchanged and unrelated cost | Observed: `performance.now()` around 1,000 calls of the action, per call |
-| Allocations | Profiler: bytes allocated during 1,000 unchanged actions, 1,000 unrelated actions and 100 typing interactions, from Chrome's sampling heap profiler at a 64-byte interval, collected objects included |
-| Memory per mounted field | Profiler: JavaScript heap after garbage collection, mounted minus empty, at 100 fields, divided by 100 |
-| Retained after churn | Profiler: JavaScript heap and `Memory.getDOMCounters` listener and node counts after garbage collection, after the churn workload, against before it |
-| Selection and derivation calls | Observed: calls to each selection's `read` in Lattice and to the summary derivation in the control, per action |
-| DOM writes | Observed: spies on the elements' input setters and on the control's `value` and `disabled` setters, `Text.data` and attribute methods, per action |
-| Cleanup | Observed: after teardown, observers disconnected, no input assigned and no action called for further actions and events, and listener counts back to their baseline |
+| Measure                        | Evidence                                                                                                                                                                                                  |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Interaction cost               | Profiler: `Performance.getMetrics` deltas of `TaskDuration` and `ScriptDuration` per typing and lock interaction, in blocks of 21 interactions with a frame after each, as in the component authoring lab |
+| Setup and teardown time        | Observed: `performance.now()` around each, in cross-origin isolated pages, in batches reaching at least 1,000 fields per repetition, per field                                                            |
+| Unchanged and unrelated cost   | Observed: `performance.now()` around 1,000 calls of the action, per call                                                                                                                                  |
+| Allocations                    | Profiler: bytes allocated during 1,000 unchanged actions, 1,000 unrelated actions and 100 typing interactions, from Chrome's sampling heap profiler at a 64-byte interval, collected objects included     |
+| Memory per mounted field       | Profiler: JavaScript heap after garbage collection, mounted minus empty, at 100 fields, divided by 100                                                                                                    |
+| Retained after churn           | Profiler: JavaScript heap and `Memory.getDOMCounters` listener and node counts after garbage collection, after the churn workload, against before it                                                      |
+| Selection and derivation calls | Observed: calls to each selection's `read` in Lattice and to the summary derivation in the control, per action                                                                                            |
+| DOM writes                     | Observed: spies on the elements' input setters and on the control's `value` and `disabled` setters, `Text.data` and attribute methods, per action                                                         |
+| Cleanup                        | Observed: after teardown, observers disconnected, no input assigned and no action called for further actions and events, and listener counts back to their baseline                                       |
 
 Counted measures run in their own pages, apart from clean timing pages, and
 allocation sampling runs in its own pages too.
@@ -153,12 +153,12 @@ after 20,000 warmup calls, 20,000 sampled calls, 5 pages each at 10 and 100
 fields. A diagnostic run with inlining disabled split the store's functions
 apart:
 
-| Write | Site | Bytes per call | What it is |
-| --- | --- | --- | --- |
-| Unrelated | `set` | 210 | The new snapshot, and two growable arrays of changed keys and values |
-| Unrelated | `commit` | 97 | A commit record object, and the queue's backing store, regrown after `queue.length = 0` trims it |
-| Unrelated | `touch` and its patch arrow | 45 | The application's patch function and patch object |
-| Unchanged | `setQuery` | 16 | The application's patch object; `set` allocates nothing |
+| Write     | Site                        | Bytes per call | What it is                                                                                       |
+| --------- | --------------------------- | -------------- | ------------------------------------------------------------------------------------------------ |
+| Unrelated | `set`                       | 210            | The new snapshot, and two growable arrays of changed keys and values                             |
+| Unrelated | `commit`                    | 97             | A commit record object, and the queue's backing store, regrown after `queue.length = 0` trims it |
+| Unrelated | `touch` and its patch arrow | 45             | The application's patch function and patch object                                                |
+| Unchanged | `setQuery`                  | 16             | The application's patch object; `set` allocates nothing                                          |
 
 The delivery walk allocates nothing in optimized code, at either size. The
 stage 1 allocation figures that grew with subscriptions were sampled after 300
@@ -228,14 +228,14 @@ launch Chromium.
 
 ## Conditions
 
-| Item | Value |
-| --- | --- |
-| Dates | 2026-10-24: timing 18:45–18:50 UTC, counted 18:50, memory 18:50–18:52 |
-| Host | macOS 15 (Darwin 24.6), x86-64, Intel Xeon W-2140B at 3.2 GHz with 16 threads, 64 GB memory, on mains power |
-| Background load | 1-minute load average 6 at the start of the timing set, rising to 49 by its end; 38 to 46 during the counted and memory sets |
-| Runtimes | Node 24.12.0; Chromium 156.0.8078.4 bundled with Playwright 1.64.1, new headless mode, 800 × 600 viewport; every timing page cross-origin isolated |
+| Item            | Value                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dates           | 2026-10-24: timing 18:45–18:50 UTC, counted 18:50, memory 18:50–18:52                                                                                                                                                                                                                                                                                                                                                                    |
+| Host            | macOS 15 (Darwin 24.6), x86-64, Intel Xeon W-2140B at 3.2 GHz with 16 threads, 64 GB memory, on mains power                                                                                                                                                                                                                                                                                                                              |
+| Background load | 1-minute load average 6 at the start of the timing set, rising to 49 by its end; 38 to 46 during the counted and memory sets                                                                                                                                                                                                                                                                                                             |
+| Runtimes        | Node 24.12.0; Chromium 156.0.8078.4 bundled with Playwright 1.64.1, new headless mode, 800 × 600 viewport; every timing page cross-origin isolated                                                                                                                                                                                                                                                                                       |
 | Measured source | Repository commit `fc5b2b7c6c23` with uncommitted sources, identical in all three sets. SHA-256 prefixes: `store.js` `31a6a0ac8331`, `shallow.js` `f6c84d08b867`, `elements.js` `a9e42497fb74`, example `filters.js` `71c7edef2729`, `bindings.js` `3c6ccda2d7c8`, `app.js` `042c60548771`, `filter-field.js` `22a9c97ead3f`, `filter-summary.js` `7cb0d8246ef6`, control `1b1fbde01a17`, page API `8abcc86873cc`, runner `16af032e9cec` |
-| Samples | Timing: 20 pages per variant at 10 fields, 10 at 1 and 100. Counted: 3 per variant and size. Memory and allocation: 10 per variant and size. No page errored |
+| Samples         | Timing: 20 pages per variant at 10 fields, 10 at 1 and 100. Counted: 3 per variant and size. Memory and allocation: 10 per variant and size. No page errored                                                                                                                                                                                                                                                                             |
 
 ## Results
 
@@ -244,30 +244,30 @@ rule: larger than 5% of the control and than both interquartile ranges.
 
 ### Interaction cost
 
-| Fields | Hand-written, ms per interaction | Lattice | Difference | Meaningful |
-| --- | --- | --- | --- | --- |
-| 1 | 1.77 (IQR 0.066) | 1.83 (IQR 0.058) | +0.056, +3.2% | No |
-| 10 | 2.29 (IQR 0.090) | 2.36 (IQR 0.133) | +0.071, +3.1% | No |
-| 100 | 6.92 (IQR 0.334) | 7.21 (IQR 0.447) | +0.286, +4.1% | No |
+| Fields | Hand-written, ms per interaction | Lattice          | Difference    | Meaningful |
+| ------ | -------------------------------- | ---------------- | ------------- | ---------- |
+| 1      | 1.77 (IQR 0.066)                 | 1.83 (IQR 0.058) | +0.056, +3.2% | No         |
+| 10     | 2.29 (IQR 0.090)                 | 2.36 (IQR 0.133) | +0.071, +3.1% | No         |
+| 100    | 6.92 (IQR 0.334)                 | 7.21 (IQR 0.447) | +0.286, +4.1% | No         |
 
 Script duration within those interactions:
 
-| Fields | Hand-written, ms | Lattice | Difference | Meaningful |
-| --- | --- | --- | --- | --- |
-| 1 | 0.060 | 0.081 | +0.021, +36% | Yes |
-| 10 | 0.095 | 0.116 | +0.021, +22% | Yes |
-| 100 | 0.332 | 0.385 | +0.053, +16% | Yes |
+| Fields | Hand-written, ms | Lattice | Difference   | Meaningful |
+| ------ | ---------------- | ------- | ------------ | ---------- |
+| 1      | 0.060            | 0.081   | +0.021, +36% | Yes        |
+| 10     | 0.095            | 0.116   | +0.021, +22% | Yes        |
+| 100    | 0.332            | 0.385   | +0.053, +16% | Yes        |
 
 Style recalculation and layout were the same in both, within 2.4% and never
 meaningful.
 
 ### Setup and teardown
 
-| Fields | Setup, µs per field: hand-written | Lattice | Teardown: hand-written | Lattice |
-| --- | --- | --- | --- | --- |
-| 1 | 21.4 | 23.4 (+9%) | 13.1 | 15.7 (+20%) |
-| 10 | 15.8 | 20.6 (+30%) | 7.0 | 9.8 (+39%) |
-| 100 | 14.6 | 18.7 (+28%) | 6.6 | 9.1 (+40%) |
+| Fields | Setup, µs per field: hand-written | Lattice     | Teardown: hand-written | Lattice     |
+| ------ | --------------------------------- | ----------- | ---------------------- | ----------- |
+| 1      | 21.4                              | 23.4 (+9%)  | 13.1                   | 15.7 (+20%) |
+| 10     | 15.8                              | 20.6 (+30%) | 7.0                    | 9.8 (+39%)  |
+| 100    | 14.6                              | 18.7 (+28%) | 6.6                    | 9.1 (+40%)  |
 
 All differences are meaningful. Lattice adds about 4 to 5 µs of setup and
 2.6 µs of teardown per field.
@@ -275,10 +275,10 @@ All differences are meaningful. Lattice adds about 4 to 5 µs of setup and
 ### Unchanged and unrelated updates
 
 | Fields | Unchanged, µs per action: hand-written | Lattice | Unrelated: hand-written | Lattice |
-| --- | --- | --- | --- | --- |
-| 1 | 0.010 | 0.075 | 0.005 | 0.37 |
-| 10 | 0.010 | 0.075 | 0.005 | 0.53 |
-| 100 | 0.010 | 0.075 | 0.000 | 2.64 |
+| ------ | -------------------------------------- | ------- | ----------------------- | ------- |
+| 1      | 0.010                                  | 0.075   | 0.005                   | 0.37    |
+| 10     | 0.010                                  | 0.075   | 0.005                   | 0.53    |
+| 100    | 0.010                                  | 0.075   | 0.000                   | 2.64    |
 
 All Lattice differences are meaningful. An unchanged write costs a constant
 65 ns more: the store compares the patch and returns. An unrelated write costs
@@ -288,14 +288,14 @@ the changed field. Neither variant made a DOM write for either action.
 
 ### Allocations and memory
 
-| Fields | Measure | Hand-written | Lattice |
-| --- | --- | --- | --- |
-| 1, 10, 100 | Bytes per unchanged action | 2.4, 2.4, 2.6 | 26, 27, 23 |
-| 1, 10, 100 | Bytes per unrelated action | 4.3, 4.3, 4.3 | 740, 1,798, 2,548 |
-| 1, 10, 100 | Bytes per interaction, including the runner's own page calls | 3,129, 3,298, 5,164 | 3,774, 3,940, 3,380 |
-| 100 | JavaScript heap per mounted field, bytes | 372 (IQR 59) | 755 (IQR 0) |
-| 1, 10, 100 | Retained after 20 mount and teardown cycles, bytes | 16,848, 9,848, 9,572 | 44,016, 19,992, 18,100 |
-| 1, 10, 100 | Listeners and nodes retained after those cycles | 0 | 0 |
+| Fields     | Measure                                                      | Hand-written         | Lattice                |
+| ---------- | ------------------------------------------------------------ | -------------------- | ---------------------- |
+| 1, 10, 100 | Bytes per unchanged action                                   | 2.4, 2.4, 2.6        | 26, 27, 23             |
+| 1, 10, 100 | Bytes per unrelated action                                   | 4.3, 4.3, 4.3        | 740, 1,798, 2,548      |
+| 1, 10, 100 | Bytes per interaction, including the runner's own page calls | 3,129, 3,298, 5,164  | 3,774, 3,940, 3,380    |
+| 100        | JavaScript heap per mounted field, bytes                     | 372 (IQR 59)         | 755 (IQR 0)            |
+| 1, 10, 100 | Retained after 20 mount and teardown cycles, bytes           | 16,848, 9,848, 9,572 | 44,016, 19,992, 18,100 |
+| 1, 10, 100 | Listeners and nodes retained after those cycles              | 0                    | 0                      |
 
 Allocation figures are estimates from sampling at a 64-byte interval. The
 memory per field at 1 and 10 fields is dominated by one-time costs and varied
@@ -326,17 +326,17 @@ Allocation pages ran 19:05–19:08 UTC, timing 19:08–19:12, counted 19:12, wit
 the same host and tools; background load stayed high. The lab copy passed all
 48 of the store's unit tests before the runs.
 
-| Measure | Variant 1 | Variant 2 | Difference | Meaningful |
-| --- | --- | --- | --- | --- |
-| Bytes per unrelated write, 10 and 100 fields | 352, 351 | 98, 98 | −72% | Yes |
-| Bytes per changing write, 10 and 100 fields | 364, 364 | 110, 110 | −70% | Yes |
-| Bytes per unchanged write, 10 and 100 fields | 17, 17 | 17, 17 | +2% | No |
-| µs per unrelated write, 10 fields | 0.53 (IQR 0.015) | 0.42 (IQR 0.010) | −22% | Yes |
-| µs per unrelated write, 100 fields | 2.68 (IQR 0.18) | 2.29 (IQR 0.12) | −15% | Yes |
-| µs per unchanged write | 0.075 | 0.075 | 0% | No |
-| Interaction task time (CPU work, not presented latency), ms, 10 and 100 fields | 2.52, 7.45 | 2.51, 7.18 | −0.4%, −3.6% | No |
-| Interaction script time, ms, 10 and 100 fields | 0.123, 0.388 | 0.120, 0.376 | −3% | No |
-| Setup and teardown, µs per field | 41–60, 15–16 | 19–21, 9–10 | Lower | No: interquartile ranges up to 50 µs |
+| Measure                                                                        | Variant 1        | Variant 2        | Difference   | Meaningful                           |
+| ------------------------------------------------------------------------------ | ---------------- | ---------------- | ------------ | ------------------------------------ |
+| Bytes per unrelated write, 10 and 100 fields                                   | 352, 351         | 98, 98           | −72%         | Yes                                  |
+| Bytes per changing write, 10 and 100 fields                                    | 364, 364         | 110, 110         | −70%         | Yes                                  |
+| Bytes per unchanged write, 10 and 100 fields                                   | 17, 17           | 17, 17           | +2%          | No                                   |
+| µs per unrelated write, 10 fields                                              | 0.53 (IQR 0.015) | 0.42 (IQR 0.010) | −22%         | Yes                                  |
+| µs per unrelated write, 100 fields                                             | 2.68 (IQR 0.18)  | 2.29 (IQR 0.12)  | −15%         | Yes                                  |
+| µs per unchanged write                                                         | 0.075            | 0.075            | 0%           | No                                   |
+| Interaction task time (CPU work, not presented latency), ms, 10 and 100 fields | 2.52, 7.45       | 2.51, 7.18       | −0.4%, −3.6% | No                                   |
+| Interaction script time, ms, 10 and 100 fields                                 | 0.123, 0.388     | 0.120, 0.376     | −3%          | No                                   |
+| Setup and teardown, µs per field                                               | 41–60, 15–16     | 19–21, 9–10      | Lower        | No: interquartile ranges up to 50 µs |
 
 Bytes are steady-state figures after 20,000 warmup calls, from 10 pages per
 variant and size; timings from 20 pages at 10 fields and 10 at 100. Setup and
@@ -352,16 +352,16 @@ Allocation pages ran 20:19–20:23 UTC, timing 20:23–20:28 and counted at 20:2
 Background load rose from 34 to 105 during the allocation set and from 97 to
 148 during the timing set, on 16 threads; the heaviest of the whole lab.
 
-| Measure | Previous store | Shipping store | Reading |
-| --- | --- | --- | --- |
-| Bytes per unrelated write, 10 and 100 fields | 352, 351 | 98, 97 | Confirmed: −72%, the same as stage 2 |
-| Bytes per changing write, 10 and 100 fields | 364, 364 | 110, 110 | Confirmed: −70% |
-| Bytes per unchanged write | 17 | 17 | No difference |
-| µs per unrelated write, 10 fields | 0.535 (IQR 0.015) | 0.425 (IQR 0.030) | Confirmed: −21%, meaningful |
-| µs per unrelated write, 100 fields | 2.73 (IQR 0.53) | 2.31 (IQR 0.06) | Inconclusive: −16%, smaller than the previous store's spread |
-| Interaction script time, 10 and 100 fields | 0.127, 0.445 ms | 0.124, 0.403 ms | No meaningful difference |
-| Interaction task time, 100 fields | 10.7 ms (IQR 2.9) | 7.3 ms (IQR 3.1) | Flagged meaningful by the rule, but not claimed: the spreads near 3 ms and the load make a store change worth 3 ms implausible |
-| Any measure slower | — | — | None |
+| Measure                                      | Previous store    | Shipping store    | Reading                                                                                                                        |
+| -------------------------------------------- | ----------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Bytes per unrelated write, 10 and 100 fields | 352, 351          | 98, 97            | Confirmed: −72%, the same as stage 2                                                                                           |
+| Bytes per changing write, 10 and 100 fields  | 364, 364          | 110, 110          | Confirmed: −70%                                                                                                                |
+| Bytes per unchanged write                    | 17                | 17                | No difference                                                                                                                  |
+| µs per unrelated write, 10 fields            | 0.535 (IQR 0.015) | 0.425 (IQR 0.030) | Confirmed: −21%, meaningful                                                                                                    |
+| µs per unrelated write, 100 fields           | 2.73 (IQR 0.53)   | 2.31 (IQR 0.06)   | Inconclusive: −16%, smaller than the previous store's spread                                                                   |
+| Interaction script time, 10 and 100 fields   | 0.127, 0.445 ms   | 0.124, 0.403 ms   | No meaningful difference                                                                                                       |
+| Interaction task time, 100 fields            | 10.7 ms (IQR 2.9) | 7.3 ms (IQR 3.1)  | Flagged meaningful by the rule, but not claimed: the spreads near 3 ms and the load make a store change worth 3 ms implausible |
+| Any measure slower                           | —                 | —                 | None                                                                                                                           |
 
 Both stores passed every counted check at 10 and 100 fields. The allocation
 result holds on the shipping path. The timing result holds for unrelated writes
@@ -374,13 +374,13 @@ Heap snapshots before and after churn at 10 fields, 3 pages per variant,
 grouped by node type and constructor, with the same churn as stage 1, repeated
 with 20 and 60 cycles:
 
-| Retained after churn | Hand-written, 20 / 60 cycles | Lattice, 20 / 60 cycles |
-| --- | --- | --- |
-| Application-level objects: plain objects, arrays, closures, hidden classes | 2,376 / 2,376 bytes | 3,868 / 3,868 bytes |
-| Compiled code (`InstructionStream`, `Code`, bytecode, feedback vectors) | about 23 / 23 KB | about 34 / 39 KB |
-| Paint timing entries (`LargestContentfulPaint`, `InteractionContentfulPaint`) | one of each per cycle | one of each per cycle |
-| Blink hash table and vector backings | grown capacity, no added entries | grown capacity, no added entries |
-| Stores, subscriptions, signals, controllers, elements, observers, listeners | none | none |
+| Retained after churn                                                          | Hand-written, 20 / 60 cycles     | Lattice, 20 / 60 cycles          |
+| ----------------------------------------------------------------------------- | -------------------------------- | -------------------------------- |
+| Application-level objects: plain objects, arrays, closures, hidden classes    | 2,376 / 2,376 bytes              | 3,868 / 3,868 bytes              |
+| Compiled code (`InstructionStream`, `Code`, bytecode, feedback vectors)       | about 23 / 23 KB                 | about 34 / 39 KB                 |
+| Paint timing entries (`LargestContentfulPaint`, `InteractionContentfulPaint`) | one of each per cycle            | one of each per cycle            |
+| Blink hash table and vector backings                                          | grown capacity, no added entries | grown capacity, no added entries |
+| Stores, subscriptions, signals, controllers, elements, observers, listeners   | none                             | none                             |
 
 Lattice's extra retention after churn is attributed to engine state rather
 than objects it keeps: more of its functions are compiled and optimized during
@@ -395,10 +395,10 @@ same in both variants. No change is made on this evidence.
 
 ## Correctness
 
-| Variant | Counted pages | Failed checks |
-| --- | --- | --- |
-| 0. Hand-written wiring | 9 | None |
-| 1. Lattice | 9 | None |
+| Variant                | Counted pages | Failed checks |
+| ---------------------- | ------------- | ------------- |
+| 0. Hand-written wiring | 9             | None          |
+| 1. Lattice             | 9             | None          |
 
 Both passed initial values, typing, locking, unchanged and unrelated actions,
 teardown, and the expected count of every effect, at 1, 10 and 100 fields.
@@ -485,6 +485,6 @@ reduction is the established result; the timing gain is supported at 10 fields
 only. The owner kept the change and deferred the field index. The change is implemented in `src/modules/store/store.js`, where the
 store's unit tests, the root import test and the filters example's browser
 tests pass, and
-[store architecture](../specs/architecture/store.md#measured-choices) records
+[store architecture](../specs/javascript/architecture/store.md#measured-choices) records
 it. The walk's time still grows with the number of subscriptions; a field
 index remains unconsidered until a workload shows that walk matters.

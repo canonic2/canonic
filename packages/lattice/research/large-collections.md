@@ -5,7 +5,7 @@
 At 10,000 items, how should a keyed collection's single selection be held,
 and does mounting only the visible rows keep mounting, memory, scrolling and
 updates within budget? The answers decide whether the
-[collections contract](../specs/contracts/collections.md) recommends a
+[collections contract](../specs/javascript/contracts/collections.md) recommends a
 selection pattern on the existing API or needs a keyed subscription API, and
 whether Lattice documents a windowing pattern or proposes a windowing helper.
 
@@ -52,11 +52,11 @@ collection record.
 
 ### Stage A: selection, every row mounted
 
-| Variant | Selection state | Row wiring |
-| --- | --- | --- |
-| S0. Scalar selection | `selectedKey` in a store beside the collection | Each row subscribes to a store selection `selectedKey === key`; one subscription per row on one field |
-| S1. Item field | Item `selected` fields are the sole selection owner; a private cached key is derived from successful actions, never independently writable. `select(key)` clears the previous item and sets the new one in one collection batch | Each row watches its item's `selected` with `watchItem` |
-| S2. List input | `selectedKey` in a store, as S0 | One subscription assigns the list element's `selectedKey` input; its setter updates the old and new retained rows |
+| Variant              | Selection state                                                                                                                                                                                                                 | Row wiring                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| S0. Scalar selection | `selectedKey` in a store beside the collection                                                                                                                                                                                  | Each row subscribes to a store selection `selectedKey === key`; one subscription per row on one field             |
+| S1. Item field       | Item `selected` fields are the sole selection owner; a private cached key is derived from successful actions, never independently writable. `select(key)` clears the previous item and sets the new one in one collection batch | Each row watches its item's `selected` with `watchItem`                                                           |
+| S2. List input       | `selectedKey` in a store, as S0                                                                                                                                                                                                 | One subscription assigns the list element's `selectedKey` input; its setter updates the old and new retained rows |
 
 S2 preserves state → binding → element separation and needs no binding
 exception. A binding that directly addresses individual rows would instead be
@@ -70,11 +70,11 @@ select a row, then update an unrelated item.
 
 ### Stage B: windowing
 
-| Variant | Rows |
-| --- | --- |
-| W0. All rows | Every item has a mounted row, as in the collection record |
+| Variant                        | Rows                                                                                                                                                                                                                                                              |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| W0. All rows                   | Every item has a mounted row, as in the collection record                                                                                                                                                                                                         |
 | W1. Window, create and destroy | A lab window binding watches the keys and a scroll position. With a fixed row height and an overscan of 10 rows on each side, it mounts rows only for the keys in view; rows that leave end their lifetime and are removed, rows that enter are created and bound |
-| W2. Window, recycled rows | As W1, but a row that leaves is unbound and kept in a pool, and an entering key rebinds a pooled row with a new lifetime instead of creating one |
+| W2. Window, recycled rows      | As W1, but a row that leaves is unbound and kept in a pool, and an entering key rebinds a pooled row with a new lifetime instead of creating one                                                                                                                  |
 
 All variants use Stage A's leading eligible pattern, recorded in a dated
 Method entry before Stage B begins. Selection-change CPU time decides between
@@ -104,7 +104,7 @@ scrolling it out of view and back.
   number of frames over 16.7 ms, and long tasks over 50 ms.
 - **Presented latency.** For a real click selecting a row, through Playwright,
   the Event Timing entry's processing end and duration, as
-  [performance and evidence](../specs/contracts/performance.md#rendering-and-responsiveness)
+  [performance and evidence](../specs/javascript/contracts/performance.md#rendering-and-responsiveness)
   requires; reported as headless Chromium figures.
   “To screen” means the event's presentation endpoint from Event Timing
   (`startTime + duration`) or an identified presented frame in a trace. Mount
@@ -606,7 +606,7 @@ each side. Initial mounting retains 19 rows, a middle window 23, plus at most
 one focused row. Capability creation and view attachment are distinct phases;
 the comparison reports both, rather than hiding capability construction.
 
-The provisional [retained-items surface](../specs/framework/collection-mechanics.md)
+The provisional [retained-items surface](../specs/javascript/framework/collection-mechanics.md)
 has creation, placement, removal and error ports, plus `setKeys`, `retain`,
 `get` and `dispose`. It owns the keyed registry and incarnation lifetimes,
 supports full-list or bounded retention and one pinned item, and never chooses
@@ -657,15 +657,15 @@ and ends each acquired lifetime once. Probe these cases outside timing.
 
 ### Stage A (2026-10-25)
 
-| Item | Value |
-| --- | --- |
-| Time | 03:56–04:37 UTC |
-| Host | macOS 15, x86-64, Intel Xeon W-2140B, 16 threads, 64 GB memory; Node 24.12.0; headless Chromium 156.0.8078.4 with Playwright 1.64.1 |
-| Load | One-minute load 16.3 before and 8.0 after; an intermediate observation was 25.6. Power state was not sampled |
-| Source | Public commit `bd61a1e`; shipping collection SHA-256 `a597d35a…`, store `9bf3b436…`, reporter `e4ad2ac9…`; lab page `659b1be1…`, runner `0ecb66bb…` |
-| Samples | Per pattern and size: 15 timing pages, 10 memory/allocation pages, 3 counted pages, 10 presentation pages of 20 clicks; 228 pages total |
+| Item       | Value                                                                                                                                                                                                                          |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Time       | 03:56–04:37 UTC                                                                                                                                                                                                                |
+| Host       | macOS 15, x86-64, Intel Xeon W-2140B, 16 threads, 64 GB memory; Node 24.12.0; headless Chromium 156.0.8078.4 with Playwright 1.64.1                                                                                            |
+| Load       | One-minute load 16.3 before and 8.0 after; an intermediate observation was 25.6. Power state was not sampled                                                                                                                   |
+| Source     | Public commit `bd61a1e`; shipping collection SHA-256 `a597d35a…`, store `9bf3b436…`, reporter `e4ad2ac9…`; lab page `659b1be1…`, runner `0ecb66bb…`                                                                            |
+| Samples    | Per pattern and size: 15 timing pages, 10 memory/allocation pages, 3 counted pages, 10 presentation pages of 20 clicks; 228 pages total                                                                                        |
 | Warm state | CPU setup and teardown: five warmups, ten measured rounds; changing updates: five warmup and ten measured rounds of 1,000 calls. Presented mount is the first construction in a fresh context; imports precede the input event |
-| Memory | After forced garbage collection; total is mounted minus empty, presentation is mounted minus state-only. Native DOM bytes are not measured; DOM nodes are counted separately |
+| Memory     | After forced garbage collection; total is mounted minus empty, presentation is mounted minus state-only. Native DOM bytes are not measured; DOM nodes are counted separately                                                   |
 
 The common item record includes a `selected` boolean in all patterns; it is
 dormant in S0 and S2. This isolates subscription and wiring differences but
@@ -691,16 +691,16 @@ not repeated. The higher load limits comparisons of presentation tails.
 
 ### Stage B (2026-10-25)
 
-| Item | Value |
-| --- | --- |
-| Time | 05:10–05:49 UTC |
-| Host and tools | As Stage A; one owned browser per set, fresh context per page; browser-level caches may stay warm |
-| Load | One-minute load 11.2 before and 6.5 after; not sampled continuously |
-| Source | Public commit `bae472c`; shipping source hashes unchanged from Stage A; corrected lab page `443c7dc0…`, runner `d3dad200…` |
-| Samples | Per window and size: 15 timing pages, 10 heap/allocation pages, 3 counted pages, 10 presentation pages of 20 clicks, 10 scrolling pages; 288 pages total |
-| Scrolling | Five categories of work are separate: driven synchronous samples, traced script intervals, callback cadence, long tasks, and sampled allocations. Timing/GC uses a trace-only pass; allocations use a later sampling-only pass |
-| Sampling | 32-byte interval for selection allocation; 32,768-byte interval for scrolling allocation, including objects collected during sampling |
-| Memory | Initial 50-row window, no focused pin or accumulated recycle pool; mounted minus empty and mounted minus state-only after forced GC |
+| Item           | Value                                                                                                                                                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Time           | 05:10–05:49 UTC                                                                                                                                                                                                                |
+| Host and tools | As Stage A; one owned browser per set, fresh context per page; browser-level caches may stay warm                                                                                                                              |
+| Load           | One-minute load 11.2 before and 6.5 after; not sampled continuously                                                                                                                                                            |
+| Source         | Public commit `bae472c`; shipping source hashes unchanged from Stage A; corrected lab page `443c7dc0…`, runner `d3dad200…`                                                                                                     |
+| Samples        | Per window and size: 15 timing pages, 10 heap/allocation pages, 3 counted pages, 10 presentation pages of 20 clicks, 10 scrolling pages; 288 pages total                                                                       |
+| Scrolling      | Five categories of work are separate: driven synchronous samples, traced script intervals, callback cadence, long tasks, and sampled allocations. Timing/GC uses a trace-only pass; allocations use a later sampling-only pass |
+| Sampling       | 32-byte interval for selection allocation; 32,768-byte interval for scrolling allocation, including objects collected during sampling                                                                                          |
+| Memory         | Initial 50-row window, no focused pin or accumulated recycle pool; mounted minus empty and mounted minus state-only after forced GC                                                                                            |
 
 ### Stage B confirmation (2026-10-25)
 
@@ -781,12 +781,12 @@ Its public source revision was `999e76929e03`. W1, C1, shipping collection,
 store, reporter, example row and reconciler hashes match the targeted
 comparison. New SHA-256 values are:
 
-| Input | SHA-256 |
-| --- | --- |
-| Guard-only G1 | `471ca1479aa6dee9afef01519566589a221d97c113ee729b5cb4f388fbed7c05` |
-| Native wiring N1 | `6a80260ded2e7eed41ea626fe6054af872be892ed5cbadb224abefb914172923` |
-| Bounded runner | `f27be8aad02e4d928e0f9995336d158a933f271715422d69a157c383042171d9` |
-| Trace summarizer | `d13d510e6cfd8e7566907be143b3c3e9b689ee21746803e773fa02adb5a67b6a` |
+| Input               | SHA-256                                                            |
+| ------------------- | ------------------------------------------------------------------ |
+| Guard-only G1       | `471ca1479aa6dee9afef01519566589a221d97c113ee729b5cb4f388fbed7c05` |
+| Native wiring N1    | `6a80260ded2e7eed41ea626fe6054af872be892ed5cbadb224abefb914172923` |
+| Bounded runner      | `f27be8aad02e4d928e0f9995336d158a933f271715422d69a157c383042171d9` |
+| Trace summarizer    | `d13d510e6cfd8e7566907be143b3c3e9b689ee21746803e773fa02adb5a67b6a` |
 | Native-stack runner | `e0d0efec9e8c1feff846dd8ef9487018fc0006815872e281b03f6609099cffae` |
 
 Eighteen diagnostic pages followed the repaired six-cell smoke. End jumps
@@ -861,27 +861,27 @@ CPU figures are p50 / p95 / maximum (IQR) across 15 page medians. Each page's
 median is over ten measured rounds. Times exclude style, layout and paint
 that happen after the synchronous operation returns.
 
-| Pattern | Items | Mount, ms | Teardown, ms | Random selection, µs | Next selection, µs | Same selection, µs | Unrelated label update, µs |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| S0 | 1,000 | 31.6 / 32.1 / 32.1 (0.525) | 14.8 / 15.3 / 15.3 (0.370) | 18.2 / 19.0 / 19.0 (0.430) | 18.4 / 19.0 / 19.0 (0.670) | 0.045 / 0.050 / 0.050 (0.005) | 2.88 / 2.98 / 2.98 (0.080) |
-| S0 | 10,000 | 941 / 986 / 986 (41.1) | 172 / 197 / 197 (10.4) | 243 / 577 / 577 (114) | 234 / 349 / 349 (97.5) | 0.050 / 0.050 / 0.050 (0.005) | 2.91 / 3.08 / 3.08 (0.150) |
-| S1 | 1,000 | 31.3 / 32.3 / 32.3 (0.945) | 14.9 / 15.6 / 15.6 (0.575) | 2.62 / 2.81 / 2.81 (0.180) | 2.11 / 2.20 / 2.20 (0.120) | 0.045 / 0.055 / 0.055 (0.005) | 3.06 / 3.24 / 3.24 (0.065) |
-| S1 | 10,000 | 950 / 1032 / 1032 (27.9) | 168 / 175 / 175 (8.57) | 3.55 / 3.75 / 3.75 (0.115) | 2.38 / 2.68 / 2.68 (0.210) | 0.040 / 0.040 / 0.040 (0.000) | 3.03 / 3.21 / 3.21 (0.110) |
-| S2 | 1,000 | 30.8 / 33.0 / 33.0 (1.04) | 13.2 / 14.0 / 14.0 (0.435) | 1.24 / 1.53 / 1.53 (0.100) | 0.995 / 1.38 / 1.38 (0.190) | 0.050 / 0.050 / 0.050 (0.010) | 2.99 / 3.56 / 3.56 (0.150) |
-| S2 | 10,000 | 931 / 1021 / 1021 (46.9) | 171 / 177 / 177 (6.58) | 1.70 / 2.06 / 2.06 (0.210) | 1.35 / 1.58 / 1.58 (0.220) | 0.050 / 0.050 / 0.050 (0.005) | 2.90 / 3.05 / 3.05 (0.110) |
+| Pattern | Items  | Mount, ms                  | Teardown, ms               | Random selection, µs       | Next selection, µs          | Same selection, µs            | Unrelated label update, µs |
+| ------- | ------ | -------------------------- | -------------------------- | -------------------------- | --------------------------- | ----------------------------- | -------------------------- |
+| S0      | 1,000  | 31.6 / 32.1 / 32.1 (0.525) | 14.8 / 15.3 / 15.3 (0.370) | 18.2 / 19.0 / 19.0 (0.430) | 18.4 / 19.0 / 19.0 (0.670)  | 0.045 / 0.050 / 0.050 (0.005) | 2.88 / 2.98 / 2.98 (0.080) |
+| S0      | 10,000 | 941 / 986 / 986 (41.1)     | 172 / 197 / 197 (10.4)     | 243 / 577 / 577 (114)      | 234 / 349 / 349 (97.5)      | 0.050 / 0.050 / 0.050 (0.005) | 2.91 / 3.08 / 3.08 (0.150) |
+| S1      | 1,000  | 31.3 / 32.3 / 32.3 (0.945) | 14.9 / 15.6 / 15.6 (0.575) | 2.62 / 2.81 / 2.81 (0.180) | 2.11 / 2.20 / 2.20 (0.120)  | 0.045 / 0.055 / 0.055 (0.005) | 3.06 / 3.24 / 3.24 (0.065) |
+| S1      | 10,000 | 950 / 1032 / 1032 (27.9)   | 168 / 175 / 175 (8.57)     | 3.55 / 3.75 / 3.75 (0.115) | 2.38 / 2.68 / 2.68 (0.210)  | 0.040 / 0.040 / 0.040 (0.000) | 3.03 / 3.21 / 3.21 (0.110) |
+| S2      | 1,000  | 30.8 / 33.0 / 33.0 (1.04)  | 13.2 / 14.0 / 14.0 (0.435) | 1.24 / 1.53 / 1.53 (0.100) | 0.995 / 1.38 / 1.38 (0.190) | 0.050 / 0.050 / 0.050 (0.010) | 2.99 / 3.56 / 3.56 (0.150) |
+| S2      | 10,000 | 931 / 1021 / 1021 (46.9)   | 171 / 177 / 177 (6.58)     | 1.70 / 2.06 / 2.06 (0.210) | 1.35 / 1.58 / 1.58 (0.220)  | 0.050 / 0.050 / 0.050 (0.005) | 2.90 / 3.05 / 3.05 (0.110) |
 
 Heap and allocation figures use the same p50 / p95 / maximum (IQR) notation
 over 10 pages; MB is decimal. Every pattern had 10,005 DOM nodes at 1,000
 items and 100,005 at 10,000 items, with no variation.
 
-| Pattern | Items | Total heap, MB | Presentation-only heap, MB | Allocated bytes/selection | Minor GCs/20,000 selections | GC ms/20,000 selections |
-| --- | --- | --- | --- | --- | --- | --- |
-| S0 | 1,000 | 1.10 / 1.10 / 1.10 (0.000388) | 0.965 / 0.966 / 0.966 (0.000388) | 99.2 / 99.7 / 99.7 (0.414) | 1 / 2 / 2 (1) | 0.575 / 0.961 / 0.961 (0.351) |
-| S0 | 10,000 | 10.8 / 10.9 / 10.9 (0.000700) | 9.35 / 9.40 / 9.40 (0.000700) | 99.2 / 99.7 / 99.7 (0.724) | 2 / 2 / 2 (0) | 1.02 / 1.07 / 1.07 (0.079) |
-| S1 | 1,000 | 1.04 / 1.04 / 1.04 (0.00123) | 0.900 / 0.902 / 0.902 (0.00123) | 591 / 593 / 593 (0.656) | 5 / 5 / 5 (0) | 1.87 / 1.97 / 1.97 (0.027) |
-| S1 | 10,000 | 10.6 / 10.6 / 10.6 (0.0635) | 9.11 / 9.11 / 9.11 (0.0635) | 591 / 593 / 593 (0.486) | 2 / 2 / 2 (0) | 1.39 / 1.50 / 1.50 (0.080) |
-| S2 | 1,000 | 0.914 / 0.914 / 0.914 (0.00114) | 0.777 / 0.778 / 0.778 (0.00114) | 100 / 100 / 100 (0.330) | 2 / 2 / 2 (0) | 0.905 / 1.02 / 1.02 (0.068) |
-| S2 | 10,000 | 9.11 / 9.11 / 9.11 (0.00213) | 7.65 / 7.65 / 7.65 (0.00213) | 99.2 / 100 / 100 (0.582) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) |
+| Pattern | Items  | Total heap, MB                  | Presentation-only heap, MB       | Allocated bytes/selection  | Minor GCs/20,000 selections | GC ms/20,000 selections       |
+| ------- | ------ | ------------------------------- | -------------------------------- | -------------------------- | --------------------------- | ----------------------------- |
+| S0      | 1,000  | 1.10 / 1.10 / 1.10 (0.000388)   | 0.965 / 0.966 / 0.966 (0.000388) | 99.2 / 99.7 / 99.7 (0.414) | 1 / 2 / 2 (1)               | 0.575 / 0.961 / 0.961 (0.351) |
+| S0      | 10,000 | 10.8 / 10.9 / 10.9 (0.000700)   | 9.35 / 9.40 / 9.40 (0.000700)    | 99.2 / 99.7 / 99.7 (0.724) | 2 / 2 / 2 (0)               | 1.02 / 1.07 / 1.07 (0.079)    |
+| S1      | 1,000  | 1.04 / 1.04 / 1.04 (0.00123)    | 0.900 / 0.902 / 0.902 (0.00123)  | 591 / 593 / 593 (0.656)    | 5 / 5 / 5 (0)               | 1.87 / 1.97 / 1.97 (0.027)    |
+| S1      | 10,000 | 10.6 / 10.6 / 10.6 (0.0635)     | 9.11 / 9.11 / 9.11 (0.0635)      | 591 / 593 / 593 (0.486)    | 2 / 2 / 2 (0)               | 1.39 / 1.50 / 1.50 (0.080)    |
+| S2      | 1,000  | 0.914 / 0.914 / 0.914 (0.00114) | 0.777 / 0.778 / 0.778 (0.00114)  | 100 / 100 / 100 (0.330)    | 2 / 2 / 2 (0)               | 0.905 / 1.02 / 1.02 (0.068)   |
+| S2      | 10,000 | 9.11 / 9.11 / 9.11 (0.00213)    | 7.65 / 7.65 / 7.65 (0.00213)     | 99.2 / 100 / 100 (0.582)   | 0 / 0 / 0 (0)               | 0 / 0 / 0 (0)                 |
 
 No traced selection run had a major GC. S1's two item-record changes and
 batch bookkeeping allocate substantially more than S2's scalar write; these
@@ -892,14 +892,14 @@ relative to event start; duration is the headless presentation measurement.
 There are ten mount events and up to 200 trusted click entries per cell.
 Synthetic label-generated clicks with interaction ID zero are excluded.
 
-| Pattern | Items | Mount presented | Click presented | Click processing end | Observed click entries |
-| --- | --- | --- | --- | --- | --- |
-| S0 | 1,000 | 184 / 232 / 232 (0) | 16 / 16 / 16 (0) | 6.36 / 8.50 / 11.2 (1.04) | 200/200 |
-| S0 | 10,000 | 1800 / 1840 / 1840 (32) | 96 / 120 / 128 (8) | 72.5 / 92.7 / 99.3 (6.58) | 200/200 |
-| S1 | 1,000 | 184 / 184 / 184 (0) | 16 / 16 / 16 (0) | 5.94 / 8.02 / 11.0 (0.965) | 199/200 |
-| S1 | 10,000 | 1784 / 1808 / 1808 (32) | 96 / 112 / 120 (8) | 71.7 / 80.9 / 97.8 (6.29) | 200/200 |
-| S2 | 1,000 | 184 / 200 / 200 (0) | 16 / 16 / 16 (0) | 6.17 / 8.06 / 10.6 (1.09) | 198/200 |
-| S2 | 10,000 | 1784 / 8408 / 8408 (40) | 96 / 120 / 528 (8) | 70.9 / 95.8 / 447 (5.93) | 200/200 |
+| Pattern | Items  | Mount presented         | Click presented    | Click processing end       | Observed click entries |
+| ------- | ------ | ----------------------- | ------------------ | -------------------------- | ---------------------- |
+| S0      | 1,000  | 184 / 232 / 232 (0)     | 16 / 16 / 16 (0)   | 6.36 / 8.50 / 11.2 (1.04)  | 200/200                |
+| S0      | 10,000 | 1800 / 1840 / 1840 (32) | 96 / 120 / 128 (8) | 72.5 / 92.7 / 99.3 (6.58)  | 200/200                |
+| S1      | 1,000  | 184 / 184 / 184 (0)     | 16 / 16 / 16 (0)   | 5.94 / 8.02 / 11.0 (0.965) | 199/200                |
+| S1      | 10,000 | 1784 / 1808 / 1808 (32) | 96 / 112 / 120 (8) | 71.7 / 80.9 / 97.8 (6.29)  | 200/200                |
+| S2      | 1,000  | 184 / 200 / 200 (0)     | 16 / 16 / 16 (0)   | 6.17 / 8.06 / 10.6 (1.09)  | 198/200                |
+| S2      | 10,000 | 1784 / 8408 / 8408 (40) | 96 / 120 / 528 (8) | 70.9 / 95.8 / 447 (5.93)   | 200/200                |
 
 No value is imputed for missing Event Timing entries. The 10,000-item cells
 have complete click coverage. One S2 page had a much slower mount and clicks;
@@ -909,10 +909,10 @@ Observed selection-change counts, identical on all three counted pages at
 each size:
 
 | Pattern | Selection reads at 1,000 / 10,000 | Row assignments | Summary writes |
-| --- | --- | --- | --- |
-| S0 | 1,000 / 10,000 | 2 | 0 |
-| S1 | 2 / 2 | 2 | 0 |
-| S2 | 1 / 1, a list subscription | 2 | 0 |
+| ------- | --------------------------------- | --------------- | -------------- |
+| S0      | 1,000 / 10,000                    | 2               | 0              |
+| S1      | 2 / 2                             | 2               | 0              |
+| S2      | 1 / 1, a list subscription        | 2               | 0              |
 
 S2's random selection is 52% cheaper than S1 at 10,000 items, a meaningful
 difference. Its total heap is about 1.5 MB smaller. Setup and teardown at
@@ -923,21 +923,21 @@ CPU and footprint leader; that does not establish the presentation budget.
 
 Same summary notation as the first set; 15 pages per timing cell.
 
-| Pattern | Items | Random selection, µs | Next selection, µs |
-| --- | --- | --- | --- |
-| S0 | 1,000 | 17.3 / 18.2 / 18.2 (0.520) | 16.7 / 18.7 / 18.7 (0.555) |
-| S0 | 10,000 | 196 / 250 / 250 (11.7) | 188 / 210 / 210 (13.6) |
-| S2 | 1,000 | 1.20 / 3.46 / 3.46 (0.110) | 1.03 / 2.18 / 2.18 (0.130) |
-| S2 | 10,000 | 1.80 / 1.88 / 1.88 (0.045) | 1.45 / 1.53 / 1.53 (0.110) |
+| Pattern | Items  | Random selection, µs       | Next selection, µs         |
+| ------- | ------ | -------------------------- | -------------------------- |
+| S0      | 1,000  | 17.3 / 18.2 / 18.2 (0.520) | 16.7 / 18.7 / 18.7 (0.555) |
+| S0      | 10,000 | 196 / 250 / 250 (11.7)     | 188 / 210 / 210 (13.6)     |
+| S2      | 1,000  | 1.20 / 3.46 / 3.46 (0.110) | 1.03 / 2.18 / 2.18 (0.130) |
+| S2      | 10,000 | 1.80 / 1.88 / 1.88 (0.045) | 1.45 / 1.53 / 1.53 (0.110) |
 
 Event Timing, ten pages per cell:
 
-| Pattern | Items | Mount presented, ms | Click presented, ms | Click processing end, ms | Observed click entries |
-| --- | --- | --- | --- | --- | --- |
-| S0 | 1,000 | 192 / 208 / 208 (8) | 16 / 16 / 24 (0) | 6.69 / 9.09 / 11.3 (1.11) | 198/200 |
-| S0 | 10,000 | 1840 / 5280 / 5280 (64) | 96 / 432 / 568 (8) | 74.4 / 332 / 495 (6.18) | 200/200 |
-| S2 | 1,000 | 192 / 216 / 216 (8) | 16 / 16 / 16 (0) | 6.71 / 8.32 / 10.1 (1.09) | 200/200 |
-| S2 | 10,000 | 1816 / 9416 / 9416 (88) | 96 / 160 / 584 (8) | 73.2 / 120 / 490 (8.18) | 200/200 |
+| Pattern | Items  | Mount presented, ms     | Click presented, ms | Click processing end, ms  | Observed click entries |
+| ------- | ------ | ----------------------- | ------------------- | ------------------------- | ---------------------- |
+| S0      | 1,000  | 192 / 208 / 208 (8)     | 16 / 16 / 24 (0)    | 6.69 / 9.09 / 11.3 (1.11) | 198/200                |
+| S0      | 10,000 | 1840 / 5280 / 5280 (64) | 96 / 432 / 568 (8)  | 74.4 / 332 / 495 (6.18)   | 200/200                |
+| S2      | 1,000  | 192 / 216 / 216 (8)     | 16 / 16 / 16 (0)    | 6.71 / 8.32 / 10.1 (1.09) | 200/200                |
+| S2      | 10,000 | 1816 / 9416 / 9416 (88) | 96 / 160 / 584 (8)  | 73.2 / 120 / 490 (8.18)   | 200/200                |
 
 S2 remains meaningfully cheaper than S0. CPU growth is 1.494× for random
 selection and 1.415× for next-row selection, both within 1.5×, with little
@@ -952,28 +952,28 @@ medians; heap and allocation figures use 10 pages. Bulk done updates use two
 calls per round; tiny label updates use 1,000. No frame profiler is active
 during these CPU timings.
 
-| Window | Items | Mount, ms | Teardown, ms | Visible label, µs | Offscreen label, µs | Bulk done, ms |
-| --- | --- | --- | --- | --- | --- | --- |
-| W0 | 1,000 | 31.0 / 38.8 / 38.8 (1.82) | 13.3 / 15.2 / 15.2 (0.730) | 2.89 / 3.60 / 3.60 (0.105) | 2.94 / 3.45 / 3.45 (0.095) | 3.54 / 4.47 / 4.47 (0.265) |
-| W0 | 10,000 | 944 / 1170 / 1170 (49.2) | 172 / 178 / 178 (8.21) | 2.90 / 3.12 / 3.12 (0.120) | 2.88 / 3.10 / 3.10 (0.190) | 43.1 / 146 / 146 (3.01) |
-| W1 | 1,000 | 2.61 / 2.78 / 2.78 (0.200) | 0.870 / 0.975 / 0.975 (0.065) | 3.04 / 3.31 / 3.31 (0.155) | 0.300 / 0.320 / 0.320 (0.005) | 0.485 / 0.535 / 0.535 (0.030) |
-| W1 | 10,000 | 7.47 / 8.01 / 8.01 (0.310) | 0.875 / 0.950 / 0.950 (0.055) | 2.94 / 3.45 / 3.45 (0.080) | 0.325 / 0.350 / 0.350 (0.005) | 3.44 / 3.59 / 3.59 (0.135) |
-| W2 | 1,000 | 2.55 / 4.31 / 4.31 (0.180) | 0.880 / 1.53 / 1.53 (0.055) | 3.06 / 5.25 / 5.25 (0.240) | 0.305 / 0.355 / 0.355 (0.005) | 0.493 / 0.905 / 0.905 (0.035) |
-| W2 | 10,000 | 7.34 / 8.12 / 8.12 (0.370) | 0.890 / 0.955 / 0.955 (0.040) | 2.92 / 3.94 / 3.94 (0.090) | 0.330 / 0.350 / 0.350 (0.005) | 3.54 / 3.80 / 3.80 (0.190) |
+| Window | Items  | Mount, ms                  | Teardown, ms                  | Visible label, µs          | Offscreen label, µs           | Bulk done, ms                 |
+| ------ | ------ | -------------------------- | ----------------------------- | -------------------------- | ----------------------------- | ----------------------------- |
+| W0     | 1,000  | 31.0 / 38.8 / 38.8 (1.82)  | 13.3 / 15.2 / 15.2 (0.730)    | 2.89 / 3.60 / 3.60 (0.105) | 2.94 / 3.45 / 3.45 (0.095)    | 3.54 / 4.47 / 4.47 (0.265)    |
+| W0     | 10,000 | 944 / 1170 / 1170 (49.2)   | 172 / 178 / 178 (8.21)        | 2.90 / 3.12 / 3.12 (0.120) | 2.88 / 3.10 / 3.10 (0.190)    | 43.1 / 146 / 146 (3.01)       |
+| W1     | 1,000  | 2.61 / 2.78 / 2.78 (0.200) | 0.870 / 0.975 / 0.975 (0.065) | 3.04 / 3.31 / 3.31 (0.155) | 0.300 / 0.320 / 0.320 (0.005) | 0.485 / 0.535 / 0.535 (0.030) |
+| W1     | 10,000 | 7.47 / 8.01 / 8.01 (0.310) | 0.875 / 0.950 / 0.950 (0.055) | 2.94 / 3.45 / 3.45 (0.080) | 0.325 / 0.350 / 0.350 (0.005) | 3.44 / 3.59 / 3.59 (0.135)    |
+| W2     | 1,000  | 2.55 / 4.31 / 4.31 (0.180) | 0.880 / 1.53 / 1.53 (0.055)   | 3.06 / 5.25 / 5.25 (0.240) | 0.305 / 0.355 / 0.355 (0.005) | 0.493 / 0.905 / 0.905 (0.035) |
+| W2     | 10,000 | 7.34 / 8.12 / 8.12 (0.370) | 0.890 / 0.955 / 0.955 (0.040) | 2.92 / 3.94 / 3.94 (0.090) | 0.330 / 0.350 / 0.350 (0.005) | 3.54 / 3.80 / 3.80 (0.190)    |
 
 Both windows mount in less than 1% of W0's synchronous time at 10,000
 items, and visible label updates are within 2% of W0. Bulk changes retain
 the collection's linear state and aggregate work while assigning only mounted
 rows.
 
-| Window | Items | Total heap, MB | Presentation-only heap, MB | DOM nodes | Allocated bytes/selection | Minor GCs/20,000 selections | GC ms/20,000 selections |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| W0 | 1,000 | 0.914 / 0.915 / 0.915 (0.000780) | 0.777 / 0.778 / 0.778 (0.000780) | 10,005 | 100 / 101 / 101 (0.674) | 2 / 2 / 2 (0) | 0.890 / 0.994 / 0.994 (0.058) |
-| W0 | 10,000 | 9.11 / 9.11 / 9.11 (0.00167) | 7.65 / 7.65 / 7.65 (0.00167) | 100,005 | 99.2 / 100 / 100 (0.919) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) |
-| W1 | 1,000 | 0.181 / 0.187 / 0.187 (0.00000) | 0.0438 / 0.0499 / 0.0499 (0.00000) | 505 | 101 / 101 / 101 (0.361) | 1 / 1 / 1 (0) | 0.537 / 0.659 / 0.659 (0.035) |
-| W1 | 10,000 | 1.51 / 1.52 / 1.52 (0.00609) | 0.0439 / 0.0500 / 0.0500 (0.00609) | 505 | 101 / 101 / 101 (0.426) | 2 / 2 / 2 (0) | 0.877 / 1.05 / 1.05 (0.096) |
-| W2 | 1,000 | 0.181 / 0.187 / 0.187 (0.000100) | 0.0438 / 0.0499 / 0.0499 (0.00000) | 505 | 101 / 101 / 101 (0.549) | 1 / 1 / 1 (1) | 0.531 / 0.690 / 0.690 (0.584) |
-| W2 | 10,000 | 1.51 / 1.52 / 1.52 (0.00609) | 0.0439 / 0.0500 / 0.0500 (0.00609) | 505 | 101 / 101 / 101 (0.435) | 2 / 2 / 2 (0) | 0.928 / 1.01 / 1.01 (0.094) |
+| Window | Items  | Total heap, MB                   | Presentation-only heap, MB         | DOM nodes | Allocated bytes/selection | Minor GCs/20,000 selections | GC ms/20,000 selections       |
+| ------ | ------ | -------------------------------- | ---------------------------------- | --------- | ------------------------- | --------------------------- | ----------------------------- |
+| W0     | 1,000  | 0.914 / 0.915 / 0.915 (0.000780) | 0.777 / 0.778 / 0.778 (0.000780)   | 10,005    | 100 / 101 / 101 (0.674)   | 2 / 2 / 2 (0)               | 0.890 / 0.994 / 0.994 (0.058) |
+| W0     | 10,000 | 9.11 / 9.11 / 9.11 (0.00167)     | 7.65 / 7.65 / 7.65 (0.00167)       | 100,005   | 99.2 / 100 / 100 (0.919)  | 0 / 0 / 0 (0)               | 0 / 0 / 0 (0)                 |
+| W1     | 1,000  | 0.181 / 0.187 / 0.187 (0.00000)  | 0.0438 / 0.0499 / 0.0499 (0.00000) | 505       | 101 / 101 / 101 (0.361)   | 1 / 1 / 1 (0)               | 0.537 / 0.659 / 0.659 (0.035) |
+| W1     | 10,000 | 1.51 / 1.52 / 1.52 (0.00609)     | 0.0439 / 0.0500 / 0.0500 (0.00609) | 505       | 101 / 101 / 101 (0.426)   | 2 / 2 / 2 (0)               | 0.877 / 1.05 / 1.05 (0.096)   |
+| W2     | 1,000  | 0.181 / 0.187 / 0.187 (0.000100) | 0.0438 / 0.0499 / 0.0499 (0.00000) | 505       | 101 / 101 / 101 (0.549)   | 1 / 1 / 1 (1)               | 0.531 / 0.690 / 0.690 (0.584) |
+| W2     | 10,000 | 1.51 / 1.52 / 1.52 (0.00609)     | 0.0439 / 0.0500 / 0.0500 (0.00609) | 505       | 101 / 101 / 101 (0.435)   | 2 / 2 / 2 (0)               | 0.928 / 1.01 / 1.01 (0.094)   |
 
 DOM counts have no variation. Heap is measured at the initial 50-row window,
 without a focus pin. At 10,000 items, both windows use 16.6% of W0's total
@@ -984,14 +984,14 @@ state. Selection profiles include common runner preparation as in Stage A.
 
 Event Timing over ten fresh pages per cell, in milliseconds:
 
-| Window | Items | Mount presented | Click presented | Click processing end | Observed mount / click entries |
-| --- | --- | --- | --- | --- | --- |
-| W0 | 1,000 | 184 / 408 / 408 (8) | 16 / 16 / 24 (0) | 6.94 / 8.49 / 11.6 (1.28) | 10/10; 199/200 |
-| W0 | 10,000 | 1800 / 2040 / 2040 (200) | 96 / 120 / 384 (8) | 72.3 / 91.7 / 285 (7.97) | 10/10; 200/200 |
-| W1 | 1,000 | 88 / 136 / 136 (8) | 16 / 16 / 16 (0) | 1.50 / 2.50 / 2.77 (0.530) | 10/10; 199/200 |
-| W1 | 10,000 | 104 / 112 / 112 (8) | 16 / 16 / 16 (0) | 1.48 / 2.42 / 2.66 (0.515) | 10/10; 199/200 |
-| W2 | 1,000 | 88 / 144 / 144 (8) | 16 / 16 / 24 (0) | 1.50 / 2.39 / 2.71 (0.515) | 10/10; 199/200 |
-| W2 | 10,000 | 104 / 136 / 136 (16) | 16 / 16 / 24 (0) | 1.50 / 2.36 / 2.90 (0.505) | 10/10; 198/200 |
+| Window | Items  | Mount presented          | Click presented    | Click processing end       | Observed mount / click entries |
+| ------ | ------ | ------------------------ | ------------------ | -------------------------- | ------------------------------ |
+| W0     | 1,000  | 184 / 408 / 408 (8)      | 16 / 16 / 24 (0)   | 6.94 / 8.49 / 11.6 (1.28)  | 10/10; 199/200                 |
+| W0     | 10,000 | 1800 / 2040 / 2040 (200) | 96 / 120 / 384 (8) | 72.3 / 91.7 / 285 (7.97)   | 10/10; 200/200                 |
+| W1     | 1,000  | 88 / 136 / 136 (8)       | 16 / 16 / 16 (0)   | 1.50 / 2.50 / 2.77 (0.530) | 10/10; 199/200                 |
+| W1     | 10,000 | 104 / 112 / 112 (8)      | 16 / 16 / 16 (0)   | 1.48 / 2.42 / 2.66 (0.515) | 10/10; 199/200                 |
+| W2     | 1,000  | 88 / 144 / 144 (8)       | 16 / 16 / 24 (0)   | 1.50 / 2.39 / 2.71 (0.515) | 10/10; 199/200                 |
+| W2     | 10,000 | 104 / 136 / 136 (16)     | 16 / 16 / 24 (0)   | 1.50 / 2.36 / 2.90 (0.505) | 10/10; 198/200                 |
 
 Windowed clicked selections have an observed p95 of 16 ms, but first mount
 still exceeds 100 ms presented. CPU mount time alone does not establish
@@ -1003,36 +1003,36 @@ Intervals describe callback cadence, not presentation. Long-task counts are
 from the page's Long Tasks observer; nested trace task records corroborate
 them and are not counted as independent tasks.
 
-| Window | Items | Motion | Script ms/frame, p50 / p95 / max (IQR) | Callback interval ms, p50 / p95 / max (IQR) | Intervals >16.7 ms | Tasks >50 ms |
-| --- | --- | --- | --- | --- | --- | --- |
-| W0 | 1,000 | Row | 0.118 / 0.140 / 0.192 (0.012) | 16.7 / 16.7 / 16.7 (0.005) | 0 | 0 |
-| W0 | 1,000 | Viewport | 0.116 / 0.134 / 0.160 (0.012) | 16.7 / 16.7 / 16.7 (0.005) | 0 | 0 |
-| W0 | 1,000 | End | 0.112 / 0.131 / 18.1 (0.009) | 16.7 / 16.7 / 117 (0.005) | 5 | 3 |
-| W0 | 10,000 | Row | 0.117 / 0.246 / 2.94 (0.014) | 16.7 / 33.3 / 233 (0.005) | 76 | 21 |
-| W0 | 10,000 | Viewport | 0.103 / 0.139 / 2.95 (0.011) | 33.3 / 50.0 / 350 (0.005) | 1188 | 56 |
-| W0 | 10,000 | End | 0.100 / 0.120 / 0.206 (0.008) | 33.3 / 50.0 / 66.7 (0.005) | 1178 | 17 |
-| W1 | 1,000 | Row | 0.728 / 0.799 / 1.00 (0.049) | 16.7 / 16.7 / 16.7 (0.005) | 0 | 0 |
-| W1 | 1,000 | Viewport | 3.95 / 4.63 / 5.84 (0.281) | 16.7 / 16.7 / 16.7 (0.005) | 0 | 0 |
-| W1 | 1,000 | End | 4.57 / 4.97 / 5.37 (0.200) | 16.7 / 16.7 / 16.7 (0.005) | 0 | 0 |
-| W1 | 10,000 | Row | 0.729 / 0.827 / 0.971 (0.060) | 16.7 / 16.7 / 16.7 (0.005) | 0 | 0 |
-| W1 | 10,000 | Viewport | 4.01 / 4.46 / 136 (0.223) | 16.7 / 16.7 / 133 (0.005) | 9 | 3 |
-| W1 | 10,000 | End | 4.58 / 5.30 / 45.0 (0.219) | 16.7 / 16.7 / 117 (0.005) | 5 | 3 |
-| W2 | 1,000 | Row | 0.630 / 0.695 / 0.949 (0.047) | 16.7 / 16.7 / 16.7 (0.005) | 0 | 0 |
-| W2 | 1,000 | Viewport | 3.67 / 4.28 / 5.91 (0.237) | 16.7 / 16.7 / 16.7 (0.005) | 0 | 0 |
-| W2 | 1,000 | End | 4.12 / 4.56 / 21.4 (0.199) | 16.7 / 16.7 / 100 (0.005) | 1 | 0 |
-| W2 | 10,000 | Row | 0.629 / 1.06 / 4.66 (0.050) | 16.7 / 16.7 / 16.7 (0.005) | 0 | 0 |
-| W2 | 10,000 | Viewport | 3.75 / 9.76 / 175 (0.255) | 16.7 / 16.7 / 183 (0.005) | 47 | 10 |
-| W2 | 10,000 | End | 4.05 / 4.33 / 4.73 (0.151) | 16.7 / 16.7 / 16.7 (0.005) | 0 | 0 |
+| Window | Items  | Motion   | Script ms/frame, p50 / p95 / max (IQR) | Callback interval ms, p50 / p95 / max (IQR) | Intervals >16.7 ms | Tasks >50 ms |
+| ------ | ------ | -------- | -------------------------------------- | ------------------------------------------- | ------------------ | ------------ |
+| W0     | 1,000  | Row      | 0.118 / 0.140 / 0.192 (0.012)          | 16.7 / 16.7 / 16.7 (0.005)                  | 0                  | 0            |
+| W0     | 1,000  | Viewport | 0.116 / 0.134 / 0.160 (0.012)          | 16.7 / 16.7 / 16.7 (0.005)                  | 0                  | 0            |
+| W0     | 1,000  | End      | 0.112 / 0.131 / 18.1 (0.009)           | 16.7 / 16.7 / 117 (0.005)                   | 5                  | 3            |
+| W0     | 10,000 | Row      | 0.117 / 0.246 / 2.94 (0.014)           | 16.7 / 33.3 / 233 (0.005)                   | 76                 | 21           |
+| W0     | 10,000 | Viewport | 0.103 / 0.139 / 2.95 (0.011)           | 33.3 / 50.0 / 350 (0.005)                   | 1188               | 56           |
+| W0     | 10,000 | End      | 0.100 / 0.120 / 0.206 (0.008)          | 33.3 / 50.0 / 66.7 (0.005)                  | 1178               | 17           |
+| W1     | 1,000  | Row      | 0.728 / 0.799 / 1.00 (0.049)           | 16.7 / 16.7 / 16.7 (0.005)                  | 0                  | 0            |
+| W1     | 1,000  | Viewport | 3.95 / 4.63 / 5.84 (0.281)             | 16.7 / 16.7 / 16.7 (0.005)                  | 0                  | 0            |
+| W1     | 1,000  | End      | 4.57 / 4.97 / 5.37 (0.200)             | 16.7 / 16.7 / 16.7 (0.005)                  | 0                  | 0            |
+| W1     | 10,000 | Row      | 0.729 / 0.827 / 0.971 (0.060)          | 16.7 / 16.7 / 16.7 (0.005)                  | 0                  | 0            |
+| W1     | 10,000 | Viewport | 4.01 / 4.46 / 136 (0.223)              | 16.7 / 16.7 / 133 (0.005)                   | 9                  | 3            |
+| W1     | 10,000 | End      | 4.58 / 5.30 / 45.0 (0.219)             | 16.7 / 16.7 / 117 (0.005)                   | 5                  | 3            |
+| W2     | 1,000  | Row      | 0.630 / 0.695 / 0.949 (0.047)          | 16.7 / 16.7 / 16.7 (0.005)                  | 0                  | 0            |
+| W2     | 1,000  | Viewport | 3.67 / 4.28 / 5.91 (0.237)             | 16.7 / 16.7 / 16.7 (0.005)                  | 0                  | 0            |
+| W2     | 1,000  | End      | 4.12 / 4.56 / 21.4 (0.199)             | 16.7 / 16.7 / 100 (0.005)                   | 1                  | 0            |
+| W2     | 10,000 | Row      | 0.629 / 1.06 / 4.66 (0.050)            | 16.7 / 16.7 / 16.7 (0.005)                  | 0                  | 0            |
+| W2     | 10,000 | Viewport | 3.75 / 9.76 / 175 (0.255)              | 16.7 / 16.7 / 183 (0.005)                   | 47                 | 10           |
+| W2     | 10,000 | End      | 4.05 / 4.33 / 4.73 (0.151)             | 16.7 / 16.7 / 16.7 (0.005)                  | 0                  | 0            |
 
 W1's viewport cell contains three long tasks of 55–133 ms; W2's contains
 ten of 51–186 ms. All remain in the results. Per-page median script times
 at 10,000 items, with 10 pages per cell:
 
 | Window | Viewport script ms, p50 / p95 / max (IQR) |
-| --- | --- |
-| W0 | 0.102 / 0.110 / 0.110 (0.004) |
-| W1 | 4.01 / 4.24 / 4.24 (0.061) |
-| W2 | 3.71 / 9.58 / 9.58 (0.074) |
+| ------ | ----------------------------------------- |
+| W0     | 0.102 / 0.110 / 0.110 (0.004)             |
+| W1     | 4.01 / 4.24 / 4.24 (0.061)                |
+| W2     | 3.71 / 9.58 / 9.58 (0.074)                |
 
 W2's typical viewport script cost is about 7.5% lower than W1's, a meaningful
 difference under the agreed rule, while its first-set tail is worse. Both
@@ -1045,26 +1045,26 @@ maximum (IQR) across ten page samples. KB is decimal. GC is the trace-event
 total during the 120 timing frames; per-frame GC cost is that total divided
 by 120. Counts show total events and major events as separate distributions.
 
-| Window | Items | Motion | Allocated KB/frame | GC events/120 frames | Major events/120 frames | GC ms/120 frames |
-| --- | --- | --- | --- | --- | --- | --- |
-| W0 | 1,000 | Row | 0.546 / 0.820 / 0.820 (0.282) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) |
-| W0 | 1,000 | Viewport | 0.273 / 0.828 / 0.828 (0.546) | 1 / 1 / 1 (0) | 1 / 1 / 1 (0) | 2.99 / 3.89 / 3.89 (0.516) |
-| W0 | 1,000 | End | 0.273 / 0.547 / 0.547 (0.000233) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) |
-| W0 | 10,000 | Row | 0.273 / 0.823 / 0.823 (0.550) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) |
-| W0 | 10,000 | Viewport | 0.548 / 0.820 / 0.820 (0.273) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) |
-| W0 | 10,000 | End | 0.273 / 1.64 / 1.64 (0.548) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) | 0 / 0 / 0 (0) |
-| W1 | 1,000 | Row | 35.4 / 42.2 / 42.2 (5.23) | 3 / 3 / 3 (0) | 0 / 0 / 0 (0) | 2.22 / 2.40 / 2.40 (0.117) |
-| W1 | 1,000 | Viewport | 229 / 238 / 238 (10.6) | 12 / 13 / 13 (1) | 8 / 8 / 8 (0) | 24.4 / 24.9 / 24.9 (0.602) |
-| W1 | 1,000 | End | 263 / 276 / 276 (11.4) | 12 / 12 / 12 (0) | 12 / 12 / 12 (0) | 22.0 / 23.9 / 23.9 (1.18) |
-| W1 | 10,000 | Row | 35.3 / 38.9 / 38.9 (4.39) | 1 / 1 / 1 (0) | 0 / 0 / 0 (0) | 1.14 / 1.31 / 1.31 (0.059) |
-| W1 | 10,000 | Viewport | 229 / 245 / 245 (9.90) | 10 / 10 / 10 (0) | 6 / 6 / 6 (0) | 23.2 / 51.3 / 51.3 (0.754) |
-| W1 | 10,000 | End | 262 / 281 / 281 (15.7) | 8 / 11 / 11 (0) | 8 / 9 / 9 (0) | 19.2 / 102 / 102 (1.27) |
-| W2 | 1,000 | Row | 34.3 / 40.3 / 40.3 (4.12) | 3 / 3 / 3 (0) | 0 / 0 / 0 (0) | 2.18 / 2.38 / 2.38 (0.106) |
-| W2 | 1,000 | Viewport | 210 / 232 / 232 (13.8) | 15 / 16 / 16 (2) | 8 / 8 / 8 (0) | 25.0 / 29.6 / 29.6 (2.47) |
-| W2 | 1,000 | End | 257 / 275 / 275 (9.80) | 10 / 10 / 10 (0) | 10 / 10 / 10 (0) | 18.2 / 19.9 / 19.9 (0.441) |
-| W2 | 10,000 | Row | 35.6 / 40.6 / 40.6 (4.70) | 1 / 1 / 1 (0) | 0 / 0 / 0 (0) | 1.10 / 1.46 / 1.46 (0.072) |
-| W2 | 10,000 | Viewport | 215 / 227 / 227 (12.7) | 10 / 10 / 10 (0) | 6 / 6 / 6 (0) | 21.7 / 54.7 / 54.7 (2.41) |
-| W2 | 10,000 | End | 260 / 263 / 263 (8.91) | 7 / 10 / 10 (0) | 7 / 7 / 7 (0) | 15.8 / 20.2 / 20.2 (1.45) |
+| Window | Items  | Motion   | Allocated KB/frame               | GC events/120 frames | Major events/120 frames | GC ms/120 frames           |
+| ------ | ------ | -------- | -------------------------------- | -------------------- | ----------------------- | -------------------------- |
+| W0     | 1,000  | Row      | 0.546 / 0.820 / 0.820 (0.282)    | 0 / 0 / 0 (0)        | 0 / 0 / 0 (0)           | 0 / 0 / 0 (0)              |
+| W0     | 1,000  | Viewport | 0.273 / 0.828 / 0.828 (0.546)    | 1 / 1 / 1 (0)        | 1 / 1 / 1 (0)           | 2.99 / 3.89 / 3.89 (0.516) |
+| W0     | 1,000  | End      | 0.273 / 0.547 / 0.547 (0.000233) | 0 / 0 / 0 (0)        | 0 / 0 / 0 (0)           | 0 / 0 / 0 (0)              |
+| W0     | 10,000 | Row      | 0.273 / 0.823 / 0.823 (0.550)    | 0 / 0 / 0 (0)        | 0 / 0 / 0 (0)           | 0 / 0 / 0 (0)              |
+| W0     | 10,000 | Viewport | 0.548 / 0.820 / 0.820 (0.273)    | 0 / 0 / 0 (0)        | 0 / 0 / 0 (0)           | 0 / 0 / 0 (0)              |
+| W0     | 10,000 | End      | 0.273 / 1.64 / 1.64 (0.548)      | 0 / 0 / 0 (0)        | 0 / 0 / 0 (0)           | 0 / 0 / 0 (0)              |
+| W1     | 1,000  | Row      | 35.4 / 42.2 / 42.2 (5.23)        | 3 / 3 / 3 (0)        | 0 / 0 / 0 (0)           | 2.22 / 2.40 / 2.40 (0.117) |
+| W1     | 1,000  | Viewport | 229 / 238 / 238 (10.6)           | 12 / 13 / 13 (1)     | 8 / 8 / 8 (0)           | 24.4 / 24.9 / 24.9 (0.602) |
+| W1     | 1,000  | End      | 263 / 276 / 276 (11.4)           | 12 / 12 / 12 (0)     | 12 / 12 / 12 (0)        | 22.0 / 23.9 / 23.9 (1.18)  |
+| W1     | 10,000 | Row      | 35.3 / 38.9 / 38.9 (4.39)        | 1 / 1 / 1 (0)        | 0 / 0 / 0 (0)           | 1.14 / 1.31 / 1.31 (0.059) |
+| W1     | 10,000 | Viewport | 229 / 245 / 245 (9.90)           | 10 / 10 / 10 (0)     | 6 / 6 / 6 (0)           | 23.2 / 51.3 / 51.3 (0.754) |
+| W1     | 10,000 | End      | 262 / 281 / 281 (15.7)           | 8 / 11 / 11 (0)      | 8 / 9 / 9 (0)           | 19.2 / 102 / 102 (1.27)    |
+| W2     | 1,000  | Row      | 34.3 / 40.3 / 40.3 (4.12)        | 3 / 3 / 3 (0)        | 0 / 0 / 0 (0)           | 2.18 / 2.38 / 2.38 (0.106) |
+| W2     | 1,000  | Viewport | 210 / 232 / 232 (13.8)           | 15 / 16 / 16 (2)     | 8 / 8 / 8 (0)           | 25.0 / 29.6 / 29.6 (2.47)  |
+| W2     | 1,000  | End      | 257 / 275 / 275 (9.80)           | 10 / 10 / 10 (0)     | 10 / 10 / 10 (0)        | 18.2 / 19.9 / 19.9 (0.441) |
+| W2     | 10,000 | Row      | 35.6 / 40.6 / 40.6 (4.70)        | 1 / 1 / 1 (0)        | 0 / 0 / 0 (0)           | 1.10 / 1.46 / 1.46 (0.072) |
+| W2     | 10,000 | Viewport | 215 / 227 / 227 (12.7)           | 10 / 10 / 10 (0)     | 6 / 6 / 6 (0)           | 21.7 / 54.7 / 54.7 (2.41)  |
+| W2     | 10,000 | End      | 260 / 263 / 263 (8.91)           | 7 / 10 / 10 (0)      | 7 / 7 / 7 (0)           | 15.8 / 20.2 / 20.2 (1.45)  |
 
 Recycling avoids row construction but still rebinds entering items. In the
 viewport case it allocates about 215 KB/frame against W1's 229 KB/frame,
@@ -1077,17 +1077,17 @@ Label and done counts are binding assignments, not setter-entry counts;
 attribute reflection can re-enter the example's setters. Position counts
 are changed `top` assignments.
 
-| Operation | W0 | W1 | W2 |
-| --- | --- | --- | --- |
-| Initial mount | N rows created and positioned | 50 rows created and positioned | 50 rows created and positioned |
-| Steady one-row step | No row work | 1 created, 1 removed | 1 rebound, 1 removed |
-| Viewport step | No row work | 40 created, 40 removed | 40 rebound, 40 removed |
-| End jump | No row work | 50 created, 60 removed | 50 rebound, 60 removed |
-| Visible label change | 1 label assignment | 1 label assignment | 1 label assignment |
-| Offscreen label change | 1 label assignment | No row assignment or position write | No row assignment or position write |
-| Bulk done at the initial window | N done assignments; 1 derivation and summary write | 50 done assignments; 1 derivation and summary write | 50 done assignments; 1 derivation and summary write |
-| Insert above viewport | 1 row created, N+1 position writes; 1 derivation and summary write | No row created; 60 position writes; 1 derivation and summary write | No row created; 60 position writes; 1 derivation and summary write |
-| Remove above viewport | 1 row removed, N position writes; 1 derivation and summary write | No row removed; 60 position writes; 1 derivation and summary write | No row removed; 60 position writes; 1 derivation and summary write |
+| Operation                       | W0                                                                 | W1                                                                 | W2                                                                 |
+| ------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Initial mount                   | N rows created and positioned                                      | 50 rows created and positioned                                     | 50 rows created and positioned                                     |
+| Steady one-row step             | No row work                                                        | 1 created, 1 removed                                               | 1 rebound, 1 removed                                               |
+| Viewport step                   | No row work                                                        | 40 created, 40 removed                                             | 40 rebound, 40 removed                                             |
+| End jump                        | No row work                                                        | 50 created, 60 removed                                             | 50 rebound, 60 removed                                             |
+| Visible label change            | 1 label assignment                                                 | 1 label assignment                                                 | 1 label assignment                                                 |
+| Offscreen label change          | 1 label assignment                                                 | No row assignment or position write                                | No row assignment or position write                                |
+| Bulk done at the initial window | N done assignments; 1 derivation and summary write                 | 50 done assignments; 1 derivation and summary write                | 50 done assignments; 1 derivation and summary write                |
+| Insert above viewport           | 1 row created, N+1 position writes; 1 derivation and summary write | No row created; 60 position writes; 1 derivation and summary write | No row created; 60 position writes; 1 derivation and summary write |
+| Remove above viewport           | 1 row removed, N position writes; 1 derivation and summary write   | No row removed; 60 position writes; 1 derivation and summary write | No row removed; 60 position writes; 1 derivation and summary write |
 
 Each entering row receives label, done and selected inputs once; its position
 is assigned once. A recycled row is unbound before rebinding. Focus pinning
@@ -1100,28 +1100,28 @@ offscreen row whose own item changes.
 The candidate page is unchanged from the first set. CPU timings use 15 pages
 per window at 10,000 items; presentation and viewport scrolling use 10.
 
-| Window | Mount ms, p50 / p95 / max (IQR) | Teardown ms | Visible label µs |
-| --- | --- | --- | --- |
-| W0 | 919 / 980 / 980 (47.9) | 165 / 175 / 175 (15.3) | 2.89 / 3.11 / 3.11 (0.080) |
-| W1 | 7.31 / 8.00 / 8.00 (0.235) | 0.880 / 0.965 / 0.965 (0.050) | 2.92 / 3.08 / 3.08 (0.055) |
-| W2 | 7.18 / 7.62 / 7.62 (0.390) | 0.875 / 0.940 / 0.940 (0.030) | 2.94 / 3.23 / 3.23 (0.155) |
+| Window | Mount ms, p50 / p95 / max (IQR) | Teardown ms                   | Visible label µs           |
+| ------ | ------------------------------- | ----------------------------- | -------------------------- |
+| W0     | 919 / 980 / 980 (47.9)          | 165 / 175 / 175 (15.3)        | 2.89 / 3.11 / 3.11 (0.080) |
+| W1     | 7.31 / 8.00 / 8.00 (0.235)      | 0.880 / 0.965 / 0.965 (0.050) | 2.92 / 3.08 / 3.08 (0.055) |
+| W2     | 7.18 / 7.62 / 7.62 (0.390)      | 0.875 / 0.940 / 0.940 (0.030) | 2.94 / 3.23 / 3.23 (0.155) |
 
 Event Timing, milliseconds, with the same summary notation:
 
-| Window | Mount presented | Click presented | Click processing end | Observed mount / click entries |
-| --- | --- | --- | --- | --- |
-| W0 | 1776 / 1928 / 1928 (32) | 96 / 120 / 376 (8) | 71.8 / 92.2 / 311 (7.64) | 10/10; 200/200 |
-| W1 | 104 / 120 / 120 (8) | 16 / 16 / 24 (0) | 1.46 / 2.44 / 2.79 (0.495) | 10/10; 199/200 |
-| W2 | 104 / 216 / 216 (8) | 16 / 16 / 16 (0) | 1.51 / 2.50 / 5.08 (0.500) | 10/10; 196/200 |
+| Window | Mount presented         | Click presented    | Click processing end       | Observed mount / click entries |
+| ------ | ----------------------- | ------------------ | -------------------------- | ------------------------------ |
+| W0     | 1776 / 1928 / 1928 (32) | 96 / 120 / 376 (8) | 71.8 / 92.2 / 311 (7.64)   | 10/10; 200/200                 |
+| W1     | 104 / 120 / 120 (8)     | 16 / 16 / 24 (0)   | 1.46 / 2.44 / 2.79 (0.495) | 10/10; 199/200                 |
+| W2     | 104 / 216 / 216 (8)     | 16 / 16 / 16 (0)   | 1.51 / 2.50 / 5.08 (0.500) | 10/10; 196/200                 |
 
 Viewport-per-frame scrolling, 1,200 traced frames and 1,190 callback
 intervals per window:
 
-| Window | Script ms/frame, p50 / p95 / max (IQR) | Page median script ms | Callback interval ms | Intervals >16.7 ms | Tasks >50 ms | GC ms/120 frames |
-| --- | --- | --- | --- | --- | --- | --- |
-| W0 | 0.102 / 0.124 / 0.184 (0.009) | 0.101 / 0.104 / 0.104 (0.001) | 33.3 / 50.0 / 100 (0.005) | 1187 | 18 | 0 / 0 / 0 (0) |
-| W1 | 4.13 / 4.58 / 5.22 (0.420) | 4.12 / 4.21 / 4.21 (0.066) | 16.7 / 16.7 / 16.7 (0.005) | 0 | 0 | 21.2 / 23.3 / 23.3 (2.54) |
-| W2 | 3.85 / 6.31 / 142 (0.371) | 3.80 / 6.31 / 6.31 (0.087) | 16.7 / 16.7 / 150 (0.005) | 31 | 11 | 18.7 / 28.4 / 28.4 (0.562) |
+| Window | Script ms/frame, p50 / p95 / max (IQR) | Page median script ms         | Callback interval ms       | Intervals >16.7 ms | Tasks >50 ms | GC ms/120 frames           |
+| ------ | -------------------------------------- | ----------------------------- | -------------------------- | ------------------ | ------------ | -------------------------- |
+| W0     | 0.102 / 0.124 / 0.184 (0.009)          | 0.101 / 0.104 / 0.104 (0.001) | 33.3 / 50.0 / 100 (0.005)  | 1187               | 18           | 0 / 0 / 0 (0)              |
+| W1     | 4.13 / 4.58 / 5.22 (0.420)             | 4.12 / 4.21 / 4.21 (0.066)    | 16.7 / 16.7 / 16.7 (0.005) | 0                  | 0            | 21.2 / 23.3 / 23.3 (2.54)  |
+| W2     | 3.85 / 6.31 / 142 (0.371)              | 3.80 / 6.31 / 6.31 (0.087)    | 16.7 / 16.7 / 150 (0.005)  | 31                 | 11           | 18.7 / 28.4 / 28.4 (0.562) |
 
 W2 again has a meaningfully cheaper typical viewport cost, about 7.8% below
 W1 on page medians, but its eleven long tasks span 61–151 ms. W1 has no
@@ -1138,14 +1138,14 @@ layout from preceding changes. They are not isolated-input presentation
 times. Offscreen selection alternates the last two keys; W0 retains both
 rows, while they are unmounted in W1 and W2.
 
-| Window | Items | Insert above viewport, ms | Remove above viewport, ms | Offscreen selection, µs |
-| --- | --- | --- | --- | --- |
-| W0 | 1,000 | 5.01 / 6.01 / 6.01 (0.330) | 6.11 / 7.35 / 7.35 (0.448) | 0.890 / 1.03 / 1.03 (0.035) |
-| W0 | 10,000 | 78.1 / 80.6 / 80.6 (0.676) | 91.0 / 93.0 / 93.0 (1.38) | 0.855 / 0.920 / 0.920 (0.040) |
-| W1 | 1,000 | 0.372 / 0.415 / 0.415 (0.007) | 0.422 / 0.464 / 0.464 (0.0095) | 0.295 / 0.315 / 0.315 (0.005) |
-| W1 | 10,000 | 0.714 / 0.914 / 0.914 (0.0105) | 1.21 / 1.48 / 1.48 (0.0183) | 0.310 / 0.340 / 0.340 (0.015) |
-| W2 | 1,000 | 0.374 / 0.391 / 0.391 (0.00975) | 0.422 / 0.442 / 0.442 (0.0115) | 0.300 / 0.320 / 0.320 (0.010) |
-| W2 | 10,000 | 0.714 / 0.752 / 0.752 (0.0192) | 1.21 / 1.26 / 1.26 (0.0135) | 0.315 / 0.325 / 0.325 (0.010) |
+| Window | Items  | Insert above viewport, ms       | Remove above viewport, ms      | Offscreen selection, µs       |
+| ------ | ------ | ------------------------------- | ------------------------------ | ----------------------------- |
+| W0     | 1,000  | 5.01 / 6.01 / 6.01 (0.330)      | 6.11 / 7.35 / 7.35 (0.448)     | 0.890 / 1.03 / 1.03 (0.035)   |
+| W0     | 10,000 | 78.1 / 80.6 / 80.6 (0.676)      | 91.0 / 93.0 / 93.0 (1.38)      | 0.855 / 0.920 / 0.920 (0.040) |
+| W1     | 1,000  | 0.372 / 0.415 / 0.415 (0.007)   | 0.422 / 0.464 / 0.464 (0.0095) | 0.295 / 0.315 / 0.315 (0.005) |
+| W1     | 10,000 | 0.714 / 0.914 / 0.914 (0.0105)  | 1.21 / 1.48 / 1.48 (0.0183)    | 0.310 / 0.340 / 0.340 (0.015) |
+| W2     | 1,000  | 0.374 / 0.391 / 0.391 (0.00975) | 0.422 / 0.442 / 0.442 (0.0115) | 0.300 / 0.320 / 0.320 (0.010) |
+| W2     | 10,000 | 0.714 / 0.752 / 0.752 (0.0192)  | 1.21 / 1.26 / 1.26 (0.0135)    | 0.315 / 0.325 / 0.325 (0.010) |
 
 Windowed membership changes still copy the keys and scan the aggregate, but
 position only the retained window. W0 repositions every row; the next action
@@ -1161,10 +1161,10 @@ are below, in milliseconds. With three samples, p95 equals the maximum and
 is exploratory. The presentation endpoint is Chromium Event Timing evidence,
 not an animation-frame callback or a physical-display measurement.
 
-| Items | Input delay p50 / max | Event processing p50 / max | Residual to presentation p50 / max | Total p50 / max |
-| --- | ---: | ---: | ---: | ---: |
-| 1,000 | 2.20 / 2.31 | 11.99 / 12.52 | 87.46 / 97.80 | 102.29 / 112.00 |
-| 10,000 | 2.19 / 2.30 | 24.45 / 26.17 | 92.90 / 137.56 | 119.54 / 165.89 |
+| Items  | Input delay p50 / max | Event processing p50 / max | Residual to presentation p50 / max | Total p50 / max |
+| ------ | --------------------: | -------------------------: | ---------------------------------: | --------------: |
+| 1,000  |           2.20 / 2.31 |              11.99 / 12.52 |                      87.46 / 97.80 | 102.29 / 112.00 |
+| 10,000 |           2.19 / 2.30 |              24.45 / 26.17 |                     92.90 / 137.56 | 119.54 / 165.89 |
 
 At 10,000 items, the dominant post-handler browser main-frame task spans
 70.6–121.1 ms of wall time but only 8.93–15.29 ms of thread CPU time.
@@ -1194,15 +1194,15 @@ allocation ownership comes from the separate sampling pass. Values are
 rounded. Wrapper overhead makes these unsuitable for the 4 ms budget or
 for comparing allocation totals with the uninstrumented pass.
 
-| Diagnostic owner | Exclusive ms per step | Sampled kB per step |
-| --- | ---: | ---: |
-| Range and position bookkeeping | 0.200 | 13.6 |
-| Reconciliation excluding timed callees | 0.157 | 22.8 |
-| Binding setup and disposal | 1.25 | 124 |
-| DOM construction, inputs, insertion and removal, including component lifecycle | 2.76 | 102 |
-| Remaining row setup | 0.313 | 26.4 |
-| Driver/other allocation | Outside these spans | 2.34 |
-| GC trace time, overlapping the spans above | 0.449 | Not an application allocation owner |
+| Diagnostic owner                                                               | Exclusive ms per step |                 Sampled kB per step |
+| ------------------------------------------------------------------------------ | --------------------: | ----------------------------------: |
+| Range and position bookkeeping                                                 |                 0.200 |                                13.6 |
+| Reconciliation excluding timed callees                                         |                 0.157 |                                22.8 |
+| Binding setup and disposal                                                     |                  1.25 |                                 124 |
+| DOM construction, inputs, insertion and removal, including component lifecycle |                  2.76 |                                 102 |
+| Remaining row setup                                                            |                 0.313 |                                26.4 |
+| Driver/other allocation                                                        |   Outside these spans |                                2.34 |
+| GC trace time, overlapping the spans above                                     |                 0.449 | Not an application allocation owner |
 
 The binding allocation bucket is dominated by normal release; the DOM bucket
 by component disconnection. The comparison retains the latter behavior.
@@ -1217,11 +1217,11 @@ in Method, with the shipping modules and example field unchanged.
 
 At 10,000 items, 15 timing pages per variant:
 
-| Variant | Synchronous mount, ms | Teardown, ms | Visible label update, µs |
-| --- | ---: | ---: | ---: |
-| W0 reference | 922 / 1,026 / 1,026 (56.4) | 173 / 201 / 201 (15.1) | 2.91 / 3.17 / 3.17 (0.055) |
+| Variant      |         Synchronous mount, ms |                  Teardown, ms |   Visible label update, µs |
+| ------------ | ----------------------------: | ----------------------------: | -------------------------: |
+| W0 reference |    922 / 1,026 / 1,026 (56.4) |        173 / 201 / 201 (15.1) | 2.91 / 3.17 / 3.17 (0.055) |
 | Unchanged W1 | 7.365 / 9.870 / 9.870 (1.240) | 0.870 / 1.190 / 1.190 (0.105) | 2.92 / 3.94 / 3.94 (0.125) |
-| C1 | 7.255 / 8.180 / 8.180 (0.635) | 0.645 / 0.710 / 0.710 (0.050) | 2.96 / 3.13 / 3.13 (0.120) |
+| C1           | 7.255 / 8.180 / 8.180 (0.635) | 0.645 / 0.710 / 0.710 (0.050) | 2.96 / 3.13 / 3.13 (0.120) |
 
 Mount's median difference is not meaningful. Teardown is 25.9% cheaper,
 clearing both IQRs. C1's mount is 0.787% of W0 and its visible update is
@@ -1233,11 +1233,11 @@ summary once per commit.
 
 Heap at 10,000 items, ten pages per variant, in decimal MB:
 
-| Variant | Total heap | Presentation-only heap | DOM nodes, constant |
-| --- | ---: | ---: | ---: |
-| W0 reference | 9.1133 / 9.1157 / 9.1157 (0.0023) | 7.6460 / 7.6484 / 7.6484 (0.0023) | 100,005 |
-| Unchanged W1 | 1.5105 / 1.5168 / 1.5168 (0.0061) | 0.04390 / 0.04999 / 0.04999 (0.00609) | 505 |
-| C1 | 1.5102 / 1.5163 / 1.5163 (0.0002) | 0.04362 / 0.04971 / 0.04971 (0) | 505 |
+| Variant      |                        Total heap |                Presentation-only heap | DOM nodes, constant |
+| ------------ | --------------------------------: | ------------------------------------: | ------------------: |
+| W0 reference | 9.1133 / 9.1157 / 9.1157 (0.0023) |     7.6460 / 7.6484 / 7.6484 (0.0023) |             100,005 |
+| Unchanged W1 | 1.5105 / 1.5168 / 1.5168 (0.0061) | 0.04390 / 0.04999 / 0.04999 (0.00609) |                 505 |
+| C1           | 1.5102 / 1.5163 / 1.5163 (0.0002) |       0.04362 / 0.04971 / 0.04971 (0) |                 505 |
 
 C1 retains 16.6% of W0's total heap and 0.505% of its DOM nodes. Its heap
 difference from W1 is not meaningful. Total heap, rather than just the much
@@ -1245,10 +1245,10 @@ smaller presentation increment, decides the heap threshold.
 
 Mount click Event Timing at 10,000 items, ten events per variant, ms:
 
-| Variant | Input delay | Event processing | Residual to presentation | Total |
-| --- | ---: | ---: | ---: | ---: |
+| Variant      |               Input delay |             Event processing |        Residual to presentation |                Total |
+| ------------ | ------------------------: | ---------------------------: | ------------------------------: | -------------------: |
 | Unchanged W1 | 1.58 / 1.88 / 1.88 (0.18) | 19.07 / 22.51 / 22.51 (1.36) | 83.87 / 103.60 / 103.60 (15.38) | 104 / 128 / 128 (16) |
-| C1 | 1.59 / 1.78 / 1.78 (0.12) | 19.17 / 20.29 / 20.29 (1.42) | 91.86 / 145.93 / 145.93 (38.93) | 112 / 168 / 168 (40) |
+| C1           | 1.59 / 1.78 / 1.78 (0.12) | 19.17 / 20.29 / 20.29 (1.42) | 91.86 / 145.93 / 145.93 (38.93) | 112 / 168 / 168 (40) |
 
 The mount presentation budget fails again. The median difference is smaller
 than both IQRs; there is no supported mount latency improvement. Presented
@@ -1258,10 +1258,10 @@ all clicked selections were checked, and missing entries are not imputed.
 
 Viewport scrolling at 10,000 items:
 
-| Variant | Frame script, ms | Page-median script, ms | Sampled kB/step, ten pages | GC trace ms/sequence, ten pages | Long tasks |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Unchanged W1 | 4.061 / 5.545 / 139.289 (0.265) | 4.022 / 5.545 / 5.545 (0.187) | 228.9 / 242.5 / 242.5 (11.6) | 23.58 / 53.68 / 53.68 (2.26) | 7, 57–149 ms |
-| C1 | 3.700 / 4.715 / 26.422 (0.295) | 3.671 / 4.155 / 4.155 (0.122) | 153.8 / 159.8 / 159.8 (7.1) | 16.43 / 46.11 / 46.11 (5.88) | 0 |
+| Variant      |                Frame script, ms |        Page-median script, ms |   Sampled kB/step, ten pages | GC trace ms/sequence, ten pages |   Long tasks |
+| ------------ | ------------------------------: | ----------------------------: | ---------------------------: | ------------------------------: | -----------: |
+| Unchanged W1 | 4.061 / 5.545 / 139.289 (0.265) | 4.022 / 5.545 / 5.545 (0.187) | 228.9 / 242.5 / 242.5 (11.6) |    23.58 / 53.68 / 53.68 (2.26) | 7, 57–149 ms |
+| C1           |  3.700 / 4.715 / 26.422 (0.295) | 3.671 / 4.155 / 4.155 (0.122) |  153.8 / 159.8 / 159.8 (7.1) |    16.43 / 46.11 / 46.11 (5.88) |            0 |
 
 C1's typical viewport script reduction is 8.73%, exceeding 5% of control
 and both page-median IQRs. Allocations fall 32.8%, also clearing that rule.
@@ -1275,14 +1275,14 @@ necessary row lifetimes.
 
 Uninstrumented viewport allocation stacks, median kB per step with IQR:
 
-| Stack owner | Unchanged W1 | C1 |
-| --- | ---: | ---: |
-| Range/position | 15.1 (2.18) | 6.57 (2.74) |
-| Reconciler/callees, including optimized lifecycle callees | 77.6 (8.28) | 12.1 (2.23) |
-| Visible binding lifecycle frames | 24.3 (4.10) | 25.1 (3.28) |
-| DOM/component | 82.6 (6.91) | 80.1 (5.57) |
-| Remaining row setup | 28.2 (2.20) | 23.3 (3.81) |
-| Driver/other | 2.46 (1.36) | 2.19 (0.84) |
+| Stack owner                                               | Unchanged W1 |          C1 |
+| --------------------------------------------------------- | -----------: | ----------: |
+| Range/position                                            |  15.1 (2.18) | 6.57 (2.74) |
+| Reconciler/callees, including optimized lifecycle callees |  77.6 (8.28) | 12.1 (2.23) |
+| Visible binding lifecycle frames                          |  24.3 (4.10) | 25.1 (3.28) |
+| DOM/component                                             |  82.6 (6.91) | 80.1 (5.57) |
+| Remaining row setup                                       |  28.2 (2.20) | 23.3 (3.81) |
+| Driver/other                                              |  2.46 (1.36) | 2.19 (0.84) |
 
 Bucket medians need not sum to the median total. The large ancestor-frame
 reduction is consistent with the lifecycle changes identified by diagnostic
@@ -1291,12 +1291,12 @@ allocated 77.6 kB. Component disconnection remains a large allocation site.
 
 Other scrolling inputs at 10,000 items, ten pages and 1,200 frames per cell:
 
-| Input / variant | Frame script, ms | Page-median script, ms | Sampled kB/step | Long tasks |
-| --- | ---: | ---: | ---: | ---: |
-| Row / W1 | 0.739 / 0.827 / 1.019 (0.067) | 0.726 / 0.784 / 0.784 (0.033) | 36.4 / 40.3 / 40.3 (3.86) | 0 |
-| Row / C1 | 0.640 / 0.715 / 0.851 (0.058) | 0.637 / 0.673 / 0.673 (0.039) | 17.8 / 23.5 / 23.5 (2.45) | 0 |
-| End / W1 | 4.576 / 5.021 / 7.355 (0.211) | 4.557 / 4.743 / 4.743 (0.215) | 259.8 / 271.1 / 271.1 (11.7) | 0 |
-| End / C1 | 4.217 / 11.849 / 177.466 (0.270) | 4.189 / 11.660 / 11.660 (0.127) | 173.0 / 182.2 / 182.2 (12.6) | 21, 54–288 ms |
+| Input / variant |                 Frame script, ms |          Page-median script, ms |              Sampled kB/step |    Long tasks |
+| --------------- | -------------------------------: | ------------------------------: | ---------------------------: | ------------: |
+| Row / W1        |    0.739 / 0.827 / 1.019 (0.067) |   0.726 / 0.784 / 0.784 (0.033) |    36.4 / 40.3 / 40.3 (3.86) |             0 |
+| Row / C1        |    0.640 / 0.715 / 0.851 (0.058) |   0.637 / 0.673 / 0.673 (0.039) |    17.8 / 23.5 / 23.5 (2.45) |             0 |
+| End / W1        |    4.576 / 5.021 / 7.355 (0.211) |   4.557 / 4.743 / 4.743 (0.215) | 259.8 / 271.1 / 271.1 (11.7) |             0 |
+| End / C1        | 4.217 / 11.849 / 177.466 (0.270) | 4.189 / 11.660 / 11.660 (0.127) | 173.0 / 182.2 / 182.2 (12.6) | 21, 54–288 ms |
 
 The row and end typical reductions clear the meaningful-difference rule,
 but C1 has a worse end-jump tail. Those samples are retained. Trace correlation
@@ -1328,20 +1328,20 @@ All 70 pages pass their listed correctness checks. Entries are p50 / p95 /
 maximum (IQR), with the same timing boundaries and nearest-rank summaries as
 the full set. Fifteen timing pages per variant:
 
-| Variant | Synchronous mount, ms | Teardown, ms | Visible label update, µs |
-| --- | ---: | ---: | ---: |
+| Variant      |         Synchronous mount, ms |                  Teardown, ms |      Visible label update, µs |
+| ------------ | ----------------------------: | ----------------------------: | ----------------------------: |
 | Unchanged W1 | 7.190 / 7.405 / 7.405 (0.120) | 0.865 / 0.885 / 0.885 (0.020) | 2.895 / 2.975 / 2.975 (0.075) |
-| C1 | 7.030 / 7.835 / 7.835 (0.275) | 0.620 / 0.670 / 0.670 (0.040) | 2.885 / 3.075 / 3.075 (0.105) |
+| C1           | 7.030 / 7.835 / 7.835 (0.275) | 0.620 / 0.670 / 0.670 (0.040) | 2.885 / 3.075 / 3.075 (0.105) |
 
 Mount's median difference remains below 5%. Teardown is meaningfully lower,
 by 28.3%. Visible update medians are effectively unchanged.
 
 Mount Event Timing, ten events per variant, in milliseconds:
 
-| Variant | Input delay | Event processing | Residual to presentation | Total |
-| --- | ---: | ---: | ---: | ---: |
+| Variant      |                Input delay |                 Event processing |     Residual to presentation |               Total |
+| ------------ | -------------------------: | -------------------------------: | ---------------------------: | ------------------: |
 | Unchanged W1 | 1.54 / 1.68 / 1.68 (0.075) | 18.585 / 20.100 / 20.100 (0.290) | 83.16 / 90.25 / 90.25 (7.98) | 104 / 112 / 112 (8) |
-| C1 | 1.51 / 1.60 / 1.60 (0.085) | 18.585 / 19.155 / 19.155 (0.370) | 83.41 / 91.32 / 91.32 (7.62) | 104 / 112 / 112 (8) |
+| C1           | 1.51 / 1.60 / 1.60 (0.085) | 18.585 / 19.155 / 19.155 (0.370) | 83.41 / 91.32 / 91.32 (7.62) | 104 / 112 / 112 (8) |
 
 Both mount p95 values still exceed 100 ms. Selection clicks have complete
 coverage of 200 events per variant, all reported at 16 ms. The candidate
@@ -1349,10 +1349,10 @@ does not reduce the dominant mount presentation residual.
 
 Viewport scrolling, 1,200 frames from ten pages per variant:
 
-| Variant | Frame script, ms | Page-median script, ms | GC trace ms/sequence | Long tasks |
-| --- | ---: | ---: | ---: | ---: |
-| Unchanged W1 | 4.100 / 4.561 / 5.818 (0.381) | 4.072 / 4.220 / 4.220 (0.083) | 20.11 / 23.81 / 23.81 (1.05) | 0 |
-| C1 | 3.701 / 4.079 / 4.437 (0.323) | 3.700 / 3.741 / 3.741 (0.033) | 17.29 / 21.05 / 21.05 (0.92) | 0 |
+| Variant      |              Frame script, ms |        Page-median script, ms |         GC trace ms/sequence | Long tasks |
+| ------------ | ----------------------------: | ----------------------------: | ---------------------------: | ---------: |
+| Unchanged W1 | 4.100 / 4.561 / 5.818 (0.381) | 4.072 / 4.220 / 4.220 (0.083) | 20.11 / 23.81 / 23.81 (1.05) |          0 |
+| C1           | 3.701 / 4.079 / 4.437 (0.323) | 3.700 / 3.741 / 3.741 (0.033) | 17.29 / 21.05 / 21.05 (0.92) |          0 |
 
 The typical reduction is 9.14%, clearing 5% and both IQRs again. The p95
 limit still fails at 4.079 ms; it is not rounded down to accept the candidate.
@@ -1382,11 +1382,11 @@ not run; a long paint or script span is not all paint or script CPU work.
 Bounded repeat, three pages and 360 frames per traced cell, p50 / p95 /
 maximum (IQR), in milliseconds:
 
-| Variant | Traced frame script | Traced page-median script | Long tasks, traced / plain |
-| --- | ---: | ---: | ---: |
-| W1 | 4.810 / 5.446 / 6.326 (0.310) | 4.830 / 4.832 / 4.832 (0.046) | 0 / 0 |
-| Guard-only G1 | 4.777 / 5.538 / 5.964 (0.385) | 4.915 / 4.968 / 4.968 (0.381) | 0 / 1 |
-| Combined C1 | 4.482 / 5.345 / 9.666 (0.484) | 4.477 / 4.842 / 4.842 (0.518) | 1 / 0 |
+| Variant       |           Traced frame script |     Traced page-median script | Long tasks, traced / plain |
+| ------------- | ----------------------------: | ----------------------------: | -------------------------: |
+| W1            | 4.810 / 5.446 / 6.326 (0.310) | 4.830 / 4.832 / 4.832 (0.046) |                      0 / 0 |
+| Guard-only G1 | 4.777 / 5.538 / 5.964 (0.385) | 4.915 / 4.968 / 4.968 (0.381) |                      0 / 1 |
+| Combined C1   | 4.482 / 5.345 / 9.666 (0.484) | 4.477 / 4.842 / 4.842 (0.518) |                      1 / 0 |
 
 The severe C1 page does not recur in this small repeat. Its one traced long
 task lasts 101.816 ms, uses 8.765 ms thread CPU, and overlaps no main-thread
@@ -1399,11 +1399,11 @@ and the data do not establish a guard-specific or C1-specific cause.
 
 The paired callback timer exposes substantial tracing perturbation:
 
-| Variant | Traced callback, ms | Plain callback, ms |
-| --- | ---: | ---: |
-| W1 | 4.470 / 5.055 / 5.930 (0.290) | 2.215 / 2.525 / 3.010 (0.125) |
-| G1 | 4.525 / 5.255 / 5.640 (0.370) | 2.300 / 3.175 / 74.630 (0.250) |
-| C1 | 4.225 / 5.060 / 9.360 (0.480) | 1.960 / 2.260 / 2.980 (0.090) |
+| Variant |           Traced callback, ms |             Plain callback, ms |
+| ------- | ----------------------------: | -----------------------------: |
+| W1      | 4.470 / 5.055 / 5.930 (0.290) |  2.215 / 2.525 / 3.010 (0.125) |
+| G1      | 4.525 / 5.255 / 5.640 (0.370) | 2.300 / 3.175 / 74.630 (0.250) |
+| C1      | 4.225 / 5.060 / 9.360 (0.480) |  1.960 / 2.260 / 2.980 (0.090) |
 
 These use the same callback boundary within a page; tracing approximately
 doubles its median. The plain timer omits native-scroll and other callbacks,
@@ -1424,11 +1424,11 @@ Small-sample p95 equals the maximum and is exploratory. These are API Event
 Timing phases correlated to the actual mount handler, not the automation
 probe or an animation-frame callback:
 
-| Variant | Input delay | Event processing | Residual to presentation | Total |
-| --- | ---: | ---: | ---: | ---: |
-| W1 | 1.31 / 1.40 / 1.40 (0.22) | 21.695 / 21.925 / 21.925 (0.460) | 97.36 / 128.90 / 128.90 (32.14) | 120 / 152 / 152 (32) |
-| C1 | 1.26 / 1.27 / 1.27 (0.25) | 20.800 / 21.965 / 21.965 (1.680) | 98.46 / 104.76 / 104.76 (14.59) | 120 / 128 / 128 (16) |
-| Native wiring N1 | 1.26 / 2.31 / 2.31 (1.06) | 8.765 / 8.850 / 8.850 (0.495) | 102.39 / 117.89 / 117.89 (24.97) | 112 / 128 / 128 (24) |
+| Variant          |               Input delay |                 Event processing |         Residual to presentation |                Total |
+| ---------------- | ------------------------: | -------------------------------: | -------------------------------: | -------------------: |
+| W1               | 1.31 / 1.40 / 1.40 (0.22) | 21.695 / 21.925 / 21.925 (0.460) |  97.36 / 128.90 / 128.90 (32.14) | 120 / 152 / 152 (32) |
+| C1               | 1.26 / 1.27 / 1.27 (0.25) | 20.800 / 21.965 / 21.965 (1.680) |  98.46 / 104.76 / 104.76 (14.59) | 120 / 128 / 128 (16) |
+| Native wiring N1 | 1.26 / 2.31 / 2.31 (1.06) |    8.765 / 8.850 / 8.850 (0.495) | 102.39 / 117.89 / 117.89 (24.97) | 112 / 128 / 128 (24) |
 
 State construction, subscription setup and pattern work add roughly 12–13 ms
 of median handler time over native wiring in this fixture. That difference
@@ -1440,10 +1440,10 @@ both IQRs. Native wiring itself exceeds the unchanged 100 ms target.
 Trace medians, with full per-page ranges in parentheses, in milliseconds:
 
 | Variant | Main-thread rendering CPU | Raster wall-time union | Frame-task wall / CPU | Off CPU inside frame tasks |
-| --- | ---: | ---: | ---: | ---: |
-| W1 | 6.56 (6.45–6.65) | 5.26 (4.99–5.70) | 81.84 / 4.72 | 77.33 (74.42–101.59) |
-| C1 | 6.42 (6.28–6.44) | 5.33 (5.25–5.37) | 84.52 / 4.33 | 80.34 (75.78–83.37) |
-| N1 | 6.67 (6.42–6.71) | 5.34 (5.27–5.44) | 89.99 / 4.72 | 85.34 (71.43–101.47) |
+| ------- | ------------------------: | ---------------------: | --------------------: | -------------------------: |
+| W1      |          6.56 (6.45–6.65) |       5.26 (4.99–5.70) |          81.84 / 4.72 |       77.33 (74.42–101.59) |
+| C1      |          6.42 (6.28–6.44) |       5.33 (5.25–5.37) |          84.52 / 4.33 |        80.34 (75.78–83.37) |
+| N1      |          6.67 (6.42–6.71) |       5.34 (5.27–5.44) |          89.99 / 4.72 |       85.34 (71.43–101.47) |
 
 Rendering here unions nested style/layout/pre-paint/paint/layer spans on the
 renderer main thread; raster is on other threads and may overlap. Main frame
@@ -1474,12 +1474,12 @@ symbolized scheduling capture on a controlled host. No large run was started.
 Page-median callback time, three pages per cell, p50 / p95 / maximum (IQR),
 in milliseconds. This is the same synchronous callback boundary in all modes:
 
-| Variant / input | No trace | Minimal trace | Full trace |
-| --- | ---: | ---: | ---: |
-| W1 / viewport | 1.970 / 2.040 / 2.040 (0.150) | 2.760 / 2.795 / 2.795 (0.145) | 3.705 / 3.715 / 3.715 (0.030) |
-| W1 / end jump | 2.240 / 2.240 / 2.240 (0.065) | 3.215 / 3.315 / 3.315 (0.190) | 4.440 / 4.605 / 4.605 (0.230) |
-| C1 / viewport | 1.700 / 1.810 / 1.810 (0.125) | 2.520 / 2.585 / 2.585 (0.085) | 3.445 / 3.570 / 3.570 (0.155) |
-| C1 / end jump | 1.950 / 1.985 / 1.985 (0.045) | 2.875 / 2.895 / 2.895 (0.040) | 4.105 / 4.185 / 4.185 (0.155) |
+| Variant / input |                      No trace |                 Minimal trace |                    Full trace |
+| --------------- | ----------------------------: | ----------------------------: | ----------------------------: |
+| W1 / viewport   | 1.970 / 2.040 / 2.040 (0.150) | 2.760 / 2.795 / 2.795 (0.145) | 3.705 / 3.715 / 3.715 (0.030) |
+| W1 / end jump   | 2.240 / 2.240 / 2.240 (0.065) | 3.215 / 3.315 / 3.315 (0.190) | 4.440 / 4.605 / 4.605 (0.230) |
+| C1 / viewport   | 1.700 / 1.810 / 1.810 (0.125) | 2.520 / 2.585 / 2.585 (0.085) | 3.445 / 3.570 / 3.570 (0.155) |
+| C1 / end jump   | 1.950 / 1.985 / 1.985 (0.045) | 2.875 / 2.895 / 2.895 (0.040) | 4.105 / 4.185 / 4.185 (0.155) |
 
 Minimal tracing adds 40.1%, 43.5%, 48.2% and 47.4%, respectively; full
 tracing adds 88.1%, 98.2%, 102.6% and 110.5%. Each exceeds 5% and both
@@ -1504,35 +1504,35 @@ p50 / p95 (IQR) of page medians; p95 is also the maximum. Cold values are
 one first-use observation per page. Times are synchronous elapsed ms unless
 marked µs; deferred rendering and presentation are excluded.
 
-| 1,000 items | H0 | P1 |
-| --- | ---: | ---: |
-| Cold capability, ms | 1.915 / 1.935 (0.045) | 2.020 / 2.070 (0.200) |
-| Cold view, ms | 22.305 / 27.420 (16.765) | 28.155 / 31.670 (5.185) |
-| Cold total, ms | 24.200 / 29.360 (16.790) | 30.230 / 33.695 (5.340) |
-| Warm view, ms | 1.140 / 1.170 (0.065) | 1.125 / 1.180 (0.065) |
-| Warm teardown, ms | 0.265 / 0.275 (0.015) | 0.275 / 0.280 (0.025) |
-| Viewport change, ms | 1.0300 / 1.0315 (0.01775) | 1.0505 / 1.0635 (0.02850) |
-| End jump, ms | 1.11075 / 1.11125 (0.00625) | 1.1200 / 1.1250 (0.02350) |
-| Unchanged range, µs | 0.430 / 0.440 (0.010) | 0.460 / 0.460 (0.010) |
-| Selection switch, µs | 1.220 / 1.230 (0.030) | 1.185 / 1.195 (0.025) |
-| Same-key replacement, ms | 0.4340 / 0.4490 (0.01700) | 0.43125 / 0.43475 (0.00925) |
-| Total retained JS heap, B | 158804 / 158804 (56) | 159116 / 159132 (72) |
-| Presentation-only JS heap, B | 26220 / 26220 (0) | 26524 / 26540 (16) |
+| 1,000 items                  |                          H0 |                          P1 |
+| ---------------------------- | --------------------------: | --------------------------: |
+| Cold capability, ms          |       1.915 / 1.935 (0.045) |       2.020 / 2.070 (0.200) |
+| Cold view, ms                |    22.305 / 27.420 (16.765) |     28.155 / 31.670 (5.185) |
+| Cold total, ms               |    24.200 / 29.360 (16.790) |     30.230 / 33.695 (5.340) |
+| Warm view, ms                |       1.140 / 1.170 (0.065) |       1.125 / 1.180 (0.065) |
+| Warm teardown, ms            |       0.265 / 0.275 (0.015) |       0.275 / 0.280 (0.025) |
+| Viewport change, ms          |   1.0300 / 1.0315 (0.01775) |   1.0505 / 1.0635 (0.02850) |
+| End jump, ms                 | 1.11075 / 1.11125 (0.00625) |   1.1200 / 1.1250 (0.02350) |
+| Unchanged range, µs          |       0.430 / 0.440 (0.010) |       0.460 / 0.460 (0.010) |
+| Selection switch, µs         |       1.220 / 1.230 (0.030) |       1.185 / 1.195 (0.025) |
+| Same-key replacement, ms     |   0.4340 / 0.4490 (0.01700) | 0.43125 / 0.43475 (0.00925) |
+| Total retained JS heap, B    |        158804 / 158804 (56) |        159116 / 159132 (72) |
+| Presentation-only JS heap, B |           26220 / 26220 (0) |          26524 / 26540 (16) |
 
-| 10,000 items | H0 | P1 |
-| --- | ---: | ---: |
-| Cold capability, ms | 13.130 / 13.450 (0.705) | 13.665 / 13.960 (0.985) |
-| Cold view, ms | 24.390 / 26.470 (10.175) | 22.775 / 24.880 (11.855) |
-| Cold total, ms | 37.520 / 39.215 (9.470) | 35.755 / 38.550 (11.560) |
-| Warm view, ms | 1.985 / 2.160 (0.205) | 1.935 / 2.035 (0.130) |
-| Warm teardown, ms | 0.295 / 0.310 (0.020) | 0.285 / 0.295 (0.015) |
-| Viewport change, ms | 0.9330 / 0.94525 (0.04725) | 0.9030 / 0.92075 (0.03375) |
-| End jump, ms | 1.1050 / 1.1235 (0.02525) | 1.1210 / 1.12375 (0.01750) |
-| Unchanged range, µs | 0.440 / 0.445 (0.010) | 0.450 / 0.465 (0.015) |
-| Selection switch, µs | 1.195 / 1.220 (0.040) | 1.190 / 1.210 (0.020) |
-| Same-key replacement, ms | 1.7260 / 1.7500 (0.04225) | 1.77075 / 1.7950 (0.03600) |
-| Total retained JS heap, B | 1453888 / 1453972 (84) | 1453816 / 1453896 (96) |
-| Presentation-only JS heap, B | 26820 / 26820 (0) | 26856 / 26856 (0) |
+| 10,000 items                 |                         H0 |                         P1 |
+| ---------------------------- | -------------------------: | -------------------------: |
+| Cold capability, ms          |    13.130 / 13.450 (0.705) |    13.665 / 13.960 (0.985) |
+| Cold view, ms                |   24.390 / 26.470 (10.175) |   22.775 / 24.880 (11.855) |
+| Cold total, ms               |    37.520 / 39.215 (9.470) |   35.755 / 38.550 (11.560) |
+| Warm view, ms                |      1.985 / 2.160 (0.205) |      1.935 / 2.035 (0.130) |
+| Warm teardown, ms            |      0.295 / 0.310 (0.020) |      0.285 / 0.295 (0.015) |
+| Viewport change, ms          | 0.9330 / 0.94525 (0.04725) | 0.9030 / 0.92075 (0.03375) |
+| End jump, ms                 |  1.1050 / 1.1235 (0.02525) | 1.1210 / 1.12375 (0.01750) |
+| Unchanged range, µs          |      0.440 / 0.445 (0.010) |      0.450 / 0.465 (0.015) |
+| Selection switch, µs         |      1.195 / 1.220 (0.040) |      1.190 / 1.210 (0.020) |
+| Same-key replacement, ms     |  1.7260 / 1.7500 (0.04225) | 1.77075 / 1.7950 (0.03600) |
+| Total retained JS heap, B    |     1453888 / 1453972 (84) |     1453816 / 1453896 (96) |
+| Presentation-only JS heap, B |          26820 / 26820 (0) |          26856 / 26856 (0) |
 
 Only the 1,000-item unchanged-range regression clears the meaningful-difference
 rule: +6.98%, or 0.030 µs, exceeding both 0.010 µs IQRs. It remains a failure
@@ -1542,15 +1542,15 @@ increase is +26.23%, but within H0's IQR; it is inconclusive, not a win for P1.
 
 The same observed work holds for both variants and sizes:
 
-| Operation | Creates / placements / removals | Other work |
-| --- | ---: | --- |
-| Initial mount | 19 / 19 / 0 | 19 active lifetimes |
-| Repeated completed range | 0 / 0 / 0 | No row input assignment |
-| One viewport change | 15 / 23 / 15 | 23 active lifetimes |
-| Selection change | 0 / 0 / 0 | Two selected assignments |
-| Offscreen text change | 0 / 0 / 0 | Zero text assignments |
-| Visible key reuse | 1 / 19 / 1 | New incarnation |
-| Teardown at top | 0 / 0 / 19 | Zero active lifetimes |
+| Operation                | Creates / placements / removals | Other work               |
+| ------------------------ | ------------------------------: | ------------------------ |
+| Initial mount            |                     19 / 19 / 0 | 19 active lifetimes      |
+| Repeated completed range |                       0 / 0 / 0 | No row input assignment  |
+| One viewport change      |                    15 / 23 / 15 | 23 active lifetimes      |
+| Selection change         |                       0 / 0 / 0 | Two selected assignments |
+| Offscreen text change    |                       0 / 0 / 0 | Zero text assignments    |
+| Visible key reuse        |                      1 / 19 / 1 | New incarnation          |
+| Teardown at top          |                      0 / 0 / 19 | Zero active lifetimes    |
 
 Mounted-minus-empty DOM counts are 177 nodes and 179 listeners in both
 variants at both sizes. Ended views return both counts to baseline. Total JS
@@ -1570,20 +1570,20 @@ Loading/evaluation before the entry API is ready is outside cold mount timing.
 Three new pages per variant at 10,000 items; the same p50 / p95 (IQR)
 notation and maximum-equals-p95 rule apply.
 
-| Metric | H0 | P1 |
-| --- | ---: | ---: |
-| Cold capability, ms | 14.435 / 16.520 (2.890) | 13.840 / 13.980 (1.150) |
-| Cold view, ms | 23.820 / 26.945 (14.880) | 14.265 / 20.355 (6.160) |
-| Cold total, ms | 38.255 / 40.575 (11.985) | 28.250 / 33.185 (5.150) |
-| Warm view, ms | 2.045 / 2.070 (0.090) | 2.085 / 2.175 (0.130) |
-| Warm teardown, ms | 0.310 / 0.320 (0.025) | 0.305 / 0.345 (0.055) |
-| Viewport change, ms | 1.0960 / 1.09625 (0.17625) | 1.07425 / 1.22575 (0.30175) |
-| End jump, ms | 1.2055 / 1.2770 (0.12350) | 1.2855 / 1.2860 (0.16550) |
-| Unchanged range, µs | 0.445 / 0.450 (0.010) | 0.460 / 0.460 (0.000) |
-| Selection switch, µs | 1.205 / 1.210 (0.030) | 1.215 / 1.215 (0.030) |
-| Same-key replacement, ms | 2.0865 / 2.0885 (0.25850) | 1.81475 / 1.99025 (0.20200) |
-| Total retained JS heap, B | 1453676 / 1453744 (84) | 1453800 / 1453980 (180) |
-| Presentation-only JS heap, B | 26676 / 26676 (0) | 26856 / 26856 (0) |
+| Metric                       |                         H0 |                          P1 |
+| ---------------------------- | -------------------------: | --------------------------: |
+| Cold capability, ms          |    14.435 / 16.520 (2.890) |     13.840 / 13.980 (1.150) |
+| Cold view, ms                |   23.820 / 26.945 (14.880) |     14.265 / 20.355 (6.160) |
+| Cold total, ms               |   38.255 / 40.575 (11.985) |     28.250 / 33.185 (5.150) |
+| Warm view, ms                |      2.045 / 2.070 (0.090) |       2.085 / 2.175 (0.130) |
+| Warm teardown, ms            |      0.310 / 0.320 (0.025) |       0.305 / 0.345 (0.055) |
+| Viewport change, ms          | 1.0960 / 1.09625 (0.17625) | 1.07425 / 1.22575 (0.30175) |
+| End jump, ms                 |  1.2055 / 1.2770 (0.12350) |   1.2855 / 1.2860 (0.16550) |
+| Unchanged range, µs          |      0.445 / 0.450 (0.010) |       0.460 / 0.460 (0.000) |
+| Selection switch, µs         |      1.205 / 1.210 (0.030) |       1.215 / 1.215 (0.030) |
+| Same-key replacement, ms     |  2.0865 / 2.0885 (0.25850) | 1.81475 / 1.99025 (0.20200) |
+| Total retained JS heap, B    |     1453676 / 1453744 (84) |     1453800 / 1453980 (180) |
+| Presentation-only JS heap, B |          26676 / 26676 (0) |           26856 / 26856 (0) |
 
 No named timing or total-heap regression clears the meaningful-difference
 rule here. End jumps are +6.64%, within both IQRs. Key replacement improves
@@ -1815,12 +1815,12 @@ the requirement to preserve adverse samples.
 
 ### Stage A against its thresholds (2026-10-25)
 
-| Threshold | S1 | S2 |
-| --- | --- | --- |
-| 1. At most four row reads, only two row assignments | Holds: two reads, two assignments | Holds: one list read, two assignments |
-| 2. At most 1.5× CPU growth and meaningfully lower than S0 | Holds: random 1.36×, next 1.13× | Holds: random 1.38×, next 1.35× |
-| 3. Click presented p95 at most 100 ms | Fails: 112 ms | Fails: 120 ms |
-| 4. Correctness | Holds | Holds |
+| Threshold                                                 | S1                                | S2                                    |
+| --------------------------------------------------------- | --------------------------------- | ------------------------------------- |
+| 1. At most four row reads, only two row assignments       | Holds: two reads, two assignments | Holds: one list read, two assignments |
+| 2. At most 1.5× CPU growth and meaningfully lower than S0 | Holds: random 1.36×, next 1.13×   | Holds: random 1.38×, next 1.35×       |
+| 3. Click presented p95 at most 100 ms                     | Fails: 112 ms                     | Fails: 120 ms                         |
+| 4. Correctness                                            | Holds                             | Holds                                 |
 
 Neither candidate is supported against every all-mounted threshold. S2 leads
 synchronous selection CPU time and footprint without a binding-contract
@@ -1831,22 +1831,22 @@ decides on the complete reported evidence.
 
 ### Stage B against its thresholds (2026-10-25, first set)
 
-| Threshold at 10,000 items | W1 | W2 |
-| --- | --- | --- |
-| 5. Mount CPU at most 10% of W0, presented at most 100 ms | CPU holds: 0.791%; presented fails: p95 112 ms | CPU holds: 0.778%; presented fails: p95 136 ms |
-| 6. Total heap and DOM nodes at most 25% of W0 | Holds: 16.6% heap, 0.505% nodes | Holds: 16.6% heap, 0.505% nodes |
-| 7. Viewport script p95 at most 4 ms, no task over 50 ms | Fails: 4.46 ms, 3 long tasks | Fails: 9.76 ms, 10 long tasks |
+| Threshold at 10,000 items                                                    | W1                                                                | W2                                                                |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 5. Mount CPU at most 10% of W0, presented at most 100 ms                     | CPU holds: 0.791%; presented fails: p95 112 ms                    | CPU holds: 0.778%; presented fails: p95 136 ms                    |
+| 6. Total heap and DOM nodes at most 25% of W0                                | Holds: 16.6% heap, 0.505% nodes                                   | Holds: 16.6% heap, 0.505% nodes                                   |
+| 7. Viewport script p95 at most 4 ms, no task over 50 ms                      | Fails: 4.46 ms, 3 long tasks                                      | Fails: 9.76 ms, 10 long tasks                                     |
 | 8. Unmounted label update has no DOM write; visible update within +25% of W0 | Holds for the measured workload: zero assignments; visible +1.55% | Holds for the measured workload: zero assignments; visible +0.52% |
-| 9. Correctness | Holds for the listed checks | Holds for the listed checks |
+| 9. Correctness                                                               | Holds for the listed checks                                       | Holds for the listed checks                                       |
 
 The confirmation repeats the deciding timing outcomes:
 
-| Threshold component | W1 confirmation | W2 confirmation |
-| --- | --- | --- |
-| 5. CPU mount ratio and presented mount | 0.796% of W0; presented p95 120 ms, fails | 0.781% of W0; presented p95 216 ms, fails |
-| 7. Viewport script p95 and long tasks | 4.58 ms, zero observed long tasks; fails the 4 ms limit | 6.31 ms, 11 long tasks; fails both limits |
-| 8. Visible label CPU within +25% | Holds: +0.69% | Holds: +1.38% |
-| 9. Model and focus checks | Hold | Hold |
+| Threshold component                    | W1 confirmation                                         | W2 confirmation                           |
+| -------------------------------------- | ------------------------------------------------------- | ----------------------------------------- |
+| 5. CPU mount ratio and presented mount | 0.796% of W0; presented p95 120 ms, fails               | 0.781% of W0; presented p95 216 ms, fails |
+| 7. Viewport script p95 and long tasks  | 4.58 ms, zero observed long tasks; fails the 4 ms limit | 6.31 ms, 11 long tasks; fails both limits |
+| 8. Visible label CPU within +25%       | Holds: +0.69%                                           | Holds: +1.38%                             |
+| 9. Model and focus checks              | Hold                                                    | Hold                                      |
 
 Neither window is supported against every agreed threshold in either set.
 Both reduce total heap by about 83% and DOM nodes by 99.5% in this fixture,
@@ -1864,13 +1864,13 @@ at the measured sizes unless the owner agrees another plan.
 
 ### W1 targeted follow-up against its budgets (2026-10-25)
 
-| Existing threshold at 10,000 items | C1 full comparison | C1 confirmation |
-| --- | --- | --- |
-| 5. Mount CPU at most 10% of W0, presented at most 100 ms | CPU holds at 0.787%; presented fails at 168 ms p95 | Presented fails at 112 ms p95; no new W0 reference |
-| 6. Total heap and nodes at most 25% of W0 | Holds: 16.6% total heap, 0.505% nodes | Not repeated |
-| 7. Viewport script p95 at most 4 ms, no task over 50 ms | Fails at 4.715 ms; zero long tasks | Fails at 4.079 ms; zero long tasks |
-| 8. Unmounted update has no DOM write; visible CPU within +25% of W0 | Holds: zero row assignments, visible +1.72% | Visible cost unchanged against W1; no new W0 reference |
-| 9. Correctness | Holds for the listed checks | Holds for the listed checks |
+| Existing threshold at 10,000 items                                  | C1 full comparison                                 | C1 confirmation                                        |
+| ------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------ |
+| 5. Mount CPU at most 10% of W0, presented at most 100 ms            | CPU holds at 0.787%; presented fails at 168 ms p95 | Presented fails at 112 ms p95; no new W0 reference     |
+| 6. Total heap and nodes at most 25% of W0                           | Holds: 16.6% total heap, 0.505% nodes              | Not repeated                                           |
+| 7. Viewport script p95 at most 4 ms, no task over 50 ms             | Fails at 4.715 ms; zero long tasks                 | Fails at 4.079 ms; zero long tasks                     |
+| 8. Unmounted update has no DOM write; visible CPU within +25% of W0 | Holds: zero row assignments, visible +1.72%        | Visible cost unchanged against W1; no new W0 reference |
+| 9. Correctness                                                      | Holds for the listed checks                        | Holds for the listed checks                            |
 
 The evidence supports the targeted application's lower work: reconciling a
 completed range is unnecessary, one row controller owns normal and failure
@@ -1893,7 +1893,7 @@ by these results.
 ### Scoped owner adoption (2026-10-25)
 
 The owner adopts only C1's duplicate-reconciliation guard as a documented
-[application pattern](../specs/framework/collections.md). It removes demonstrated
+[application pattern](../specs/javascript/framework/collections.md). It removes demonstrated
 redundant work. This does not adopt the combined candidate generally, its
 controller/disposal changes, or large-list readiness. The 4.079 ms result
 remains a miss against 4 ms; the 100 ms mount presentation target is unchanged.
