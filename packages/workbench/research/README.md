@@ -16,6 +16,7 @@ folder and are not committed.
 
 | Record | Status | Related contracts |
 | --- | --- | --- |
+| [Chrome paint records as vectors](iframe-paint-record.md) | Decided 2026-10-27: the paint record has a complete replayable payload and replay is sharp to 800%; stock access needs `--no-sandbox`, so pursue only with a native capture hook | [Rendering flow](../specs/system/rendering-flow.md), [capture](../specs/review/capture.md) |
 | [Compiler speed](compiler-speed.md) | Reported 2026-10-11; esbuild kept, Rspack later adopted by the pipeline decision | [TypeScript previews](../specs/pages/previews.md), [performance](../specs/system/performance.md) |
 | [Preview loading](preview-loading.md) | Provisional, one run set (2026-10-11); led to the Rspack pipeline comparison | [Performance](../specs/system/performance.md), [preview pipeline](../specs/preview-pipeline/README.md) |
 | [Rspack preview pipeline](rspack-pipeline.md) | Decided 2026-10-13: implemented with the warm document | [Preview pipeline](../specs/preview-pipeline/README.md), [hot updates](../specs/preview-pipeline/hot-updates.md) |

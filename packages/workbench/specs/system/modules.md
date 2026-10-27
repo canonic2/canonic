@@ -22,7 +22,9 @@ asset delivery are distinct from composing the Workbench interface.
 `packages/workbench/` owns the Workbench product. Applications and libraries are
 peers; the VS Code extension is one delivery host. The product root coordinates
 checks, builds, version consistency and releases, and holds product-wide specs,
-user docs, design fixtures and labs.
+user docs, design fixtures, labs and the canvas playground. `playground/` is a
+development tool: it reads UI modules such as the canvas grid and geometry, but
+nothing in a shipping part imports it and VSIX staging leaves it out.
 
 | Part | Responsibility and boundary |
 | --- | --- |
