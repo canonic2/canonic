@@ -336,6 +336,43 @@ pub fn call(root: &Root, request: &Request, options: &Options) -> Result<Reply> 
     call_until(root, request, options, None)
 }
 
+/// Complete a handoff handshake and return its reply plus a checked open stream.
+/// The stream is blocking with handshake timeouts cleared. Product code owns
+/// subsequent framing, deadlines and closure; this function never replays work.
+/// No product bytes are read beyond the two handshake frames.
+///
+/// # Errors
+/// Returns connection, capability, capacity and transport errors, `OutcomeUnknown`
+/// on an ambiguous handshake, or `HandoffRefused` with the manager's error reply.
+pub fn open(root: &Root, request: &Request, options: &Options) -> Result<(Reply, UnixStream)> {
+    let mut request = request.clone();
+    if !request
+        .requires
+        .iter()
+        .any(|c| c == crate::protocol::CONNECTION_HANDOFF)
+    {
+        request
+            .requires
+            .push(crate::protocol::CONNECTION_HANDOFF.into());
+    }
+    let id = request.request_id.clone();
+    let mut stream = endpoint::connect(root, false, options.io)?;
+    let reply = exchange(
+        &mut stream,
+        &crate::protocol::ConnectionRequest {
+            connection: request,
+        },
+        &id,
+        options,
+        None,
+    )?;
+    if reply.code.is_some() || reply.accepted.is_some() {
+        return Err(Error::HandoffRefused(Box::new(reply)));
+    }
+    crate::connection::clear_deadlines(&stream)?;
+    Ok((reply, stream))
+}
+
 pub(crate) fn call_until(
     root: &Root,
     request: &Request,

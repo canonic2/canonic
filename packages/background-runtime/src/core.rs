@@ -20,6 +20,17 @@ pub enum State {
     Exiting,
 }
 
+/// Admission semantics for a product control action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ControlRole {
+    /// Bounded inspection; does not renew idle grace or create resource holds.
+    Inspection,
+    /// New work, refused after admission closes.
+    Work,
+    /// Cleanup of existing obligations, permitted during an unsettled drain.
+    Cleanup,
+}
+
 /// Payload-free transition evidence; consumers choose how to log it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
@@ -215,10 +226,17 @@ impl Admission {
         Ok(Permit {
             gate: self.clone(),
             observer,
+            read_only: false,
         })
     }
 
-    pub(crate) fn control(&self) -> Result<Permit> {
+    /// Reserve a bounded control reply before reading or classifying its frame.
+    /// Runtime adapters must separately bound connection counts and read time.
+    /// Controls may enter during drain only while work or holds still remain.
+    ///
+    /// # Errors
+    /// Returns `Draining` after the drain settles or exit commits.
+    pub fn control(&self) -> Result<Permit> {
         let mut inner = self.lock();
         // Once work settles, existing replies form a finite set. They must
         // not admit more observers while they finish.
@@ -230,6 +248,7 @@ impl Admission {
         Ok(Permit {
             gate: self.clone(),
             observer: true,
+            read_only: false,
         })
     }
 
@@ -406,19 +425,41 @@ impl Admission {
 pub struct Permit {
     gate: Admission,
     observer: bool,
+    read_only: bool,
 }
 impl Permit {
-    pub(crate) fn promote(&mut self) -> Result<()> {
+    /// Classify an admitted control before acknowledgement or product effects.
+    /// Cleanup cannot reopen a drain after its work and holds have settled.
+    ///
+    /// # Errors
+    /// Returns `Draining` for new work after closure or cleanup after settlement.
+    pub fn classify_control(&mut self, role: ControlRole) -> Result<()> {
+        if role == ControlRole::Inspection {
+            self.observe();
+            self.read_only = true;
+            return Ok(());
+        }
         let mut inner = self.gate.lock();
-        if inner.closed() {
+        if inner.closed()
+            && (role == ControlRole::Work || inner.state == State::Exiting || inner.empty())
+        {
             return Err(Error::Draining);
         }
         if self.observer {
             inner.observers -= 1;
             inner.work += 1;
             self.observer = false;
-            Admission::notify(inner);
         }
+        self.read_only = false;
+        if inner.state == State::Idle {
+            inner.event(Event::IdleCancelled);
+        }
+        if !inner.closed() {
+            inner.state = State::Serving;
+        }
+        inner.changed = true;
+        inner.idle_since = None;
+        Admission::notify(inner);
         Ok(())
     }
     pub(crate) fn activate(&self) {
@@ -447,8 +488,12 @@ impl Permit {
     /// Transfer live responsibility before releasing the request, including during drain.
     ///
     /// # Errors
-    /// Returns `Draining` if an observer tries to create ownership after closure.
+    /// Returns `ReadOnly` for an inspection control, or `Draining` if an observer
+    /// tries to create ownership after closure.
     pub fn hold(&self) -> Result<Hold> {
+        if self.read_only {
+            return Err(Error::ReadOnly);
+        }
         let mut inner = self.gate.lock();
         if self.observer && inner.closed() {
             return Err(Error::Draining);
@@ -491,6 +536,49 @@ impl Drop for Hold {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn control_roles_preserve_grace_and_cannot_reopen_settled_drain() {
+        let gate = Admission::new();
+        gate.ready();
+        let grace = IdleGrace(Duration::from_secs(30));
+        assert!(!gate.tick(Duration::ZERO, &grace));
+        let mut inspection = gate.control().unwrap();
+        inspection
+            .classify_control(ControlRole::Inspection)
+            .unwrap();
+        assert!(matches!(inspection.hold(), Err(Error::ReadOnly)));
+        assert_eq!(
+            gate.next_check(Duration::from_secs(20), &grace),
+            Some(Duration::from_secs(10))
+        );
+        assert!(gate.retire_if_empty());
+        assert!(!gate.tick(Duration::from_secs(20), &grace));
+        drop(inspection);
+        assert!(gate.tick(Duration::from_secs(20), &grace));
+
+        let gate = Admission::new();
+        gate.ready();
+        let hold = gate.hold().unwrap();
+        assert!(gate.drain());
+        let mut cleanup = gate.control().unwrap();
+        cleanup.classify_control(ControlRole::Cleanup).unwrap();
+        let mut late = gate.control().unwrap();
+        assert!(matches!(
+            late.classify_control(ControlRole::Work),
+            Err(Error::Draining)
+        ));
+        drop(hold);
+        assert!(!gate.tick(Duration::ZERO, &Explicit));
+        drop(cleanup);
+        assert!(matches!(
+            late.classify_control(ControlRole::Cleanup),
+            Err(Error::Draining)
+        ));
+        assert!(matches!(gate.control(), Err(Error::Draining)));
+        drop(late);
+        assert!(gate.tick(Duration::ZERO, &Explicit));
+    }
 
     #[test]
     fn next_policy_check_uses_the_idle_epoch_and_live_obligations() {

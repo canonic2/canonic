@@ -10,9 +10,10 @@
 | `frame` | Byte driver | Length-prefixed reads and writes, bounded JSON encoding. |
 | `endpoint` | Host adapter | Root resolution, private paths, peer credentials, lease and endpoint guards. |
 | `launch` | Host adapter | Detached re-execution and existing-service activation through `Launcher`. |
-| `client` | Orchestration | Non-launching inspection, explicit startup, readiness, one-shot exchanges and upgrade probes. |
+| `client` | Orchestration | Non-launching inspection, explicit startup, readiness, one-shot exchanges, connection handshakes and upgrade probes. |
 | `recovery` | Orchestration | Bounded reconnect and identical-envelope replay under product reconciliation authority. |
 | `owner` | Host adapter | Dedicated owner-channel EOF detection while retaining a resource hold. |
+| `connection` | Host adapter | Prepared handoff receiver, product-owned stream, capacity slot and lifetime guard. |
 | `server` | Synchronous driver | Ordinary/control pools, transport deadlines, dispatch and shutdown order. |
 | `wakeup` | Private host adapter | Coalesced poll notifications and retained thread wake tokens for cleanup. |
 | `unsupported` | Platform boundary | Typed endpoint and lease refusal where adapters are unavailable. |
@@ -48,11 +49,18 @@ retain reservations through reply writing; product workers and owner channels
 retain holds independently. Handler callbacks are the real extension boundary.
 `Launcher` has detached-spawn and registered-service implementations.
 
-`Handler` owns product dispatch, observer classification, extension controls,
+`Handler` owns product dispatch, observer classification, extension control roles,
 blocker summaries and the start of drain cleanup. Classification and preflight
 run under a reservation but outside the core lock. Control callbacks must
 return promptly or transfer slow work to a product worker with a hold. Cleanup
 cannot wait on a worker whose progress requires that same callback to return.
+
+`Handler::open` prepares a `connection::Handoff`. The synchronous driver writes
+the final reply before invoking its receiver with a guarded stream. The receiver
+must promptly transfer ownership to product scheduling; it must not run a
+long-lived session on the request worker. No per-session thread is created by
+the library. `Connection::into_parts` separates the socket from its guard for
+runtime adapters; the guard outlives every cloned socket and resource cleanup.
 
 Callback panics are caught by workers so other admitted replies are not
 abandoned. Catching a panic does not establish rollback or release product

@@ -5,6 +5,10 @@
 )]
 
 #[cfg(unix)]
+mod connections;
+#[cfg(unix)]
+mod controls;
+#[cfg(unix)]
 mod fixtures;
 #[cfg(unix)]
 mod lifecycle;

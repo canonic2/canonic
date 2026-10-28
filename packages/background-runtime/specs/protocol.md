@@ -9,9 +9,9 @@ writes reject before writing a prefix. Neither
 truncates. JSON helpers are provided because multiple consumers use JSON.
 
 The byte helpers do not choose deadlines; their caller owns the transport and
-clock. The synchronous driver handles one request and its acknowledgement and
-result per connection. A product that retains a cloned stream owns its
-separate owner-channel protocol, capacity and lifetime hold.
+clock. One-shot connections carry one request, acknowledgement and result.
+An explicit connection handshake can transfer the socket after the result;
+the library never interleaves subsequent product traffic with its replies.
 
 ## Request envelopes
 
@@ -24,9 +24,10 @@ either endpoint. It never depends on product protocol or build identity.
 | Envelope | Required fields | Optional fields and defaults |
 | --- | --- | --- |
 | Product | `protocol`, `request_id` | `requires`: empty list; `payload`: null |
+| Connection handoff | `connection`: a complete product request envelope | No other outer fields; inner defaults match product requests |
 | Control | `control_version`, `request_id`, `action` | `requires`: empty list; `manager_id`: absent/null; `arguments`: null |
 
-Both request envelopes reject unknown fields. Product payloads and extension
+All request envelopes reject unknown fields. Product payloads and extension
 arguments are opaque JSON values interpreted by the product. Built-in control
 arguments follow the library's action-specific contract. Request IDs use
 the syntax and size bound in [limits](limits.md#sizes-and-identifiers).
@@ -52,7 +53,30 @@ be ignored; changed required semantics require a new control version.
 | `retire_if_older` | Exact incarnation and `arguments: {"version":"2.0.0"}`; compare release precedence, retire now if empty or schedule retirement when work settles. |
 | `drain` | Close mutation admission and start product cleanup on the first drain transition. |
 | `force_stop` | Opt-in exact-incarnation process exit, bypassing graceful cleanup; see [failure recovery](recovery.md#explicit-force-stop). |
-| Declared extension | Invoke the product control callback under mutation admission. |
+| Declared extension | Invoke the product control callback under its declared inspection, work or cleanup role. |
+
+## Connection handoff
+
+`connection-handoff-v1` advertises explicit duplex handoff on the ordinary
+endpoint. `client::open` adds this required capability to the inner request.
+Unsupported capability, observer-only request or exhausted connection capacity
+refuses before acknowledgement and before the product's `open` callback.
+The control endpoint never accepts a connection handshake.
+
+The admitted `Handler::open` prepares a bounded reply and an ownership receiver.
+Only after a successful final result write may the receiver obtain the socket,
+its hold and its capacity guard. Product errors, oversized replies and failed
+writes drop the prepared receiver without delivering a connection. Dropping a
+receiver must clean up its captured preparation guards. A lost result remains
+ambiguous; no automatic replay is authorized.
+
+`client::open` consumes exactly the acknowledgement and result, then returns
+the successful reply and open stream. A complete error reply produces typed
+`HandoffRefused` retaining that reply. Both endpoints clear handshake timeouts
+and use blocking mode before handoff. Subsequent bytes, framing, deadlines,
+closure and drain policy belong to the product. New stream protocols and
+durable handoff deduplication remain product capabilities, independent of the
+control protocol version.
 
 Product compatibility is exact protocol equality plus support for every
 required capability; release ordering does not establish compatibility.

@@ -30,14 +30,16 @@ budget; they do not have separate library size allowances.
 | Ordinary connections, active plus queued | 24 / 65,536 | `capacity`; excess connections refused. |
 | Control workers | 1 / no more than control capacity | `control_workers`; must be positive. |
 | Control connections, active plus queued | 9 / 65,536 | `control_capacity`; excess connections refused independently. |
-| Server capabilities | At most 128, including the library's version-retirement capability when available | Invalid identity rejects startup. |
+| Prepared and transferred connections | 64 / 65,536 | `connection_capacity`; zero disables handoff; exhaustion refuses before product dispatch. Slots remain occupied through cleanup. |
+| Server capabilities | At most 128, including enabled library capabilities | Invalid identity rejects startup. |
 | Live bound endpoints per lease | One per lane | Duplicate bind returns `EndpointBound`. |
 | Retained lifecycle events | Latest 64 | Oldest event discarded on overflow; `events()` consumes retained entries. |
 
 Unread connections occupy lane capacity. Queues and workers share the capacity
 budget; the queue is not an additional allowance. Product holds are accounting
-tokens, not a library resource quota. Products bound resources, long-lived
-channels, blocker pages and callback memory themselves. The library keeps no
+tokens, not a library resource quota. Guarded handoffs have the separate limit
+above. Products bound other resources, raw owner channels, blocker pages and
+callback memory themselves. The library keeps no
 durable request history, deduplication journal or product inventory.
 
 ## Time
@@ -60,6 +62,8 @@ product callback. Products own handler deadlines, cleanup completion and
 custom launcher duration.
 Recovery callbacks also own their execution deadline. Owner-channel waits
 take a caller-selected timeout without treating expiry as owner death.
+After successful handoff, handshake timeouts are cleared on both sockets.
+Products own stream deadlines and drain cancellation for transferred connections.
 
 Partial reads or writes must consume the same frame budget, rather than renew
 it. A queued connection that exhausts its read deadline must not dispatch.

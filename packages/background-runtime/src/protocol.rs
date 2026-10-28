@@ -14,6 +14,16 @@ pub const VERSION_RETIREMENT: &str = "retire-if-older-v1";
 /// Explicit, opt-in process termination without graceful resource cleanup.
 pub const FORCE_STOP: &str = "force-stop-v1";
 
+/// Supports an explicit request/reply handshake followed by product-owned bytes.
+pub const CONNECTION_HANDOFF: &str = "connection-handoff-v1";
+
+/// Explicit handoff envelope, distinct from a one-shot product request.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ConnectionRequest {
+    pub connection: Request,
+}
+
 /// A product's bounded structured failure, framed without interpreting its contents.
 #[derive(Debug, thiserror::Error)]
 #[error("product request failed")]

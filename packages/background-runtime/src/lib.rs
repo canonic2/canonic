@@ -6,6 +6,8 @@
 
 #[cfg(unix)]
 pub mod client;
+#[cfg(unix)]
+pub mod connection;
 pub mod core;
 #[cfg(unix)]
 pub mod endpoint;
@@ -62,6 +64,12 @@ pub enum Error {
     /// A bound or timeout is zero or internally inconsistent.
     #[error("invalid manager options")]
     Options,
+    /// An inspection control tried to create resource ownership.
+    #[error("inspection controls cannot create resource holds")]
+    ReadOnly,
+    /// The manager replied without accepting a connection handoff.
+    #[error("manager refused connection handoff")]
+    HandoffRefused(Box<protocol::Reply>),
     /// A bounded connection or worker lane is full.
     #[error("manager capacity reached")]
     Capacity,

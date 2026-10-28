@@ -25,14 +25,33 @@ before their creating request releases its reservation.
 
 The ordinary lane reserves before reading a frame, so queued and incomplete
 connections count as work until classified or refused. A decoded observer
-converts its reservation to a response obligation. A decoded control extension
-must acquire mutation admission before acknowledgement and product dispatch.
+converts its reservation to a response obligation. Control extensions are
+classified before acknowledgement and product dispatch using `ControlRole`:
+
+- `Inspection` keeps a bounded response obligation, never renews idle grace
+  and cannot acquire a hold (`ReadOnly`). It cannot veto empty retirement.
+- `Work` acquires mutation admission and is refused after closure.
+- `Cleanup` acquires a tracked mutation reservation, including during drain
+  while work or holds remain. It may settle existing obligations, never start
+  unrelated work. Products enforce exact resource and recovery authority.
+
+Classification and the settled-drain recheck are atomic. A previously admitted
+observer cannot promote into cleanup after the final work and hold settle.
+Mutation roles renew the idle epoch while serving; inspection does not.
 Built-in inspection and lifetime controls do not count themselves as mutations.
 
 Dropping a permit settles that request's accounting; it does not prove a
 product effect was undone. A product must keep any continuing worker, resource
 or uncertain cleanup held independently. An admitted mutation can transfer a
 hold during drain. An observer cannot create ownership after closure.
+
+An explicit connection handoff acquires a hold before its reply completes and
+retains a separately bounded slot through product cleanup. The request permit
+and ordinary worker are released after ownership is delivered; the continuing
+session does not occupy that worker. EOF alone does not release the hold.
+Products retain the guard until cleanup settles, and coordinate handoffs racing
+drain so late receivers close or clean up their connection. The library never
+silently closes product-owned sessions to satisfy an exit policy.
 
 ## Retirement and drain
 

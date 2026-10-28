@@ -77,7 +77,13 @@ does not replace acceptance on a different platform or in a consuming product.
 | Durable mutation deduplication and ID/content conflict | Keep application tests using its journal or operation store | Product |
 | Successor reloads durable state under its lease, validates stored format and re-establishes resources before readiness | Keep application update/recovery tests; generic process fixtures establish fresh identity and lease exclusion only | Product |
 | Updated executable and registered service agree on the release being activated | Stale-launcher fixture establishes bounded refusal, not installer correctness | Product |
-| Long-lived owner channel, EOF policy and client/resource identity | Keep application owner-channel tests; use `Context::stream` and a transferred hold | Product |
+| Duplex handoff completes replies before product traffic, frees workers, pins retirement and closes under product drain | `connections::duplex_handoff_frees_workers_bounds_sessions_and_drain_closes_them` uses more live sessions than workers | Library handoff; product stream and drain semantics |
+| Handoff errors and oversized replies release capacity without delivering ownership; cleanup retains capacity after EOF | `connections::handoff_refusal_and_oversize_release_slots_without_delivering_a_connection` | Library guard; product cleanup authority |
+| Failed final writes never deliver ownership; an admitted handoff racing drain is cleaned up | `connections::failed_final_reply_never_delivers_and_a_handoff_racing_drain_is_closed` uses explicit callback barriers and real sockets | Library reply ordering; product late-handoff cleanup |
+| Disabled handoff refuses before product dispatch | `connections::disabled_or_missing_capability_never_dispatches_open` | Library |
+| Extension inspection preserves idle grace, cannot create holds or veto retirement; cleanup cannot reopen settled drain | `core::tests::control_roles_preserve_grace_and_cannot_reopen_settled_drain` uses a controllable clock and deterministic reservations | Library |
+| Inspection and cleanup extensions work during unsettled drain; ordinary work and missing capabilities refuse before dispatch | `controls::inspection_preserves_idle_and_cleanup_remains_available_during_drain` | Library roles; product classification and exact authority |
+| Long-lived owner EOF policy and client/resource identity | Keep application owner-channel tests; use `client::open`, `Handler::open` and the transferred connection guard | Product |
 | Blocker pagination, exact recovery authority and resource cleanup | Keep application recovery and blocker tests | Product |
 | Device awake timers, actor queues, UI or gateway behavior | Keep application-specific tests | Product |
 | Linux execution | Implemented cfg paths; host acceptance unverified | Platform gap |
@@ -107,7 +113,7 @@ failure behavior. In particular, acceptance must distinguish:
 | Gap | Contract / available evidence | Missing verification |
 | --- | --- | --- |
 | Trickled request-write coverage | [Limits](limits.md#verification-gap); request writes use an absolute frame deadline capped by readiness where applicable | A real peer that stalls request consumption cannot renew the total frame write deadline. |
-| Oversized product response | The handler fixture can return a large value, but no test requests it | Bounded final `frame_too_large` error with matching ID and incarnation. |
+| Oversized one-shot product response | Handoff response overflow is covered above; the one-shot handler fixture can return a large value, but no test requests it | Bounded one-shot final `frame_too_large` error with matching ID and incarnation. |
 | Invalid options and callback failure paths | Validation and panic containment exist in `server` | Invalid-option boundaries, callback panic isolation and cleanup after driver failure. |
 | Actual foreign-user boundary | Shared UID comparison and real same-user sockets only | Another user's connection and foreign-owned paths, without modifying unrelated resources. |
 | Registered-service activation and platform adapters | [Platforms](platforms.md#acceptance-boundaries) | Linux host execution, real login-service activation and Windows adapters/acceptance. |

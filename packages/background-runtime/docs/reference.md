@@ -8,9 +8,10 @@
 | `protocol` | `Identity`, `Control`, `Request`, `Reply`, `Code`, independent `CONTROL_VERSION = 1` |
 | `version` | Bounded semantic `Version` parsing and release precedence |
 | `launch` | `Launcher`, current-executable `Spawn`, registered `Service` activation |
-| `client` | Explicit connect-or-start, one-shot call, control, upgrade |
+| `client` | Explicit connect-or-start, one-shot call, connection open, control, upgrade |
 | `recovery` | Bounded `call`, replay `Options`, product reconciliation `Decision` |
 | `owner` | `Connection` holds resource responsibility while detecting owner-channel EOF |
+| `connection` | `Handoff`, product-owned `Connection`, transferable lifetime/capacity `Guard` |
 | `server` | Synchronous `serve`, `Handler`, dispatch `Context`, bounded `Options` |
 
 All public fallible functions document their errors in rustdoc. `Error` is a
@@ -50,7 +51,10 @@ socket activity or an admission notification; `Explicit` has no periodic idle
 timer. Live work and holds suppress idle timers. Use `Admission::wake()` after
 changing a policy input outside admission; this preserves the idle epoch.
 
-Alternative drivers register their standard Rust `Waker` with
+Alternative drivers reserve controls with `Admission::control()` and call
+`Permit::classify_control(role)` after validation, before acknowledgement or
+effects. Classification atomically applies the role and idle-accounting rules.
+They register their standard Rust `Waker` with
 `Admission::set_waker` before observing state, call `tick` and
 `Admission::next_check`, then await notification or the returned timer. Clear
 queued notifications before observation, never after computing the wait.
@@ -109,8 +113,16 @@ ordinary envelopes. Built-ins are `identity`, `status`, `retire_if_empty`,
 them. Declare each required capability in `Identity::capabilities` and in the
 request's `requires` list. Unknown actions, wrong versions, missing capabilities
 and stale target incarnations are refused before admission. Extensions receive
-a mutation reservation and can transfer work into a hold. They must return
-promptly; product workers perform slow cleanup so controls remain responsive.
+their role from `Handler::control_role(&Control)`; its default is
+`core::ControlRole::Work`. Choose `Inspection` for read-only actions: they do
+not renew idle grace, cannot veto retirement, and `permit.hold()` returns
+`Error::ReadOnly`. Choose `Cleanup` for operations that settle existing resources
+during drain. Cleanup retains a work reservation through the reply and can
+transfer slow cleanup into a hold. Ordinary work is refused during drain.
+Cleanup is refused once existing work and holds settle, even if an earlier
+observer is still awaiting classification. Products must validate exact cleanup
+authority and prevent unrelated new work. All callbacks must return promptly;
+product workers perform slow cleanup so controls remain responsive.
 `blockers()` returns a bounded secret-free summary. Use paginated extension
 actions for large inventories; freshness and exact authority checks belong to
 the product. Identity and status metadata must never contain secrets.
@@ -124,6 +136,40 @@ does not automatically retire the replacement. Low-level `client::control`
 preserves the raw `Code::StaleManager` refusal reply.
 For an automatic release comparison and complete replacement wait, use
 `connect_versioned` rather than this immediate manual retirement primitive.
+
+## Long-lived connections
+
+Use `client::open(&root, &request, &options)` for a duplex stream or a persistent
+client-presence channel. It never starts a manager. The handshake requires
+`connection-handoff-v1` and returns `(Reply, UnixStream)` after consuming exactly
+the admission and result frames. The stream is blocking with transport timeouts
+cleared; set application deadlines or transfer it to your runtime. A product
+error or oversized reply returns `Error::HandoffRefused` containing the reply.
+Transport loss remains `OutcomeUnknown`; reconnecting does not authorize replay.
+
+Implement `Handler::open` to return `connection::Handoff::new(reply, receiver)`.
+The receiver gets a `connection::Connection` only after the final reply write
+succeeds. It must enqueue or transfer that connection promptly; running the
+session inline occupies the handshake worker. The library creates no session
+threads. Prepared resources should use captured RAII guards so failed replies
+clean them up without invoking the receiver. Never write product stream bytes
+through `Context::stream` during the handshake.
+
+Borrow `Connection::stream()` for I/O. Use `into_parts()` to obtain a
+`UnixStream` and `connection::Guard` for an async adapter. Retain that guard
+through all socket copies and resource cleanup, including after EOF. Dropping
+it releases the lifetime hold and connection slot. The product owns subsequent
+framing, cancellation and EOF semantics.
+
+`server::Options::connection_capacity` defaults to 64 and counts prepared plus
+transferred connections through cleanup. Zero disables handoff and its
+capability. Exhaustion returns `Capacity` before `Handler::open`. Transferred
+connections free ordinary lane capacity; status reports occupied connection
+slots, including preparations, as `connections.transferred`. Their holds keep
+retirement busy.
+The product's drain callback must close or clean up these sessions. Coordinate
+the receiver with drain state: a handoff admitted before drain may finish
+after that callback, and its receiver must then clean up immediately.
 
 ## Request and owner recovery
 
@@ -184,6 +230,7 @@ signal a PID or bypass the live lease.
 | `capacity` | 24 | Active plus queued ordinary connections |
 | `control_workers` | 1 | Reserved control workers |
 | `control_capacity` | 9 | Active plus queued control connections |
+| `connection_capacity` | 64 | Prepared plus product-owned connections through cleanup; zero disables handoff |
 | `frame_limit` | 1 MiB | Payload size, excluding four-byte prefix |
 | `io_timeout` | 3 seconds | Total queued-frame read deadline; bounded response writes |
 | `client::Options::readiness` | 15 seconds | Overall probe budget, shared by connection, writes, admission and identity replies |

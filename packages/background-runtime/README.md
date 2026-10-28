@@ -15,6 +15,10 @@ It waits for activity or the next policy deadline, with no periodic idle poll.
 Applications supply request handling, product-held obligations, exit policy,
 blocker contents and durable request-ID reconciliation.
 
+Explicit connection handshakes transfer a guarded duplex stream after the reply,
+freeing request workers while separately bounding live connections. Control
+extensions declare inspection, ordinary-work or drain-cleanup roles.
+
 ```toml
 [dependencies]
 canonic-background-runtime = { path = "../background-runtime" }

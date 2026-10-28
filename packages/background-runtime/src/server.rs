@@ -2,7 +2,8 @@
 
 use crate::{
     Error, Result,
-    core::{Admission, ExitPolicy, Permit},
+    connection::{self, Connection, Handoff, Slots},
+    core::{Admission, ControlRole, ExitPolicy, Permit},
     endpoint::{self, Endpoint, Lease},
     frame,
     protocol::{self, Code, Control, Identity, Reply, Request},
@@ -44,6 +45,25 @@ pub trait Handler: Send + Sync + 'static {
     fn extensions(&self) -> &[&str] {
         &[]
     }
+    /// Classify an advertised extension before acknowledgement or effects.
+    /// Cleanup may settle existing obligations during drain; it must never start
+    /// unrelated work. Inspection cannot create holds or renew idle grace.
+    fn control_role(&self, _request: &Control) -> ControlRole {
+        ControlRole::Work
+    }
+    /// Prepare a product-owned connection, independently of one-shot dispatch.
+    /// The receiver runs only after the final reply succeeds and must return
+    /// promptly. It owns session scheduling and drain cleanup thereafter.
+    ///
+    /// # Errors
+    /// Returns a product refusal; no connection is transferred on failure.
+    fn open(
+        &self,
+        _request: &Request,
+        _context: &Context<'_>,
+    ) -> std::result::Result<Handoff, protocol::ProductError> {
+        Err(protocol::ProductError(Value::Null))
+    }
     /// A bounded, secret-free blocker page or summary, computed only when requested.
     fn blockers(&self) -> Value {
         Value::Null
@@ -78,6 +98,9 @@ pub struct Options {
     pub capacity: usize,
     pub control_workers: usize,
     pub control_capacity: usize,
+    /// Maximum transferred connections, including prepared handshakes. Zero
+    /// disables handoff. Slots remain occupied through product cleanup.
+    pub connection_capacity: usize,
     pub frame_limit: usize,
     /// Total frame read/write deadline, not a per-byte renewable timeout.
     pub io_timeout: Duration,
@@ -94,6 +117,7 @@ impl Default for Options {
             capacity: 24,
             control_workers: 1,
             control_capacity: 9,
+            connection_capacity: 64,
             frame_limit: frame::DEFAULT_LIMIT,
             io_timeout: Duration::from_secs(3),
             allow_force_stop: false,
@@ -109,6 +133,7 @@ struct Shared<H> {
     options: Options,
     ordinary_count: Arc<AtomicUsize>,
     control_count: Arc<AtomicUsize>,
+    connections: Arc<Slots>,
 }
 struct Job {
     stream: UnixStream,
@@ -262,9 +287,16 @@ pub fn serve<H: Handler>(
 ) -> Result<()> {
     let lease = lease.into();
     let version = Version::parse(&identity.build).ok();
-    identity
-        .capabilities
-        .retain(|c| c != protocol::VERSION_RETIREMENT && c != protocol::FORCE_STOP);
+    identity.capabilities.retain(|c| {
+        c != protocol::VERSION_RETIREMENT
+            && c != protocol::FORCE_STOP
+            && c != protocol::CONNECTION_HANDOFF
+    });
+    if options.connection_capacity > 0 {
+        identity
+            .capabilities
+            .push(protocol::CONNECTION_HANDOFF.into());
+    }
     if version.is_some() {
         identity
             .capabilities
@@ -277,6 +309,7 @@ pub fn serve<H: Handler>(
     let ordinary = lease.bind(false)?;
     let control = lease.bind(true)?;
     let shared = Arc::new(Shared {
+        connections: Slots::new(options.connection_capacity),
         identity,
         version,
         gate,
@@ -372,6 +405,7 @@ fn validate(identity: &Identity, o: &Options) -> Result<()> {
         || o.control_capacity < o.control_workers
         || o.capacity > 65536
         || o.control_capacity > 65536
+        || o.connection_capacity > 65536
         || o.frame_limit < 1024
         || o.frame_limit > u32::MAX as usize
         || o.io_timeout.is_zero()
@@ -477,9 +511,19 @@ fn handle<H: Handler>(s: &Shared<H>, job: &mut Job, control_lane: bool) -> Resul
     if control_lane {
         return refuse(s, &mut stream, "", Code::UnknownAction);
     }
-    let request: Request = match serde_json::from_value(value) {
-        Ok(request) => request,
-        Err(_) => return refuse(s, &mut stream, &id, Code::Invalid),
+    handle_product(s, job, value, &id)
+}
+
+fn handle_product<H: Handler>(s: &Shared<H>, job: &mut Job, value: Value, id: &str) -> Result<()> {
+    let mut stream = &job.stream;
+    let opening = value.get("connection").is_some();
+    let decoded = if opening {
+        serde_json::from_value::<protocol::ConnectionRequest>(value).map(|v| v.connection)
+    } else {
+        serde_json::from_value::<Request>(value)
+    };
+    let Ok(request) = decoded else {
+        return refuse(s, &mut stream, id, Code::Invalid);
     };
     if !protocol::valid_id(&request.request_id) {
         return refuse(s, &mut stream, "", Code::Invalid);
@@ -487,20 +531,41 @@ fn handle<H: Handler>(s: &Shared<H>, job: &mut Job, control_lane: bool) -> Resul
     if s.identity
         .require(request.protocol, &request.requires)
         .is_err()
+        || (opening
+            && !s
+                .identity
+                .capabilities
+                .iter()
+                .any(|c| c == protocol::CONNECTION_HANDOFF))
     {
         return refuse(s, &mut stream, &request.request_id, Code::Incompatible);
     }
     if s.handler.observer(&request) {
+        if opening {
+            job.permit.observe();
+            return refuse(s, &mut stream, &request.request_id, Code::Invalid);
+        }
         job.permit.observe();
     } else {
         job.permit.activate();
     }
+    let slot = if opening {
+        let Some(slot) = s.connections.reserve() else {
+            return refuse(s, &mut stream, &request.request_id, Code::Capacity);
+        };
+        Some(slot)
+    } else {
+        None
+    };
     send(
         s,
         &mut stream,
         &response(s, &request.request_id, Some(true), None, Value::Null),
         Instant::now() + s.options.io_timeout,
     )?;
+    if let Some(slot) = slot {
+        return handoff(s, job, &request, slot);
+    }
     let result = s.handler.call(
         &request,
         &Context {
@@ -515,6 +580,40 @@ fn handle<H: Handler>(s: &Shared<H>, job: &mut Job, control_lane: bool) -> Resul
         &response(s, &request.request_id, None, code, data),
         Instant::now() + s.options.io_timeout,
     )
+}
+
+fn handoff<H: Handler>(
+    s: &Shared<H>,
+    job: &Job,
+    request: &Request,
+    slot: connection::Slot,
+) -> Result<()> {
+    let connection = Connection::new(job.stream.try_clone()?, job.permit.hold()?, slot);
+    let prepared = s.handler.open(
+        request,
+        &Context {
+            permit: &job.permit,
+            stream: &job.stream,
+        },
+    );
+    let (code, data, receive) = match prepared {
+        Ok(handoff) => (None, handoff.reply, Some(handoff.receive)),
+        Err(error) => (Some(Code::Product), error.0, None),
+    };
+    let reply = response(s, &request.request_id, None, code, data);
+    // Oversized results get a bounded error, never a successful handoff.
+    let fits = frame::encode_json(&reply, s.options.frame_limit).is_ok();
+    send(
+        s,
+        &mut &job.stream,
+        &reply,
+        Instant::now() + s.options.io_timeout,
+    )?;
+    if fits && let Some(receive) = receive {
+        connection::clear_deadlines(connection.stream())?;
+        receive(connection);
+    }
+    Ok(())
 }
 
 fn outcome(result: std::result::Result<Value, protocol::ProductError>) -> (Option<Code>, Value) {
@@ -565,10 +664,10 @@ fn handle_control<H: Handler>(s: &Shared<H>, job: &mut Job, r: &Control) -> Resu
         false
     };
     if !built_in {
-        if job.permit.promote().is_err() {
+        let role = s.handler.control_role(r);
+        if job.permit.classify_control(role).is_err() {
             return refuse(s, &mut &job.stream, id, Code::Draining);
         }
-        job.permit.activate();
     }
     let mut stream = &job.stream;
     send(
@@ -624,7 +723,7 @@ fn dispatch_control<H: Handler>(
             Ok(value)
         }
         "status" => Ok(
-            json!({"identity":s.identity,"lifetime":s.gate.snapshot(),"blockers":s.handler.blockers(),"connections":{"ordinary":s.ordinary_count.load(Ordering::SeqCst),"control":s.control_count.load(Ordering::SeqCst)}}),
+            json!({"identity":s.identity,"lifetime":s.gate.snapshot(),"blockers":s.handler.blockers(),"connections":{"ordinary":s.ordinary_count.load(Ordering::SeqCst),"control":s.control_count.load(Ordering::SeqCst),"transferred":s.connections.used()}}),
         ),
         "retire_if_empty" => {
             let retired = s.gate.retire_if_empty();
@@ -750,6 +849,7 @@ mod tests {
                 options: Options::default(),
                 ordinary_count: Arc::new(AtomicUsize::new(0)),
                 control_count: Arc::new(AtomicUsize::new(0)),
+                connections: Slots::new(0),
             };
             let (sender, receiver) = mpsc::sync_channel(1);
             drop(receiver);
