@@ -1,10 +1,12 @@
 # Canonic
 
 Canonic provides tools for reviewing interface designs and their implementations.
+This repository holds its public libraries. Workbench, the VS Code extension
+with a browser canvas, design pages, previews and annotations, is distributed
+from this repository's [releases](https://github.com/canonic2/canonic/releases),
+the Visual Studio Marketplace and Open VSX; its documentation is at
+[canonic.sh](https://canonic.sh/).
 
-- [Workbench](packages/workbench/README.md) is a VS Code extension with a browser
-  canvas, design pages, previews and annotations.
-- [Website](packages/website/README.md) contains the product website and previews.
 - [Lattice](packages/lattice/README.md) is an unpublished native JavaScript
   framework scaffold.
 - [TUI](packages/tui/README.md) is an unpublished Rust library of terminal

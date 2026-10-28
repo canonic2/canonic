@@ -1,7 +1,0 @@
-.DS_Store
-node_modules/
-*.vsix
-capture/runtime/
-server/node/preview/bin/
-dist/
-/labs/
