@@ -85,6 +85,8 @@ pub fn upgrade(
 }
 
 /// Connect or explicitly start. This sends no application request.
+/// Each readiness wait activates its launcher at most once; a child that has
+/// not acquired its lease yet is still starting, not evidence for another launch.
 ///
 /// # Errors
 /// Returns `Absent` without a launcher, `Starting` at the deadline, `Draining`
@@ -268,8 +270,9 @@ pub(crate) fn connect_until(
                 if Instant::now() >= deadline {
                     return Err(Error::Starting);
                 }
-                // Retry activation only after definite absence and a released lease.
-                if !started || !root.leased()? {
+                // The launched process may not have acquired its lease yet.
+                // Wait for readiness instead of creating additional contenders.
+                if !started {
                     launcher.start()?;
                     started = true;
                 }

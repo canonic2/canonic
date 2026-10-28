@@ -24,6 +24,7 @@ does not replace acceptance on a different platform or in a consuming product.
 | Overlong socket path refused | `transport::absent_inspection_creates_nothing_and_long_paths_are_refused` | Library |
 | Racing helpers converge; typed losers; every client reaches winner | `processes::simultaneous_starters_converge_and_losers_exit_distinctly`, `processes::clients_connect_or_start_race_reaches_one_winner`; fixture maps `AlreadyRunning` to distinct exit 73 | Library |
 | Starting owner waits for exiting holder | `processes::starting_owner_waits_for_exiting_lease_holder` | Library |
+| One readiness wait activates once while its child has not acquired the lease | `processes::one_client_activates_once_while_its_child_has_not_acquired_the_lease` holds a real child before acquisition, checks bounded expiry and counts activations, then releases and reaps it | Library |
 | Stale socket replaced only with lease; live socket preserved; duplicate bind refused | `transport::stale_socket_replacement_and_live_lease_preservation` | Library |
 | SIGKILL releases lease; successor replaces stale endpoint | `processes::sigkill_releases_kernel_lease_and_next_client_replaces_stale_socket` | Library |
 | Detached manager survives parent exit, SIGTERM and SIGHUP to parent group | `processes::detached_manager_survives_parent_exit_and_parent_group_signals` | Library |

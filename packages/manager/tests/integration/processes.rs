@@ -4,9 +4,47 @@ use super::fixtures::*;
 use canonic_manager::{Error, client, endpoint::Lease, launch::Launcher};
 use serde_json::json;
 use std::{
+    io::Write,
     sync::{Arc, Barrier},
     time::Duration,
 };
+
+#[test]
+fn one_client_activates_once_while_its_child_has_not_acquired_the_lease() {
+    struct Delayed {
+        root: canonic_manager::endpoint::Root,
+        children: std::sync::Mutex<Vec<ChildGuard>>,
+    }
+    impl Launcher for Delayed {
+        fn start(&self) -> canonic_manager::Result<()> {
+            self.children
+                .lock()
+                .unwrap()
+                .push(child(&self.root, "delayed-manager"));
+            Ok(())
+        }
+    }
+    let (_temp, root) = root();
+    let launch = Delayed {
+        root: root.clone(),
+        children: std::sync::Mutex::new(vec![]),
+    };
+    let mut options = options();
+    options.readiness = Duration::from_millis(100);
+    let result = client::connect(&root, Some(&launch), &options);
+    assert!(matches!(result, Err(Error::Starting)));
+    assert!(!root.leased().unwrap());
+    let mut children = std::mem::take(&mut *launch.children.lock().unwrap());
+    let activations = children.len();
+    let mut winner = children.remove(0);
+    // Clean up every delayed fixture even when the activation count is wrong.
+    drop(children);
+    winner.0.stdin.as_mut().unwrap().write_all(b"x").unwrap();
+    ready(&root);
+    stop(&root, "drain");
+    assert!(winner.0.wait().unwrap().success());
+    assert_eq!(activations, 1);
+}
 
 #[test]
 fn simultaneous_starters_converge_and_losers_exit_distinctly() {

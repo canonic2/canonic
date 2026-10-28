@@ -40,6 +40,10 @@ Only an explicit connect-or-start call with a `Launcher` may activate a process.
 It waits through `Draining` until a successor can become ready; inspection
 without a launcher reports `Draining` immediately. A deadline never forces
 the exiting holder to release a live obligation.
+Each readiness wait activates its launcher at most once. An unheld lease after
+activation can mean the child has not acquired it yet; it does not authorize
+another activation. If that activation never becomes ready, the wait expires
+with `Starting`; the caller can initiate a separate connection attempt.
 Startup polling backs off and stops at its deadline. A probe's connection and
 frame operations must fit the remaining readiness budget. Custom launchers own
 the duration and failure semantics of their activation callback; the library
@@ -79,3 +83,5 @@ from process-detachment acceptance.
 - A detached manager survives parent exit and signals to the parent's group.
 - No inspection or readiness probe dispatches an ordinary product request.
 - An overall readiness deadline also bounds an in-flight probe.
+- One client's readiness wait launches only once even while its child is held
+  before lease acquisition.

@@ -252,6 +252,9 @@ fn entry() {
             let _ = std::io::stdin().read(&mut [0]);
         }
         _ => {
+            if mode == "delayed-manager" {
+                std::io::stdin().read_exact(&mut [0]).unwrap();
+            }
             let wait = if mode == "waiting" {
                 assert!(matches!(
                     Lease::acquire(&root, Duration::ZERO),
