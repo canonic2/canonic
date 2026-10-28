@@ -75,6 +75,9 @@ pub enum Error {
     /// Version or capabilities do not meet the request's requirements.
     #[error("manager is incompatible")]
     Incompatible,
+    /// A control targeted an incarnation that has since been replaced.
+    #[error("manager incarnation changed; inspect again before requesting retirement")]
+    StaleManager,
     /// A release label cannot be safely ordered as a bounded semantic version.
     #[error("manager version must be a semantic version of at most 128 bytes")]
     InvalidVersion,

@@ -87,6 +87,62 @@ impl FixtureLaunch {
 }
 
 #[test]
+fn upgrade_racing_a_replacement_returns_a_typed_stale_manager_error() {
+    let (_temp, root) = root();
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    let endpoint = lease.bind(true).unwrap();
+    let caller_root = root.clone();
+    let caller = std::thread::spawn(move || client::upgrade(&caller_root, 7, &[], &options()));
+    let (mut old_stream, probe) = read_control(&endpoint);
+    assert_eq!(probe.action, "identity");
+    // Retain the old connection, but replace its listener and lease holder
+    // before allowing the identity result to reach the client.
+    drop(endpoint);
+    drop(lease);
+    let gate = Admission::new();
+    let server = thread_server(
+        &root,
+        &gate,
+        Arc::new(Acme::default()),
+        server::Options::default(),
+    );
+    let replacement = ready(&root);
+    let mut previous = identity();
+    previous.manager_id = "acme-previous".into();
+    assert_ne!(previous.manager_id, replacement.manager_id);
+    let ack = Reply {
+        control_version: 1,
+        manager_id: previous.manager_id.clone(),
+        request_id: probe.request_id,
+        accepted: Some(true),
+        code: None,
+        data: serde_json::Value::Null,
+    };
+    frame::write_json(&mut old_stream, &ack, frame::DEFAULT_LIMIT).unwrap();
+    frame::write_json(
+        &mut old_stream,
+        &Reply {
+            accepted: None,
+            data: json!(previous),
+            ..ack
+        },
+        frame::DEFAULT_LIMIT,
+    )
+    .unwrap();
+    let result = caller.join().unwrap();
+    // A stale target must leave the actual replacement serving ordinary work.
+    assert_eq!(
+        client::call(&root, &request(json!("replacement-usable")), &options())
+            .unwrap()
+            .data,
+        "replacement-usable"
+    );
+    stop(&root, "drain");
+    server.join().unwrap().unwrap();
+    assert!(matches!(result, Err(Error::StaleManager)), "{result:?}");
+}
+
+#[test]
 fn concurrent_versioned_clients_converge_on_one_replacement() {
     let (_temp, root) = root();
     let mut older = child(&root, "manager");

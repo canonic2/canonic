@@ -58,6 +58,11 @@ Product compatibility is exact protocol equality plus support for every
 required capability; release ordering does not establish compatibility.
 `client::upgrade` is an explicit immediate retirement attempt and reports
 `Retired` or `Busy` with compatibility and blockers.
+If its identity observation races replacement, the exact-incarnation refusal
+returns typed `Error::StaleManager`, without re-targeting the replacement or
+treating the refusal as a malformed envelope. The caller must inspect again
+before deciding whether another incarnation should retire. Low-level `control`
+continues to return the complete `stale_manager` refusal reply.
 
 The [update contract](updates.md) owns `client::connect_versioned`, release
 ordering, the `retire-if-older-v1` capability and its wire arguments/results,

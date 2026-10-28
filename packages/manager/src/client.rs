@@ -49,7 +49,9 @@ pub enum Upgrade {
 /// manager remains usable, and an incompatible one keeps its control surface.
 ///
 /// # Errors
-/// Returns non-launching control, transport or malformed-reply errors.
+/// Returns `StaleManager` if the observed incarnation was replaced before the
+/// retirement request, or non-launching control, transport and malformed-reply
+/// errors. A stale refusal leaves the replacement untouched.
 pub fn upgrade(
     root: &Root,
     protocol: u32,
@@ -69,6 +71,9 @@ pub fn upgrade(
         },
         options,
     )?;
+    if reply.code == Some(Code::StaleManager) {
+        return Err(Error::StaleManager);
+    }
     match reply
         .data
         .get("retired")

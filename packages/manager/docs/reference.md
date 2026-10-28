@@ -103,6 +103,10 @@ the product. Identity and status metadata must never contain secrets.
 `client::upgrade` asks an observed manager to retire atomically. `Retired` permits
 waiting for endpoint closure and starting a successor; `Busy` includes identity,
 compatibility and product blockers. It never kills or implicitly drains busy work.
+If replacement races that probe, it returns `Error::StaleManager`. Inspect again
+and reconsider the upgrade before targeting the current incarnation; the helper
+does not automatically retire the replacement. Low-level `client::control`
+preserves the raw `Code::StaleManager` refusal reply.
 For an automatic release comparison and complete replacement wait, use
 `connect_versioned` rather than this immediate manual retirement primitive.
 
