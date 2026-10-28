@@ -14,6 +14,7 @@
 | `recovery` | Orchestration | Bounded reconnect and identical-envelope replay under product reconciliation authority. |
 | `owner` | Host adapter | Dedicated owner-channel EOF detection while retaining a resource hold. |
 | `server` | Synchronous driver | Ordinary/control pools, transport deadlines, dispatch and shutdown order. |
+| `wakeup` | Private host adapter | Coalesced poll notifications and retained thread wake tokens for cleanup. |
 | `unsupported` | Platform boundary | Typed endpoint and lease refusal where adapters are unavailable. |
 
 Dependencies point inward: client and server coordinate the core and adapters;
@@ -32,9 +33,12 @@ The core's mutex protects only counters, timestamps and the
 [bounded event ring](limits.md#counts-and-retention). It encloses no filesystem,
 stream, subprocess or product callback.
 The only whole-inventory work occurs on explicit product blocker requests.
-The server polls two listener descriptors with the wait bound in
-[limits](limits.md#time), never polling durable records or enumerating product
-resources. A hot ordinary backlog must not starve the control lane or lifetime
+The server waits on two listener descriptors and a coalesced wake socket, using
+the next policy deadline or no timeout ([scheduling](lifetime.md#scheduling-and-notifications)).
+The core holds a runtime `Waker` and invokes it only after releasing its lock;
+the host adapter supplies notification I/O. No idle timer runs while work or
+holds pin the manager. The driver never polls durable records or enumerates
+product resources. A hot ordinary backlog must not starve the control lane or lifetime
 evaluation; the loop accepts at most one connection per lane per turn.
 
 ## Resource ownership and callbacks
@@ -66,6 +70,9 @@ An async adapter can use the same `Admission`, `Permit`, `Hold`, `Identity`,
 envelopes and `Root`/`Lease`/`Endpoint` without the thread driver. It must reserve
 before preflight, apply total frame deadlines, retain the control lane, and
 release endpoints before the lease. No async runtime dependency is introduced.
+Register the runtime's waker before observing admission, use `next_check` for
+its timer, and retain wake notifications racing that observation. Every custom
+exit policy implements both `exit` and `next_check`.
 
 Reusing core types does not provide the synchronous driver's scheduling or
 validation automatically. An alternative driver owns its queue, observer

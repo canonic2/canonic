@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex, MutexGuard},
+    task::Waker,
     time::Duration,
 };
 
@@ -43,6 +44,11 @@ pub enum ExitReason {
 pub trait ExitPolicy: Send + Sync {
     /// Whether an otherwise empty manager should close admission.
     fn exit(&self, idle: Duration) -> bool;
+    /// Time until another idle evaluation is needed, or None to wait for a
+    /// state-change notification. Runs outside the admission lock. A timed
+    /// policy must supply its remaining deadline; zero requests immediate evaluation.
+    /// If unchanged idle state must keep serving, return a positive delay or None.
+    fn next_check(&self, idle: Duration) -> Option<Duration>;
 }
 
 /// Exit after a monotonic idle grace. Observers never renew it.
@@ -50,6 +56,9 @@ pub struct IdleGrace(pub Duration);
 impl ExitPolicy for IdleGrace {
     fn exit(&self, idle: Duration) -> bool {
         idle >= self.0
+    }
+    fn next_check(&self, idle: Duration) -> Option<Duration> {
+        Some(self.0.saturating_sub(idle))
     }
 }
 
@@ -59,6 +68,9 @@ impl ExitPolicy for WhenEmpty {
     fn exit(&self, _: Duration) -> bool {
         true
     }
+    fn next_check(&self, _: Duration) -> Option<Duration> {
+        Some(Duration::ZERO)
+    }
 }
 
 /// Require an explicit retirement or drain, even when empty.
@@ -66,6 +78,9 @@ pub struct Explicit;
 impl ExitPolicy for Explicit {
     fn exit(&self, _: Duration) -> bool {
         false
+    }
+    fn next_check(&self, _: Duration) -> Option<Duration> {
+        None
     }
 }
 
@@ -91,6 +106,7 @@ struct Inner {
     changed: bool,
     reason: ExitReason,
     events: VecDeque<Event>,
+    waker: Option<Arc<Waker>>,
 }
 
 impl Inner {
@@ -132,6 +148,7 @@ impl Admission {
             changed: false,
             reason: ExitReason::Policy,
             events: VecDeque::with_capacity(64),
+            waker: None,
         })))
     }
     fn lock(&self) -> MutexGuard<'_, Inner> {
@@ -140,12 +157,40 @@ impl Admission {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    /// Install the single driving runtime's wake target, or remove it on detach.
+    /// Register before observing state or calculating a wait. Mutations wake
+    /// outside the lock; observing state and consuming diagnostics do not wake.
+    pub fn set_waker(&self, waker: Option<Waker>) {
+        let waker = waker.map(Arc::new);
+        let previous = {
+            let mut inner = self.lock();
+            std::mem::replace(&mut inner.waker, waker)
+        };
+        drop(previous);
+    }
+
+    /// Notify the driving runtime after an external product-policy change.
+    /// Does not change admission or reset the idle epoch.
+    pub fn wake(&self) {
+        Self::notify(self.lock());
+    }
+
+    fn notify(inner: MutexGuard<'_, Inner>) {
+        // Clone only an Arc here; a custom waker's vtable also runs outside the lock.
+        let waker = inner.waker.clone();
+        drop(inner);
+        if let Some(waker) = waker {
+            waker.wake_by_ref();
+        }
+    }
+
     /// Open admission after product initialization and endpoint binding.
     pub fn ready(&self) {
         let mut inner = self.lock();
         if inner.state == State::Starting {
             inner.state = State::Serving;
             inner.event(Event::Ready);
+            Self::notify(inner);
         }
     }
 
@@ -166,6 +211,7 @@ impl Admission {
         } else {
             inner.work += 1;
         }
+        Self::notify(inner);
         Ok(Permit {
             gate: self.clone(),
             observer,
@@ -180,6 +226,7 @@ impl Admission {
             return Err(Error::Draining);
         }
         inner.observers += 1;
+        Self::notify(inner);
         Ok(Permit {
             gate: self.clone(),
             observer: true,
@@ -203,6 +250,7 @@ impl Admission {
             inner.idle_since = None;
             inner.event(Event::IdleCancelled);
         }
+        Self::notify(inner);
         Ok(Hold(self.clone()))
     }
 
@@ -223,6 +271,7 @@ impl Admission {
         }
         inner.reason = ExitReason::Retired;
         inner.event(Event::DrainAdmitted);
+        Self::notify(inner);
         true
     }
 
@@ -238,14 +287,17 @@ impl Admission {
             inner.event(Event::RetirementRequested);
         }
         if inner.closed() {
+            Self::notify(inner);
             return true;
         }
         if !inner.empty() {
+            Self::notify(inner);
             return false;
         }
         inner.state = State::Draining;
         inner.reason = ExitReason::Retired;
         inner.event(Event::DrainAdmitted);
+        Self::notify(inner);
         true
     }
 
@@ -260,6 +312,7 @@ impl Admission {
         inner.state = State::Draining;
         inner.reason = ExitReason::Drained;
         inner.event(Event::DrainAdmitted);
+        Self::notify(inner);
         true
     }
 
@@ -308,6 +361,27 @@ impl Admission {
         inner.state == State::Exiting
     }
 
+    /// Compute the next relative policy deadline using a caller clock. None
+    /// means wait for a state change; zero means call `tick` before blocking.
+    /// Register a waker before calling this to avoid losing a concurrent change.
+    #[must_use]
+    pub fn next_check(&self, now: Duration, policy: &impl ExitPolicy) -> Option<Duration> {
+        let idle = {
+            let inner = self.lock();
+            if inner.state == State::Starting || inner.closed() || !inner.empty() {
+                return None;
+            }
+            if inner.changed {
+                return Some(Duration::ZERO);
+            }
+            let Some(since) = inner.idle_since else {
+                return Some(Duration::ZERO);
+            };
+            now.saturating_sub(since)
+        };
+        policy.next_check(idle)
+    }
+
     /// Read counts without enumerating product records.
     #[must_use]
     pub fn snapshot(&self) -> Snapshot {
@@ -343,6 +417,7 @@ impl Permit {
             inner.observers -= 1;
             inner.work += 1;
             self.observer = false;
+            Admission::notify(inner);
         }
         Ok(())
     }
@@ -356,6 +431,7 @@ impl Permit {
         }
         inner.changed = true;
         inner.idle_since = None;
+        Admission::notify(inner);
     }
     /// Convert a decoded read-only request into a bounded observer response.
     /// It no longer pins the idle deadline, but exit still waits for its reply.
@@ -365,6 +441,7 @@ impl Permit {
             inner.observers += 1;
             inner.work -= 1;
             self.observer = true;
+            Admission::notify(inner);
         }
     }
     /// Transfer live responsibility before releasing the request, including during drain.
@@ -383,6 +460,7 @@ impl Permit {
             inner.idle_since = None;
             inner.event(Event::IdleCancelled);
         }
+        Admission::notify(inner);
         Ok(Hold(self.gate.clone()))
     }
 }
@@ -395,6 +473,7 @@ impl Drop for Permit {
             inner.work -= 1;
             inner.changed = true;
         }
+        Admission::notify(inner);
     }
 }
 
@@ -405,12 +484,94 @@ impl Drop for Hold {
         let mut inner = self.0.lock();
         inner.held -= 1;
         inner.changed = true;
+        Admission::notify(inner);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn next_policy_check_uses_the_idle_epoch_and_live_obligations() {
+        let gate = Admission::new();
+        gate.ready();
+        assert_eq!(
+            gate.next_check(Duration::ZERO, &Explicit),
+            Some(Duration::ZERO)
+        );
+        assert!(!gate.tick(Duration::ZERO, &Explicit));
+        assert_eq!(gate.next_check(Duration::ZERO, &Explicit), None);
+        let grace = IdleGrace(Duration::from_secs(30));
+        assert_eq!(
+            gate.next_check(Duration::from_secs(10), &grace),
+            Some(Duration::from_secs(20))
+        );
+        let observer = gate.enter(true).unwrap();
+        assert_eq!(
+            gate.next_check(Duration::from_secs(20), &grace),
+            Some(Duration::from_secs(10))
+        );
+        drop(observer);
+        let hold = gate.hold().unwrap();
+        assert_eq!(gate.next_check(Duration::from_secs(100), &grace), None);
+        drop(hold);
+        assert_eq!(
+            gate.next_check(Duration::from_secs(100), &grace),
+            Some(Duration::ZERO)
+        );
+        assert!(!gate.tick(Duration::from_secs(100), &grace));
+        assert_eq!(
+            gate.next_check(Duration::from_secs(110), &grace),
+            Some(Duration::from_secs(20))
+        );
+        assert!(gate.tick(Duration::from_secs(130), &grace));
+        assert_eq!(gate.next_check(Duration::from_secs(130), &grace), None);
+    }
+
+    #[test]
+    fn runtime_notifications_run_outside_the_lock_and_observations_do_not_wake() {
+        use std::{
+            sync::atomic::{AtomicUsize, Ordering},
+            task::Wake,
+        };
+        struct Reentrant {
+            gate: Admission,
+            calls: AtomicUsize,
+        }
+        impl Wake for Reentrant {
+            fn wake(self: Arc<Self>) {
+                assert!(
+                    self.gate.0.try_lock().is_ok(),
+                    "wake ran under the admission lock"
+                );
+                let _ = self.gate.snapshot();
+                self.calls.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        let gate = Admission::new();
+        let wake = Arc::new(Reentrant {
+            gate: gate.clone(),
+            calls: AtomicUsize::new(0),
+        });
+        gate.set_waker(Some(Waker::from(wake.clone())));
+        gate.ready();
+        let mut work = gate.enter(false).unwrap();
+        let hold = work.hold().unwrap();
+        drop(hold);
+        work.observe();
+        drop(work);
+        assert_eq!(wake.calls.load(Ordering::SeqCst), 6);
+        assert!(!gate.tick(Duration::ZERO, &Explicit));
+        let _ = gate.snapshot();
+        let _ = gate.events();
+        assert_eq!(wake.calls.load(Ordering::SeqCst), 6);
+        assert!(gate.drain());
+        assert_eq!(wake.calls.load(Ordering::SeqCst), 7);
+        gate.wake();
+        assert_eq!(wake.calls.load(Ordering::SeqCst), 8);
+        gate.set_waker(None);
+    }
 
     #[test]
     fn pending_retirement_waits_for_work_and_bypasses_the_idle_policy() {

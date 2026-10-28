@@ -51,7 +51,7 @@ durable request history, deduplication journal or product inventory.
 | Recovery sends and elapsed I/O | Caller-selected positive `recovery::Options::attempts` and `timeout` | First send counts; each replay requires product authority after ambiguity. One absolute timeout caps reconnects, backoff and frame operations. |
 | Lease wait | Caller-selected; zero permits one immediate attempt | Expiry while held returns `AlreadyRunning`. |
 | Lease and readiness backoff | Starts at 2 ms, doubles up to 100 ms | Sleep is capped by remaining wait time. |
-| Server listener poll | 20 ms | Poll wait between lifetime checks; not a callback latency guarantee. |
+| Server listener wait | Next policy deadline, or indefinite without a timer | Listener activity and coalesced admission notifications wake the loop; fractional milliseconds round up and the OS poll limit caps very long waits. |
 
 Server I/O timeouts must be nonzero. Endpoint connection rejects a zero
 transport timeout. Time uses a monotonic clock; the admission core receives
@@ -70,5 +70,7 @@ Pure `frame` helpers rely on the supplied reader or writer to enforce time.
 Client request writes use an absolute frame deadline, capped by readiness during
 probes. A real trickled-request-write regression is missing.
 
-No package-wide RSS, wakeup or callback-latency budget is established. Capacity
-and frame bounds do not by themselves bound memory allocated inside products.
+The [idle scheduling contract](lifetime.md#scheduling-and-notifications) forbids
+fixed periodic listener polling. No package-wide RSS or callback-latency budget
+is established. Capacity and frame bounds do not by themselves bound memory
+allocated inside products.

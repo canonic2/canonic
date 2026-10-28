@@ -11,6 +11,7 @@ owner death, and an explicitly enabled force-stop supports crash recovery.
 
 The admission core performs no I/O and accepts a caller-supplied clock. A
 synchronous driver uses standard threads; no async runtime is required.
+It waits for activity or the next policy deadline, with no periodic idle poll.
 Applications supply request handling, product-held obligations, exit policy,
 blocker contents and durable request-ID reconciliation.
 

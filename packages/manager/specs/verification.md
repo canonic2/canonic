@@ -38,6 +38,11 @@ does not replace acceptance on a different platform or in a consuming product.
 | Owned endpoints removed before lease release | Saturation test; `transport::stale_socket_replacement_and_live_lease_preservation` observes lease still held after unlink | Library |
 | Cleanup never removes a replacement socket | `transport::cleanup_preserves_a_replaced_socket_identity` | Library |
 | Grace, immediate-empty and explicit policies; held state prevents exit | `lifecycle::three_policies_use_a_controllable_clock_and_observers_never_renew_grace` | Library interface; product policy and hold placement |
+| Idle driver has no periodic checks under explicit or long-grace policies; drain wakes it | `lifecycle::idle_driver_waits_for_policy_deadlines_or_changes_without_periodic_checks` counts policy calls on real endpoints without client traffic | Library |
+| Idle deadlines follow the current epoch and live obligations; sub-millisecond waits round up | `core::tests::next_policy_check_uses_the_idle_epoch_and_live_obligations`, `server::tests::policy_waits_round_up_and_explicit_waits_have_no_timer` | Library |
+| Runtime notifications run outside the admission lock; observations do not feed back | `core::tests::runtime_notifications_run_outside_the_lock_and_observations_do_not_wake` | Library |
+| Notifications coalesce and a change before blocking is retained | `wakeup::tests::notifications_coalesce_and_a_wake_before_poll_remains_readable`, `lifecycle::a_change_during_deadline_calculation_is_not_lost_before_poll` | Library |
+| Wake I/O failures retain their cause and failure cleanup retains park notifications | `wakeup::tests::wake_failures_preserve_the_io_cause_and_a_closed_channel_does_not_spin`, `wakeup::tests::failure_cleanup_retains_a_wake_received_before_parking` | Library |
 | Observers finish without extending grace or vetoing retirement | Same policy and retirement-fencing tests; continuing arrivals covered by the drain test above | Library |
 | Unknown controls/versions refuse without effects; capability refusal precedes dispatch | `transport::controls_ignore_product_version_and_unknown_actions_have_no_effects` | Library |
 | Malformed JSON and undecodable selected envelopes receive invalid refusals without product effects | `transport::malformed_json_and_envelopes_receive_invalid_refusals_without_product_dispatch` covers both lanes, unknown/missing fields, wrong types and bounded request-ID correlation | Library |
@@ -79,7 +84,8 @@ does not replace acceptance on a different platform or in a consuming product.
 No real login registrations or second-user accounts are altered by these tests.
 Resource and protocol behavior owned by products cannot be proved by a generic
 echo fixture. Integrations must retain those tests when replacing their manager
-mechanics. No RSS, wakeup or latency performance promise is established here.
+mechanics. Idle scheduling is covered above; no process-wide RSS or latency
+performance promise is established here.
 
 ## Acceptance criteria
 

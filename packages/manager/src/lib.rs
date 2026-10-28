@@ -22,6 +22,8 @@ pub mod recovery;
 #[cfg(unix)]
 pub mod server;
 pub mod version;
+#[cfg(unix)]
+mod wakeup;
 
 /// A typed failure at the manager boundary. Messages never contain payloads.
 #[derive(Debug, thiserror::Error)]

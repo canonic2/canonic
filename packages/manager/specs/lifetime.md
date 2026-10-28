@@ -86,6 +86,38 @@ request deadline or permission to terminate a live resource. Read-only
 observations do not restart the grace. If work or holds change while the
 policy callback runs, its result cannot close a different idle epoch.
 
+## Scheduling and notifications
+
+`ExitPolicy::next_check(idle)` reports time until the next clock-dependent idle
+evaluation. `None` means wait for a state change; zero requests immediate
+evaluation. A timed policy must report its remaining deadline as well as its
+`exit` decision. Both callbacks run outside the admission lock. `IdleGrace`
+reports its remaining grace, `WhenEmpty` reports zero and `Explicit` has no timer.
+If unchanged idle state must keep serving, a custom policy reports a positive
+delay or no timer, so it cannot request repeated immediate idle checks.
+
+After `tick`, `Admission::next_check(now, policy)` calculates the driver's wait.
+Live work and holds suppress idle timers. An empty epoch requiring another tick
+reports zero; observers never restart its grace. Fractional milliseconds are
+rounded up by the poll adapter so a near deadline cannot cause busy polling.
+
+The core stores one runtime-supplied standard Rust `Waker`. Register it through
+`set_waker` before observing state or calculating a wait, and detach it when the
+driver stops. Admission changes, permit classification and drops, hold creation
+and drops, retirement and drain wake the driver after releasing the lock.
+Snapshots and diagnostic consumption do not wake it. `Admission::wake` lets a
+product notify the runtime after changing policy inputs outside admission;
+that notification does not reset the idle epoch.
+
+The synchronous adapter coalesces notifications on a private nonblocking socket
+pair and includes its receiver in the listener poll. It clears notifications
+before `tick` and deadline calculation, never between calculation and blocking.
+A concurrent change therefore remains observable in state or as a readable wake
+signal. Without a due timer or activity the driver blocks indefinitely. There
+is no fixed listener-poll interval and no inventory scan. Notification failure
+is reported as I/O failure; graceful error cleanup retains a thread wake token
+and waits for admitted obligations without periodic polling.
+
 ## Exit and lifecycle evidence
 
 The driver joins workers, removes only its own socket identities and releases

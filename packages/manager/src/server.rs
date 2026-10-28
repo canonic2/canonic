@@ -3,10 +3,11 @@
 use crate::{
     Error, Result,
     core::{Admission, ExitPolicy, Permit},
-    endpoint::{self, Lease},
+    endpoint::{self, Endpoint, Lease},
     frame,
     protocol::{self, Code, Control, Identity, Reply, Request},
     version::Version,
+    wakeup::Wakeup,
 };
 use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 use serde_json::{Value, json};
@@ -286,48 +287,77 @@ pub fn serve<H: Handler>(
     });
     let mut work = Pool::new(&shared, false);
     let mut controls = Pool::new(&shared, true);
+    let wakeup = Wakeup::new()?;
+    shared.gate.set_waker(Some(wakeup.waker()));
     shared.gate.ready();
     let start = Instant::now();
-    let result = (|| {
-        while !shared.gate.tick(start.elapsed(), policy) {
-            let mut descriptors = [
-                PollFd::new(control.listener().as_fd(), PollFlags::POLLIN),
-                PollFd::new(ordinary.listener().as_fd(), PollFlags::POLLIN),
-            ];
-            match poll(&mut descriptors, PollTimeout::from(20_u16)) {
-                Ok(_) | Err(nix::errno::Errno::EINTR) => {}
-                Err(e) => return Err(e.into()),
-            }
-            for (endpoint, pool, is_control) in
-                [(&control, &controls, true), (&ordinary, &work, false)]
-            {
-                // One accept per lane per turn prevents a hot ordinary backlog
-                // from starving controls or lifetime transitions.
-                match endpoint.listener().accept() {
-                    Ok((stream, _)) => pool.enqueue(&shared, stream, is_control),
-                    Err(e)
-                        if matches!(
-                            e.kind(),
-                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
-                        ) => {}
-                    Err(e) => return Err(e.into()),
-                }
-            }
-        }
-        Ok(())
-    })();
+    let result = drive(
+        &shared,
+        policy,
+        &wakeup,
+        [(&control, &controls, true), (&ordinary, &work, false)],
+        start,
+    );
     // Even an accept failure waits for previously admitted work, never dropping it.
     if result.is_err() {
         if shared.gate.drain() {
             shared.handler.drain();
         }
         while !shared.gate.tick(start.elapsed(), &crate::core::Explicit) {
-            std::thread::park_timeout(Duration::from_millis(20));
+            std::thread::park();
         }
     }
     let joined = work.close().and(controls.close());
     let removed = ordinary.unlink().and(control.unlink());
+    shared.gate.set_waker(None);
     result.and(joined).and(removed)
+}
+
+fn drive<H: Handler>(
+    shared: &Shared<H>,
+    policy: &impl ExitPolicy,
+    wakeup: &Wakeup,
+    lanes: [(&Endpoint<'_>, &Pool, bool); 2],
+    start: Instant,
+) -> Result<()> {
+    loop {
+        // Any change racing the following observation leaves a readable signal.
+        wakeup.clear()?;
+        if shared.gate.tick(start.elapsed(), policy) {
+            return Ok(());
+        }
+        let timeout = policy_timeout(shared.gate.next_check(start.elapsed(), policy));
+        let mut descriptors = [
+            PollFd::new(lanes[0].0.listener().as_fd(), PollFlags::POLLIN),
+            PollFd::new(lanes[1].0.listener().as_fd(), PollFlags::POLLIN),
+            PollFd::new(wakeup.as_fd(), PollFlags::POLLIN),
+        ];
+        match poll(&mut descriptors, timeout) {
+            Ok(_) => {}
+            Err(nix::errno::Errno::EINTR) => continue,
+            Err(error) => return Err(error.into()),
+        }
+        for (endpoint, pool, control) in lanes {
+            // One accept per lane preserves controls and lifetime progress.
+            match endpoint.listener().accept() {
+                Ok((stream, _)) => pool.enqueue(shared, stream, control),
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                    ) => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+}
+
+fn policy_timeout(delay: Option<Duration>) -> PollTimeout {
+    delay.map_or(PollTimeout::NONE, |delay| {
+        // Round up fractional milliseconds so a near deadline cannot busy-poll.
+        let millis = i32::try_from(delay.as_nanos().div_ceil(1_000_000)).unwrap_or(i32::MAX);
+        PollTimeout::try_from(millis).unwrap_or(PollTimeout::MAX)
+    })
 }
 
 fn validate(identity: &Identity, o: &Options) -> Result<()> {
@@ -669,6 +699,24 @@ mod tests {
         ) -> std::result::Result<Value, protocol::ProductError> {
             Err(protocol::ProductError(Value::Null))
         }
+    }
+
+    #[test]
+    fn policy_waits_round_up_and_explicit_waits_have_no_timer() {
+        assert_eq!(policy_timeout(None), PollTimeout::NONE);
+        assert_eq!(
+            policy_timeout(Some(Duration::ZERO)),
+            PollTimeout::from(0_u16)
+        );
+        assert_eq!(
+            policy_timeout(Some(Duration::from_nanos(1))),
+            PollTimeout::from(1_u16)
+        );
+        assert_eq!(
+            policy_timeout(Some(Duration::from_secs(30))),
+            PollTimeout::from(30_000_u16)
+        );
+        assert_eq!(policy_timeout(Some(Duration::MAX)), PollTimeout::MAX);
     }
 
     fn backpressured_pair() -> (UnixStream, UnixStream) {

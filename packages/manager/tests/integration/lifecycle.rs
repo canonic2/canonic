@@ -7,6 +7,104 @@ use canonic_manager::{
 use std::time::Duration;
 
 #[test]
+fn idle_driver_waits_for_policy_deadlines_or_changes_without_periodic_checks() {
+    use super::fixtures::*;
+    use canonic_manager::{core::ExitPolicy, endpoint::Lease, server};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    };
+
+    struct Counted {
+        grace: Option<Duration>,
+        checks: mpsc::Sender<Duration>,
+        stop: Arc<AtomicBool>,
+    }
+    impl ExitPolicy for Counted {
+        fn exit(&self, idle: Duration) -> bool {
+            self.checks.send(idle).unwrap();
+            self.stop.load(Ordering::SeqCst) || self.grace.is_some_and(|grace| idle >= grace)
+        }
+        fn next_check(&self, idle: Duration) -> Option<Duration> {
+            self.grace.map(|grace| grace.saturating_sub(idle))
+        }
+    }
+    for grace in [None, Some(Duration::from_secs(30))] {
+        let (_temp, root) = root();
+        let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+        let gate = Admission::new();
+        let server_gate = gate.clone();
+        let (checks, observed) = mpsc::channel();
+        let stop = Arc::new(AtomicBool::new(false));
+        let server_stop = stop.clone();
+        let server = std::thread::spawn(move || {
+            server::serve(
+                lease,
+                identity(),
+                server_gate,
+                Arc::new(Acme::default()),
+                &Counted {
+                    grace,
+                    checks,
+                    stop: server_stop,
+                },
+                server::Options::default(),
+            )
+        });
+        observed.recv_timeout(Duration::from_secs(1)).unwrap();
+        let quiet = observed.recv_timeout(Duration::from_millis(100));
+        if grace.is_none() {
+            stop.store(true, Ordering::SeqCst);
+            gate.wake();
+        } else {
+            assert!(gate.drain());
+        }
+        wait(|| server.is_finished().then_some(()));
+        server.join().unwrap().unwrap();
+        assert!(
+            matches!(quiet, Err(mpsc::RecvTimeoutError::Timeout)),
+            "idle policy was checked again without activity or a due deadline: {grace:?}"
+        );
+    }
+}
+
+#[test]
+fn a_change_during_deadline_calculation_is_not_lost_before_poll() {
+    use super::fixtures::*;
+    use canonic_manager::{core::ExitPolicy, endpoint::Lease, server};
+    use std::sync::Arc;
+
+    struct DrainDuringDeadline(Admission);
+    impl ExitPolicy for DrainDuringDeadline {
+        fn exit(&self, _: Duration) -> bool {
+            false
+        }
+        fn next_check(&self, _: Duration) -> Option<Duration> {
+            assert!(self.0.drain());
+            None
+        }
+    }
+    let (_temp, root) = root();
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    let gate = Admission::new();
+    let server_gate = gate.clone();
+    let server = std::thread::spawn(move || {
+        server::serve(
+            lease,
+            identity(),
+            server_gate,
+            Arc::new(Acme::default()),
+            &DrainDuringDeadline(gate),
+            server::Options::default(),
+        )
+    });
+    wait(|| server.is_finished().then_some(()));
+    server.join().unwrap().unwrap();
+    assert!(!root.leased().unwrap());
+}
+
+#[test]
 fn retirement_fences_admission_and_preserves_accepted_work() {
     let gate = Admission::new();
     gate.ready();
@@ -75,6 +173,9 @@ fn admission_during_policy_callback_cancels_retirement() {
         fn exit(&self, _: Duration) -> bool {
             *self.work.lock().unwrap() = Some(self.gate.enter(false).unwrap());
             true
+        }
+        fn next_check(&self, _: Duration) -> Option<Duration> {
+            None
         }
     }
     let gate = Admission::new();

@@ -43,6 +43,21 @@ that final response set or prevent lease release.
 the core rechecks the observed idle epoch before closing. Product state must be
 represented by holds, rather than a separately sampled emptiness boolean.
 
+Custom policies implement `exit(idle)` and `next_check(idle)`. The latter returns
+the remaining time until another idle evaluation or `None` to wait for activity.
+Zero requests immediate evaluation. The driver sleeps until that deadline,
+socket activity or an admission notification; `Explicit` has no periodic idle
+timer. Live work and holds suppress idle timers. Use `Admission::wake()` after
+changing a policy input outside admission; this preserves the idle epoch.
+
+Alternative drivers register their standard Rust `Waker` with
+`Admission::set_waker` before observing state, call `tick` and
+`Admission::next_check`, then await notification or the returned timer. Clear
+queued notifications before observation, never after computing the wait.
+Changes to permits, holds and shutdown wake outside the admission lock. Detach
+the waker with `set_waker(None)` when the driver stops. No async dependency is
+required.
+
 The latest 64 payload-free transitions are retained. `events()` consumes them;
 overflow drops oldest diagnostics, never obligations. Products decide logging
 and persistence. `Snapshot` contains no credentials or request contents.
