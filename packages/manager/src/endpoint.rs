@@ -352,7 +352,9 @@ impl Drop for Endpoint<'_> {
 /// Connect without creating any files, validating both pathname and kernel peer.
 ///
 /// # Errors
-/// Returns `Absent`, `Starting`, private-path, credential or transport errors.
+/// Returns `Absent`, `Starting`, `Capacity`, private-path, credential or transport
+/// errors. An ambiguous refused connection to a leased endpoint is `Starting`;
+/// on macOS this includes a full backlog as well as a stale/closed listener.
 pub fn connect(root: &Root, control: bool, timeout: Duration) -> Result<UnixStream> {
     match private(root.path(), false) {
         Ok(_) => {}
@@ -415,7 +417,7 @@ pub fn connect(root: &Root, control: bool, timeout: Duration) -> Result<UnixStre
 
 fn connect_bounded(path: &Path, timeout: Duration) -> io::Result<UnixStream> {
     use nix::{
-        poll::{PollFd, PollFlags, PollTimeout, poll},
+        poll::{PollFd, PollFlags, poll},
         sys::socket::{
             AddressFamily, SockFlag, SockType, UnixAddr, connect, getsockopt, socket,
             sockopt::SocketError,
@@ -425,6 +427,9 @@ fn connect_bounded(path: &Path, timeout: Duration) -> io::Result<UnixStream> {
     if timeout.is_zero() {
         return Err(io::ErrorKind::InvalidInput.into());
     }
+    let deadline = Instant::now()
+        .checked_add(timeout)
+        .ok_or(io::ErrorKind::InvalidInput)?;
     let fd = socket(
         AddressFamily::Unix,
         SockType::Stream,
@@ -444,13 +449,7 @@ fn connect_bounded(path: &Path, timeout: Duration) -> io::Result<UnixStream> {
         Ok(()) => {}
         Err(nix::errno::Errno::EINPROGRESS) => {
             let mut descriptors = [PollFd::new(fd.as_fd(), PollFlags::POLLOUT)];
-            if poll(
-                &mut descriptors,
-                PollTimeout::try_from(timeout).unwrap_or(PollTimeout::MAX),
-            )? == 0
-            {
-                return Err(io::ErrorKind::TimedOut.into());
-            }
+            wait_for_connect(deadline, |timeout| poll(&mut descriptors, timeout))?;
             let error = getsockopt(&fd, SocketError)?;
             if error != 0 {
                 return Err(io::Error::from_raw_os_error(error));
@@ -461,4 +460,71 @@ fn connect_bounded(path: &Path, timeout: Duration) -> io::Result<UnixStream> {
     let stream = UnixStream::from(fd);
     stream.set_nonblocking(false)?;
     Ok(stream)
+}
+
+fn wait_for_connect(
+    deadline: Instant,
+    mut wait: impl FnMut(nix::poll::PollTimeout) -> nix::Result<i32>,
+) -> io::Result<()> {
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(io::ErrorKind::TimedOut.into());
+        }
+        let millis = i32::try_from(remaining.as_nanos().div_ceil(1_000_000)).unwrap_or(i32::MAX);
+        let timeout =
+            nix::poll::PollTimeout::try_from(millis).unwrap_or(nix::poll::PollTimeout::MAX);
+        match wait(timeout) {
+            Ok(0) | Err(nix::errno::Errno::EINTR) => {}
+            Ok(_) => return Ok(()),
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Interrupted poll behavior using a real socket and an injected kernel result.
+
+    use super::*;
+    use nix::{
+        errno::Errno,
+        poll::{PollFd, PollFlags, poll},
+    };
+    use std::os::fd::AsFd;
+
+    #[test]
+    fn interrupted_connect_poll_retries_the_same_socket() {
+        let (stream, _peer) = UnixStream::pair().unwrap();
+        let mut descriptors = [PollFd::new(stream.as_fd(), PollFlags::POLLOUT)];
+        let mut calls = 0;
+        let result = wait_for_connect(Instant::now() + Duration::from_secs(1), |timeout| {
+            calls += 1;
+            if calls == 1 {
+                Err(Errno::EINTR)
+            } else {
+                poll(&mut descriptors, timeout)
+            }
+        });
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(calls, 2);
+    }
+
+    #[test]
+    fn interruption_at_connect_deadline_does_not_renew_the_budget() {
+        let (stream, _peer) = UnixStream::pair().unwrap();
+        let mut descriptors = [PollFd::new(stream.as_fd(), PollFlags::POLLIN)];
+        let mut calls = 0;
+        let result = wait_for_connect(Instant::now() + Duration::from_millis(20), |timeout| {
+            calls += 1;
+            if calls == 1 {
+                assert_eq!(poll(&mut descriptors, timeout)?, 0);
+                Err(Errno::EINTR)
+            } else {
+                Ok(1)
+            }
+        });
+        assert!(matches!(result, Err(error) if error.kind() == io::ErrorKind::TimedOut));
+        assert_eq!(calls, 1);
+    }
 }

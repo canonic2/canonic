@@ -18,6 +18,11 @@ Windows adapter implementation and host acceptance are not established.
 
 ## Acceptance boundaries
 
+On macOS, full Unix-listener queues and stale/closed listener paths can both
+produce `ECONNREFUSED`. The client retains the conservative leased-endpoint
+`Starting` outcome described in [startup](startup.md#inspection-and-readiness).
+It cannot promise to distinguish every backlog failure as `Capacity`.
+
 The peer-check test injects a forged UID into the shared comparison and checks
 actual same-user peers on real sockets. No real second-user connection has been
 run. Activation through real login registrations also remains unverified; tests

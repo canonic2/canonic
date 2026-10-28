@@ -208,6 +208,11 @@ product. Linux activation may need a custom `Launcher` that explicitly supplies
 the user's session-bus environment; none is inherited automatically.
 
 `Absent`, `Starting`, `Draining`, `Capacity` and `Incompatible` are distinct.
+`Starting` means readiness is unconfirmed or an authorized startup wait expired.
+On macOS it also covers a refused leased endpoint: the OS uses the same error
+for a full backlog and a stale/closed listener, so those cases cannot be safely
+distinguished. Interrupted kernel connection polls retry on the same socket
+within the original deadline.
 Local frame rejection writes nothing. A complete refusal is definite
 non-admission. After any potentially partial send, lost admission or result
 produces `OutcomeUnknown(request_id)`; inspect the product's durable outcome.

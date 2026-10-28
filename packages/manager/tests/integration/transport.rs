@@ -21,6 +21,58 @@ use std::{
 };
 
 #[test]
+#[cfg(target_os = "macos")]
+fn macos_backlog_and_stale_socket_refusals_share_the_starting_outcome() {
+    use nix::sys::socket::{Backlog, listen};
+
+    let (_temp, root) = root();
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    let endpoint = lease.bind(false).unwrap();
+    listen(endpoint.listener(), Backlog::new(1).unwrap()).unwrap();
+    let inode = std::fs::metadata(root.socket(false)).unwrap().ino();
+    let mut queued = vec![];
+    let mut backlog_error = None;
+    for _ in 0..8 {
+        match UnixStream::connect(root.socket(false)) {
+            Ok(stream) => queued.push(stream),
+            Err(error) => {
+                backlog_error = Some(error);
+                break;
+            }
+        }
+    }
+    let backlog_error = backlog_error.expect("small backlog did not fill");
+    assert_eq!(backlog_error.kind(), std::io::ErrorKind::ConnectionRefused);
+    assert!(matches!(
+        endpoint::connect(&root, false, Duration::from_secs(1)),
+        Err(Error::Starting)
+    ));
+    assert_eq!(std::fs::metadata(root.socket(false)).unwrap().ino(), inode);
+    let (accepted, _) = endpoint.listener().accept().unwrap();
+    drop(accepted);
+    // Capacity release restores connectivity without replacing the listener.
+    let connection = endpoint::connect(&root, false, Duration::from_secs(1)).unwrap();
+    drop(connection);
+    drop(queued);
+    drop(endpoint);
+    let stale = std::os::unix::net::UnixListener::bind(root.socket(false)).unwrap();
+    std::fs::set_permissions(root.socket(false), std::fs::Permissions::from_mode(0o600)).unwrap();
+    drop(stale);
+    let stale_error = UnixStream::connect(root.socket(false)).unwrap_err();
+    assert_eq!(stale_error.raw_os_error(), backlog_error.raw_os_error());
+    assert!(matches!(
+        endpoint::connect(&root, false, Duration::from_secs(1)),
+        Err(Error::Starting)
+    ));
+    assert!(root.leased().unwrap());
+    drop(lease);
+    assert!(matches!(
+        endpoint::connect(&root, false, Duration::from_secs(1)),
+        Err(Error::Absent)
+    ));
+}
+
+#[test]
 fn malformed_json_and_envelopes_receive_invalid_refusals_without_product_dispatch() {
     let (_temp, root) = root();
     let gate = Admission::new();

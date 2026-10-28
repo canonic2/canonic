@@ -34,7 +34,16 @@ as readiness probes and never replayed by the library.
 | `Starting` | A lease holder has not supplied a ready endpoint; an explicit startup wait may expire in this state. |
 | Identity reply | Readiness is established for the returned incarnation, subject to its lifecycle state. |
 | `Draining` | The manager has closed mutation admission; readiness must not report it as serving. |
-| `Capacity` | A bounded lane or connection backlog is full; this is not proof of absence. |
+| `Capacity` | A bounded lane refuses admission, or the kernel reports congestion/a connection-wait timeout; this is not proof of absence. |
+
+Kernel backlog detection is platform-dependent. On macOS `ECONNREFUSED` can
+mean either a full Unix-listener queue or a stale/closed listener. The lease
+and pathname cannot distinguish those cases. A refused leased endpoint is
+therefore conservatively `Starting`, meaning readiness is unconfirmed; it
+does not prove the process is initializing. With no lease holder, the same
+refused endpoint is `Absent`. Do not infer authority to replace an endpoint
+from a refusal alone. Explicit server-lane refusals and identifiable kernel
+congestion still report `Capacity`.
 
 Only an explicit connect-or-start call with a `Launcher` may activate a process.
 It waits through `Draining` until a successor can become ready; inspection
@@ -59,6 +68,9 @@ Connection timeouts are capped by the remaining readiness time. Request writes,
 admission reads and identity reads use the earlier of their frame deadline and
 the same absolute readiness deadline; no phase renews the overall budget.
 Expiry returns `Starting`, and polling starts no further probe after expiry.
+An in-progress kernel connection retries interrupted polls against one absolute
+connection deadline. `EINTR` neither fails the connection nor renews its budget;
+the same socket is retained until readiness, another error or deadline expiry.
 
 ## Detached launch
 

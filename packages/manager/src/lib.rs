@@ -68,7 +68,8 @@ pub enum Error {
     /// No endpoint and no live lease holder exist.
     #[error("manager is absent")]
     Absent,
-    /// A lease is held but readiness was not reached by the deadline.
+    /// Readiness is unavailable for a lease holder, or an authorized startup
+    /// wait expired. A refused leased endpoint can also be congested on macOS.
     #[error("manager is starting")]
     Starting,
     /// Admission is closed.
