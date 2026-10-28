@@ -270,9 +270,9 @@ pub(crate) fn connect_until(
                 if Instant::now() >= deadline {
                     return Err(Error::Starting);
                 }
-                // The launched process may not have acquired its lease yet.
-                // Wait for readiness instead of creating additional contenders.
-                if !started {
+                // Wait for any existing holder to finish before activating.
+                // After activation, an unheld lease may mean the child is still starting.
+                if !started && !root.leased()? {
                     launcher.start()?;
                     started = true;
                 }

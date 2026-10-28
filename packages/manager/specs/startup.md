@@ -40,6 +40,12 @@ Only an explicit connect-or-start call with a `Launcher` may activate a process.
 It waits through `Draining` until a successor can become ready; inspection
 without a launcher reports `Draining` immediately. A deadline never forces
 the exiting holder to release a live obligation.
+With a launcher, a dropped identity exchange or its per-frame I/O timeout is
+also temporary while readiness time remains. Read-only identity probes can be
+retried without replaying application work. Activation waits until the existing
+lease holder releases exclusion, including when its endpoints have already
+closed and inspection reports `Starting`. Invalid identities, incompatible
+controls and endpoint/peer validation failures remain errors.
 Each readiness wait activates its launcher at most once. An unheld lease after
 activation can mean the child has not acquired it yet; it does not authorize
 another activation. If that activation never becomes ready, the wait expires

@@ -57,6 +57,73 @@ impl Launch {
 }
 
 #[test]
+fn connect_or_start_waits_for_the_live_lease_before_activating() {
+    let (_temp, root) = root();
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    let launch = Launch::new(&root);
+    let mut opts = options();
+    opts.readiness = Duration::from_millis(100);
+    let result = client::connect(&root, Some(&launch), &opts);
+    let children = std::mem::take(&mut *launch.children.lock().unwrap());
+    let activations = children.len();
+    // Reap premature contenders before releasing exclusion, even on failure.
+    drop(children);
+    assert!(root.leased().unwrap());
+    drop(lease);
+    assert!(matches!(result, Err(Error::Starting)));
+    assert_eq!(activations, 0);
+}
+
+#[test]
+fn connect_or_start_retries_dropped_and_timed_out_identity_probes_before_replacement() {
+    for timeout in [false, true] {
+        let (_temp, root) = root();
+        let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+        let endpoint = lease.bind(true).unwrap();
+        let launch = Arc::new(Launch::new(&root));
+        let caller_root = root.clone();
+        let caller_launch = launch.clone();
+        let caller = std::thread::spawn(move || {
+            let mut opts = options();
+            opts.io = Duration::from_millis(50);
+            client::connect(&caller_root, Some(caller_launch.as_ref()), &opts)
+        });
+        let (mut first, _) = wait(|| endpoint.listener().accept().ok());
+        first.set_nonblocking(false).unwrap();
+        first
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        let probe: protocol::Control = frame::read_json(&mut first, frame::DEFAULT_LIMIT).unwrap();
+        assert_eq!(probe.action, "identity");
+        // A retained silent stream exceeds io; closing it models a lost reply.
+        let first = if timeout {
+            Some(first)
+        } else {
+            drop(first);
+            None
+        };
+        let (mut second, _) = wait(|| endpoint.listener().accept().ok());
+        second.set_nonblocking(false).unwrap();
+        second
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        let retry: protocol::Control = frame::read_json(&mut second, frame::DEFAULT_LIMIT).unwrap();
+        assert_eq!(retry.action, "identity");
+        assert_eq!(probe.request_id, retry.request_id);
+        assert!(launch.children.lock().unwrap().is_empty());
+        // The old endpoint stops serving; only lease release permits activation.
+        drop(first);
+        drop(second);
+        drop(endpoint);
+        drop(lease);
+        let identity = caller.join().unwrap().unwrap();
+        assert_ne!(identity.manager_id, super::fixtures::identity().manager_id);
+        assert_eq!(launch.children.lock().unwrap().len(), 1);
+        launch.finish();
+    }
+}
+
+#[test]
 fn connect_or_start_waits_for_drain_then_reaches_a_fresh_process() {
     let (_temp, root) = root();
     let gate = Admission::new();

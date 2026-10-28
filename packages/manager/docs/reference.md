@@ -111,6 +111,9 @@ For an automatic release comparison and complete replacement wait, use
 `client::connect` with a launcher waits through a draining manager within the
 readiness budget and starts a successor after lease release. Without a launcher,
 inspection reports `Draining` immediately. A timeout does not kill live work.
+With a launcher, dropped identity replies and per-frame identity timeouts retry
+within the overall readiness budget. Activation waits for the old lease holder
+to release exclusion, even when its endpoints have already closed.
 Each readiness wait invokes the launcher at most once. A child that has not
 locked its lease yet is still starting; the client waits instead of spawning
 duplicates. If readiness expires, a caller can initiate a new connection attempt.
