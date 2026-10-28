@@ -98,7 +98,14 @@ a non-admission refusal.
 
 The client maps lifecycle, capacity and compatibility refusals to typed errors;
 other complete refusal codes remain in the returned `Reply`. Malformed JSON
-or an undecodable envelope can close the connection without a refusal frame.
+or a selected envelope that cannot be decoded receives a bounded `invalid`
+refusal attempt before the connection closes, without acknowledgement or
+product dispatch. This includes unknown fields, missing required fields and
+wrong field types. A valid bounded request ID is preserved when the JSON value
+contains one; otherwise the refusal ID is empty. No parser error text or input
+payload is reflected. Ordinary envelopes on the control endpoint retain their
+`unknown_action` refusal. A lost refusal still leaves the client uncertain;
+only receipt of the complete refusal establishes non-admission.
 
 ## Ambiguity and recovery
 

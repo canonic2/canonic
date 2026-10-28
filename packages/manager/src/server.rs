@@ -424,18 +424,33 @@ fn handle<H: Handler>(s: &Shared<H>, job: &mut Job, control_lane: bool) -> Resul
             return Err(e);
         }
     };
-    let value: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Envelope)?;
+    let value: Value = match serde_json::from_slice(&bytes) {
+        Ok(value) => value,
+        Err(_) => return refuse(s, &mut stream, "", Code::Invalid),
+    };
+    let id = value
+        .get("request_id")
+        .and_then(Value::as_str)
+        .filter(|id| protocol::valid_id(id))
+        .unwrap_or_default()
+        .to_owned();
     if value.get("control_version").is_some() {
         if !control_lane {
             job.permit.observe();
         }
-        let request: Control = serde_json::from_value(value).map_err(|_| Error::Envelope)?;
+        let request: Control = match serde_json::from_value(value) {
+            Ok(request) => request,
+            Err(_) => return refuse(s, &mut stream, &id, Code::Invalid),
+        };
         return handle_control(s, job, &request);
     }
     if control_lane {
         return refuse(s, &mut stream, "", Code::UnknownAction);
     }
-    let request: Request = serde_json::from_value(value).map_err(|_| Error::Envelope)?;
+    let request: Request = match serde_json::from_value(value) {
+        Ok(request) => request,
+        Err(_) => return refuse(s, &mut stream, &id, Code::Invalid),
+    };
     if !protocol::valid_id(&request.request_id) {
         return refuse(s, &mut stream, "", Code::Invalid);
     }

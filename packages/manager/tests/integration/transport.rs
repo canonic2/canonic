@@ -21,6 +21,91 @@ use std::{
 };
 
 #[test]
+fn malformed_json_and_envelopes_receive_invalid_refusals_without_product_dispatch() {
+    let (_temp, root) = root();
+    let gate = Admission::new();
+    let handler = Arc::new(Acme::default());
+    *handler.blocked.lock().unwrap() = true;
+    let server = thread_server(&root, &gate, handler.clone(), server::Options::default());
+    let identity = ready(&root);
+    let mut replies = vec![];
+    for control_lane in [false, true] {
+        for (bytes, expected_id) in invalid_frames(control_lane) {
+            let mut stream =
+                endpoint::connect(&root, control_lane, Duration::from_secs(1)).unwrap();
+            frame::write(&mut stream, &bytes, frame::DEFAULT_LIMIT).unwrap();
+            let reply = frame::read_json::<Reply>(&mut stream, frame::DEFAULT_LIMIT);
+            replies.push((reply, expected_id));
+        }
+    }
+    let dispatched = handler.dispatched.load(std::sync::atomic::Ordering::SeqCst);
+    let blocked = *handler.blocked.lock().unwrap();
+    stop(&root, "drain");
+    server.join().unwrap().unwrap();
+    for (reply, expected_id) in replies {
+        let reply = reply.unwrap();
+        assert_eq!(reply.accepted, Some(false));
+        assert_eq!(reply.code, Some(Code::Invalid));
+        assert_eq!(reply.request_id, expected_id);
+        assert_eq!(reply.manager_id, identity.manager_id);
+        assert_eq!(reply.control_version, 1);
+        assert!(reply.data.is_null());
+    }
+    assert_eq!(dispatched, 0);
+    assert!(
+        blocked,
+        "invalid control envelope reached the product callback"
+    );
+}
+
+fn invalid_frames(control_lane: bool) -> Vec<(Vec<u8>, &'static str)> {
+    let mut frames = vec![(b"{".to_vec(), ""), (vec![0xff], "")];
+    let mut envelopes = vec![
+        (
+            json!({"control_version":1,"request_id":"acme-invalid","action":"acme_release","extra":true}),
+            "acme-invalid",
+        ),
+        (
+            json!({"control_version":1,"request_id":"acme-invalid"}),
+            "acme-invalid",
+        ),
+        (
+            json!({"control_version":"1","request_id":"acme-invalid","action":"acme_release"}),
+            "acme-invalid",
+        ),
+        (
+            json!({"control_version":1,"request_id":123,"action":"acme_release"}),
+            "",
+        ),
+    ];
+    if !control_lane {
+        envelopes.extend([
+            (
+                json!({"protocol":7,"request_id":"acme-invalid","payload":"acme","extra":true}),
+                "acme-invalid",
+            ),
+            (
+                json!({"protocol":"7","request_id":"acme-invalid"}),
+                "acme-invalid",
+            ),
+            (json!({"request_id":"acme-invalid"}), "acme-invalid"),
+            (json!({"protocol":7}), ""),
+            (json!({"protocol":7,"request_id":"bad id","extra":true}), ""),
+            (
+                json!({"protocol":7,"request_id":"x".repeat(129),"extra":true}),
+                "",
+            ),
+        ]);
+    }
+    frames.extend(
+        envelopes
+            .into_iter()
+            .map(|(value, id)| (serde_json::to_vec(&value).unwrap(), id)),
+    );
+    frames
+}
+
+#[test]
 fn real_socket_checks_peer_and_forged_other_uid_is_refused() {
     let (_temp, root) = root();
     let lease = Lease::acquire(&root, Duration::ZERO).unwrap();

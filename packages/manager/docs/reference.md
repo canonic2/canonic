@@ -196,6 +196,10 @@ the user's session-bus environment; none is inherited automatically.
 Local frame rejection writes nothing. A complete refusal is definite
 non-admission. After any potentially partial send, lost admission or result
 produces `OutcomeUnknown(request_id)`; inspect the product's durable outcome.
+Malformed JSON and selected-envelope decode failures receive a bounded
+`Code::Invalid` refusal attempt before closure, with no product callback.
+The refusal preserves a valid bounded request ID when available and uses an
+empty ID otherwise. A lost refusal remains ambiguous to the caller.
 Never infer non-admission just because an acknowledgement was not received.
 One-shot calls never replay. Explicit recovery requires the product decision
 described above. Products allocate stable IDs and deduplicate durable mutations
