@@ -1,0 +1,485 @@
+//! I/O-free admission reservations, product obligations, exit policies and events.
+
+use crate::{Error, Result};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex, MutexGuard},
+    time::Duration,
+};
+
+/// Externally visible lifecycle state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum State {
+    Starting,
+    Serving,
+    Idle,
+    Draining,
+    Exiting,
+}
+
+/// Payload-free transition evidence; consumers choose how to log it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Event {
+    Ready,
+    IdleEntered,
+    IdleCancelled,
+    DrainAdmitted,
+    DrainRefused,
+    RetirementRequested,
+    Exit(ExitReason),
+}
+
+/// Why admission closed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExitReason {
+    Policy,
+    Retired,
+    Drained,
+}
+
+/// A policy receives elapsed idle time supplied by the runtime's clock.
+pub trait ExitPolicy: Send + Sync {
+    /// Whether an otherwise empty manager should close admission.
+    fn exit(&self, idle: Duration) -> bool;
+}
+
+/// Exit after a monotonic idle grace. Observers never renew it.
+pub struct IdleGrace(pub Duration);
+impl ExitPolicy for IdleGrace {
+    fn exit(&self, idle: Duration) -> bool {
+        idle >= self.0
+    }
+}
+
+/// Exit immediately when no work or product obligation is held.
+pub struct WhenEmpty;
+impl ExitPolicy for WhenEmpty {
+    fn exit(&self, _: Duration) -> bool {
+        true
+    }
+}
+
+/// Require an explicit retirement or drain, even when empty.
+pub struct Explicit;
+impl ExitPolicy for Explicit {
+    fn exit(&self, _: Duration) -> bool {
+        false
+    }
+}
+
+/// A coherent count snapshot; held obligations are distinct from bounded replies.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Snapshot {
+    pub state: State,
+    pub work: usize,
+    pub observers: usize,
+    pub held: usize,
+    /// A requested replacement will bypass the idle policy once work settles.
+    #[serde(default)]
+    pub retirement_pending: bool,
+}
+
+struct Inner {
+    state: State,
+    work: usize,
+    observers: usize,
+    held: usize,
+    retirement_pending: bool,
+    idle_since: Option<Duration>,
+    changed: bool,
+    reason: ExitReason,
+    events: VecDeque<Event>,
+}
+
+impl Inner {
+    fn event(&mut self, event: Event) {
+        if self.events.len() == 64 {
+            self.events.pop_front();
+        }
+        self.events.push_back(event);
+    }
+    fn empty(&self) -> bool {
+        self.work == 0 && self.held == 0
+    }
+    fn closed(&self) -> bool {
+        matches!(self.state, State::Draining | State::Exiting)
+    }
+}
+
+/// Shared atomic boundary. Its short lock never encloses I/O or a product callback.
+#[derive(Clone)]
+pub struct Admission(Arc<Mutex<Inner>>);
+
+impl Default for Admission {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Admission {
+    /// Create a closed-to-requests starting state. Initial obligations may be added.
+    #[must_use]
+    pub fn new() -> Self {
+        Self(Arc::new(Mutex::new(Inner {
+            state: State::Starting,
+            work: 0,
+            observers: 0,
+            held: 0,
+            retirement_pending: false,
+            idle_since: None,
+            changed: false,
+            reason: ExitReason::Policy,
+            events: VecDeque::with_capacity(64),
+        })))
+    }
+    fn lock(&self) -> MutexGuard<'_, Inner> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Open admission after product initialization and endpoint binding.
+    pub fn ready(&self) {
+        let mut inner = self.lock();
+        if inner.state == State::Starting {
+            inner.state = State::Serving;
+            inner.event(Event::Ready);
+        }
+    }
+
+    /// Reserve before product preflight; keep the permit through final reply writing.
+    ///
+    /// # Errors
+    /// Returns `Starting` before readiness or `Draining` after closure.
+    pub fn enter(&self, observer: bool) -> Result<Permit> {
+        let mut inner = self.lock();
+        if inner.state == State::Starting {
+            return Err(Error::Starting);
+        }
+        if inner.closed() {
+            return Err(Error::Draining);
+        }
+        if observer {
+            inner.observers += 1;
+        } else {
+            inner.work += 1;
+        }
+        Ok(Permit {
+            gate: self.clone(),
+            observer,
+        })
+    }
+
+    pub(crate) fn control(&self) -> Result<Permit> {
+        let mut inner = self.lock();
+        // Once work settles, existing replies form a finite set. They must
+        // not admit more observers while they finish.
+        if inner.state == State::Exiting || (inner.state == State::Draining && inner.empty()) {
+            return Err(Error::Draining);
+        }
+        inner.observers += 1;
+        Ok(Permit {
+            gate: self.clone(),
+            observer: true,
+        })
+    }
+
+    /// Pin a live product resource before publishing it. May be used during startup.
+    ///
+    /// # Errors
+    /// Returns `Draining` after admission closes. An already admitted permit can
+    /// transfer its obligation using [`Permit::hold`] even during drain.
+    pub fn hold(&self) -> Result<Hold> {
+        let mut inner = self.lock();
+        if inner.closed() {
+            return Err(Error::Draining);
+        }
+        inner.held += 1;
+        inner.changed = true;
+        if inner.state == State::Idle {
+            inner.state = State::Serving;
+            inner.idle_since = None;
+            inner.event(Event::IdleCancelled);
+        }
+        Ok(Hold(self.clone()))
+    }
+
+    /// Close admission first, then check product obligations and mutations.
+    /// Observers finish their responses but cannot starve retirement.
+    #[must_use]
+    pub fn retire_if_empty(&self) -> bool {
+        let mut inner = self.lock();
+        if inner.closed() {
+            return inner.empty();
+        }
+        let previous = inner.state;
+        inner.state = State::Draining;
+        if !inner.empty() {
+            inner.state = previous;
+            inner.event(Event::DrainRefused);
+            return false;
+        }
+        inner.reason = ExitReason::Retired;
+        inner.event(Event::DrainAdmitted);
+        true
+    }
+
+    /// Remember an explicit replacement request without interrupting live work.
+    /// Returns true if admission is already closed or can close immediately.
+    /// A busy manager keeps serving and closes on an atomic empty recheck,
+    /// regardless of its normal idle grace or explicit-only policy.
+    #[must_use]
+    pub fn retire_when_empty(&self) -> bool {
+        let mut inner = self.lock();
+        if !inner.retirement_pending {
+            inner.retirement_pending = true;
+            inner.event(Event::RetirementRequested);
+        }
+        if inner.closed() {
+            return true;
+        }
+        if !inner.empty() {
+            return false;
+        }
+        inner.state = State::Draining;
+        inner.reason = ExitReason::Retired;
+        inner.event(Event::DrainAdmitted);
+        true
+    }
+
+    /// Close new admission; admitted work and holds must settle before exit.
+    /// Returns true only on the first drain transition.
+    #[must_use]
+    pub fn drain(&self) -> bool {
+        let mut inner = self.lock();
+        if inner.closed() {
+            return false;
+        }
+        inner.state = State::Draining;
+        inner.reason = ExitReason::Drained;
+        inner.event(Event::DrainAdmitted);
+        true
+    }
+
+    /// Advance using a caller-supplied monotonic timestamp, without polling state.
+    /// The policy callback runs outside the admission lock. Its epoch is rechecked.
+    #[must_use]
+    pub fn tick(&self, now: Duration, policy: &impl ExitPolicy) -> bool {
+        let idle = {
+            let mut inner = self.lock();
+            if inner.state == State::Starting {
+                return false;
+            }
+            if !inner.closed() && inner.empty() {
+                if inner.changed || inner.idle_since.is_none() {
+                    inner.idle_since = Some(now);
+                    inner.changed = false;
+                    inner.state = State::Idle;
+                    inner.event(Event::IdleEntered);
+                }
+                inner.idle_since
+            } else {
+                None
+            }
+        };
+        let exit = idle.is_some_and(|since| policy.exit(now.saturating_sub(since)));
+        let mut inner = self.lock();
+        if (exit || inner.retirement_pending)
+            && !inner.closed()
+            && inner.empty()
+            && !inner.changed
+            && inner.idle_since == idle
+        {
+            inner.state = State::Draining;
+            inner.reason = if inner.retirement_pending {
+                ExitReason::Retired
+            } else {
+                ExitReason::Policy
+            };
+            inner.event(Event::DrainAdmitted);
+        }
+        if inner.state == State::Draining && inner.empty() && inner.observers == 0 {
+            inner.state = State::Exiting;
+            let reason = inner.reason;
+            inner.event(Event::Exit(reason));
+        }
+        inner.state == State::Exiting
+    }
+
+    /// Read counts without enumerating product records.
+    #[must_use]
+    pub fn snapshot(&self) -> Snapshot {
+        let inner = self.lock();
+        Snapshot {
+            state: inner.state,
+            work: inner.work,
+            observers: inner.observers,
+            held: inner.held,
+            retirement_pending: inner.retirement_pending,
+        }
+    }
+
+    /// Consume up to 64 retained payload-free events; oldest overflow is discarded.
+    #[must_use]
+    pub fn events(&self) -> Vec<Event> {
+        self.lock().events.drain(..).collect()
+    }
+}
+
+/// An admitted request, released only after dispatch and reply publication settle.
+pub struct Permit {
+    gate: Admission,
+    observer: bool,
+}
+impl Permit {
+    pub(crate) fn promote(&mut self) -> Result<()> {
+        let mut inner = self.gate.lock();
+        if inner.closed() {
+            return Err(Error::Draining);
+        }
+        if self.observer {
+            inner.observers -= 1;
+            inner.work += 1;
+            self.observer = false;
+        }
+        Ok(())
+    }
+    pub(crate) fn activate(&self) {
+        let mut inner = self.gate.lock();
+        if inner.state == State::Idle {
+            inner.event(Event::IdleCancelled);
+        }
+        if !inner.closed() {
+            inner.state = State::Serving;
+        }
+        inner.changed = true;
+        inner.idle_since = None;
+    }
+    /// Convert a decoded read-only request into a bounded observer response.
+    /// It no longer pins the idle deadline, but exit still waits for its reply.
+    pub fn observe(&mut self) {
+        if !self.observer {
+            let mut inner = self.gate.lock();
+            inner.observers += 1;
+            inner.work -= 1;
+            self.observer = true;
+        }
+    }
+    /// Transfer live responsibility before releasing the request, including during drain.
+    ///
+    /// # Errors
+    /// Returns `Draining` if an observer tries to create ownership after closure.
+    pub fn hold(&self) -> Result<Hold> {
+        let mut inner = self.gate.lock();
+        if self.observer && inner.closed() {
+            return Err(Error::Draining);
+        }
+        inner.held += 1;
+        inner.changed = true;
+        if inner.state == State::Idle {
+            inner.state = State::Serving;
+            inner.idle_since = None;
+            inner.event(Event::IdleCancelled);
+        }
+        Ok(Hold(self.gate.clone()))
+    }
+}
+impl Drop for Permit {
+    fn drop(&mut self) {
+        let mut inner = self.gate.lock();
+        if self.observer {
+            inner.observers -= 1;
+        } else {
+            inner.work -= 1;
+            inner.changed = true;
+        }
+    }
+}
+
+/// A product-owned resource, worker, connection or uncertainty pin.
+pub struct Hold(Admission);
+impl Drop for Hold {
+    fn drop(&mut self) {
+        let mut inner = self.0.lock();
+        inner.held -= 1;
+        inner.changed = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pending_retirement_waits_for_work_and_bypasses_the_idle_policy() {
+        let gate = Admission::new();
+        gate.ready();
+        let held = gate.hold().unwrap();
+        assert!(!gate.retire_when_empty());
+        assert!(!gate.retire_when_empty());
+        assert!(gate.snapshot().retirement_pending);
+        let work = gate.enter(false).unwrap();
+        assert!(!gate.tick(Duration::from_secs(100), &Explicit));
+        drop(held);
+        assert!(!gate.tick(Duration::from_secs(200), &Explicit));
+        let transferred = work.hold().unwrap();
+        drop(work);
+        assert!(!gate.tick(Duration::from_secs(300), &Explicit));
+        drop(transferred);
+        let reply = gate.control().unwrap();
+        assert!(!gate.tick(Duration::from_secs(301), &Explicit));
+        assert!(matches!(gate.enter(false), Err(Error::Draining)));
+        drop(reply);
+        assert!(gate.tick(Duration::from_secs(301), &Explicit));
+        let events = gate.events();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| **e == Event::RetirementRequested)
+                .count(),
+            1
+        );
+        assert_eq!(events.last(), Some(&Event::Exit(ExitReason::Retired)));
+    }
+
+    #[test]
+    fn control_admission_closes_when_draining_work_and_holds_settle() {
+        let gate = Admission::new();
+        gate.ready();
+        let work = gate.enter(false).unwrap();
+        let hold = work.hold().unwrap();
+        assert!(gate.drain());
+        let reply = gate.control().unwrap();
+        assert!(!gate.tick(Duration::ZERO, &Explicit));
+        drop(work);
+        drop(gate.control().unwrap());
+        drop(hold);
+        for _ in 0..64 {
+            assert!(matches!(gate.control(), Err(Error::Draining)));
+            assert!(!gate.tick(Duration::ZERO, &Explicit));
+            assert_eq!(gate.snapshot().observers, 1);
+        }
+        drop(reply);
+        assert!(gate.tick(Duration::ZERO, &Explicit));
+    }
+
+    #[test]
+    fn retirement_and_idle_exit_close_controls_but_preserve_existing_replies() {
+        for retire in [false, true] {
+            let gate = Admission::new();
+            gate.ready();
+            let reply = gate.control().unwrap();
+            if retire {
+                assert!(gate.retire_if_empty());
+            } else {
+                assert!(!gate.tick(Duration::ZERO, &WhenEmpty));
+            }
+            assert!(matches!(gate.control(), Err(Error::Draining)));
+            assert!(!gate.tick(Duration::ZERO, &Explicit));
+            drop(reply);
+            assert!(gate.tick(Duration::ZERO, &Explicit));
+        }
+    }
+}
