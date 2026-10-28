@@ -6,7 +6,7 @@ mode serves requests; its ordinary mode explicitly chooses to start an absent
 manager. Production CLI parsing should hide the internal mode.
 
 ```rust,no_run
-use canonic_manager::{Result, client, core::{Admission, IdleGrace},
+use canonic_background_runtime::{Result, client, core::{Admission, IdleGrace},
     endpoint::{Lease, Root}, launch::Spawn, protocol::{Identity, Request},
     server::{self, Context, Handler}};
 use serde_json::{Value, json};
@@ -15,7 +15,7 @@ use std::{fs::OpenOptions, path::Path, sync::Arc, time::Duration};
 struct Acme;
 impl Handler for Acme {
     fn call(&self, request: &Request, _context: &Context<'_>)
-        -> std::result::Result<Value, canonic_manager::protocol::ProductError> {
+        -> std::result::Result<Value, canonic_background_runtime::protocol::ProductError> {
         Ok(json!({"echo": request.payload}))
     }
 }

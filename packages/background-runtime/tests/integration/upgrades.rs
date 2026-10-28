@@ -1,7 +1,7 @@
 //! Upgrade reuse, incarnation checks and admission-independent control acceptance.
 
 use super::fixtures::*;
-use canonic_manager::{
+use canonic_background_runtime::{
     Error,
     client::{self, Upgrade},
     core::Admission,
@@ -60,7 +60,7 @@ struct FixtureLaunch {
     children: std::sync::Mutex<Vec<ChildGuard>>,
 }
 impl Launcher for FixtureLaunch {
-    fn start(&self) -> canonic_manager::Result<()> {
+    fn start(&self) -> canonic_background_runtime::Result<()> {
         let child = child(&self.root, self.mode);
         self.children.lock().unwrap().push(child);
         Ok(())
@@ -393,7 +393,7 @@ fn lost_version_retirement_result_reobserves_before_starting_a_replacement() {
     let (mut stream, identity_request) = read_control(&endpoint);
     let mut old = identity();
     old.capabilities
-        .push(canonic_manager::protocol::VERSION_RETIREMENT.into());
+        .push(canonic_background_runtime::protocol::VERSION_RETIREMENT.into());
     reply_control(&mut stream, &identity_request, json!(old), true);
     drop(stream);
     let (mut stream, retirement) = read_control(&endpoint);
@@ -424,7 +424,7 @@ fn an_unorderable_running_build_is_not_retired() {
             unknown,
             server_gate,
             Arc::new(Acme::default()),
-            &canonic_manager::core::Explicit,
+            &canonic_background_runtime::core::Explicit,
             server::Options::default(),
         )
     });
@@ -433,7 +433,7 @@ fn an_unorderable_running_build_is_not_retired() {
         !running
             .capabilities
             .iter()
-            .any(|c| c == canonic_manager::protocol::VERSION_RETIREMENT)
+            .any(|c| c == canonic_background_runtime::protocol::VERSION_RETIREMENT)
     );
     let launch = FixtureLaunch {
         root: root.clone(),

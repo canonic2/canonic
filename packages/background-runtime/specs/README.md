@@ -1,6 +1,6 @@
-# Manager specifications
+# Background runtime specifications
 
-These specifications define `canonic-manager`: the shared mechanics of a
+These specifications define `canonic-background-runtime`: the shared mechanics of a
 per-user background manager, the guarantees products can rely on, and the
 boundary between library and product responsibilities. They are the contract
 for implementation; reader-facing usage belongs in [docs](../docs/README.md).

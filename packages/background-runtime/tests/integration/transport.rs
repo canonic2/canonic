@@ -1,7 +1,7 @@
 //! Socket privacy, bounded resources, controls and lease-order acceptance.
 
 use super::fixtures::*;
-use canonic_manager::{
+use canonic_background_runtime::{
     Error, client,
     core::Admission,
     endpoint::{self, Lease},
@@ -503,7 +503,7 @@ fn lost_admission_ack_is_ambiguous_and_never_replayed() {
     let caller =
         std::thread::spawn(move || client::call(&path, &request(json!("acme")), &options()));
     let (mut stream, _) = wait(|| endpoint.listener().accept().ok());
-    let r: canonic_manager::protocol::Request =
+    let r: canonic_background_runtime::protocol::Request =
         frame::read_json(&mut stream, frame::DEFAULT_LIMIT).unwrap();
     assert_eq!(r.request_id, "acme-request");
     drop(stream);
@@ -557,7 +557,7 @@ fn assert_readiness_deadline(send_admission: bool) {
     stream
         .set_write_timeout(Some(Duration::from_secs(5)))
         .unwrap();
-    let request: canonic_manager::protocol::Control =
+    let request: canonic_background_runtime::protocol::Control =
         frame::read_json(&mut stream, frame::DEFAULT_LIMIT).unwrap();
     assert_eq!(request.action, "identity");
     let mut outcome = None;
@@ -625,7 +625,7 @@ fn assert_trickled_reply_times_out(trickle_admission: bool) {
     stream
         .set_write_timeout(Some(Duration::from_secs(5)))
         .unwrap();
-    let request: canonic_manager::protocol::Request =
+    let request: canonic_background_runtime::protocol::Request =
         frame::read_json(&mut stream, frame::DEFAULT_LIMIT).unwrap();
     let admission = Reply {
         control_version: 1,

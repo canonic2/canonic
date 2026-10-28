@@ -1,6 +1,6 @@
 //! Deterministic clock, atomic admission and responsibility-transfer acceptance.
 
-use canonic_manager::{
+use canonic_background_runtime::{
     Error,
     core::{Admission, Event, Explicit, IdleGrace, State, WhenEmpty},
 };
@@ -9,7 +9,7 @@ use std::time::Duration;
 #[test]
 fn idle_driver_waits_for_policy_deadlines_or_changes_without_periodic_checks() {
     use super::fixtures::*;
-    use canonic_manager::{core::ExitPolicy, endpoint::Lease, server};
+    use canonic_background_runtime::{core::ExitPolicy, endpoint::Lease, server};
     use std::sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -72,7 +72,7 @@ fn idle_driver_waits_for_policy_deadlines_or_changes_without_periodic_checks() {
 #[test]
 fn a_change_during_deadline_calculation_is_not_lost_before_poll() {
     use super::fixtures::*;
-    use canonic_manager::{core::ExitPolicy, endpoint::Lease, server};
+    use canonic_background_runtime::{core::ExitPolicy, endpoint::Lease, server};
     use std::sync::Arc;
 
     struct DrainDuringDeadline(Admission);
@@ -167,9 +167,9 @@ fn three_policies_use_a_controllable_clock_and_observers_never_renew_grace() {
 fn admission_during_policy_callback_cancels_retirement() {
     struct Racing {
         gate: Admission,
-        work: std::sync::Mutex<Option<canonic_manager::core::Permit>>,
+        work: std::sync::Mutex<Option<canonic_background_runtime::core::Permit>>,
     }
-    impl canonic_manager::core::ExitPolicy for Racing {
+    impl canonic_background_runtime::core::ExitPolicy for Racing {
         fn exit(&self, _: Duration) -> bool {
             *self.work.lock().unwrap() = Some(self.gate.enter(false).unwrap());
             true

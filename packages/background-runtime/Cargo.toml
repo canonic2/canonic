@@ -1,11 +1,11 @@
 [package]
-name = "canonic-manager"
+name = "canonic-background-runtime"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 publish = false
 license-file = "LICENSE"
-description = "Per-user background manager admission, local IPC and detached startup"
+description = "Per-user background process lifetime, local IPC and detached startup"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

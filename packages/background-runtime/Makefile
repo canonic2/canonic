@@ -1,4 +1,4 @@
-# Local manager library checks. Run `make` to list targets.
+# Local background runtime library checks. Run `make` to list targets.
 CARGO ?= $(if $(wildcard $(HOME)/.cargo/bin/cargo),$(HOME)/.cargo/bin/cargo,$(shell command -v cargo 2>/dev/null))
 CARGO_FLAGS ?=
 

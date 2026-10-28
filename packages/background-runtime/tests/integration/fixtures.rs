@@ -1,6 +1,6 @@
 //! Test-owned manager and child-process helpers; no product executable is used.
 
-use canonic_manager::{
+use canonic_background_runtime::{
     client,
     core::{Admission, Explicit},
     endpoint::{Lease, Root},
@@ -93,7 +93,7 @@ impl Handler for Acme {
         &self,
         r: &Request,
         _: &Context<'_>,
-    ) -> std::result::Result<Value, canonic_manager::protocol::ProductError> {
+    ) -> std::result::Result<Value, canonic_background_runtime::protocol::ProductError> {
         self.dispatched
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         if r.payload == "dispatch-count" {
@@ -133,7 +133,7 @@ impl Handler for Acme {
         &self,
         _: &Control,
         _: &Context<'_>,
-    ) -> std::result::Result<Value, canonic_manager::protocol::ProductError> {
+    ) -> std::result::Result<Value, canonic_background_runtime::protocol::ProductError> {
         *self.blocked.lock().unwrap() = false;
         self.changed.notify_all();
         Ok(Value::Null)
@@ -146,7 +146,7 @@ impl Handler for Crash {
         &self,
         request: &Request,
         _: &Context<'_>,
-    ) -> std::result::Result<Value, canonic_manager::protocol::ProductError> {
+    ) -> std::result::Result<Value, canonic_background_runtime::protocol::ProductError> {
         std::fs::write(
             self.0.join("acme-outcome.json"),
             serde_json::to_vec(request).unwrap(),
@@ -161,7 +161,7 @@ pub(super) fn thread_server(
     gate: &Admission,
     handler: Arc<Acme>,
     options: server::Options,
-) -> std::thread::JoinHandle<canonic_manager::Result<()>> {
+) -> std::thread::JoinHandle<canonic_background_runtime::Result<()>> {
     let lease = Lease::acquire(root, Duration::ZERO).unwrap();
     let gate = gate.clone();
     std::thread::spawn(move || server::serve(lease, identity(), gate, handler, &Explicit, options))
@@ -226,15 +226,18 @@ fn entry() {
     match mode.as_str() {
         "owner-client" => {
             let _connection =
-                canonic_manager::endpoint::connect(&root, false, Duration::from_secs(2)).unwrap();
+                canonic_background_runtime::endpoint::connect(&root, false, Duration::from_secs(2))
+                    .unwrap();
             loop {
                 std::thread::park();
             }
         }
         "home" => {
-            let actual =
-                Root::for_user(Path::new(".acme"), canonic_manager::endpoint::Home::Account)
-                    .unwrap();
+            let actual = Root::for_user(
+                Path::new(".acme"),
+                canonic_background_runtime::endpoint::Home::Account,
+            )
+            .unwrap();
             let expected = nix::unistd::User::from_uid(nix::unistd::geteuid())
                 .unwrap()
                 .unwrap()
@@ -258,7 +261,7 @@ fn entry() {
             let wait = if mode == "waiting" {
                 assert!(matches!(
                     Lease::acquire(&root, Duration::ZERO),
-                    Err(canonic_manager::Error::AlreadyRunning)
+                    Err(canonic_background_runtime::Error::AlreadyRunning)
                 ));
                 std::fs::write(root.path().join("acme-waiting"), b"lease-observed-busy").unwrap();
                 Duration::from_secs(5)
@@ -267,7 +270,7 @@ fn entry() {
             };
             let lease = match Lease::acquire(&root, wait) {
                 Ok(lease) => lease,
-                Err(canonic_manager::Error::AlreadyRunning) => std::process::exit(73),
+                Err(canonic_background_runtime::Error::AlreadyRunning) => std::process::exit(73),
                 Err(error) => panic!("{error}"),
             };
             let mut identity = identity();

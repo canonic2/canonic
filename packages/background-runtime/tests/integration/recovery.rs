@@ -1,7 +1,7 @@
 //! Recovery across process death, shutdown overlap and disconnected owners.
 
 use super::fixtures::*;
-use canonic_manager::{
+use canonic_background_runtime::{
     Error, client,
     core::{Admission, Explicit},
     endpoint::{Lease, Root},
@@ -22,7 +22,7 @@ struct Launch {
     children: Mutex<Vec<ChildGuard>>,
 }
 impl Launcher for Launch {
-    fn start(&self) -> canonic_manager::Result<()> {
+    fn start(&self) -> canonic_background_runtime::Result<()> {
         self.children
             .lock()
             .unwrap()

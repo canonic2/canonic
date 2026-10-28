@@ -1,4 +1,4 @@
-# canonic-manager
+# canonic-background-runtime
 
 A Rust library for one background manager per user and data root. It provides
 private local IPC, kernel-owned single-instance leases, explicit startup,
@@ -17,7 +17,7 @@ blocker contents and durable request-ID reconciliation.
 
 ```toml
 [dependencies]
-canonic-manager = { path = "../manager" }
+canonic-background-runtime = { path = "../background-runtime" }
 ```
 
 This public library is unpublished. macOS and Linux adapters are implemented;

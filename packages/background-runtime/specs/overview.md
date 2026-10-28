@@ -5,7 +5,7 @@
 Short-lived clients sometimes need a shared process to retain live resources
 between requests. Starting one process per client loses that ownership;
 sharing one without a lifetime contract risks duplicate managers, dropped
-work or a process that never exits. `canonic-manager` provides the common
+work or a process that never exits. `canonic-background-runtime` provides the common
 startup, IPC, admission and shutdown mechanics.
 
 One manager serves one effective user and one selected root. An account-home
