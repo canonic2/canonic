@@ -178,6 +178,9 @@ Server capacities must be at least their positive worker counts and at most
 65,536. Frame limits are 1,024 through `u32::MAX`. Timeouts must be nonzero.
 All limits refuse explicitly. There is no truncation. Products enforce their own
 handler and operation deadlines and separately bound retained owner channels.
+Refusals on the accept thread use an absolute write budget of at most 20 ms,
+capped by a shorter `io_timeout`, so backpressure cannot consume a worker's full
+reply budget on that thread. Worker replies retain their configured I/O budget.
 
 ## Launch and errors
 

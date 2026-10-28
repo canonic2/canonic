@@ -21,6 +21,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+const ACCEPT_REFUSAL_TIMEOUT: Duration = Duration::from_millis(20);
+
 /// Product callbacks. No callback runs inside the admission lock.
 /// Extension handlers must return promptly or hand work to a product-owned worker.
 pub trait Handler: Send + Sync + 'static {
@@ -177,20 +179,15 @@ impl Pool {
         if stream.set_nonblocking(false).is_err() {
             return;
         }
-        // Tiny refusal writes are bounded independently from ordinary idle readers.
-        if stream
-            .set_write_timeout(Some(Duration::from_millis(20)))
-            .is_err()
-        {
-            return;
-        }
+        // A refusal must not stall admission to the other lane for a full frame budget.
+        let refusal_until = Instant::now() + shared.options.io_timeout.min(ACCEPT_REFUSAL_TIMEOUT);
         if !control
             && matches!(
                 shared.gate.snapshot().state,
                 crate::core::State::Draining | crate::core::State::Exiting
             )
         {
-            let _ = refuse(shared, &mut &stream, "", Code::Draining);
+            let _ = refuse_until(shared, &mut &stream, "", Code::Draining, refusal_until);
             return;
         }
         let reserved = self
@@ -200,7 +197,7 @@ impl Pool {
             })
             .is_ok();
         if !reserved {
-            let _ = refuse(shared, &mut &stream, "", Code::Capacity);
+            let _ = refuse_until(shared, &mut &stream, "", Code::Capacity, refusal_until);
             return;
         }
         let permit = if control {
@@ -210,7 +207,7 @@ impl Pool {
         };
         let Ok(permit) = permit else {
             self.count.fetch_sub(1, Ordering::SeqCst);
-            let _ = refuse(shared, &mut &stream, "", Code::Draining);
+            let _ = refuse_until(shared, &mut &stream, "", Code::Draining, refusal_until);
             return;
         };
         let job = Job {
@@ -225,7 +222,7 @@ impl Pool {
             let job = match error {
                 mpsc::TrySendError::Full(j) | mpsc::TrySendError::Disconnected(j) => j,
             };
-            let _ = refuse(shared, &mut &job.stream, "", Code::Capacity);
+            let _ = refuse_until(shared, &mut &job.stream, "", Code::Capacity, refusal_until);
         }
     }
 
@@ -370,11 +367,8 @@ fn response<H>(
         data,
     }
 }
-fn send<H>(s: &Shared<H>, stream: &mut &UnixStream, reply: &Reply) -> Result<()> {
-    let mut output = Deadline {
-        stream,
-        until: Instant::now() + s.options.io_timeout,
-    };
+fn send<H>(s: &Shared<H>, stream: &mut &UnixStream, reply: &Reply, until: Instant) -> Result<()> {
+    let mut output = Deadline { stream, until };
     match frame::write_json(&mut output, reply, s.options.frame_limit) {
         Err(Error::FrameTooLarge) => {
             let bounded = response(
@@ -390,10 +384,20 @@ fn send<H>(s: &Shared<H>, stream: &mut &UnixStream, reply: &Reply) -> Result<()>
     }
 }
 fn refuse<H>(s: &Shared<H>, stream: &mut &UnixStream, id: &str, code: Code) -> Result<()> {
+    refuse_until(s, stream, id, code, Instant::now() + s.options.io_timeout)
+}
+fn refuse_until<H>(
+    s: &Shared<H>,
+    stream: &mut &UnixStream,
+    id: &str,
+    code: Code,
+    until: Instant,
+) -> Result<()> {
     send(
         s,
         stream,
         &response(s, id, Some(false), Some(code), Value::Null),
+        until,
     )
 }
 
@@ -450,6 +454,7 @@ fn handle<H: Handler>(s: &Shared<H>, job: &mut Job, control_lane: bool) -> Resul
         s,
         &mut stream,
         &response(s, &request.request_id, Some(true), None, Value::Null),
+        Instant::now() + s.options.io_timeout,
     )?;
     let result = s.handler.call(
         &request,
@@ -463,6 +468,7 @@ fn handle<H: Handler>(s: &Shared<H>, job: &mut Job, control_lane: bool) -> Resul
         s,
         &mut stream,
         &response(s, &request.request_id, None, code, data),
+        Instant::now() + s.options.io_timeout,
     )
 }
 
@@ -524,6 +530,7 @@ fn handle_control<H: Handler>(s: &Shared<H>, job: &mut Job, r: &Control) -> Resu
         s,
         &mut stream,
         &response(s, id, Some(true), None, Value::Null),
+        Instant::now() + s.options.io_timeout,
     )?;
     if r.action == "force_stop" {
         // This opt-in crash path deliberately skips graceful joins and cleanup.
@@ -532,11 +539,17 @@ fn handle_control<H: Handler>(s: &Shared<H>, job: &mut Job, r: &Control) -> Resu
             s,
             &mut stream,
             &response(s, id, None, None, json!({"stopping":true})),
+            Instant::now() + s.options.io_timeout,
         );
         std::process::exit(75);
     }
     let (code, data) = outcome(dispatch_control(s, job, r, newer));
-    send(s, &mut stream, &response(s, id, None, code, data))
+    send(
+        s,
+        &mut stream,
+        &response(s, id, None, code, data),
+        Instant::now() + s.options.io_timeout,
+    )
 }
 
 fn newer_version<H>(s: &Shared<H>, r: &Control) -> std::result::Result<bool, Code> {
@@ -622,5 +635,85 @@ impl std::io::Write for Deadline<'_> {
     }
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Backpressured refusal writes on the accept-thread enqueue path.
+
+    use super::*;
+    use std::{io::Write, net::Shutdown};
+
+    struct Unused;
+    impl Handler for Unused {
+        fn call(
+            &self,
+            _: &Request,
+            _: &Context<'_>,
+        ) -> std::result::Result<Value, protocol::ProductError> {
+            Err(protocol::ProductError(Value::Null))
+        }
+    }
+
+    fn backpressured_pair() -> (UnixStream, UnixStream) {
+        let (mut stream, peer) = UnixStream::pair().unwrap();
+        stream.set_nonblocking(true).unwrap();
+        loop {
+            match stream.write(&[0; 4096]) {
+                Ok(0) => panic!("fixture socket unexpectedly closed"),
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(error) => panic!("fixture socket: {error}"),
+            }
+        }
+        stream.set_nonblocking(false).unwrap();
+        (stream, peer)
+    }
+
+    #[test]
+    fn accept_thread_refusals_keep_the_short_deadline_under_backpressure() {
+        for reason in ["capacity", "draining", "closed-control", "closed-queue"] {
+            let gate = Admission::new();
+            gate.ready();
+            if matches!(reason, "draining" | "closed-control") {
+                assert!(gate.drain());
+            }
+            let shared = Shared {
+                identity: Identity::new("1.0.0".into(), 1, vec![]).unwrap(),
+                version: None,
+                gate,
+                handler: Arc::new(Unused),
+                options: Options::default(),
+                ordinary_count: Arc::new(AtomicUsize::new(0)),
+                control_count: Arc::new(AtomicUsize::new(0)),
+            };
+            let (sender, receiver) = mpsc::sync_channel(1);
+            drop(receiver);
+            let pool = Pool {
+                sender: (reason == "closed-queue").then_some(sender),
+                workers: vec![],
+                count: Arc::new(AtomicUsize::new(usize::from(reason == "capacity"))),
+                capacity: 1,
+            };
+            let (stream, peer) = backpressured_pair();
+            let (finished, completion) = mpsc::sync_channel(1);
+            let enqueue = std::thread::spawn(move || {
+                pool.enqueue(&shared, stream, reason == "closed-control");
+                finished.send(()).unwrap();
+            });
+            let bounded = completion.recv_timeout(Duration::from_millis(250)).is_ok();
+            // Release the peer and join the writer before reporting a timeout.
+            let shutdown = peer.shutdown(Shutdown::Both);
+            drop(peer);
+            enqueue.join().unwrap();
+            if let Err(error) = shutdown {
+                assert_eq!(error.kind(), std::io::ErrorKind::NotConnected);
+            }
+            assert!(
+                bounded,
+                "{reason} refusal exceeded the accept-thread budget"
+            );
+        }
     }
 }

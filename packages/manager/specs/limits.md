@@ -44,7 +44,8 @@ durable request history, deduplication journal or product inventory.
 
 | Bound | Default / schedule | Meaning |
 | --- | --- | --- |
-| Server I/O | 3 seconds, `io_timeout` | One total queued-frame read budget from enqueue; each reply write gets a fresh bounded budget. |
+| Server I/O | 3 seconds, `io_timeout` | One total queued-frame read budget from enqueue; each worker reply write gets a fresh bounded budget. |
+| Accept-thread refusal writes | At most 20 ms, capped by a shorter `io_timeout` | One absolute write deadline for an enqueue refusal, including every partial write and any bounded encoding fallback; independent of worker reply budgets. |
 | Client transport | 3 seconds, `io` | Connection timeout and per-frame read/write deadline; readiness probes cap each phase by the same absolute readiness deadline. |
 | Overall client readiness | 15 seconds, `readiness` | Remaining readiness time must bound each probe's transport operations. |
 | Recovery sends and elapsed I/O | Caller-selected positive `recovery::Options::attempts` and `timeout` | First send counts; each replay requires product authority after ambiguity. One absolute timeout caps reconnects, backoff and frame operations. |
