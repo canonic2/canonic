@@ -130,15 +130,52 @@ The bar across the top of the canvas, with controls for the page showing.
 
 | Term | Meaning |
 | --- | --- |
-| **Canvas** | The large area that shows the page, gray and dotted, which zooms and pans. Artboards are drawn on it. It shares the main region with the toolbar and view controls; its canvas element (`wb-canvas`) owns the keyed artboards. |
+| **Canvas** | The large area that shows the page, gray and dotted, which zooms and pans. Artboards are drawn on it. It shares the main region with the toolbar and view controls. WebGPU draws it, as [canvas rendering](canvas/rendering.md) specifies. |
 | **Canvas mode** | How the canvas shows the page. **Default**: the page is in an artboard on the canvas. **Docs**: a page in a docs lens, shown on its own, has no artboard; its docs fill the canvas, on white, and scroll. The mode follows the lens. Docs beside other artboards are in an artboard like any page. |
-| **Artboard** | The box on the canvas that shows one declared or implicit artboard of a page and scenario, with its **artboard label**: the page's name and size, with a declared artboard's label after the page's name (*Feedback / Warning*). When a spec means this box rather than the hierarchy level, it says **artboard instance**; an instance has its own ID, distinct from a declared artboard's ID. See [multiple artboards](canvas/multiple-artboards.md). Each instance is a keyed artboard shell of the canvas element; its clipped content holds that instance's content renderer. |
-| **Preview frame** | The content iframe inside an artboard, loading a page or preview rather than the Workbench application. "Frame" means only this. |
+| **Artboard** | The box on the canvas that shows one declared or implicit artboard of a page and scenario, with its **artboard label**: the page's name and size, with a declared artboard's label after the page's name (*Feedback / Warning*). When a spec means this box rather than the hierarchy level, it says **artboard instance**; an instance has its own ID, distinct from a declared artboard's ID. See [multiple artboards](canvas/multiple-artboards.md). An instance shows a placeholder, a picture, a still or its running app, as [canvas rendering](canvas/rendering.md) specifies. |
+| **Preview frame** | The content iframe of a running artboard, loading a page or preview rather than the Workbench application. "Frame" means only this. |
 | **Content renderer** | An owned content-only viewport/adapter with mounting, readiness, interaction, capture and disposal. It may own preview frames or a native surface. It never initializes the Workbench application shell; see [rendering flow](system/rendering-flow.md). |
 | **Toolbar** | The floating bar at the bottom of the canvas: the annotation tools (Select, Scribble, Arrow, shapes, Text, Comment), Undo, Clear, the screenshot, and **Copy handoff**. |
 | **View controls** | The floating controls at the bottom right: **Recenter view**, **Zoom out**, the zoom level and its menu, and **Zoom in**. |
 | **Annotation** | One drawing made with the toolbar's annotation tools: a scribble, arrow, shape, text, or comment. A page's annotations belong to the page, scenario, artboard, and iteration they were drawn on. |
 | **Handoff** | The prompt and screenshot **Copy handoff** prepares for an agent. |
+
+### Canvas rendering
+
+Defined in [canvas rendering](canvas/rendering.md).
+
+| Term | Meaning |
+| --- | --- |
+| **Representation** | What an artboard shows at a given moment: a placeholder, a picture, a still or its running app. Exactly one at a time, chosen by the canvas. |
+| **Placeholder** | The plain box an artboard shows while nothing else of it exists yet. |
+| **Picture** | Pixels of an artboard at one resolution level, a PNG rendered from its still and drawn by WebGPU. "Picture" on the canvas means this, not a screenshot. |
+| **Still** | A static copy of an artboard's document: its HTML and CSS without scripts, taken once per preview and build by booting the preview in the background. Shown in its own iframe for the few artboards large enough to read. |
+| **Running artboard** | An artboard whose preview runs in its own content renderer and preview frame, because someone is using it. "Running" means this. |
+| **Swap** | Changing an artboard's representation, such as from a picture to a still. A swap is never visible: the new representation stays hidden over the old one until it has painted. |
+| **Resolution level** | One of the picture scales, in device pixels per CSS pixel: 0.125, 0.25, 0.5, 1, 2 and 4. The **wanted level** is the smallest level that is sharp at the current zoom and pixel density. A picture below the wanted level looks blurry until the wanted one arrives. |
+| **Texture atlas** | A large GPU texture (an **atlas page**, 4096 × 4096 pixels) holding many small pictures side by side, each in its own **slot**, so all of them draw in one call. The 0.125× pictures live in atlas pages. "Atlas" means this. |
+| **Render manager** | The part of the Workbench server that has stills and pictures produced and caches them for every canvas it serves: their queue by priority, cancellation, the machine budget, which render host does each job, the cache that survives restarts, and refresh after builds. |
+| **Demand** | Everything a canvas wants from the render manager now: each item an artboard, a representation and a priority. Each demand replaces the canvas's previous one; items that leave it are cancelled unless another canvas wants them, and items in it receive updates after builds. |
+| **Machine budget** | How many previews may boot and pictures render at once, from the machine's cores and memory, each preview's measured cost and the current load. Running artboards count against it. |
+| **Render host** | A process that controls a Chromium and does the render manager's jobs in it: an embedding application with the Chromium its canvas runs in, or the editor extension's capture helper. |
+| **Render page** | One page of a render host's Chromium that runs one job at a time, booting a preview for its still or rendering pictures. Never shown to the person and never throttled as a hidden page. |
+| **Sheet** | One render of several stills laid out together, up to 16 and about a megapixel, cut into one picture per artboard afterwards. |
+| **Boot** | Loading a preview in a render page until it is ready, to take its still. "Boot" means only this; the person never sees a boot. |
+| **Content host** | The content-only document that loads and mounts one preview, with no Workbench shell: a boot loads it in a render page, and a running artboard loads it in its preview frame. |
+| **Content site** | The separate origin running artboards load from, so Chromium runs them in a process apart from the canvas. |
+| **Camera layer** | The DOM layer, in world coordinates, that holds stills and running artboards; the camera moves it with a CSS transform. See [the camera layer](canvas/rendering.md#the-camera-layer). |
+| **Still artboards** | The artboards that show stills: up to the **still limit** (five) nearest the viewport centre, once artboards are at least the **still threshold** (320 CSS pixels) wide on screen. |
+| **Taken still** | The still the canvas takes from a running artboard when it is left, so what the person did stays visible. |
+| **Work area** | The view and a quarter of its size on each side. Its artboards get pictures in demand. |
+| **Neighbour ring** | The artboards up to one view beyond the work area. Once the wanted level has held for 400 ms, their pictures at that level are demanded last, so a pan finds them ready. |
+| **Priority** | The order in which the render manager produces demanded items; lower is sooner. Stills of the still artboards first, then pictures for the work area, then the neighbour ring, nearest the viewport centre first. |
+| **Held key** | The key of the still or picture a canvas already has for a demanded item, so the render manager sends only a different one. |
+| **Claim** | One canvas's demand item on a render manager job. A job no canvas claims is dropped, or cancelled while booting. |
+| **Still key** | What identifies a still: its preview entry's build revision, scenario, artboard size, inputs, lens and color scheme. |
+| **Picture key** | What identifies a picture: its still's content hash and its resolution level. |
+| **Build revision** | What a preview entry loads from the current build, hashed. A build that changes it makes the entry's stills stale. |
+| **Upload budget** | The bytes of decoded pictures the canvas copies to the GPU per animation frame, so a new wanted level's pictures spread over frames. |
+| **Artboard swapper** | The canvas prototype whose drawing, atlas and swapping this contract adopts; see the [artboard swapper record](../research/artboard-swapper.md). |
 
 "Page" keeps its ordinary meaning inside a page's own content, such as a
 link to another page of the product being designed. "Screenshot" is an image
