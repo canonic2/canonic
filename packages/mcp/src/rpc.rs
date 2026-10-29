@@ -21,6 +21,8 @@ pub const INTERNAL_ERROR: i32 = -32603;
 pub const SERVER_ERROR: i32 = -32000;
 /// The request reached its deadline before it produced a reply.
 pub const DEADLINE_EXCEEDED: i32 = -32001;
+/// A consumer could not resolve or authorize a resource URI.
+pub const RESOURCE_NOT_FOUND: i32 = -32002;
 /// The request was cancelled because the connection closed.
 pub const REQUEST_CANCELLED: i32 = -32800;
 

@@ -13,6 +13,12 @@ private = { ignore = true }
 allow = ["Apache-2.0", "MIT", "Unicode-3.0"]
 confidence-threshold = 0.9
 
+# yaml-rust2's hashlink tables use foldhash's permissive Zlib license,
+# reviewed with the same scoped exception as Canonic TUI and Shield.
+[[licenses.exceptions]]
+name = "foldhash"
+allow = ["Zlib"]
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"

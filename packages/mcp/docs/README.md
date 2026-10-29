@@ -12,6 +12,8 @@ Start with the [quick start](getting-started.md).
 - [Quick start](getting-started.md) — dependency, a first tool and a stdio server.
 - [Serve over stdio](guides/stdio.md) — lanes, keys, deadlines, progress, extension methods and disconnection.
 - [Ask the user to confirm](guides/confirmation.md) — form confirmation and its continuation.
+- [Publish resources and templates](guides/resources.md) — guides, reports and binary artifacts through validated URIs.
+- [Publish bundled skills](guides/skills.md) — offline workflows, verified manifests, modern request context and legacy resource fallback.
 - [Drive the session yourself](guides/session.md) — use the protocol core from another runtime.
 
 ## Reference
@@ -24,5 +26,5 @@ Start with the [quick start](getting-started.md).
 - [Development](contributing/development.md) — build, checks and test tooling.
 
 These guides describe the supported public API. Generated rustdoc supplies
-exact signatures. The [specifications](../specs/README.md) are the separate
-internal contract reference, including every [limit](../specs/limits.md).
+exact signatures; the resource and Skills guides describe their publication
+and content limits.

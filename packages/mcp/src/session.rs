@@ -8,7 +8,10 @@ use crate::{
     tool::{Catalog, ToolCall},
 };
 use serde_json::{Value, json};
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 #[cfg(test)]
 mod tests;
@@ -27,6 +30,12 @@ pub const DEFAULT_MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 /// Connection limits and product extension methods.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionOptions {
+    /// Explicit modern protocol opt-in; absent preserves legacy behavior.
+    pub modern: Option<crate::ModernOptions>,
+    /// Immutable bundled skills; requires modern opt-in at construction.
+    pub skills: Option<Arc<crate::SkillCatalog>>,
+    /// Optional immutable resource catalog; `None` disables resource methods.
+    pub resources: Option<Arc<crate::resource::ResourceCatalog>>,
     /// The longest accepted message, in bytes, excluding the line break.
     pub max_message_bytes: usize,
     /// Messages accepted before the connection ends; `None` for no limit.
@@ -40,6 +49,9 @@ pub struct SessionOptions {
 impl Default for SessionOptions {
     fn default() -> Self {
         Self {
+            modern: None,
+            skills: None,
+            resources: None,
             max_message_bytes: DEFAULT_MAX_MESSAGE_BYTES,
             max_messages: None,
             extension_methods: Vec::new(),
@@ -120,6 +132,15 @@ pub enum Decision {
 /// What a received message requires of the caller.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Inbound {
+    /// Schedule this immutable library-owned file read and finish its ID normally.
+    BundledResource {
+        /// Request ID.
+        id: Value,
+        /// Prepared content; consumers cannot replace the byte source.
+        read: crate::BundledRead,
+        /// Validated progress token supplied for this read.
+        progress_token: Option<Value>,
+    },
     /// Write this reply.
     Reply(Value),
     /// Write this reply, then end the connection.
@@ -154,7 +175,7 @@ pub enum Inbound {
         /// Why the arguments do not match the tool's input schema.
         error: ArgumentError,
     },
-    /// Run a product extension request; reply through [`Session::finish`].
+    /// Run a resource read or product extension request; reply through [`Session::finish`].
     Method {
         /// The request ID.
         id: Value,
@@ -212,12 +233,25 @@ pub struct Session {
     confirmation: Option<Value>,
     confirmations: u64,
     closed: bool,
+    contexts: HashMap<String, Arc<crate::RequestContext>>,
+    configuration_error: Option<ConfigurationError>,
 }
+
+/// Invalid protocol/catalog composition, refused before serving.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("invalid MCP session configuration: {0}")]
+pub struct ConfigurationError(pub String);
 
 impl Session {
     /// A new connection serving `catalog`.
+    ///
+    /// Configuration errors are stored rather than returned. If modern identity
+    /// or Skills composition is invalid, [`Self::receive_value`] returns
+    /// [`Inbound::Fatal`] with an internal-error reply and a null request ID.
+    /// Use [`Self::try_new`] to report configuration errors before accepting input.
     #[must_use]
-    pub fn new(catalog: Arc<Catalog>, options: SessionOptions) -> Self {
+    pub fn new(catalog: Arc<Catalog>, mut options: SessionOptions) -> Self {
+        let configuration_error = configure(&mut options).err();
         Self {
             catalog,
             options,
@@ -228,7 +262,30 @@ impl Session {
             confirmation: None,
             confirmations: 0,
             closed: false,
+            contexts: HashMap::new(),
+            configuration_error,
         }
+    }
+
+    /// Constructs a session after validating modern identity and catalog composition.
+    ///
+    /// # Errors
+    /// Returns [`ConfigurationError`] before accepting any request for invalid options.
+    pub fn try_new(
+        catalog: Arc<Catalog>,
+        options: SessionOptions,
+    ) -> Result<Self, ConfigurationError> {
+        let session = Self::new(catalog, options);
+        if let Some(error) = &session.configuration_error {
+            return Err(error.clone());
+        }
+        Ok(session)
+    }
+
+    /// The immutable context of an outstanding modern request; legacy calls return None.
+    #[must_use]
+    pub fn request_context(&self, id: &Value) -> Option<Arc<crate::RequestContext>> {
+        self.contexts.get(&id.to_string()).cloned()
     }
 
     /// The catalog this session serves.
@@ -290,6 +347,15 @@ impl Session {
 
     /// Processes one parsed message. [`Session::receive`] parses frames strictly first.
     pub fn receive_value(&mut self, value: Value) -> Inbound {
+        if self.configuration_error.is_some() {
+            return Inbound::Fatal {
+                reply: rpc::failure(
+                    Value::Null,
+                    &RpcError::new(rpc::INTERNAL_ERROR, "Invalid session configuration"),
+                ),
+                reason: "invalid session configuration",
+            };
+        }
         match rpc::classify(value) {
             Err(error) => Inbound::Reply(rpc::failure(Value::Null, &error)),
             Ok(Message::Response { id, outcome }) => self.response(id, outcome),
@@ -331,6 +397,9 @@ impl Session {
         if let Some(instructions) = &info.instructions {
             result["instructions"] = json!(instructions);
         }
+        if self.options.resources.is_some() {
+            result["capabilities"]["resources"] = json!({});
+        }
         self.phase = Phase::Negotiated;
         self.client = Some(client);
         rpc::success(id, result)
@@ -344,6 +413,7 @@ impl Session {
 
     /// Releases an outstanding request ID. Returns whether to send its reply.
     pub fn finish(&mut self, id: &Value) -> bool {
+        self.contexts.remove(&id.to_string());
         self.outstanding.remove(&id.to_string())
     }
 
@@ -447,6 +517,25 @@ impl Session {
                 reason: "duplicate outstanding request ID",
             };
         }
+        if method == "server/discover" && self.options.modern.is_none() {
+            let error = if self.ready() {
+                RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found")
+            } else {
+                RpcError::new(rpc::SERVER_ERROR, "Server not initialized")
+            };
+            return Inbound::Reply(rpc::failure(id, &error));
+        }
+        let meta = &params["_meta"];
+        if [
+            crate::modern::VERSION_KEY,
+            crate::modern::CAPABILITIES_KEY,
+            crate::modern::CLIENT_KEY,
+        ]
+        .iter()
+        .any(|key| meta.get(*key).is_some())
+        {
+            return self.metadata_request(id, method, params);
+        }
         let reply = |error: RpcError| Inbound::Reply(rpc::failure(id.clone(), &error));
         match method {
             "ping" if rpc::only(&params, &["_meta"]) => Inbound::Reply(rpc::success(id, json!({}))),
@@ -471,6 +560,11 @@ impl Session {
                 )),
             },
             _ if !self.ready() => reply(RpcError::new(rpc::SERVER_ERROR, "Server not initialized")),
+            _ if method.starts_with("skills/")
+                || ["resources/directory/read", "server/discover"].contains(&method) =>
+            {
+                reply(RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found"))
+            }
             "tools/list" if rpc::only(&params, &["_meta"]) => {
                 Inbound::Reply(rpc::success(id, self.catalog.listing()))
             }
@@ -479,6 +573,9 @@ impl Session {
                 "Invalid tool listing parameters",
             )),
             "tools/call" => self.tool_call(id, &params),
+            "resources/list" | "resources/templates/list" | "resources/read" => {
+                self.resource_request(id, method, params)
+            }
             _ if self
                 .options
                 .extension_methods
@@ -514,6 +611,293 @@ impl Session {
             Err(error) => Inbound::InvalidArguments { id, call, error },
         }
     }
+
+    fn resource_request(&mut self, id: Value, method: &str, params: Value) -> Inbound {
+        let Some(catalog) = &self.options.resources else {
+            return Inbound::Reply(rpc::failure(
+                id,
+                &RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found"),
+            ));
+        };
+        if method != "resources/read" {
+            return Inbound::Reply(
+                match catalog.listing(&params, method == "resources/templates/list") {
+                    Ok(result) => rpc::success(id, result),
+                    Err(error) => rpc::failure(id, &error),
+                },
+            );
+        }
+        if let Err(error) = crate::resource::read_params(&params) {
+            return Inbound::Reply(rpc::failure(id, &error));
+        }
+        if let Some(skills) = &self.options.skills
+            && skills.owns(params["uri"].as_str().unwrap_or_default())
+        {
+            return match skills.read(params["uri"].as_str().unwrap_or_default()) {
+                Some(read) => {
+                    self.outstanding.insert(id.to_string());
+                    Inbound::BundledResource {
+                        id,
+                        read,
+                        progress_token: params["_meta"].get("progressToken").cloned(),
+                    }
+                }
+                None => Inbound::Reply(rpc::failure(
+                    id,
+                    &crate::resource::not_found(params["uri"].as_str().unwrap_or_default()),
+                )),
+            };
+        }
+        self.outstanding.insert(id.to_string());
+        Inbound::Method {
+            id,
+            method: method.to_owned(),
+            params,
+        }
+    }
+
+    fn metadata_request(&mut self, id: Value, method: &str, params: Value) -> Inbound {
+        let failure = |error: RpcError| Inbound::Reply(rpc::failure(id.clone(), &error));
+        let Some(version) = params["_meta"][crate::modern::VERSION_KEY]
+            .as_str()
+            .filter(|v| !v.is_empty() && v.len() <= MAX_VERSION_BYTES && !v.contains('\0'))
+        else {
+            return failure(crate::modern::invalid(
+                "Missing or invalid protocol version",
+            ));
+        };
+        if SUPPORTED_PROTOCOL_VERSIONS.contains(&version) {
+            if self
+                .client
+                .as_ref()
+                .is_none_or(|client| client.protocol_version != version)
+            {
+                return failure(crate::modern::invalid(
+                    "Protocol version does not match legacy handshake",
+                ));
+            }
+            let mut legacy = params;
+            if let Some(meta) = legacy["_meta"].as_object_mut() {
+                for key in [
+                    crate::modern::VERSION_KEY,
+                    crate::modern::CAPABILITIES_KEY,
+                    crate::modern::CLIENT_KEY,
+                ] {
+                    meta.remove(key);
+                }
+            }
+            return self.request(id, method, legacy);
+        }
+        let Some(options) = self
+            .options
+            .modern
+            .as_ref()
+            .filter(|_| version == crate::modern::PROTOCOL_VERSION)
+        else {
+            let mut supported: Vec<&str> = SUPPORTED_PROTOCOL_VERSIONS.to_vec();
+            if self.options.modern.is_some() {
+                supported.push(crate::modern::PROTOCOL_VERSION);
+            }
+            return failure(
+                RpcError::new(-32022, "Unsupported protocol version")
+                    .with_data(json!({"requested":version,"supported":supported})),
+            );
+        };
+        let context = match crate::RequestContext::parse(&params, options, method) {
+            Ok(context) => context,
+            Err(error) => return failure(error),
+        };
+        let context = if method == "resources/list" && self.options.skills.is_some() {
+            context.with_cache(options.resources_cache.merged(options.skills_cache))
+        } else if method == "resources/read"
+            && self
+                .options
+                .skills
+                .as_ref()
+                .is_some_and(|skills| skills.owns(params["uri"].as_str().unwrap_or_default()))
+        {
+            context.with_cache(options.skills_cache)
+        } else {
+            context
+        };
+        let event = self.modern_request(id.clone(), method, params, &context);
+        match event {
+            Inbound::Reply(mut reply) => {
+                if reply.get("result").is_some() {
+                    reply["result"] = context.complete_value(reply["result"].take());
+                }
+                Inbound::Reply(reply)
+            }
+            event => {
+                if self.outstanding.contains(&id.to_string()) {
+                    self.contexts.insert(id.to_string(), context);
+                }
+                event
+            }
+        }
+    }
+
+    fn modern_request(
+        &mut self,
+        id: Value,
+        method: &str,
+        mut params: Value,
+        context: &Arc<crate::RequestContext>,
+    ) -> Inbound {
+        let failure = |error: RpcError| Inbound::Reply(rpc::failure(id.clone(), &error));
+        if method == "server/discover" {
+            if !rpc::only(&params, &["_meta"]) {
+                return failure(crate::modern::invalid("Invalid discovery parameters"));
+            }
+            return Inbound::Reply(rpc::success(id, self.discovery()));
+        }
+        if method.starts_with("skills/") || method == "resources/directory/read" {
+            if !["skills/list", "skills/get"].contains(&method) {
+                return failure(RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found"));
+            }
+            return match &self.options.skills {
+                None => failure(RpcError::new(rpc::METHOD_NOT_FOUND, "Skills disabled")),
+                Some(skills) => match skills.query(method, &params) {
+                    Ok(result) => Inbound::Reply(rpc::success(id, result)),
+                    Err(error) => failure(error),
+                },
+            };
+        }
+        if method == "initialize" {
+            return failure(RpcError::new(
+                rpc::METHOD_NOT_FOUND,
+                "Modern requests do not initialize",
+            ));
+        }
+        if method == "tools/call" || method == "resources/read" {
+            if !rpc::only(
+                &params,
+                &[
+                    "name",
+                    "arguments",
+                    "uri",
+                    "_meta",
+                    "inputResponses",
+                    "requestState",
+                ],
+            ) {
+                return failure(crate::modern::invalid("Invalid operation parameters"));
+            }
+            if method == "resources/read"
+                && self
+                    .options
+                    .skills
+                    .as_ref()
+                    .is_some_and(|skills| skills.owns(params["uri"].as_str().unwrap_or_default()))
+                && (context.request_state.is_some() || context.input_responses.is_some())
+            {
+                return failure(crate::modern::invalid(
+                    "Bundled reads do not accept retry inputs",
+                ));
+            }
+            if let Some(object) = params.as_object_mut() {
+                object.remove("inputResponses");
+                object.remove("requestState");
+            }
+        }
+        match method {
+            "ping" if rpc::only(&params, &["_meta"]) => Inbound::Reply(rpc::success(id, json!({}))),
+            "tools/list" if rpc::only(&params, &["_meta"]) => {
+                Inbound::Reply(rpc::success(id, self.catalog.listing()))
+            }
+            "ping" | "tools/list" => failure(crate::modern::invalid("Invalid parameters")),
+            "tools/call" => self.tool_call(id, &params),
+            "resources/list" | "resources/templates/list" | "resources/read" => {
+                let event = self.resource_request(id, method, params);
+                match event {
+                    Inbound::Reply(mut reply)
+                        if reply["error"]["code"] == rpc::RESOURCE_NOT_FOUND =>
+                    {
+                        reply["error"]["code"] = json!(rpc::INVALID_PARAMS);
+                        Inbound::Reply(reply)
+                    }
+                    event => event,
+                }
+            }
+            _ if self
+                .options
+                .extension_methods
+                .iter()
+                .any(|name| name == method) =>
+            {
+                self.outstanding.insert(id.to_string());
+                Inbound::Method {
+                    id,
+                    method: method.into(),
+                    params,
+                }
+            }
+            _ => failure(RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found")),
+        }
+    }
+}
+
+impl Session {
+    fn discovery(&self) -> Value {
+        let mut versions = SUPPORTED_PROTOCOL_VERSIONS.to_vec();
+        versions.push(crate::modern::PROTOCOL_VERSION);
+        let mut result = json!({"supportedVersions":versions,"capabilities":{"tools":{}}});
+        if self.options.resources.is_some() {
+            result["capabilities"]["resources"] = json!({});
+        }
+        if self.options.skills.is_some() {
+            result["capabilities"]["extensions"] = json!({crate::skill::EXTENSION:{}});
+        }
+        if let Some(instructions) = self
+            .options
+            .modern
+            .as_ref()
+            .and_then(|options| options.server.instructions.as_ref())
+        {
+            result["instructions"] = json!(instructions);
+        }
+        result
+    }
+}
+
+fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
+    if let Some(modern) = &options.modern {
+        let info = json!({"name":modern.server.name,"version":modern.server.version,"title":modern.server.title});
+        if json::measure(&info, 16384, &|| Ok(())).is_err()
+            || modern
+                .server
+                .instructions
+                .as_ref()
+                .is_some_and(|text| text.len() > 16384)
+        {
+            return Err(ConfigurationError(
+                "modern server metadata exceeds its budget".into(),
+            ));
+        }
+    }
+    if let Some(modern) = &options.modern
+        && (modern.server.name.is_empty()
+            || modern.server.version.is_empty()
+            || modern.server.name.len() > MAX_CLIENT_FIELD_BYTES
+            || modern.server.version.len() > MAX_CLIENT_FIELD_BYTES)
+    {
+        return Err(ConfigurationError(
+            "modern server identity is invalid".into(),
+        ));
+    }
+    if let Some(skills) = &options.skills {
+        if options.modern.is_none() {
+            return Err(ConfigurationError(
+                "skills require modern protocol support".into(),
+            ));
+        }
+        options.resources = Some(Arc::new(
+            skills
+                .compose(options.resources.as_deref())
+                .map_err(|error| ConfigurationError(error.to_string()))?,
+        ));
+    }
+    Ok(())
 }
 
 fn client(params: &Value) -> Result<Client, RpcError> {

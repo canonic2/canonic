@@ -58,6 +58,16 @@ pub trait Handler: Send + Sync + 'static {
         Admission::default()
     }
 
+    /// Admission with the immutable modern request context, absent for legacy work.
+    fn admit_context(
+        &self,
+        request: &Request,
+        context: Option<&crate::RequestContext>,
+    ) -> Admission {
+        let _ = context;
+        self.admit(request)
+    }
+
     /// Runs one request.
     fn call(&self, request: Request, context: &Context) -> Outcome;
 
@@ -71,9 +81,11 @@ pub trait Handler: Send + Sync + 'static {
 /// Work a [`Handler`] runs.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
+    /// Immutable library-owned resource bytes, exposed to admission only.
+    Resource(crate::BundledRead),
     /// A tool call whose name and arguments the session has checked.
     Tool(ToolCall),
-    /// A product extension request from [`SessionOptions::extension_methods`].
+    /// A validated resource read or product request from [`SessionOptions::extension_methods`].
     Method {
         /// The method.
         method: String,
@@ -92,6 +104,16 @@ pub enum Request {
 
 /// What a request produced.
 pub enum Outcome {
+    /// A prepared bundled read, normally produced internally by the driver.
+    Bundled(crate::BundledRead),
+    /// Unknown/inaccessible resource, encoded for the admitted protocol revision.
+    ResourceNotFound(String),
+    /// A resource read with explicitly selected freshness and authorization scope.
+    ResourceWithCache(crate::ReadResourceResult, crate::CachePolicy),
+    /// Modern consumer-owned confirmation; no in-memory closure is serialized.
+    InputRequired(crate::InputRequiredResult),
+    /// Validated resource read contents.
+    Resource(crate::resource::ReadResourceResult),
     /// A tool result.
     Tool(ToolResult),
     /// An extension request's result.
@@ -216,6 +238,9 @@ impl Default for Options {
 /// Why [`serve`] ended other than at the end of input.
 #[derive(Debug, thiserror::Error)]
 pub enum ServeError {
+    /// Invalid modern identity or conflicting catalog ownership, before threads start.
+    #[error(transparent)]
+    Configuration(#[from] crate::ConfigurationError),
     /// The options cannot run a server.
     #[error("invalid MCP server options: {0}")]
     Options(&'static str),
@@ -235,6 +260,7 @@ pub enum ServeError {
 
 /// The context of one running request.
 pub struct Context {
+    protocol: Option<Arc<crate::RequestContext>>,
     id: Option<Value>,
     control: Arc<Control>,
     progress: Option<Progress>,
@@ -248,6 +274,11 @@ struct Progress {
 }
 
 impl Context {
+    /// This call's immutable modern metadata and retry inputs, or None for legacy work.
+    #[must_use]
+    pub fn request_context(&self) -> Option<&crate::RequestContext> {
+        self.protocol.as_deref()
+    }
     /// The request ID, or `None` for a notification.
     #[must_use]
     pub fn request_id(&self) -> Option<&Value> {
@@ -286,6 +317,9 @@ impl Context {
         reason = "progress is best effort; most callers ignore whether it was buffered"
     )]
     pub fn progress(&self, progress: f64, total: Option<f64>, message: Option<&str>) -> bool {
+        if self.control.check().is_err() {
+            return false;
+        }
         let Some(sink) = &self.progress else {
             return false;
         };
@@ -310,6 +344,7 @@ impl Context {
 /// running mutations are cancelled after [`Options::disconnect_grace`], and
 /// read-only work continues to its deadline. Replies are still written while
 /// the output accepts them.
+/// Resource reads follow the same lifetime as read-only tools.
 ///
 /// # Errors
 ///
@@ -326,6 +361,7 @@ pub fn serve<H: Handler>(
     options: &Options,
 ) -> Result<(), ServeError> {
     validate(options)?;
+    let session = Session::try_new(catalog, options.session.clone())?;
     let dispatcher = thread::current();
     let scheduler = scheduler::Scheduler::start(&handler, options, dispatcher.clone())?;
     let (frames, incoming) = mpsc::sync_channel(INPUT_BUFFER);
@@ -335,7 +371,7 @@ pub fn serve<H: Handler>(
         .spawn(move || reader::read(input, &frames, &dispatcher, limit))
         .map_err(ServeError::Spawn)?;
     let mut connection = Connection {
-        session: Session::new(catalog, options.session.clone()),
+        session,
         scheduler,
         handler,
         output: Output {
@@ -429,7 +465,8 @@ impl<H: Handler, W: Write> Connection<H, W> {
         read_only: bool,
         progress_token: Option<Value>,
     ) -> Result<(), ServeError> {
-        let admission = self.handler.admit(&request);
+        let context = id.as_ref().and_then(|id| self.session.request_context(id));
+        let admission = self.handler.admit_context(&request, context.as_deref());
         let outgoing = self.scheduler.admit(
             &mut self.session,
             id,
@@ -449,6 +486,11 @@ impl<H: Handler, W: Write> Connection<H, W> {
 
     fn inbound(&mut self, inbound: Inbound) -> Result<(), ServeError> {
         match inbound {
+            Inbound::BundledResource {
+                id,
+                read,
+                progress_token,
+            } => self.schedule(Some(id), Request::Resource(read), true, progress_token),
             Inbound::Reply(reply) => self.output.value(&reply),
             Inbound::Fatal { reply, reason } => {
                 self.output.value(&reply)?;
@@ -463,8 +505,19 @@ impl<H: Handler, W: Write> Connection<H, W> {
             }
             Inbound::InvalidArguments { id, call, error } => {
                 let result = self.handler.invalid_arguments(&call, &error);
+                let context = self.session.request_context(&id);
                 self.session.finish(&id);
-                self.output.tool_result(&id, &result)
+                if let Some(context) = context {
+                    match context.encode_success(&id, &result, self.output.limit, &|| Ok(())) {
+                        Ok(bytes) => self.output.bytes(&bytes),
+                        Err(_) => self.output.value(&rpc::failure(
+                            id,
+                            &RpcError::new(rpc::INTERNAL_ERROR, "Response exceeds output limit"),
+                        )),
+                    }
+                } else {
+                    self.output.tool_result(&id, &result)
+                }
             }
             Inbound::Tool { id, call } => {
                 let read_only = self
@@ -476,7 +529,16 @@ impl<H: Handler, W: Write> Connection<H, W> {
                 self.schedule(Some(id), Request::Tool(call), read_only, token)
             }
             Inbound::Method { id, method, params } => {
-                self.schedule(Some(id), Request::Method { method, params }, false, None)
+                let read_only = method == "resources/read";
+                let token = read_only
+                    .then(|| params["_meta"].get("progressToken").cloned())
+                    .flatten();
+                self.schedule(
+                    Some(id),
+                    Request::Method { method, params },
+                    read_only,
+                    token,
+                )
             }
             Inbound::Notification { method, params } => {
                 self.schedule(None, Request::Notification { method, params }, false, None)

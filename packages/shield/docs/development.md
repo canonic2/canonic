@@ -254,40 +254,6 @@ For a fresh checkout install SDK test dependencies with
 `npm --prefix packages/shield/adapters/sdk-tests ci --ignore-scripts --no-fund --no-audit`.
 Native host checks are verified on macOS; Linux/Windows behavior is unverified.
 
-## Agent benchmarks
-
-`adapters/sdk-tests/benchmark/` drives a real Claude Code or Codex agent, with its
-real model, through a fixed scenario of at most ten prompts in a fresh project.
-Each project is enrolled with the `shield` under test, plus any packs the
-scenario installs. The runner sends each prompt unchanged and answers host
-approvals from the scenario's decision set. After each turn it records Shield
-history, proposals, active rules, recurrence counts, Git contents and run-owned
-processes; the scenario adds its own observations. Stubbed tools stand in for
-programs such as `aws`, so runs never reach real services. A separate oracle
-scores the saved run, so a changed check can rescore earlier runs without
-another model session.
-
-A scenario benchmarks either Shield or one pack. Shield's scenarios live in the
-harness. `--record` saves one neutral JSON summary per run under the Shield
-version's folder, plus generated pages. Record the runs that confirm a release:
-
-```sh
-npm --prefix packages/shield/adapters/sdk-tests run benchmark -- --host claude --decisions claude-confirmation --record --role confirmation
-npm --prefix packages/shield/adapters/sdk-tests run benchmark:score -- ~/ShieldSessions/runs/<run>
-npm --prefix packages/shield/adapters/sdk-tests run benchmark:test
-```
-
-Pack scenarios live beside the packs in the registry repository and record under
-that pack's version there. Pass the scenario folder with `--scenario`.
-
-Benchmarks spend model usage on the logged-in account and run only on request.
-`--setup-only` prepares and observes the fixture without an agent.
-`npm --prefix packages/shield/adapters/sdk-tests run benchmark:projection` captures
-the tool schemas and results each host sends its model. It uses a local scripted
-model and spends nothing. The
-[benchmark README](../adapters/sdk-tests/benchmark/README.md) describes login,
-decision sets, recording, checks and limits.
-
 ## Individual Rust verification
 
 Choose the checks needed for your change; there is no aggregate target.

@@ -1,5 +1,13 @@
 # Drive the session yourself
 
+For explicit modern protocol opt-in, per-request reply context and bundled
+resource dispatch, see [Skills and modern context](skills.md#protocols-context-and-caching).
+Use `Session::try_new` to validate that composition before accepting input.
+`Session::new` also validates configuration, but defers reporting failures:
+processing a parsed message then returns `Inbound::Fatal` with code `-32603`
+and a null request ID. Use `try_new` when startup must report configuration
+errors before a client connects.
+
 The stdio driver is synchronous. A server with its own runtime, such as an
 asynchronous one, can use the protocol core directly and keep the same
 protocol behavior. `Session` performs no I/O and starts no threads.
@@ -45,7 +53,7 @@ for frame in frames {
   `cancel_confirmation` to withdraw it and send the returned notice.
 - Call `session.close()` when the input ends and send the notice it returns.
 - Deadlines, lanes, keys and end-of-input handling are yours. The
-  [scheduling specification](../../specs/scheduling.md) describes the driver's
+  [stdio guide](stdio.md) describes the driver's
   choices if you want to match them.
 
 `rpc::encode_success` encodes a reply directly from a `ToolResult` within an

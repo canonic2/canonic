@@ -14,7 +14,6 @@ use crate::{
     rpc::{self, RpcError},
     session::{Decision, Session},
 };
-use serde::Serialize;
 use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -30,6 +29,7 @@ use std::{
 /// What a queued or running request is, independent of its work.
 #[derive(Clone)]
 struct Meta {
+    request_context: Option<Arc<crate::RequestContext>>,
     id: Option<Value>,
     lane: usize,
     key: Option<String>,
@@ -52,6 +52,7 @@ struct Job {
 }
 
 struct Assignment {
+    request_context: Option<Arc<crate::RequestContext>>,
     sequence: u64,
     id: Option<Value>,
     work: Work,
@@ -213,6 +214,7 @@ impl Scheduler {
         let timeout = admission.timeout.unwrap_or(self.timeout);
         lane.queue.push_back(Job {
             meta: Meta {
+                request_context: id.as_ref().and_then(|id| session.request_context(id)),
                 id,
                 lane: admission.lane,
                 key: admission.key,
@@ -236,7 +238,7 @@ impl Scheduler {
             if self
                 .running
                 .get(&sequence)
-                .is_some_and(|running| !running.answered)
+                .is_some_and(|running| !running.answered && running.control.check().is_ok())
             {
                 out.push(Outgoing::Value(notification));
             }
@@ -619,6 +621,7 @@ impl Scheduler {
                     dispatcher: self.dispatcher.clone(),
                 });
                 let assignment = Assignment {
+                    request_context: job.meta.request_context.clone(),
                     sequence,
                     id: job.meta.id.clone(),
                     work: job.work,
@@ -698,16 +701,32 @@ fn work<H: Handler>(
 ) {
     while let Ok(assignment) = incoming.recv() {
         let context = Context {
+            protocol: assignment.request_context,
             id: assignment.id,
             control: assignment.control,
             progress: assignment.progress,
         };
         let resumed = matches!(assignment.work, Work::Resume(..));
-        let outcome = panic::catch_unwind(AssertUnwindSafe(|| match assignment.work {
-            Work::Call(request) => handler.call(request, &context),
-            Work::Resume(resume, decision) => resume(decision, &context),
+        let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
+            let outcome = match assignment.work {
+                Work::Call(Request::Resource(read)) => Outcome::Bundled(read),
+                Work::Call(request) => handler.call(request, &context),
+                Work::Resume(resume, decision) => resume(decision, &context),
+            };
+            match outcome {
+                Outcome::Confirm(confirm) if context.protocol.is_some() => {
+                    (confirm.resume)(Decision::Unavailable, &context)
+                }
+                outcome => outcome,
+            }
         }));
-        let finish = settle(context.id.as_ref(), outcome, resumed, limit);
+        let finish = settle(
+            context.id.as_ref(),
+            outcome,
+            resumed || context.protocol.is_some(),
+            limit,
+            context.protocol.as_deref(),
+        );
         if finished.send((assignment.sequence, finish)).is_err() {
             return;
         }
@@ -720,6 +739,7 @@ fn settle(
     outcome: thread::Result<Outcome>,
     resumed: bool,
     limit: usize,
+    context: Option<&crate::RequestContext>,
 ) -> Finish {
     // A notification's outcome, including a confirmation step, has no reply.
     let Some(id) = id else {
@@ -733,8 +753,61 @@ fn settle(
     };
     match outcome {
         Err(_) => internal("Request failed"),
-        Ok(Outcome::Tool(result)) => encoded(id, &result, limit),
-        Ok(Outcome::Method(Ok(value))) => encoded(id, &value, limit),
+        Ok(Outcome::Tool(result)) => encoded(id, &result, limit, context),
+        Ok(Outcome::Resource(result)) => encoded(id, &result, limit, context),
+        Ok(Outcome::Bundled(read)) => encoded(id, read.result(), limit, context),
+        Ok(Outcome::ResourceWithCache(result, policy)) => {
+            let selected = context.map(|context| context.with_cache(policy));
+            encoded(id, &result, limit, selected.as_deref())
+        }
+        Ok(Outcome::ResourceNotFound(uri)) => {
+            let code = if context.is_some() {
+                rpc::INVALID_PARAMS
+            } else {
+                rpc::RESOURCE_NOT_FOUND
+            };
+            Finish::Reply(rpc::failure(
+                id.clone(),
+                &RpcError::new(code, "Resource not found")
+                    .with_data(serde_json::json!({"uri":uri})),
+            ))
+        }
+        Ok(Outcome::InputRequired(result)) => match context {
+            Some(context) => match context.interim(&result) {
+                Ok(value) => encoded(id, &value, limit, None),
+                Err(error) => Finish::Reply(rpc::failure(id.clone(), &error)),
+            },
+            None => internal("Input-required results require modern protocol metadata"),
+        },
+        Ok(Outcome::Method(Ok(value))) => {
+            if context.is_some()
+                && ["resultType", "_meta", "ttlMs", "cacheScope"]
+                    .iter()
+                    .any(|key| value.get(*key).is_some())
+            {
+                return internal("Method result overrides protocol-owned fields");
+            }
+            encoded(id, &value, limit, context)
+        }
+        Ok(Outcome::Method(Err(mut error)))
+            if context.is_some_and(|context| context.method == "resources/read")
+                && error
+                    .data
+                    .as_ref()
+                    .and_then(|data| data["uri"].as_str())
+                    .is_some_and(|uri| {
+                        crate::resource::validate_uri(uri).is_ok()
+                            && error == crate::resource::not_found(uri)
+                    }) =>
+        {
+            error.code = rpc::INVALID_PARAMS;
+            Finish::Reply(rpc::failure(id.clone(), &error))
+        }
+        Ok(Outcome::Method(Err(error)))
+            if context.is_some() && [rpc::RESOURCE_NOT_FOUND, -32042].contains(&error.code) =>
+        {
+            internal("Legacy-only error returned for a modern request")
+        }
         Ok(Outcome::Method(Err(error))) => Finish::Reply(rpc::failure(id.clone(), &error)),
         Ok(Outcome::Done) => internal("Request produced no reply"),
         Ok(Outcome::Confirm(_)) if resumed => internal("Request asked for confirmation twice"),
@@ -742,8 +815,17 @@ fn settle(
     }
 }
 
-fn encoded(id: &Value, result: &(impl Serialize + ?Sized), limit: usize) -> Finish {
-    match rpc::encode_success(id, result, limit, &|| Ok(())) {
+fn encoded(
+    id: &Value,
+    result: &(impl crate::modern::CompletePayload + ?Sized),
+    limit: usize,
+    context: Option<&crate::RequestContext>,
+) -> Finish {
+    let encoded = context.map_or_else(
+        || rpc::encode_success(id, result, limit, &|| Ok(())),
+        |context| context.encode_success(id, result, limit, &|| Ok(())),
+    );
+    match encoded {
         Ok(bytes) => Finish::Bytes(bytes),
         Err(EncodeError::TooLarge { .. } | EncodeError::Interrupted) => {
             Finish::Reply(rpc::failure(

@@ -26,8 +26,9 @@ fn admit(&self, request: &Request) -> Admission {
 }
 ```
 
-A full lane answers new requests with `-32000`. `ping` and `tools/list` never
-wait for a lane.
+A full lane answers new requests with `-32000`. `ping`, `tools/list` and
+resource/template listings never wait for a lane. Resource reads use the lane
+chosen by `Handler::admit`; see [resources](resources.md).
 
 ## Keys
 
@@ -96,6 +97,8 @@ When stdin closes:
 
 `serve` returns after that work settles. Annotate tools accurately: the
 read-only hint decides what may still run.
+Resource reads follow the same read-only lifetime; product extension requests
+follow mutation rules.
 
 ## Diagnostics
 

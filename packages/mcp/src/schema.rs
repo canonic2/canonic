@@ -226,15 +226,11 @@ fn validate_with(
         return validate_with(root, target, value, path, depth + 1);
     }
     let matches = |branch: &Value| validate_with(root, branch, value, path, depth + 1).is_ok();
-    if let Some(branches) = schema["oneOf"].as_array()
-        && branches.iter().filter(|branch| matches(branch)).count() != 1
-    {
-        return Err(mismatch());
+    if let Some(branches) = schema["oneOf"].as_array() {
+        validate_union(root, branches, value, path, depth, true)?;
     }
-    if let Some(branches) = schema["anyOf"].as_array()
-        && !branches.iter().any(matches)
-    {
-        return Err(mismatch());
+    if let Some(branches) = schema["anyOf"].as_array() {
+        validate_union(root, branches, value, path, depth, false)?;
     }
     if let Some(branches) = schema["allOf"].as_array() {
         for branch in branches {
@@ -292,6 +288,57 @@ fn validate_with(
         validate_array(root, schema, array, path, depth)?;
     }
     validate_scalar(schema, value, path)
+}
+
+/// Keep a unique deeper failure when no branch matches. Ambiguous alternatives
+/// and overlapping oneOf branches still report the union itself as invalid.
+fn validate_union(
+    root: &Value,
+    branches: &[Value],
+    value: &Value,
+    path: &str,
+    depth: usize,
+    exactly_one: bool,
+) -> Result<(), ArgumentError> {
+    let path_depth = |path: &str| path.bytes().filter(|b| matches!(b, b'.' | b'[')).count();
+    let mut matched = 0;
+    let mut deepest = path_depth(path);
+    let mut failure = None;
+    let mut ambiguous = false;
+    for branch in branches {
+        match validate_with(root, branch, value, path, depth + 1) {
+            Ok(()) => {
+                matched += 1;
+                if !exactly_one {
+                    return Ok(());
+                }
+            }
+            Err(error) => {
+                let level = path_depth(&error.path);
+                if level > deepest || failure.is_none() {
+                    deepest = level;
+                    failure = Some(error);
+                    ambiguous = false;
+                } else if level == deepest && failure.as_ref().is_some_and(|known| *known != error)
+                {
+                    ambiguous = true;
+                }
+            }
+        }
+    }
+    if matched == 1 {
+        return Ok(());
+    }
+    if matched == 0
+        && !ambiguous
+        && let Some(error) = failure
+    {
+        return Err(error);
+    }
+    Err(ArgumentError::new(
+        path,
+        format!("{path} does not match its tool schema"),
+    ))
 }
 
 fn is_type(kind: &str, value: &Value) -> bool {
@@ -474,6 +521,53 @@ mod tests {
         assert_eq!(
             message(&list, &json!([{"x":0},{"x":0},{"x":0}])),
             "arguments must contain at most 2 items; received 3"
+        );
+    }
+
+    #[test]
+    fn unions_keep_unique_nested_errors_and_refuse_ambiguous_matches() {
+        for union in ["oneOf", "anyOf"] {
+            let location = json!({"oneOf":[
+                {"type":"object","properties":{"exact":{"oneOf":[
+                    {"type":"object","properties":{"root":{"const":"project"}},"required":["root"]},
+                    {"type":"object","properties":{"root":{"const":"absolute"},"path":{"type":"string"}},"required":["root","path"]}
+                ]}},"required":["exact"]},
+                {"type":"object","properties":{"within":{"type":"object"}},"required":["within"]}
+            ]});
+            let mut schema = json!({});
+            schema[union] = json!([
+                {"type":"object","properties":{"kind":{"const":"create"},"location":location},"required":["kind","location"]},
+                {"type":"object","properties":{"kind":{"const":"remove"}},"required":["kind"]}
+            ]);
+            let bad = json!({"kind":"create","location":{"exact":"/acme/project"}});
+            let error = validate(&schema, &bad).unwrap_err();
+            assert_eq!(error.path, "arguments.location.exact");
+            assert_eq!(error.message, "arguments.location.exact must be object");
+            assert!(
+                validate(
+                    &schema,
+                    &json!({"kind":"create","location":{"exact":{"root":"project"}}})
+                )
+                .is_ok()
+            );
+            assert!(validate(&schema, &json!({"kind":"other"})).is_err());
+        }
+        let ambiguous = json!({"oneOf":[
+            {"type":"object","properties":{"left":{"type":"number"}}},
+            {"type":"object","properties":{"right":{"type":"number"}}}
+        ]});
+        assert_eq!(
+            validate(&ambiguous, &json!({"left":"bad","right":"bad"}))
+                .unwrap_err()
+                .path,
+            "arguments"
+        );
+        assert!(
+            validate(
+                &json!({"oneOf":[{"type":"integer"},{"type":"number"}]}),
+                &json!(1)
+            )
+            .is_err()
         );
     }
 

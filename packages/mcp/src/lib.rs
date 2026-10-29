@@ -1,7 +1,7 @@
 //! Model Context Protocol server building blocks.
 //!
 //! The library has two layers. The protocol core ([`Session`], [`rpc`],
-//! [`tool`], [`schema`], [`json`] and [`control`]) performs no I/O and starts
+//! [`tool`], [`resource`], [`skill`], [`modern`], [`schema`], [`json`] and [`control`]) performs no I/O and starts
 //! no threads, so any runtime can drive it. The [`stdio`] driver runs a
 //! [`stdio::Handler`] over newline-delimited JSON-RPC with bounded lanes,
 //! deadlines, cancellation, progress, host confirmation and disconnection
@@ -33,17 +33,26 @@
 
 pub mod control;
 pub mod json;
+pub mod modern;
+pub mod resource;
 pub mod rpc;
 pub mod schema;
 mod session;
+pub mod skill;
 pub mod stdio;
 pub mod tool;
 
 pub use control::{Control, Interrupted};
+pub use modern::{CachePolicy, CacheScope, InputRequiredResult, ModernOptions, RequestContext};
+pub use resource::{
+    ReadResourceResult, Resource, ResourceCatalog, ResourceContents, ResourceError,
+    ResourceTemplate,
+};
 pub use rpc::RpcError;
 pub use session::{
-    Client, DEFAULT_MAX_MESSAGE_BYTES, Decision, Inbound, LATEST_PROTOCOL_VERSION,
-    MAX_CLIENT_FIELD_BYTES, MAX_VERSION_BYTES, SUPPORTED_PROTOCOL_VERSIONS, ServerInfo, Session,
-    SessionOptions,
+    Client, ConfigurationError, DEFAULT_MAX_MESSAGE_BYTES, Decision, Inbound,
+    LATEST_PROTOCOL_VERSION, MAX_CLIENT_FIELD_BYTES, MAX_VERSION_BYTES,
+    SUPPORTED_PROTOCOL_VERSIONS, ServerInfo, Session, SessionOptions,
 };
+pub use skill::{BundledRead, SkillCatalog, SkillDefinition, SkillError, SkillFile};
 pub use tool::{Annotations, Catalog, CatalogError, Content, Tool, ToolCall, ToolResult};

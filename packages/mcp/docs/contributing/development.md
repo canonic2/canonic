@@ -48,6 +48,8 @@ package's `target/` directory between runs.
   and private links.
 - `clippy.toml` allows `unwrap` in tests only.
 - `deny.toml` allows Apache-2.0, MIT and Unicode-3.0.
+  A crate-scoped Zlib exception covers `foldhash`, used by the YAML parser's
+  hash tables.
 - `.config/nextest.toml` disables fail-fast and terminates hung tests.
 
 ## Tests
@@ -58,9 +60,8 @@ in-memory pipes and a scriptable handler; it opens no sockets or processes.
 Wait on recorded events with the fixture's bounded wait rather than sleeping,
 and keep deadlines short only to make expiry happen.
 
-See the [documentation index](../README.md) for usage guides and the
-[specifications](../../specs/README.md) for internal contracts. When changing an
-API, keep its rustdoc and the corresponding guide consistent.
+See the [documentation index](../README.md) for usage guides. When changing
+an API, keep its rustdoc and the corresponding guide consistent.
 
 ## Individual Rust verification
 

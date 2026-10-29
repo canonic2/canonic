@@ -60,6 +60,7 @@ impl Handler for Script {
 
 pub(crate) fn arguments(request: &Request) -> &Value {
     match request {
+        Request::Resource(_) => &Value::Null,
         Request::Tool(call) => &call.arguments,
         Request::Method { params, .. } | Request::Notification { params, .. } => params,
     }
@@ -67,6 +68,7 @@ pub(crate) fn arguments(request: &Request) -> &Value {
 
 pub(crate) fn tool_name(request: &Request) -> &str {
     match request {
+        Request::Resource(_) => "resources/read",
         Request::Tool(call) => &call.name,
         Request::Method { method, .. } | Request::Notification { method, .. } => method,
     }

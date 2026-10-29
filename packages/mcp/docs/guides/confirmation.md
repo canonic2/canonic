@@ -1,5 +1,8 @@
 # Ask the user to confirm
 
+This guide covers the initialization-based protocol. The opt-in modern path
+uses [consumer-owned confirmation retries](skills.md#modern-confirmation-retries).
+
 Some actions need the person using the host, not the agent, to agree. A
 handler returns `Outcome::Confirm`; the host shows the message as a form with
 Accept and Decline, and your continuation receives the answer.
