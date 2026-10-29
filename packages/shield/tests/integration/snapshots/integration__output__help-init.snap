@@ -1,0 +1,45 @@
+---
+source: tests/integration/output.rs
+expression: "String::from_utf8_lossy(&output.get_output().stdout)"
+---
+Create this project's Shield policy and optionally set up agents, after confirmation
+
+Usage: shield init [OPTIONS]
+
+Options:
+      --agent <AGENTS>
+          Agent to set up with project hooks and MCP; repeat for several. Omission asks
+
+          [possible values: claude, codex]
+
+      --project <PROJECT>
+          Select a project; otherwise discover the nearest enrolled ancestor
+
+      --json
+          Print one JSON result; commands that change policy refuse JSON mode
+
+      --no-setup
+          Set up no agents now
+
+      --debug-log-dir <DEBUG_LOG_DIR>
+          Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+
+      --no-baseline
+          Skip the default baseline addition; preserve configured packs and rules
+
+      --no-debug-log
+          Disable diagnostic logging, including automatic debug-build logs
+
+      --profile <PROFILE>
+          Profile for the default baseline; omission offers Recommended during onboarding
+
+          Possible values:
+          - loose:       Least restrictive profile
+          - recommended: Default profile
+          - strict:      Most restrictive profile
+
+      --cache-dir <CACHE_DIR>
+          Compiled cache location for init, MCP setup or cache preparation
+
+  -h, --help
+          Print help (see a summary with '-h')

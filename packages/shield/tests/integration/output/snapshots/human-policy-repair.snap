@@ -1,0 +1,15 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield policy review
+--- terminal
+Active policy · revision [SHORT-DIGEST]
+  acme/parent 0.1.0 · strict
+  acme/test 0.1.0 · strict
+Policy → Repair project files
+Restore the .shield project files from the active policy.
+Manual edits that conflict are kept for you to review.
+Review and confirm → Apply change
+Restored the .shield project files from the active policy.
+--- exit 0

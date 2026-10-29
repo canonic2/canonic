@@ -1,0 +1,11 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield doctor
+--- terminal
+Shield policy is active in [PROJECT], but no agent is connected. Connect one with shield mcp setup.
+Policy: no packs · revision [SHORT-DIGEST]
+History: on, keeping up to 5000 entries
+Limits: native hooks can be skipped or fail open on host timeout/startup failure; no same-user OS isolation.
+--- exit 0

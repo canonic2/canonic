@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield policy review
+--- terminal
+Active policy · revision [SHORT-DIGEST]
+  1 project rule
+Policy → Finish inspection
+--- exit 0

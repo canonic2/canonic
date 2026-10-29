@@ -1,0 +1,9 @@
+# Test runner settings for `cargo nextest run`. See docs/development.md.
+
+[profile.default]
+# Keep process and PTY fixtures within a bounded host load.
+test-threads = 4
+# Report every failure in one run rather than stopping at the first.
+fail-fast = false
+# Flag a slow test after 30 seconds and stop it after 2 minutes.
+slow-timeout = { period = "30s", terminate-after = 4 }

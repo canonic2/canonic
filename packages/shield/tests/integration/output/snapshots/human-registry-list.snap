@@ -1,0 +1,9 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield registry list
+--- terminal
+acme  [REGISTRY] · local directory · project
+main  https://canonic2.github.io/shield-registry/ · signed by key [SHORT-DIGEST] · registry canonic-shield-main · built in · default
+--- exit 0

@@ -1,0 +1,13 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield registry remove acme
+--- terminal
+Remove registry acme from this project
+  [REGISTRY] · local directory
+Installed packs keep their source.
+The default registry becomes main.
+Review and confirm → Apply change
+Removed registry acme from this project. The default registry is main.
+--- exit 0

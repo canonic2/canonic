@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield rule list
+--- terminal
+2 rules in the active policy
+  status    allow  git status · project rule
+  mutation  deny   acme write · acme/test
+--- exit 0

@@ -1,0 +1,18 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield mcp setup --remove --agent claude
+--- terminal
+Agent integrations
+  Remove Shield's hooks and MCP servers.
+  Claude Code removed · hooks PostToolUse, PostToolUseFailure, PreToolUse · MCP server shield
+
+  Files
+    .mcp.json                    updated    Claude Code MCP server
+    .claude/settings.local.json  updated    Claude Code hooks
+  Other settings in these files are preserved.
+
+Review and confirm → Apply change
+No agent is connected. Connect one with shield mcp setup.
+--- exit 0

@@ -1,0 +1,12 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack info acme/parent
+--- terminal
+Checking registry metadata…
+acme/parent 0.2.0 · registry acme · no rules
+Acme integration fixture
+Versions 0.1.0, 0.2.0 · requires Shield [SHIELD-VERSION]
+Add it with shield pack add acme/parent.
+--- exit 0

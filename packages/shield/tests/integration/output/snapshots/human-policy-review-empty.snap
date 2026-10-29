@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield policy review
+--- terminal
+Active policy · revision [SHORT-DIGEST]
+  No packs or project rules. Add a pack with shield pack add.
+Policy → Finish inspection
+--- exit 0

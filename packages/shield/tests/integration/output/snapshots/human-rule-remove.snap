@@ -1,0 +1,12 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield rule remove status
+--- terminal
+Change policy
+  - rule status: allow git status
+  Permissions: not fully compared; check the changes above
+Review and confirm → Apply change
+Removed rule status
+--- exit 0

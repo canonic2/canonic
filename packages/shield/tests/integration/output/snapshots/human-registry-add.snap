@@ -1,0 +1,12 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield registry add acme [REGISTRY]
+--- terminal
+Register acme for this project
+  [REGISTRY] · local directory
+Installed packs are not affected.
+Review and confirm → Apply change
+Registered acme for this project.
+--- exit 0

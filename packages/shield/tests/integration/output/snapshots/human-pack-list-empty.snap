@@ -1,0 +1,8 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack list
+--- terminal
+No packs installed. Find one with shield pack search, or add the baseline with shield pack add main/baseline.
+--- exit 0

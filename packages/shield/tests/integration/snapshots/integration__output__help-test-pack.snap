@@ -1,0 +1,19 @@
+---
+source: tests/integration/output.rs
+expression: "String::from_utf8_lossy(&output.get_output().stdout)"
+---
+Check a pack's declarative decision fixtures without execution
+
+Usage: shield __internal test-pack [OPTIONS] --pack <PACK> --cases <CASES>
+
+Options:
+      --details                        Include matched rules, requirement facts and guidance in fixture results
+      --project <PROJECT>              Select a project; otherwise discover the nearest enrolled ancestor
+      --json                           Print one JSON result; commands that change policy refuse JSON mode
+      --pack <PACK>                    Local permission pack to validate and test
+      --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+      --with-pack <WITH_PACK>          Companion packs composed under the same fixture profile; repeat as needed
+      --cases <CASES>                  Versioned YAML or JSON decision fixtures
+      --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
+      --cache-dir <CACHE_DIR>          Compiled cache location for init, MCP setup or cache preparation
+  -h, --help                           Print help

@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield policy show
+--- terminal
+Active policy · revision [SHORT-DIGEST]
+  acme/parent 0.1.0 · strict
+  acme/test 0.1.0 · strict
+--- exit 0

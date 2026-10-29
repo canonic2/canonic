@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield status
+--- stderr
+Error: Shield is not initialized here
+No enrolled project was found for the selected directory.
+Run shield init in the intended project.
+--- exit 1

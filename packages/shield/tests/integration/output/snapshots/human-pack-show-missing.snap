@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack show acme/missing
+--- stderr
+Error: Installed pack was not found: acme/missing
+No retained selection matches this reference.
+Run shield pack list to select a current pack reference.
+--- exit 1

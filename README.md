@@ -7,6 +7,8 @@ from this repository's [releases](https://github.com/canonic2/canonic/releases),
 the Visual Studio Marketplace and Open VSX; its documentation is at
 [canonic.sh](https://canonic.sh/).
 
+- [Shield](packages/shield/README.md) is a CLI that checks coding-agent requests
+  against project permission rules.
 - [Lattice](packages/lattice/README.md) is an unpublished native JavaScript
   framework scaffold.
 - [TUI](packages/tui/README.md) is an unpublished Rust library of terminal

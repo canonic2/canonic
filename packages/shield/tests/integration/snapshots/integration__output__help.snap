@@ -1,0 +1,39 @@
+---
+source: tests/integration/output.rs
+expression: "String::from_utf8_lossy(&output.get_output().stdout)"
+---
+Project policy and approval for AI agents
+
+Usage: shield [OPTIONS] <COMMAND>
+
+Commands:
+  init        Create this project's Shield policy and optionally set up agents, after confirmation
+  status      Show policy, integrations and pending requests
+  doctor      Check configuration and installation prerequisites; changes nothing
+  mcp         Set up agent hooks and MCP, or serve Shield's MCP tools
+  protection  Change whether agents may read or change protected settings and policy files
+  policy      Show policy or review pending changes and history settings
+  pack        Install, update, configure, remove, find or inspect permission packs
+  registry    List, add, remove or choose registry sources
+  rule        List, add, edit or remove project custom rules
+  request     List, inspect, approve or deny stored agent requests
+  history     List or inspect agent request decisions and outcomes
+  cache       Prepare disposable compiled data from the currently committed policy
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+      --project <PROJECT>              Select a project; otherwise discover the nearest enrolled ancestor
+      --json                           Print one JSON result; commands that change policy refuse JSON mode
+      --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+      --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
+      --cache-dir <CACHE_DIR>          Compiled cache location for init, MCP setup or cache preparation
+  -h, --help                           Print help
+  -V, --version                        Print version
+
+Start a project:  shield init
+Configure agents: shield mcp setup
+Inspect policy:   shield status  /  shield policy show  /  shield rule list
+Find packs:       shield pack search <query>  /  shield pack info <reference>
+Review requests:  shield request list  /  shield request approve <request>
+Structured data:  add --json to inspection commands
+Terminal color:   NO_COLOR disables color

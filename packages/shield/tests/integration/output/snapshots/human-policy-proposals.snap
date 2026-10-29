@@ -1,0 +1,15 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield policy review
+--- terminal
+Active policy · revision [SHORT-DIGEST]
+  No packs or project rules. Add a pack with shield pack add.
+2 proposals are waiting for review.
+Policy → Review 2 pending proposals
+rule add → rejected · Add rule status: allow git status
+rule add → accepted · Add rule log: allow git log
+Rejected: Add rule status: allow git status
+Added rule log
+--- exit 0

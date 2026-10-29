@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack remove acme/test
+--- stderr
+Error: acme/test is still required by acme/parent
+Removing it would break that dependency.
+Remove or change the packs that depend on it first; see shield pack list.
+--- exit 1

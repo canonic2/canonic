@@ -1,0 +1,15 @@
+---
+source: tests/integration/output.rs
+expression: "String::from_utf8_lossy(&output.get_output().stdout)"
+---
+Evaluate one normalized host operation from stdin
+
+Usage: shield __internal enforce-request [OPTIONS] --project <PROJECT>
+
+Options:
+      --project <PROJECT>              Owning enrolled project fixed by the trusted host launcher
+      --json                           Print one JSON result; commands that change policy refuse JSON mode
+      --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+      --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
+      --cache-dir <CACHE_DIR>          Compiled cache location for init, MCP setup or cache preparation
+  -h, --help                           Print help

@@ -1,0 +1,19 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield init --no-setup --no-baseline
+--- terminal
+Setting up Shield. Nothing is activated until you confirm.
+Initialize Shield in [PROJECT]
+
+Policy
+  No permission packs
+
+Agent integrations
+  None selected. Set them up later with shield mcp setup.
+
+Review and confirm → Cancel
+--- stderr
+Cancelled; nothing changed.
+--- exit 130

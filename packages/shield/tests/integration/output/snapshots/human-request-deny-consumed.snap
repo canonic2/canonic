@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield request deny [ENTRY]
+--- stderr
+Error: Request is not available: [ENTRY]
+The request may have expired, been consumed or belong to another project.
+Run shield request list and select a current request; request a fresh attempt when needed.
+--- exit 1

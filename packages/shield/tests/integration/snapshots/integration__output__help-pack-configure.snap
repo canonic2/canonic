@@ -1,0 +1,23 @@
+---
+source: tests/integration/output.rs
+expression: "String::from_utf8_lossy(&output.get_output().stdout)"
+---
+Change a selection's variable values and rule overrides, after confirmation
+
+Usage: shield pack configure [OPTIONS] <REFERENCE>
+
+Arguments:
+  <REFERENCE>  Installed pack name or `pack:<uuid>` selector
+
+Options:
+      --project <PROJECT>              Select a project; otherwise discover the nearest enrolled ancestor
+      --set <NAME=VALUE>               Bind a variable; a value starting with [ is a JSON list. Repeatable
+      --json                           Print one JSON result; commands that change policy refuse JSON mode
+      --unset <NAME>                   Remove a variable value. Repeatable
+      --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+      --override <ID=VALUE>            Override a rule: `off`, `allow`, `ask`, `deny`, `on_unmet:ask` or `on_unmet:deny`. Repeatable
+      --clear-override <ID>            Remove a rule override. Repeatable
+      --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
+      --cache-dir <CACHE_DIR>          Compiled cache location for init, MCP setup or cache preparation
+      --local                          Change your uncommitted local configuration instead of the shared one
+  -h, --help                           Print help

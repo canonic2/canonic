@@ -1,0 +1,17 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield policy review
+--- terminal
+Active policy · revision [SHORT-DIGEST]
+  acme/parent 0.1.0 · strict
+  acme/test 0.1.0 · strict
+Policy → Request history settings
+Record request history → Enabled
+Input → received
+Clear existing history → Keep history
+Request history: on, keeping up to 1000 entries
+Review and confirm → Apply change
+Request history is on, keeping up to 1000 entries.
+--- exit 0

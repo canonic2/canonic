@@ -1,0 +1,13 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield request show [ENTRY]
+--- terminal
+Request [ENTRY] to run /bin/echo Acme in [PROJECT]
+pending · from an unidentified agent via run · until [TIME]
+Requested [TIME] in [PROJECT]
+Policy: ask (matched-policy)
+Rule echo: Acme echo needs approval
+Approve it with shield request approve [ENTRY], or deny it with shield request deny [ENTRY].
+--- exit 0

@@ -1,0 +1,18 @@
+---
+source: tests/integration/output.rs
+expression: "String::from_utf8_lossy(&output.get_output().stdout)"
+---
+Authorize one stored Ask request once, after confirmation
+
+Usage: shield request approve [OPTIONS] <REQUEST>
+
+Arguments:
+  <REQUEST>
+
+Options:
+      --project <PROJECT>              Select a project; otherwise discover the nearest enrolled ancestor
+      --json                           Print one JSON result; commands that change policy refuse JSON mode
+      --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+      --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
+      --cache-dir <CACHE_DIR>          Compiled cache location for init, MCP setup or cache preparation
+  -h, --help                           Print help

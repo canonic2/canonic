@@ -1,0 +1,8 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield rule list
+--- terminal
+No rules in the active policy. Add a pack with shield pack add or a rule with shield rule add.
+--- exit 0

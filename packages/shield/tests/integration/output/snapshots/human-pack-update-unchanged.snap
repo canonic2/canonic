@@ -1,0 +1,9 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack update
+--- terminal
+Checking for newer releases…
+Nothing to change; the policy is already up to date.
+--- exit 0

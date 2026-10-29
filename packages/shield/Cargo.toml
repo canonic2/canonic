@@ -1,0 +1,92 @@
+[package]
+name = "canonic-shield"
+version = "0.10.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+license-file = "../../LICENSE"
+description = "Standalone AI-agent protection CLI"
+
+[lib]
+name = "shield"
+
+[[bin]]
+name = "shield"
+path = "src/main.rs"
+
+# Without debug info, macOS builds keep no per-unit object files in deps/.
+# Kept objects pile up with every edit, and a crowded deps/ slows every test
+# process launch. Use the diagnostic profile for a debugger.
+[profile.dev]
+debug = false
+
+# Parsing, hashing and regex work in dependencies dominates the budget and
+# large-policy tests; optimizing only dependencies keeps this crate quick to
+# rebuild.
+[profile.dev.package."*"]
+opt-level = 2
+
+# Native hosts impose short hook deadlines. Keep diagnostics and symbols without
+# the unoptimized evaluator overhead of Cargo's development profile.
+[profile.diagnostic]
+inherits = "release"
+debug = 2
+debug-assertions = true
+strip = "none"
+
+[dependencies]
+canonic-tui = { version = "0.3.0", path = "../tui" }
+canonic-registry = { version = "0.2.0", path = "../registry" }
+canonic-mcp = { version = "0.1.0", path = "../mcp" }
+blake3 = "1.8.2"
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["raw_value"] }
+serde-saphyr = { version = "1.3", default-features = false, features = ["deserialize", "serialize"] }
+# serde-saphyr's parser, used directly for the source spans of policy file edits.
+granit-parser = { version = "1.3", default-features = false, features = ["std"] }
+semver = "1.0"
+globset = "0.4.20"
+regex-automata = "0.4.18"
+url = "2.5.8"
+ring = "0.17.14"
+thiserror = "2.0"
+# Enforce the patched TLS provider floor for registry acquisition.
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+toml_edit = "0.25"
+miniz_oxide = { version = "0.9.1", default-features = false, features = ["with-alloc"] }
+
+[build-dependencies]
+miniz_oxide = { version = "0.9.1", default-features = false, features = ["with-alloc"] }
+
+[target.'cfg(unix)'.dependencies]
+signal-hook = "0.3"
+rustix = { version = "1.1", features = ["process", "termios"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+nix = { version = "0.31", features = ["fs", "signal", "process"] }
+libproc = "0.14.11"
+
+[dev-dependencies]
+canonic-registry = { version = "0.2.0", path = "../registry", features = ["test-support"] }
+assert_cmd = "2.2"
+assert_fs = "1.1"
+insta = { version = "1.49", features = ["filters"] }
+predicates = "3.1"
+proptest = { version = "1.11", default-features = false, features = ["std"] }
+sha2 = "0.11"
+regex = "1.13.1"
+
+[lints.rust]
+unsafe_code = "forbid"
+unreachable_pub = "warn"
+
+[lints.rustdoc]
+# Doc comments must link to items that exist.
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+mod_module_files = "warn"

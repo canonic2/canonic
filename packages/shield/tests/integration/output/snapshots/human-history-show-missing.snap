@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield history show missing
+--- stderr
+Error: History entry is not available: missing
+This entry is not retained in the selected project's history.
+Run shield history list to select an available entry.
+--- exit 1

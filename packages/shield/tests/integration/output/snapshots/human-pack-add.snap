@@ -1,0 +1,16 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack add acme/parent
+--- terminal
+Resolving acme/parent and its dependencies…
+Choose a profile → Recommended
+Change policy
+  + acme/parent 0.1.0 · recommended profile · no rules · tracking · digest [SHORT-DIGEST]
+  + acme/test 0.1.0 · recommended profile · 1 rule · dependency · digest [SHORT-DIGEST]
+  Permissions: no command decision changes
+Review and confirm → Apply change
+Added acme/parent 0.1.0 · recommended profile
+Added acme/test 0.1.0 · recommended profile · dependency
+--- exit 0

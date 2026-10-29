@@ -1,0 +1,14 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack remove acme/parent
+--- terminal
+Change policy
+  - acme/parent 0.1.0
+  - acme/test 0.1.0
+  Permissions: broader, for example acme write: deny → ask
+Review and confirm → Apply change
+Removed acme/parent 0.1.0
+Removed acme/test 0.1.0
+--- exit 0

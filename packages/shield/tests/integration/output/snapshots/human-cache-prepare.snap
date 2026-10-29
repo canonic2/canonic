@@ -1,0 +1,9 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield cache prepare
+--- terminal
+Preparing the committed policy's compiled cache…
+Compiled policy is ready in [PROJECT]/.shield/cache.
+--- exit 0

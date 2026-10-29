@@ -1,0 +1,42 @@
+---
+source: tests/integration/output.rs
+expression: "String::from_utf8_lossy(&output.get_output().stdout)"
+---
+List, add, remove or choose registry sources
+
+Usage: shield registry [OPTIONS] <COMMAND>
+
+Commands:
+  list     List effective registry sources
+  add      Enroll a local directory or signed HTTPS registry, after confirmation
+  remove   Remove a registration, preserving installed policy, after confirmation
+  default  Choose the source for future unqualified search and add, after confirmation
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --project <PROJECT>
+          Select a project; otherwise discover the nearest enrolled ancestor
+
+      --scope <SCOPE>
+          Affect this project's sources or the user's sources for every project
+
+          Possible values:
+          - project: This project
+          - user:    Every project of the current user
+
+          [default: project]
+
+      --json
+          Print one JSON result; commands that change policy refuse JSON mode
+
+      --debug-log-dir <DEBUG_LOG_DIR>
+          Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+
+      --no-debug-log
+          Disable diagnostic logging, including automatic debug-build logs
+
+      --cache-dir <CACHE_DIR>
+          Compiled cache location for init, MCP setup or cache preparation
+
+  -h, --help
+          Print help (see a summary with '-h')

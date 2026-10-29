@@ -1,0 +1,69 @@
+# Dependency checks for `cargo deny check`. See docs/development.md.
+
+[graph]
+all-features = true
+
+[advisories]
+# Unmaintained crates fail only when Shield depends on them directly.
+unmaintained = "workspace"
+
+[licenses]
+# Shield's own license is proprietary; the unpublished package is not checked.
+private = { ignore = true }
+allow = ["Apache-2.0", "MIT", "Unicode-3.0"]
+confidence-threshold = 0.9
+
+# Ratatui's layout/cache hash tables use foldhash's permissive Zlib license,
+# reviewed with the same scoped exception as Canonic TUI.
+[[licenses.exceptions]]
+name = "foldhash"
+allow = ["Zlib"]
+
+# BLAKE3 uses arrayref's BSD-2-Clause array helpers; reviewed against its license.
+[[licenses.exceptions]]
+name = "arrayref"
+allow = ["BSD-2-Clause"]
+
+# YAML decoding uses encoding_rs's BSD-licensed encoding tables.
+[[licenses.exceptions]]
+name = "encoding_rs"
+allow = ["BSD-3-Clause"]
+
+# libproc generates Darwin bindings with these permissively licensed build tools.
+[[licenses.exceptions]]
+name = "bindgen"
+allow = ["BSD-3-Clause"]
+
+[[licenses.exceptions]]
+name = "libloading"
+allow = ["ISC"]
+
+# HTTPS uses Rustls/ring and bundled public trust-anchor data.
+[[licenses.exceptions]]
+name = "ring"
+allow = ["ISC"]
+
+[[licenses.exceptions]]
+name = "rustls-webpki"
+allow = ["ISC"]
+
+[[licenses.exceptions]]
+name = "subtle"
+allow = ["BSD-3-Clause"]
+
+[[licenses.exceptions]]
+name = "untrusted"
+allow = ["ISC"]
+
+[[licenses.exceptions]]
+name = "webpki-roots"
+allow = ["CDLA-Permissive-2.0"]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

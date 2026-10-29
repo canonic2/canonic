@@ -1,0 +1,36 @@
+---
+source: tests/integration/output.rs
+expression: "String::from_utf8_lossy(&output.get_output().stdout)"
+---
+Run a supported native command against active policy
+
+Usage: shield __internal run [OPTIONS] -- <ARGV>...
+
+Arguments:
+  <ARGV>...  Exact absolute executable and literal arguments; no PATH or interpreter lookup
+
+Options:
+      --project <PROJECT>
+          Owning enrolled project directory [default: .]
+      --agent <AGENT>
+          Optional agent label, recorded as caller attribution
+      --json
+          Print one JSON result; commands that change policy refuse JSON mode
+      --debug-log-dir <DEBUG_LOG_DIR>
+          Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+      --session-id <SESSION_ID>
+          Optional host session ID supplied by the launcher
+      --no-debug-log
+          Disable diagnostic logging, including automatic debug-build logs
+      --tool-use-id <TOOL_USE_ID>
+          Optional host tool-call ID
+      --cache-dir <CACHE_DIR>
+          Compiled cache location for init, MCP setup or cache preparation
+      --cwd <CWD>
+          Canonical cwd inside the enrolled project; defaults to its root
+      --timeout-ms <TIMEOUT_MS>
+          Deadline including preparation; cleanup has a separate short grace period [default: 5000]
+      --approval-request <APPROVAL_REQUEST>
+          Stored native request selector; only an existing exact operator grant can allow Ask
+  -h, --help
+          Print help

@@ -1,0 +1,46 @@
+---
+source: tests/integration/output.rs
+expression: "String::from_utf8_lossy(&output.get_output().stdout)"
+---
+Install, repair or with --remove uninstall project hooks and Shield MCP, after confirmation
+
+Usage: shield mcp setup [OPTIONS]
+
+Options:
+      --agent <AGENTS>
+          Agent to set up or remove; repeat for several. Omission asks
+
+          [possible values: claude, codex]
+
+      --project <PROJECT>
+          Select a project; otherwise discover the nearest enrolled ancestor
+
+      --json
+          Print one JSON result; commands that change policy refuse JSON mode
+
+      --scope <SCOPE>
+          Shield integrations are project scoped; user scope is refused
+
+          Possible values:
+          - project: This project
+          - user:    Every project of the current user
+
+          [default: project]
+
+      --debug-log-dir <DEBUG_LOG_DIR>
+          Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+
+      --remove
+          Remove the selected agents' hooks, MCP server and permission settings
+
+      --dry-run
+          Show the review without writing anything
+
+      --no-debug-log
+          Disable diagnostic logging, including automatic debug-build logs
+
+      --cache-dir <CACHE_DIR>
+          Compiled cache location for init, MCP setup or cache preparation
+
+  -h, --help
+          Print help (see a summary with '-h')

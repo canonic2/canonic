@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield registry default acme
+--- terminal
+Make acme the default registry for this project (was main)
+Review and confirm → Apply change
+acme is the default registry for this project.
+--- exit 0

@@ -1,0 +1,11 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield request approve [ENTRY]
+--- terminal
+Approve once: run /bin/echo Acme in [PROJECT]
+  Requested by an unidentified agent via run. One use within five minutes, for exactly this request.
+Review and confirm → Apply change
+Approved [ENTRY] once; it can run until [TIME].
+--- exit 0

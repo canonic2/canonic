@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield registry add acme [REGISTRY]
+--- stderr
+Error: This registry alias is already registered
+Each alias names one registry in its scope.
+Choose another alias, or remove the existing one with shield registry remove.
+--- exit 1

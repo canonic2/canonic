@@ -1,0 +1,20 @@
+---
+source: tests/integration/output.rs
+expression: "String::from_utf8_lossy(&output.get_output().stdout)"
+---
+Show policy or review pending changes and history settings
+
+Usage: shield policy [OPTIONS] <COMMAND>
+
+Commands:
+  show    Show active policy, pending proposals and history settings
+  review  Review pending proposals, edited files, projection repair or history settings in a terminal
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --project <PROJECT>              Select a project; otherwise discover the nearest enrolled ancestor
+      --json                           Print one JSON result; commands that change policy refuse JSON mode
+      --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+      --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
+      --cache-dir <CACHE_DIR>          Compiled cache location for init, MCP setup or cache preparation
+  -h, --help                           Print help

@@ -1,0 +1,20 @@
+{
+  "name": "@canonic/shield-mcp-interop-tests",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 *.test.mjs",
+    "benchmark": "node benchmark/run.mjs",
+    "benchmark:score": "node benchmark/score.mjs",
+    "benchmark:record": "node benchmark/score.mjs --record",
+    "benchmark:projection": "node benchmark/projection.mjs",
+    "benchmark:test": "node --test 'benchmark/**/*.test.mjs'"
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.292",
+    "@modelcontextprotocol/sdk": "1.32.1"
+  }
+}

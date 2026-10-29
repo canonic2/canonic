@@ -1,0 +1,9 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack search missing
+--- terminal
+Checking registry metadata…
+No packs match in registry acme.
+--- exit 0

@@ -1,0 +1,12 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack info acme/missing
+--- terminal
+Checking registry metadata…
+--- stderr
+Error: Permission pack was not found: acme/missing
+No available release matches this reference in the selected source.
+Use shield pack search to find the publisher/name and source, then retry.
+--- exit 1

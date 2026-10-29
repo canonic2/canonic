@@ -1,0 +1,8 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield request list
+--- terminal
+No requests are waiting and no approvals are unused.
+--- exit 0

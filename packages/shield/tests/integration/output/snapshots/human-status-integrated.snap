@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield status
+--- terminal
+Shield is active in [PROJECT] for Claude Code.
+Policy: no packs · revision [SHORT-DIGEST]
+History: on, keeping up to 1000 entries
+--- exit 0

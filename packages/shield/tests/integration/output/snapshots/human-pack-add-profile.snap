@@ -1,0 +1,15 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack add acme/parent --profile strict
+--- terminal
+Resolving acme/parent and its dependencies…
+Change policy
+  ~ acme/parent profile recommended → strict
+  ~ acme/test profile recommended → strict
+  Permissions: stricter, for example acme write: ask → deny
+Review and confirm → Apply change
+Changed acme/parent to the strict profile (was recommended)
+Changed acme/test to the strict profile (was recommended)
+--- exit 0

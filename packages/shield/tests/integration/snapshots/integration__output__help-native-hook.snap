@@ -1,0 +1,17 @@
+---
+source: tests/integration/output.rs
+expression: "String::from_utf8_lossy(&output.get_output().stdout)"
+---
+Translate a registered native host event into the core protocol
+
+Usage: shield __internal native-hook [OPTIONS] --project <PROJECT> --agent <AGENT> --event <EVENT>
+
+Options:
+      --project <PROJECT>              Project fixed by confirmed installation
+      --agent <AGENT>                  Agent protocol fixed by confirmed installation [possible values: claude, codex]
+      --json                           Print one JSON result; commands that change policy refuse JSON mode
+      --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+      --event <EVENT>                  Event fixed by confirmed installation, including input-read failures
+      --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
+      --cache-dir <CACHE_DIR>          Compiled cache location for init, MCP setup or cache preparation
+  -h, --help                           Print help

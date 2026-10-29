@@ -1,0 +1,24 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield mcp setup --agent claude
+--- terminal
+Tool permissions → 20 of 21 marked
+Agent integrations
+  Claude Code added · hooks PostToolUse, PostToolUseFailure, PreToolUse · MCP server shield
+  Hooks and MCP run [SHIELD] for this project.
+  20 of 21 Shield MCP tools run without asking; ask each time: policy_apply.
+  Policy activation still requires your confirmation.
+  Agents can read and write system temporary folders. Session files use each agent's supported mappings.
+
+  Files
+    .mcp.json                    created    Claude Code MCP server
+    .claude/settings.local.json  created    Claude Code hooks
+  Other settings in these files are preserved.
+
+After confirming, restart each agent, trust this project, review its hooks and approve the MCP server.
+
+Review and confirm → Apply change
+Connected Claude Code. Restart it, trust this project and approve Shield's hooks and MCP server.
+--- exit 0

@@ -1,0 +1,8 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield history list
+--- terminal
+No matching request history.
+--- exit 0

@@ -1,0 +1,9 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack list
+--- terminal
+acme/parent 0.1.0 · recommended
+acme/test 0.1.0 · recommended · dependency of acme/parent
+--- exit 0

@@ -1,0 +1,13 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack info acme/test
+--- terminal
+Checking registry metadata…
+acme/test 0.1.0 · registry acme · 1 rule
+Acme integration fixture
+Versions 0.1.0 · requires Shield [SHIELD-VERSION]
+  mutation  acme write · loose allow, recommended ask, strict deny
+Add it with shield pack add acme/test.
+--- exit 0

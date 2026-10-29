@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack show acme/parent
+--- terminal
+acme/parent 0.1.0 · recommended · from acme
+Acme integration fixture
+no rules · digest [SHORT-DIGEST] · depends on acme/test ^0.1
+--- exit 0

@@ -1,0 +1,11 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack search acme/
+--- terminal
+Checking registry metadata…
+acme/parent  0.1.0, 0.2.0
+acme/test    0.1.0
+Registry acme. Inspect one with shield pack info <pack>.
+--- exit 0

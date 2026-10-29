@@ -1,0 +1,11 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield history show [ENTRY]
+--- terminal
+/bin/echo Acme · ask → approved
+Requested [TIME] by an unidentified agent via run in [PROJECT]
+Rule echo: Acme echo needs approval
+Outcome: completed, exit 0
+--- exit 0

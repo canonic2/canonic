@@ -1,0 +1,7 @@
+# Test processes, and every Git fixture command they start, read
+# tests/git/config as Git's global configuration instead of the developer's,
+# which turns off Git's automatic background maintenance in fixture
+# repositories. Shield's own Git launches clear the environment and set these
+# settings on their command line.
+[env]
+GIT_CONFIG_GLOBAL = { value = "tests/git/config", relative = true, force = true }

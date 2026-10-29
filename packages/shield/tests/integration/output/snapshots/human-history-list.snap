@@ -1,0 +1,9 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield history list
+--- terminal
+[ENTRY]  [TIME]  ask → approved  /bin/echo Acme
+Show one with shield history show <entry>.
+--- exit 0

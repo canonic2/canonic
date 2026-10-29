@@ -1,0 +1,19 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield rule add
+--- terminal
+Input → received
+Rule matching → Exact command arguments
+Input → received
+Input → received
+Rule decision → Allow
+Input → received
+Input → received
+Change policy
+  + rule status: allow git status
+  Permissions: not fully compared; check the changes above
+Review and confirm → Apply change
+Added rule status
+--- exit 0
