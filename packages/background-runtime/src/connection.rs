@@ -1,13 +1,10 @@
 //! Bounded product-owned connections transferred only after a successful reply.
 
-use crate::{Result, core::Hold};
+use crate::{Result, core::Hold, net::Stream};
 use serde_json::Value;
-use std::{
-    os::unix::net::UnixStream,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 
 /// A successful handshake and the product's ownership receiver.
@@ -34,12 +31,12 @@ impl Handoff {
 /// Product code owns framing, reads, writes, EOF handling and drain cancellation.
 /// Keep the guard until resource cleanup completes, including after socket EOF.
 pub struct Connection {
-    stream: UnixStream,
+    stream: Stream,
     guard: Guard,
 }
 
 impl Connection {
-    pub(crate) fn new(stream: UnixStream, hold: Hold, slot: Slot) -> Self {
+    pub(crate) fn new(stream: Stream, hold: Hold, slot: Slot) -> Self {
         Self {
             stream,
             guard: Guard {
@@ -51,14 +48,14 @@ impl Connection {
 
     /// Borrow the blocking stream. Handshake read/write timeouts are cleared.
     #[must_use]
-    pub const fn stream(&self) -> &UnixStream {
+    pub const fn stream(&self) -> &Stream {
         &self.stream
     }
 
     /// Transfer into an alternative runtime, retaining the guard through cleanup.
     /// All cloned descriptors and product resources must settle before the guard.
     #[must_use]
-    pub fn into_parts(self) -> (UnixStream, Guard) {
+    pub fn into_parts(self) -> (Stream, Guard) {
         (self.stream, self.guard)
     }
 }
@@ -99,7 +96,7 @@ impl Drop for Slot {
     }
 }
 
-pub(crate) fn clear_deadlines(stream: &UnixStream) -> Result<()> {
+pub(crate) fn clear_deadlines(stream: &Stream) -> Result<()> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(None)?;
     stream.set_write_timeout(None)?;

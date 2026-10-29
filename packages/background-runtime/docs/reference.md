@@ -3,7 +3,8 @@
 | Module | Use |
 | --- | --- |
 | `core` | `Admission`, RAII `Permit` and `Hold`, `Snapshot`, `State`, `Event`, `ExitPolicy` |
-| `endpoint` | Unix `Root`, `Home`, `Lease`, borrowing `Endpoint`, peer checks and non-launching connect |
+| `endpoint` | `Root`, `Home`, `Lease`, borrowing `Endpoint`, peer checks and non-launching connect |
+| `net` | Platform `Stream` and `Listener` re-exports for local socket I/O |
 | `frame` | Four-byte big-endian length prefix, bytes, JSON read/write convenience |
 | `protocol` | `Identity`, `Control`, `Request`, `Reply`, `Code`, independent `CONTROL_VERSION = 1` |
 | `version` | Bounded semantic `Version` parsing and release precedence |
@@ -17,6 +18,28 @@
 All public fallible functions document their errors in rustdoc. `Error` is a
 typed `thiserror` enum. The package exposes no CLI and writes no logs or product
 records. The product opens its log and gives the resulting file to `Spawn`.
+
+## Local streams and endpoints
+
+Use `net::Stream` and `net::Listener` when naming the socket types returned by
+the library. The `net` module is available on Unix and Windows builds; these
+are re-exports of the platform types, with their native methods:
+
+| Platform | `net::Stream` | `net::Listener` |
+| --- | --- | --- |
+| Unix | `std::os::unix::net::UnixStream` | `std::os::unix::net::UnixListener` |
+| Windows | `uds_windows::UnixStream` | `uds_windows::UnixListener` |
+
+The Windows type re-exports do not enable manager connections: Windows root
+constructors and peer checks return `Error::Unsupported`. The manager runtime
+is supported on macOS and Linux.
+
+For a custom driver, `Lease::bind(control)` returns an `Endpoint` borrowing the
+lease. `Endpoint::listener() -> &net::Listener` borrows its bound listener.
+`Endpoint::path() -> &Path` returns the socket pathname without filesystem I/O:
+`manager.sock` for the ordinary lane or `control.sock` for the control lane,
+under the selected root. Reading that path does not establish liveness or
+transfer cleanup authority; retain the endpoint and lease guards.
 
 ## Admission and lifetime
 
@@ -141,7 +164,7 @@ For an automatic release comparison and complete replacement wait, use
 
 Use `client::open(&root, &request, &options)` for a duplex stream or a persistent
 client-presence channel. It never starts a manager. The handshake requires
-`connection-handoff-v1` and returns `(Reply, UnixStream)` after consuming exactly
+`connection-handoff-v1` and returns `(Reply, net::Stream)` after consuming exactly
 the admission and result frames. The stream is blocking with transport timeouts
 cleared; set application deadlines or transfer it to your runtime. A product
 error or oversized reply returns `Error::HandoffRefused` containing the reply.
@@ -156,7 +179,7 @@ clean them up without invoking the receiver. Never write product stream bytes
 through `Context::stream` during the handshake.
 
 Borrow `Connection::stream()` for I/O. Use `into_parts()` to obtain a
-`UnixStream` and `connection::Guard` for an async adapter. Retain that guard
+`net::Stream` and `connection::Guard` for an async adapter. Retain that guard
 through all socket copies and resource cleanup, including after EOF. Dropping
 it releases the lifetime hold and connection slot. The product owns subsequent
 framing, cancellation and EOF semantics.
@@ -195,14 +218,17 @@ without permitting an extra send. Reconciliation and launch callbacks own their
 execution deadlines. The library never infers mutation replay safety from a
 dead process, a missing acknowledgement or an empty journal lookup alone.
 
-`owner::Connection::new(stream, hold)` attaches a resource hold to a dedicated
-silent same-user connection. The product must arrange for the owning process
-to retain the other endpoint, bound these channels and drive `wait(timeout)`
-on its runtime. Do not share the read side with request framing. A timeout
+On macOS and Linux, `owner::Connection::new(stream, hold)` attaches a resource
+hold to a dedicated silent same-user connection. The product must arrange for
+the owning process to retain the other endpoint, bound these channels and drive
+`wait(timeout)` on its runtime. Do not share the read side with request framing. A timeout
 returns false; EOF, including after owner death, returns true. Unexpected data
 or a socket failure returns an error. The hold remains live after EOF: clean up
 the resource before dropping the connection, and retain it if cleanup is
 uncertain. EOF requires every copy of the peer endpoint to close.
+
+Windows owner-channel construction and `wait` return `Unsupported`. A wait
+refusal does not report owner death or release a retained resource hold.
 
 ## Explicit force-stop
 
@@ -253,6 +279,14 @@ the join handle when the caller needs its exit result. An OS registration owns
 the manager when `Service` activates it; registration/removal stay with the
 product. Linux activation may need a custom `Launcher` that explicitly supplies
 the user's session-bus environment; none is inherited automatically.
+
+`Service` has `Launchd(String)`, `Systemd(String)` and `ScheduledTask(String)`
+variants. Activating a variant on a different platform returns `Unsupported`.
+
+Windows `Service::ScheduledTask` activates an existing task using
+`SystemRoot/System32/schtasks.exe`. It requires an absolute `SystemRoot`;
+missing, empty or relative values return `Options`. Task names beginning with
+`-` or `/` also return `Options`.
 
 `Absent`, `Starting`, `Draining`, `Capacity` and `Incompatible` are distinct.
 `Starting` means readiness is unconfirmed or an authorized startup wait expired.

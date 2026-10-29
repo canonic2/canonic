@@ -47,9 +47,35 @@ impl Spawn {
             .stdin(Stdio::null())
             .stdout(self.log.try_clone()?)
             .stderr(self.log.try_clone()?);
-        detach(&mut command);
-        let mut child = command.spawn()?;
+        let mut child = spawn_detached(&mut command)?;
         Ok(std::thread::spawn(move || child.wait()))
+    }
+}
+
+#[cfg(not(windows))]
+fn spawn_detached(command: &mut Command) -> std::io::Result<std::process::Child> {
+    detach(command);
+    command.spawn()
+}
+
+/// A detached process with no console, in its own process group, outside the
+/// client's job when the job allows breaking away; closing the client's
+/// console or job then does not end it.
+#[cfg(windows)]
+fn spawn_detached(command: &mut Command) -> std::io::Result<std::process::Child> {
+    use std::os::windows::process::CommandExt;
+    const DETACHED_PROCESS: u32 = 0x0000_0008;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+    const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
+    command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB);
+    match command.spawn() {
+        Ok(child) => Ok(child),
+        // A job that forbids breakaway refuses the flag; start inside it instead.
+        Err(error) if error.raw_os_error() == Some(5) => {
+            command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+            command.spawn()
+        }
+        Err(error) => Err(error),
     }
 }
 impl Launcher for Spawn {
@@ -76,7 +102,7 @@ fn detach(command: &mut Command) {
         });
     }
 }
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn detach(_: &mut Command) {}
 
 /// Activate an existing service registration. Registration and removal are product work.
@@ -85,6 +111,8 @@ pub enum Service {
     Launchd(String),
     /// A systemd user unit name, e.g. `acme-manager.service`.
     Systemd(String),
+    /// A Windows Task Scheduler task name, e.g. `Acme\Manager`.
+    ScheduledTask(String),
 }
 impl Launcher for Service {
     fn start(&self) -> Result<()> {
@@ -102,12 +130,23 @@ impl Launcher for Service {
                 c.args(["--user", "start", "--", unit]);
                 c
             }
+            Self::ScheduledTask(task) if cfg!(windows) => {
+                scheduled_task_command(task, std::env::var_os("SystemRoot"))?
+            }
             _ => return Err(Error::Unsupported),
         };
         // Activation doesn't execute the manager as a client child. The registration
         // supplies its environment; no caller variables are forwarded to the service.
+        command.env_clear();
+        if cfg!(windows) {
+            // schtasks itself needs the system directories.
+            for name in ["SystemRoot", "windir"] {
+                if let Some(value) = std::env::var_os(name) {
+                    command.env(name, value);
+                }
+            }
+        }
         let status = command
-            .env_clear()
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -118,6 +157,63 @@ impl Launcher for Service {
             Err(Error::Io(std::io::Error::other(
                 "service activation failed",
             )))
+        }
+    }
+}
+
+/// Build without launching so validation never activates a real registration.
+fn scheduled_task_command(task: &str, system_root: Option<OsString>) -> Result<Command> {
+    if task.starts_with(['-', '/']) {
+        return Err(Error::Options);
+    }
+    let root = PathBuf::from(system_root.ok_or(Error::Options)?);
+    if !root.is_absolute() {
+        return Err(Error::Options);
+    }
+    let mut command = Command::new(root.join("System32").join("schtasks.exe"));
+    command.args(["/Run", "/TN", task]);
+    Ok(command)
+}
+
+#[cfg(test)]
+mod tests {
+    //! Validate scheduler executable selection and arguments without activating tasks.
+
+    use super::*;
+
+    #[test]
+    fn scheduled_task_uses_an_absolute_system_executable_and_one_task_argument() {
+        let root = std::env::current_dir().unwrap();
+        let task = r"\Acme\Manager with spaces";
+        let command = scheduled_task_command(task, Some(root.clone().into_os_string())).unwrap();
+        assert_eq!(
+            command.get_program(),
+            root.join("System32").join("schtasks.exe")
+        );
+        assert_eq!(
+            command.get_args().map(OsString::from).collect::<Vec<_>>(),
+            ["/Run", "/TN", task].map(OsString::from)
+        );
+    }
+
+    #[test]
+    fn scheduled_task_refuses_missing_empty_or_relative_system_root() {
+        for root in [None, Some(OsString::new()), Some("Windows".into())] {
+            assert!(matches!(
+                scheduled_task_command(r"Acme\Manager", root),
+                Err(Error::Options)
+            ));
+        }
+    }
+
+    #[test]
+    fn scheduled_task_refuses_option_like_task_names() {
+        let root = std::env::current_dir().unwrap().into_os_string();
+        for task in ["-Run", "/Run"] {
+            assert!(matches!(
+                scheduled_task_command(task, Some(root.clone())),
+                Err(Error::Options)
+            ));
         }
     }
 }

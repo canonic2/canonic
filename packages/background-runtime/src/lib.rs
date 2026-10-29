@@ -4,24 +4,26 @@
 //! One-shot calls never replay; opt-in recovery requires product authority.
 #![doc = include_str!("../docs/getting-started.md")]
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub mod client;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub mod connection;
 pub mod core;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub mod endpoint;
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 #[path = "unsupported.rs"]
 pub mod endpoint;
 pub mod frame;
 pub mod launch;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
+pub mod net;
+#[cfg(any(unix, windows))]
 pub mod owner;
 pub mod protocol;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub mod recovery;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub mod server;
 pub mod version;
 #[cfg(unix)]
@@ -106,7 +108,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Verify availability before selecting platform-specific adapters.
 ///
 /// # Errors
-/// Returns [`Error::Unsupported`] outside implemented Unix platforms.
+/// Returns [`Error::Unsupported`] outside macOS and Linux. Windows lacks
+/// enforced private-root ownership and access-list validation.
 pub const fn supported() -> Result<()> {
     if cfg!(any(target_os = "macos", target_os = "linux")) {
         Ok(())

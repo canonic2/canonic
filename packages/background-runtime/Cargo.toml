@@ -17,6 +17,9 @@ semver = "1.0"
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["user", "socket", "process", "fs", "poll", "signal"] }
 
+[target.'cfg(windows)'.dependencies]
+uds_windows = "1.2"
+
 [dev-dependencies]
 tempfile = "3.0"
 

@@ -5,13 +5,11 @@ use crate::{
     endpoint::{self, Root},
     frame,
     launch::Launcher,
+    net::Stream,
     protocol::{Code, Control, Identity, Reply, Request},
     version::Version,
 };
-use std::{
-    os::unix::net::UnixStream,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 /// Readiness and per-frame deadlines; polling uses capped exponential backoff.
 pub struct Options {
@@ -344,7 +342,7 @@ pub fn call(root: &Root, request: &Request, options: &Options) -> Result<Reply> 
 /// # Errors
 /// Returns connection, capability, capacity and transport errors, `OutcomeUnknown`
 /// on an ambiguous handshake, or `HandoffRefused` with the manager's error reply.
-pub fn open(root: &Root, request: &Request, options: &Options) -> Result<(Reply, UnixStream)> {
+pub fn open(root: &Root, request: &Request, options: &Options) -> Result<(Reply, Stream)> {
     let mut request = request.clone();
     if !request
         .requires
@@ -392,7 +390,7 @@ pub(crate) fn call_until(
 }
 
 fn exchange(
-    stream: &mut UnixStream,
+    stream: &mut Stream,
     request: &impl serde::Serialize,
     id: &str,
     options: &Options,
@@ -411,7 +409,7 @@ fn exchange(
         &bytes,
         options.frame_limit,
     );
-    let read = |stream: &mut UnixStream| -> Result<Reply> {
+    let read = |stream: &mut Stream| -> Result<Reply> {
         let mut input = FrameDeadline {
             stream,
             until: frame_until(options.io, deadline),
@@ -446,8 +444,21 @@ fn frame_until(io: Duration, deadline: Option<Instant>) -> Instant {
 }
 
 struct FrameDeadline<'a> {
-    stream: &'a UnixStream,
+    stream: &'a Stream,
     until: Instant,
+}
+
+/// Darwin can reject a timeout change after the peer exits.
+fn darwin_invalid_timeout(error: &std::io::Error) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        error.raw_os_error() == Some(nix::errno::Errno::EINVAL as i32)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = error;
+        false
+    }
 }
 impl std::io::Read for FrameDeadline<'_> {
     fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
@@ -457,10 +468,7 @@ impl std::io::Read for FrameDeadline<'_> {
         }
         match self.stream.set_read_timeout(Some(remaining)) {
             Ok(()) => {}
-            Err(error)
-                if cfg!(target_os = "macos")
-                    && error.raw_os_error() == Some(nix::errno::Errno::EINVAL as i32) =>
-            {
+            Err(error) if darwin_invalid_timeout(&error) => {
                 // Darwin can reject timeout changes after peer exit while a
                 // complete reply is buffered. Nonblocking reads preserve that
                 // reply without letting an incomplete frame exceed its deadline.
@@ -504,7 +512,7 @@ mod tests {
 
     #[test]
     fn frame_deadline_preserves_buffered_reply_after_peer_exit() {
-        let (stream, mut peer) = UnixStream::pair().unwrap();
+        let (stream, mut peer) = Stream::pair().unwrap();
         frame::write_json(&mut peer, &"acme", frame::DEFAULT_LIMIT).unwrap();
         drop(peer);
         let mut input = FrameDeadline {

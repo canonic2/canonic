@@ -74,6 +74,7 @@ does not replace acceptance on a different platform or in a consuming product.
 | Overall readiness bounds silent endpoints and the combined admission/identity exchange | `transport::readiness_deadline_bounds_a_silent_endpoint`, `transport::readiness_deadline_spans_admission_and_identity_frames` | Library |
 | Payload-free bounded lifecycle evidence | `lifecycle::bounded_events_are_payload_free_and_consumed` | Library; product logging/persistence |
 | Login-service activation can replace direct spawn | `processes::service_launch_path_is_selected_without_spawning_the_binary` checks the interface boundary only | Product registration; live activation gap |
+| Scheduled-task activation uses an absolute system executable and refuses invalid roots or option-like task names | `launch::tests::scheduled_task_uses_an_absolute_system_executable_and_one_task_argument`, `launch::tests::scheduled_task_refuses_missing_empty_or_relative_system_root`, `launch::tests::scheduled_task_refuses_option_like_task_names` inspect command construction without spawning | Library construction; live Windows activation unverified |
 | Durable mutation deduplication and ID/content conflict | Keep application tests using its journal or operation store | Product |
 | Successor reloads durable state under its lease, validates stored format and re-establishes resources before readiness | Keep application update/recovery tests; generic process fixtures establish fresh identity and lease exclusion only | Product |
 | Updated executable and registered service agree on the release being activated | Stale-launcher fixture establishes bounded refusal, not installer correctness | Product |
@@ -86,8 +87,10 @@ does not replace acceptance on a different platform or in a consuming product.
 | Long-lived owner EOF policy and client/resource identity | Keep application owner-channel tests; use `client::open`, `Handler::open` and the transferred connection guard | Product |
 | Blocker pagination, exact recovery authority and resource cleanup | Keep application recovery and blocker tests | Product |
 | Device awake timers, actor queues, UI or gateway behavior | Keep application-specific tests | Product |
-| Linux execution | Implemented cfg paths; host acceptance unverified | Platform gap |
-| Windows named pipe and LockFileEx | Typed unsupported platform boundary; adapters unimplemented | Platform gap |
+| Linux execution | The integration fixtures also run on a Linux development VM; systemd activation is not exercised | Library; platform service gap |
+| Windows private-root boundary | `endpoint::windows_tests::windows_roots_refuse_before_accessing_paths_or_account_environment` checks typed refusal for both root constructors, availability and path validation; Windows fixture execution is unverified | Platform gap; owner and access-list validation required before enabling runtime use |
+| Windows owner monitoring refuses without reporting death or releasing a hold | `owner::tests::unsupported_wait_never_reports_death_or_releases_the_hold` checks repeated refusal before and after peer close, with hold retention until connection drop | Windows fixture execution unverified; repeatable bounded EOF monitoring required before enabling waits |
+| Blocking accept threads respect lane capacity without delaying controls behind ordinary traffic | `server::windows::tests::unread_accepts_are_bounded_and_controls_progress_while_driver_is_paused` exercises direct pool enqueue, unread-client saturation, capacity refusals and control replies with the lifetime driver paused | Library strategy on Unix sockets; Windows host behavior unverified |
 
 No real login registrations or second-user accounts are altered by these tests.
 Resource and protocol behavior owned by products cannot be proved by a generic
@@ -116,7 +119,7 @@ failure behavior. In particular, acceptance must distinguish:
 | Oversized one-shot product response | Handoff response overflow is covered above; the one-shot handler fixture can return a large value, but no test requests it | Bounded one-shot final `frame_too_large` error with matching ID and incarnation. |
 | Invalid options and callback failure paths | Validation and panic containment exist in `server` | Invalid-option boundaries, callback panic isolation and cleanup after driver failure. |
 | Actual foreign-user boundary | Shared UID comparison and real same-user sockets only | Another user's connection and foreign-owned paths, without modifying unrelated resources. |
-| Registered-service activation and platform adapters | [Platforms](platforms.md#acceptance-boundaries) | Linux host execution, real login-service activation and Windows adapters/acceptance. |
+| Registered-service activation and platform adapters | [Platforms](platforms.md#acceptance-boundaries) | Real login-service activation and Windows host acceptance. |
 
 These rows identify missing evidence; they are not claims that the
 implementation fails. Durable ID deduplication, owner-channel semantics,

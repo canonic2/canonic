@@ -4,16 +4,14 @@ use crate::{
     Error, Result,
     connection::{self, Connection, Handoff, Slots},
     core::{Admission, ControlRole, ExitPolicy, Permit},
-    endpoint::{self, Endpoint, Lease},
+    endpoint::{self, Lease},
     frame,
+    net::Stream,
     protocol::{self, Code, Control, Identity, Reply, Request},
     version::Version,
-    wakeup::Wakeup,
 };
-use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 use serde_json::{Value, json};
 use std::{
-    os::{fd::AsFd, unix::net::UnixStream},
     sync::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
@@ -22,6 +20,15 @@ use std::{
     thread::JoinHandle,
     time::{Duration, Instant},
 };
+
+#[cfg(unix)]
+mod unix;
+#[cfg(unix)]
+use unix as driver;
+#[cfg(any(windows, test))]
+mod windows;
+#[cfg(windows)]
+use windows as driver;
 
 const ACCEPT_REFUSAL_TIMEOUT: Duration = Duration::from_millis(20);
 
@@ -88,7 +95,7 @@ pub trait Handler: Send + Sync + 'static {
 /// stream to establish a separately bounded owner channel before authorizing work.
 pub struct Context<'a> {
     pub permit: &'a Permit,
-    pub stream: &'a UnixStream,
+    pub stream: &'a Stream,
 }
 
 /// Pool capacities count active plus queued connections, including unread frames.
@@ -136,7 +143,7 @@ struct Shared<H> {
     connections: Arc<Slots>,
 }
 struct Job {
-    stream: UnixStream,
+    stream: Stream,
     permit: Permit,
     until: Instant,
 }
@@ -196,7 +203,7 @@ impl Pool {
         }
     }
 
-    fn enqueue<H: Handler>(&self, shared: &Shared<H>, stream: UnixStream, control: bool) {
+    fn enqueue<H: Handler>(&self, shared: &Shared<H>, stream: Stream, control: bool) {
         if endpoint::check_peer(&stream).is_err() {
             return;
         }
@@ -320,14 +327,10 @@ pub fn serve<H: Handler>(
     });
     let mut work = Pool::new(&shared, false);
     let mut controls = Pool::new(&shared, true);
-    let wakeup = Wakeup::new()?;
-    shared.gate.set_waker(Some(wakeup.waker()));
-    shared.gate.ready();
     let start = Instant::now();
-    let result = drive(
+    let result = driver::run(
         &shared,
         policy,
-        &wakeup,
         [(&control, &controls, true), (&ordinary, &work, false)],
         start,
     );
@@ -344,53 +347,6 @@ pub fn serve<H: Handler>(
     let removed = ordinary.unlink().and(control.unlink());
     shared.gate.set_waker(None);
     result.and(joined).and(removed)
-}
-
-fn drive<H: Handler>(
-    shared: &Shared<H>,
-    policy: &impl ExitPolicy,
-    wakeup: &Wakeup,
-    lanes: [(&Endpoint<'_>, &Pool, bool); 2],
-    start: Instant,
-) -> Result<()> {
-    loop {
-        // Any change racing the following observation leaves a readable signal.
-        wakeup.clear()?;
-        if shared.gate.tick(start.elapsed(), policy) {
-            return Ok(());
-        }
-        let timeout = policy_timeout(shared.gate.next_check(start.elapsed(), policy));
-        let mut descriptors = [
-            PollFd::new(lanes[0].0.listener().as_fd(), PollFlags::POLLIN),
-            PollFd::new(lanes[1].0.listener().as_fd(), PollFlags::POLLIN),
-            PollFd::new(wakeup.as_fd(), PollFlags::POLLIN),
-        ];
-        match poll(&mut descriptors, timeout) {
-            Ok(_) => {}
-            Err(nix::errno::Errno::EINTR) => continue,
-            Err(error) => return Err(error.into()),
-        }
-        for (endpoint, pool, control) in lanes {
-            // One accept per lane preserves controls and lifetime progress.
-            match endpoint.listener().accept() {
-                Ok((stream, _)) => pool.enqueue(shared, stream, control),
-                Err(error)
-                    if matches!(
-                        error.kind(),
-                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
-                    ) => {}
-                Err(error) => return Err(error.into()),
-            }
-        }
-    }
-}
-
-fn policy_timeout(delay: Option<Duration>) -> PollTimeout {
-    delay.map_or(PollTimeout::NONE, |delay| {
-        // Round up fractional milliseconds so a near deadline cannot busy-poll.
-        let millis = i32::try_from(delay.as_nanos().div_ceil(1_000_000)).unwrap_or(i32::MAX);
-        PollTimeout::try_from(millis).unwrap_or(PollTimeout::MAX)
-    })
 }
 
 fn validate(identity: &Identity, o: &Options) -> Result<()> {
@@ -431,7 +387,7 @@ fn response<H>(
         data,
     }
 }
-fn send<H>(s: &Shared<H>, stream: &mut &UnixStream, reply: &Reply, until: Instant) -> Result<()> {
+fn send<H>(s: &Shared<H>, stream: &mut &Stream, reply: &Reply, until: Instant) -> Result<()> {
     let mut output = Deadline { stream, until };
     match frame::write_json(&mut output, reply, s.options.frame_limit) {
         Err(Error::FrameTooLarge) => {
@@ -447,12 +403,12 @@ fn send<H>(s: &Shared<H>, stream: &mut &UnixStream, reply: &Reply, until: Instan
         other => other,
     }
 }
-fn refuse<H>(s: &Shared<H>, stream: &mut &UnixStream, id: &str, code: Code) -> Result<()> {
+fn refuse<H>(s: &Shared<H>, stream: &mut &Stream, id: &str, code: Code) -> Result<()> {
     refuse_until(s, stream, id, code, Instant::now() + s.options.io_timeout)
 }
 fn refuse_until<H>(
     s: &Shared<H>,
-    stream: &mut &UnixStream,
+    stream: &mut &Stream,
     id: &str,
     code: Code,
     until: Instant,
@@ -754,7 +710,7 @@ fn dispatch_control<H: Handler>(
 }
 
 struct Deadline<'a> {
-    stream: &'a UnixStream,
+    stream: &'a Stream,
     until: Instant,
 }
 impl std::io::Read for Deadline<'_> {
@@ -800,26 +756,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn policy_waits_round_up_and_explicit_waits_have_no_timer() {
-        assert_eq!(policy_timeout(None), PollTimeout::NONE);
-        assert_eq!(
-            policy_timeout(Some(Duration::ZERO)),
-            PollTimeout::from(0_u16)
-        );
-        assert_eq!(
-            policy_timeout(Some(Duration::from_nanos(1))),
-            PollTimeout::from(1_u16)
-        );
-        assert_eq!(
-            policy_timeout(Some(Duration::from_secs(30))),
-            PollTimeout::from(30_000_u16)
-        );
-        assert_eq!(policy_timeout(Some(Duration::MAX)), PollTimeout::MAX);
-    }
-
-    fn backpressured_pair() -> (UnixStream, UnixStream) {
-        let (mut stream, peer) = UnixStream::pair().unwrap();
+    fn backpressured_pair() -> (Stream, Stream) {
+        let (mut stream, peer) = Stream::pair().unwrap();
         stream.set_nonblocking(true).unwrap();
         loop {
             match stream.write(&[0; 4096]) {
