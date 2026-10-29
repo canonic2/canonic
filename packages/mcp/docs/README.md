@@ -14,6 +14,7 @@ Start with the [quick start](getting-started.md).
 - [Ask the user to confirm](guides/confirmation.md) — form confirmation and its continuation.
 - [Publish resources and templates](guides/resources.md) — guides, reports and binary artifacts through validated URIs.
 - [Publish bundled skills](guides/skills.md) — offline workflows, verified manifests, modern request context and legacy resource fallback.
+- [Bundle your guides as documentation tools](guides/documentation.md) — build-time guide bundles and the list, search and read tools.
 - [Drive the session yourself](guides/session.md) — use the protocol core from another runtime.
 
 ## Reference

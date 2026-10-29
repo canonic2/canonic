@@ -1,11 +1,12 @@
 //! Model Context Protocol server building blocks.
 //!
 //! The library has two layers. The protocol core ([`Session`], [`rpc`],
-//! [`tool`], [`resource`], [`skill`], [`modern`], [`schema`], [`json`] and [`control`]) performs no I/O and starts
+//! [`tool`], [`resource`], [`skill`], [`docs`], [`modern`], [`schema`], [`json`] and [`control`]) performs no I/O and starts
 //! no threads, so any runtime can drive it. The [`stdio`] driver runs a
 //! [`stdio::Handler`] over newline-delimited JSON-RPC with bounded lanes,
 //! deadlines, cancellation, progress, host confirmation and disconnection
-//! rules.
+//! rules. The `docs-build` feature adds the only file-reading part: a
+//! build-script helper that bundles a server's guides for [`docs`].
 //!
 //! A product supplies its tool [`Catalog`], server identity and tool
 //! implementations. The library never interprets tool arguments beyond their
@@ -32,6 +33,7 @@
 //! ```
 
 pub mod control;
+pub mod docs;
 pub mod json;
 pub mod modern;
 pub mod resource;

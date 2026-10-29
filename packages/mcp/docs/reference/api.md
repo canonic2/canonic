@@ -4,6 +4,7 @@
 | --- | --- |
 | Publish tools | `Tool`, `Annotations`, `Catalog::new` |
 | Publish bundled workflows | `SkillCatalog`, `SkillDefinition`, `SkillFile`, `SessionOptions::skills` |
+| Publish your guides as documentation tools | `docs::build::embed` (feature `docs-build`), `include_docs!`, `docs::Bundle`, `docs::Documentation`, `docs::DocsError` |
 | Enable modern protocol handling | `ModernOptions`, `SessionOptions::modern`, `Session::try_new` |
 | Inspect per-request metadata and retries | `Context::request_context`, `Session::request_context`, `RequestContext` |
 | Set cache freshness and scope | `CachePolicy`, `CacheScope`, `ModernOptions` |
