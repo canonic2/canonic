@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::configuration::Bundle;
-use canonic_mcp::LATEST_PROTOCOL_VERSION as VERSION;
+use canonic_mcp_kit::LATEST_PROTOCOL_VERSION as VERSION;
 use serde_json::{Value, json};
 use std::{
     io::{self, BufReader, Cursor, Read, Write},

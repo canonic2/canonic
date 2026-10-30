@@ -1,7 +1,7 @@
 //! Builds MCP tool results from complete evidence: a short summary, the
 //! selector text and the evidence as structured content.
 use super::{MAX_OUTPUT, messages};
-use canonic_mcp::{
+use canonic_mcp_kit::{
     Content, Interrupted, ToolResult,
     json::{self, EncodeError},
 };

@@ -1,7 +1,7 @@
 //! Verifies complete tool evidence, selector text, limits and interruption.
 
 use super::*;
-use canonic_mcp::rpc;
+use canonic_mcp_kit::rpc;
 use std::cell::Cell;
 
 fn result(summary: &str, text: &Value, evidence: &Value, failed: bool) -> Value {

@@ -1,6 +1,6 @@
 //! Shield's MCP server for enrolled projects: the tool catalog, connection
 //! identity, review dispatch and host confirmation of policy changes, served by
-//! canonic-mcp's stdio driver.
+//! canonic-mcp-kit's stdio driver.
 
 mod frame_log;
 mod messages;
@@ -8,7 +8,7 @@ mod response;
 #[cfg(test)]
 pub(crate) mod tests;
 
-use canonic_mcp::{
+use canonic_mcp_kit::{
     Annotations, Catalog, CatalogError, Client, Decision, RpcError, ServerInfo, SessionOptions,
     Tool, ToolCall, ToolResult, rpc,
     schema::ArgumentError,

@@ -74,7 +74,7 @@ use pure Rust code; no host compression tools or shared libraries are needed.
 
 The `canonic-registry` dependency handles registry identity, authentication,
 acquisition, checkpoints, resolution, and UTC timestamps. Shield owns pack
-declarations and the review that activates acquired artifacts. `canonic-mcp`
+declarations and the review that activates acquired artifacts. `canonic-mcp-kit`
 handles framing, lifecycle, validation, cancellation, deadlines, and confirmation
 requests; Shield's handler supplies its tools and limits.
 

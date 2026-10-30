@@ -237,8 +237,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
-name = "canonic-mcp"
-version = "0.3.0"
+name = "canonic-mcp-kit"
+version = "0.4.0"
 dependencies = [
  "iri-string",
  "miniz_oxide",
@@ -271,7 +271,7 @@ dependencies = [
  "assert_cmd",
  "assert_fs",
  "blake3",
- "canonic-mcp",
+ "canonic-mcp-kit",
  "canonic-registry",
  "canonic-tui",
  "clap",

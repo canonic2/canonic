@@ -1,0 +1,46 @@
+[package]
+name = "canonic-mcp-kit"
+version = "0.4.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+license-file = "LICENSE"
+description = "Model Context Protocol server sessions, tool catalogs and a bounded stdio driver"
+
+[dependencies]
+iri-string = { version = "0.7.14", default-features = false, features = ["std"] }
+miniz_oxide = { version = "0.9.1", default-features = false, features = ["with-alloc"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+thiserror = "2.0"
+yaml-rust2 = { version = "0.13", default-features = false }
+
+[features]
+# The documentation bundle builder, for consumers' build scripts. It reads files,
+# so ordinary runtime builds leave it out.
+docs-build = []
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+unreachable_pub = "warn"
+
+[lints.rustdoc]
+# Doc comments must link to items that exist.
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+mod_module_files = "warn"
+
+# Without debug info, macOS builds keep no per-unit object files in deps/.
+# Kept objects pile up with every edit, and a crowded deps/ slows every test
+# process launch.
+[profile.dev]
+debug = false

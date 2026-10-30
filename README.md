@@ -15,7 +15,7 @@ the Visual Studio Marketplace and Open VSX; its documentation is at
   components, with a local gallery.
 - [Registry](packages/registry/README.md) is an unpublished Rust library for
   signed pack catalogs, verified acquisition, dependency resolution and lockfiles.
-- [MCP](packages/mcp/README.md) is an unpublished Rust library for Model Context
+- [MCP Kit](packages/mcp-kit/README.md) is an unpublished Rust library for Model Context
   Protocol servers.
 
 Each package documents its own setup and development commands. Package sources
