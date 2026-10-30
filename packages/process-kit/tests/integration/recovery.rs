@@ -20,13 +20,14 @@ use std::{
 struct Launch {
     root: Root,
     children: Mutex<Vec<ChildGuard>>,
+    mode: &'static str,
 }
 impl Launcher for Launch {
     fn start(&self) -> canonic_process_kit::Result<()> {
         self.children
             .lock()
             .unwrap()
-            .push(child(&self.root, "manager"));
+            .push(child(&self.root, self.mode));
         Ok(())
     }
 }
@@ -35,6 +36,7 @@ impl Launch {
         Self {
             root: root.clone(),
             children: Mutex::new(vec![]),
+            mode: "manager",
         }
     }
     fn finish(&self) {
@@ -328,6 +330,49 @@ fn recovery_replays_the_identical_request_only_after_product_authorization() {
         assert_eq!(sent.payload, reply.data);
         assert_eq!(checked, 1);
         launch.finish();
+    }
+}
+
+#[test]
+fn replay_refusal_preserves_an_earlier_unknown_outcome() {
+    for prior_acknowledgement in [None, Some(false), Some(true)] {
+        let (_temp, root) = root();
+        let crashed = prior_acknowledgement.map(|ack| lost_result(&root, ack));
+        let mut launch = Launch::new(&root);
+        launch.mode = "small-frames";
+        let original = request(json!("x".repeat(2048)));
+        let mut reconciliations = 0;
+        let result = recovery::call(
+            &root,
+            &launch,
+            &original,
+            &options(),
+            &recovery::Options {
+                attempts: 2,
+                timeout: Duration::from_secs(5),
+            },
+            |received, _| {
+                assert_eq!(received.request_id, original.request_id);
+                assert_eq!(received.payload, original.payload);
+                reconciliations += 1;
+                Ok(recovery::Decision::Replay)
+            },
+        );
+        if let Some(crashed) = crashed {
+            let sent = crashed.join().unwrap();
+            assert_eq!(sent.request_id, original.request_id);
+            assert_eq!(sent.payload, original.payload);
+        }
+        launch.finish();
+        if prior_acknowledgement.is_some() {
+            assert!(matches!(result, Err(Error::OutcomeUnknown(id)) if id == original.request_id));
+            assert_eq!(reconciliations, 1);
+        } else {
+            let reply = result.unwrap();
+            assert_eq!(reply.accepted, Some(false));
+            assert_eq!(reply.code, Some(Code::FrameTooLarge));
+            assert_eq!(reconciliations, 0);
+        }
     }
 }
 

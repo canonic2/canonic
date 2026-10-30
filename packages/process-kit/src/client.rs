@@ -371,6 +371,83 @@ pub fn open(root: &Root, request: &Request, options: &Options) -> Result<(Reply,
     Ok((reply, stream))
 }
 
+/// Send one product request and return once the manager acknowledged it,
+/// without waiting for its result. The caller may wait for the result on one
+/// thread and abandon the request from another, for example when its own
+/// caller is cancelled: abandoning closes the connection, which the manager
+/// observes as the client's departure. This never replays work.
+///
+/// # Errors
+/// As [`call`] before the acknowledgement: definite refusal codes, or
+/// `OutcomeUnknown` after a partial send or a lost acknowledgement.
+pub fn submit(root: &Root, request: &Request, options: &Options) -> Result<Admitted> {
+    let mut stream = endpoint::connect(root, false, options.io)?;
+    let ack = acknowledge(&mut stream, request, &request.request_id, options, None)?;
+    if ack.accepted == Some(false) {
+        // Typed refusals keep their errors; any other complete refusal is
+        // returned whole, as `call` returns it in its reply.
+        return Err(Error::Refused(Box::new(refusal(ack)?)));
+    }
+    Ok(Admitted {
+        stream,
+        ack,
+        id: request.request_id.clone(),
+        io: options.io,
+        frame_limit: options.frame_limit,
+    })
+}
+
+/// An acknowledged one-shot request whose result is still outstanding.
+pub struct Admitted {
+    stream: Stream,
+    ack: Reply,
+    id: String,
+    io: Duration,
+    frame_limit: usize,
+}
+
+/// Closes an [`Admitted`] request's connection from another thread.
+pub struct Abandon(Stream);
+
+impl Abandon {
+    /// Close the connection in both directions. A pending [`Admitted::result`]
+    /// returns `OutcomeUnknown`; the manager observes the client's departure.
+    /// Abandoning does not cancel work the manager already dispatched.
+    pub fn abandon(&self) {
+        let _ = self.0.shutdown(std::net::Shutdown::Both);
+    }
+}
+
+impl Admitted {
+    /// The manager's acknowledgement, including its incarnation.
+    #[must_use]
+    pub fn acknowledgement(&self) -> &Reply {
+        &self.ack
+    }
+
+    /// A handle that abandons this request when the caller no longer wants it.
+    ///
+    /// # Errors
+    /// Returns an I/O error if the connection cannot be shared.
+    pub fn abandon_handle(&self) -> Result<Abandon> {
+        Ok(Abandon(self.stream.try_clone()?))
+    }
+
+    /// Wait for the result within the options' per-frame budget.
+    ///
+    /// # Errors
+    /// Returns `OutcomeUnknown` when the result is lost, late or abandoned,
+    /// or `Envelope` for a result that does not match the acknowledgement.
+    pub fn result(mut self) -> Result<Reply> {
+        let options = Options {
+            io: self.io,
+            frame_limit: self.frame_limit,
+            ..Options::default()
+        };
+        finish(&mut self.stream, &self.ack, &self.id, &options, None)
+    }
+}
+
 pub(crate) fn call_until(
     root: &Root,
     request: &Request,
@@ -396,6 +473,40 @@ fn exchange(
     options: &Options,
     deadline: Option<Instant>,
 ) -> Result<Reply> {
+    let ack = acknowledge(stream, request, id, options, deadline)?;
+    if ack.accepted == Some(false) {
+        return refusal(ack);
+    }
+    finish(stream, &ack, id, options, deadline)
+}
+
+fn read_reply(
+    stream: &mut Stream,
+    id: &str,
+    options: &Options,
+    deadline: Option<Instant>,
+) -> Result<Reply> {
+    let mut input = FrameDeadline {
+        stream,
+        until: frame_until(options.io, deadline),
+    };
+    let reply: Reply = frame::read_json(&mut input, options.frame_limit)
+        .map_err(|_| Error::OutcomeUnknown(id.into()))?;
+    if reply.control_version != 1 || (!reply.request_id.is_empty() && reply.request_id != id) {
+        return Err(Error::Envelope);
+    }
+    Ok(reply)
+}
+
+/// Send `request` and read its first frame: an acknowledgement, or a complete
+/// refusal returned with `accepted: Some(false)`.
+fn acknowledge(
+    stream: &mut Stream,
+    request: &impl serde::Serialize,
+    id: &str,
+    options: &Options,
+    deadline: Option<Instant>,
+) -> Result<Reply> {
     // Validate size before sending anything, so local size errors are definite.
     let bytes = frame::encode_json(request, options.frame_limit)?;
     if bytes.len() > options.frame_limit {
@@ -409,21 +520,9 @@ fn exchange(
         &bytes,
         options.frame_limit,
     );
-    let read = |stream: &mut Stream| -> Result<Reply> {
-        let mut input = FrameDeadline {
-            stream,
-            until: frame_until(options.io, deadline),
-        };
-        let reply: Reply = frame::read_json(&mut input, options.frame_limit)
-            .map_err(|_| Error::OutcomeUnknown(id.into()))?;
-        if reply.control_version != 1 || (!reply.request_id.is_empty() && reply.request_id != id) {
-            return Err(Error::Envelope);
-        }
-        Ok(reply)
-    };
-    let ack = read(stream)?;
+    let ack = read_reply(stream, id, options, deadline)?;
     if ack.accepted == Some(false) {
-        return refusal(ack);
+        return Ok(ack);
     }
     if sent.is_err() {
         return Err(Error::OutcomeUnknown(id.into()));
@@ -431,7 +530,18 @@ fn exchange(
     if ack.accepted != Some(true) {
         return Err(Error::Envelope);
     }
-    let reply = read(stream)?;
+    Ok(ack)
+}
+
+/// Read the result that follows `ack` on the same connection.
+fn finish(
+    stream: &mut Stream,
+    ack: &Reply,
+    id: &str,
+    options: &Options,
+    deadline: Option<Instant>,
+) -> Result<Reply> {
+    let reply = read_reply(stream, id, options, deadline)?;
     if reply.manager_id != ack.manager_id || reply.request_id != id || reply.accepted.is_some() {
         return Err(Error::Envelope);
     }

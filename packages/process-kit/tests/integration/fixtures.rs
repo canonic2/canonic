@@ -299,6 +299,11 @@ fn entry() {
                 &Explicit,
                 server::Options {
                     allow_force_stop: mode == "stuck",
+                    frame_limit: if mode == "small-frames" {
+                        1024
+                    } else {
+                        canonic_process_kit::frame::DEFAULT_LIMIT
+                    },
                     ..Default::default()
                 },
             )

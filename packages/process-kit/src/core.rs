@@ -524,6 +524,20 @@ impl Drop for Permit {
 
 /// A product-owned resource, worker, connection or uncertainty pin.
 pub struct Hold(Admission);
+impl Hold {
+    /// Pin another resource that this live obligation creates, such as a
+    /// worker started by cleanup. A live hold keeps the manager unsettled, so
+    /// this succeeds during drain and pending retirement, where
+    /// [`Admission::hold`] refuses new holds.
+    #[must_use]
+    pub fn split(&self) -> Self {
+        let mut inner = self.0.lock();
+        inner.held += 1;
+        inner.changed = true;
+        Admission::notify(inner);
+        Self(self.0.clone())
+    }
+}
 impl Drop for Hold {
     fn drop(&mut self) {
         let mut inner = self.0.lock();
@@ -730,5 +744,20 @@ mod tests {
             drop(reply);
             assert!(gate.tick(Duration::ZERO, &Explicit));
         }
+    }
+
+    #[test]
+    fn a_split_hold_pins_cleanup_work_after_drain_closes_new_holds() {
+        let gate = Admission::new();
+        gate.ready();
+        let worker = gate.hold().unwrap();
+        assert!(gate.drain());
+        assert!(matches!(gate.hold(), Err(Error::Draining)));
+        let cleanup = worker.split();
+        assert_eq!(gate.snapshot().held, 2);
+        drop(worker);
+        assert!(!gate.tick(Duration::ZERO, &Explicit));
+        drop(cleanup);
+        assert!(gate.tick(Duration::ZERO, &Explicit));
     }
 }

@@ -31,7 +31,11 @@ fn drive<H: Handler>(
     loop {
         // Any change racing the following observation leaves a readable signal.
         wakeup.clear()?;
+        accept_pending(shared, lanes)?;
         if shared.gate.tick(start.elapsed(), policy) {
+            // Attempt a bounded refusal for one arrival per lane that raced
+            // the exit decision, without draining an unbounded backlog.
+            accept_pending(shared, lanes)?;
             return Ok(());
         }
         let timeout = policy_timeout(shared.gate.next_check(start.elapsed(), policy));
@@ -41,23 +45,29 @@ fn drive<H: Handler>(
             PollFd::new(wakeup.as_fd(), PollFlags::POLLIN),
         ];
         match poll(&mut descriptors, timeout) {
-            Ok(_) => {}
-            Err(nix::errno::Errno::EINTR) => continue,
+            Ok(_) | Err(nix::errno::Errno::EINTR) => {}
             Err(error) => return Err(error.into()),
         }
-        for (endpoint, pool, control) in lanes {
-            // One accept per lane preserves controls and lifetime progress.
-            match endpoint.listener().accept() {
-                Ok((stream, _)) => pool.enqueue(shared, stream, control),
-                Err(error)
-                    if matches!(
-                        error.kind(),
-                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
-                    ) => {}
-                Err(error) => return Err(error.into()),
-            }
+    }
+}
+
+fn accept_pending<H: Handler>(
+    shared: &Shared<H>,
+    lanes: [(&Endpoint<'_>, &Pool, bool); 2],
+) -> Result<()> {
+    for (endpoint, pool, control) in lanes {
+        // One accept per lane preserves controls and lifetime progress.
+        match endpoint.listener().accept() {
+            Ok((stream, _)) => pool.enqueue(shared, stream, control),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                ) => {}
+            Err(error) => return Err(error.into()),
         }
     }
+    Ok(())
 }
 
 fn policy_timeout(delay: Option<Duration>) -> PollTimeout {

@@ -82,8 +82,8 @@ pub(super) fn run<H: Handler>(
                             if stop.load(Ordering::SeqCst) {
                                 return;
                             }
-                            // Capacity and the read deadline are assigned here;
-                            // no unaccounted socket queue precedes the pool.
+                            // Reserve capacity here; the frame budget starts
+                            // when a pool worker takes this connection.
                             pool.enqueue(shared, stream, control);
                         }
                         Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}

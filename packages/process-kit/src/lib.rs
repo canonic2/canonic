@@ -72,6 +72,9 @@ pub enum Error {
     /// The manager replied without accepting a connection handoff.
     #[error("manager refused connection handoff")]
     HandoffRefused(Box<protocol::Reply>),
+    /// The manager completely refused a submitted request; nothing was admitted.
+    #[error("manager refused the request")]
+    Refused(Box<protocol::Reply>),
     /// A bounded connection or worker lane is full.
     #[error("manager capacity reached")]
     Capacity,

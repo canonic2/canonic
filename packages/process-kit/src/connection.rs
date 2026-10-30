@@ -96,9 +96,49 @@ impl Drop for Slot {
     }
 }
 
+/// Clear handshake deadlines before transfer. Darwin rejects timeout changes
+/// with `EINVAL` once the peer has closed; that stream already reads EOF, so
+/// its owner observes the closure instead of a handshake failure.
 pub(crate) fn clear_deadlines(stream: &Stream) -> Result<()> {
     stream.set_nonblocking(false)?;
-    stream.set_read_timeout(None)?;
-    stream.set_write_timeout(None)?;
+    for cleared in [
+        stream.set_read_timeout(None),
+        stream.set_write_timeout(None),
+    ] {
+        match cleared {
+            Ok(()) => {}
+            Err(error) if peer_closed_timeout(&error) => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
     Ok(())
+}
+
+fn peer_closed_timeout(error: &std::io::Error) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        error.raw_os_error() == Some(nix::errno::Errno::EINVAL as i32)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = error;
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_peer_closed_after_the_handshake_reads_eof_instead_of_failing_transfer() {
+        let (stream, peer) = Stream::pair().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(1)))
+            .unwrap();
+        drop(peer);
+        clear_deadlines(&stream).unwrap();
+        let mut byte = [0];
+        assert_eq!(std::io::Read::read(&mut &stream, &mut byte).unwrap(), 0);
+    }
 }

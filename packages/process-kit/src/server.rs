@@ -17,7 +17,8 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         mpsc,
     },
-    thread::JoinHandle,
+    task::{Wake, Waker},
+    thread::{JoinHandle, Thread},
     time::{Duration, Instant},
 };
 
@@ -110,6 +111,7 @@ pub struct Options {
     pub connection_capacity: usize,
     pub frame_limit: usize,
     /// Total frame read/write deadline, not a per-byte renewable timeout.
+    /// The read budget starts when a worker takes the connection, after queueing.
     pub io_timeout: Duration,
     /// Enable exact-incarnation `force_stop`. It exits the entire process with
     /// status 75 after a bounded reply attempt, bypassing destructors, callbacks
@@ -145,7 +147,6 @@ struct Shared<H> {
 struct Job {
     stream: Stream,
     permit: Permit,
-    until: Instant,
 }
 struct Pool {
     sender: Option<mpsc::SyncSender<Job>>,
@@ -243,11 +244,7 @@ impl Pool {
             let _ = refuse_until(shared, &mut &stream, "", Code::Draining, refusal_until);
             return;
         };
-        let job = Job {
-            stream,
-            permit,
-            until: Instant::now() + shared.options.io_timeout,
-        };
+        let job = Job { stream, permit };
         if let Some(sender) = &self.sender
             && let Err(error) = sender.try_send(job)
         {
@@ -336,17 +333,37 @@ pub fn serve<H: Handler>(
     );
     // Even an accept failure waits for previously admitted work, never dropping it.
     if result.is_err() {
-        if shared.gate.drain() {
-            shared.handler.drain();
-        }
-        while !shared.gate.tick(start.elapsed(), &crate::core::Explicit) {
-            std::thread::park();
-        }
+        drain_after_failure(&shared, start);
     }
     let joined = work.close().and(controls.close());
     let removed = ordinary.unlink().and(control.unlink());
     shared.gate.set_waker(None);
     result.and(joined).and(removed)
+}
+
+struct CleanupWake(Thread);
+impl Wake for CleanupWake {
+    fn wake(self: Arc<Self>) {
+        self.0.unpark();
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.unpark();
+    }
+}
+
+fn drain_after_failure<H: Handler>(shared: &Shared<H>, start: Instant) {
+    // Setup may have failed before registering a driver waker. Cleanup needs
+    // only a retained park token, independent of any failed socket or channel.
+    shared.gate.set_waker(Some(Waker::from(Arc::new(CleanupWake(
+        std::thread::current(),
+    )))));
+    if shared.gate.drain() {
+        shared.handler.drain();
+    }
+    while !shared.gate.tick(start.elapsed(), &crate::core::Explicit) {
+        std::thread::park();
+    }
 }
 
 fn validate(identity: &Identity, o: &Options) -> Result<()> {
@@ -423,17 +440,14 @@ fn refuse_until<H>(
 
 fn handle<H: Handler>(s: &Shared<H>, job: &mut Job, control_lane: bool) -> Result<()> {
     let mut stream = &job.stream;
-    let remaining = job.until.saturating_duration_since(Instant::now());
-    if remaining.is_zero() {
-        return refuse(s, &mut stream, "", Code::Capacity);
-    }
-    job.stream.set_read_timeout(Some(remaining))?;
+    let until = Instant::now() + s.options.io_timeout;
+    job.stream.set_read_timeout(Some(s.options.io_timeout))?;
     job.stream.set_write_timeout(Some(s.options.io_timeout))?;
     // A deadline wrapper updates the socket timeout before every partial read.
     let bytes = match frame::read(
         &mut Deadline {
             stream: &job.stream,
-            until: job.until,
+            until,
         },
         s.options.frame_limit,
     ) {
@@ -740,7 +754,7 @@ impl std::io::Write for Deadline<'_> {
 
 #[cfg(test)]
 mod tests {
-    //! Backpressured refusal writes on the accept-thread enqueue path.
+    //! Bounded refusals and graceful cleanup after driver failures.
 
     use super::*;
     use std::{io::Write, net::Shutdown};
@@ -753,6 +767,62 @@ mod tests {
             _: &Context<'_>,
         ) -> std::result::Result<Value, protocol::ProductError> {
             Err(protocol::ProductError(Value::Null))
+        }
+    }
+
+    #[test]
+    fn failed_driver_setup_waits_for_async_cleanup_and_wakes_when_it_settles() {
+        struct Cleanup(mpsc::SyncSender<()>);
+        impl Handler for Cleanup {
+            fn call(
+                &self,
+                _: &Request,
+                _: &Context<'_>,
+            ) -> std::result::Result<Value, protocol::ProductError> {
+                unreachable!("failed driver must not dispatch work")
+            }
+            fn drain(&self) {
+                self.0.send(()).unwrap();
+            }
+        }
+
+        for ready in [false, true] {
+            let gate = Admission::new();
+            let hold = gate.hold().unwrap();
+            if ready {
+                gate.ready();
+            }
+            let (draining, drained) = mpsc::sync_channel(0);
+            let shared = Shared {
+                identity: Identity::new("1.0.0".into(), 1, vec![]).unwrap(),
+                version: None,
+                gate: gate.clone(),
+                handler: Arc::new(Cleanup(draining)),
+                options: Options::default(),
+                ordinary_count: Arc::new(AtomicUsize::new(0)),
+                control_count: Arc::new(AtomicUsize::new(0)),
+                connections: Slots::new(0),
+            };
+            let (finished, completion) = mpsc::sync_channel(1);
+            let cleanup = std::thread::spawn(move || {
+                drain_after_failure(&shared, Instant::now());
+                finished.send(()).unwrap();
+            });
+            drained.recv_timeout(Duration::from_secs(1)).unwrap();
+            assert_eq!(gate.snapshot().held, 1);
+            assert!(matches!(
+                completion.try_recv(),
+                Err(mpsc::TryRecvError::Empty)
+            ));
+            drop(hold);
+            let woke = completion.recv_timeout(Duration::from_secs(1)).is_ok();
+            // Always release and join the fixture before reporting a lost wake.
+            if !woke {
+                cleanup.thread().unpark();
+            }
+            cleanup.join().unwrap();
+            assert!(woke, "cleanup stayed parked after its last hold settled");
+            assert_eq!(gate.snapshot().state, crate::core::State::Exiting);
         }
     }
 

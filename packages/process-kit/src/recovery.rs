@@ -71,6 +71,10 @@ pub fn call(
         match client::call_until(root, request, transport, Some(deadline)) {
             Err(Error::OutcomeUnknown(_)) => ambiguous = true,
             Err(Error::Absent | Error::Starting | Error::Draining | Error::Capacity) => {}
+            // Refusing this replay cannot establish what the earlier send did.
+            Ok(reply) if ambiguous && reply.accepted == Some(false) => {
+                return Err(Error::OutcomeUnknown(request.request_id.clone()));
+            }
             Ok(reply) => return Ok(reply),
             Err(error) => return Err(uncertain(error, ambiguous, request)),
         }

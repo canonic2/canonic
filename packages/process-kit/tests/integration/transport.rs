@@ -290,6 +290,135 @@ fn frames_refuse_oversize_and_partial_frames_without_truncation() {
 }
 
 #[test]
+fn queued_frame_budget_starts_when_a_worker_takes_the_connection() {
+    let (_temp, root) = root();
+    let gate = Admission::new();
+    let handler = Arc::new(Acme::default());
+    *handler.blocked.lock().unwrap() = true;
+    let io_timeout = Duration::from_millis(100);
+    let server = thread_server(
+        &root,
+        &gate,
+        handler.clone(),
+        server::Options {
+            workers: 1,
+            capacity: 2,
+            io_timeout,
+            ..Default::default()
+        },
+    );
+    ready(&root);
+    let path = root.clone();
+    let first =
+        std::thread::spawn(move || client::call(&path, &request(json!("block")), &options()));
+    wait(|| (*handler.entered.lock().unwrap() == 1).then_some(()));
+    let path = root.clone();
+    let (completed, completion) = std::sync::mpsc::channel();
+    let queued = std::thread::spawn(move || {
+        completed
+            .send(client::call(&path, &request(json!("queued")), &options()))
+            .unwrap();
+    });
+    wait(|| (gate.snapshot().work == 2).then_some(()));
+    // The queued request must survive more than a full frame budget while
+    // its worker is occupied. No callback can complete it before release.
+    let early = completion.recv_timeout(io_timeout * 2);
+    *handler.blocked.lock().unwrap() = false;
+    handler.changed.notify_all();
+    let result = early.unwrap_or_else(|_| completion.recv_timeout(Duration::from_secs(5)).unwrap());
+    let first = first.join().unwrap();
+    queued.join().unwrap();
+    stop(&root, "drain");
+    server.join().unwrap().unwrap();
+    assert_eq!(first.unwrap().data, "block");
+    assert_eq!(result.unwrap().data, "queued");
+}
+
+#[test]
+fn shutdown_refuses_arrivals_during_the_exit_decision() {
+    use canonic_process_kit::core::ExitPolicy;
+    use std::sync::{Mutex, mpsc};
+
+    struct Closing {
+        entered: mpsc::Sender<()>,
+        release: Mutex<mpsc::Receiver<()>>,
+    }
+    impl ExitPolicy for Closing {
+        fn exit(&self, _: Duration) -> bool {
+            self.entered.send(()).unwrap();
+            self.release
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap();
+            true
+        }
+        fn next_check(&self, _: Duration) -> Option<Duration> {
+            None
+        }
+    }
+    let (_temp, root) = root();
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    let gate = Admission::new();
+    let handler = Arc::new(Acme::default());
+    let observed = handler.clone();
+    let (entered, waiting) = mpsc::channel();
+    let (release, resume) = mpsc::channel();
+    let server = std::thread::spawn(move || {
+        server::serve(
+            lease,
+            identity(),
+            gate,
+            handler,
+            &Closing {
+                entered,
+                release: Mutex::new(resume),
+            },
+            server::Options::default(),
+        )
+    });
+    waiting.recv_timeout(Duration::from_secs(5)).unwrap();
+    let mut ordinary = endpoint::connect(&root, false, Duration::from_secs(1)).unwrap();
+    let mut control_stream = endpoint::connect(&root, true, Duration::from_secs(1)).unwrap();
+    ordinary
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    control_stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    frame::write_json(
+        &mut ordinary,
+        &request(json!("unused")),
+        frame::DEFAULT_LIMIT,
+    )
+    .unwrap();
+    frame::write_json(
+        &mut control_stream,
+        &control(&root, "status"),
+        frame::DEFAULT_LIMIT,
+    )
+    .unwrap();
+    release.send(()).unwrap();
+    let ordinary: canonic_process_kit::Result<Reply> =
+        frame::read_json(&mut ordinary, frame::DEFAULT_LIMIT);
+    let control: canonic_process_kit::Result<Reply> =
+        frame::read_json(&mut control_stream, frame::DEFAULT_LIMIT);
+    server.join().unwrap().unwrap();
+    for reply in [ordinary, control] {
+        let reply = reply.unwrap();
+        assert_eq!(reply.accepted, Some(false));
+        assert_eq!(reply.code, Some(Code::Draining));
+    }
+    assert_eq!(
+        observed
+            .dispatched
+            .load(std::sync::atomic::Ordering::SeqCst),
+        0
+    );
+    assert!(!root.leased().unwrap());
+}
+
+#[test]
 fn saturated_work_lane_keeps_controls_responsive_and_refuses_capacity() {
     let (_temp, root) = root();
     let gate = Admission::new();
@@ -510,6 +639,67 @@ fn lost_admission_ack_is_ambiguous_and_never_replayed() {
     assert!(
         matches!(caller.join().unwrap(), Err(Error::OutcomeUnknown(id)) if id == "acme-request")
     );
+    assert!(endpoint.listener().accept().is_err());
+}
+
+fn acknowledge_submission(
+    endpoint: &canonic_process_kit::endpoint::Endpoint<'_>,
+) -> canonic_process_kit::net::Stream {
+    let (mut stream, _) = wait(|| endpoint.listener().accept().ok());
+    let r: canonic_process_kit::protocol::Request =
+        frame::read_json(&mut stream, frame::DEFAULT_LIMIT).unwrap();
+    assert_eq!(r.request_id, "acme-request");
+    frame::write_json(
+        &mut stream,
+        &json!({"control_version":1,"manager_id":"acme-manager","request_id":"acme-request","accepted":true,"code":null,"data":null}),
+        frame::DEFAULT_LIMIT,
+    )
+    .unwrap();
+    stream
+}
+
+#[test]
+fn a_submitted_request_returns_its_result_after_admission() {
+    let (_temp, root) = root();
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    let endpoint = lease.bind(false).unwrap();
+    let path = root.clone();
+    let caller =
+        std::thread::spawn(move || client::submit(&path, &request(json!("acme")), &options()));
+    let mut stream = acknowledge_submission(&endpoint);
+    let admitted = caller.join().unwrap().unwrap();
+    assert_eq!(admitted.acknowledgement().manager_id, "acme-manager");
+    frame::write_json(
+        &mut stream,
+        &json!({"control_version":1,"manager_id":"acme-manager","request_id":"acme-request","accepted":null,"code":null,"data":"done"}),
+        frame::DEFAULT_LIMIT,
+    )
+    .unwrap();
+    assert_eq!(admitted.result().unwrap().data, json!("done"));
+}
+
+#[test]
+fn an_abandoned_submission_closes_its_connection_without_replay() {
+    let (_temp, root) = root();
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    let endpoint = lease.bind(false).unwrap();
+    let path = root.clone();
+    let caller =
+        std::thread::spawn(move || client::submit(&path, &request(json!("acme")), &options()));
+    let mut stream = acknowledge_submission(&endpoint);
+    let admitted = caller.join().unwrap().unwrap();
+    let abandon = admitted.abandon_handle().unwrap();
+    let waiting = std::thread::spawn(move || admitted.result());
+    abandon.abandon();
+    assert!(
+        matches!(waiting.join().unwrap(), Err(Error::OutcomeUnknown(id)) if id == "acme-request")
+    );
+    // The manager side observes the client's departure.
+    stream
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .unwrap();
+    let mut byte = [0_u8; 1];
+    assert_eq!(std::io::Read::read(&mut stream, &mut byte).unwrap(), 0);
     assert!(endpoint.listener().accept().is_err());
 }
 
