@@ -103,7 +103,7 @@ pub fn is_utc_seconds(value: &str) -> bool {
 /// Formats seconds since the Unix epoch as `YYYY-MM-DDTHH:MM:SSZ`.
 ///
 /// ```
-/// assert_eq!(canonic_registry::timestamp::format_utc(0), "1970-01-01T00:00:00Z");
+/// assert_eq!(canonic_registry_kit::timestamp::format_utc(0), "1970-01-01T00:00:00Z");
 /// ```
 #[must_use]
 pub fn format_utc(seconds: u64) -> String {

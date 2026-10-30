@@ -16,8 +16,8 @@ mod predicates;
 #[cfg(test)]
 mod tests;
 mod validation;
-fn timestamp(value: &str) -> Option<canonic_registry::timestamp::Parts> {
-    canonic_registry::timestamp::parse(value).filter(|parts| parts.0 > 0)
+fn timestamp(value: &str) -> Option<canonic_registry_kit::timestamp::Parts> {
+    canonic_registry_kit::timestamp::parse(value).filter(|parts| parts.0 > 0)
 }
 pub(crate) use preconditions::Precondition;
 use predicates::{Failures, checks, domain_matches};

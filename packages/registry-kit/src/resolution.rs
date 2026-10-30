@@ -220,7 +220,7 @@ pub fn resolve<'a, L: Level>(
 /// No I/O or operator review is performed here; callers present the report.
 ///
 /// ```
-/// use canonic_registry::resolution::{
+/// use canonic_registry_kit::resolution::{
 ///     self, Dependency, Error, Instance, Release, Root,
 /// };
 /// use std::collections::BTreeSet;

@@ -4,7 +4,7 @@
 //! declare dependencies, and the lockfile is a small document embedding the
 //! crate's locked entries.
 use assert_fs::{TempDir, prelude::*};
-use canonic_registry::{
+use canonic_registry_kit::{
     acquisition::Fetcher,
     cache::ArtifactCache,
     catalog::{Catalog, Entry},
@@ -108,8 +108,8 @@ fn install_resolves_across_registries_locks_and_reproduces_offline() {
         .child("catalog.json")
         .write_str(
             &json!({"schema_version":1,"packs":[
-                {"id":"acme/workbench","version":"1.2.0","path":"packs/workbench.json","sha256":canonic_registry::digest::sha256_hex(&workbench)},
-                {"id":"acme/review","version":"0.4.0","path":"packs/review.json","sha256":canonic_registry::digest::sha256_hex(&review)}
+                {"id":"acme/workbench","version":"1.2.0","path":"packs/workbench.json","sha256":canonic_registry_kit::digest::sha256_hex(&workbench)},
+                {"id":"acme/review","version":"0.4.0","path":"packs/review.json","sha256":canonic_registry_kit::digest::sha256_hex(&review)}
             ]})
             .to_string(),
         )
@@ -241,7 +241,7 @@ fn install_resolves_across_registries_locks_and_reproduces_offline() {
         .unwrap()
         // The workbench artifact names the team identity, so its digest varies too.
         .replace(
-            &canonic_registry::digest::sha256_hex(&workbench),
+            &canonic_registry_kit::digest::sha256_hex(&workbench),
             "[workbench digest]",
         )
         .replace(&team_identity, "[team identity]")
@@ -253,7 +253,10 @@ fn install_resolves_across_registries_locks_and_reproduces_offline() {
     drop(local);
     for pack in &locked {
         let bytes = cache.get(&pack.digest, MAX_ARTIFACT).unwrap().unwrap();
-        assert_eq!(canonic_registry::digest::sha256_hex(&bytes), pack.digest);
+        assert_eq!(
+            canonic_registry_kit::digest::sha256_hex(&bytes),
+            pack.digest
+        );
     }
     assert!(fetcher.catalog(&discovered.source, now).is_err());
     let review: PackId = "acme/review".parse().unwrap();
@@ -277,7 +280,7 @@ fn an_unregistered_foreign_source_refuses_resolution() {
     local
         .child("catalog.json")
         .write_str(
-            &json!({"schema_version":1,"packs":[{"id":"acme/workbench","version":"1.0.0","path":"pack.json","sha256":canonic_registry::digest::sha256_hex(&pack)}]})
+            &json!({"schema_version":1,"packs":[{"id":"acme/workbench","version":"1.0.0","path":"pack.json","sha256":canonic_registry_kit::digest::sha256_hex(&pack)}]})
                 .to_string(),
         )
         .unwrap();

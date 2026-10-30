@@ -1,5 +1,5 @@
 //! Signed sources: first-use discovery, authentication, rollback and replacement.
-use canonic_registry::{
+use canonic_registry_kit::{
     acquisition::AcquisitionError,
     catalog::CatalogError,
     checkpoint::{CheckpointError, Checkpoints},
@@ -146,7 +146,7 @@ fn rollback_and_release_replacement_are_refused_by_checkpoints() {
 
     let bytes = serde_json::json!({
         "schema_version":1,"registry_id":"acme","sequence":3,"expires_at":FUTURE,
-        "packs":[{"id":"acme/git","version":"1.0.0","path":original.path,"sha256":canonic_registry::digest::sha256_hex(b"different bytes")}]
+        "packs":[{"id":"acme/git","version":"1.0.0","path":original.path,"sha256":canonic_registry_kit::digest::sha256_hex(b"different bytes")}]
     })
     .to_string();
     registry.publish_bytes(bytes.as_bytes());

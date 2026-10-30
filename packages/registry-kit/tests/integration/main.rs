@@ -6,7 +6,7 @@ mod hosted;
 mod signed;
 mod workflow;
 
-use canonic_registry::{acquisition::Fetcher, testing::Server};
+use canonic_registry_kit::{acquisition::Fetcher, testing::Server};
 use std::time::Duration;
 
 /// A fetcher trusting the owned fixture CA, for signed and local sources alike.

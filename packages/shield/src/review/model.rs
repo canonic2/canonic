@@ -34,7 +34,7 @@ pub(crate) struct Context {
     pub(crate) host_event_name: Option<String>,
     pub(crate) occurred_at: Option<String>,
     /// Reads registry sources for operations in this context.
-    pub(crate) fetcher: canonic_registry::acquisition::Fetcher,
+    pub(crate) fetcher: canonic_registry_kit::acquisition::Fetcher,
 }
 impl Context {
     pub(crate) fn new(project_id: String, project_root: String, surface: &str) -> Self {

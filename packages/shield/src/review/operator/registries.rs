@@ -10,7 +10,7 @@ use crate::{
         storage::Store,
     },
 };
-use canonic_registry::{acquisition::Fetcher, registrations::Registrations};
+use canonic_registry_kit::{acquisition::Fetcher, registrations::Registrations};
 use serde_json::{Value, json};
 use std::path::Path;
 

@@ -1,5 +1,5 @@
 //! Optional evidence redaction and current-clock sampling; calendar math is shared.
-pub(crate) use canonic_registry::timestamp::format_utc;
+pub(crate) use canonic_registry_kit::timestamp::format_utc;
 use serde_json::{Value, json};
 use std::time::{SystemTime, UNIX_EPOCH};
 

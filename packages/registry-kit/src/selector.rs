@@ -61,7 +61,7 @@ pub enum SelectorError {
 /// registry.
 ///
 /// ```
-/// use canonic_registry::selector::{Selector, parse};
+/// use canonic_registry_kit::selector::{Selector, parse};
 /// let Selector::Catalog(reference) = parse("team/acme/git@1.2.0", |a| a == "team").unwrap() else {
 ///     unreachable!()
 /// };

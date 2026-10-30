@@ -6,7 +6,7 @@ the built-in source, user-global scope and optional project scope.
 ## Merge scopes
 
 ```rust
-use canonic_registry::{
+use canonic_registry_kit::{
     registrations::{Effective, Registrations}, source::Source,
 };
 use std::error::Error;
@@ -50,7 +50,7 @@ state; do not retain aliases as dependency identities.
 A missing file reads as empty registrations.
 
 ```rust
-use canonic_registry::{registrations::GlobalFile, source::Source};
+use canonic_registry_kit::{registrations::GlobalFile, source::Source};
 use std::{error::Error, path::Path};
 
 fn store_approved(path: &Path, source: Source) -> Result<(), Box<dyn Error>> {

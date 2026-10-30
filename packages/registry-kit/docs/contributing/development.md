@@ -2,7 +2,7 @@
 
 For application integration tests, start with
 [Test your integration](../guides/testing.md). This page covers contributing to
-the library itself. Run the commands below from `packages/registry`.
+the library itself. Run the commands below from `packages/registry-kit`.
 
 This is one unpublished Cargo package with a library and no binary. It uses
 Rust 1.99.0, Rust 2024, a committed `Cargo.lock`, rustfmt, strict Clippy,

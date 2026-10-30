@@ -5,7 +5,7 @@ use crate::{
     policy::{self, Pack, Profile},
     review::{Context, Error, model::State},
 };
-use canonic_registry::{
+use canonic_registry_kit::{
     catalog::Catalog,
     registrations::{Effective, Scope},
     resolution::{self, Instance, Root},

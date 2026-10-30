@@ -40,7 +40,7 @@ pub(crate) enum Error {
     #[error(transparent)]
     Policy(#[from] policy::Error),
     #[error("dependency resolution refused: {}", dependency_refusal(.0))]
-    Dependency(#[from] canonic_registry::resolution::Error),
+    Dependency(#[from] canonic_registry_kit::resolution::Error),
     #[error("pack {pack} is required by {dependents:?}")]
     RequiredPack {
         pack: String,
@@ -150,7 +150,7 @@ impl Error {
             Self::Io(_) => "io",
             Self::Policy(policy::Error::Interrupted) => "interrupted",
             Self::Policy(policy::Error::Limit)
-            | Self::Dependency(canonic_registry::resolution::Error::Limit) => "resource-limit",
+            | Self::Dependency(canonic_registry_kit::resolution::Error::Limit) => "resource-limit",
             Self::Dependency(_)
             | Self::Policy(_)
             | Self::Invalid(_)
@@ -197,9 +197,9 @@ fn alternatives_text(alternatives: &[String], total: usize) -> String {
 }
 
 /// Resolver refusals in Shield's terms: dependency levels are protection profiles.
-fn dependency_refusal(error: &canonic_registry::resolution::Error) -> String {
+fn dependency_refusal(error: &canonic_registry_kit::resolution::Error) -> String {
     match error {
-        canonic_registry::resolution::Error::LevelConflict(instance) => format!(
+        canonic_registry_kit::resolution::Error::LevelConflict(instance) => format!(
             "explicit profile conflicts with dependency requirements: Instance {{ registry: {:?}, pack: \"{}\" }}",
             instance.registry, instance.pack
         ),

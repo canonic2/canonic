@@ -9,7 +9,7 @@ as your application's `src/main.rs` and run `cargo run`. Each run creates a new
 temporary directory and prints its location; remove that directory when done.
 
 ```rust
-use canonic_registry::{
+use canonic_registry_kit::{
     acquisition::Fetcher, cache::ArtifactCache, checkpoint::Checkpoints, digest,
 };
 use serde_json::json;

@@ -4,7 +4,7 @@ use crate::review::{
     self,
     mcp::{Connection, call},
 };
-use canonic_registry::testing::{Response, Server, SigningKey};
+use canonic_registry_kit::testing::{Response, Server, SigningKey};
 use std::cell::Cell;
 
 /// A signed registry whose catalogs the tests edit before signing.

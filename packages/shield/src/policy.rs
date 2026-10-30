@@ -859,7 +859,7 @@ fn tagged(input: &str) -> bool {
 }
 
 /// Lowercase hexadecimal SHA-256, the digest of artifacts, sources and revisions.
-pub(crate) use canonic_registry::digest::sha256_hex as fingerprint;
+pub(crate) use canonic_registry_kit::digest::sha256_hex as fingerprint;
 
 /// Compose validated packs and custom rules against a literal argv request.
 ///

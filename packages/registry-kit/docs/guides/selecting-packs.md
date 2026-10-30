@@ -21,7 +21,7 @@ prereleases; `@^1` is invalid. Inputs are bounded to 4096 bytes.
 This helper works with existing effective registrations and checkpoints:
 
 ```rust
-use canonic_registry::{
+use canonic_registry_kit::{
     acquisition::Fetcher, checkpoint::Checkpoints, registrations::Effective,
     selector::{self, Selector},
 };
@@ -74,7 +74,7 @@ installed, including version updates. It is a digest-derived UUID-shaped value,
 not a random UUID generator.
 
 ```rust
-use canonic_registry::{names::PackId, selector::{self, Installed, InstalledSelector}};
+use canonic_registry_kit::{names::PackId, selector::{self, Installed, InstalledSelector}};
 use std::error::Error;
 
 fn match_example() -> Result<(), Box<dyn Error>> {

@@ -31,7 +31,7 @@ fn available(context: &Context, root: &assert_fs::TempDir) -> assert_fs::TempDir
         .unwrap()
         .update(context, &|| Ok(()), |state| {
             state.operator["sources"]["tools"] =
-                json!(canonic_registry::source::Source::local(&directory).unwrap());
+                json!(canonic_registry_kit::source::Source::local(&directory).unwrap());
             Ok(json!({}))
         })
         .unwrap();

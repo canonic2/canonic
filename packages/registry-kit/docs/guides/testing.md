@@ -9,7 +9,7 @@ joins it on drop.
 Place this in an integration test file in your application:
 
 ```rust
-use canonic_registry::{
+use canonic_registry_kit::{
     checkpoint::Checkpoints, testing::{Server, SignedRegistry},
 };
 use std::{error::Error, time::{Duration, SystemTime}};

@@ -6,7 +6,7 @@ const HEX: &[u8; 16] = b"0123456789abcdef";
 ///
 /// ```
 /// assert_eq!(
-///     canonic_registry::digest::sha256_hex(b""),
+///     canonic_registry_kit::digest::sha256_hex(b""),
 ///     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 /// );
 /// ```

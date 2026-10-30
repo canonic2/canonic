@@ -1,4 +1,4 @@
-# canonic-registry
+# Registry Kit
 
 A Rust library for installing packs from registries. It authenticates signed
 catalogs, enrolls sources, reads artifacts with bounds, refuses rollback,
@@ -8,10 +8,10 @@ published.
 
 ```toml
 [dependencies]
-canonic-registry = { path = "../registry" }
+canonic-registry-kit = { path = "../registry-kit" }
 
 [dev-dependencies]
-canonic-registry = { path = "../registry", features = ["test-support"] }
+canonic-registry-kit = { path = "../registry-kit", features = ["test-support"] }
 ```
 
 A registry is a local directory or an HTTPS origin serving `catalog.json` and

@@ -5,13 +5,13 @@ the path is relative to your application's `Cargo.toml`.
 
 ```toml
 [dependencies]
-canonic-registry = { path = "../registry" }
+canonic-registry-kit = { path = "../registry-kit" }
 semver = "1.0"
 serde_json = "1.0"
 ```
 
-Adjust `../registry` to your checkout. The crate is imported as
-`canonic_registry`. It requires Rust 1.99 or newer and uses the Rust 2024 edition.
+Adjust `../registry-kit` to your checkout. The crate is imported as
+`canonic_registry_kit`. It requires Rust 1.99 or newer and uses the Rust 2024 edition.
 The library checkout pins Rust 1.99.0 in `rust-toolchain.toml`.
 
 Add `semver` when constructing version requirements or releases. Add `serde` and
@@ -27,7 +27,7 @@ Enable `test-support` for integration tests that need an owned HTTPS registry:
 
 ```toml
 [dev-dependencies]
-canonic-registry = { path = "../registry", features = ["test-support"] }
+canonic-registry-kit = { path = "../registry-kit", features = ["test-support"] }
 ```
 
 This exposes `testing::SignedRegistry`, `testing::Server` and

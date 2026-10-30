@@ -10,7 +10,7 @@ use crate::{
     policy::{self, Profile},
     review::{Context, Error},
 };
-use canonic_registry::{
+use canonic_registry_kit::{
     acquisition::Fetcher,
     catalog::{Catalog, Entry, LookupError},
     names::{self, PackId},

@@ -23,7 +23,7 @@ catalog entry. The application must verify that both came from the same source
 and release; this helper performs no authentication.
 
 ```rust
-use canonic_registry::{
+use canonic_registry_kit::{
     catalog::Entry, lock::{LockedEdge, LockedPack},
     resolution::{Level, Selection}, selector::InstalledSelector,
 };

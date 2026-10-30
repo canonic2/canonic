@@ -250,8 +250,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "canonic-registry"
-version = "0.2.0"
+name = "canonic-registry-kit"
+version = "0.3.0"
 dependencies = [
  "libc",
  "ring",
@@ -272,7 +272,7 @@ dependencies = [
  "assert_fs",
  "blake3",
  "canonic-mcp-kit",
- "canonic-registry",
+ "canonic-registry-kit",
  "canonic-tui-kit",
  "clap",
  "globset",

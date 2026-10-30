@@ -244,7 +244,7 @@ fn failure(context: &Context, error: &Error) -> Value {
         Error::Io(_) => Some("shield doctor".into()),
         Error::Capacity { kind, .. } => kind.operator_route().map(Into::into),
         Error::CacheUnavailable => crate::agent_message::cache_repair(&context.project_root),
-        Error::Dependency(canonic_registry::resolution::Error::Unenrolled(_)) => {
+        Error::Dependency(canonic_registry_kit::resolution::Error::Unenrolled(_)) => {
             Some("shield registry add".into())
         }
         _ => None,
@@ -339,7 +339,7 @@ fn error_fields(error: &Error) -> (&'static str, String) {
                 "No release of {pack} supports this Shield version. Ask the user to update Shield before retrying; do not retry with another reference to the same pack"
             ),
         ),
-        Error::Dependency(canonic_registry::resolution::Error::Unenrolled(source)) => (
+        Error::Dependency(canonic_registry_kit::resolution::Error::Unenrolled(source)) => (
             "invalid_input",
             format!(
                 "A dependency needs registry {}, which this project has not added. Ask the user to add it with shield registry add, then retry",
@@ -444,7 +444,7 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
             "The request was cancelled. Inspect current state before retrying a proposal or mutation",
         ),
         Error::Policy(crate::policy::Error::Limit)
-        | Error::Dependency(canonic_registry::resolution::Error::Limit) => (
+        | Error::Dependency(canonic_registry_kit::resolution::Error::Limit) => (
             "budget_exceeded",
             "This request exceeded Shield's limits. Narrow the query or input before retrying",
         ),

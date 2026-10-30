@@ -1132,7 +1132,7 @@ fn release_and_registry_refusals_name_the_user_step() {
     );
     let unenrolled = failure(
         &context,
-        &Error::Dependency(canonic_registry::resolution::Error::Unenrolled(
+        &Error::Dependency(canonic_registry_kit::resolution::Error::Unenrolled(
             "acme-foreign".into(),
         )),
     );

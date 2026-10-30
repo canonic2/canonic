@@ -1,6 +1,6 @@
 //! Source admission for updates of retained selections and foreign dependencies.
 use super::*;
-use canonic_registry::{
+use canonic_registry_kit::{
     registrations::Registrations,
     testing::{Response, Server, SigningKey},
 };

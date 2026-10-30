@@ -2,13 +2,13 @@
 //! the mapping of shared registry refusals to Shield errors.
 //!
 //! Sources, catalog authentication, bounded acquisition, checkpoint admission
-//! and registration precedence come from `canonic_registry`.
+//! and registration precedence come from `canonic_registry_kit`.
 use super::project as state;
 use crate::{
     policy,
     review::{Context, Error, storage::Store},
 };
-use canonic_registry::{
+use canonic_registry_kit::{
     acquisition::{AcquisitionError, Fetcher},
     catalog::{Catalog, CatalogError, Entry},
     checkpoint::{CheckpointError, Checkpoints},

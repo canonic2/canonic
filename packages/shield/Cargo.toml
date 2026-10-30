@@ -36,7 +36,7 @@ strip = "none"
 
 [dependencies]
 canonic-tui-kit = { version = "0.4.0", path = "../tui-kit" }
-canonic-registry = { version = "0.2.0", path = "../registry" }
+canonic-registry-kit = { version = "0.3.0", path = "../registry-kit" }
 canonic-mcp-kit = { version = "0.4.0", path = "../mcp-kit" }
 blake3 = "1.8.2"
 clap = { version = "4.5", features = ["derive"] }
@@ -68,7 +68,7 @@ nix = { version = "0.31", features = ["fs", "signal", "process"] }
 libproc = "0.14.11"
 
 [dev-dependencies]
-canonic-registry = { version = "0.2.0", path = "../registry", features = ["test-support"] }
+canonic-registry-kit = { version = "0.3.0", path = "../registry-kit", features = ["test-support"] }
 assert_cmd = "2.2"
 assert_fs = "1.1"
 insta = { version = "1.49", features = ["filters"] }

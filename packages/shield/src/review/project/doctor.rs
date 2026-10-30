@@ -59,7 +59,7 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
 
     // Pack updates are verified against retained registry checkpoints and the
     // enrolled source each pack came from.
-    if serde_json::from_value::<canonic_registry::checkpoint::Checkpoints>(json!(
+    if serde_json::from_value::<canonic_registry_kit::checkpoint::Checkpoints>(json!(
         current.registry_checkpoints
     ))
     .is_err()

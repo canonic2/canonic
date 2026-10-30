@@ -313,8 +313,8 @@ pub(crate) fn asked_requests(root: &Path, session: Option<&str>, cap: usize) -> 
             || event["details"]["original_input"]["sandbox_permissions"] == "require_escalated";
         let at = event["recorded_at"]
             .as_str()
-            .and_then(canonic_registry::timestamp::parse)
-            .map(canonic_registry::timestamp::unix_seconds);
+            .and_then(canonic_registry_kit::timestamp::parse)
+            .map(canonic_registry_kit::timestamp::unix_seconds);
         if let Some((_, known)) = found.iter_mut().find(|(seen, _)| seen == &identity) {
             known.count += 1;
             known.recurrence_known &= invocation.is_some();
@@ -383,7 +383,7 @@ fn uninstalled_candidates(root: &Path, executable: &str) -> Option<Vec<String>> 
             .filter_map(Value::as_str)
         {
             if !installed(source.identity(), id)
-                && id.parse::<canonic_registry::names::PackId>().is_ok()
+                && id.parse::<canonic_registry_kit::names::PackId>().is_ok()
             {
                 found
                     .entry((source.identity().to_owned(), id.to_owned()))

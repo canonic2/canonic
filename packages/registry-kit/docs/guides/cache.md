@@ -7,7 +7,7 @@ the object performs no I/O; writes create a missing directory.
 ## Store verified release bytes
 
 ```rust
-use canonic_registry::{cache::ArtifactCache, catalog::Entry};
+use canonic_registry_kit::{cache::ArtifactCache, catalog::Entry};
 use std::error::Error;
 
 fn retain(cache: &ArtifactCache, entry: &Entry, bytes: &[u8])
@@ -31,7 +31,7 @@ rename, not an in-place modification. On Unix, newly created directories are
 ## Read offline
 
 ```rust
-use canonic_registry::{cache::{ArtifactCache, CacheError}, lock::LockedPack};
+use canonic_registry_kit::{cache::{ArtifactCache, CacheError}, lock::LockedPack};
 
 fn retained_bytes(cache: &ArtifactCache, pack: &LockedPack)
     -> Result<Option<Vec<u8>>, CacheError>

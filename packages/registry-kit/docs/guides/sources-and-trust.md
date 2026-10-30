@@ -7,7 +7,7 @@
 registration write and asks no questions.
 
 ```rust
-use canonic_registry::{acquisition::{Discovery, Fetcher}, checkpoint::Checkpoints};
+use canonic_registry_kit::{acquisition::{Discovery, Fetcher}, checkpoint::Checkpoints};
 use std::{error::Error, time::{Duration, SystemTime}};
 
 fn discover_for_review(location: &str, now: SystemTime) -> Result<Discovery, Box<dyn Error>> {
@@ -40,7 +40,7 @@ silently replace it with the server's current `catalog-key.pub`.
 When a key and registry ID are already trusted, construct a source directly:
 
 ```rust
-use canonic_registry::source::{Source, SourceError};
+use canonic_registry_kit::source::{Source, SourceError};
 
 fn known_source(public_key: &str) -> Result<Source, SourceError> {
     Source::signed("https://registry.example.com/team/", public_key, "acme-team")

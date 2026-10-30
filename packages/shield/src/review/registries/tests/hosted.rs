@@ -1,7 +1,7 @@
 //! HTTPS acquisition as Shield configures it: TLS validation, no redirects,
 //! the artifact size bound, UTF-8 text and the request deadline.
 use super::*;
-use canonic_registry::{
+use canonic_registry_kit::{
     digest,
     testing::{Response, Server},
 };

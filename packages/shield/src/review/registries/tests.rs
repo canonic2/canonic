@@ -2,7 +2,7 @@
 mod dependencies;
 mod hosted;
 use super::*;
-use canonic_registry::testing::SigningKey;
+use canonic_registry_kit::testing::SigningKey;
 
 #[test]
 fn global_registrations_need_an_absolute_home_directory() {
@@ -21,7 +21,7 @@ fn global_registrations_need_an_absolute_home_directory() {
 
 #[test]
 fn catalog_timestamps_retain_exact_second_precision_and_calendar_validation() {
-    use canonic_registry::timestamp::is_utc_seconds as utc;
+    use canonic_registry_kit::timestamp::is_utc_seconds as utc;
     assert!(utc("2000-02-29T12:00:00Z"));
     assert!(utc("0000-02-29T12:00:00Z"));
     assert!(!utc("1900-02-29T12:00:00Z"));
@@ -165,7 +165,7 @@ fn signed_metadata_binds_exact_bytes_registry_identity_and_valid_expiry() {
 #[test]
 fn main_source_is_binary_pinned_without_enrollment_or_network_key_discovery() {
     let source = main_source().expect("main source");
-    assert!(canonic_registry::source::is_https_location(
+    assert!(canonic_registry_kit::source::is_https_location(
         source.location()
     ));
     assert_eq!(source.identity(), "main");

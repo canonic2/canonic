@@ -245,7 +245,7 @@ fn proposed_pack_keeps_the_enrolled_registry_and_publisher_identity() {
     let root = Path::new(&context.project_root);
     let registry = assert_fs::TempDir::new().unwrap();
     let source =
-        canonic_registry::source::Source::local(&registry.path().canonicalize().unwrap()).unwrap();
+        canonic_registry_kit::source::Source::local(&registry.path().canonicalize().unwrap()).unwrap();
     let pack = json!({"schema_version":1,"kind":"pack","id":"acme/runtime","version":"1.0.0",
         "description":"Acme runtime fixture","license":"MIT","maintainers":["Acme"],
         "engines":{"shield":env!("CARGO_PKG_VERSION")},"capabilities":["argument-rules-v1","structured-rules-v1"],
@@ -253,14 +253,14 @@ fn proposed_pack_keeps_the_enrolled_registry_and_publisher_identity() {
     fs::write(registry.path().join("runtime.json"), &pack).unwrap();
     let document = json!({"schema_version":2,"packs":[{"id":"acme/runtime","version":"1.0.0","path":"runtime.json","sha256":crate::policy::fingerprint(pack.as_bytes())}],"commands":{"acme/runtime":["node","npm","npx"]}}).to_string();
     fs::write(registry.path().join("catalog.json"), &document).unwrap();
-    let catalog = canonic_registry::catalog::Catalog::verify(
+    let catalog = canonic_registry_kit::catalog::Catalog::verify(
         &source,
         document.as_bytes(),
         None,
         std::time::SystemTime::now(),
     )
     .unwrap();
-    let mut checkpoints = canonic_registry::checkpoint::Checkpoints::default();
+    let mut checkpoints = canonic_registry_kit::checkpoint::Checkpoints::default();
     checkpoints.admit(&catalog).unwrap();
     update_advisory_fixture(&context, |operator, retained| {
         operator["sources"]["tools"] = json!(source);

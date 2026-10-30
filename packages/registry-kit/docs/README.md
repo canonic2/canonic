@@ -1,6 +1,6 @@
-# Registry documentation
+# Registry Kit documentation
 
-`canonic-registry` provides the registry operations for a Rust application that
+`canonic-registry-kit` provides the registry operations for a Rust application that
 installs packs: source enrollment, catalog authentication, verified downloads,
 dependency resolution, retained artifacts and lockfile validation. Your
 application defines the pack format and controls review and installation.

@@ -4,7 +4,7 @@ use crate::{
     policy::{self, Pack, Profile},
     review::Error,
 };
-use canonic_registry::{
+use canonic_registry_kit::{
     acquisition::Fetcher,
     catalog::Entry,
     checkpoint::Checkpoints,
@@ -169,7 +169,7 @@ fn by_identity(main: &Source, registered: &Effective) -> BTreeMap<String, (Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use canonic_registry::registrations::Registrations;
+    use canonic_registry_kit::registrations::Registrations;
     use std::fs;
     fn fixture() -> (assert_fs::TempDir, Source) {
         let root = assert_fs::TempDir::new().unwrap();

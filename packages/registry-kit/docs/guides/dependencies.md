@@ -9,7 +9,7 @@ performs no network I/O, content validation, enrollment or installation.
 This standalone example selects `acme/app@1.0.0` and its compatible dependency:
 
 ```rust
-use canonic_registry::resolution::{self, Dependency, Instance, Release, Root};
+use canonic_registry_kit::resolution::{self, Dependency, Instance, Release, Root};
 use semver::VersionReq;
 use std::{collections::BTreeSet, error::Error};
 
@@ -83,7 +83,7 @@ Keep candidates alive while using the results. Selected cycles are refused.
 Use `resolve_with_diagnostics` when presenting a resolution to the operator:
 
 ```rust
-use canonic_registry::resolution::{self, Release, Root};
+use canonic_registry_kit::resolution::{self, Release, Root};
 use std::collections::BTreeSet;
 
 fn review_candidates(
@@ -120,7 +120,7 @@ Use `()` when all packs have one level. If your application has ordered levels,
 implement `Level` and list every value strictly weakest first:
 
 ```rust
-use canonic_registry::resolution::{Dependency, Level};
+use canonic_registry_kit::resolution::{Dependency, Level};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Profile { Basic, Strict }
@@ -129,7 +129,7 @@ impl Level for Profile {
     fn all() -> &'static [Self] { &[Self::Basic, Self::Strict] }
 }
 
-fn strict_dependency() -> Result<Dependency<Profile>, canonic_registry::resolution::Error> {
+fn strict_dependency() -> Result<Dependency<Profile>, canonic_registry_kit::resolution::Error> {
     Dependency::parse("acme/review", "^1", None,
         Some(vec![Profile::Strict, Profile::Strict]))
 }

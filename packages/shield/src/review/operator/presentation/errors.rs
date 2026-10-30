@@ -177,14 +177,14 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
     }
 }
 
-fn dependency(error: &canonic_registry::resolution::Error) -> Report {
+fn dependency(error: &canonic_registry_kit::resolution::Error) -> Report {
     match error {
-        canonic_registry::resolution::Error::Limit => Report::new(
+        canonic_registry_kit::resolution::Error::Limit => Report::new(
             "Dependency resolution reached its limit",
             "The dependency graph exceeds the bounded resolver's capacity.",
             &["Reduce the requested dependency closure or choose a simpler release selection."],
         ),
-        canonic_registry::resolution::Error::Unenrolled(source) => {
+        canonic_registry_kit::resolution::Error::Unenrolled(source) => {
             let mut r = Report::new(
                 &format!(
                     "A dependency needs registry {}, which is not enrolled",
@@ -752,8 +752,8 @@ mod tests {
                 pack: "0123456789abcdef/acme/git".into(),
                 dependents: vec!["0123456789abcdef/acme/workflow".into()],
             },
-            Error::Dependency(canonic_registry::resolution::Error::Conflict),
-            Error::Dependency(canonic_registry::resolution::Error::Unenrolled(
+            Error::Dependency(canonic_registry_kit::resolution::Error::Conflict),
+            Error::Dependency(canonic_registry_kit::resolution::Error::Unenrolled(
                 "0123456789abcdef".into(),
             )),
             Error::Policy(crate::policy::Error::Limit),
@@ -762,7 +762,7 @@ mod tests {
             Error::NotPortable(
                 "the rule names /Users/acme/project; write it relative to the project".into(),
             ),
-            Error::Dependency(canonic_registry::resolution::Error::Limit),
+            Error::Dependency(canonic_registry_kit::resolution::Error::Limit),
             Error::Policy(crate::policy::Error::Interrupted),
             Error::Policy(crate::policy::Error::Contract("invalid requirement")),
             Error::Policy(crate::policy::Error::binding(

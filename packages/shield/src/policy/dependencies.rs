@@ -1,10 +1,10 @@
 //! Owns pack `dependencies` declarations and their conversion to registry resolution.
 //!
-//! Resolution itself belongs to `canonic_registry::resolution`; profiles are its
+//! Resolution itself belongs to `canonic_registry_kit::resolution`; profiles are its
 //! ordered level, so dependencies inherit or map a parent's profile.
 
 use super::{Error, Pack, Profile};
-use canonic_registry::resolution::{self, Dependency, Instance, Level, Release, Root};
+use canonic_registry_kit::resolution::{self, Dependency, Instance, Level, Release, Root};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 

@@ -13,7 +13,7 @@ the Visual Studio Marketplace and Open VSX; its documentation is at
   framework scaffold.
 - [TUI Kit](packages/tui-kit/README.md) is an unpublished Rust library of terminal
   components, with a local gallery.
-- [Registry](packages/registry/README.md) is an unpublished Rust library for
+- [Registry Kit](packages/registry-kit/README.md) is an unpublished Rust library for
   signed pack catalogs, verified acquisition, dependency resolution and lockfiles.
 - [MCP Kit](packages/mcp-kit/README.md) is an unpublished Rust library for Model Context
   Protocol servers.

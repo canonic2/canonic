@@ -1,5 +1,5 @@
 //! HTTPS transport: TLS validation, redirects, response bounds and deadlines.
-use canonic_registry::{
+use canonic_registry_kit::{
     acquisition::{AcquisitionError, Fetcher, MAX_CATALOG_BYTES},
     source::Source,
     testing::{Response, Server, SigningKey},
