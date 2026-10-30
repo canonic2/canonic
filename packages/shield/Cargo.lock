@@ -273,7 +273,7 @@ dependencies = [
  "blake3",
  "canonic-mcp-kit",
  "canonic-registry",
- "canonic-tui",
+ "canonic-tui-kit",
  "clap",
  "globset",
  "granit-parser",
@@ -300,8 +300,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "canonic-tui"
-version = "0.3.0"
+name = "canonic-tui-kit"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "crossterm",

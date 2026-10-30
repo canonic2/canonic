@@ -1,7 +1,7 @@
 //! Shield's single inline terminal host; views return intent and never authorize policy.
 use super::{Card, Step};
 use crate::review::Error;
-use canonic_tui::{
+use canonic_tui_kit::{
     editor::{Editor, EditorView},
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
     permission_review::{self, Kind, PermissionReview, Resource},
@@ -433,7 +433,7 @@ pub(super) fn question(
     }
 }
 
-use canonic_tui::question_form::{self as form, AnswerValue, Kind as Shape, QuestionForm, Request};
+use canonic_tui_kit::question_form::{self as form, AnswerValue, Kind as Shape, QuestionForm, Request};
 
 fn setup_form(question: &super::Question) -> Result<QuestionForm, Error> {
     let shape = match (question.multiple, question.choices.is_empty()) {
@@ -545,7 +545,7 @@ pub(super) fn input(host: Host, title: &str) -> Result<String, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use canonic_tui::{
+    use canonic_tui_kit::{
         event::KeyEvent,
         ratatui::{Terminal, backend::TestBackend},
     };
@@ -620,7 +620,7 @@ mod tests {
             .buffer()
             .content()
             .iter()
-            .map(canonic_tui::ratatui::buffer::Cell::symbol)
+            .map(canonic_tui_kit::ratatui::buffer::Cell::symbol)
             .collect::<String>();
         for expected in [
             "Install acme/git 1.0.0",
@@ -656,7 +656,7 @@ mod tests {
             .buffer()
             .content()
             .iter()
-            .map(canonic_tui::ratatui::buffer::Cell::symbol)
+            .map(canonic_tui_kit::ratatui::buffer::Cell::symbol)
             .collect::<String>();
         assert!(text.contains("Back"), "{text}");
         assert!(text.contains("[ Install acme/git 1.0.0 ]"), "{text}");
@@ -747,7 +747,7 @@ mod tests {
             .buffer()
             .content()
             .iter()
-            .map(canonic_tui::ratatui::buffer::Cell::symbol)
+            .map(canonic_tui_kit::ratatui::buffer::Cell::symbol)
             .collect::<String>();
         assert!(text.contains("Cancel"));
         assert!(text.contains("Apply change"));

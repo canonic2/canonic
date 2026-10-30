@@ -11,7 +11,7 @@ the Visual Studio Marketplace and Open VSX; its documentation is at
   against project permission rules.
 - [Lattice](packages/lattice/README.md) is an unpublished native JavaScript
   framework scaffold.
-- [TUI](packages/tui/README.md) is an unpublished Rust library of terminal
+- [TUI Kit](packages/tui-kit/README.md) is an unpublished Rust library of terminal
   components, with a local gallery.
 - [Registry](packages/registry/README.md) is an unpublished Rust library for
   signed pack catalogs, verified acquisition, dependency resolution and lockfiles.
