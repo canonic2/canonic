@@ -1,0 +1,33 @@
+---
+/* A code sample with its file name and a Copy button. Without JavaScript the
+   code is still there to select. */
+interface Props {
+  /** The file name or label above the code. */
+  file: string;
+  code: string;
+  /** What the Copy button's accessible name says it copies. */
+  copies?: string;
+}
+const { file, code, copies = 'the code' } = Astro.props;
+---
+<canonic-code-block class="code">
+  <div class="code-head">
+    <span class="code-file">{file}</span>
+    <button class="copy" type="button" aria-label={`Copy ${copies}`}>Copy</button>
+  </div>
+  <pre><code>{code}</code></pre>
+</canonic-code-block>
+
+<script>
+  import { copyText } from '../scripts/copy';
+
+  class CanonicCodeBlock extends HTMLElement {
+    connectedCallback() {
+      const button = this.querySelector<HTMLButtonElement>('.copy');
+      const code = this.querySelector('code');
+      if (!button || !code) return;
+      button.onclick = () => copyText(button, code.textContent || '');
+    }
+  }
+  if (!customElements.get('canonic-code-block')) customElements.define('canonic-code-block', CanonicCodeBlock);
+</script>

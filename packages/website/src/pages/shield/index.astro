@@ -1,0 +1,47 @@
+---
+import Base from '../../layouts/Base.astro';
+import CodeBlock from '../../components/CodeBlock.astro';
+import Feature from '../../components/Feature.astro';
+import { products } from '../../lib/marks.js';
+import { download, github, pages, shieldNav } from '../../lib/shield.js';
+
+const mark = products.find(product => product.name === 'Shield');
+const quickStart = 'shield init\nshield status\nshield doctor';
+const packs = 'shield pack search node\nshield pack add node --profile strict\nshield pack update';
+const install = 'git clone https://github.com/canonic2/canonic.git\ncd canonic\nmake -C packages/shield install-local';
+---
+<Base title="Canonic Shield" description="Project permissions for Claude Code and Codex, with reviewed rules, signed permission packs and request history."
+  product="Shield" nav={shieldNav('Overview')} github={github} download={download}>
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-text">
+        <a class="chip" href={pages.docs}>
+          <svg viewBox={mark.viewBox} aria-hidden="true"><path d={mark.base} fill="currentColor" /><path d={mark.accent} class="accent" /></svg>
+          Canonic Shield
+        </a>
+        <h1>Project permissions for coding agents.</h1>
+        <p>Shield checks the commands, file reads and web requests that Claude Code and Codex submit against rules you keep with your project. Each request gets Allow, Ask or Deny, with the rules that decided it.</p>
+        <div class="actions">
+          <a class="btn" href={`${pages.docs}getting-started/`}>Get started</a>
+          <a class="btn btn-ghost" href={pages.docs}>Read the guides</a>
+        </div>
+      </div>
+      <CodeBlock file="In your project" code={quickStart} copies="the Shield quick-start commands" />
+    </div>
+  </section>
+  <section class="features band">
+    <div class="wrap">
+      <Feature id="permissions" kicker="Project policy" title="Start with rules you can review.">
+        <p><code>shield init</code> installs a signed baseline pack and connects your agents. Pick a Loose, Recommended or Strict profile, then review and confirm the changes.</p>
+        <p>Add permission packs for the tools you use, or write precise YAML or JSON rules for commands, arguments, paths and web addresses. Agents can propose rules; changes need your confirmation.</p>
+        <div class="feature-media" slot="media"><CodeBlock file="Permission packs" code={packs} copies="the permission-pack commands" /></div>
+      </Feature>
+      <Feature id="install" kicker="Install" title="Build one Rust CLI from source.">
+        <p>Shield has not been published to package managers yet. Install Rust, clone the repository and build the CLI. The checkout pins its toolchain.</p>
+        <p>The command installs <code>shield</code> into <code>~/.local/bin</code>; add that folder to your <code>PATH</code>. macOS is the verified platform. Native agent setup uses Unix hooks and refuses Windows.</p>
+        <p>Shield checks submitted requests. It does not replace the agent's sandbox, and a host that skips its hooks bypasses enforcement. See <a href={`${pages.docs}introduction/`}>What is Shield?</a></p>
+        <div class="feature-media" slot="media"><CodeBlock file="Terminal" code={install} copies="the Shield source installation commands" /></div>
+      </Feature>
+    </div>
+  </section>
+</Base>

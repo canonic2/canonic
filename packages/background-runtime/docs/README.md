@@ -7,5 +7,4 @@ and when it can be released.
 Start with [a minimal manager and client](getting-started.md). Then read the
 [API reference](reference.md) for admission transfers, control extensions,
 launch choices, limits and failure handling. [Development](development.md)
-describes tests and checks. The separate [specifications](../specs/README.md)
-record design requirements and acceptance boundaries.
+describes tests and checks.

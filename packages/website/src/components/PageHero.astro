@@ -1,0 +1,18 @@
+---
+/* The top of an inner page: a kicker, the page's one <h1>, and a lede (the
+   default slot). */
+interface Props {
+  kicker: string;
+  title: string;
+  /** The text column's width. */
+  width?: 'narrow' | 'narrower';
+}
+const { kicker, title, width = 'narrow' } = Astro.props;
+---
+<section class="page-hero">
+  <div class:list={['wrap', width]}>
+    <span class="kicker">{kicker}</span>
+    <h1>{title}</h1>
+    {Astro.slots.has('default') && <p class="lede"><slot /></p>}
+  </div>
+</section>

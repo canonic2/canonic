@@ -25,8 +25,7 @@ Try `tasks`, `filter`, `loading`, `load-failed`, `paging`, `removed`, `bad-data`
 `deep`, `long-names`, `narrow`, `tiny` and the shared color/ASCII profiles.
 Selected full names, disabled reasons and errors appear below the tree. Alt-PageUp
 and Alt-PageDown scroll these details. The caller controls placement, focus,
-snapshots and every request result; [Tree Browser](../specs/components/tree-browser.md)
-defines the reusable contract. Standalone Code/Diff Inspection is separate.
+snapshots and every request result. Standalone Code/Diff Inspection is separate.
 
 ## Permission Review
 
@@ -52,7 +51,6 @@ route events through `update`, inject elapsed time with `tick`, and drain
 exact current ticket can acknowledge actual application. Call `expire`, `withdraw`
 or validated `replace` for host lifetime/material changes. `render_with` draws
 the panel and `render_overlay` its Dialog in a separate caller-owned viewport.
-See the [complete contract](../specs/components/permission-review.md).
 
 Use `chat.push_review(Review::Permission(Box::new(panel)))` or
 `Review::Questions(Box::new(form))` for immediate saved-anchor composition.
@@ -173,7 +171,7 @@ The narrow profile caps the component area at 40 columns inside the gallery.
 Entries marked `design pending` open a description of the intended behavior and
 its source board. They do not simulate a feature that is still awaiting
 implementation. Some working fixtures describe a remaining design gap beneath
-the component. The [design map](../specs/features/gallery-designs.md) records coverage.
+the component.
 
 From the package directory, list or open named scenarios without cycling:
 
@@ -319,8 +317,7 @@ or successfully ends a turn; F6 refuses or fails it. Cancellation and background
 requests remain pending until that simulated host response. F7 replaces the draft lifetime; F8 tests a stale response;
 F9 changes availability; F11 returns editor text; F12 restores a saved snapshot;
 F3 expands/collapses fixture shell output. Gallery storage and execution are
-simulated. The public [composer contract](../specs/components/composer.md) records the
-layout, state transitions, limits and host adapters.
+simulated.
 
 `Composer::update` returns an optional immutable `Submission`. Hosts project it
 with `Chat::push_submission`, then call `acknowledge_submission` with its exact
@@ -670,8 +667,7 @@ copy/details/refusal with `acknowledge_tool`. `complete_tool_retry` consumes the
 matching pending ticket and atomically inserts the accepted successor below its
 parent. The host still validates execution/authority and owns full output.
 Chat retains its 64 KiB per-turn source limit; omitted bytes are disclosed and
-Details lets a real host fetch the complete source. See the
-[public contract](../specs/components/tool-call-card.md).
+Details lets a real host fetch the complete source.
 
 ## Session Browser
 
@@ -726,9 +722,6 @@ Gallery F5 succeeds, F6/F7 fail/refuse, F8 refreshes material, F9 removes the
 selected row and F12 delivers an old result. `before-chat` exposes Ctrl-X O;
 F1 opens the simulated palette. `queued-drafts`, `switch-back` and `streaming`
 demonstrate retained per-session state. All operations are fixture simulations.
-The [public contract](../specs/components/session-browser.md) owns limits and
-lifetime rules; [human review](../specs/human-testing.md#session-browser-review)
-remains a separate acceptance checkpoint.
 
 ## Code and diff inspection
 
@@ -770,8 +763,7 @@ a reason and optional bounded preview; Enter explicitly shows that part.
 Combined source is bounded to 4 MiB/20,000 lines, each line to 64 KiB, find to
 65,536 occurrences with visible feedback. Controls render as text. Copies use
 LF and ASCII patch signs; arbitrary selected patch lines are not guaranteed
-to apply independently. See the
-[public contract](../specs/components/code-diff-inspection.md).
+to apply independently.
 
 ## Status panels and notices
 
@@ -799,8 +791,6 @@ Changed records need newer revisions; stale/foreign/duplicate replies are inert.
 Enable Chat entry with `set_status_available(true)` and handle `Intent::Status`.
 Supply derived `Chrome` with `set_status_chrome` for summary/activity and composer
 focus styling. Retain the actual Chat object when entering another focus scope.
-See the [component contract](../specs/components/status-panels-and-notices.md)
-for limits, clock behavior and host ownership.
 
 ## Permanent command feedback
 
@@ -828,8 +818,7 @@ ANSI; styled output resets attributes after each span. This formatter acquires n
 terminal and prompts for nothing. `render` draws into an existing frame and
 `lines` lets a host manage a scrollable viewport. The three `command-error`
 scenarios under Status Panels & Notices demonstrate short, long and minimal
-feedback. See the [contract](../specs/components/status-panels-and-notices.md#settled-command-diagnostics)
-for display bounds and safe text.
+feedback.
 
 ## Inline composition
 
@@ -942,6 +931,4 @@ only after output is accepted. Later revisions append a named correction. Abort
 an ambiguously partial write to stop automatic replay. Use
 `Chat::render_inline_live` for the dock/activity/review area without drawing its
 transcript. Measure that space with `Chat::inline_height` and add the wrapped live
-parts, then render them in the host's remaining space. See the
-[terminal contract](../specs/features/terminal.md#inline-runtime-api) for bounds
-and the remaining native acceptance scope.
+parts, then render them in the host's remaining space.

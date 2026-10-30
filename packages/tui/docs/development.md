@@ -83,7 +83,7 @@ completion, autosave snapshots and editor conflicts. `editor/atoms.rs` carries
 lossless chips through transactions; `composer/codec.rs` encodes caller-owned
 streams. The foreground editor adapter is invoked explicitly by a host and
 wrapped in `TerminalSession::handoff`. `gallery/composer.rs` simulates those host
-ports with 99 named scenarios. See the [implementation contract](../specs/components/composer.md).
+ports with 99 named scenarios. See [composer workflows](usage.md#composer-workflows).
 
 `theme/tokens.rs` defines semantic color/symbol/cell contracts; `theme.rs`
 resolves profiles and reusable styles. `ui.rs` owns the labeled rule primitive.
@@ -148,8 +148,7 @@ unexpected changes automatically. Property tests cover selection bounds.
 
 Presentation tests cover terminal-default colors, ANSI/indexed/RGB/no-color
 selection, ASCII, host labels/placeholder/footer, copy-safe rows and notice
-expiry. [Presentation architecture](../specs/presentation.md) documents these
-boundaries and the current design-system/editor scope.
+expiry.
 
 The Unix PTY integration test needs Python 3. It verifies selector navigation,
 picker confirmation, chat submission, resize, Ctrl-C and terminal mode restoration.

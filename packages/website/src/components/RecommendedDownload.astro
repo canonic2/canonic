@@ -1,0 +1,54 @@
+---
+/* A panel with the .vsix for the visitor's computer, and the other build of
+   the same system for Macs with Intel and Arm Windows or Linux. Hidden until
+   the computer is recognized; the platform table lists every file anyway. */
+interface Props {
+  downloads: { url: string; files: { target: string; short: string; name: string; url: string }[] };
+}
+const { downloads } = Astro.props;
+const files = downloads.files.map(({ target, short, name, url }) => ({ target, short, name, url }));
+const arrow = 'M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10';
+---
+<canonic-recommended-download class="rec ink" hidden data-files={JSON.stringify(files)}>
+  <div class="rec-text">
+    <span class="rec-kicker">For this computer</span>
+    <span class="rec-name" data-rec-name></span>
+    <span class="rec-file" data-rec-file></span>
+  </div>
+  <a class="btn" href={downloads.url} data-rec-link>
+    <svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true"><path d={arrow} /></svg>
+    Download .vsix
+  </a>
+  <p class="rec-alt" data-rec-alt hidden><span data-rec-alt-ask></span> <a href={downloads.url}></a></p>
+</canonic-recommended-download>
+
+<script>
+  import { recommendation } from '../scripts/platform';
+
+  interface File { target: string; short: string; name: string; url: string }
+
+  class CanonicRecommendedDownload extends HTMLElement {
+    connectedCallback() {
+      const pick = recommendation();
+      const files: File[] = JSON.parse(this.dataset.files || '[]');
+      const chosen = pick && files.find(file => file.target === pick.target);
+      if (!pick || !chosen) return;
+      this.querySelector('[data-rec-name]')!.textContent = chosen.short;
+      this.querySelector('[data-rec-file]')!.textContent = chosen.name;
+      const link = this.querySelector<HTMLAnchorElement>('[data-rec-link]')!;
+      link.href = chosen.url;
+      link.setAttribute('aria-label', `Download ${chosen.name}`);
+      const other = files.find(file => file.target === pick.alt);
+      const alt = this.querySelector<HTMLElement>('[data-rec-alt]');
+      if (other && alt) {
+        alt.querySelector('[data-rec-alt-ask]')!.textContent = pick.ask;
+        const altLink = alt.querySelector('a')!;
+        altLink.href = other.url;
+        altLink.textContent = `Download ${other.name}`;
+        alt.hidden = false;
+      }
+      this.hidden = false;
+    }
+  }
+  if (!customElements.get('canonic-recommended-download')) customElements.define('canonic-recommended-download', CanonicRecommendedDownload);
+</script>

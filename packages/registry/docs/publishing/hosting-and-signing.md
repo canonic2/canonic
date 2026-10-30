@@ -64,7 +64,7 @@ characters each, starting alphanumeric and otherwise using letters, digits or
 `._+-`. These authenticated hints establish relevance only. Checkpoint admission
 prepares the current index; consumers need no artifact reads for discovery.
 Omit the metadata for v1, and upgrade v1-only consumers before publishing v2.
-See [registry format](../../specs/registry-format.md) for the complete contract.
+See [catalog format](catalog-format.md) for the catalog fields.
 
 Every response must be HTTP 200 with no `Content-Encoding`. Disable compression
 and redirects for these paths, including automatic redirects to a CDN or login

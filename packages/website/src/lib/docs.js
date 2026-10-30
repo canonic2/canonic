@@ -1,0 +1,100 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { docGroups } from './doc-groups.js';
+
+const repositoryRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+const docSources = ['workbench', 'shield'].map(product => ({
+  product,
+  root: path.join(repositoryRoot, 'packages', product, 'docs'),
+}));
+
+export function docsHref(id, base = '/', product = 'workbench') {
+  return `${base.replace(/\/?$/, '/')}${product}/docs/${id === 'index' ? '' : `${id.replace(/\/index$/, '')}/`}`;
+}
+
+export function docTitle(entry) {
+  return entry.body.match(/^#\s+(.+)$/m)?.[1].replace(/`/g, '') || entry.id;
+}
+
+export { docGroups };
+
+export function docsNavigation(entries, order = docGroups) {
+  const byId = new Map(entries.map(entry => [entry.id, entry]));
+  const groups = order.map(group => ({
+    title: group.title,
+    entries: group.ids.map(id => byId.get(id)).filter(Boolean),
+  }));
+  const listed = new Set(order.flatMap(group => group.ids));
+  const rest = entries.filter(entry => !listed.has(entry.id)).sort((a, b) =>
+    Number(b.id.endsWith('/index')) - Number(a.id.endsWith('/index')) || docTitle(a).localeCompare(docTitle(b)));
+  if (rest.length) groups.push({ title: 'More guides', entries: rest });
+  return groups;
+}
+
+// Keep repository Markdown links usable on the website, including fragments.
+// Links outside the published docs lead to the corresponding repository file.
+export function rewriteDocLink(url, source, base = '/') {
+  if (!source || /^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url)) return url;
+  if (!docSources.some(docs => source.startsWith(docs.root + path.sep))) return url;
+  const match = /^([^?#]+)(.*)$/.exec(url);
+  if (!match) return url;
+  const resolved = path.resolve(path.dirname(source), decodeURIComponent(match[1]));
+  for (const docs of docSources) {
+    const relative = path.relative(docs.root, resolved).split(path.sep).join('/');
+    if (relative.startsWith('../') || path.isAbsolute(relative)) continue;
+    if (!/\.md$/i.test(match[1])) return url;
+    const id = relative.replace(/\.md$/i, '').replace(/(^|\/)README$/, '$1index');
+    return docsHref(id, base, docs.product) + match[2];
+  }
+  const repositoryPath = path.relative(repositoryRoot, resolved).split(path.sep).join('/');
+  if (repositoryPath.startsWith('../')) return url;
+  return `https://github.com/canonic2/canonic/blob/main/${repositoryPath}${match[2]}`;
+}
+
+// Links that leave the site open in a new tab.
+export function isExternalLink(href, site) {
+  if (!/^https?:\/\//i.test(href || '')) return false;
+  return !site || new URL(href).origin !== new URL(site).origin;
+}
+
+// Code highlighting for every Markdown page, shared with the docs preview.
+export const shikiConfig = { theme: 'github-dark', langAlias: { gitignore: 'plaintext' } };
+
+/* The Sätteri plugins that rewrite guide links and open external links in a
+   new tab. The site adds them to Astro's processor; the docs preview in
+   previews/ renders with the same plugins. */
+export function docsMarkdownPlugins({ site, base = '/' }) {
+  const rewrite = (node, context) => {
+    const source = context.fileURL && fileURLToPath(context.fileURL);
+    if (!source || !docSources.some(docs => source.startsWith(docs.root + path.sep))) return;
+    context.setProperty(node, 'url', rewriteDocLink(node.url, source, base));
+  };
+  return {
+    hastPlugins: [{
+      name: 'product-docs-external-links',
+      element: {
+        filter: ['a'],
+        visit: (node, context) => {
+          if (!isExternalLink(node.properties?.href, site)) return;
+          context.setProperty(node, 'target', '_blank');
+          context.setProperty(node, 'rel', 'noopener');
+        },
+      },
+    }],
+    mdastPlugins: [{ name: 'product-docs-links', link: rewrite, definition: rewrite }],
+  };
+}
+
+export function docsMarkdown() {
+  return {
+    name: 'product-docs-links',
+    hooks: {
+      'astro:config:setup': ({ config }) => {
+        // Extend Astro's default Sätteri processor without adding a renderer.
+        const plugins = docsMarkdownPlugins({ site: config.site, base: config.base });
+        config.markdown.processor.options.hastPlugins.push(...plugins.hastPlugins);
+        config.markdown.processor.options.mdastPlugins.push(...plugins.mdastPlugins);
+      },
+    },
+  };
+}

@@ -1,0 +1,16 @@
+---
+import { getCollection } from 'astro:content';
+import DocsPage from '../../../components/DocsPage.astro';
+import { docsNavigation } from '../../../lib/docs.js';
+import { shieldDocGroups } from '../../../lib/doc-groups.js';
+import { download, github, shieldNav } from '../../../lib/shield.js';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('shieldDocs');
+  return entries.map(entry => ({
+    params: { slug: entry.id === 'index' ? undefined : entry.id.replace(/\/index$/, '') },
+    props: { entry, groups: docsNavigation(entries, shieldDocGroups) },
+  }));
+}
+---
+<DocsPage {...Astro.props} product="Shield" nav={shieldNav('Docs')} github={github} download={download} />

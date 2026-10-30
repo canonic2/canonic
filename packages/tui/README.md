@@ -12,18 +12,15 @@ available in the regular gallery. Run the native host with
 `cargo run --locked --features gallery -- --inline --component inline-composition --scenario streaming`.
 Both native Unix hosts release modes on Ctrl-Alt-Z or external SIGTSTP; shell `fg`
 restores the draft and active view. Ctrl-Z retains editor undo.
-See [usage](docs/usage.md#inline-composition) and the
-[terminal contract](specs/features/terminal.md#inline-runtime-api).
+See [usage](docs/usage.md#inline-composition).
 Code/Diff Inspection supplies code and unified-patch views, logical navigation,
 folds, whole-file switching, loaded find, line selection and acknowledged
 copy/editor requests. Its 51 live scenarios include Chat/tree return with
-preserved caller state. See [usage](docs/usage.md#code-and-diff-inspection) and
-the [contract](specs/components/code-diff-inspection.md).
+preserved caller state. See [usage](docs/usage.md#code-and-diff-inspection).
 Status Panels & Notices provides supplied sections, responsive Chat/Dialog placement,
 explicit notice expiry, persistent errors, settled command diagnostics and acknowledged actions in 30 live
 scenarios. Ctrl-X I opens status and Ctrl-X N lists notices when the host enables
-the adapter. See [usage](docs/usage.md#status-panels-and-notices) and the
-[contract](specs/components/status-panels-and-notices.md).
+the adapter. See [usage](docs/usage.md#status-panels-and-notices).
 The Cargo package is `canonic-tui`; Rust code imports it as `canonic_tui`.
 Consuming CLIs declare it as a required, versioned local Cargo path dependency.
 Every CLI build includes the shared TUI. Interactive prompts use its components
@@ -37,15 +34,13 @@ Session Browser provides a dedicated screen over host-supplied conversations. It
 rename/fork/move/pin/delete, acknowledged results and returning to retained Chat
 instances. Ctrl-X O opens it when the host enables the adapter; the `sessions`
 palette command uses the same entry point. All discovery and storage stay with
-the host. See [Session Browser](specs/components/session-browser.md) and
-[usage](docs/usage.md#session-browser).
+the host. See [usage](docs/usage.md#session-browser).
 
 Tree Browser navigates host-supplied files, diff resources and tasks with stable
 IDs, saved folds, ancestor filtering, lazy children, paging and acknowledged
 actions. Its 66 live scenarios compose full-screen and responsive panel placement
 with retained Chat. Ctrl-X F is available when the host enables the adapter.
-See [Tree Browser](specs/components/tree-browser.md) and
-[usage](docs/usage.md#tree-browser). Loading, inspection and execution stay with
+See [usage](docs/usage.md#tree-browser). Loading, inspection and execution stay with
 the host.
 
 Permission Review offers 56 deterministic scenarios. Numbers highlight; Enter
@@ -54,8 +49,7 @@ destructive choices require two deliberate Enter presses within three seconds.
 F5 acknowledges, F6 fails, F7 refuses, F8 expires, F9 replaces and F12 supplies
 a stale result. R explicitly retries failed application. It shares Question
 Form's above-dock Chat queue and preserves the draft and logical viewport.
-See [Permission Review](specs/components/permission-review.md) and
-[usage](docs/usage.md#permission-review). No fixture executes or stores a grant.
+See [usage](docs/usage.md#permission-review). No fixture executes or stores a grant.
 
 From the repository root:
 
@@ -75,7 +69,7 @@ Returning to a picker retains its search, selection and scroll position;
 scenario picker state is remembered separately for each component.
 Named scenarios also open with `--component <name> --scenario <name>`;
 `--list` lists them without a terminal. Pending designs display their requirements
-and source board. See the [design coverage map](specs/features/gallery-designs.md).
+and source board.
 
 The compact picker returns stable choice IDs, with details, groups, disabled and
 danger rows, fuzzy filtering, paging and explicit single/multiple confirmation.
@@ -93,14 +87,13 @@ editor-first Up recall, searchable history, stash swaps/drop undo, autosave
 snapshots, paste/image chips, shell mode, slash/file completion and external-editor
 conflicts. The gallery has 99 named composer scenarios with simulated host work.
 F5 accepts or ends a turn, F6 refuses/fails, F11 returns editor text and F12
-restores saved state with the queue paused. See [usage](docs/usage.md#composer-workflows)
-and the [public implementation contract](specs/components/composer.md).
+restores saved state with the queue paused. See [usage](docs/usage.md#composer-workflows).
 
 Completion Menu has 30 interactive states for commands/files, streaming, failure,
 retry, disabled candidates and insertion. Tab and Enter insert; a later Enter
 invokes a known command or submits the message. Its pure reusable API owns ranking,
 source tickets and fixed-height rendering; hosts own discovery and I/O. See
-[usage](docs/usage.md#completion-menu) and its [contract](specs/components/completion-menu.md).
+[usage](docs/usage.md#completion-menu).
 
 Tool Call Card supplies nine lifecycle states, text/code/diff previews, ordered
 concurrent groups, coalesced streaming and identified copy/details/retry effects.
@@ -108,7 +101,7 @@ Its 79 gallery scenarios run inside Chat with an independent Composer draft,
 including twenty run activity and cancellation scenarios.
 Ctrl-X V selects cards; Enter expands, `o` opens searchable full-output details,
 `r` requests a new retry card, and `y`/`c` copy call/output in the local simulation.
-See [usage](docs/usage.md#tool-call-card) and its [contract](specs/components/tool-call-card.md).
+See [usage](docs/usage.md#tool-call-card).
 
 Question Form stages single/multiple choices and multiline typed answers above
 Chat's preserved Composer. Multiple questions require a final Review; one question
@@ -116,7 +109,7 @@ submits on deliberate choice. The shared queue defers arrivals during typing,
 retains the active review and validates identified host acknowledgements. Its 52
 scenarios simulate failure/refusal, partial answers, expiry, replacement and copy.
 F5 accepts, F6 fails, F7 refuses, F8 expires, F9 replaces and F12 probes a stale
-reply. See [usage](docs/usage.md#question-form) and the [contract](specs/components/question-form.md).
+reply. See [usage](docs/usage.md#question-form).
 
 The editor uses full-width text between title/footer rules, with semantic color
 and cell tokens. F2 cycles its twenty-five working states; F4 cycles color profiles.
@@ -153,6 +146,6 @@ cargo check --locked --manifest-path path/to/consumer/Cargo.toml
 ```
 
 Existing product interfaces retain their behavior; their UI migrations are
-separate increments. See [usage](docs/usage.md), [development](docs/development.md)
-and [internal specs](specs/README.md). No crates.io publication or gallery
+separate increments. See [usage](docs/usage.md) and [development](docs/development.md).
+No crates.io publication or gallery
 installation is required.

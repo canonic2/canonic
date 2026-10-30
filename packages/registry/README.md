@@ -32,7 +32,6 @@ belong to the product.
 - [Integration workflow](docs/guides/integration.md): enrollment, resolution and installation.
 - [Publish a registry](docs/publishing/hosting-and-signing.md): serve signed catalogs and releases.
 - [Development](docs/contributing/development.md): checks, tests and tools.
-- [Specifications](specs/README.md): the contracts behind each module.
 
 Select checks individually from this directory: `make format-check`, `make lint`,
 `make types`, `make test`, `make doctest`, `make docs` or `make deps`.

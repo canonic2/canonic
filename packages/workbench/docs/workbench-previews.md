@@ -1,0 +1,408 @@
+# TypeScript Workbench previews
+
+A Workbench preview renders a component or page from your own source code,
+in named scenarios, next to your design pages. You define it in a
+`.workbench.ts` or `.workbench.tsx` file, with an adapter for HTML, React, Vue,
+Astro, React Native Web, or a technology you register yourself.
+
+Like a story in Storybook, a preview renders your real component or page, but
+not a running copy of your app. Each scenario supplies the data the page would
+load, through props, providers, or [mocked requests](preview-data.md#request-mocks),
+and Workbench keeps it on the canvas: its links open other previews, and
+everything else it would do on a real site, such as following a route,
+submitting a form, or starting a download, is recorded under **Actions**
+instead. See [Preview data, mocks, and actions](preview-data.md).
+
+Workbench mounts your content into a container that fills the artboard width,
+including with a flex body and loading, empty, or error content. Styles targeting
+your production root, such as `#app`, do not target the preview mount; keep any
+additional root styling in your preview source or environment.
+
+This page covers what every preview shares: definitions, scenarios, controls,
+lifecycle hooks, the command-line tools, and portable exports. Each framework
+has its own guide:
+
+| Adapter | Renders | Guide |
+| --- | --- | --- |
+| `react` | A React component, with `inputs` as props | [React](react.md) |
+| `react-native-web` | A React Native component through React Native Web | [React Native Web](react-native-web.md) |
+| `vue` | A Vue 3 single-file component or module, with `inputs` as props | [Vue](vue.md) |
+| `astro` | An Astro component or page, rendered on the server | [Astro](astro.md) |
+| `html` | An HTML file with its styles and scripts, or a module that mounts into the canvas | [HTML](html.md) |
+| Your own | Anything you can mount from a browser module | [Custom adapters](custom-adapters.md) |
+
+You need:
+
+- `workbench.yaml` at the project root. `name: Acme` alone is enough when
+  previews supply every page.
+- A [trusted workspace](extension.md#workspace-trust), since previews run
+  project code.
+- The framework you render with, installed in your project. Workbench compiles
+  TypeScript, JSX, and Vue files itself, but uses your project's React, Vue,
+  Astro, or React Native Web. It never installs or replaces them.
+
+## Add a preview
+
+1. Write a definition next to the component, such as `src/Button.workbench.ts`:
+
+   ```ts
+   import { definePreview } from '@canonic2/workbench';
+
+   export default definePreview({
+     id: 'components/button',
+     title: 'Components/Button',
+     adapter: 'react',
+     source: { entry: './Button.tsx', export: 'Button' },
+     inputs: { label: 'Continue', disabled: false },
+     controls: {
+       label: { type: 'text' },
+       disabled: { type: 'boolean' },
+     },
+     scenarios: {
+       default: {},
+       disabled: { inputs: { disabled: true } },
+     },
+   });
+   ```
+
+   Workbench supplies `@canonic2/workbench` when it compiles the file. For
+   TypeScript and your editor, install it as a development dependency; see
+   [Types](#types).
+   This example renders a React component; each framework guide has a complete
+   example of its own.
+
+2. Run **Workbench: Refresh Pages**, or save `workbench.yaml`. The preview
+   appears in the page list with its scenarios, and opens on the canvas like any
+   other page.
+
+Workbench finds every `*.workbench.ts` and `*.workbench.tsx` file in the
+project. It skips hidden folders, `node_modules`, `dist`, `build`, and
+`coverage`, and whatever your project's `.gitignore` files ignore, such as
+Rust's `target` folder. To choose other files or turn previews off, see
+[Previews in the configuration reference](configuration.md#previews).
+
+The `title` places the preview in the sidebar. Its first segment names the
+collection, its last the page, and any segments between them a group:
+`Components/Forms/Button` is **Button**, in a **Forms** group, in the
+**Components** collection. A title without `/` goes in a **Previews**
+collection.
+Without a `title`, the `id` is used.
+
+Set `icon: 'monitor'` on `definePreview` for a page preview, or use
+`previews.icons` in `workbench.yaml` to assign icons by title prefix. A
+definition's icon wins over the longest matching prefix, then `previews.icon`,
+then the default `component`. Collection icons are configured separately; an
+icon-only handwritten collection can style a collection shared with Storybook.
+See [preview icon settings](configuration.md#previews) and
+[collection precedence](configuration.md#collections).
+
+Collections and groups with exactly matching names are shared with your
+hand-written pages. For example, a preview titled `Web App/Pages/Jobs` and a
+hand-written page in the **Pages** group of the **Web App** collection appear
+in one **Pages** group under **Web App**.
+
+A file that fails to load or has an invalid definition is reported with the
+other [configuration problems](troubleshooting.md#read-the-resolved-config).
+The remaining previews still load.
+
+To place a preview yourself, give a page in `workbench.yaml` the definition
+as its `src`, such as `src: src/Button.workbench.ts`. The page keeps its place
+and label, and takes its scenarios from the definition. The file must still match
+the discovery patterns.
+
+A `.workbench.ts` or `.workbench.tsx` file can also default-export
+`defineDocs({...})` from `@canonic2/workbench` instead of `definePreview`, to
+declare a [Markdown page](docs-pages.md#declare-a-markdown-page-in-a-definition):
+Markdown with live examples and the docs lenses that render them. It is
+discovered with the previews and placed by its `title` the same way, except
+that a title without `/` goes in a **Docs** collection. If `workbench.yaml` also lists its Markdown
+file, the listed page is used instead. To give a preview page its own docs,
+set `docs` on its entry in `workbench.yaml`. See [Docs](docs-pages.md).
+
+## Name the preview lens
+
+To rename the preview's own lens, set `previews.lensLabel` in `workbench.yaml`:
+
+```yaml
+previews:
+  lensLabel: Design
+```
+
+This changes the default **Preview** label to **Design** for discovered
+previews. An explicitly listed page can set its own `lensLabel` to override
+that value. These are YAML settings, separate from the preview definition's
+`title`, which places and names the page in the sidebar. They rename the
+existing lens without adding a second button. If a preview is used as a
+`kind: workbench` implementation, set that implementation's `label` instead.
+See [Customize lens labels](lenses.md#customize-lens-labels).
+
+## Define a preview
+
+| Key | Description |
+| --- | --- |
+| `id` | Required. Kebab-case segments separated by `/`, such as `components/button`. Unique in the project, across previews and docs pages. |
+| `title` | Where the preview appears in the sidebar. Defaults to `id`. |
+| `adapter` | Required. `html`, `react`, `vue`, `astro`, `react-native-web`, or a [registered](#register-other-technologies) name. |
+| `source` | Required. `entry` is the file to render, relative to the definition and inside the project. `export` names its export and defaults to `default`. |
+| `inputs` | Data passed to the source: props for React and Vue, `Astro.props` for Astro. |
+| `controls` | Inputs you can edit in **Preview controls**. See [Controls](preview-data.md#controls). |
+| `scenarios` | A map of kebab-case scenario IDs to [scenarios](#scenarios). |
+| `artboards` | An explicit map of artboards shown together within this page. Each has an optional `label`, integer `width` and `height` from 1 to 8192, and optional `inputs`. See [Multiple artboards](#multiple-artboards). |
+| `links` | The addresses the source links or submits to, each mapped to the preview it opens. See [Links and navigation](preview-data.md#links-and-navigation). |
+| `requests` | Answers to the page's `fetch` and `XMLHttpRequest` calls. See [Request mocks](preview-data.md#request-mocks). |
+| `sizes` | The artboard sizes the preview supports: any of `fit`, `laptop`, `mobile`, and `resizable`. See [Sizes](pages-and-scenarios.md#sizes). |
+| `docs` | Text shown under **Documentation** in **Preview controls**. |
+| `fixtures`, `globals` | Data and settings that environments, hooks, and request handlers read from the context. See [Fixtures and globals](preview-data.md#fixtures-and-globals). |
+| `styles` | Stylesheets to load with the preview, relative to the definition. |
+| `assets` | Extra local files or folders the source or a loader reads at runtime, relative to the definition. |
+| `environment` | A module, relative to the definition, that wraps or configures every scenario. See [Environments](preview-data.md#environments). |
+| `setup`, `play`, `ready` | [Lifecycle hooks](#lifecycle-hooks) for every scenario. |
+
+`inputs`, `fixtures`, and `globals` must be plain, cloneable data.
+
+### Scenarios
+
+Each scenario can set:
+
+- `label`, the name in the sidebar. It defaults to the ID in sentence case, so
+  `is-busy` reads **Is busy**.
+- `inputs`, `fixtures`, and `globals`, which override the preview's values
+  key by key; see [What you can set, and where](preview-data.md#what-you-can-set-and-where).
+- `source`, to render a different entry or export in this scenario.
+- `requests`, tried before the preview's
+  [request mocks](preview-data.md#which-mock-answers).
+- `setup`, `play`, and `ready` hooks.
+
+The first scenario is the one a preview opens in. Every scenario also opens directly
+with `?scenario=<id>` on the preview's address; an unknown scenario shows an error.
+A preview without `scenarios` has one scenario, `default`.
+
+SVG icon sprites registered when your preview module loads remain available
+when you switch scenarios or return to that preview.
+
+Returning to a preview preserves form edits, filters, scroll, open menus, and
+live application state. The canvas keeps up to three previews you left loaded
+for 15 minutes. **Reload** starts the current preview again;
+**Reset scenario** restores its declared inputs. A source change rebuilds the
+preview. Closing the canvas releases the previews it kept.
+
+The `<html>` element carries `data-wb-scenario` with the current scenario ID, so CSS
+keyed off it works as it does in [design pages](pages-and-scenarios.md#1-css-keyed-off-the-root).
+
+## Multiple artboards
+
+Use `artboards` when one page contains several independently sized examples.
+Scenarios remain alternatives selected with the scenario switcher; declaring scenarios
+does not create artboards. A page may have both: the selected scenario applies to
+each of its declared artboards.
+
+```ts
+artboards: {
+  info: { label: 'Info', width: 560, height: 79 },
+  success: {
+    label: 'Success', width: 560, height: 119,
+    inputs: { tone: 'success', title: 'Import complete' },
+  },
+}
+```
+
+Declare 1–32 artboards with kebab-case IDs. These are children of one page,
+not scenario entries or additional pages in the sidebar. Each renderer receives
+`context.artboard` and its own inputs. Inputs merge from the preview, then the
+artboard, then the selected scenario, then temporary control edits. Reset restores
+that artboard's authored inputs. The page's supported sizes must permit its
+dimensions; include Resizable for arbitrary dimensions.
+
+Artboard labels remain selectable while their previews initialize. You can pan
+and zoom during loading. With the canvas focused, Left and Right select and
+center neighboring artboards. Only the selected artboard runs its preview. The
+others show a background image of it, or, when they are large enough on screen
+to read, a static copy of the page without scripts; see
+[Using the canvas](canvas.md). If an artboard's background image cannot be
+rendered, its label shows the reason; it is tried again after the next source
+edit, or when the artboard comes back into view.
+
+Select an artboard to interact with it. Once you click or type in it, its
+application state is kept when you select another one, so returning to it keeps
+its document, inputs and scroll position. Selecting artboards only to look at
+them keeps nothing. Up to eight artboards keep application state; using a ninth
+releases the one used longest ago, and a message names it. A released artboard
+shows a kept image of what you did. **Release**, in the selected artboard's
+label, does the same on request: it keeps that image and ends its document. **Restart**, in the same place
+once released, starts a fresh document: application drafts, counters and other
+JavaScript state reset, while Workbench annotations and input overrides survive.
+
+Capture includes the complete declared group. It uses each artboard's running
+document or its kept image, and starts artboards that never ran
+one at a time. The background images are not used. If a kept image is out of
+date after a source edit, capture fails and asks you to restart that artboard
+rather than leaving it out.
+
+For a component that should fit its content, put `data-wb-fit-content` on its
+origin-aligned root and remove surrounding padding, backgrounds and viewport
+minimum heights. Natural bounds follow content edits independently per artboard.
+
+## Adapters
+
+`adapter` picks how the `source` renders. The built-in adapters are `html`,
+`react`, `vue`, `astro`, and `react-native-web`; see the table at the top of
+this page for each one's guide. Any other name must be
+[registered](#register-other-technologies).
+
+## Data, controls, and actions
+
+A preview gets the data its real page would load, and you can change it per
+scenario and while you review. [Preview data, mocks, and actions](preview-data.md)
+covers all of it:
+
+- **Inputs and controls:** props for the component, and fields under
+  **Preview controls** that edit them live. **Reset scenario** drops your edits
+  and the action log.
+- **Fixtures and globals:** data and settings for the code around the component.
+- **Environments:** providers, plugins, stores, and setup, for one preview or,
+  from `workbench.config.ts`, for the whole project.
+- **Request mocks:** answers to the page's own `fetch` and XMLHttpRequest
+  calls, for empty, loading, error, and offline scenarios.
+- **Actions:** what the page tried to do, listed under **Actions** in
+  **Preview controls**.
+- **Links and navigation:** links that open other previews, with the
+  top bar's **Actions** switch on.
+
+## Lifecycle hooks
+
+Hooks and sources receive a context with `id`, `scenario`, `inputs`, `fixtures`,
+`globals`, an abort `signal`, `action(name, ...values)`, `navigate(to)`, and
+`error(error)`. Examples in a page's [docs](docs-pages.md#examples) get the same
+context, with empty `inputs`, `fixtures`, and `globals`.
+
+- `setup(context)` runs before the source mounts and may return a cleanup
+  function. It runs from the project's [environment](preview-data.md#environments),
+  then the preview's `environment`, then the preview, then the scenario.
+  [Request mocks](preview-data.md#request-mocks) are already active, so
+  `setup` can fetch.
+- `play({ canvas, ...context })` runs after mounting, for an interaction
+  sequence such as opening a menu. The preview's runs before the scenario's.
+- `ready(context)` runs last, for anything the preview must wait for.
+
+An [environment](preview-data.md#environments) module can export `setup` and
+`ready` too, and a hook for its adapter, such as `wrap` for React.
+
+A preview is ready once its hooks finish, its fonts load, and its visible
+images load or 3 seconds pass. Screenshots and handoffs wait for that, and fail
+with the rendering error, or with `Workbench preview did not finish rendering
+before capture` after 8 seconds.
+
+Before a preview renders again, its signal is aborted and cleanups run in
+reverse order. Tie subscriptions, timers, and listeners to `context.signal` or a
+cleanup. A failed cleanup doesn't stop the others, and **Reset scenario** recovers
+after a failed render.
+
+Errors are shown in the preview's frame: thrown errors, rejected promises,
+React error boundaries, Vue's error handler, and anything a custom adapter
+passes to `context.error(error)`.
+
+An error after the first render also makes the artboard unavailable for capture
+until it recovers. A declared artboard that fails shows its error and starts
+again after the next save or resize, or with **Release** and then **Restart**.
+An ordinary preview can use **Reset scenario** to render again.
+
+Saving a file updates the open previews that use it, usually within a fraction
+of a second, without reloading the canvas:
+
+- React components keep their state through React Fast Refresh, as long as
+  the order of their hooks is unchanged.
+- Vue components update through Vue's hot reload. A template or style edit
+  keeps the component's state; a script edit resets it.
+- Stylesheets, CSS modules, and Vue style blocks are replaced in place.
+- HTML and Astro previews render again in place, with the selected scenario and
+  inputs.
+- Saving the definition, an environment, or a module that can't update in
+  place reloads the preview, keeping its scenario, size, and inputs.
+- Saving `workbench.config.ts` restarts the compilers and reloads the open
+  previews.
+- A syntax error shows in the frame, and the next good save recovers it.
+
+If you add or remove a definition, or change its `title` or scenarios, run
+**Workbench: Refresh Pages** to update the sidebar.
+
+Workbench compiles previews with [Rspack](https://rspack.rs/), bundled with the
+extension. It starts building when the project opens, and builds all of the
+project's previews and docs examples together, so code they share loads once:
+moving to another page loads only that page's own code. The saved page list and
+build cache are kept in the system's temporary folder, never in your project,
+and are reused when Workbench restarts. Your project does not need to install
+a compiler.
+
+## Register other technologies
+
+Adapter names aren't a fixed list. `workbench.config.ts` at the project root,
+or the file named by [`previews.config`](configuration.md#previews), registers
+adapters and sets Rspack `rules`, `plugins` made with Workbench's helpers, `aliases`, `dedupe`,
+`resolveExtensions`, and `define` for every preview. An adapter whose name isn't built in or
+registered fails with `Unknown adapter`. See [Custom adapters](custom-adapters.md).
+
+## Compare a design with a preview
+
+A page can show a preview as a lens next to its design, with a `workbench`
+implementation. See
+[Compare a design with a Workbench preview](lenses.md#compare-a-design-with-a-workbench-preview).
+
+## Types
+
+Install the authoring types so `tsc` and your editor resolve
+`@canonic2/workbench`:
+
+```sh
+npm install --save-dev @canonic2/workbench
+```
+
+Use `pnpm add -D` or `yarn add -D` with those package managers. The types
+check that each scenario's `inputs` match the preview's. Workbench still compiles
+previews with its own copy, so the installed version affects types only; keep
+it at the version of your extension to type the newest fields.
+
+Without an installed package, the `init` command below writes the same types to
+a `workbench-env.d.ts` file. Include that file in your `tsconfig.json`.
+
+## Command-line tools
+
+The extension includes the `workbench-server` command in its install folder,
+at `server/bin/<platform>-<arch>/workbench-server`. Project code in
+definitions and configuration runs on Node 24 or later: the `node` on your
+`PATH`, or the program `--node` names.
+
+```sh
+~/.vscode/extensions/canonic.canonic-workbench-<version>/server/bin/darwin-arm64/workbench-server check .
+```
+
+| Command | What it does |
+| --- | --- |
+| `init <project>` | Writes `workbench-env.d.ts`, the types for `@canonic2/workbench`, and a `workbench.yaml` named after the folder. Existing files are left alone. |
+| `list <project>` | Prints, as JSON, the previews, docs pages and definition errors Workbench finds. |
+| `check <project>` | Finds and compiles every preview without opening a browser. Prints `Built <id>` for each, lists every failure, and exits with an error if there were any. |
+| `build <project> [output]` | Writes the [standalone viewer](#portable-exports) to `output`, or `workbench-static` in the project. The folder must be empty or missing. Successful previews are written even when others fail; failures are listed and the exit code is nonzero. |
+
+## Portable exports
+
+**Export…** › **Source package (ZIP)** includes compiled previews in a `browser/`
+folder, alongside their editable sources. See
+[Design-system export](design-system-export.md). Serve the extracted folder
+with any static HTTP server and open `browser/index.html`. The `build` command
+writes the same viewer on its own. Viewing it needs no Workbench, Electron,
+package installation, or build step.
+
+The viewer has:
+
+- a searchable list of previews, and the build warnings, if any,
+- **Scenario** and **Size** menus, with **Width** and **Height** for
+  **Resizable**,
+- **Reload**, and **Preview controls** with the same inputs, reset, actions,
+  and documentation as the canvas,
+- **Open preview**, which opens the preview on its own page. That page also
+  accepts `?scenario=<id>`.
+
+The viewer's address keeps the preview, scenario, size, and resizable dimensions, so
+you can copy it to share a selection.
+
+Astro previews carry every authored scenario but no input controls; see
+[Astro portable exports](astro.md#portable-exports).

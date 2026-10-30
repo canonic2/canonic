@@ -27,9 +27,8 @@ canonic-background-runtime = { path = "../background-runtime" }
 This public library is unpublished. macOS and Linux adapters are implemented;
 the socket and process fixtures run on both platforms. Windows root selection
 and peer checks return `Unsupported` because owner and access-list validation
-are not implemented. See [platforms](specs/platforms.md) for the adapter boundary.
+are not implemented.
 
 - [Get started](docs/getting-started.md): a minimal manager and client.
 - [API reference](docs/reference.md): responsibilities, options and errors.
-- [Specifications](specs/README.md): contracts, decisions and acceptance map.
 - [Development](docs/development.md): individual checks and fixture ownership.

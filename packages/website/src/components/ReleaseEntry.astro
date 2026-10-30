@@ -1,0 +1,53 @@
+---
+/* One release on the Changelog: version, date, and tag beside its notes, its
+   links on GitHub, and its builds when it has any. `release` is one entry of
+   workbenchReleases() in src/lib/releases.js. */
+interface Props {
+  release: {
+    version: string; tag: string; url: string; published: string | null; changes: string;
+    notes: ({ text: string } | { items: string[] })[];
+    files: { computer: string; short: string; name: string; url: string }[];
+  };
+  /** Marks the release the Install sections link to. */
+  latest?: boolean;
+}
+const { release, latest = false } = Astro.props;
+const day = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+const arrow = 'M8 2.5v8 M4.5 7L8 10.5 11.5 7 M3 13.5h10';
+---
+<li class="release" id={`v${release.version}`}>
+  <div class="release-meta">
+    <span class="release-version">
+      <a href={`#v${release.version}`}>v{release.version}</a>
+      {latest && <span class="badge">Latest</span>}
+    </span>
+    {release.published && <time datetime={release.published.slice(0, 10)}>{day.format(new Date(release.published))}</time>}
+    <span class="release-tag">{release.tag}</span>
+  </div>
+  <div class="release-body">
+    {release.notes.length > 0 && (
+      <div class="release-notes">
+        {release.notes.map(block => 'items' in block
+          ? <ul>{block.items.map(item => <li>{item}</li>)}</ul>
+          : <p>{block.text}</p>)}
+      </div>
+    )}
+    <div class="actions-row">
+      <a class="btn btn-sm" href={release.changes} target="_blank" rel="noopener">Full changelog on GitHub <span aria-hidden="true">↗</span></a>
+      <a class="btn btn-sm btn-ghost" href={release.url} target="_blank" rel="noopener">Release page <span aria-hidden="true">↗</span></a>
+    </div>
+    {release.files.length > 0 && (
+      <div class="builds">
+        <span class="builds-head">Builds</span>
+        <div class="builds-list">
+          {release.files.map(file => (
+            <a class="get" href={file.url} aria-label={`Download v${release.version} for ${file.computer}: ${file.name}`}>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d={arrow} /></svg>
+              {file.short}
+            </a>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+</li>

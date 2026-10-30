@@ -75,9 +75,8 @@ so the snapshot redacts them.
 The TLS fixtures in `src/testing/fixtures/` are public test data valid until
 2126. They must never be used for real services.
 
-See the [documentation index](../README.md) for public usage guides and the
-[specifications](../../specs/README.md) for internal contracts. When changing an
-API, keep its rustdoc and the corresponding usage guide consistent.
+See the [documentation index](../README.md) for public usage guides. When changing
+an API, keep its rustdoc and the corresponding usage guide consistent.
 
 [Documentation index](../README.md)
 

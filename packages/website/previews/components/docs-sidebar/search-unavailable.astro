@@ -1,0 +1,9 @@
+---
+/* In the docs layout's 220-pixel column. environment.ts fails the search
+   index request inside this wrapper. */
+import DocsSidebar from '../../../src/components/DocsSidebar.astro';
+import { docGroups } from '../fixtures';
+---
+<div style="width: 220px" data-search="unavailable">
+  <DocsSidebar groups={docGroups} current="getting-started" />
+</div>

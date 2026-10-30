@@ -1,0 +1,25 @@
+---
+/* The command that installs a .vsix, with a Copy button. On a recognized
+   computer it names the recommended file instead of <file>.vsix. */
+---
+<canonic-install-command class="cmd">
+  <code>code --install-extension &lt;file&gt;.vsix</code>
+  <button class="copy" type="button" aria-label="Copy the install command">Copy</button>
+</canonic-install-command>
+
+<script>
+  import { copyText } from '../scripts/copy';
+  import { fileName, recommendation } from '../scripts/platform';
+
+  class CanonicInstallCommand extends HTMLElement {
+    connectedCallback() {
+      const code = this.querySelector('code');
+      const button = this.querySelector<HTMLButtonElement>('.copy');
+      if (!code) return;
+      const pick = recommendation();
+      if (pick) code.textContent = `code --install-extension ${fileName(pick.target)}`;
+      if (button) button.onclick = () => copyText(button, code.textContent || '');
+    }
+  }
+  if (!customElements.get('canonic-install-command')) customElements.define('canonic-install-command', CanonicInstallCommand);
+</script>

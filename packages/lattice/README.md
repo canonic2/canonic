@@ -2,9 +2,8 @@
 
 Lattice's implemented package provides native JavaScript primitives for state
 and Web Component bindings, with no runtime dependencies. It is unpublished.
-The [framework specifications](specs/framework.md) record the agreed direction
-for multiple languages and native platforms; those implementations and shared
-code generation are not available yet.
+Other language implementations, native platforms and shared code generation
+are not available yet.
 
 Supported runtimes are **Node 24.12+** for pure entry points and tooling, and
 **Chromium 133+** for browser use. Embedded hosts qualify by their Chromium
@@ -90,10 +89,5 @@ pinned combination against missing module/function/private-method documentation,
 incorrect parameter names and a JSDoc type mismatch. TypeScript 6.0.3 is pinned
 to satisfy the JSDoc plugin's current TypeScript compatibility range.
 
-The [specifications](specs/README.md) hold the agreed
-[JavaScript contracts](specs/javascript/contracts/README.md), the
-[JavaScript authoring model](specs/javascript/framework/README.md) and current
-[JavaScript architecture](specs/javascript/architecture/README.md).
-[Research](research/README.md) records the measurements behind decisions.
 Contributor language, JSDoc and tooling instructions are supplied directly by
 the package's agent rules.

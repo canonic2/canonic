@@ -1,0 +1,42 @@
+---
+import { render } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import DocsSidebar from './DocsSidebar.astro';
+import { base } from '../lib/base.js';
+import { docTitle, docsHref } from '../lib/docs.js';
+import '../styles/docs.css';
+
+const { entry, groups, product, version, nav, github, download } = Astro.props;
+const { Content, headings } = await render(entry);
+const title = docTitle(entry);
+const slug = product.toLowerCase();
+const pages = groups.flatMap(group => group.entries);
+const position = pages.findIndex(page => page.id === entry.id);
+const previous = pages[position - 1];
+const next = pages[position + 1];
+const sections = headings.filter(heading => heading.depth === 2 || heading.depth === 3);
+const group = groups.find(group => group.entries.some(page => page.id === entry.id));
+const description = entry.body.split('\n\n').find(paragraph => !paragraph.startsWith('#'))?.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[`*\n]/g, ' ').slice(0, 180);
+---
+<Base title={`${title} · ${product} docs · Canonic`} description={description} product={product}
+  version={version} nav={nav} github={github} download={download}>
+  <div class="docs-shell wrap">
+    <DocsSidebar groups={groups} current={entry.id} product={product} action={{ href: download.href, label: `Get ${product}` }} />
+    <article class="docs-article">
+      <div class="docs-breadcrumb"><a href={docsHref('index', base, slug)}>{product} docs</a><span aria-hidden="true">/</span><span>{group.title}</span></div>
+      <div class="docs-prose"><Content /></div>
+      <div class="docs-page-footer">
+        <a target="_blank" rel="noopener" href={`${github}/blob/main/packages/${slug}/docs/${entry.id.replace(/(^|\/)index$/, '$1README')}.md`}>View Markdown on GitHub ↗</a>
+      </div>
+      <nav class="docs-pagination" aria-label="Guide navigation">
+        {previous ? <a href={docsHref(previous.id, base, slug)}><span>← Previous</span><strong>{docTitle(previous)}</strong></a> : <span />}
+        {next && <a href={docsHref(next.id, base, slug)}><span>Next →</span><strong>{docTitle(next)}</strong></a>}
+      </nav>
+    </article>
+    {sections.length > 0 && <aside class="docs-toc" aria-label="On this page">
+      <h2>On this page</h2>
+      <nav>{sections.map(heading => <a href={`#${heading.slug}`} class:list={{ 'docs-toc-sub': heading.depth === 3 }}>{heading.text}</a>)}</nav>
+      <a class="docs-back-top" href="#content">Back to top ↑</a>
+    </aside>}
+  </div>
+</Base>

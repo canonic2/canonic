@@ -1,0 +1,40 @@
+---
+/* The Changelog page: every published workbench release, newest first, with
+   its notes from GitHub, its links, and whichever builds it has. */
+import Base from '../../layouts/Base.astro';
+import PageHero from '../../components/PageHero.astro';
+import ReleaseEntry from '../../components/ReleaseEntry.astro';
+import { download, downloads as loadDownloads, github, releases as loadReleases, workbenchNav } from '../../lib/workbench.js';
+
+const downloads = await loadDownloads();
+const releases = await loadReleases();
+// The Install sections link one release; it is the one marked Latest.
+const latest = downloads && downloads.version || releases && releases[0] && releases[0].version;
+---
+<Base
+  title="Changelog · Canonic Workbench"
+  description="Every release of Canonic Workbench, newest first, with its notes, its changes on GitHub, and its builds where available."
+  product="Workbench"
+  version={latest}
+  nav={workbenchNav('Changelog')}
+  github={github}
+  download={download}
+>
+  <PageHero kicker="Workbench" title="Changelog" width="narrower">
+    Every release of Canonic Workbench, newest first, with its full list of changes on GitHub. Builds are listed for the releases that have them.
+  </PageHero>
+
+  <section class="releases-section" aria-label="Releases">
+    <div class="wrap narrower">
+      {releases && releases.length ? (
+        <ol class="releases">
+          {releases.map(release => <ReleaseEntry release={release} latest={release.version === latest} />)}
+        </ol>
+      ) : releases ? (
+        <p class="lede">The first Workbench release will appear here.</p>
+      ) : (
+        <p class="lede">The release list couldn’t be loaded. See <a href={`${github}/releases`} target="_blank" rel="noopener">Workbench releases on GitHub <span aria-hidden="true">↗</span></a>.</p>
+      )}
+    </div>
+  </section>
+</Base>

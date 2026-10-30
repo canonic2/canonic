@@ -1,0 +1,15 @@
+---
+/* One docs page, with the props the docs route's getStaticPaths would give
+   it. A preview isn't routed, so the guide comes from the `id` prop. */
+import { getCollection } from 'astro:content';
+import { docsNavigation } from '../src/lib/docs.js';
+import { docGroups, shieldDocGroups } from '../src/lib/doc-groups.js';
+import WorkbenchPage from '../src/pages/workbench/docs/[...slug].astro';
+import ShieldPage from '../src/pages/shield/docs/[...slug].astro';
+
+const shield = Astro.props.product === 'Shield';
+const Page = shield ? ShieldPage : WorkbenchPage;
+const entries = await getCollection(shield ? 'shieldDocs' : 'workbenchDocs');
+const entry = entries.find(item => item.id === Astro.props.id) || entries.find(item => item.id === 'index');
+---
+<Page entry={entry} groups={docsNavigation(entries, shield ? shieldDocGroups : docGroups)} />

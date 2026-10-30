@@ -69,7 +69,6 @@ V1-only readers reject v2 catalogs; upgrade consumers before publishing v2.
 Successful checkpoint admission replaces the discovery index with the latest
 catalog's associations. Absent or empty metadata clears the index, including
 when admitting a v1 catalog. Retained release digests remain independent.
-See [checkpoint storage and compatibility](../../specs/trust.md#checkpoints).
 
 ## Release entries
 

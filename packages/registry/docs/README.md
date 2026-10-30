@@ -42,5 +42,4 @@ read the [integration workflow](guides/integration.md).
 - [Development](contributing/development.md) — build, checks and test tooling.
 
 These guides describe the supported public API. Generated rustdoc supplies exact
-signatures and error variants. The [specifications](../specs/README.md) are the
-separate internal contract reference.
+signatures and error variants.

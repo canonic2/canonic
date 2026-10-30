@@ -1,0 +1,93 @@
+---
+/* The Install page: the recommended download, every platform's file, and the
+   steps to add the extension to VS Code. */
+import Base from '../../layouts/Base.astro';
+import CodeBlock from '../../components/CodeBlock.astro';
+import InstallCommand from '../../components/InstallCommand.astro';
+import PageHero from '../../components/PageHero.astro';
+import PlatformTable from '../../components/PlatformTable.astro';
+import RecommendedDownload from '../../components/RecommendedDownload.astro';
+import { download, downloads as loadDownloads, github, marketplace, pages, setupYaml, workbenchNav } from '../../lib/workbench.js';
+
+const downloads = await loadDownloads();
+const version = downloads && downloads.version;
+---
+<Base
+  title="Install Canonic Workbench"
+  description="Install Canonic Workbench from the Visual Studio Marketplace, or download the .vsix for your platform."
+  product="Workbench"
+  version={version}
+  nav={workbenchNav('Install')}
+  github={github}
+  download={download}
+>
+  <PageHero kicker={`Install${version ? ` · v${version}` : ''}`} title="Install Canonic Workbench">
+    In VS Code, search for <b>Canonic Workbench</b> in the Extensions view, or see it on the <a href={marketplace} target="_blank" rel="noopener">Visual Studio Marketplace ↗</a>. For Cursor, Windsurf, and other VS Code forks, install the <code>.vsix</code> for your platform from this page. Then add a <code>workbench.yaml</code> to your project.
+  </PageHero>
+
+  <section class="platforms-section" aria-labelledby="platforms-title">
+    <div class="wrap narrow">
+      {downloads ? (
+        <>
+          <RecommendedDownload downloads={downloads} />
+          <h2 id="platforms-title" class="h-small">All platforms</h2>
+          <PlatformTable downloads={downloads} />
+          <a class="text-link start" href={downloads.url} target="_blank" rel="noopener">{version ? `Release v${version} on GitHub ↗` : 'Latest release on GitHub ↗'}</a>
+        </>
+      ) : (
+        <>
+          <h2 id="platforms-title" class="h-small">All platforms</h2>
+          <p class="lede">Workbench downloads will appear after the first successful workbench release.</p>
+        </>
+      )}
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap narrow add-steps">
+      <h2 class="h-medium">Install a .vsix</h2>
+      <ol class="numbered">
+        <li>
+          <span class="num" aria-hidden="true">1</span>
+          <div class="numbered-body">
+            <p>In the Extensions view, click <b>⋯</b> and choose <b>Install from VSIX…</b>, or run:</p>
+            <InstallCommand />
+          </div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">2</span>
+          <div class="numbered-body"><p>If the editor was already open, run <b>Developer: Reload Window</b> from the Command Palette.</p></div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">3</span>
+          <div class="numbered-body">
+            <p>Add a <code>workbench.yaml</code> at the root of your project:</p>
+            <CodeBlock file="workbench.yaml" code={setupYaml} copies="the workbench.yaml example" />
+          </div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">4</span>
+          <div class="numbered-body"><p>The <b>Workbench</b> icon appears in the activity bar. Pick a page there, or run <b>Workbench: Open Canvas</b>, to open the canvas.</p></div>
+        </li>
+      </ol>
+      <p class="install-note">Requires VS Code 1.75 or later. The <code>.vsix</code> files are the same builds as the Marketplace’s. They are unsigned; desktop macOS is the most tested platform.</p>
+    </div>
+  </section>
+
+  <section class="next-section">
+    <div class="wrap narrow cards">
+      <div class="card">
+        <h3>Removing it</h3>
+        <p>Workbench only activates in a folder with a <code>workbench.yaml</code>. To remove it from a project, delete the files listed in <a href={`${pages.docs}getting-started/#removing-workbench-from-a-project`}>Removing Workbench from a project</a>.</p>
+      </div>
+      <div class="card">
+        <h3>Starting servers</h3>
+        <p>With a start command and a readiness check configured, Workbench starts your Storybook or local server in a terminal, in a trusted workspace, when the check fails.</p>
+      </div>
+      <a class="card card-next" href={pages.docs}>
+        <span>Next</span>
+        <strong>Read the docs →</strong>
+      </a>
+    </div>
+  </section>
+</Base>

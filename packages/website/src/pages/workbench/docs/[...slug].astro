@@ -1,0 +1,16 @@
+---
+import { getCollection } from 'astro:content';
+import DocsPage from '../../../components/DocsPage.astro';
+import { docsNavigation } from '../../../lib/docs.js';
+import { download, downloads, github, workbenchNav } from '../../../lib/workbench.js';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('workbenchDocs');
+  return entries.map(entry => ({
+    params: { slug: entry.id === 'index' ? undefined : entry.id.replace(/\/index$/, '') },
+    props: { entry, groups: docsNavigation(entries) },
+  }));
+}
+const version = (await downloads())?.version;
+---
+<DocsPage {...Astro.props} product="Workbench" version={version} nav={workbenchNav('Docs')} github={github} download={download} />
