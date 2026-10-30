@@ -1,0 +1,524 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Custom adapters and compiler settings · Workbench docs · Canonic</title><meta name="description" content="Workbench previews ship with adapters for HTML, React, Vue, Astro, and React Native Web. To preview anything else, such as web components, Svelte, Solid, or an in-house rendering l"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.17.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/workbench/">Overview</a><a href="/workbench/docs/" aria-current="page">Docs</a><a href="/workbench/install/">Install</a><a href="/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Getting started</h2><a href="/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/workbench/docs/canvas/" data-doc-id="canvas">Using the canvas</a><a href="/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group"><h2>Previews</h2><a href="/workbench/docs/workbench-previews/" data-doc-id="workbench-previews">TypeScript Workbench previews</a><a href="/workbench/docs/preview-data/" data-doc-id="preview-data">Preview data, mocks, and actions</a><a href="/workbench/docs/react/" data-doc-id="react">React previews</a><a href="/workbench/docs/react-native-web/" data-doc-id="react-native-web">React Native Web previews</a><a href="/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/workbench/docs/astro/" data-doc-id="astro">Astro previews</a><a href="/workbench/docs/html/" data-doc-id="html">HTML previews</a><a href="/workbench/docs/custom-adapters/" data-doc-id="custom-adapters" aria-current="page">Custom adapters and compiler settings</a></div><div class="docs-group"><h2>Connect your implementation</h2><a href="/workbench/docs/lenses/" data-doc-id="lenses">Lenses and URL implementations</a><a href="/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/workbench/docs/ios-simulator/" data-doc-id="ios-simulator">iOS Simulator</a><a href="/workbench/docs/windows/" data-doc-id="windows">App windows</a></div><div class="docs-group"><h2>Reference</h2><a href="/workbench/docs/configuration/" data-doc-id="configuration">workbench.yaml reference</a><a href="/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/workbench/docs/extension/" data-doc-id="extension">The VS Code extension</a><a href="/workbench/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshooting</a></div></nav><a class="docs-install" href="/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span>Previews</span></div><div class="docs-prose"><h1 id="custom-adapters-and-compiler-settings">Custom adapters and compiler settings</h1>
+<p>Workbench previews ship with adapters for HTML, React, Vue, Astro, and React
+Native Web. To preview anything else, such as web components, Svelte, Solid, or
+an in-house rendering library, register an adapter in <code>workbench.config.ts</code>. The
+same file holds the compiler settings every preview shares: compiler plugins and
+loader rules, import aliases, deduplicated packages, file extensions, and
+build-time constants.</p>
+<p>Use this guide when:</p>
+<ul>
+<li>your components aren’t rendered by a built-in adapter,</li>
+<li>a file type needs a compiler step Workbench doesn’t have, such as <code>.svelte</code>
+files or <code>?inline</code> imports,</li>
+<li>imports need redirecting to mocks or to one copy of a package,</li>
+<li>you want to replace how a built-in adapter mounts components.</li>
+</ul>
+<p>For the definition keys, controls, hooks, and the command-line checker, see
+<a href="/workbench/docs/workbench-previews/">TypeScript Workbench previews</a>.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>A <code>workbench.yaml</code> at the project root, and a
+<a href="/workbench/docs/extension/#workspace-trust">trusted workspace</a>. Plugins, loaders and
+runtimes run project code.</li>
+<li>Whatever your adapter renders with, installed in your project. Workbench
+bundles your runtime module with the project’s own packages and installs
+nothing.</li>
+<li>Plugins and loaders for <a href="https://rspack.rs/" target="_blank" rel="noopener">Rspack</a>, which compiles
+previews. Most webpack loaders work as Rspack rules. Vite, Rollup, and Babel
+plugins need an equivalent loader or plugin.</li>
+</ul>
+<h2 id="example-web-components">Example: web components</h2>
+<p>This example previews a custom element whose shadow DOM styles are imported with
+a Vite-style <code>?inline</code> suffix. It registers a <code>web-components</code> adapter, with a
+rule that loads <code>?inline</code> imports as text. It needs no packages.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>acme-ui/</span></span>
+<span class="line"><span>├── workbench.yaml</span></span>
+<span class="line"><span>├── workbench.config.ts</span></span>
+<span class="line"><span>├── preview/</span></span>
+<span class="line"><span>│   └── web-components.ts</span></span>
+<span class="line"><span>└── src/</span></span>
+<span class="line"><span>    ├── acme-button.css</span></span>
+<span class="line"><span>    ├── acme-button.ts</span></span>
+<span class="line"><span>    ├── acme-button.workbench.ts</span></span>
+<span class="line"><span>    ├── acme-theme.ts</span></span>
+<span class="line"><span>    └── inline.d.ts</span></span></code></pre>
+<p><code>workbench.config.ts</code> registers the adapter and its rule:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { defineConfig } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> defineConfig</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapters: {</span></span>
+<span class="line"><span style="color:#9ECBFF">    'web-components'</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#E1E4E8">      runtime: </span><span style="color:#9ECBFF">'./preview/web-components.ts'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#6A737D">      // Imports ending in `?inline` load the file's text, for shadow DOM styles.</span></span>
+<span class="line"><span style="color:#E1E4E8">      rules: [{ resourceQuery:</span><span style="color:#9ECBFF"> /</span><span style="color:#DBEDFF">inline</span><span style="color:#9ECBFF">/</span><span style="color:#E1E4E8">, type: </span><span style="color:#9ECBFF">'asset/source'</span><span style="color:#E1E4E8"> }],</span></span>
+<span class="line"><span style="color:#E1E4E8">    },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p><code>preview/web-components.ts</code> is the runtime. It creates the element, sets the
+inputs as properties, and logs the element’s events in <strong>Actions</strong>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PreviewContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> ElementClass</span><span style="color:#F97583"> =</span><span style="color:#B392F0"> CustomElementConstructor</span><span style="color:#F97583"> &amp;</span><span style="color:#E1E4E8"> { </span><span style="color:#FFAB70">events</span><span style="color:#F97583">?:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">[] };</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> async</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> mount</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#FFAB70">  canvas</span><span style="color:#F97583">:</span><span style="color:#B392F0"> HTMLElement</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">  source</span><span style="color:#F97583">:</span><span style="color:#B392F0"> ElementClass</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">  context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">  environment</span><span style="color:#F97583">:</span><span style="color:#E1E4E8"> { </span><span style="color:#B392F0">wrap</span><span style="color:#F97583">?:</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">element</span><span style="color:#F97583">:</span><span style="color:#B392F0"> HTMLElement</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#B392F0"> HTMLElement</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> tag</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> customElements.</span><span style="color:#B392F0">getName</span><span style="color:#E1E4E8">(source);</span></span>
+<span class="line"><span style="color:#F97583">  if</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">tag) </span><span style="color:#F97583">throw</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> Error</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'Define the element with customElements.define before exporting it.'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> element</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> document.</span><span style="color:#B392F0">createElement</span><span style="color:#E1E4E8">(tag);</span></span>
+<span class="line"><span style="color:#E1E4E8">  Object.</span><span style="color:#B392F0">assign</span><span style="color:#E1E4E8">(element, context.inputs);</span></span>
+<span class="line"><span style="color:#F97583">  for</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">const</span><span style="color:#79B8FF"> name</span><span style="color:#F97583"> of</span><span style="color:#E1E4E8"> source.events </span><span style="color:#F97583">??</span><span style="color:#E1E4E8"> []) {</span></span>
+<span class="line"><span style="color:#E1E4E8">    element.</span><span style="color:#B392F0">addEventListener</span><span style="color:#E1E4E8">(name, </span><span style="color:#FFAB70">event</span><span style="color:#F97583"> =&gt;</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">action</span><span style="color:#E1E4E8">(name, (event </span><span style="color:#F97583">as</span><span style="color:#B392F0"> CustomEvent</span><span style="color:#E1E4E8">).detail), {</span></span>
+<span class="line"><span style="color:#E1E4E8">      signal: context.signal,</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">  canvas.</span><span style="color:#B392F0">append</span><span style="color:#E1E4E8">(environment.wrap </span><span style="color:#F97583">?</span><span style="color:#E1E4E8"> environment.</span><span style="color:#B392F0">wrap</span><span style="color:#E1E4E8">(element, context) </span><span style="color:#F97583">:</span><span style="color:#E1E4E8"> element);</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">  // Lit and similar libraries render asynchronously.</span></span>
+<span class="line"><span style="color:#F97583">  await</span><span style="color:#E1E4E8"> (element </span><span style="color:#F97583">as</span><span style="color:#E1E4E8"> { </span><span style="color:#FFAB70">updateComplete</span><span style="color:#F97583">?:</span><span style="color:#B392F0"> Promise</span><span style="color:#E1E4E8">&lt;</span><span style="color:#79B8FF">unknown</span><span style="color:#E1E4E8">&gt; }).updateComplete;</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> canvas.</span><span style="color:#B392F0">replaceChildren</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>src/acme-button.ts</code> is the component:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> styles </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> './acme-button.css?inline'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> class</span><span style="color:#B392F0"> AcmeButton</span><span style="color:#F97583"> extends</span><span style="color:#B392F0"> HTMLElement</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">  static</span><span style="color:#FFAB70"> events</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> [</span><span style="color:#9ECBFF">'acme-press'</span><span style="color:#E1E4E8">];</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#FFAB70">  label</span><span style="color:#F97583"> =</span><span style="color:#9ECBFF"> 'Continue'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">  disabled</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> false</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">  connectedCallback</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> root</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.shadowRoot </span><span style="color:#F97583">??</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">attachShadow</span><span style="color:#E1E4E8">({ mode: </span><span style="color:#9ECBFF">'open'</span><span style="color:#E1E4E8"> });</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> sheet</span><span style="color:#F97583"> =</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> CSSStyleSheet</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">    sheet.</span><span style="color:#B392F0">replaceSync</span><span style="color:#E1E4E8">(styles);</span></span>
+<span class="line"><span style="color:#E1E4E8">    root.adoptedStyleSheets </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> [sheet];</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> button</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> document.</span><span style="color:#B392F0">createElement</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'button'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">    button.textContent </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.label;</span></span>
+<span class="line"><span style="color:#E1E4E8">    button.disabled </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.disabled;</span></span>
+<span class="line"><span style="color:#E1E4E8">    button.</span><span style="color:#B392F0">addEventListener</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'click'</span><span style="color:#E1E4E8">, () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#79B8FF">      this</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">dispatchEvent</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">new</span><span style="color:#B392F0"> CustomEvent</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'acme-press'</span><span style="color:#E1E4E8">, { detail: </span><span style="color:#79B8FF">this</span><span style="color:#E1E4E8">.label }));</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">    root.</span><span style="color:#B392F0">replaceChildren</span><span style="color:#E1E4E8">(button);</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">customElements.</span><span style="color:#B392F0">define</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'acme-button'</span><span style="color:#E1E4E8">, AcmeButton);</span></span></code></pre>
+<p><code>src/acme-button.css</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="css"><code><span class="line"><span style="color:#85E89D">button</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#79B8FF">  background</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">#4f46e5</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#79B8FF">  border</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#79B8FF">  border-radius</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">8</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#79B8FF">  color</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">white</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#79B8FF">  font</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">600</span><span style="color:#79B8FF"> 14</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">/</span><span style="color:#79B8FF">1</span><span style="color:#79B8FF"> system-ui</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">sans-serif</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#79B8FF">  padding</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">12</span><span style="color:#F97583">px</span><span style="color:#79B8FF"> 16</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">button</span><span style="color:#B392F0">:disabled</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#79B8FF">  opacity</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.5</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>src/inline.d.ts</code> types the <code>?inline</code> imports for your editor:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">declare</span><span style="color:#F97583"> module</span><span style="color:#9ECBFF"> '*?inline'</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> text</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">  export</span><span style="color:#F97583"> default</span><span style="color:#E1E4E8"> text;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>src/acme-theme.ts</code> is the preview’s environment. The runtime above calls its
+<code>wrap</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PreviewContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> wrap</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">element</span><span style="color:#F97583">:</span><span style="color:#B392F0"> HTMLElement</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> theme</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> document.</span><span style="color:#B392F0">createElement</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'div'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">  theme.dataset.theme </span><span style="color:#F97583">=</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">(context.globals.theme </span><span style="color:#F97583">??</span><span style="color:#9ECBFF"> 'light'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">  theme.</span><span style="color:#B392F0">append</span><span style="color:#E1E4E8">(element);</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> theme;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>src/acme-button.workbench.ts</code> uses the adapter by name:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'components/acme-button'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  title: </span><span style="color:#9ECBFF">'Components/Button'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'web-components'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./acme-button.ts'</span><span style="color:#E1E4E8">, export: </span><span style="color:#9ECBFF">'AcmeButton'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  environment: </span><span style="color:#9ECBFF">'./acme-theme.ts'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  globals: { theme: </span><span style="color:#9ECBFF">'light'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  inputs: { label: </span><span style="color:#9ECBFF">'Continue'</span><span style="color:#E1E4E8">, disabled: </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  controls: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    label: { type: </span><span style="color:#9ECBFF">'text'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">    disabled: { type: </span><span style="color:#9ECBFF">'boolean'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    default: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    disabled: { inputs: { disabled: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>Run <strong>Workbench: Refresh Pages</strong>. <strong>Button</strong> appears under <strong>Components</strong>
+with <strong>Default</strong> and <strong>Disabled</strong> scenarios. Editing <strong>label</strong> in
+<strong>Preview controls</strong> mounts the element again with the new value, and pressing
+the button logs <code>acme-press</code> in <strong>Actions</strong>. The
+<a href="/workbench/docs/workbench-previews/#command-line-tools">checker</a> reports:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>$ &lt;extension&gt;/server/bin/&lt;platform&gt;-&lt;arch&gt;/workbench-server check acme-ui</span></span>
+<span class="line"><span>Built components/acme-button</span></span></code></pre>
+<h2 id="the-runtime-module">The runtime module</h2>
+<p><code>runtime</code> is a browser module, relative to the project root, that exports
+<code>mount(canvas, source, context, environment)</code>. Workbench bundles it with each
+preview that uses the adapter, so it can import your framework like any other
+module.</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>canvas</code></td>
+<td>The empty element to render into.</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>The export of the scenario’s <code>source.entry</code> named by <code>source.export</code> (<code>default</code> when omitted), after your rules and plugins compile it.</td>
+</tr>
+<tr>
+<td><code>context</code></td>
+<td>The <a href="/workbench/docs/workbench-previews/#lifecycle-hooks">preview context</a>: <code>id</code>, <code>scenario</code>, <code>inputs</code>, <code>fixtures</code>, <code>globals</code>, <code>signal</code>, <code>action</code>, <code>navigate</code>, and <code>error</code>.</td>
+</tr>
+<tr>
+<td><code>environment</code></td>
+<td>Everything the definition’s <code>environment</code> module exports, or <code>{}</code> when it has none. Define your own hooks here, such as <code>wrap</code> above. With a <a href="/workbench/docs/preview-data/#environments">project-wide environment</a> too, the two are combined: <code>setup</code>, <code>mount</code>, <code>ready</code>, <code>configure</code>, and <code>wrap</code> run both, the project’s outside, and other exports come from the definition’s module first.</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><code>mount</code> may return a cleanup function, or a promise for one. Workbench waits
+for the promise before it runs <code>play</code> and <code>ready</code> hooks and marks the preview
+ready, so resolve it once the component has rendered.</li>
+<li>Workbench calls <code>mount</code> again for every scenario change, input edit, and
+<strong>Reset scenario</strong>, after aborting <code>context.signal</code> and running the previous
+cleanup. Remove anything you added outside <code>canvas</code> in the cleanup.</li>
+<li>An error thrown by <code>mount</code>, or a rejected promise, shows in the frame. Pass
+errors that happen later, such as in an event handler, to
+<code>context.error(error)</code>.</li>
+<li>How inputs reach the component is up to the runtime: props, properties,
+attributes, or a store.</li>
+<li>The runtime needs nothing for <a href="/workbench/docs/preview-data/#request-mocks">request mocks</a>
+or <a href="/workbench/docs/preview-data/#links-and-navigation">links</a>: Workbench answers the
+page’s requests and handles its links whatever renders it.</li>
+</ul>
+<p>Previews with custom adapters export to the
+<a href="/workbench/docs/workbench-previews/#portable-exports">portable viewer</a> like any other, with
+their controls.</p>
+<h2 id="docs-page-examples">Docs page examples</h2>
+<p>A registered adapter also renders the examples in a page’s
+<a href="/workbench/docs/docs-pages/">docs</a>. Name it as the <code>adapter</code> of a <code>docs</code> lens:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  web</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Web components</span></span>
+<span class="line"><span style="color:#85E89D">    adapter</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">web-components</span></span></code></pre>
+<p>Workbench bundles the lens’s example source with the runtime and the adapter’s
+<code>rules</code> and <code>plugins</code>, and calls <code>mount(canvas, source, context, environment)</code> once per
+example:</p>
+<ul>
+<li><code>canvas</code> is the example’s panel, and <code>source</code> is the example: a file’s
+default export, for a folder source, or one named export, for a file source.</li>
+<li><code>context.id</code> is the example’s ID. <code>inputs</code>, <code>fixtures</code>, and <code>globals</code> are
+empty, since examples have no inputs or controls.</li>
+<li><code>environment</code> combines the project’s environment for the adapter and the
+lens’s <code>environment</code>, as for a preview. Its <code>setup</code> runs once before the
+examples mount, and <code>ready</code> once after.</li>
+<li>In a folder source, only files ending in <code>.ts</code>, <code>.tsx</code>, <code>.js</code>, <code>.jsx</code>, or
+<code>.mjs</code> are examples. For components in other file types, such as <code>.svelte</code>,
+write one script file per example that exports the component, or export
+them by name from one file.</li>
+</ul>
+<p>A built-in adapter replaced in <code>adapters</code> is replaced for docs examples too.</p>
+<h2 id="configuration-file">Configuration file</h2>
+<p>Workbench reads <code>workbench.config.ts</code> at the project root. To use another file
+inside the project, set <a href="/workbench/docs/configuration/#previews"><code>previews.config</code></a> in
+<code>workbench.yaml</code>. Saving the file, or a file it imports, restarts the preview
+compilers and reloads the open previews.</p>
+<p>Workbench runs the file in Node. Relative imports are bundled with it; packages
+are loaded from your project’s <code>node_modules</code>. <code>defineConfig</code> from
+<code>@canonic2/workbench</code> only adds types.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { defineConfig } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> defineConfig</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapters: { </span><span style="color:#6A737D">/* name: { runtime, rules, plugins } */</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  environment: </span><span style="color:#9ECBFF">'./src/workbench/environment.tsx'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  rules: [],</span></span>
+<span class="line"><span style="color:#E1E4E8">  plugins: [],</span></span>
+<span class="line"><span style="color:#E1E4E8">  aliases: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">  dedupe: [],</span></span>
+<span class="line"><span style="color:#E1E4E8">  resolveExtensions: [],</span></span>
+<span class="line"><span style="color:#E1E4E8">  define: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>adapters</code></td>
+<td>map of name to <code>{ runtime, rules?, plugins? }</code></td>
+<td>Adapters that definitions name in <code>adapter</code>.</td>
+</tr>
+<tr>
+<td><code>environment</code></td>
+<td>path, or map of adapter name to path</td>
+<td>An <a href="/workbench/docs/preview-data/#environments">environment</a> around every preview, or around each adapter’s previews, relative to the project root.</td>
+</tr>
+<tr>
+<td><code>rules</code></td>
+<td>list of Rspack module rules</td>
+<td>Loader rules for every preview.</td>
+</tr>
+<tr>
+<td><code>plugins</code></td>
+<td>list of compiler plugins</td>
+<td><a href="#rules-and-plugins">Plugins</a> for every preview.</td>
+</tr>
+<tr>
+<td><code>aliases</code></td>
+<td>map of import specifier to path or package</td>
+<td>Redirects exact imports.</td>
+</tr>
+<tr>
+<td><code>dedupe</code></td>
+<td>list of package names</td>
+<td>Packages resolved from the definition’s folder.</td>
+</tr>
+<tr>
+<td><code>resolveExtensions</code></td>
+<td>list of extensions</td>
+<td>The extensions tried for imports without one. Replaces the default list.</td>
+</tr>
+<tr>
+<td><code>define</code></td>
+<td>map of expression to code string</td>
+<td>Constants replaced at build time.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="adapters">adapters</h3>
+<p>Each key is the name a definition gives as <code>adapter</code>. Definitions only accept
+kebab-case names, such as <code>web-components</code>. Each value has:</p>
+<ul>
+<li><code>runtime</code>: the <a href="#the-runtime-module">runtime module</a>, relative to the project
+root.</li>
+<li><code>rules</code> and <code>plugins</code>: rules and plugins for previews that use this
+adapter only. <code>defineAdapter</code> from <code>@canonic2/workbench</code> types one adapter on its own.</li>
+</ul>
+<h3 id="rules-and-plugins">rules and plugins</h3>
+<p>Workbench compiles previews with <a href="https://rspack.rs/" target="_blank" rel="noopener">Rspack</a>’s compiler.
+<code>rules</code> are <a href="https://rspack.rs/config/module#modulerules" target="_blank" rel="noopener">module rules</a>: they
+pick a loader or a module type for matching files. <code>plugins</code> are the compiler
+capabilities below, made with helpers from <code>@canonic2/workbench</code>. Global ones
+apply to every preview, and an adapter’s to the previews that use it.
+Workbench’s own rules and plugins come first.</p>
+<table>
+<thead>
+<tr>
+<th>Helper</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>virtualModule({ id, source })</code></td>
+<td>Serves a module made from <code>source</code> when code imports <code>id</code>, such as <code>virtual:build-info</code></td>
+</tr>
+<tr>
+<td><code>resolveImport({ request, to, importer? })</code></td>
+<td>Sends an exact import to another file: from every file, or only from files <code>importer</code> matches</td>
+</tr>
+<tr>
+<td><code>importGlob({ include? })</code></td>
+<td>Expands <code>import.meta.glob(...)</code> at build time, as Vite does</td>
+</tr>
+<tr>
+<td><code>svgSprite({ dirs, symbolId?, register?, names? })</code></td>
+<td>Builds an SVG sprite from a folder of icons, as <code>vite-plugin-svg-icons</code> does</td>
+</tr>
+</tbody>
+</table>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { defineConfig, virtualModule, resolveImport, importGlob, svgSprite } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> defineConfig</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  plugins: [</span></span>
+<span class="line"><span style="color:#B392F0">    virtualModule</span><span style="color:#E1E4E8">({ id: </span><span style="color:#9ECBFF">'virtual:build-info'</span><span style="color:#E1E4E8">, source: </span><span style="color:#9ECBFF">"export const buildInfo = 'Acme build 42';"</span><span style="color:#E1E4E8"> }),</span></span>
+<span class="line"><span style="color:#6A737D">    // The first match wins: native screens get the native entry, other files the web one.</span></span>
+<span class="line"><span style="color:#B392F0">    resolveImport</span><span style="color:#E1E4E8">({ request: </span><span style="color:#9ECBFF">'@acme/ui'</span><span style="color:#E1E4E8">, importer: </span><span style="color:#9ECBFF">'apps/mobile/**'</span><span style="color:#E1E4E8">, to: </span><span style="color:#9ECBFF">'./packages/ui/src/native.ts'</span><span style="color:#E1E4E8"> }),</span></span>
+<span class="line"><span style="color:#B392F0">    resolveImport</span><span style="color:#E1E4E8">({ request: </span><span style="color:#9ECBFF">'@acme/ui'</span><span style="color:#E1E4E8">, to: </span><span style="color:#9ECBFF">'./packages/ui/src/index.ts'</span><span style="color:#E1E4E8"> }),</span></span>
+<span class="line"><span style="color:#B392F0">    importGlob</span><span style="color:#E1E4E8">(),</span></span>
+<span class="line"><span style="color:#B392F0">    svgSprite</span><span style="color:#E1E4E8">({ dirs: [</span><span style="color:#9ECBFF">'packages/ui/src/icons'</span><span style="color:#E1E4E8">], symbolId: </span><span style="color:#9ECBFF">'icon-[name]'</span><span style="color:#E1E4E8"> }),</span></span>
+<span class="line"><span style="color:#E1E4E8">  ],</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<ul>
+<li><strong><code>resolveImport</code></strong>: <code>request</code> matches one whole import. <code>to</code> is a file
+relative to the project root, or a package. <code>importer</code> is a glob, or a list
+of globs, over the importing file’s path from the project root, or a regular
+expression over its absolute path.</li>
+<li><strong><code>importGlob</code></strong>: each call’s patterns must be string literals starting with
+<code>./</code>, <code>../</code> or <code>/</code> (the project root). Keys are written as the pattern is,
+in name order. <code>eager</code>, <code>import</code>, <code>query</code> and <code>exhaustive</code> work as in Vite;
+a <code>!</code> pattern leaves files out. <code>include</code> limits the transform to some files,
+as a rule’s <code>include</code> does: a path from the project root, a regular
+expression, or a list of them. Calls in comments and strings are left as
+written.</li>
+<li><strong><code>svgSprite</code></strong>: every <code>.svg</code> in <code>dirs</code>, relative to the project root,
+becomes a <code>&lt;symbol&gt;</code>. <code>symbolId</code> names each one: <code>[dir]</code> is the icon’s
+folder inside <code>dirs</code> (with <code>-</code> for <code>/</code>) and <code>[name]</code> its file name, and
+the default is <code>icon-[dir]-[name]</code>. Importing <code>virtual:svg-icons-register</code>
+inserts the sprite into the page; <code>virtual:svg-icons-names</code> exports the IDs.
+<code>register</code> and <code>names</code> rename those imports. Each symbol keeps the icon’s
+view box, or takes one from its width and height; IDs inside an icon are
+prefixed with its symbol ID, and so are the references to them.</li>
+<li>Adding, editing or deleting a file a plugin reads, such as an icon or a file
+a glob matches, rebuilds the previews that use it.</li>
+</ul>
+<p>A loader is a file that exports a function from source text to module text.
+Name it in a rule by path, relative to the project root:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">rules</span><span style="color:#E1E4E8">: [{ test:</span><span style="color:#9ECBFF"> /</span><span style="color:#85E89D;font-weight:bold">\.</span><span style="color:#DBEDFF">tsx</span><span style="color:#F97583">?$</span><span style="color:#9ECBFF">/</span><span style="color:#E1E4E8">, exclude:</span><span style="color:#9ECBFF"> /</span><span style="color:#DBEDFF">node_modules</span><span style="color:#9ECBFF">/</span><span style="color:#E1E4E8">, enforce: </span><span style="color:#9ECBFF">'pre'</span><span style="color:#E1E4E8">, loader: </span><span style="color:#9ECBFF">'./workbench/greeting-loader.cjs'</span><span style="color:#E1E4E8"> }],</span></span></code></pre>
+<p>Loaders run in Node, one module at a time, with the usual loader context:
+<code>this.getOptions()</code>, <code>this.resourcePath</code>, <code>this.async()</code>, <code>this.addDependency()</code>
+and the like. <code>this.emitError()</code> fails the module’s build with its message,
+as a thrown error does; <code>this.emitWarning()</code> reports a warning and the build
+continues. <code>this.loadModule</code> and <code>this.importModule</code> are not available.
+Rspack’s built-in loaders, such as <code>builtin:lightningcss-loader</code>, run in the
+compiler itself.</p>
+<p>Rules and plugins apply when Workbench builds previews and docs examples, live
+and for the <a href="/workbench/docs/design-system-export/">design-system export</a>. They don’t apply
+when Workbench reads a definition or this file, or in
+<a href="/workbench/docs/astro/#imports-aliases-and-plugins">Astro frontmatter</a>, so a <code>.workbench.ts</code>
+file can’t import a file that only a loader can read.</p>
+<p>An object with <code>apply(compiler)</code> (an Rspack plugin) or <code>setup(build)</code> (an
+esbuild plugin) doesn’t run: it is reported as a configuration problem and
+left out. Use a helper above, or a loader rule.</p>
+<ul>
+<li><strong>Build absolute paths from <code>__dirname</code>,</strong> the folder of the configuration
+file. Don’t rely on the current working directory.</li>
+</ul>
+<h3 id="aliases">aliases</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">aliases</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#9ECBFF">  '@acme/tokens'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'./src/tokens.ts'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">  '@acme/tokens/colors'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'./src/tokens/colors.ts'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">  'acme-analytics'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'./preview/analytics-mock.ts'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">  '#runtime'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'acme-runtime'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">},</span></span></code></pre>
+<ul>
+<li>A key matches one exact package-style import: <code>@acme/tokens</code> doesn’t match
+<code>@acme/tokens/colors</code>, so list each subpath you import. Keys that start with
+<code>.</code> or <code>/</code> never match.</li>
+<li>A value that starts with <code>.</code>, or an absolute path, is a file relative to the
+project root. Any other value is a package, resolved from the definition’s
+folder.</li>
+<li><code>tsconfig.json</code> <code>paths</code> also apply, without an alias.</li>
+<li>Aliases also apply to <a href="/workbench/docs/astro/">Astro frontmatter</a>.</li>
+</ul>
+<h3 id="dedupe">dedupe</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">dedupe</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">'react'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'react-dom'</span><span style="color:#E1E4E8">],</span></span></code></pre>
+<p>Imports of these packages resolve from the folder of the preview definition, as
+if the definition imported them, instead of from the file that imports them. In
+a monorepo where a shared package has its own copy of a framework, this gives
+every module in the preview the same copy.</p>
+<h3 id="resolveextensions">resolveExtensions</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">resolveExtensions</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">'.web.ts'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'.ts'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'.js'</span><span style="color:#E1E4E8">],</span></span></code></pre>
+<p>The extensions tried, in order, for an import without one. The list replaces
+the default, <code>.tsx</code>, <code>.ts</code>, <code>.jsx</code>, <code>.js</code>, <code>.mjs</code>, <code>.cjs</code>, <code>.json</code>, <code>.vue</code>,
+<code>.html</code>, so include every extension your previews import without one. The
+<code>react-native-web</code> adapter puts <code>.web.tsx</code>, <code>.web.ts</code>, <code>.web.jsx</code>, and
+<code>.web.js</code> first when you don’t set this. It doesn’t apply to Astro frontmatter.</p>
+<h3 id="define">define</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">define</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#9ECBFF">  'process.env.API_URL'</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">JSON</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">stringify</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'https://api.example.com'</span><span style="color:#E1E4E8">),</span></span>
+<span class="line"><span style="color:#B392F0">  __ACME_FLAG__</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'true'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">},</span></span></code></pre>
+<p>Each key is an identifier or property chain, and each value is the code that
+replaces it, so wrap strings in <code>JSON.stringify</code>. Workbench sets
+<code>process.env.NODE_ENV</code> to <code>"development"</code> on the canvas and <code>"production"</code> in
+<code>check</code>, <code>build</code>, and exports; your <code>define</code> can override it. Defines also
+apply to Astro frontmatter, where they set
+<a href="/workbench/docs/astro/#environment-values"><code>import.meta.env</code> values</a>.</p>
+<h2 id="replace-a-built-in-adapter">Replace a built-in adapter</h2>
+<p>Registering an adapter named <code>html</code>, <code>react</code>, <code>vue</code>, <code>astro</code>, or
+<code>react-native-web</code> replaces the built-in one for every preview in the project:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> defineConfig</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapters: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    react: { runtime: </span><span style="color:#9ECBFF">'./preview/react-runtime.tsx'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>Your runtime receives the selected export and does all the mounting, including
+any providers. A replaced <code>astro</code> adapter doesn’t render on the server:
+<code>.astro</code> files then need a rule that compiles them for the browser, or the
+build fails with <code>Module parse failed</code>. Replacing
+<code>react-native-web</code> keeps its <code>react-native</code> alias and <code>.web.*</code> extensions.</p>
+<h2 id="errors-and-fixes">Errors and fixes</h2>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Where</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Unknown adapter “&lt;name&gt;”. Register it in workbench.config.ts.</code></td>
+<td>The frame and <code>check</code></td>
+<td>Add the name to <code>adapters</code>, or fix the definition’s <code>adapter</code>.</td>
+</tr>
+<tr>
+<td><code>adapter must be a registered kebab-case name.</code></td>
+<td>Configuration problems</td>
+<td>Use lowercase letters, digits, and hyphens in the adapter name.</td>
+</tr>
+<tr>
+<td><code>Module not found: Can't resolve '&lt;path&gt;'</code> on a runtime path</td>
+<td>The frame and <code>check</code></td>
+<td>Fix <code>runtime</code>. It is relative to the project root.</td>
+</tr>
+<tr>
+<td><code>adapter.mount is not a function</code></td>
+<td>The frame</td>
+<td>Export a function named <code>mount</code> from the runtime.</td>
+</tr>
+<tr>
+<td><code>The selected source export does not exist for &lt;id&gt; — &lt;scenario&gt;</code></td>
+<td>The frame only; <code>check</code> passes</td>
+<td>Fix <code>source.export</code>, or export that name from the entry.</td>
+</tr>
+<tr>
+<td><code>Module parse failed</code> on a file type Workbench doesn’t compile</td>
+<td>The frame and <code>check</code></td>
+<td>Add a rule with a loader for the file type.</td>
+</tr>
+<tr>
+<td><code>workbench.config.ts: “&lt;name&gt;” is an esbuild plugin.</code> or <code>is a JavaScript Rspack plugin.</code></td>
+<td>Configuration problems</td>
+<td>Use a plugin from <code>@canonic2/workbench</code>, or a loader rule.</td>
+</tr>
+<tr>
+<td><code>Workbench previews: &lt;message&gt;</code></td>
+<td>Configuration problems</td>
+<td><code>workbench.config.ts</code> threw while loading. No previews load until it’s fixed; <code>check</code> prints the same message.</td>
+</tr>
+<tr>
+<td><code>previews.config: must be a project-relative config file.</code></td>
+<td>Configuration problems</td>
+<td>Point <code>previews.config</code> at a file inside the project. Previews stay off until it’s fixed.</td>
+</tr>
+</tbody>
+</table>
+<p>For configuration problems and the log, see
+<a href="/workbench/docs/troubleshooting/#a-typescript-preview-is-missing-or-broken">A TypeScript preview is missing or broken</a>.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/custom-adapters.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/workbench/docs/html/"><span>← Previous</span><strong>HTML previews</strong></a><a href="/workbench/docs/lenses/"><span>Next →</span><strong>Lenses and URL implementations</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#requirements">Requirements</a><a href="#example-web-components">Example: web components</a><a href="#the-runtime-module">The runtime module</a><a href="#docs-page-examples">Docs page examples</a><a href="#configuration-file">Configuration file</a><a href="#adapters" class="docs-toc-sub">adapters</a><a href="#rules-and-plugins" class="docs-toc-sub">rules and plugins</a><a href="#aliases" class="docs-toc-sub">aliases</a><a href="#dedupe" class="docs-toc-sub">dedupe</a><a href="#resolveextensions" class="docs-toc-sub">resolveExtensions</a><a href="#define" class="docs-toc-sub">define</a><a href="#replace-a-built-in-adapter">Replace a built-in adapter</a><a href="#errors-and-fixes">Errors and fixes</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

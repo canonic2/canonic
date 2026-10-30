@@ -1,0 +1,558 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Using the canvas · Workbench docs · Canonic</title><meta name="description" content="The canvas shows the selected page on a surface you can zoom and pan like a design tool. A page can explicitly declare multiple artboards, each with its own dimensions and inputs. "><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.17.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/workbench/">Overview</a><a href="/workbench/docs/" aria-current="page">Docs</a><a href="/workbench/install/">Install</a><a href="/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Getting started</h2><a href="/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/workbench/docs/canvas/" data-doc-id="canvas" aria-current="page">Using the canvas</a><a href="/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group"><h2>Previews</h2><a href="/workbench/docs/workbench-previews/" data-doc-id="workbench-previews">TypeScript Workbench previews</a><a href="/workbench/docs/preview-data/" data-doc-id="preview-data">Preview data, mocks, and actions</a><a href="/workbench/docs/react/" data-doc-id="react">React previews</a><a href="/workbench/docs/react-native-web/" data-doc-id="react-native-web">React Native Web previews</a><a href="/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/workbench/docs/astro/" data-doc-id="astro">Astro previews</a><a href="/workbench/docs/html/" data-doc-id="html">HTML previews</a><a href="/workbench/docs/custom-adapters/" data-doc-id="custom-adapters">Custom adapters and compiler settings</a></div><div class="docs-group"><h2>Connect your implementation</h2><a href="/workbench/docs/lenses/" data-doc-id="lenses">Lenses and URL implementations</a><a href="/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/workbench/docs/ios-simulator/" data-doc-id="ios-simulator">iOS Simulator</a><a href="/workbench/docs/windows/" data-doc-id="windows">App windows</a></div><div class="docs-group"><h2>Reference</h2><a href="/workbench/docs/configuration/" data-doc-id="configuration">workbench.yaml reference</a><a href="/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/workbench/docs/extension/" data-doc-id="extension">The VS Code extension</a><a href="/workbench/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshooting</a></div></nav><a class="docs-install" href="/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span>Getting started</span></div><div class="docs-prose"><h1 id="using-the-canvas">Using the canvas</h1>
+<p>The canvas shows the selected page on a surface you can zoom and pan like a
+design tool. A page can explicitly declare multiple artboards, each with its
+own dimensions and inputs. Click an artboard’s label to select it. Size, preview controls,
+Actions, and drawing tools apply to that artboard. In a
+<a href="/workbench/docs/docs-pages/">docs lens</a>, a page’s docs fill the canvas instead; see
+<a href="#docs-on-the-canvas">Docs on the canvas</a>. This page covers each part of it.</p>
+<p>Scenarios are alternatives: the scenario switcher changes which scenario of the page
+is showing. Storybook stories also remain alternatives. They do not create
+artboards. A page without an <code>artboards</code> declaration shows one preview; docs
+show one viewport. Inputs and annotations stay independent while selecting
+between declared artboards. Screenshots, references, and handoffs include
+every artboard. The existing sidebar, top bar, toolbar, and view controls keep
+their layout.</p>
+<p>With several artboards, only the selected artboard runs its preview; click a
+label or another artboard to select it. The others show a background image of
+the preview, rendered once per build and kept between sessions, so reopening a
+page shows them at once. Background images are rendered at the zoom you look
+at them, so zooming in shows a soft image until the sharper one arrives.
+Artboards large enough to read show a static copy of the page instead, with
+sharp text at any zoom but no scripts; click one to select it and run its
+preview. A single artboard keeps running. The multi-artboard surface requires
+WebGPU in Chrome or Electron.</p>
+<p>When you leave a ready artboard, Workbench keeps an image of its current state,
+including what you typed, opened or scrolled to. That image stays visible at
+every zoom at its captured artboard size until you return to the running
+preview. It has one captured resolution, so it can look soft when enlarged.
+After a build it stays visible
+with <strong>Stale</strong> in the label. Restart the artboard to begin with a fresh document.
+These images last for the current canvas session. Workbench can evict an image
+to make room while its app remains ready to capture again; released images are
+protected from budget eviction. If capture is unavailable or fails, the artboard
+shows its background image; returning to a warm document still restores its state.
+Changing an artboard’s size hides an image captured at different dimensions and
+shows the background render at the new size. The saved image is retained, so
+resizing a released artboard does not delete its saved state.</p>
+<p>Artboards you use, by clicking or typing in them, keep their application state;
+selecting one only to look at it does not. Up to eight keep it: using a ninth
+releases the one you used longest ago and says so. A released artboard shows a
+kept image of what you did. <strong>Release</strong> in the selected artboard’s label does
+the same on request: it keeps an image of what you did and ends its document. <strong>Restart</strong> starts a fresh
+document and resets application state. Returning to an artboard that kept its
+state preserves its inputs, scroll position and application state.
+An image marked <strong>Stale</strong> cannot supply screenshots or handoffs for a released
+artboard; restart it before capturing again.
+Artboards that Workbench ended automatically to make room can be started afresh
+for review when their saved image is out of date.
+If the image budget is full or the canvas cannot display the captured image,
+<strong>Release</strong> reports the problem and keeps the app running. Restart a released
+artboard to discard its saved image and make room. If using a ninth artboard
+cannot release the oldest, the existing eight keep their state. The new app
+stays warm but is not pinned; try again after capture or display recovers.</p>
+<p>When you pick another page, the sidebar marks it immediately. The previous
+artboard stays visible for up to 200 ms, keeping its own label and reference.
+If the requested page becomes ready sooner, it appears immediately without a
+loader. If it takes longer, the old view is hidden and <strong>Loading preview…</strong>
+appears until the replacement is ready. Scenarios and lenses use the same grace
+period. The outgoing preview is not interactive during the transition;
+screenshots and handoffs wait for the requested page to finish loading.
+A failure ends the transition and shows the error. Rapid picks follow the
+latest destination. This keeps fast switches visually continuous without
+delaying ready content.
+Labels use the page’s name and the selected story or scenario. Declared artboards
+include their own names while loading. During a Storybook lookup, the tab names
+the destination page; the story name joins it once resolved.
+The grid belongs to the main canvas. Each embedded preview fills its artboard
+without adding another canvas grid or inner frame shadow.</p>
+<p>For a component with no surrounding page, mark its origin-aligned root with
+<code>data-wb-fit-content</code> and remove page padding, viewport minimum heights, and
+backgrounds. With Fit or Resizable supported, its artboard follows the content’s
+natural bounds, including after live input edits.</p>
+<h2 id="layout">Layout</h2>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Where</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sidebar</td>
+<td>The <strong>Workbench</strong> view in VS Code’s activity bar, or the left edge of a standalone browser window</td>
+<td>The space switcher, the collection list, the page list, and search</td>
+</tr>
+<tr>
+<td>Space switcher</td>
+<td>Top of the sidebar</td>
+<td>The space showing, and the others to switch to. In VS Code it’s always there, for <strong>Add a space…</strong>; in a browser, only with more than one space. See <a href="/workbench/docs/spaces/">Several spaces</a>.</td>
+</tr>
+<tr>
+<td>Collection list</td>
+<td>Sidebar, under the heading <strong>Collections</strong></td>
+<td>The space’s collections</td>
+</tr>
+<tr>
+<td>Page list</td>
+<td>Sidebar</td>
+<td>The chosen collection’s groups, pages, and scenarios</td>
+</tr>
+<tr>
+<td>Search</td>
+<td>Bottom of the sidebar</td>
+<td>Filters every collection’s pages, groups, and scenarios</td>
+</tr>
+<tr>
+<td>Top bar</td>
+<td>Top of the canvas</td>
+<td>The breadcrumb with the scenario switcher, lenses, size, actions, reload, source, reference, and more</td>
+</tr>
+<tr>
+<td>Artboard</td>
+<td>Middle</td>
+<td>The page, labeled with its name and size by the artboard label</td>
+</tr>
+<tr>
+<td>Toolbar</td>
+<td>Floating at the bottom</td>
+<td>Annotation tools, undo, clear, screenshot, and handoff</td>
+</tr>
+<tr>
+<td>View controls</td>
+<td>Floating at the bottom right</td>
+<td>Recenter view, zoom out, the zoom level and its menu, and zoom in</td>
+</tr>
+</tbody>
+</table>
+<p>Inside VS Code, the sidebar is where a file tree usually goes, in your
+editor’s theme, and the canvas tab doesn’t repeat it.</p>
+<h2 id="the-sidebar">The sidebar</h2>
+<ul>
+<li><strong>The collection list</strong>, headed <strong>Collections</strong>, is at the top. Pick a
+collection to show its pages in the page list and open its first page. When
+the page showing already belongs to that collection, it stays.</li>
+<li><strong>Groups</strong> in the page list hold related pages. Select a group to expand it
+and open its first page. Selecting the group of the page showing, or a
+group’s arrow, expands or collapses it.</li>
+<li><strong>Pages</strong> with two or more scenarios expand to show them. Pick a scenario to
+show it; the first is the page as authored. Selecting the page itself shows
+its first scenario, and selecting it again while it is showing collapses it. A
+<a href="/workbench/docs/docs-pages/#a-markdown-page">Markdown page</a> has nothing listed under it.</li>
+<li><strong>Search</strong>, the field at the bottom (<em>Search pages…</em>), filters every
+collection’s pages, groups, and scenarios as you type, and groups the results
+by collection.</li>
+<li><a href="/workbench/docs/workbench-previews/">TypeScript previews</a> and Markdown pages defined in
+<code>*.workbench.ts</code> files appear in the collections their titles name, beside the
+pages listed in <code>workbench.yaml</code>.</li>
+</ul>
+<p>In VS Code, the page list is one stop in the tab order. <strong>Up</strong> and <strong>Down</strong>
+move through its groups, pages, and scenarios, <strong>Right</strong> expands a group or page,
+<strong>Left</strong> collapses it, <strong>Home</strong> and <strong>End</strong> jump to the first and last, and
+<strong>Enter</strong> or <strong>Space</strong> shows the focused page or scenario. The problems list,
+above the page list, shows problems importing a catalog or TypeScript previews.</p>
+<p>In a standalone browser, ⌘K or Ctrl+K jumps to search. Drag the sidebar’s edge
+to resize it, focus the edge and use the arrow keys, or double-click it to
+reset the width. The width is remembered.</p>
+<h2 id="the-top-bar">The top bar</h2>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Breadcrumb: space</strong></td>
+<td>The space’s mark and name, before the page. Select it to switch to another <a href="/workbench/docs/spaces/">space</a>. Shown when there is more than one space.</td>
+</tr>
+<tr>
+<td><strong>Breadcrumb: page and scenario</strong></td>
+<td>The page’s name, then the scenario showing. The scenario is the scenario switcher: select it to pick another scenario. On a <a href="/workbench/docs/storybook/">Storybook lens</a>, it picks a story of the current title instead. Shown when there is more than one to choose from.</td>
+</tr>
+<tr>
+<td><strong>Lens switcher</strong></td>
+<td>Switches between the page’s <a href="/workbench/docs/docs-pages/">docs</a> lenses, the authored page, and each <a href="/workbench/docs/lenses/">implementation</a> the page has, in that order. Shown when the page has two or more lenses. A page with docs opens on its first docs lens, one for each renderer of its examples. The authored lens defaults to <strong>Design</strong>, or <strong>Preview</strong> for a TypeScript preview. <a href="/workbench/docs/lenses/#customize-lens-labels">Every label is customizable</a>.</td>
+</tr>
+<tr>
+<td><strong>Size switcher</strong></td>
+<td><strong>Fit</strong>, <strong>Laptop</strong>, <strong>Mobile</strong>, and <strong>Resizable</strong>. See <a href="#artboard-sizes">Artboard sizes</a>. Disabled in a docs lens, because the docs fill the canvas.</td>
+</tr>
+<tr>
+<td><strong>Actions</strong> (pointer icon and switch)</td>
+<td>Lets links navigate and forms submit in the page. Off by default. In a Workbench preview, links open the previews they’re mapped to and everything else is recorded under <strong>Actions</strong>; see <a href="/workbench/docs/preview-data/#links-and-navigation">Links and navigation</a>. Through a lens whose page is served by something other than the workbench, such as a URL or Storybook lens, it is always on and can’t be switched. See <a href="/workbench/docs/pages-and-scenarios/#links-and-actions">Links and actions</a>.</td>
+</tr>
+<tr>
+<td><strong>Reload</strong></td>
+<td>Reloads the current page.</td>
+</tr>
+<tr>
+<td><strong>Open the source</strong> (<code>&lt;/&gt;</code>)</td>
+<td>Lists the design file and the page’s <a href="/workbench/docs/lenses/#point-at-the-code">code pointers</a>, and opens one in the editor. For a TypeScript preview, it lists the preview definition and its source file; for a page with docs, its design file, then <strong>Docs</strong>, its Markdown, then each docs lens’s example source. On a Markdown page, <strong>Docs</strong> is the first row. A path that isn’t on this machine is listed but can’t be opened.</td>
+</tr>
+<tr>
+<td><strong>Copy reference</strong></td>
+<td>Copies a short text reference to the current view. See <a href="#copy-a-reference">Copy a reference</a>.</td>
+</tr>
+<tr>
+<td><strong>Open on its own</strong></td>
+<td>Opens the current page in your browser, outside the workbench.</td>
+</tr>
+<tr>
+<td><strong>Preview controls</strong></td>
+<td>Opens the inputs, <strong>Reset scenario</strong>, action log, and documentation of a TypeScript preview. Shown once the preview is ready. See <a href="/workbench/docs/preview-data/">Preview data, mocks, and actions</a>.</td>
+</tr>
+<tr>
+<td><strong>More</strong></td>
+<td><strong>Configure pages</strong> and <strong>Download design-system ZIP</strong>, which <a href="/workbench/docs/design-system-export/">exports the whole current space</a> across its collections and pages. Shown when the workbench server is running.</td>
+</tr>
+</tbody>
+</table>
+<p>When the canvas is narrow, <strong>Reload</strong>, <strong>Open the source</strong>, <strong>Copy reference</strong>,
+<strong>Open on its own</strong>, and <strong>Preview controls</strong> fold into <strong>More</strong> rather than
+overlapping.</p>
+<p>Your choices of lens, size, and actions are remembered across pages and
+sessions. A page that doesn’t support a remembered choice uses its own
+default: the Design lens, a Markdown page’s own docs lens, or the first size
+it supports.</p>
+<h2 id="artboard-sizes">Artboard sizes</h2>
+<p>The size switcher sets the artboard’s size:</p>
+<table>
+<thead>
+<tr>
+<th>Button</th>
+<th>Size</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Fit</strong></td>
+<td>The available canvas</td>
+<td>Follows the canvas as you resize the editor.</td>
+</tr>
+<tr>
+<td><strong>Laptop</strong></td>
+<td>1512 × 982</td>
+<td>A 14-inch MacBook Pro.</td>
+</tr>
+<tr>
+<td><strong>Mobile</strong></td>
+<td>393 × 852</td>
+<td>An iPhone 15 Pro.</td>
+</tr>
+<tr>
+<td><strong>Resizable</strong></td>
+<td>1024 × 768 to start, at least 320 × 320</td>
+<td>Drag the artboard’s left, right, or bottom edge, or a bottom corner. The last size is kept.</td>
+</tr>
+</tbody>
+</table>
+<p>The page always lays out at the artboard’s real size. An artboard larger than
+the canvas is zoomed out to fit, never squeezed, so a 1512-pixel layout is
+still 1512 pixels wide to the page. Screenshots are always taken at the
+artboard’s real size, whatever the zoom.</p>
+<p>A page’s <a href="/workbench/docs/pages-and-scenarios/#sizes"><code>sizes</code></a> decide which sizes are
+enabled.</p>
+<h2 id="zoom-and-pan">Zoom and pan</h2>
+<p>The canvas behaves like Figma’s:</p>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>⌘ or Ctrl + scroll wheel, or pinch</td>
+<td>Zoom at the pointer</td>
+</tr>
+<tr>
+<td>Scroll wheel on the canvas around the artboard, or Shift + wheel there</td>
+<td>Pan. Over the page, the wheel scrolls the page.</td>
+</tr>
+<tr>
+<td>Space + drag, or middle-button drag</td>
+<td>Pan, anywhere on the canvas</td>
+</tr>
+<tr>
+<td>⌘ or Ctrl + <code>=</code> (or <code>+</code>), and ⌘ or Ctrl + <code>−</code></td>
+<td>Zoom in and out, in powers of two</td>
+</tr>
+<tr>
+<td>⌘ or Ctrl + 0, or Shift 0</td>
+<td>Zoom to 100%</td>
+</tr>
+<tr>
+<td>Shift 1</td>
+<td>Zoom to fit</td>
+</tr>
+</tbody>
+</table>
+<p>The view controls have <strong>Zoom out</strong> and <strong>Zoom in</strong> buttons on either side of
+the current level. Select the level for a menu with the same commands plus 50%
+and 200%. <strong>Recenter view</strong>, beside the zoom buttons, brings the artboard back
+to the middle of the canvas without changing the zoom level or the page’s
+scroll position.</p>
+<p>Until you zoom or pan by hand, the artboard stays fitted: changing size or
+resizing the editor fits it again. Fitting never magnifies past 100%.</p>
+<p>These shortcuts work while a page has focus, because the workbench reads them
+inside the pages it serves, and through Storybook’s key channel for a Storybook
+lens. A page from another origin, such as a URL lens, keeps its own scroll
+wheel.</p>
+<h2 id="docs-on-the-canvas">Docs on the canvas</h2>
+<p>The canvas has two modes, and the lens decides which. In the default canvas
+mode, the page is on an artboard. In a <a href="/workbench/docs/docs-pages/#lenses">docs lens</a>, the
+canvas is in its docs mode: there is no artboard, the page’s docs fill the
+canvas, at most 960 pixels wide and centered, and the wheel scrolls them like
+a page in a browser. The size switcher stays visible but is disabled.
+Switching back to the design lens restores the artboard at its size. Zoom,
+annotations, screenshots, and handoffs work in a docs lens too; see
+<a href="/workbench/docs/docs-pages/#on-the-canvas">On the canvas</a>.</p>
+<h2 id="keyboard-and-clipboard-in-the-editor">Keyboard and clipboard in the editor</h2>
+<p>Inside VS Code, pages behave like pages:</p>
+<ul>
+<li>Typing, caret movement, selection, copy, cut, paste, select all, and undo
+stay in the focused field or page.</li>
+<li>Editor shortcuts, such as the Command Palette or switching tabs, reach
+VS Code, including multi-key chords.</li>
+<li>Right-clicking a design page opens VS Code’s context menu with the page’s
+selected text.</li>
+<li>Select all works in a field, a note, or the page, but not over the top bar
+or the toolbar.</li>
+</ul>
+<p>Pages from another origin, such as a URL lens, can’t receive the editor’s
+menu or clipboard integration. Storybook doesn’t forward keys while an input in
+the story is focused. Use <strong>Open on its own</strong> when you need full native
+behavior.</p>
+<h2 id="keyboard-shortcuts">Keyboard shortcuts</h2>
+<p>Workbench adds no VS Code keybindings; these keys work inside the canvas and
+the sidebar. Use Ctrl where a shortcut shows ⌘ on Windows and Linux.</p>
+<h3 id="canvas-keys">Canvas keys</h3>
+<table>
+<thead>
+<tr>
+<th>Keys</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>⌘ <code>=</code> or ⌘ <code>+</code></td>
+<td>Zoom in</td>
+</tr>
+<tr>
+<td>⌘ <code>−</code></td>
+<td>Zoom out</td>
+</tr>
+<tr>
+<td>⌘ 0, or Shift 0</td>
+<td>Zoom to 100%</td>
+</tr>
+<tr>
+<td>Shift 1</td>
+<td>Zoom to fit</td>
+</tr>
+<tr>
+<td>Space + drag</td>
+<td>Pan</td>
+</tr>
+<tr>
+<td>Escape</td>
+<td>Close an open menu</td>
+</tr>
+</tbody>
+</table>
+<p>Shift 0 and Shift 1 don’t apply while you type in a field or a note.</p>
+<h3 id="annotation-keys">Annotation keys</h3>
+<table>
+<thead>
+<tr>
+<th>Keys</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Escape</td>
+<td>Leave the drawing tool for <strong>Select</strong>; with <strong>Select</strong>, deselect the annotation; while typing a note, finish it</td>
+</tr>
+<tr>
+<td>⌘ Z</td>
+<td>Undo the last annotation, unless a field, a note, or the page has focus</td>
+</tr>
+<tr>
+<td>Delete or Backspace</td>
+<td>Remove the selected annotation</td>
+</tr>
+<tr>
+<td>Arrow keys, Shift + arrow keys</td>
+<td>Nudge the selected annotation 1 or 8 pixels</td>
+</tr>
+<tr>
+<td>Shift while drawing</td>
+<td>Keep arrows and lines at 45° steps, and rectangles and circles square</td>
+</tr>
+<tr>
+<td>Shift while dragging a corner handle</td>
+<td>Keep a rectangle or circle square</td>
+</tr>
+<tr>
+<td>Double-click a note or comment</td>
+<td>Edit its text, with <strong>Select</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sidebar-keys">Sidebar keys</h3>
+<table>
+<thead>
+<tr>
+<th>Keys</th>
+<th>Where</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>⌘ K</td>
+<td>Standalone browser</td>
+<td>Jump to search</td>
+</tr>
+<tr>
+<td>Escape</td>
+<td>In search</td>
+<td>Clear it</td>
+</tr>
+<tr>
+<td>Down</td>
+<td>In search, in VS Code</td>
+<td>Move to the first result in the page list</td>
+</tr>
+<tr>
+<td>Up, Down, Home, End</td>
+<td>In the page list, in VS Code</td>
+<td>Move between groups, pages, and scenarios</td>
+</tr>
+<tr>
+<td>Right, Left</td>
+<td>In the page list, in VS Code</td>
+<td>Expand or collapse a group or page; Left on a page or scenario inside one moves to it</td>
+</tr>
+<tr>
+<td>Enter or Space</td>
+<td>On a page or scenario</td>
+<td>Show it</td>
+</tr>
+<tr>
+<td>Left, Right, Shift + Left or Right</td>
+<td>On the sidebar’s edge, in a standalone browser</td>
+<td>Resize the sidebar by 8 or 32 pixels</td>
+</tr>
+</tbody>
+</table>
+<h2 id="links-and-the-address">Links and the address</h2>
+<p>The current view is recorded in the address’s hash, so reloading or opening a
+copied link lands on the same page, scenario, size, and lens:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>#pages/sign-in.html:error@1512~staging</span></span>
+<span class="line"><span> └ src              └ scenario └ width └ lens</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Values</th>
+<th>Left out when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>src</td>
+<td>The page’s <code>src</code></td>
+<td>Never</td>
+</tr>
+<tr>
+<td><code>:scenario</code></td>
+<td>A scenario id, or on a Storybook lens the part of the story’s id after <code>--</code></td>
+<td>The first scenario is showing, or the page has no scenarios</td>
+</tr>
+<tr>
+<td><code>!example</code></td>
+<td>In a docs lens, an example’s ID; the docs open scrolled to that example</td>
+<td>No example is named, or the lens isn’t a docs lens</td>
+</tr>
+<tr>
+<td><code>@width</code></td>
+<td><code>fit</code>, <code>1512</code>, <code>393</code>, or <code>resizable</code></td>
+<td>In a docs lens, which has no width. Elsewhere the workbench always writes it, though a link you type may omit it</td>
+</tr>
+<tr>
+<td><code>~lens</code></td>
+<td>An implementation name, or <code>design</code> for the authored lens of a page with docs</td>
+<td>The page’s default lens is showing: its first docs lens (a Markdown page’s <code>lens</code>), or the authored lens of a page without docs</td>
+</tr>
+</tbody>
+</table>
+<p>The src is always the page’s <code>src</code>, also in a docs lens of a page with a
+design. See <a href="/workbench/docs/docs-pages/#addresses">Addresses</a> for examples of addresses in a
+docs lens.</p>
+<p>After a page loads, the address is rewritten to describe exactly what is
+showing.</p>
+<p>To get a link:</p>
+<ul>
+<li><strong>Workbench: Copy Canvas URL</strong> copies the workbench’s address.</li>
+<li><strong>Workbench: Open Canvas in Browser</strong> opens it in your browser.</li>
+<li>In a standalone browser, copy the address bar.</li>
+</ul>
+<p>The workbench only listens on <code>127.0.0.1</code>, so a link works on your machine
+while the workbench is running. The port is the first free one from 3579, so
+with several windows or spaces open, a saved link may point at another space
+after a restart; the hash part stays valid. Share a
+<a href="#copy-a-reference">reference</a> or a screenshot with other people instead.</p>
+<h2 id="copy-a-reference">Copy a reference</h2>
+<p><strong>Copy reference</strong> identifies every artboard and the selection, with each page’s
+label, design file, scenario or story, size, and lens. Paste it into a conversation
+to point an agent or a colleague at the canvas. It doesn’t take a screenshot or include annotations. For
+those, use a <a href="/workbench/docs/annotations-and-handoff/#hand-off-to-an-agent">handoff</a>.</p>
+<p>Agents can also read the same reference without a paste. Every open canvas
+tells the Workbench server which artboards it shows, and
+<code>GET /_workbench/view</code> on the server returns the reference from the canvas
+you changed most recently. Projects with agent hooks set up can give
+it to Claude Code and Codex with every prompt, and to MCP clients through a
+<code>current_view</code> tool. A project with a <code>.canonic</code> folder gets the server’s
+address in <code>.canonic/.workbench/server.json</code>; add that folder to
+<code>.gitignore</code>.</p>
+<h2 id="configure-pages">Configure pages</h2>
+<p><strong>More</strong> › <strong>Configure pages</strong> edits the collections and their pages in a
+form:</p>
+<ul>
+<li>Add, remove, and rename collections, and set their icons.</li>
+<li>Add a group to a collection with <strong>Add group</strong>, from the collection’s row or
+its details. A new group starts with one untitled page, since a group needs
+at least one; groups don’t nest. Rename and remove groups, and add pages to
+them.</li>
+<li>Add and remove pages, and edit their labels and source paths.</li>
+<li>Choose each page’s supported sizes.</li>
+</ul>
+<p>Saving rewrites only the <code>collections</code> block of <code>workbench.yaml</code>, and the
+sidebar refreshes. Scenarios, implementation mappings, and code pointers in that
+block are preserved. Everything outside it, including comments, is left alone;
+comments inside it are removed. The form edits <code>workbench.yaml</code> only, so
+collections that <code>workbench.local.yaml</code> overrides on your machine keep showing
+the local version. Editing the YAML directly always works too; see the
+<a href="/workbench/docs/configuration/">reference</a>.</p>
+<h2 id="using-a-standalone-browser">Using a standalone browser</h2>
+<p>The canvas also works in a regular browser:</p>
+<ul>
+<li>From VS Code, run <strong>Workbench: Open Canvas in Browser</strong>. The extension still
+serves the page, so handoffs and opening files in the editor work too.</li>
+<li>Without VS Code, run the server yourself. See
+<a href="/workbench/docs/extension/#running-without-vs-code">Running without VS Code</a>. Everything
+works except handoffs, opening files in the editor, and
+<a href="/workbench/docs/configuration/#start-commands">start commands</a>.</li>
+</ul>
+<p>In a browser, the sidebar is on the left of the page, browser shortcuts and
+menus work normally, and the camera downloads screenshots. Problems importing
+a catalog or TypeScript previews are listed only in VS Code’s sidebar.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/canvas.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/workbench/docs/docs-pages/"><span>← Previous</span><strong>Docs</strong></a><a href="/workbench/docs/annotations-and-handoff/"><span>Next →</span><strong>Annotations and handoff</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#layout">Layout</a><a href="#the-sidebar">The sidebar</a><a href="#the-top-bar">The top bar</a><a href="#artboard-sizes">Artboard sizes</a><a href="#zoom-and-pan">Zoom and pan</a><a href="#docs-on-the-canvas">Docs on the canvas</a><a href="#keyboard-and-clipboard-in-the-editor">Keyboard and clipboard in the editor</a><a href="#keyboard-shortcuts">Keyboard shortcuts</a><a href="#canvas-keys" class="docs-toc-sub">Canvas keys</a><a href="#annotation-keys" class="docs-toc-sub">Annotation keys</a><a href="#sidebar-keys" class="docs-toc-sub">Sidebar keys</a><a href="#links-and-the-address">Links and the address</a><a href="#copy-a-reference">Copy a reference</a><a href="#configure-pages">Configure pages</a><a href="#using-a-standalone-browser">Using a standalone browser</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

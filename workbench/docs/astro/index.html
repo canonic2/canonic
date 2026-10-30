@@ -1,0 +1,505 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Astro previews · Workbench docs · Canonic</title><meta name="description" content="The  astro  adapter renders an Astro component or page on the server, with your preview's inputs as  Astro.props , and shows the resulting HTML, styles, and scripts on the canvas. "><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.17.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/workbench/">Overview</a><a href="/workbench/docs/" aria-current="page">Docs</a><a href="/workbench/install/">Install</a><a href="/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Getting started</h2><a href="/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/workbench/docs/canvas/" data-doc-id="canvas">Using the canvas</a><a href="/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group"><h2>Previews</h2><a href="/workbench/docs/workbench-previews/" data-doc-id="workbench-previews">TypeScript Workbench previews</a><a href="/workbench/docs/preview-data/" data-doc-id="preview-data">Preview data, mocks, and actions</a><a href="/workbench/docs/react/" data-doc-id="react">React previews</a><a href="/workbench/docs/react-native-web/" data-doc-id="react-native-web">React Native Web previews</a><a href="/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/workbench/docs/astro/" data-doc-id="astro" aria-current="page">Astro previews</a><a href="/workbench/docs/html/" data-doc-id="html">HTML previews</a><a href="/workbench/docs/custom-adapters/" data-doc-id="custom-adapters">Custom adapters and compiler settings</a></div><div class="docs-group"><h2>Connect your implementation</h2><a href="/workbench/docs/lenses/" data-doc-id="lenses">Lenses and URL implementations</a><a href="/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/workbench/docs/ios-simulator/" data-doc-id="ios-simulator">iOS Simulator</a><a href="/workbench/docs/windows/" data-doc-id="windows">App windows</a></div><div class="docs-group"><h2>Reference</h2><a href="/workbench/docs/configuration/" data-doc-id="configuration">workbench.yaml reference</a><a href="/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/workbench/docs/extension/" data-doc-id="extension">The VS Code extension</a><a href="/workbench/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshooting</a></div></nav><a class="docs-install" href="/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span>Previews</span></div><div class="docs-prose"><h1 id="astro-previews">Astro previews</h1>
+<p>The <code>astro</code> adapter renders an Astro component or page on the server, with your
+preview’s inputs as <code>Astro.props</code>, and shows the resulting HTML, styles, and
+scripts on the canvas. Use it to review components and pages in named scenarios
+next to their designs, without running your site.</p>
+<p>The adapter renders one component on its own, not your application: no
+<code>astro.config.*</code>, integrations, middleware, or routing. To review the running
+site, use a <a href="/workbench/docs/lenses/">URL lens</a> instead.</p>
+<p>For what every preview shares, such as the definition keys, controls, hooks, and
+the command-line checker, see <a href="/workbench/docs/workbench-previews/">TypeScript Workbench previews</a>.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Astro 4.9 or later, installed where the component can resolve it: in the
+<code>node_modules</code> of its package or any folder above it. Workbench uses that
+installation’s compiler and its Container API, and never installs Astro.</li>
+<li>A <code>workbench.yaml</code> at the project root, and a
+<a href="/workbench/docs/extension/#workspace-trust">trusted workspace</a>.</li>
+</ul>
+<h2 id="add-a-component-preview">Add a component preview</h2>
+<p>This example previews a pricing card in three scenarios.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>acme-site/</span></span>
+<span class="line"><span>├── package.json</span></span>
+<span class="line"><span>├── workbench.yaml</span></span>
+<span class="line"><span>└── src/</span></span>
+<span class="line"><span>    ├── assets/check.svg</span></span>
+<span class="line"><span>    └── components/</span></span>
+<span class="line"><span>        ├── Badge.astro</span></span>
+<span class="line"><span>        ├── PlanCard.astro</span></span>
+<span class="line"><span>        ├── PlanCard.workbench.ts</span></span>
+<span class="line"><span>        └── plan-card.css</span></span></code></pre>
+<p><code>src/components/PlanCard.astro</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="astro"><code><span class="line"><span style="color:#6A737D">---</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> Badge </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> './Badge.astro'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> check </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '../assets/check.svg?url'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#9ECBFF"> './plan-card.css'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">interface</span><span style="color:#B392F0"> Props</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#FFAB70">  name</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">  price</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">  featured</span><span style="color:#F97583">?:</span><span style="color:#79B8FF"> boolean</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">const</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">name</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">price</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">featured</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> false</span><span style="color:#E1E4E8"> } </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> Astro.props;</span></span>
+<span class="line"><span style="color:#6A737D">---</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">&lt;</span><span style="color:#85E89D">article</span><span style="color:#B392F0"> class:list</span><span style="color:#E1E4E8">={[</span><span style="color:#9ECBFF">'plan'</span><span style="color:#E1E4E8">, { featured }]}&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  {featured </span><span style="color:#F97583">&amp;&amp;</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#79B8FF">Badge</span><span style="color:#E1E4E8">&gt;Most popular&lt;/</span><span style="color:#79B8FF">Badge</span><span style="color:#E1E4E8">&gt;}</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">h2</span><span style="color:#E1E4E8">&gt;{name}&lt;/</span><span style="color:#85E89D">h2</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">p</span><span style="color:#B392F0"> class</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"price"</span><span style="color:#E1E4E8">&gt;{price}&lt;/</span><span style="color:#85E89D">p</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">ul</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#85E89D">slot</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">      &lt;</span><span style="color:#85E89D">li</span><span style="color:#E1E4E8">&gt;&lt;</span><span style="color:#85E89D">img</span><span style="color:#B392F0"> src</span><span style="color:#E1E4E8">={check} </span><span style="color:#B392F0">alt</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8"> /&gt; Unlimited projects&lt;/</span><span style="color:#85E89D">li</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;/</span><span style="color:#85E89D">slot</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;/</span><span style="color:#85E89D">ul</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">button</span><span style="color:#B392F0"> type</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"button"</span><span style="color:#E1E4E8">&gt;Choose {name}&lt;/</span><span style="color:#85E89D">button</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;/</span><span style="color:#85E89D">article</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">&lt;</span><span style="color:#85E89D">style</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#B392F0">  .plan</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">border</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#F97583">px</span><span style="color:#79B8FF"> solid</span><span style="color:#79B8FF"> #d0d5dd</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">border-radius</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">12</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">padding</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">24</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; }</span></span>
+<span class="line"><span style="color:#B392F0">  .featured</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">border-color</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">#4f46e5</span><span style="color:#E1E4E8">; }</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;/</span><span style="color:#85E89D">style</span><span style="color:#E1E4E8">&gt;</span></span></code></pre>
+<p><code>src/components/Badge.astro</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="astro"><code><span class="line"><span style="color:#E1E4E8">&lt;</span><span style="color:#85E89D">span</span><span style="color:#B392F0"> class</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"badge"</span><span style="color:#E1E4E8">&gt;&lt;</span><span style="color:#85E89D">slot</span><span style="color:#E1E4E8"> /&gt;&lt;/</span><span style="color:#85E89D">span</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">&lt;</span><span style="color:#85E89D">style</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#B392F0">  .badge</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">background</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">#eef2ff</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">color</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">#4338ca</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">border-radius</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">999</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">padding</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">2</span><span style="color:#F97583">px</span><span style="color:#79B8FF"> 8</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; }</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;/</span><span style="color:#85E89D">style</span><span style="color:#E1E4E8">&gt;</span></span></code></pre>
+<p><code>src/components/plan-card.css</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="css"><code><span class="line"><span style="color:#B392F0">.plan</span><span style="color:#85E89D"> h2</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#79B8FF">  font</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">600</span><span style="color:#79B8FF"> 20</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">/</span><span style="color:#79B8FF">1.2</span><span style="color:#79B8FF"> system-ui</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">sans-serif</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>src/components/PlanCard.workbench.ts</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'components/plan-card'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  title: </span><span style="color:#9ECBFF">'Components/Plan Card'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'astro'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./PlanCard.astro'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  inputs: { name: </span><span style="color:#9ECBFF">'Team'</span><span style="color:#E1E4E8">, price: </span><span style="color:#9ECBFF">'$12 per month'</span><span style="color:#E1E4E8">, featured: </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  controls: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    name: { type: </span><span style="color:#9ECBFF">'text'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">    price: { type: </span><span style="color:#9ECBFF">'text'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">    featured: { type: </span><span style="color:#9ECBFF">'boolean'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    default: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    featured: { inputs: { featured: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">    enterprise: { inputs: { name: </span><span style="color:#9ECBFF">'Enterprise'</span><span style="color:#E1E4E8">, price: </span><span style="color:#9ECBFF">'Contact sales'</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>Run <strong>Workbench: Refresh Pages</strong>. <strong>Plan Card</strong> appears in a <strong>Components</strong>
+collection with <strong>Default</strong>, <strong>Featured</strong>, and <strong>Enterprise</strong> scenarios. To check it
+without the canvas, run the
+<a href="/workbench/docs/workbench-previews/#command-line-tools">checker</a> on the project:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>$ &lt;extension&gt;/server/bin/&lt;platform&gt;-&lt;arch&gt;/workbench-server check acme-site</span></span>
+<span class="line"><span>Built components/plan-card</span></span></code></pre>
+<h2 id="preview-a-page">Preview a page</h2>
+<p>A page is a component like any other. Pass the data it would load as inputs:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="astro"><code><span class="line"><span style="color:#6A737D">---</span></span>
+<span class="line"><span style="color:#6A737D">// src/pages/pricing.astro</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> Base </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '../layouts/Base.astro'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> PlanCard </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '../components/PlanCard.astro'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">const</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">plans</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> [] } </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> Astro.props;</span></span>
+<span class="line"><span style="color:#6A737D">---</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">&lt;</span><span style="color:#79B8FF">Base</span><span style="color:#B392F0"> title</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"Pricing"</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">main</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#85E89D">h1</span><span style="color:#E1E4E8">&gt;Pricing&lt;/</span><span style="color:#85E89D">h1</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    {plans.</span><span style="color:#B392F0">map</span><span style="color:#E1E4E8">((</span><span style="color:#FFAB70">plan</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#79B8FF">PlanCard</span><span style="color:#E1E4E8"> {</span><span style="color:#F97583">...</span><span style="color:#E1E4E8">plan} /&gt;)}</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;/</span><span style="color:#85E89D">main</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;/</span><span style="color:#79B8FF">Base</span><span style="color:#E1E4E8">&gt;</span></span></code></pre>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#6A737D">// src/pages/pricing.workbench.ts</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'pages/pricing'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  title: </span><span style="color:#9ECBFF">'Pages/Pricing'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'astro'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./pricing.astro'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  sizes: [</span><span style="color:#9ECBFF">'laptop'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'mobile'</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#E1E4E8">  inputs: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    plans: [</span></span>
+<span class="line"><span style="color:#E1E4E8">      { name: </span><span style="color:#9ECBFF">'Team'</span><span style="color:#E1E4E8">, price: </span><span style="color:#9ECBFF">'$12 per month'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">      { name: </span><span style="color:#9ECBFF">'Business'</span><span style="color:#E1E4E8">, price: </span><span style="color:#9ECBFF">'$24 per month'</span><span style="color:#E1E4E8">, featured: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">    ],</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">  controls: { plans: { type: </span><span style="color:#9ECBFF">'json'</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    default: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    empty: { inputs: { plans: [] } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>When a layout renders <code>&lt;html&gt;</code>, <code>&lt;head&gt;</code>, and <code>&lt;body&gt;</code>, their attributes, such
+as <code>lang</code> and a <code>class</code> on <code>&lt;body&gt;</code>, are kept. The page’s <code>&lt;title&gt;</code>, <code>&lt;meta&gt;</code>,
+and <code>&lt;base&gt;</code> are dropped; the frame’s title is the preview’s <code>title</code>.</p>
+<p>A page in <code>src/pages/</code> is not routed. <code>Astro.params</code> is <code>{}</code>, and
+<code>getStaticPaths</code> isn’t called, so a dynamic route such as <code>[slug].astro</code> should
+read what it needs from props in the preview.</p>
+<p>When the frontmatter loads data with <code>fetch</code>, answer it with
+<a href="/workbench/docs/preview-data/#request-mocks"><code>requests</code></a>; the mocks apply while the
+page renders in Node as well as to scripts in the frame:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">  requests</span><span style="color:#E1E4E8">: { </span><span style="color:#9ECBFF">'GET /api/plans'</span><span style="color:#E1E4E8">: { body: plans } },</span></span>
+<span class="line"><span style="color:#B392F0">  scenarios</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#F97583">    default</span><span style="color:#E1E4E8">: {},</span></span>
+<span class="line"><span style="color:#B392F0">    empty</span><span style="color:#E1E4E8">: { </span><span style="color:#B392F0">requests</span><span style="color:#E1E4E8">: { </span><span style="color:#9ECBFF">'GET /api/plans'</span><span style="color:#E1E4E8">: { body: [] } } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span></code></pre>
+<p>Relative URLs resolve against <code>http://localhost/</code> there. The page waits for
+every fetch before it renders, so <code>pending</code> and long <code>delay</code> values have no
+loading state to show: a render that waits more than 10 seconds fails.</p>
+<p>Since the page isn’t routed, its links to your other routes have nowhere to go.
+Map each route that has a preview of its own, and the navigation in a shared
+layout opens it with <strong>Actions</strong> on:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">  links</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#9ECBFF">    '/'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'pages/home'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    '/pricing/'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'pages/pricing'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span></code></pre>
+<p>Other links, including downloads and other sites, are recorded under
+<strong>Actions</strong>. See <a href="/workbench/docs/preview-data/#links-and-navigation">Links and navigation</a>.</p>
+<h2 id="what-runs-where">What runs where</h2>
+<ul>
+<li><strong>In Workbench’s <a href="/workbench/docs/extension/#the-preview-compiler">Node evaluator</a>:</strong> the
+frontmatter of every component, and whatever it imports, including Node
+modules such as <code>node:fs</code>. Workbench renders each scenario there with your
+project’s own Astro when it builds the preview. Frontmatter is never sent to
+the browser.</li>
+<li><strong>In the canvas:</strong> the rendered HTML, its styles, its <code>&lt;script&gt;</code> tags, and
+your preview’s <code>setup</code>, <code>play</code>, and <code>ready</code> hooks.</li>
+</ul>
+<p>Because the frontmatter runs once per scenario at build time, a frontmatter
+error in any scenario fails the whole preview, not just that scenario. Frontmatter that
+calls an external service needs that service to be reachable.</p>
+<h2 id="props-slots-and-scenarios">Props, slots, and scenarios</h2>
+<ul>
+<li>
+<p><strong>Props:</strong> the preview’s <code>inputs</code>, merged with the scenario’s <code>inputs</code>, become
+<code>Astro.props</code>. They must be plain data. <code>fixtures</code> and <code>globals</code> don’t reach
+the frontmatter; they are only available to hooks in the browser.</p>
+</li>
+<li>
+<p><strong>Slots:</strong> nested components fill each other’s slots as usual. The preview
+itself renders with no slot content, so a component’s own <code>&lt;slot&gt;</code> shows its
+fallback. To preview it with content, write a small example component and use
+it as a scenario’s <code>source</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="astro"><code><span class="line"><span style="color:#6A737D">---</span></span>
+<span class="line"><span style="color:#6A737D">// src/components/PlanCard.example.astro</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> PlanCard </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> './PlanCard.astro'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#6A737D">---</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">&lt;</span><span style="color:#79B8FF">PlanCard</span><span style="color:#B392F0"> name</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"Team"</span><span style="color:#B392F0"> price</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"$12 per month"</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">li</span><span style="color:#E1E4E8">&gt;Priority support&lt;/</span><span style="color:#85E89D">li</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;/</span><span style="color:#79B8FF">PlanCard</span><span style="color:#E1E4E8">&gt;</span></span></code></pre>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">scenarios</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#F97583">  default</span><span style="color:#E1E4E8">: {},</span></span>
+<span class="line"><span style="color:#9ECBFF">  'custom-features'</span><span style="color:#E1E4E8">: { source: { entry: </span><span style="color:#9ECBFF">'./PlanCard.example.astro'</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">},</span></span></code></pre>
+</li>
+<li>
+<p><strong>Exports:</strong> <code>source.export</code> selects a named export of the entry, so an
+<code>index.ts</code> that re-exports components works with
+<code>source: { entry: './index.ts', export: 'PlanCard' }</code>.</p>
+</li>
+</ul>
+<h3 id="edit-inputs">Edit inputs</h3>
+<p>Editing a field in <strong>Preview controls</strong> sends the new inputs to the Node
+evaluator, which renders that scenario again and replaces the frame’s content. Each
+edit is a full server render, so frontmatter runs again. <strong>Reset scenario</strong> returns
+to the authored render. Edits never change your files.</p>
+<h2 id="styles-scripts-and-assets">Styles, scripts, and assets</h2>
+<table>
+<thead>
+<tr>
+<th>In the component</th>
+<th>In the preview</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;style&gt;</code> and <code>&lt;style is:global&gt;</code></td>
+<td>Compiled and loaded, with Astro’s scoping</td>
+</tr>
+<tr>
+<td><code>import './file.css'</code> in frontmatter</td>
+<td>Loaded, with its <code>url()</code> assets</td>
+</tr>
+<tr>
+<td><code>&lt;script&gt;</code></td>
+<td>Bundled with its imports and run in the frame</td>
+</tr>
+<tr>
+<td><code>&lt;script is:inline&gt;</code></td>
+<td>Run in the frame</td>
+</tr>
+<tr>
+<td><code>import url from './logo.svg?url'</code></td>
+<td>A URL to the copied file</td>
+</tr>
+<tr>
+<td><code>import text from './icon.svg?raw'</code></td>
+<td>The file’s text</td>
+</tr>
+<tr>
+<td><code>import logo from './logo.png'</code></td>
+<td>A URL string, not Astro’s image object</td>
+</tr>
+<tr>
+<td><code>&lt;img src="./logo.svg"&gt;</code></td>
+<td>Resolved from the component’s folder and copied with the preview</td>
+</tr>
+<tr>
+<td><code>&lt;img src="/logo.svg"&gt;</code></td>
+<td>Found in the project root, then in the nearest package’s <code>public/</code> folder</td>
+</tr>
+</tbody>
+</table>
+<p>Scripts run again on every scenario change, input edit, and reset, and can read
+the current context from <code>window.workbench</code>. For example, to log a click in
+<strong>Actions</strong>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="astro"><code><span class="line"><span style="color:#E1E4E8">&lt;</span><span style="color:#85E89D">script</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#F97583">  for</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">const</span><span style="color:#79B8FF"> button</span><span style="color:#F97583"> of</span><span style="color:#E1E4E8"> document.</span><span style="color:#B392F0">querySelectorAll</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'.plan button'</span><span style="color:#E1E4E8">)) {</span></span>
+<span class="line"><span style="color:#E1E4E8">    button.</span><span style="color:#B392F0">addEventListener</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'click'</span><span style="color:#E1E4E8">, () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> window.workbench?.</span><span style="color:#B392F0">action</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'choose'</span><span style="color:#E1E4E8">, button.textContent));</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;/</span><span style="color:#85E89D">script</span><span style="color:#E1E4E8">&gt;</span></span></code></pre>
+<p>On your site, <code>window.workbench</code> is undefined, so the optional call does nothing.</p>
+<p>Imported images are URL strings in a preview, so <code>logo.src</code> is undefined there.
+Import images with <code>?url</code> when a component needs to work in both, as the
+example does. Frontmatter can import images (<code>.svg</code>, <code>.png</code>, <code>.jpg</code>, <code>.jpeg</code>,
+<code>.gif</code>, <code>.webp</code>, <code>.avif</code>) and fonts (<code>.woff</code>, <code>.woff2</code>, <code>.ttf</code>); other file
+types need a <code>?url</code> or <code>?raw</code> import.</p>
+<p>The definition’s <code>styles</code>, <code>environment</code>, and hooks work as they do for the
+<a href="/workbench/docs/html/">HTML adapter</a>: an <code>environment</code> can export
+<code>mount(canvas, context)</code>, called after the rendered HTML is in place.</p>
+<h2 id="environment-values">Environment values</h2>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>In a preview</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>import.meta.env.DEV</code></td>
+<td><code>true</code> on the canvas, <code>false</code> in <code>check</code>, <code>build</code>, and exports</td>
+</tr>
+<tr>
+<td><code>import.meta.env.PROD</code></td>
+<td>The opposite of <code>DEV</code></td>
+</tr>
+<tr>
+<td><code>import.meta.env.BASE_URL</code></td>
+<td><code>/</code></td>
+</tr>
+<tr>
+<td><code>import.meta.env.SITE</code></td>
+<td><code>https://example.com</code></td>
+</tr>
+<tr>
+<td>Other <code>import.meta.env</code> values, such as <code>PUBLIC_API_URL</code> or <code>MODE</code></td>
+<td>Not set. Reading one fails with <code>Cannot read properties of undefined</code></td>
+</tr>
+<tr>
+<td><code>Astro.url</code></td>
+<td><code>https://example.com/</code></td>
+</tr>
+<tr>
+<td><code>Astro.site</code></td>
+<td><code>undefined</code></td>
+</tr>
+<tr>
+<td><code>Astro.params</code>, <code>Astro.locals</code></td>
+<td><code>{}</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>.env</code> files aren’t read. Set the values you need with <code>define</code> in
+<code>workbench.config.ts</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { defineConfig } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> defineConfig</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  define: {</span></span>
+<span class="line"><span style="color:#9ECBFF">    'import.meta.env.SITE'</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">JSON</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">stringify</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'https://example.com/docs/'</span><span style="color:#E1E4E8">),</span></span>
+<span class="line"><span style="color:#9ECBFF">    'import.meta.env.PUBLIC_API_URL'</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">JSON</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">stringify</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'https://api.example.com'</span><span style="color:#E1E4E8">),</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<h2 id="imports-aliases-and-plugins">Imports, aliases, and plugins</h2>
+<ul>
+<li>
+<p><strong><code>tsconfig.json</code> paths,</strong> such as <code>@/*</code> mapped to <code>src/*</code>, resolve in
+frontmatter and in scripts.</p>
+</li>
+<li>
+<p><strong><code>aliases</code></strong> in <code>workbench.config.ts</code> also apply to frontmatter. Each alias
+matches one exact import specifier. See
+<a href="/workbench/docs/custom-adapters/#aliases">Custom adapters</a>.</p>
+</li>
+<li>
+<p><strong>An alias can stand in for an <code>astro:</code> module</strong> that needs Astro’s
+application pipeline, such as <code>astro:content</code>. This one answers
+<code>astro:content</code> with a local fixture:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#6A737D">// workbench.config.ts</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { defineConfig } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> defineConfig</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  aliases: { </span><span style="color:#9ECBFF">'astro:content'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'./preview/content.ts'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#6A737D">// preview/content.ts</span></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> async</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> getCollection</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">name</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> [{ id: </span><span style="color:#9ECBFF">'launch'</span><span style="color:#E1E4E8">, data: { title: </span><span style="color:#9ECBFF">'Acme launch'</span><span style="color:#E1E4E8"> } }];</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>A component that calls <code>getCollection('blog')</code> then renders the fixture.</p>
+</li>
+<li>
+<p><strong><code>rules</code> and <code>plugins</code></strong> in <code>workbench.config.ts</code> apply to the component’s
+<code>&lt;script&gt;</code> tags and what they import, which are built for the browser. They don’t
+run in frontmatter, which Workbench bundles separately for Node. See
+<a href="/workbench/docs/custom-adapters/#rules-and-plugins">Rules and plugins</a>.</p>
+</li>
+</ul>
+<p>Registering an adapter named <code>astro</code> in <code>workbench.config.ts</code> replaces this
+adapter entirely, including server rendering. See
+<a href="/workbench/docs/custom-adapters/#replace-a-built-in-adapter">Replace a built-in adapter</a>.</p>
+<h2 id="not-supported">Not supported</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Error</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>astro:content</code>, <code>astro:assets</code>, and other <code>astro:</code> modules</td>
+<td><code>astro:content needs the Astro application pipeline; use a URL lens, or stand in for it with an alias.</code></td>
+<td>Stand in for the module with an alias, as above, or use a URL lens</td>
+</tr>
+<tr>
+<td><code>client:*</code> directives and <code>server:defer</code></td>
+<td><code>Astro client/server islands need application integrations; use a URL lens for &lt;file&gt;</code></td>
+<td>Use a URL lens</td>
+</tr>
+<tr>
+<td>React, Vue, Svelte, or other framework components inside Astro</td>
+<td><code>Unable to render `Widget`. No valid renderer was found for this file extension.</code></td>
+<td>Preview the framework component with its own adapter, or use a URL lens</td>
+</tr>
+<tr>
+<td><code>&lt;style lang="scss"&gt;</code> and other preprocessors</td>
+<td><code>Astro style preprocessors are not supported; use plain CSS: &lt;file&gt;</code></td>
+<td>Use plain CSS, or a URL lens. A rule in <code>workbench.config.ts</code> doesn’t change this</td>
+</tr>
+<tr>
+<td>Importing <code>.scss</code>, <code>.md</code>, or <code>.mdx</code> files</td>
+<td><code>No loader is configured for ".scss" files: &lt;file&gt;</code></td>
+<td>Use plain CSS, or pass the content as an input</td>
+</tr>
+<tr>
+<td><code>import.meta.glob</code></td>
+<td><code>(intermediate value).glob is not a function</code></td>
+<td>Import the files directly</td>
+</tr>
+<tr>
+<td><code>astro.config.*</code>, integrations, middleware, and <code>.env</code> files</td>
+<td>None: they are not loaded</td>
+<td>Use <code>define</code> and <code>aliases</code> in <code>workbench.config.ts</code>, and <code>rules</code> and <code>plugins</code> for scripts</td>
+</tr>
+</tbody>
+</table>
+<h2 id="document-components-with-a-docs-page">Document components with a docs page</h2>
+<p>A page’s <a href="/workbench/docs/docs-pages/">docs</a> can show Astro components as live examples.
+Give the page a <code>docs</code> lens with <code>adapter: astro</code>, and point the page’s lens at a
+folder of <code>.astro</code> files. Each file is one example, named after the file:
+<code>featured.astro</code> is <code>featured</code>.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  site</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Astro</span></span>
+<span class="line"><span style="color:#85E89D">    adapter</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">astro</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Components</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Plan Card</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs/plan-card.md</span></span>
+<span class="line"><span style="color:#85E89D">        implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          site</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">src/components/plan-card-examples/</span></span></code></pre>
+<p><code>src/components/plan-card-examples/featured.astro</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="astro"><code><span class="line"><span style="color:#6A737D">---</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> PlanCard </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '../PlanCard.astro'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#6A737D">---</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">&lt;</span><span style="color:#79B8FF">PlanCard</span><span style="color:#B392F0"> name</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"Business"</span><span style="color:#B392F0"> price</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"$24 per month"</span><span style="color:#B392F0"> featured</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">li</span><span style="color:#E1E4E8">&gt;Priority support&lt;/</span><span style="color:#85E89D">li</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;/</span><span style="color:#79B8FF">PlanCard</span><span style="color:#E1E4E8">&gt;</span></span></code></pre>
+<p><code>docs/plan-card.md</code> places it with a fenced block, as described in
+<a href="/workbench/docs/docs-pages/#write-the-markdown">Docs</a>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="md"><code><span class="line"><span style="color:#79B8FF;font-weight:bold">## Featured</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">```example featured</span></span>
+<span class="line"><span style="color:#E1E4E8">caption: featured</span></span>
+<span class="line"><span style="color:#E1E4E8">```</span></span></code></pre>
+<ul>
+<li><strong>Rendering.</strong> Workbench renders each example in Node, as it renders a
+preview’s scenarios, and the page loads the example’s styles, <code>&lt;script&gt;</code> tags,
+and assets. What runs where, the supported imports, and the
+<a href="#not-supported">unsupported features</a> are the same as for previews. A
+frontmatter error in any example fails the whole lens.</li>
+<li><strong>Props and slots.</strong> Examples get no inputs or controls, so <code>Astro.props</code> is
+<code>{}</code>. Pass props and slot content in the example file, as above.</li>
+<li><strong>Lens settings.</strong> The lens’s <code>styles</code> and <code>environment</code> apply. The
+environment’s <code>setup</code> runs before the examples mount, and its
+<code>mount(canvas, context)</code> is called after each example’s HTML is in place.</li>
+<li><strong><code>window.workbench</code></strong> isn’t set in a docs lens, so a script’s
+<code>window.workbench?.action(...)</code> call does nothing there.</li>
+<li><strong>A folder only.</strong> An <code>.astro</code> file holds one component, so an Astro lens
+takes a folder. A file fails the lens with <code>Astro examples are one component per file: point the lens at a folder of .astro files.</code></li>
+</ul>
+<h2 id="portable-exports">Portable exports</h2>
+<p><code>build</code> and <strong>Export…</strong> source/browser packages render every authored scenario when
+they export the preview, so the <a href="/workbench/docs/workbench-previews/#portable-exports">portable viewer</a>
+shows them with no Astro installation or server. The controls are left out,
+since editing inputs needs a live render, and the preview’s <strong>Documentation</strong>
+gains the note <code>Astro input edits require the live Workbench server. This export contains the authored scenarios.</code></p>
+<p>Docs with an Astro lens export the same way: the viewer shows each
+example as it was rendered, with its styles and scripts.</p>
+<h2 id="errors-and-fixes">Errors and fixes</h2>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>The Astro adapter needs astro installed in the project.</code></td>
+<td>Install <code>astro</code> in the package that contains the component, or in a folder above it.</td>
+</tr>
+<tr>
+<td><code>Astro previews require Astro 4.9 or newer (the Container API).</code></td>
+<td>Upgrade Astro to 4.9 or later.</td>
+</tr>
+<tr>
+<td><code>Cannot load the project Astro compiler: …</code></td>
+<td>Reinstall your dependencies so Astro’s compiler package is present.</td>
+</tr>
+<tr>
+<td><code>The selected Astro source export does not exist: &lt;name&gt;</code></td>
+<td>Fix <code>source.export</code>, or remove it to use the default export.</td>
+</tr>
+<tr>
+<td><code>Module not found: Can't resolve '&lt;path&gt;'</code></td>
+<td>A rendered <code>src</code>, <code>poster</code>, or <code>srcset</code> names a local file that doesn’t exist. Attributes such as <code>data-src</code> are checked too, so <code>data-src="undefined"</code> fails this way.</td>
+</tr>
+<tr>
+<td><code>Cannot read properties of undefined (reading '&lt;name&gt;')</code></td>
+<td>If <code>&lt;name&gt;</code> is an <code>import.meta.env</code> value, set it with <code>define</code>. Otherwise a prop is missing: add it to <code>inputs</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>For the other problems listed under <code>Workbench previews:</code>, see
+<a href="/workbench/docs/troubleshooting/#a-typescript-preview-is-missing-or-broken">A TypeScript preview is missing or broken</a>.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/astro.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/workbench/docs/vue/"><span>← Previous</span><strong>Vue previews</strong></a><a href="/workbench/docs/html/"><span>Next →</span><strong>HTML previews</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#requirements">Requirements</a><a href="#add-a-component-preview">Add a component preview</a><a href="#preview-a-page">Preview a page</a><a href="#what-runs-where">What runs where</a><a href="#props-slots-and-scenarios">Props, slots, and scenarios</a><a href="#edit-inputs" class="docs-toc-sub">Edit inputs</a><a href="#styles-scripts-and-assets">Styles, scripts, and assets</a><a href="#environment-values">Environment values</a><a href="#imports-aliases-and-plugins">Imports, aliases, and plugins</a><a href="#not-supported">Not supported</a><a href="#document-components-with-a-docs-page">Document components with a docs page</a><a href="#portable-exports">Portable exports</a><a href="#errors-and-fixes">Errors and fixes</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

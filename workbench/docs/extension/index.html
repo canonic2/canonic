@@ -1,0 +1,302 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>The VS Code extension · Workbench docs · Canonic</title><meta name="description" content="The Workbench extension runs a local server for each space, shows the sidebar in the Workbench view and the canvas in an editor tab, and connects handoffs and source links to the e"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.17.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/workbench/">Overview</a><a href="/workbench/docs/" aria-current="page">Docs</a><a href="/workbench/install/">Install</a><a href="/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Getting started</h2><a href="/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/workbench/docs/canvas/" data-doc-id="canvas">Using the canvas</a><a href="/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group"><h2>Previews</h2><a href="/workbench/docs/workbench-previews/" data-doc-id="workbench-previews">TypeScript Workbench previews</a><a href="/workbench/docs/preview-data/" data-doc-id="preview-data">Preview data, mocks, and actions</a><a href="/workbench/docs/react/" data-doc-id="react">React previews</a><a href="/workbench/docs/react-native-web/" data-doc-id="react-native-web">React Native Web previews</a><a href="/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/workbench/docs/astro/" data-doc-id="astro">Astro previews</a><a href="/workbench/docs/html/" data-doc-id="html">HTML previews</a><a href="/workbench/docs/custom-adapters/" data-doc-id="custom-adapters">Custom adapters and compiler settings</a></div><div class="docs-group"><h2>Connect your implementation</h2><a href="/workbench/docs/lenses/" data-doc-id="lenses">Lenses and URL implementations</a><a href="/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/workbench/docs/ios-simulator/" data-doc-id="ios-simulator">iOS Simulator</a><a href="/workbench/docs/windows/" data-doc-id="windows">App windows</a></div><div class="docs-group"><h2>Reference</h2><a href="/workbench/docs/configuration/" data-doc-id="configuration">workbench.yaml reference</a><a href="/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/workbench/docs/extension/" data-doc-id="extension" aria-current="page">The VS Code extension</a><a href="/workbench/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshooting</a></div></nav><a class="docs-install" href="/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span>Reference</span></div><div class="docs-prose"><h1 id="the-vs-code-extension">The VS Code extension</h1>
+<p>The Workbench extension runs a local server for each space, shows the
+sidebar in the Workbench view and the canvas in an editor tab, and connects
+handoffs and source links to the editor. This page is the reference for its
+commands and processes.</p>
+<h2 id="activation">Activation</h2>
+<p>The extension serves an open folder that contains <code>workbench.yaml</code> at its
+root. The file is one space, or several when it lists
+<a href="/workbench/docs/configuration/#spaces"><code>spaces</code></a>. In a multi-root workspace, every
+folder with a <code>workbench.yaml</code> adds its spaces, and the first one shows
+unless the window last showed another; see <a href="/workbench/docs/spaces/">Several spaces</a>. A window without one gets no server and no
+Workbench view, unless you have <a href="/workbench/docs/spaces/#add-a-space">added spaces</a>.
+The commands stay available, and say why they can’t run.</p>
+<p>Selecting Workbench or running <strong>Workbench: Open Canvas</strong> opens the tab
+immediately. It shows <strong>Opening Workbench</strong> while its server starts and the
+editor connects to it. Configured services, such as Storybook, start alongside
+Workbench; their readiness checks do not delay opening the canvas. The page
+list refreshes when those checks finish. The sidebar shows which catalogs it
+is waiting for, or
+<strong>Finding previews…</strong> during preview discovery. Search becomes available when
+the list is ready. The canvas shows <strong>Loading pages…</strong> while reading its
+catalogs. Preview loads show <strong>Loading preview…</strong> after 200 ms if still pending.
+Later page changes mark the sidebar immediately and keep the previous preview
+visible for up to 200 ms; a ready replacement appears immediately.</p>
+<p>If the server cannot start, the tab says <strong>Workbench couldn’t start</strong> and
+points to the Workbench log; reload the window to retry. Closing a loading tab
+keeps it closed when startup finishes.</p>
+<h3 id="projects-in-a-subfolder">Projects in a subfolder</h3>
+<p>Workbench looks only at the top of each open folder, not inside it. When
+<code>workbench.yaml</code> lives in a subfolder, such as <code>apps/design</code> in a monorepo,
+either:</p>
+<ul>
+<li>open that subfolder as its own window, or</li>
+<li>add it to the workspace with <strong>File</strong> › <strong>Add Folder to Workspace…</strong>, so the
+rest of the repository stays open beside it.</li>
+</ul>
+<p>The folder that holds <code>workbench.yaml</code> is the project root: every <code>src</code>,
+<code>root</code>, and <code>cwd</code> in it is relative to that folder, and the server serves only
+that folder. Implementation code elsewhere in the repository is reached
+through an implementation’s <a href="/workbench/docs/configuration/#implementations"><code>root</code></a>, such as
+<code>root: ../../packages/ui</code>.</p>
+<h3 id="several-spaces">Several spaces</h3>
+<p>One window can switch between several spaces: those described by the
+<code>workbench.yaml</code> of the window’s folders, which can list several each, and of
+folders you add from elsewhere on disk. Each space has its own server and
+port. See <a href="/workbench/docs/spaces/">Several spaces</a>.</p>
+<h2 id="commands">Commands</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Workbench: Open Canvas</strong></td>
+<td>Opens the canvas in an editor tab.</td>
+</tr>
+<tr>
+<td><strong>Workbench: Open Canvas in Browser</strong></td>
+<td>Opens the same canvas in your default browser.</td>
+</tr>
+<tr>
+<td><strong>Workbench: Copy Canvas URL</strong></td>
+<td>Copies the canvas address, for a bookmark, a script, or an agent.</td>
+</tr>
+<tr>
+<td><strong>Workbench: Refresh Pages</strong></td>
+<td>Re-reads <code>workbench.yaml</code> and <code>workbench.local.yaml</code>, finds <a href="/workbench/docs/workbench-previews/">TypeScript previews</a> and <a href="/workbench/docs/docs-pages/#declare-a-markdown-page-in-a-definition"><code>defineDocs</code></a> Markdown pages again, and refreshes the sidebar and canvas. This happens automatically when either YAML file changes, and when a <code>*.workbench.ts</code> file is added, removed, renamed or retitled.</td>
+</tr>
+<tr>
+<td><strong>Workbench: Switch Space…</strong></td>
+<td>Lists the <a href="/workbench/docs/spaces/">spaces</a> and shows the one you pick.</td>
+</tr>
+<tr>
+<td><strong>Workbench: Add Space…</strong></td>
+<td>Adds a folder with a <code>workbench.yaml</code> to the spaces and switches to it.</td>
+</tr>
+<tr>
+<td><strong>Workbench: Show Log</strong></td>
+<td>Opens the Workbench output log.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Open Canvas in Browser</strong> and <strong>Copy Canvas URL</strong> use the current space.</p>
+<h2 id="the-server">The server</h2>
+<p>Each space gets its own server:</p>
+<ul>
+<li>It listens on <strong>127.0.0.1 only</strong>. It serves your project folder, so nothing
+outside your machine can reach it.</li>
+<li>It uses port <strong>3579</strong>, then 3580 to 3583, then any free port the system
+offers. With several windows or spaces running, each space gets the next
+free port, in the order the servers started.</li>
+<li>It serves the project at <code>/</code> and the workbench at <code>/_workbench/</code> on the same
+origin, which is what lets the workbench read and capture the live page.</li>
+<li>It adds one <code>preview-compat.js</code> bundle to served HTML and managed previews. See
+<a href="/workbench/docs/pages-and-scenarios/#how-pages-are-served">How pages are served</a>.</li>
+</ul>
+<p><strong>Workbench: Copy Canvas URL</strong> gives the actual address.</p>
+<h2 id="the-capture-helper">The capture helper</h2>
+<p>Packaged builds include a capture helper built on Electron. It starts with
+the first space’s server, is shared by every space in the window, and
+stays running until the extension stops, so screenshots are fast:</p>
+<ul>
+<li>It keeps an inert, scriptless copy of the page you’re viewing up to date in
+the background. See <a href="/workbench/docs/annotations-and-handoff/#how-screenshots-are-taken">How screenshots are taken</a>.</li>
+<li>It renders the background images and static copies that artboards you
+aren’t running show on the canvas, in separate helper processes started when
+first needed.</li>
+<li>On macOS it runs as a background agent, with no Dock icon or window.</li>
+<li>On first activation the runtime is unpacked into the extension’s storage.
+Later activations reuse it, and runtimes from older versions are removed.
+The first launch after a runtime update can take longer while it is unpacked;
+page listing also waits when a definition needs that runtime to evaluate.
+Capture and page evaluation share the preparation work.</li>
+<li>If it crashes, it restarts and restores the latest view, waiting longer
+between attempts while it keeps failing. If a page hangs it, the helper is
+replaced, and the page is loaded again the next time the canvas asks for it.</li>
+</ul>
+<p>Screenshots need this helper. It runs on macOS 13 or later, Windows, and Linux
+with a display. Elsewhere, or if it can’t be unpacked or started, the camera
+and <strong>Copy handoff</strong> show the reason instead of a screenshot, and a
+design-system export lists the missing reference screenshots as warnings.</p>
+<p>The <a href="/workbench/docs/ios-simulator/">iOS Simulator</a> and <a href="/workbench/docs/windows/">app window</a> streams use
+a separate native window capture helper and need Screen Recording permission.</p>
+<h2 id="the-preview-compiler">The preview compiler</h2>
+<p>The server compiles <a href="/workbench/docs/workbench-previews/">TypeScript previews</a> and
+<a href="/workbench/docs/docs-pages/">docs</a> examples itself. Project JavaScript that has to run
+while they build runs in a separate Node process, the evaluator: definitions
+that compute their values, <code>workbench.config.ts</code>, JavaScript loaders from its
+<code>rules</code>, Vue single-file components, and Astro rendering. Packaged builds run
+the evaluator on the bundled runtime, so it doesn’t need a separate Node
+installation.</p>
+<ul>
+<li>The compiler builds every preview and docs example as soon as the server
+has listed your pages, and stops with the server.</li>
+<li>The evaluator starts the first time a build needs it, and stops with the
+server. A space whose definitions are plain values and that has no
+<code>workbench.config.ts</code> never starts one.</li>
+<li>If the evaluator stops, the next build that needs it starts a new one.</li>
+<li>Changing the <code>previews</code> key in <code>workbench.yaml</code> replaces the compilers with
+new ones that use the new settings. With <code>previews: false</code>, nothing is
+compiled and no evaluator runs: docs show their Markdown, and each example
+panel says why its example is missing.</li>
+</ul>
+<h2 id="logs">Logs</h2>
+<p>Errors from the canvas, the capture helper, the preview compiler, the server,
+and handoffs are written to the <strong>Workbench</strong> output log. Run <strong>Workbench: Show Log</strong> to open it.</p>
+<ul>
+<li>VS Code manages the log and its retention. Nothing is written to your project.</li>
+<li>Each server stops logging after 2 MB in a session.</li>
+<li>Entries contain event details and errors only, never screenshots, page HTML,
+or handoff prompts.</li>
+</ul>
+<h2 id="workspace-trust">Workspace trust</h2>
+<p>Workbench doesn’t declare support for untrusted workspaces, so VS Code doesn’t
+run it in Restricted Mode. Trust the folder to use it. Trusting a folder lets
+Workbench run <a href="/workbench/docs/configuration/#start-commands">start commands</a>, which are
+shell commands from <code>workbench.yaml</code>, and
+<a href="/workbench/docs/workbench-previews/">TypeScript previews</a> and
+<a href="/workbench/docs/docs-pages/">docs page</a> examples, which run project code.</p>
+<h2 id="files-and-network-access">Files and network access</h2>
+<p>In your project, Workbench writes only:</p>
+<ul>
+<li><code>.canonic/.handoffs/</code>, the screenshots that <strong>Copy handoff</strong> saves. Add it to
+<code>.gitignore</code>.</li>
+<li><code>workbench.yaml</code>, when you save <strong>Configure pages</strong>.</li>
+</ul>
+<p>Outside the project:</p>
+<ul>
+<li>The camera’s screenshots go to your browser’s or editor’s downloads folder.</li>
+<li>The bundled runtime and the window capture helper are unpacked into the
+extension’s storage in your editor’s user data folder (<code>globalStorage</code>).
+A standalone server uses the system’s temporary folder instead.</li>
+<li>The log is kept by VS Code. See <a href="#logs">Logs</a>.</li>
+</ul>
+<p>Network access:</p>
+<ul>
+<li>The server listens on <code>127.0.0.1</code> only, so other machines can’t reach it.</li>
+<li>The extension sends no telemetry and downloads nothing at runtime. The
+runtime it needs ships inside the <code>.vsix</code>.</li>
+<li>The canvas loads what you point it at: your own pages and their assets,
+<a href="/workbench/docs/lenses/">URL implementations</a>, and Storybook. Implementations load
+through a proxy on <code>127.0.0.1</code> that adds the
+<a href="/workbench/docs/lenses/#screenshots-through-a-url-lens">preview bridge</a> to their pages.
+If the bridge hasn’t connected, the capture helper loads a lens’s URL
+itself to capture it.</li>
+<li><code>url: auto</code> probes local ports for a running Storybook, and start commands
+probe the <code>check</code> and <code>ready</code> addresses you configure.</li>
+<li>A handoff goes only to your clipboard and <code>.canonic/.handoffs/</code>. Nothing is
+sent to an agent until you paste it.</li>
+</ul>
+<h2 id="updating">Updating</h2>
+<p>An install from the Visual Studio Marketplace updates like any other
+extension. For an install from a <code>.vsix</code>, download the newer <code>.vsix</code> from the
+<a href="https://github.com/canonic2/canonic/releases/latest" target="_blank" rel="noopener">latest release</a> and
+install it the same way as the first one; it replaces the installed version.
+To switch a <code>.vsix</code> install in VS Code to Marketplace updates, uninstall it
+and install <strong>Canonic Workbench</strong> from the Extensions view.</p>
+<p>Then run <strong>Developer: Reload Window</strong> in each open project window. Installing
+replaces the files on disk, but running windows, servers, capture helpers,
+and preview evaluators keep the old code until their window reloads. Reloading
+the canvas or running <strong>Refresh Pages</strong> isn’t enough.</p>
+<h2 id="uninstalling">Uninstalling</h2>
+<p>Uninstall <strong>Canonic Workbench</strong> from the Extensions view, or from the terminal:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">code</span><span style="color:#79B8FF"> --uninstall-extension</span><span style="color:#9ECBFF"> canonic.canonic-workbench</span></span></code></pre>
+<p>Then reload any window that had a project open, to stop its server and
+helpers. Uninstalling leaves your projects as they are; to remove Workbench’s
+files from a project too, see
+<a href="/workbench/docs/getting-started/#removing-workbench-from-a-project">Removing Workbench from a project</a>.</p>
+<h2 id="running-without-vs-code">Running without VS Code</h2>
+<p>The extension’s server runs on its own, started with Node 24 or later. Find the
+installed extension’s folder and point the server at a project:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">node</span><span style="color:#9ECBFF"> ~/.vscode/extensions/canonic.canonic-workbench-</span><span style="color:#79B8FF">*</span><span style="color:#9ECBFF">/server/node/server.js</span><span style="color:#9ECBFF"> path/to/project</span></span></code></pre>
+<p>It prints <code>workbench on http://127.0.0.1:3579/_workbench/</code> (or the port it
+got). Open that address in a browser. Without a project argument, it serves
+the current folder. Give it several folders to switch between their spaces in
+the browser; see <a href="/workbench/docs/spaces/#in-a-browser">Several spaces</a>. Stop it with
+Ctrl+C.</p>
+<p>The folder name ends in the version and platform, such as
+<code>canonic.canonic-workbench-0.7.0-darwin-arm64</code>. On Windows, extensions are in
+<code>%USERPROFILE%\.vscode\extensions</code>. Cursor, Windsurf, and other forks keep
+extensions in their own folder, such as <code>~/.cursor/extensions</code>.</p>
+<p>What works where:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>VS Code, or <strong>Open Canvas in Browser</strong></th>
+<th><code>server/node/server.js</code> in a browser</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pages, scenarios, sizes, zoom</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Lenses, including Simulator and window streams</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>TypeScript previews</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Docs and their examples</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Annotations and camera</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Handoff</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Open source files in the editor</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Start commands</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Design-system export</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Switch spaces</td>
+<td>Yes; add and remove in VS Code</td>
+<td>Between the folders it was given</td>
+</tr>
+<tr>
+<td>Problems list</td>
+<td>Yes, in VS Code’s sidebar</td>
+<td>Yes, above the page list</td>
+</tr>
+</tbody>
+</table>
+<h2 id="platform-support">Platform support</h2>
+<p>Desktop macOS is the most exercised platform. Windows and Linux builds, remote
+workspaces (SSH, containers, WSL), and other platforms have had less
+validation. A remote workspace runs the extension on the remote machine, so
+install the <code>.vsix</code> built for that machine’s platform, and on a Linux host
+without a display, screenshots aren’t available. Browser-only VS Code, such as
+vscode.dev, can’t run the local server or helper. The
+<a href="/workbench/docs/ios-simulator/">iOS Simulator</a> and <a href="/workbench/docs/windows/">app window</a> lenses need
+macOS.</p>
+<p>Release builds are unsigned.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/extension.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/workbench/docs/design-system-export/"><span>← Previous</span><strong>Design-system export</strong></a><a href="/workbench/docs/troubleshooting/"><span>Next →</span><strong>Troubleshooting</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#activation">Activation</a><a href="#projects-in-a-subfolder" class="docs-toc-sub">Projects in a subfolder</a><a href="#several-spaces" class="docs-toc-sub">Several spaces</a><a href="#commands">Commands</a><a href="#the-server">The server</a><a href="#the-capture-helper">The capture helper</a><a href="#the-preview-compiler">The preview compiler</a><a href="#logs">Logs</a><a href="#workspace-trust">Workspace trust</a><a href="#files-and-network-access">Files and network access</a><a href="#updating">Updating</a><a href="#uninstalling">Uninstalling</a><a href="#running-without-vs-code">Running without VS Code</a><a href="#platform-support">Platform support</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

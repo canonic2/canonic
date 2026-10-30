@@ -1,0 +1,976 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>workbench.yaml reference · Workbench docs · Canonic</title><meta name="description" content=" workbench.yaml  at the project root is the whole of a project's Workbench setup. This page lists every key. For a guided introduction, start with Getting started."><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.17.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/workbench/">Overview</a><a href="/workbench/docs/" aria-current="page">Docs</a><a href="/workbench/install/">Install</a><a href="/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Getting started</h2><a href="/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/workbench/docs/canvas/" data-doc-id="canvas">Using the canvas</a><a href="/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group"><h2>Previews</h2><a href="/workbench/docs/workbench-previews/" data-doc-id="workbench-previews">TypeScript Workbench previews</a><a href="/workbench/docs/preview-data/" data-doc-id="preview-data">Preview data, mocks, and actions</a><a href="/workbench/docs/react/" data-doc-id="react">React previews</a><a href="/workbench/docs/react-native-web/" data-doc-id="react-native-web">React Native Web previews</a><a href="/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/workbench/docs/astro/" data-doc-id="astro">Astro previews</a><a href="/workbench/docs/html/" data-doc-id="html">HTML previews</a><a href="/workbench/docs/custom-adapters/" data-doc-id="custom-adapters">Custom adapters and compiler settings</a></div><div class="docs-group"><h2>Connect your implementation</h2><a href="/workbench/docs/lenses/" data-doc-id="lenses">Lenses and URL implementations</a><a href="/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/workbench/docs/ios-simulator/" data-doc-id="ios-simulator">iOS Simulator</a><a href="/workbench/docs/windows/" data-doc-id="windows">App windows</a></div><div class="docs-group"><h2>Reference</h2><a href="/workbench/docs/configuration/" data-doc-id="configuration" aria-current="page">workbench.yaml reference</a><a href="/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/workbench/docs/extension/" data-doc-id="extension">The VS Code extension</a><a href="/workbench/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshooting</a></div></nav><a class="docs-install" href="/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span>Reference</span></div><div class="docs-prose"><h1 id="workbenchyaml-reference">workbench.yaml reference</h1>
+<p><code>workbench.yaml</code> at the project root is the whole of a project’s Workbench
+setup. This page lists every key. For a guided introduction, start with
+<a href="/workbench/docs/getting-started/">Getting started</a>.</p>
+<p>The project root is the folder that holds <code>workbench.yaml</code>. In VS Code, it has
+to be the top of an open folder; see
+<a href="/workbench/docs/extension/#projects-in-a-subfolder">Projects in a subfolder</a>.</p>
+<ul>
+<li><a href="#a-complete-example">A complete example</a></li>
+<li><a href="#top-level">Top level</a></li>
+<li><a href="#previews">Previews</a></li>
+<li><a href="#collections">Collections</a></li>
+<li><a href="#groups">Groups</a></li>
+<li><a href="#pages">Pages</a></li>
+<li><a href="#scenarios">Scenarios</a></li>
+<li><a href="#sizes">Sizes</a></li>
+<li><a href="#implementations">Implementations</a></li>
+<li><a href="#a-pages-implementations">A page’s implementations</a></li>
+<li><a href="#code-pointers">Code pointers</a></li>
+<li><a href="#start-commands">Start commands</a></li>
+<li><a href="#catalogs">Catalogs</a></li>
+<li><a href="#spaces">Spaces</a></li>
+<li><a href="#local-overrides">Local overrides</a></li>
+<li><a href="#yaml-that-the-reader-accepts">YAML that the reader accepts</a></li>
+<li><a href="#how-problems-are-reported">How problems are reported</a></li>
+<li><a href="#editing-with-the-form">Editing with the form</a></li>
+</ul>
+<h2 id="a-complete-example">A complete example</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Acme</span></span>
+<span class="line"><span style="color:#85E89D">color</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">green</span></span>
+<span class="line"><span style="color:#85E89D">icon</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">brand/logo.svg</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">previews</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  include</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">    - </span><span style="color:#9ECBFF">packages/ui/**/*.workbench.tsx</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  preview</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">workbench</span></span>
+<span class="line"><span style="color:#85E89D">  storybook</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">storybook</span></span>
+<span class="line"><span style="color:#85E89D">    url</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">auto</span></span>
+<span class="line"><span style="color:#85E89D">    root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">packages/ui</span></span>
+<span class="line"><span style="color:#85E89D">    start</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      command</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pnpm storybook</span></span>
+<span class="line"><span style="color:#85E89D">      check</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        port</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">6006</span></span>
+<span class="line"><span style="color:#85E89D">      ready</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        url</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">http://localhost:6006/index.json</span></span>
+<span class="line"><span style="color:#85E89D">      timeout</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">90</span></span>
+<span class="line"><span style="color:#85E89D">  dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">url</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Local app</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">http://localhost:3000</span></span>
+<span class="line"><span style="color:#85E89D">    root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">apps/web</span></span>
+<span class="line"><span style="color:#85E89D">    start</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      command</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pnpm dev</span></span>
+<span class="line"><span style="color:#85E89D">      cwd</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">apps/web</span></span>
+<span class="line"><span style="color:#85E89D">      check</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        port</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">3000</span></span>
+<span class="line"><span style="color:#85E89D">  staging</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">url</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">https://staging.example.com</span></span>
+<span class="line"><span style="color:#85E89D">  web</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Web</span></span>
+<span class="line"><span style="color:#85E89D">    adapter</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">react</span></span>
+<span class="line"><span style="color:#85E89D">    styles</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#9ECBFF">packages/ui/src/theme.css</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Pages</span></span>
+<span class="line"><span style="color:#85E89D">    icon</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">file-text</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">group</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Auth</span></span>
+<span class="line"><span style="color:#85E89D">        items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">          - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Sign in</span></span>
+<span class="line"><span style="color:#85E89D">            src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">design/pages/sign-in.html</span></span>
+<span class="line"><span style="color:#85E89D">            icon</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">log-in</span></span>
+<span class="line"><span style="color:#85E89D">            sizes</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">              - </span><span style="color:#9ECBFF">laptop</span></span>
+<span class="line"><span style="color:#E1E4E8">              - </span><span style="color:#9ECBFF">mobile</span></span>
+<span class="line"><span style="color:#85E89D">            scenarios</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">              - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">default</span></span>
+<span class="line"><span style="color:#85E89D">                label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Default</span></span>
+<span class="line"><span style="color:#E1E4E8">              - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">error</span></span>
+<span class="line"><span style="color:#85E89D">                label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Wrong password</span></span>
+<span class="line"><span style="color:#85E89D">            implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">              dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">                default</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/sign-in</span></span>
+<span class="line"><span style="color:#85E89D">                error</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/sign-in?error=1</span></span>
+<span class="line"><span style="color:#85E89D">              staging</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/sign-in</span></span>
+<span class="line"><span style="color:#85E89D">            code</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">              dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">                - </span><span style="color:#9ECBFF">src/routes/sign-in</span></span>
+<span class="line"><span style="color:#E1E4E8">                - </span><span style="color:#9ECBFF">src/components/sign-in-form.tsx</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Components</span></span>
+<span class="line"><span style="color:#85E89D">    icon</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">component</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Button</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">design/components/button.html</span></span>
+<span class="line"><span style="color:#85E89D">        sizes</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">          - </span><span style="color:#9ECBFF">fit</span></span>
+<span class="line"><span style="color:#E1E4E8">          - </span><span style="color:#9ECBFF">resizable</span></span>
+<span class="line"><span style="color:#85E89D">        docs</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">design/docs/button.md</span></span>
+<span class="line"><span style="color:#85E89D">        implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          preview</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">components/button</span></span>
+<span class="line"><span style="color:#85E89D">          storybook</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Components/Button</span></span>
+<span class="line"><span style="color:#85E89D">          web</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">packages/ui/src/button/examples/</span></span>
+<span class="line"><span style="color:#85E89D">        code</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          storybook</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">src/button</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Card</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">design/docs/card.md</span></span>
+<span class="line"><span style="color:#85E89D">        implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          web</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">packages/ui/src/card/examples/</span></span></code></pre>
+<h2 id="top-level">Top level</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>no</td>
+<td>Titles the sidebar and the browser tab in a standalone browser, names the space in the <a href="/workbench/docs/spaces/">space switcher</a>, and names <a href="/workbench/docs/design-system-export/">design-system exports</a>. The canvas defaults to <code>Workbench</code>, and the switcher and exports to the space’s folder name. In VS Code, the canvas tab is always <em>Workbench</em>.</td>
+</tr>
+<tr>
+<td><code>color</code></td>
+<td>string</td>
+<td>no</td>
+<td>The space’s color in the <a href="/workbench/docs/spaces/#name-color-and-icon">space switcher</a>: <code>blue</code>, <code>green</code>, <code>orange</code>, <code>purple</code>, <code>pink</code>, <code>teal</code>, <code>red</code>, <code>yellow</code>, <code>gray</code>, or a hex value such as <code>"#2f7d55"</code>. Quote a hex value. Defaults to a color chosen from the space’s folder.</td>
+</tr>
+<tr>
+<td><code>icon</code></td>
+<td>string</td>
+<td>no</td>
+<td>The space’s icon in the switcher: a <a href="https://lucide.dev/icons/" target="_blank" rel="noopener">Lucide</a> icon name such as <code>rocket</code>, or a project-relative <code>.svg</code>, <code>.png</code>, <code>.jpg</code>, <code>.webp</code>, or <code>.gif</code> file of at most 256 KB, such as <code>brand/logo.svg</code>. Defaults to the first letter of <code>name</code>.</td>
+</tr>
+<tr>
+<td><code>collections</code></td>
+<td>list of <a href="#collections">collections</a></td>
+<td>no, unless <code>previews: false</code> and no <a href="#catalogs">catalog</a></td>
+<td>The sidebar’s collections, in order.</td>
+</tr>
+<tr>
+<td><code>previews</code></td>
+<td>map or <code>false</code></td>
+<td>no</td>
+<td>Where <a href="#previews">TypeScript previews</a> are discovered. <code>false</code> turns them off.</td>
+</tr>
+<tr>
+<td><code>implementations</code></td>
+<td>map of name to <a href="#implementations">implementation</a></td>
+<td>no</td>
+<td>Where pages also exist as running code, and what renders the examples in pages’ docs.</td>
+</tr>
+<tr>
+<td><code>spaces</code></td>
+<td>map of id to <a href="#spaces">space</a></td>
+<td>no</td>
+<td>Several spaces in this one file. Without it, the file is one space.</td>
+</tr>
+</tbody>
+</table>
+<p>With <code>previews: false</code>, no catalog, and no usable collection, the config fails
+with <em>nothing to show — a config needs at least one collection with one page in
+it.</em></p>
+<h2 id="previews">Previews</h2>
+<p>Preview definitions can declare <a href="/workbench/docs/workbench-previews/#multiple-artboards">multiple artboards</a>
+inside one page. This uses the definition’s <code>artboards</code> map; <code>scenarios</code> remain
+alternatives and do not create additional artboards.</p>
+<p>Workbench discovers <a href="/workbench/docs/workbench-previews/">TypeScript previews</a> in
+<code>**/*.workbench.ts</code> and <code>**/*.workbench.tsx</code> files without any configuration.
+Each preview becomes a page, in the collection named by the first segment of
+its title, or in <strong>Previews</strong> when the title has no <code>/</code>. The same files can
+define <a href="/workbench/docs/docs-pages/#declare-a-markdown-page-in-a-definition">Markdown pages</a>, which are
+discovered the same way. Previews run project code, so in VS Code they need a
+trusted workspace.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">previews</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  include</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">    - </span><span style="color:#9ECBFF">src/**/*.workbench.ts</span></span>
+<span class="line"><span style="color:#85E89D">  config</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">workbench.config.ts</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>include</code></td>
+<td>list of glob patterns</td>
+<td>no</td>
+<td>Which files are preview definitions, relative to the project root. Replaces the default patterns. Patterns can’t start with <code>/</code> or contain <code>..</code>.</td>
+</tr>
+<tr>
+<td><code>config</code></td>
+<td>path</td>
+<td>no</td>
+<td>The preview configuration file, relative to the project root. Defaults to <code>workbench.config.ts</code>. See <a href="/workbench/docs/custom-adapters/#configuration-file">Custom adapters</a>.</td>
+</tr>
+<tr>
+<td><code>lensLabel</code></td>
+<td>nonempty string</td>
+<td>no</td>
+<td>Label of discovered previews’ authored lens. Defaults to <strong>Preview</strong>. An explicit page’s <code>lensLabel</code> takes precedence. Does not rename docs lenses or <code>workbench</code> implementations, which use implementation <code>label</code>.</td>
+</tr>
+<tr>
+<td><code>icon</code></td>
+<td>Lucide icon name</td>
+<td>no</td>
+<td>Fallback for discovered preview pages, and for collections of discovered previews and docs pages. Defaults to <code>component</code>.</td>
+</tr>
+<tr>
+<td><code>icons</code></td>
+<td>map of title prefix to Lucide icon name</td>
+<td>no</td>
+<td>The longest matching prefix wins; matches end at a <code>/</code> boundary or the whole title.</td>
+</tr>
+</tbody>
+</table>
+<p><code>previews.lensLabel</code> sets a display label, such as <strong>Design</strong>, without changing
+preview IDs or adding another lens. A page listed in <code>collections</code> can
+override it with its own <code>lensLabel</code>. Invalid or blank values are reported
+and ignored; surrounding whitespace is trimmed. See
+<a href="/workbench/docs/lenses/#customize-lens-labels">Customize lens labels</a> for a complete example.</p>
+<p>For example, choose an icon for a collection and another for its pages:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">previews</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  icons</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    Web App</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">app-window</span></span>
+<span class="line"><span style="color:#85E89D">    Web App/Pages</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">monitor</span></span></code></pre>
+<p>A preview’s <code>definePreview({ icon: 'monitor', ... })</code> overrides the prefix map
+for that page. It does not set the collection icon. Page icons resolve from
+the definition, then the longest prefix, then <code>previews.icon</code>, then <code>component</code>.
+Icon settings check kebab-case syntax, not membership in the bundled Lucide
+registry. Invalid icon settings are reported and ignored; other previews still
+load. An invalid definition icon makes that definition a preview problem.</p>
+<p><code>previews: false</code> turns off discovery and never runs preview code. An invalid
+<code>previews</code> value is reported, and previews stay off until it is fixed.</p>
+<p>A page whose <code>src</code> is a preview definition, such as
+<code>src: src/button.workbench.ts</code>, keeps its place in your collections and takes
+its scenarios from the definition. Its sizes come from the page’s own <code>sizes</code>,
+not from the definition’s.</p>
+<p>An explicitly placed preview keeps its handwritten page icon when set;
+otherwise it takes the discovered preview icon.</p>
+<p>Framework guides: <a href="/workbench/docs/react/">React</a>, <a href="/workbench/docs/react-native-web/">React Native Web</a>,
+<a href="/workbench/docs/vue/">Vue</a>, <a href="/workbench/docs/html/">HTML</a>, <a href="/workbench/docs/astro/">Astro</a>, and
+<a href="/workbench/docs/custom-adapters/">Custom adapters</a>.</p>
+<h2 id="collections">Collections</h2>
+<p>A collection is a set of pages, listed in the sidebar’s collection list. Each
+collection is an entry in <code>collections</code>.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Pages</span></span>
+<span class="line"><span style="color:#85E89D">    icon</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">file-text</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Sign in</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pages/sign-in.html</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>The collection’s label. <a href="#previews">Previews</a>, discovered <a href="/workbench/docs/docs-pages/#declare-a-markdown-page-in-a-definition">Markdown pages</a>, and <a href="#catalogs">Simulator catalog</a> pages that belong in a collection with the same name are added to it.</td>
+</tr>
+<tr>
+<td><code>icon</code></td>
+<td>Lucide icon name</td>
+<td>no</td>
+<td>Shown on the collection and on its pages that don’t set their own. Defaults to <code>file-text</code>.</td>
+</tr>
+<tr>
+<td><code>items</code></td>
+<td>list of <a href="#pages">pages</a> and <a href="#groups">groups</a></td>
+<td>unless <code>icon</code> is set</td>
+<td>An icon-only collection styles previews and Markdown pages imported into the same collection. Collections that remain empty after imports are hidden. An empty collection without an icon is dropped and reported.</td>
+</tr>
+</tbody>
+</table>
+<p>Icon names are <a href="https://lucide.dev/icons/" target="_blank" rel="noopener">Lucide</a> names in kebab-case, such as
+<code>file-text</code>, <code>component</code>, <code>layout-dashboard</code>, or <code>shield-check</code>. Every Lucide
+icon ships with the extension.</p>
+<p>To set the icon once for a collection of previews:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Web App</span></span>
+<span class="line"><span style="color:#85E89D">    icon</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">app-window</span></span></code></pre>
+<p><strong>Configure pages</strong> preserves these declarations when saving. If discovery
+finds no matching pages, the empty collection stays
+in the configuration and is hidden from the collection list.</p>
+<p>Collection icons use the collection name as the prefix lookup target. Highest
+priority first: an explicit handwritten collection icon, a <code>previews.icons</code>
+mapping, configured <code>previews.icon</code>, then built-in defaults. This holds for
+collections of discovered previews and docs pages alike. A collection of
+previews defaults to <code>component</code>, one of docs pages to <code>book-open</code>, and a
+catalog’s to its <code>catalogIcon</code> or <code>smartphone</code>. Conflicting mappings or fallbacks at the
+same priority use the alphabetically first icon name. Import order does not
+decide the icon.
+An authored collection without an explicit icon keeps <code>file-text</code> when
+imported sources use only built-in defaults; mappings and configured fallbacks
+override it.</p>
+<h2 id="groups">Groups</h2>
+<p>A group is a named set of pages inside a collection, written with the
+<code>group:</code> key. Groups don’t nest.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">group</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Auth</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Sign in</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pages/sign-in.html</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Reset password</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pages/reset.html</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>group</code></td>
+<td>string</td>
+<td>yes</td>
+<td>The group’s label.</td>
+</tr>
+<tr>
+<td><code>items</code></td>
+<td>list of <a href="#pages">pages</a></td>
+<td>yes</td>
+<td>An empty group is dropped and reported. A group inside a group is rejected.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="pages">Pages</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>label</code></td>
+<td>string</td>
+<td>yes</td>
+<td>The page’s name in the sidebar, in screenshots, and in handoffs.</td>
+</tr>
+<tr>
+<td><code>lensLabel</code></td>
+<td>nonempty string</td>
+<td>no</td>
+<td>Label of this page’s authored lens. Defaults to <strong>Design</strong> for HTML, or <code>previews.lensLabel</code> then <strong>Preview</strong> for a discovered TypeScript preview. Renames the existing lens without changing its identity. Docs lenses use implementation <code>label</code> instead. A Markdown page has no authored lens; <code>lensLabel</code> on one is reported.</td>
+</tr>
+<tr>
+<td><code>src</code></td>
+<td>path</td>
+<td>yes</td>
+<td>The HTML file, <a href="#previews">preview definition</a>, or Markdown file of a <a href="/workbench/docs/docs-pages/#a-markdown-page">Markdown page</a>, relative to the project root.</td>
+</tr>
+<tr>
+<td><code>docs</code></td>
+<td>path</td>
+<td>no</td>
+<td>The page’s <a href="/workbench/docs/docs-pages/">docs</a>: a <code>.md</code> file relative to the project root. Gives the page its docs lenses. Reported on a Markdown page, which is its own docs.</td>
+</tr>
+<tr>
+<td><code>icon</code></td>
+<td>Lucide icon name</td>
+<td>no</td>
+<td>Overrides the collection’s icon for this page.</td>
+</tr>
+<tr>
+<td><code>scenarios</code></td>
+<td>list of <a href="#scenarios">scenarios</a></td>
+<td>no</td>
+<td>Variations of the page. Shown only when there are two or more.</td>
+</tr>
+<tr>
+<td><code>sizes</code></td>
+<td>list of <a href="#sizes">sizes</a></td>
+<td>no</td>
+<td>Which artboard sizes the page supports. Defaults to all four. A Markdown page has no artboard; <code>sizes</code> on one is reported and ignored. In a docs lens, the docs fill the canvas whatever the sizes.</td>
+</tr>
+<tr>
+<td><code>implementations</code></td>
+<td>map</td>
+<td>no</td>
+<td><a href="#a-pages-implementations">Where this page is in each implementation</a>. For a page with docs, also its docs lenses: each <code>docs</code> implementation and its example source.</td>
+</tr>
+<tr>
+<td><code>lens</code></td>
+<td>implementation name</td>
+<td>no</td>
+<td>A Markdown page only: the docs lens it opens with, one of its <code>docs</code> implementations. Defaults to its first. On any other page, it is reported.</td>
+</tr>
+<tr>
+<td><code>code</code></td>
+<td>map</td>
+<td>no</td>
+<td><a href="#code-pointers">Where this page’s code lives</a>, per implementation.</td>
+</tr>
+</tbody>
+</table>
+<p><code>src</code> rules:</p>
+<ul>
+<li>It is relative to the project root. It can’t start with <code>/</code> or contain <code>..</code>.</li>
+<li>It can’t contain <code>:</code>, <code>!</code>, or <code>~</code>, which mark the scenario, an
+example in the docs, and the lens in the <a href="/workbench/docs/canvas/#links-and-the-address">address</a>.</li>
+<li>A page without both <code>label</code> and <code>src</code> is dropped and reported, and the rest
+of the sidebar still builds.</li>
+</ul>
+<p><code>src</code> usually points at an HTML file, but any file the server can serve works,
+including a page with a query string (<code>preview/index.html?component=button</code>).
+A <code>src</code> ending in <code>.md</code> is a <a href="/workbench/docs/docs-pages/#a-markdown-page">Markdown page</a>:
+docs with live examples and no design, filling the canvas instead of an
+artboard. Any other page can have docs too, with <code>docs</code>.</p>
+<h2 id="scenarios">Scenarios</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">scenarios</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">default</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Default</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">error</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Wrong password</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>kebab-case string</td>
+<td>yes</td>
+<td>Travels in the URL (<code>?scenario=error</code>), in the address, and in screenshot filenames. Starts with a lowercase letter, then lowercase letters and digits in parts joined by single hyphens, such as <code>wrong-password</code> or <code>step-2</code>.</td>
+</tr>
+<tr>
+<td><code>label</code></td>
+<td>string</td>
+<td>no</td>
+<td>The scenario’s name in the sidebar and the handoff. Defaults to the id in sentence case: <code>wrong-password</code> reads <strong>Wrong password</strong>.</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>The <strong>first</strong> scenario is the page as authored, whatever its id. The page loads
+without a <code>?scenario=</code> parameter for it. By convention it is called <code>default</code>.</li>
+<li>A scenario without an id, with an invalid id, or with an id the page already
+declared is dropped and reported; the first of a repeated id is kept.</li>
+<li>A page with fewer than two scenarios shows no scenarios in the page list.</li>
+<li>Declaring a scenario only adds it to the sidebar. The page has to answer to the
+id; see <a href="/workbench/docs/pages-and-scenarios/#scenarios">Pages and scenarios</a>.</li>
+<li>In a <a href="/workbench/docs/docs-pages/#scenarios">docs lens</a>, every example receives the page’s
+scenario. A Markdown page can declare scenarios too, and the page list doesn’t
+list them.</li>
+</ul>
+<h2 id="sizes">Sizes</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">sizes</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#9ECBFF">laptop</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#9ECBFF">mobile</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#9ECBFF">resizable</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Artboard</th>
+<th>Export reference size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>laptop</code></td>
+<td>Laptop, MacBook Pro 14</td>
+<td>1512 × 982</td>
+</tr>
+<tr>
+<td><code>mobile</code></td>
+<td>iPhone 15 Pro</td>
+<td>393 × 852</td>
+</tr>
+<tr>
+<td><code>resizable</code></td>
+<td>An artboard you resize by dragging its edges</td>
+<td>Both 1512 × 982 and 393 × 852</td>
+</tr>
+<tr>
+<td><code>fit</code></td>
+<td>Fills the available canvas</td>
+<td>1440 × 900</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Omitting <code>sizes</code> enables all four.</li>
+<li>Sizes in the size switcher that a page doesn’t list are disabled while it
+is showing.</li>
+<li>A single value may be written without a list: <code>sizes: mobile</code>.</li>
+<li>An unknown value is reported and skipped. If no value is valid, all four
+are enabled.</li>
+<li><a href="/workbench/docs/design-system-export/">Design-system exports</a> capture one reference per
+listed size, removing duplicate sizes.</li>
+</ul>
+<h2 id="implementations">Implementations</h2>
+<p>Declared once at the top level, then referred to by name from pages. The
+name is a kebab-case key, and it is also the lens’s label in the lens switcher
+unless
+<code>label</code> says otherwise (<code>local-dev</code> is shown as <em>Local dev</em>). <code>design</code> is
+reserved: the address uses it for a page’s own lens.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">url</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">http://localhost:3000</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Kinds</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kind</code></td>
+<td>all</td>
+<td>yes</td>
+<td><code>workbench</code>, <code>url</code>, <code>storybook</code>, <code>docs</code>, <code>ios-simulator</code>, or <code>window</code>.</td>
+</tr>
+<tr>
+<td><code>label</code></td>
+<td>all</td>
+<td>no</td>
+<td>The lens’s display label, independent of kind: for example <strong>Live</strong>, <strong>Prod</strong>, or <strong>Design</strong>. Defaults to the name in sentence case. Changing it preserves the implementation key and addresses.</td>
+</tr>
+<tr>
+<td><code>base</code></td>
+<td><code>url</code></td>
+<td>yes</td>
+<td>The app’s origin and optional base path, starting with <code>http://</code> or <code>https://</code>, or a Gate service such as <code>gate://demo/dev</code>. Page paths are appended to it. A trailing slash is removed.</td>
+</tr>
+<tr>
+<td><code>url</code></td>
+<td><code>storybook</code></td>
+<td>no</td>
+<td>The origin of a Storybook you run, starting with <code>http://</code> or <code>https://</code>, or <code>auto</code> to <a href="/workbench/docs/storybook/#detect-the-port-with-url-auto">detect a running Storybook</a>. Without it, Workbench <a href="/workbench/docs/storybook/#let-workbench-run-storybook">runs your project’s Storybook itself</a> from <code>root</code>, the space’s folder unless set, on a private local socket, in trusted workspaces.</td>
+</tr>
+<tr>
+<td><code>device</code></td>
+<td><code>ios-simulator</code></td>
+<td>no</td>
+<td><code>booted</code> (default) for every booted Simulator, or one exact device name or UDID.</td>
+</tr>
+<tr>
+<td><code>adapter</code></td>
+<td><code>docs</code></td>
+<td>yes</td>
+<td>What renders the examples in a page’s docs: <code>html</code>, <code>react</code>, <code>vue</code>, <code>astro</code>, <code>react-native-web</code>, or an adapter registered in <code>workbench.config.ts</code>.</td>
+</tr>
+<tr>
+<td><code>styles</code></td>
+<td><code>docs</code></td>
+<td>no</td>
+<td>Stylesheets loaded with the examples, relative to the project root.</td>
+</tr>
+<tr>
+<td><code>environment</code></td>
+<td><code>docs</code></td>
+<td>no</td>
+<td>An <a href="/workbench/docs/preview-data/#environments">environment</a> around the examples, relative to the project root.</td>
+</tr>
+<tr>
+<td><code>app</code></td>
+<td><code>window</code></td>
+<td>yes</td>
+<td>The macOS application whose window is streamed: its bundle ID, or part of it, such as <code>com.example.app</code>. Letters, digits, dots, and hyphens only.</td>
+</tr>
+<tr>
+<td><code>root</code></td>
+<td>all but <code>workbench</code> and <code>docs</code></td>
+<td>no</td>
+<td>The folder where this implementation’s code lives, relative to <code>workbench.yaml</code> or absolute. Needed for <a href="#code-pointers">code pointers</a> and Storybook source paths. Must be a path, not a URL.</td>
+</tr>
+<tr>
+<td><code>catalog</code></td>
+<td><code>ios-simulator</code></td>
+<td>no</td>
+<td>Import each booted device as a page. See <a href="#catalogs">Catalogs</a>.</td>
+</tr>
+<tr>
+<td><code>start</code></td>
+<td><code>url</code>, <code>storybook</code> with <code>url</code></td>
+<td>no</td>
+<td>A command that starts the implementation in VS Code. See <a href="#start-commands">Start commands</a>.</td>
+</tr>
+</tbody>
+</table>
+<p>Gate is a private, unpublished CLI. This optional integration is for users who
+already have access to it; Gate has no public distribution channel.</p>
+<p>For a service managed by Gate, use <code>base: gate://SERVICE/PATH</code>, for example
+<code>gate://demo/dev</code>. In a trusted workspace, Workbench runs <code>gate url list --json</code>
+from the space’s root and uses that task’s published direct endpoint. Gate must
+be on <code>PATH</code> or in <code>~/.local/bin</code>; its recipe service needs a <code>route</code>.
+Run <code>gate run demo --detach</code> from the task checkout, then refresh Workbench after a restart
+to discover its current port. Gate owns startup, so omit <code>start</code> on this lens.
+Missing tasks, unready services and discovery failures appear as lens problems;
+Workbench never substitutes another task or a fixed port. This also works in
+the standalone server. A <code>gate://</code> base takes a lowercase service name with
+letters, digits or hyphens, followed by an optional path, without a query or fragment.</p>
+<p>A <code>workbench</code> implementation shows this space’s
+<a href="#previews">TypeScript previews</a>. It takes no address, <code>start</code>, or <code>root</code>: its
+root is always the project root, and any other <code>root</code> is reported and the
+implementation dropped. A <code>catalog</code> or <code>start</code> on a kind that doesn’t support
+it is reported and ignored.</p>
+<p>A <code>docs</code> implementation renders the examples in pages’ <a href="/workbench/docs/docs-pages/">docs</a>.
+It takes no address or <code>start</code>, and its root is the project root. It applies
+only to pages with Markdown: a Markdown page, or a page with <code>docs</code>. Each one
+is a docs lens of the pages that map it: the Markdown is the same in every
+docs lens, and the lens says what renders the examples; see
+<a href="/workbench/docs/docs-pages/#lenses">Lenses</a>. A page with Markdown that maps no <code>docs</code>
+implementation gets the built-in <strong>Docs</strong> lens, keyed <code>docs</code>, so no other
+implementation it maps can be named <code>docs</code>.</p>
+<p>Guides: <a href="/workbench/docs/workbench-previews/">TypeScript previews</a>, <a href="/workbench/docs/docs-pages/">Docs</a>,
+<a href="/workbench/docs/lenses/">URL implementations</a>, <a href="/workbench/docs/storybook/">Storybook</a>,
+<a href="/workbench/docs/ios-simulator/">iOS Simulator</a>, <a href="/workbench/docs/windows/">App windows</a>.</p>
+<h2 id="a-pages-implementations">A page’s implementations</h2>
+<p>A page lists the implementations it exists in, and where. The value depends
+on the implementation’s kind.</p>
+<p><strong><code>docs</code></strong>: the docs lens’s example source, relative to the project root:
+a folder ending in <code>/</code>, one example per file, or a file, one example per named
+export. See <a href="/workbench/docs/docs-pages/#examples">Examples</a>.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  web</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">src/components/card/examples/</span></span>
+<span class="line"><span style="color:#85E89D">  native</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">src/components/card/card.examples.native.tsx</span></span></code></pre>
+<p><strong><code>url</code></strong>: one path for every scenario, or a map of the page’s scenario ids to
+paths. Paths start with <code>/</code> and are appended to <code>base</code>.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  staging</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/sign-in</span></span>
+<span class="line"><span style="color:#85E89D">  dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    default</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/sign-in</span></span>
+<span class="line"><span style="color:#85E89D">    error</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/sign-in?error=1</span></span></code></pre>
+<ul>
+<li>In a map, the first scenario’s id or <code>default</code> gives the path for the page as
+authored, and it is required.</li>
+<li>A scenario without its own entry uses the default path.</li>
+<li>A map key that isn’t one of the page’s scenario ids is reported.</li>
+</ul>
+<p><strong><code>workbench</code></strong>: a preview ID, such as <code>components/button</code>: kebab-case
+segments separated by <code>/</code>. Each of the page’s scenarios opens the preview scenario
+with the same id, and any other scenario opens the preview’s first scenario. The
+preview’s source file is added to the page’s code pointers.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  preview</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">components/button</span></span></code></pre>
+<p>An ID that matches no discovered preview is reported.</p>
+<p><strong><code>storybook</code></strong>: a story title, exactly as Storybook shows it, including its
+prefix. <code>Components/Button</code> and <code>Button</code> are different titles.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  storybook</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Components/Button</span></span></code></pre>
+<p><strong><code>ios-simulator</code></strong>: the device’s UDID. The lens streams only a device that the
+implementation’s <code>catalog</code> has imported, so the implementation needs
+<code>catalog: true</code>. The reader also accepts a device name, but the stream refuses
+it. See <a href="/workbench/docs/ios-simulator/#add-a-simulator-lens-to-a-design-page">iOS Simulator</a>.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  simulator</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">6A1F2B3C-0000-4000-8000-123456789ABC</span></span></code></pre>
+<p><strong><code>window</code></strong>: the window’s title, or part of it, ignoring case. When several
+of the app’s windows match, the largest is streamed.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  emulator</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Example Phone</span></span></code></pre>
+<p>A page may only name implementations declared at the top level.</p>
+<h2 id="code-pointers">Code pointers</h2>
+<p><code>code</code> maps an implementation to the path, or list of paths, of this page’s
+code. Paths are relative to that implementation’s <code>root</code>, or absolute.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">code</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  dev</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">src/routes/sign-in</span></span>
+<span class="line"><span style="color:#85E89D">  storybook</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">    - </span><span style="color:#9ECBFF">src/button/button.tsx</span></span>
+<span class="line"><span style="color:#E1E4E8">    - </span><span style="color:#9ECBFF">src/button/button.css</span></span></code></pre>
+<p>The canvas’s <strong>Open the source</strong> menu lists the design file and every code
+pointer, and opens one in the editor. Handoffs include their absolute paths, so
+an agent edits the implementation the screenshot shows. A code pointer for an
+implementation without <code>root</code> can’t be resolved, and the
+<a href="/workbench/docs/troubleshooting/#read-the-resolved-config">config route</a> says so. See
+<a href="/workbench/docs/lenses/#point-at-the-code">Code pointers</a>.</p>
+<h2 id="start-commands">Start commands</h2>
+<p>A <code>url</code> implementation, or a <code>storybook</code> one with a <code>url</code>, can name a command
+that brings it up. A Storybook without <code>url</code> needs none: Workbench runs it.
+In a trusted VS Code workspace, Workbench checks whether the implementation is
+answering, and runs the command in a visible terminal only when it isn’t.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">start</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  command</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pnpm storybook</span></span>
+<span class="line"><span style="color:#85E89D">  cwd</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">apps/storybook</span></span>
+<span class="line"><span style="color:#85E89D">  check</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    port</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">6006</span></span>
+<span class="line"><span style="color:#85E89D">  ready</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    url</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">http://localhost:6006/index.json</span></span>
+<span class="line"><span style="color:#85E89D">  timeout</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">90</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>command</code></td>
+<td>string</td>
+<td>yes</td>
+<td>A shell command.</td>
+</tr>
+<tr>
+<td><code>cwd</code></td>
+<td>path</td>
+<td>no</td>
+<td>Where to run it, relative to <code>workbench.yaml</code>. Defaults to <code>.</code>.</td>
+</tr>
+<tr>
+<td><code>check</code></td>
+<td>probe</td>
+<td>yes</td>
+<td>How to tell whether it is already running.</td>
+</tr>
+<tr>
+<td><code>ready</code></td>
+<td>probe</td>
+<td>no</td>
+<td>How to tell that it has finished starting. Defaults to <code>check</code>.</td>
+</tr>
+<tr>
+<td><code>timeout</code></td>
+<td>integer, 1–300</td>
+<td>no</td>
+<td>Seconds to wait for <code>ready</code>. Defaults to 60.</td>
+</tr>
+</tbody>
+</table>
+<p>A <strong>probe</strong> has exactly one of:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>port</code></td>
+<td>A TCP port, 1–65535. It is ready when something accepts a connection. Add <code>host</code> to check somewhere other than <code>127.0.0.1</code>.</td>
+</tr>
+<tr>
+<td><code>url</code></td>
+<td>An <code>http://</code> or <code>https://</code> URL. It is ready when the URL answers with a successful response.</td>
+</tr>
+</tbody>
+</table>
+<p>Use <code>port</code> for <code>check</code> when you only need to know something is listening, and
+a <code>url</code> for <code>ready</code> when the server listens before it can serve, as Storybook
+does while it builds. The canvas opens while these checks run, and the page
+list refreshes when they finish. If <code>ready</code> times out, the
+<strong>Workbench</strong> output channel records the timeout. Start commands never run in untrusted workspaces or outside
+VS Code. See <a href="/workbench/docs/lenses/#start-the-server-automatically">Start the server automatically</a>.</p>
+<h2 id="catalogs">Catalogs</h2>
+<p><code>catalog</code> on an <strong>iOS Simulator</strong> implementation imports each matching
+booted device as a page, instead of listing devices by hand. See
+<a href="/workbench/docs/ios-simulator/">iOS Simulator</a>.</p>
+<p><code>catalog: true</code> turns it on. A map turns it on and sets the icon of the
+imported pages:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">catalog</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  icon</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">tablet-smartphone</span><span style="color:#6A737D">    # defaults to smartphone</span></span></code></pre>
+<p>Other kinds don’t take <code>catalog</code>. Storybook pages are the pages you list in
+<code>collections</code> and map to a story title; see <a href="/workbench/docs/storybook/">Storybook</a>.
+TypeScript previews are <a href="#previews">discovered</a> without one.</p>
+<h2 id="spaces">Spaces</h2>
+<p>One <code>workbench.yaml</code> can describe several spaces, such as a product and its
+design system, and the <a href="/workbench/docs/spaces/">space switcher</a> lists each one. List
+them under <code>spaces</code>, keyed by an id:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">previews</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span><span style="color:#6A737D">              # shared by every space</span></span>
+<span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  storybook</span><span style="color:#E1E4E8">:                 </span><span style="color:#6A737D"># shared by every space</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">storybook</span></span>
+<span class="line"><span style="color:#85E89D">    url</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">auto</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">spaces</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  web</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Acme Web</span></span>
+<span class="line"><span style="color:#85E89D">    color</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">blue</span></span>
+<span class="line"><span style="color:#85E89D">    collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Pages</span></span>
+<span class="line"><span style="color:#85E89D">        items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">          - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Sign in</span></span>
+<span class="line"><span style="color:#85E89D">            src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pages/sign-in.html</span></span>
+<span class="line"><span style="color:#85E89D">  design-system</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Acme Design System</span></span>
+<span class="line"><span style="color:#85E89D">    icon</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">palette</span></span>
+<span class="line"><span style="color:#85E89D">    root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">packages/ui</span><span style="color:#6A737D">        # served from this folder instead</span></span>
+<span class="line"><span style="color:#85E89D">    collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Components</span></span>
+<span class="line"><span style="color:#85E89D">        items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">          - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Button</span></span>
+<span class="line"><span style="color:#85E89D">            src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">button.html</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>id</em></td>
+<td>kebab-case string</td>
+<td>yes</td>
+<td>The space’s id in this file, such as <code>web</code>. Renaming it makes it a different space to Workbench, which forgets the window’s choice of it.</td>
+</tr>
+<tr>
+<td><code>root</code></td>
+<td>string</td>
+<td>no</td>
+<td>The folder the space serves and resolves its paths against, relative to this file’s folder, or absolute. Defaults to this file’s folder, so several spaces can share one.</td>
+</tr>
+<tr>
+<td><code>name</code>, <code>color</code>, <code>icon</code></td>
+<td></td>
+<td>no</td>
+<td>As at the <a href="#top-level">top level</a>, for this space. They aren’t inherited: a space without a <code>name</code> is named after its id, such as <em>Design system</em>.</td>
+</tr>
+<tr>
+<td><code>collections</code>, <code>previews</code>, <code>implementations</code></td>
+<td></td>
+<td>no</td>
+<td>As at the top level, for this space.</td>
+</tr>
+</tbody>
+</table>
+<p>Every other key at the top level is shared. A space starts from the top
+level, and its own keys replace the shared ones, except <code>implementations</code>,
+which merges by name: a space can change one shared implementation’s <code>base</code>
+and keep the rest, or add its own.</p>
+<p>Every path in a space is relative to its <code>root</code>: its <code>src</code> values, its <code>icon</code>
+image, its preview discovery, and the <code>root</code> of each implementation it uses,
+shared ones included.</p>
+<p><strong>Configure pages</strong> saves the space’s own <code>collections</code> under its entry in
+<code>spaces</code>, even when it was showing the shared ones, so the other spaces
+keep theirs.</p>
+<p>A file with <code>spaces</code> that lists no valid space is read as one space from
+its top-level keys, and the problem is reported.</p>
+<h2 id="local-overrides">Local overrides</h2>
+<p><code>workbench.local.yaml</code> beside <code>workbench.yaml</code> holds what belongs to one
+machine: a port, an absolute <code>root</code>, a different start command. Add it to
+<code>.gitignore</code>.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#6A737D"># workbench.local.yaml</span></span>
+<span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">http://localhost:4000</span></span>
+<span class="line"><span style="color:#85E89D">    root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/Users/me/code/acme-web</span></span></code></pre>
+<p>It is merged over <code>workbench.yaml</code>:</p>
+<ul>
+<li><code>implementations</code> merges one level deep. Each implementation’s keys
+replace the committed ones by name, so the example above changes <code>dev</code>’s
+<code>base</code> and <code>root</code> and keeps its <code>kind</code> and <code>start</code>. A <code>start</code> block is
+replaced whole.</li>
+<li><code>spaces</code> merges by id, and each space merges the way the whole file
+does, so a local file can change one space’s implementation and leave
+everything else.</li>
+<li>Every other top-level key, such as <code>name</code> or <code>collections</code>, replaces the
+committed one whole.</li>
+</ul>
+<p>A missing local file is normal. A local file that doesn’t parse is reported by
+its own name.</p>
+<p>Common uses:</p>
+<table>
+<thead>
+<tr>
+<th>On your machine</th>
+<th>In <code>workbench.local.yaml</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Your dev server runs on another port</td>
+<td>The implementation’s <code>base</code>, as in the example above</td>
+</tr>
+<tr>
+<td>The implementation’s repository is checked out elsewhere</td>
+<td>The implementation’s <code>root</code>, as an absolute path</td>
+</tr>
+<tr>
+<td>You start the app differently</td>
+<td>A <code>start</code> block of your own, which replaces the committed one</td>
+</tr>
+<tr>
+<td>Storybook’s port isn’t one <code>url: auto</code> finds</td>
+<td>The Storybook implementation’s <code>url</code></td>
+</tr>
+<tr>
+<td>You don’t want TypeScript previews compiled</td>
+<td><code>previews: false</code></td>
+</tr>
+<tr>
+<td>You want your own collections and pages for a while</td>
+<td>A <code>collections</code> list, which replaces the committed one</td>
+</tr>
+<tr>
+<td>You tell spaces apart differently in the <a href="/workbench/docs/spaces/">space switcher</a></td>
+<td>Your own <code>name</code>, <code>color</code>, or <code>icon</code></td>
+</tr>
+</tbody>
+</table>
+<p>Saving <strong>Configure pages</strong> edits <code>workbench.yaml</code>, not the local file. Saving
+<code>workbench.local.yaml</code> refreshes the sidebar and canvas in VS Code, as
+saving <code>workbench.yaml</code> does.</p>
+<h2 id="yaml-that-the-reader-accepts">YAML that the reader accepts</h2>
+<p>Workbench reads a subset of YAML with its own small parser, the same in the
+browser and the server:</p>
+<ul>
+<li>Block mappings, block lists, strings, numbers, <code>true</code>, <code>false</code>, <code>null</code>,
+quotes, and comments.</li>
+<li>No flow collections (<code>{a: b}</code>, <code>[a, b]</code>), multi-line strings, anchors,
+aliases, tags, or multiple documents.</li>
+<li>Indent with spaces. Tabs are rejected.</li>
+<li><code>#</code> starts a comment at the start of a line or after a space, outside quotes.
+Quote a value that contains a space followed by <code>#</code>. <code>"#00a1ff"</code> and <code>a#b</code>
+are values.</li>
+</ul>
+<p>A line the parser doesn’t understand is reported with its line number, and
+nothing loads until it is fixed.</p>
+<h2 id="how-problems-are-reported">How problems are reported</h2>
+<p>Workbench reports what it can’t use rather than guessing, and builds
+everything else:</p>
+<ul>
+<li>A page, group, collection, scenario, or implementation that is invalid or
+repeated is dropped. Its problem names where it was, such as
+<code>Pages › Auth › Sign in: scenario id “Error” must be kebab-case — it travels in a URL.</code></li>
+<li>The problems list above the page list shows every problem, in VS Code’s
+sidebar and in a browser window’s sidebar.</li>
+<li><code>GET /_workbench/config</code> on the workbench server lists the same problems
+under <code>problems</code>, with catalogs and previews that couldn’t load and
+<a href="/workbench/docs/docs-pages/#requirements-and-problems">docs problems</a>, alongside the
+config as your machine resolves it. See
+<a href="/workbench/docs/troubleshooting/#read-the-resolved-config">Troubleshooting</a>.</li>
+</ul>
+<h2 id="editing-with-the-form">Editing with the form</h2>
+<p><strong>Configure pages</strong>, in the top bar’s <strong>More</strong> menu, edits collections,
+groups, pages, labels, source paths, and sizes in a form. See
+<a href="/workbench/docs/canvas/#configure-pages">Configure pages</a>. Saving rewrites only the
+<code>collections</code> block of <code>workbench.yaml</code>. Implementations, scenarios, implementation
+mappings, and code pointers are preserved. Comments outside <code>collections</code> are
+kept; comments inside it are not.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/configuration.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/workbench/docs/windows/"><span>← Previous</span><strong>App windows</strong></a><a href="/workbench/docs/design-system-export/"><span>Next →</span><strong>Design-system export</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#a-complete-example">A complete example</a><a href="#top-level">Top level</a><a href="#previews">Previews</a><a href="#collections">Collections</a><a href="#groups">Groups</a><a href="#pages">Pages</a><a href="#scenarios">Scenarios</a><a href="#sizes">Sizes</a><a href="#implementations">Implementations</a><a href="#a-pages-implementations">A page’s implementations</a><a href="#code-pointers">Code pointers</a><a href="#start-commands">Start commands</a><a href="#catalogs">Catalogs</a><a href="#spaces">Spaces</a><a href="#local-overrides">Local overrides</a><a href="#yaml-that-the-reader-accepts">YAML that the reader accepts</a><a href="#how-problems-are-reported">How problems are reported</a><a href="#editing-with-the-form">Editing with the form</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

@@ -1,0 +1,323 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connect Claude Code and Codex · Shield docs · Canonic</title><meta name="description" content="Shield setup registers native hooks and MCP tools for a project. Hooks check supported tool requests; MCP lets the agent inspect policy and propose changes. For your first installa"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Shield"><div class="wrap"><span class="sub-name">Shield</span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/shield/">Overview</a><a href="/shield/docs/" aria-current="page">Docs</a><a href="/shield/#install">Install</a><a href="https://github.com/canonic2/canonic/tree/main/packages/shield" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/shield/#install">Build from source</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/shield/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Get started</h2><a href="/shield/docs/" data-doc-id="index">Shield documentation</a><a href="/shield/docs/introduction/" data-doc-id="introduction">What is Shield?</a><a href="/shield/docs/getting-started/" data-doc-id="getting-started">Your first Shield project</a><a href="/shield/docs/policy-decisions/" data-doc-id="policy-decisions">Understand policy decisions</a><a href="/shield/docs/operator-experience/" data-doc-id="operator-experience">Shield in the terminal</a></div><div class="docs-group"><h2>Work with your project</h2><a href="/shield/docs/project-review/" data-doc-id="project-review">Project policy, approvals and history</a><a href="/shield/docs/local-registry/" data-doc-id="local-registry">Registry sources and packs</a><a href="/shield/docs/claude-project/" data-doc-id="claude-project" aria-current="page">Connect Claude Code and Codex</a><a href="/shield/docs/mcp-connections/" data-doc-id="mcp-connections">Configure project MCP servers</a><a href="/shield/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshoot Shield</a></div><div class="docs-group"><h2>Write rules</h2><a href="/shield/docs/policy-rules/" data-doc-id="policy-rules">Writing policy rules</a><a href="/shield/docs/rule-reference/" data-doc-id="rule-reference">Rule reference</a><a href="/shield/docs/pack-validation/" data-doc-id="pack-validation">Validating permission packs</a></div><div class="docs-group"><h2>Integrate Shield</h2><a href="/shield/docs/project-mcp/" data-doc-id="project-mcp">Use Shield from an agent (MCP)</a><a href="/shield/docs/claude-read-only/" data-doc-id="claude-read-only">Claude Agent SDK read-only integration</a><a href="/shield/docs/native-run/" data-doc-id="native-run">Bounded native execution</a><a href="/shield/docs/enforcement-handoff/" data-doc-id="enforcement-handoff">Embedded enforcement handoff</a></div><div class="docs-group"><h2>Recovery and development</h2><a href="/shield/docs/runtime-activation/" data-doc-id="runtime-activation">Active policy and repair</a><a href="/shield/docs/compiled-cache/" data-doc-id="compiled-cache">Compiled policy cache</a><a href="/shield/docs/development/" data-doc-id="development">Developing Shield</a></div></nav><a class="docs-install" href="/shield/#install">Get Shield <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/shield/docs/">Shield docs</a><span aria-hidden="true">/</span><span>Work with your project</span></div><div class="docs-prose"><h1 id="connect-claude-code-and-codex">Connect Claude Code and Codex</h1>
+<p>Shield setup registers native hooks and MCP tools for a project. Hooks check
+supported tool requests; MCP lets the agent inspect policy and propose changes.
+For your first installation, follow <a href="/shield/docs/getting-started/">the setup guide</a>.</p>
+<h2 id="which-part-does-what">Which part does what?</h2>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>What you use it for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Native hooks</td>
+<td>Check supported requests from the agent’s ordinary tools against active policy.</td>
+</tr>
+<tr>
+<td>Shield MCP tools</td>
+<td>Let the agent inspect policy, read guides, evaluate diagnostic requests, and prepare reviewed changes.</td>
+</tr>
+<tr>
+<td>Operator CLI</td>
+<td>Initialize the project and confirm settings or policy changes yourself.</td>
+</tr>
+</tbody>
+</table>
+<p>After setup, restart and trust the agent so it loads both integrations.
+Use <code>shield history list</code> to inspect recorded requests and completion.</p>
+<h2 id="install-or-repair-an-integration">Install or repair an integration</h2>
+<p>Initialize the project with <code>shield init</code>, then run <code>shield mcp setup --agent claude</code> in an operator terminal to install native
+command hooks and Shield’s project MCP entry. Confirmation shows the owned files,
+binary and project. Claude uses <code>.claude/settings.local.json</code> and <code>.mcp.json</code>.
+To add Codex as well, run <code>shield mcp setup --agent codex</code>; Codex uses
+<code>.codex/hooks.json</code> and <code>.codex/config.toml</code>. No user/global settings are changed.
+When active rules ask for <a href="/shield/docs/policy-rules/#codex-prefix-rules">Codex prefix rules</a>,
+Shield also writes <code>.codex/rules/shield.rules</code>. Setup and every activation rewrite
+it, removing it when no such rule remains or Codex is removed. Codex loads it
+only for a trusted project. Shield never replaces a file at that path that it
+did not write; status and the activation receipt say to move such a file aside.
+Status also reports a stale file and hand edits, and <code>shield mcp setup</code>
+repairs them. Until then, Codex Asks block whatever the Ask fallback, because
+the file may let Codex skip its sandbox. Setup and policy reviews list the
+prefixes a change adds or removes.</p>
+<p>Other hook groups, MCP servers, plugins, settings and Codex rules files survive
+installation and removal. Repeating setup creates one registration per agent.
+Missing entries can be repaired by selecting the agent again. Edited owned
+entries conflict; Shield preserves them and requires resolution. <code>shield mcp setup</code>
+without <code>--agent</code> resumes a confirmed interrupted plan. <code>shield mcp setup --remove</code>
+removes the agents you select, and with every agent selected removes all owned
+registrations while preserving policy, approvals and history.</p>
+<h2 id="load-the-hooks">Load the hooks</h2>
+<p>Restart the agent, trust the project, enable hooks, and approve the MCP
+connection. In Codex, review hook definitions through <code>/hooks</code>. Shield cannot
+override host trust or administrator restrictions.</p>
+<p>Setup’s Tool permissions page marks tools that can run without prompting.
+All except <code>policy_apply</code> are marked by default; later setup preserves
+your choices. Codex uses a <code>prompt</code> server setting with <code>approve</code> for marked
+tools. Claude adds <code>mcp__shield__&lt;tool&gt;</code> entries to <code>permissions.allow</code> and
+<code>shield</code> to <code>enabledMcpjsonServers</code> in <code>.claude/settings.local.json</code>.</p>
+<p>MCP policy changes need separate approval. Claude opens a confirmation form:
+Accept applies, while decline or cancel leaves the proposal pending. The form
+works in <code>default</code>, <code>auto</code>, and <code>bypassPermissions</code> modes, independently of
+ordinary tool approval. Clients without form elicitation cannot apply.
+Codex uses its tool approval prompt; <code>never</code> approval policy refuses apply.
+See <a href="/shield/docs/project-mcp/#proposals-and-operator-review">MCP review</a>.</p>
+<p>Repeating setup repairs missing tool approvals. Unmarking a tool or removing
+Shield deletes only approvals Shield added; other servers and existing approvals
+are preserved. Check <code>shield doctor --json</code> for missing or changed files and
+binaries. Status reports live verification as <code>unverified</code>.</p>
+<h2 id="intercepted-requests">Intercepted requests</h2>
+<p>PreToolUse checks requests against the registered project’s policy.</p>
+<table>
+<thead>
+<tr>
+<th>Request</th>
+<th>Check</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Claude Read</td>
+<td>File read.</td>
+</tr>
+<tr>
+<td>Claude Write, Edit, MultiEdit, NotebookEdit</td>
+<td>File write.</td>
+</tr>
+<tr>
+<td>Claude Glob, Grep</td>
+<td>Read of the search path.</td>
+</tr>
+<tr>
+<td>Claude Bash and monitor commands</td>
+<td>Shell policy.</td>
+</tr>
+<tr>
+<td>Codex <code>view_image</code></td>
+<td>Image-file read; calls naming another environment block.</td>
+</tr>
+<tr>
+<td>Codex <code>webrun</code> searches and direct URL opens</td>
+<td>Web policy, as described below.</td>
+</tr>
+<tr>
+<td>Bound project MCP tool calls</td>
+<td>MCP policy using the stable project connection ID and full arguments.</td>
+</tr>
+</tbody>
+</table>
+<p>Configure these bindings through <a href="/shield/docs/mcp-connections/">project MCP connections</a>.
+Unbound servers retain their host behavior. Bound calls whose project settings
+drift are blocked until setup is reviewed again. Codex’s inner MCP calls from
+code mode use the same per-call hook path.</p>
+<p>Session-management tools pass through to the host’s permissions. For Claude,
+these include tool loading, task lists and stopping tasks, questions, plan mode,
+scheduling, subagents, workflows, agent listing, skills, and MCP resource listing.
+Invoked tools are checked normally, except in remotely running subagents or
+workflows. Codex passes through plans, questions, permission requests, tool search,
+timing, subagents, and MCP resource listing.</p>
+<p>Unsupported tools ask in Claude and block in Codex. Examples include MCP resource
+reads; Claude also asks for session messages, worktrees, LSP, PowerShell, and
+artifacts. Tool messages name supported alternatives where available. A rule
+cannot add support for an unmodeled tool.</p>
+<h3 id="web-requests">Web requests</h3>
+<p>Codex <code>webrun</code> supports <code>search_query</code> and <code>open</code> with direct HTTP(S) URLs,
+including mixed batches of up to 16 operations. Every operation must pass.
+An optional <code>lineno</code> only positions the view. Opaque result references, clicks,
+and other actions block the entire call. Submit a direct URL when available.
+The hook sees the initial URL, not later redirect destinations.</p>
+<h3 id="protected-files-and-policy-changes">Protected files and policy changes</h3>
+<p>Claude can read and commit <code>.shield/config.yml</code>, <code>rules.yml</code>, and <code>shield.lock</code>,
+but cannot edit them or read <code>.shield/review/</code>. Reading agent settings or
+<code>.mcp.json</code> asks because they may hold credentials. <code>.shield/.gitignore</code> excludes
+private review state and cache files. Change configurable protection with
+<a href="/shield/docs/project-review/#protected-files"><code>shield protection set</code></a>.</p>
+<p>Agents cannot run Shield’s operator CLI. They inspect policy through MCP,
+prepare proposals, and submit <code>policy_apply</code> with the returned
+<code>apply_arguments</code>. You can also review proposals with <code>shield policy review</code>.
+A proposal changes no permissions until accepted.</p>
+<p>The first relevant Ask supplies candidate pack/rule guidance and a proposal
+route separately from the user-facing permission message. Ordinary allowed
+Claude requests and Shield MCP hook checks add no extra model context.
+For project scripts, inspect definitions, lifecycle hooks, and arguments before
+proposing a rule.</p>
+<p>Shell denials name up to three denied command forms and their matching rule IDs
+when that evidence is available. Inspect those rules with <code>rule_list</code> before
+proposing an allowance. A command can be denied for its argument form even when
+its input file is readable; folder-access suggestions require a matching
+outside-location failure.</p>
+<p>Claude Ask reads and shell requests use its permission prompt or SDK callback;
+without a permission host, they block. Stored grants belong to the separate
+<a href="/shield/docs/claude-read-only/">SDK consumer</a> and cannot authorize native-hook retries.
+Arguments containing only an unresolved exit-status expansion (<code>$?</code> or <code>${?}</code>),
+such as <code>echo "exit $?"</code>, keep ordinary approval instead of requiring a rewrite.
+Shield does not guess the status or propose exact literal arguments for it.
+Explicit command denials still block these requests; other unresolved expansions
+retain their existing rewrite requirements.</p>
+<h3 id="file-reads">File reads</h3>
+<p>Read-only text filters can use file-read policy when their only command match is
+a yielding fallback or no rule matches. The supported <code>jq</code> forms include string
+interpolation, arrays and objects (including shorthand fields such as
+<code>{id, decision}</code>), slices, selections, regular-expression tests and output formats
+such as <code>@tsv</code>. Environment access, module loading, extra-input
+helpers and file-loading options keep ordinary command review. Explicit command
+Ask/Deny rules retain precedence.
+Pagers such as <code>less</code> and <code>more</code> require command approval or a command rule;
+permission to read their input files does not authorize their execution.</p>
+<h3 id="temporary-and-session-files">Temporary and session files</h3>
+<p>Claude and Codex native adapters include the system temporary folders in the
+read/write location unions. On Unix this includes existing <code>/tmp</code> and <code>/var/tmp</code>
+roots plus the native per-user temporary directory; macOS aliases resolve to
+their actual directories. Existing and newly created temporary files need no
+folder proposal or session ownership check. Explicit command/rule denials and
+protected Shield files still apply. Removing or replacing a temporary root
+itself is blocked. This access does not edit project <code>access_paths</code>.</p>
+<p>Temporary environment overrides do not open the home directory, its ancestors
+or its descendants, including <code>.ssh</code>, <code>.claude</code> and <code>.codex</code>. Shield checks the
+resolved directory, so a symlink alias cannot bypass that boundary. Custom
+scratch under home follows ordinary project access or an explicitly reviewed
+<code>access_paths</code> grant.</p>
+<p>For Claude native hooks, the read union also includes the current session’s
+<code>tool-results</code> directory when its transcript path matches the registered project,
+session ID and configured Claude directory. This allows inspection of persisted
+tool output through Read or supported text filters. Outside temporary folders,
+other sessions, settings, credentials and writes receive no extra access through
+this session scope. Directory or operand symlinks
+cannot redirect this scope outside the verified artifact directory. The scope is
+observed afresh for each callback and is unavailable to MCP diagnostic input.</p>
+<p>Status lists supported working-file categories. Runtime assets and scratch
+folders outside temporary roots are not automatically discovered.</p>
+<h3 id="shell-analysis">Shell analysis</h3>
+<p>Bash source retains flags, quoting and compounds for conservative shell analysis.
+A literal <code>cd</code> to the already known current directory, including <code>cd .</code>, keeps
+that working-directory context and needs no extra approval unless an explicit
+command rule asks or denies it. Other directory changes retain conservative
+handling; returning to the original path after an unresolved change does not
+restore known context.
+Heredocs and here-strings supply inline data without an extra approval requirement.
+The command, output destinations, substitutions and shell interpreter bodies
+still follow their own policy checks, so writing a quoted heredoc to an approved
+project file can proceed when both the command and write are allowed.
+Standalone <code>[</code> and <code>]</code> in tests such as
+<code>if [ -f AGENTS.md ]; then cat AGENTS.md; fi</code> preserve the working-directory
+evidence for the read. Shield checks every branch against policy; an existence
+test does not authorize the read or skip checks on a missing file.
+Codex permitted requests return brief model context without an explicit Allow
+response or argument rewrite; Ask fallback retains the original policy decision.
+Exact shell rules match the complete supplied vendor input and available context.
+Protected-path checks resolve existing symlink targets, including ancestors of new files.
+Agent shell tools cannot launch Shield’s operator CLI or its literal
+<code>mcp serve</code> startup sequence under another executable name. Use the registered
+Shield MCP tools to propose changes and request approval.
+Allow permits the command; Deny blocks it. Unmatched requests ask. When the only
+explanation for an Ask is source Shield cannot inspect, such as <code>$(…)</code>, <code>eval</code> or
+<code>sh -c</code>, the hook blocks the request and tells the agent which part to rewrite as
+literal, separate commands; the rewritten request then gets its actual decision.</p>
+<h3 id="codex-approval-handling">Codex approval handling</h3>
+<p>Codex PreToolUse cannot request native approval. Setup preserves a saved fallback
+or defaults a new choice to <strong>allow</strong> for every profile, including Strict. The
+final review shows it without a separate picker. Allow includes unmatched
+commands and explicit Ask rules; Deny, unsupported tools and protection failures
+still block, and so does an Ask on a command a Shield prefix rule covers, which
+Codex would run outside its sandbox without asking. Repeating <code>shield mcp setup --agent codex</code>
+preserves a saved Block or Allow choice. History retains
+policy Ask and the configured handoff, without recording individual approval.
+Automatic Ask allowance is suspended while a confirmed setup plan needs repair;
+run <code>shield mcp setup</code> to finish that plan.</p>
+<p>Codex also installs PermissionRequest for approvals Codex independently raises.
+Shield evaluates the request again against current policy. Deny blocks; Ask
+returns no decision, leaving Codex’s approval flow in control. Policy Allow can
+resolve the approval using the available host context. An explicit workdir takes
+precedence; otherwise Shield uses Codex’s reported session cwd for all supported
+commands. Missing workdir or tool IDs do not change policy Allow into Ask.
+Fresh policy Allow approves without a prompt or Codex rules file; Ask and Deny
+still apply. History records missing execution context as incomplete while
+retaining the policy decision and its actual handoff. The reported session cwd
+is the evaluation context, not proof of a hidden per-command execution directory.
+With the blocking fallback, an Ask stopped at PreToolUse never reaches this event.
+Neither abstention nor completion establishes that a person approved a request.</p>
+<p><code>node --check FILE</code> and <code>node -c FILE</code> are syntax checks, with an optional <code>--</code>
+before the single filename. This applies to bare <code>node</code>, <code>/bin/node</code> and
+<code>/usr/bin/node</code>; other executable paths follow ordinary command policy.
+When Node has no specific rule beyond a yielding Ask
+fallback, Shield decides the check through file-read policy. An ordinary readable
+project source can therefore pass without an Ask fallback or a Node permission
+pack. Explicit command Ask/Deny rules, outside-folder rules and protected files
+still apply. Extra runtime flags, stdin and multiple filenames retain ordinary
+command evaluation.
+When supplied environment metadata contains Node preload options in <code>NODE_OPTIONS</code>
+(<code>--require</code>/<code>-r</code>, <code>--import</code>, <code>--loader</code> or <code>--experimental-loader</code>), shell syntax
+checks also retain execution review because startup code can run.</p>
+<p>Submitted relative paths use known request cwd. After a cwd change the analyzer
+cannot resolve, relative file redirections and supported destructive file operations
+block because Shield cannot verify their targets. Ordinary file moves into the
+project root follow policy; replacing or moving protected configuration blocks.
+Redirections to <code>/dev/null</code> and between numbered descriptors, such as
+<code>2&gt;/dev/null</code> or <code>2&gt;&amp;1</code>, open no project file and need no policy.</p>
+<p>Finite literal <code>for</code> loops check their commands through normal policy lookup.
+A supported loop and its resolved <code>break</code> or <code>continue</code> do not require approval
+on their own; an explicit policy restriction still applies. For example, if
+<code>node src/server.js</code> needs approval inside a loop, Shield names that invocation.
+Unresolved command arguments or unsupported control flow can separately require
+a rewrite or approval.
+Using <code>PATH</code> as the loop variable separately asks because it changes which
+executables the commands select.</p>
+<p>For a simple background command such as <code>node src/server.js &amp;</code>, Shield tracks
+the runtime PID’s origin through <code>$!</code>, <code>pid=$!</code>, and whole-variable copies such
+as <code>copy="$pid"</code>. A supported <code>kill "$copy"</code> can therefore reach the normal
+Ask flow instead of requiring a rewrite for an unknown operand. Known IFS must
+preserve a single numeric field for unquoted targets; quoting avoids splitting.
+Overwrites, uncertain branch values, unsupported mutations, arithmetic, indirect
+references and values read from files do not establish this provenance.
+Only positive PID references with supported literal signal options are modeled;
+process-group and name-based targets retain ordinary evaluation.
+The PID remains symbolic: Shield does not know its number or verify that the
+original process is still alive. This analysis never grants policy Allow for
+the kill; configured Ask handling still applies, including Codex’s Allow fallback.
+Runtime ownership enforcement requires a runner that owns the child process.</p>
+<h3 id="suggestions-and-history">Suggestions and history</h3>
+<p>Native agents can receive an initial pack suggestion when a retained catalog
+advertises the analyzed command. One pack can advertise several executable names;
+multiple matches are alternatives to inspect, rather than a single chosen pack.
+Suggestion guidance uses short names such as the <code>node</code> rule pack in conversation;
+tool arguments retain the full reference. Publisher and registry names distinguish
+packs that share a short name.
+The full registry/publisher/name reference leads to <code>pack_info</code>,
+<code>policy_propose</code> and user review through <code>policy_apply</code>. A relevant
+pack may still ask or deny the invocation. Suggestions preserve the current
+decision and activate nothing; see <a href="/shield/docs/local-registry/#suggestions-for-commands">catalog refresh</a>.</p>
+<p>With the blocking fallback, Codex explains that native approval is unavailable.
+The message can offer a rule for the exact command, web search or fetched host,
+or an outside folder. The agent submits that change through <code>policy_apply</code>
+for your approval, then retries after activation. CLI users can also use
+<code>shield history list</code> and <code>shield rule add</code> directly. <code>shield request approve</code> does
+not authorize a native hook retry. Policy Deny requires a policy change and cannot
+be overridden by ordinary host approval. Web searches and fetches follow web
+rules; see <a href="/shield/docs/policy-rules/">policy rules</a>. Git/Docker effect hints do not override
+Allow merely because indirect effects are possible. Hooks use the submitted
+command and available context; they do not verify execution.
+The <a href="/shield/docs/native-run/">native run</a> flow remains a separate checked execution path.</p>
+<p>Shield MCP inspection and proposals remain available. Neither a proposal nor a
+diagnostic Allow authorizes a command. PostToolUse and Claude PostToolUseFailure
+record available observations without output/error payloads. After you
+complete an Ask call, PostToolUse reports the host completion and why the call
+asked. Completion alone does not prove individual approval. Claude can inspect
+<code>suggestion_list</code> after the task for eligible recurring reviews. Native completions
+are unlinked when the pre-call receipt is unavailable. Shell exit success is
+unknown unless supplied by a supported mapping.</p>
+<h2 id="failure-boundary-and-coverage">Failure boundary and coverage</h2>
+<p>An explicit native denial prevents dispatch. The installed command also exits 2
+when the Shield process cannot start. A host that skips, disables, kills or times
+out the hook may continue execution; installation cannot promise fail-closed
+protection for those outcomes. Direct same-user processes remain outside isolation.</p>
+<p>The current implementation installs Unix command hooks. Windows setup refuses.
+Other agents have no installed native integration. Native hooks cannot consume
+the separate runner’s stored approval grants.</p>
+<p>Claude evaluates policy before showing the prompt; Shield cannot revalidate a
+changed policy when that host later accepts the answer. Native completion records
+do not establish who approved the request. Codex’s exec_command hook omits workdir
+and other execution options, so its reported cwd may differ from the command’s
+effective workdir. Shield records the context the host actually supplies.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/shield/docs/claude-project.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/shield/docs/local-registry/"><span>← Previous</span><strong>Registry sources and packs</strong></a><a href="/shield/docs/mcp-connections/"><span>Next →</span><strong>Configure project MCP servers</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#which-part-does-what">Which part does what?</a><a href="#install-or-repair-an-integration">Install or repair an integration</a><a href="#load-the-hooks">Load the hooks</a><a href="#intercepted-requests">Intercepted requests</a><a href="#web-requests" class="docs-toc-sub">Web requests</a><a href="#protected-files-and-policy-changes" class="docs-toc-sub">Protected files and policy changes</a><a href="#file-reads" class="docs-toc-sub">File reads</a><a href="#temporary-and-session-files" class="docs-toc-sub">Temporary and session files</a><a href="#shell-analysis" class="docs-toc-sub">Shell analysis</a><a href="#codex-approval-handling" class="docs-toc-sub">Codex approval handling</a><a href="#suggestions-and-history" class="docs-toc-sub">Suggestions and history</a><a href="#failure-boundary-and-coverage">Failure boundary and coverage</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

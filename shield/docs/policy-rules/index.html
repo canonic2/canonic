@@ -1,0 +1,772 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Writing policy rules · Shield docs · Canonic</title><meta name="description" content="Custom rules set project-specific permissions. Start with one exact command, then add optional arguments or requirements as needed. Use the rule reference for field definitions and"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Shield"><div class="wrap"><span class="sub-name">Shield</span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/shield/">Overview</a><a href="/shield/docs/" aria-current="page">Docs</a><a href="/shield/#install">Install</a><a href="https://github.com/canonic2/canonic/tree/main/packages/shield" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/shield/#install">Build from source</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/shield/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Get started</h2><a href="/shield/docs/" data-doc-id="index">Shield documentation</a><a href="/shield/docs/introduction/" data-doc-id="introduction">What is Shield?</a><a href="/shield/docs/getting-started/" data-doc-id="getting-started">Your first Shield project</a><a href="/shield/docs/policy-decisions/" data-doc-id="policy-decisions">Understand policy decisions</a><a href="/shield/docs/operator-experience/" data-doc-id="operator-experience">Shield in the terminal</a></div><div class="docs-group"><h2>Work with your project</h2><a href="/shield/docs/project-review/" data-doc-id="project-review">Project policy, approvals and history</a><a href="/shield/docs/local-registry/" data-doc-id="local-registry">Registry sources and packs</a><a href="/shield/docs/claude-project/" data-doc-id="claude-project">Connect Claude Code and Codex</a><a href="/shield/docs/mcp-connections/" data-doc-id="mcp-connections">Configure project MCP servers</a><a href="/shield/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshoot Shield</a></div><div class="docs-group"><h2>Write rules</h2><a href="/shield/docs/policy-rules/" data-doc-id="policy-rules" aria-current="page">Writing policy rules</a><a href="/shield/docs/rule-reference/" data-doc-id="rule-reference">Rule reference</a><a href="/shield/docs/pack-validation/" data-doc-id="pack-validation">Validating permission packs</a></div><div class="docs-group"><h2>Integrate Shield</h2><a href="/shield/docs/project-mcp/" data-doc-id="project-mcp">Use Shield from an agent (MCP)</a><a href="/shield/docs/claude-read-only/" data-doc-id="claude-read-only">Claude Agent SDK read-only integration</a><a href="/shield/docs/native-run/" data-doc-id="native-run">Bounded native execution</a><a href="/shield/docs/enforcement-handoff/" data-doc-id="enforcement-handoff">Embedded enforcement handoff</a></div><div class="docs-group"><h2>Recovery and development</h2><a href="/shield/docs/runtime-activation/" data-doc-id="runtime-activation">Active policy and repair</a><a href="/shield/docs/compiled-cache/" data-doc-id="compiled-cache">Compiled policy cache</a><a href="/shield/docs/development/" data-doc-id="development">Developing Shield</a></div></nav><a class="docs-install" href="/shield/#install">Get Shield <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/shield/docs/">Shield docs</a><span aria-hidden="true">/</span><span>Write rules</span></div><div class="docs-prose"><h1 id="writing-policy-rules">Writing policy rules</h1>
+<p>Custom rules set project-specific permissions. Start with one exact command,
+then add optional arguments or requirements as needed. Use the
+<a href="/shield/docs/rule-reference/">rule reference</a> for field definitions and
+<a href="/shield/docs/policy-decisions/">policy decisions</a> for precedence.</p>
+<p>Read the first two sections for your first rule, or choose a topic:</p>
+<table>
+<thead>
+<tr>
+<th>You want to…</th>
+<th>Read</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reject an operation when an option is missing</td>
+<td><a href="#match-commands-and-enforce-requirements">Commands and requirements</a></td>
+</tr>
+<tr>
+<td>Accept optional flags, values, or forwarded script arguments</td>
+<td><a href="#match-text-and-arguments">Text and argument matching</a></td>
+</tr>
+<tr>
+<td>Constrain working directories or affected files</td>
+<td><a href="#restrict-paths">Path restrictions</a></td>
+</tr>
+<tr>
+<td>Understand a compound shell request</td>
+<td><a href="#understand-wrappers-and-shell-commands">Wrappers and shell commands</a></td>
+</tr>
+<tr>
+<td>Permit a documentation host or search</td>
+<td><a href="#allow-searches-and-documentation-fetches">Web rules</a></td>
+</tr>
+<tr>
+<td>Publish configurable, reusable rules</td>
+<td><a href="#pack-variables-preconditions-and-templates">Pack variables</a> and <a href="#share-rule-bodies-in-a-pack">shared rule bodies</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="your-first-rule">Your first rule</h2>
+<p>Suppose you have reviewed a tool’s <code>verify</code> operation and want to allow it.
+We use the fictional executable <code>acme-check</code>; substitute your own reviewed tool.</p>
+<p>In an initialized project, run <code>shield rule add</code> and choose <strong>Exact command
+arguments</strong> (<code>argv</code>). Enter ID <code>verify-project</code>, executable <code>acme-check</code>,
+arguments <code>["verify"]</code>, and decision Allow. The arguments array excludes the
+executable. Review and confirm to activate the rule for the project cwd.</p>
+<p>The default <strong>Complete request</strong> form also binds vendor context and environment.
+Choose the argument form here so the rule can cover more than one exact request.</p>
+<p>For YAML, use this complete document. Its cwd condition also covers project
+subdirectories:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">schema_version</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span></span>
+<span class="line"><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">custom</span></span>
+<span class="line"><span style="color:#85E89D">capabilities</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">structured-rules-v1</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">argument-rules-v1</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">location-v1</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">rules</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">verify-project</span></span>
+<span class="line"><span style="color:#85E89D">    decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">    conditions</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">argv</span></span>
+<span class="line"><span style="color:#85E89D">      executable</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">acme-check</span></span>
+<span class="line"><span style="color:#85E89D">      arguments</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">exact</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">values</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">verify</span><span style="color:#E1E4E8">]}</span></span>
+<span class="line"><span style="color:#85E89D">      cwd</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">within</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">project</span><span style="color:#E1E4E8">}}</span></span></code></pre>
+<p>Merge the rule and capabilities into the file selected by <code>.shield/config.yml</code>.
+For a new shared file, save it as <code>.shield/rules.yml</code> and set <code>rules: rules.yml</code>
+in the existing configuration. Run <code>shield policy review</code>, choose <code>manual</code>, and confirm
+the review to activate your edit.</p>
+<p><code>domain: argv</code> matches an executable and argument list. Here, the executable
+must be <code>acme-check</code>, the arguments exactly <code>[verify]</code>, and cwd inside the project.
+<code>capabilities</code> declares the syntax used: structured rules, arguments, and locations.</p>
+<table>
+<thead>
+<tr>
+<th>Submitted command</th>
+<th>Does this rule match?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>acme-check verify</code> inside the project</td>
+<td>Yes; the rule contributes Allow.</td>
+</tr>
+<tr>
+<td><code>acme-check verify --write</code></td>
+<td>No; the argument list differs.</td>
+</tr>
+<tr>
+<td><code>acme-check report</code></td>
+<td>No; the operation differs.</td>
+</tr>
+<tr>
+<td><code>acme-check verify</code> outside the project</td>
+<td>No; the cwd condition fails.</td>
+</tr>
+</tbody>
+</table>
+<p>A miss leaves the decision to other rules, or Ask if none matches. Protected-file
+checks and other operations in the same shell request still apply. Inspect the
+active rule with <code>shield rule list --json</code>, or preview a request through
+<a href="/shield/docs/project-mcp/#diagnostic-input-and-snapshots">MCP diagnostics</a> without executing it.</p>
+<h2 id="choose-the-right-matching-style">Choose the right matching style</h2>
+<p>Use <code>exact</code> when only one complete argument list should match. Use <code>options</code>
+when you have reviewed optional flags or value-taking options. Use <code>prefix</code>
+only when every remaining argument may be unrestricted. For example, allowing
+the prefix <code>verify</code> also allows <code>verify --write</code>; it does not infer which flags
+are read-only.</p>
+<p>For example, if you have also reviewed <code>acme-check verify --verbose</code>, replace
+only the first rule’s <code>arguments</code> value with this fragment:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">arguments</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">options</span></span>
+<span class="line"><span style="color:#85E89D">  prefix</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">verify</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">  flags</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--verbose</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">  values</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">  operands</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span></span></code></pre>
+<p>Now both <code>acme-check verify</code> and <code>acme-check verify --verbose</code> match. The flag
+is optional. <code>acme-check verify --write</code> and <code>acme-check verify report.txt</code>
+still miss because the grammar declares neither that flag nor operands. Keep
+the executable and cwd conditions, then review and activate the edit as before.</p>
+<p>Unless marked complete, examples below are fragments for the <code>rules</code> array.
+Add their <a href="/shield/docs/rule-reference/#capabilities">required capabilities</a> to the document.</p>
+<h2 id="match-commands-and-enforce-requirements">Match commands and enforce requirements</h2>
+<p>Suppose the fictional <code>acme-db</code> tool must use <code>--read-only</code>. Matching that flag
+in conditions would leave invocations without it to other rules. Put it in
+requirements to decide what happens when it is missing.</p>
+<p>Merge this complete example into your configured rule file and activate it
+with <code>shield policy review</code>, as in <a href="#your-first-rule">your first rule</a>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">schema_version</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span></span>
+<span class="line"><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">custom</span></span>
+<span class="line"><span style="color:#85E89D">capabilities</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#9ECBFF">structured-rules-v1</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#9ECBFF">argument-rules-v1</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#9ECBFF">requirements-v1</span></span>
+<span class="line"><span style="color:#85E89D">rules</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">database-readonly</span></span>
+<span class="line"><span style="color:#85E89D">    decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">    conditions</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">argv</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">executable</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">acme-db</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">    requirements</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      arguments</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">options</span></span>
+<span class="line"><span style="color:#85E89D">        prefix</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">        flags</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--read-only</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        values</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--user</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        operands</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span></span>
+<span class="line"><span style="color:#85E89D">        require_all</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--read-only</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    on_unmet</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">deny</span></span>
+<span class="line"><span style="color:#85E89D">      message</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Add --read-only and submit a revised request.</span></span>
+<span class="line"><span style="color:#85E89D">      alternatives</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">acme-db --read-only</span><span style="color:#E1E4E8">]</span></span></code></pre>
+<p>Conditions match every <code>acme-db</code> invocation. Requirements demand <code>--read-only</code>,
+accept an optional <code>--user</code> value, and reject operands. Failure returns the
+<code>on_unmet</code> decision, Deny:</p>
+<table>
+<thead>
+<tr>
+<th>Request</th>
+<th>This rule’s result</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>acme-db --read-only</code></td>
+<td>Allow</td>
+<td>The required flag is present.</td>
+</tr>
+<tr>
+<td><code>acme-db --read-only --user analyst</code></td>
+<td>Allow</td>
+<td>The optional value-taking option is declared.</td>
+</tr>
+<tr>
+<td><code>acme-db --user analyst</code></td>
+<td>Deny</td>
+<td>The required flag is absent.</td>
+</tr>
+<tr>
+<td><code>acme-db --read-only --write</code></td>
+<td>Deny</td>
+<td>The requirement does not accept <code>--write</code>.</td>
+</tr>
+<tr>
+<td><code>another-db --read-only</code></td>
+<td>No match</td>
+<td>The executable condition does not match.</td>
+</tr>
+</tbody>
+</table>
+<p>Other matching rules and protected-state checks still affect the
+<a href="/shield/docs/policy-decisions/#how-rules-combine">final decision</a>. Verify the real tool’s
+behavior before treating an option as read-only.</p>
+<h3 id="require-a-particular-option-value">Require a particular option value</h3>
+<p>A valued option can also require a specific value. This rule allows
+<code>aws logs filter-log-events</code> with the <code>acme-read-only</code> profile and denies the
+same operation with any other profile or none:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">logs-read-only-profile</span></span>
+<span class="line"><span style="color:#85E89D">    decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">    conditions</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">argv</span></span>
+<span class="line"><span style="color:#85E89D">      executable</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">aws</span></span>
+<span class="line"><span style="color:#85E89D">      arguments</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">options</span></span>
+<span class="line"><span style="color:#85E89D">        leading</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">flags</span><span style="color:#E1E4E8">: [], </span><span style="color:#85E89D">values</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--profile</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--region</span><span style="color:#E1E4E8">]}</span></span>
+<span class="line"><span style="color:#85E89D">        prefix</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">logs</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">filter-log-events</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        flags</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">        values</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--profile</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--region</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--log-group-name</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--filter-pattern</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">                 --start-time</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--end-time</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--limit</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--output</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--query</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        operands</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span></span>
+<span class="line"><span style="color:#85E89D">    requirements</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      arguments</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">options</span></span>
+<span class="line"><span style="color:#85E89D">        leading</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          flags</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">          values</span><span style="color:#E1E4E8">: [{</span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">--profile</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">match</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">acme-read-only</span><span style="color:#E1E4E8">}, </span><span style="color:#9ECBFF">--region</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        prefix</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">logs</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">filter-log-events</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        flags</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">        values</span><span style="color:#E1E4E8">: [{</span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">--profile</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">match</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">acme-read-only</span><span style="color:#E1E4E8">}, </span><span style="color:#9ECBFF">--region</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">                 --log-group-name</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--filter-pattern</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--start-time</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--end-time</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">                 --limit</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--output</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--query</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        operands</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span></span>
+<span class="line"><span style="color:#85E89D">        require_all</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--profile</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    on_unmet</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">deny</span></span>
+<span class="line"><span style="color:#85E89D">      message</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Use --profile acme-read-only for log filtering.</span></span></code></pre>
+<p>The conditions declare the operation’s grammar without a profile value, so
+every request using those options reaches the rule, whether <code>--profile</code> comes
+before or after the operation. The requirements repeat the grammar and add the
+value: the match applies to every <code>--profile</code> occurrence in both phases, and
+<code>require_all</code> counts both phases together. Another profile, a missing profile
+or a second, different <code>--profile</code> gets the Deny. A request with an option the
+grammar does not declare does not match the rule; other rules decide it.
+A pack can replace the literal profile with <code>{var: profile}</code> so each project
+chooses its own, as described in pack variables below.</p>
+<h3 id="conditions-versus-requirements">Conditions versus requirements</h3>
+<p>Conditions determine whether a rule applies. Requirements determine its successful
+or unmet outcome. <code>on_unmet.decision</code> is Ask or Deny, and may carry a short message
+and up to three static alternatives. Alternatives are candidates that must be
+evaluated again. They cannot rewrite requests, approve execution or bypass another
+rule. Put exclusions in requirements when failure should block with an explanation.
+For an unmet requirement, feedback offers an <code>access_path_add</code> alternative only
+when the same rule and operation report an outside-location failure. Unknown
+target evidence, excluded paths and unsupported options do not establish that
+adding a folder would help.</p>
+<h2 id="match-text-and-arguments">Match text and arguments</h2>
+<p>Use a <strong>text selector</strong> to match one field, such as an executable name or one
+argument. Use an <strong>argument selector</strong> to describe the whole list after the
+executable. For <code>acme-check verify --verbose</code>, the executable is <code>acme-check</code>
+and the argument list is <code>["verify", "--verbose"]</code>.</p>
+<p>Text selectors accept a literal string or one of <code>exact</code>, <code>prefix</code>, <code>one_of</code>,
+<code>glob</code> or <code>regex</code>. Regex matches the entire field, including alternatives and
+inline flags. Glob matches individual fields; <code>*</code> does not cross a path separator,
+and an argv glob never expands into more arguments. Each argument stays separate.
+Use recursive stars as <code>**/name</code>, <code>dir/**</code>, <code>dir/**/name</code>, or bare <code>**</code> for the
+whole field. Other adjacent-star placements, including <code>a**b</code>, <code>***</code> and bare
+<code>**</code> inside a brace alternative, are refused. Use <code>[*][*]</code> for two literal stars.
+Brace alternatives may contain character classes, such as <code>{[ab],c}</code>; empty
+or nested alternatives are refused.
+Argument kinds are <code>any</code>, <code>exact</code>, <code>prefix</code>, <code>sequence</code>, <code>options</code> and restrictive
+<code>risk_tokens</code>. Options declare arity, leading global options, value predicates,
+presence/forbidden checks, repetition and parsing settings explicitly.
+With <code>prefix-leading-v1</code>, a <code>prefix</code> selector can also declare <code>leading</code> options.
+It consumes those options and their values, matches the operation immediately
+after them, and leaves the suffix unconstrained. This lets an administration
+restriction cover unknown suffix options without matching words in option values
+or later operands.</p>
+<p>For reusable allowances, choose a grammar for the operation rather than copying
+one observed argv. <code>exact</code> matches only the complete literal argument vector.
+<code>prefix</code> leaves every later argument unrestricted, so it is unsuitable when only
+reviewed optional flags should be allowed. <code>sequence</code> fixes initial token
+selectors in <code>prefix</code> and declares a <code>rest</code>: <code>{kind: none}</code>, <code>{kind: any}</code> or
+<code>{kind: each, match: SELECTOR, min: N, max: N}</code>. Counts default to 0–256.</p>
+<p>An <code>options</code> grammar fixes the initial operation in <code>prefix</code>, declares boolean
+options in <code>flags</code>, value-taking options in <code>values</code>, and positional arguments in
+<code>operands</code>. Declared options are optional unless required explicitly; unknown
+options fail matching. <code>operands: false</code> rejects positional arguments;
+<code>operands: true</code> accepts them without restriction. A bounded operand object
+declares <code>match</code>, <code>min</code> and <code>max</code>. The <code>--</code> separator ends option parsing, so flags
+forwarded through it must be modeled as operands.</p>
+<h3 id="example-permit-a-project-test-script-and-its-watch-option">Example: permit a project test script and its watch option</h3>
+<p>Suppose your project’s <code>package.json</code> defines <code>test</code>, and you have reviewed both
+the script and its <code>--watch</code> behavior. Inspect any <code>pretest</code> and <code>posttest</code>
+scripts too, because npm can run them as part of the command. Use this rule
+fragment to cover the base command and that optional forwarded argument:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">npm-test</span></span>
+<span class="line"><span style="color:#85E89D">decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">conditions</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">argv</span></span>
+<span class="line"><span style="color:#85E89D">  executable</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">npm</span></span>
+<span class="line"><span style="color:#85E89D">  cwd</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">within</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">project</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#85E89D">  arguments</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">options</span></span>
+<span class="line"><span style="color:#85E89D">    prefix</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">test</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    flags</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">    values</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">    operands</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      match</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">--watch</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">      min</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span></span>
+<span class="line"><span style="color:#85E89D">      max</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span></span></code></pre>
+<p>This covers <code>npm test</code> and <code>npm test -- --watch</code>, including the empty forwarding
+form <code>npm test --</code>. Other scripts, flags, extra operands and repeated watch
+arguments do not match. Review script definitions, lifecycle hooks and argument
+effects before proposing; an allowance permits future edits to the script too.
+Read <a href="/shield/docs/project-mcp/#rule-suggestions">rule suggestions</a> for the MCP workflow.</p>
+<h2 id="restrict-paths">Restrict paths</h2>
+<p>Use path predicates when the same command should be treated differently depending
+on the files it affects. A command’s working directory and its target files are
+different checks: running inside a project does not prove that every operand is
+inside it.</p>
+<p>Choose the check according to what you need to establish:</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Question it answers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cwd</code></td>
+<td>Where does this command start?</td>
+</tr>
+<tr>
+<td><code>targets</code></td>
+<td>Are the affected paths that Shield can model inside an allowed location?</td>
+</tr>
+<tr>
+<td><code>argument_paths</code></td>
+<td>Do the explicit path arguments satisfy the declared restrictions?</td>
+</tr>
+</tbody>
+</table>
+<p>For example, a command started inside the project can still name
+<code>/path/to/another-project/file.txt</code>. A cwd check alone does not constrain that
+operand. Path checks depend on the supported operation model described below;
+they do not turn an arbitrary executable into sandboxed code.</p>
+<p>Locations use <code>exact</code>, <code>within</code> or <code>outside</code> path predicates with <code>project</code>,
+<code>absolute</code>, <code>read</code> or <code>write</code> roots. The latter two bind the approved root unions
+from <a href="/shield/docs/project-review/#additional-access-paths">project configuration</a> and require
+<code>access-paths-v1</code>. <code>outside</code> means outside the entire union; an exclusion applies
+under every referenced root. <code>within</code> can include a root-relative text match.</p>
+<p>For a command limited to the project root, use
+<code>cwd: {exact: {root: project}}</code>. To include subdirectories, use
+<code>cwd: {within: {root: project}}</code>. The value of <code>exact</code> is a path-reference object,
+not a path string. Project rules use the portable <code>project</code> root rather than a
+machine’s absolute checkout path; changing <code>exact</code> to <code>within</code> broadens the rule.</p>
+<p>An Allow must cover all affected resource actions. Fixed native rm/rmdir/cp/mv
+forms and typed file operations account for source and effective destination
+paths. Bounded native <code>cat</code>, <code>head</code>, <code>tail</code>, <code>wc</code> and nonrecursive <code>ls</code> forms model
+read operands; unsupported options and helpers retain incomplete coverage. Bare
+<code>ls</code> reads cwd; <code>-</code> is stdin for the other four commands. Unknown options,
+unresolved paths and recursive copies cannot establish
+positive containment. Observations are fresh per request. Fixed operations use
+direct path facts; bounded search metadata checks are described below.
+Linux/Windows native acceptance is not established by macOS tests.</p>
+<h3 id="check-paths-in-command-arguments">Check paths in command arguments</h3>
+<p><code>argument_paths</code> checks paths explicitly supplied to a tool without claiming a
+complete resource model for everything that tool executes. It requires
+<code>argument-paths-v1</code>, <code>argument-rules-v1</code> and <code>location-v1</code>; read/write root unions
+also require <code>access-paths-v1</code>. For example, in a rule’s requirements:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">argument_paths</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  grammar</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">options</span></span>
+<span class="line"><span style="color:#85E89D">    prefix</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">build</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    flags</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--locked</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    values</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--manifest-path</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--target-dir</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    operands</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span></span>
+<span class="line"><span style="color:#85E89D">  options</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    --manifest-path</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      path</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">within</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">read</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#85E89D">    --target-dir</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      path</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        within</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">write</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">        exclude</span><span style="color:#E1E4E8">: [{</span><span style="color:#85E89D">root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">project</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">path</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">.shield</span><span style="color:#E1E4E8">}]</span></span>
+<span class="line"><span style="color:#85E89D">      recursive</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span></span></code></pre>
+<p>The grammar must parse the complete invocation. Every occurrence of each selected
+option is checked with physical symlink/ancestor resolution; unknown syntax or
+unresolved context fails the requirement. <code>operands: {path: ...}</code> beside <code>options</code>
+checks positional operands. Absent options introduce no paths; use <code>require_all</code>
+in the grammar when one must be supplied. These checks do not constrain implicit
+configuration, build scripts, imports or runtime file access. The rule still
+needs its own execution decision and <code>on_unmet</code> branch.</p>
+<h3 id="search-files-with-grep-and-ripgrep">Search files with grep and ripgrep</h3>
+<p>Fixed <code>grep</code> forms model a positional pattern followed by explicit regular files.
+Fixed <code>rg</code> forms search a pattern in explicit files or
+directories, the working directory when none is given, or list them with <code>--files</code>.
+Listed flags plus <code>-g</code>, <code>-t</code>, <code>-T</code>, context, count and depth values are modeled.
+Walks follow no descendant links; explicit operands still follow links and receive
+containment/exclusion checks. Content searches can honor ignore files and glob
+filters. Their footprint conservatively includes existing hidden descendants;
+excluded credential paths still block it. Native callbacks also check protected
+state, caches and agent settings, using at most 1,024 metadata entries and 32
+directory levels. A large or ambiguous footprint requires a narrower directory.
+<code>--no-ignore</code> without glob filters supplies a visible-only footprint.
+A <code>--files</code> listing supports <code>--hidden</code> and globs and skips the native
+content check; declared policy exclusions still apply. Hidden listings retain
+the existing-entry footprint even with <code>--no-ignore</code>. Stdin, hidden content
+searches, follow overrides, pattern files and helpers remain
+unverified. <code>--no-config</code> is optional. Shield trusts ambient ripgrep configuration
+and evaluates the submitted arguments; flags injected by <code>RIPGREP_CONFIG_PATH</code>
+are outside these checks. Use <code>--no-config</code> when config-free execution is desired.</p>
+<h3 id="read-and-transform-file-content">Read and transform file content</h3>
+<p>Fixed <code>sed</code>, <code>awk</code>, <code>jq</code>, <code>sort</code>, <code>uniq</code>, <code>cut</code>, <code>diff</code> and <code>cmp</code> forms model
+explicit regular-file inputs, including contained symlink targets. Sed supports
+scripts of <code>p</code>, <code>d</code>, <code>s</code>, <code>y</code>, <code>w</code>, <code>W</code>, <code>r</code> and <code>R</code> commands separated by <code>;</code> or
+newlines, each with an optional numeric or <code>$</code> address or range; <code>s</code> accepts the
+<code>g</code>, <code>p</code>, number, <code>i</code>/<code>I</code>, <code>m</code>/<code>M</code> and <code>w</code> flags. Files a script writes (<code>w</code>,
+<code>W</code>, the <code>w</code> flag) are write targets and files it reads (<code>r</code>, <code>R</code>) are read
+targets; a file name runs to the end of its line. In-place editing (<code>-i</code>,
+<code>-iSUFFIX</code>, <code>--in-place[=SUFFIX]</code>) makes each input a write target too, plus
+its backup when a suffix is given; when either name is a symbolic link, the
+write target is the link itself, which sed replaces. Because GNU sed reads
+<code>-i WORD</code> as a script and BSD sed reads WORD as a backup suffix followed by the
+script, such a form counts the targets of both readings and is modeled only
+when both are. This includes <code>-i ''</code>: GNU sed reads the empty word as an empty
+script and the following script word as another file to edit, so
+<code>sed -i '' 's/a/b/' notes.txt</code> is also read as editing a file named <code>s/a/b/</code>.
+When the whole command is that one sed invocation, with literal words and no
+redirections or variable assignments, it is checked through an agent hook, and
+it keeps no backup and writes no <code>w</code> file, sed creates nothing it could then
+edit, so a named input that does not exist adds no target. A backup or <code>w</code> file could create a later
+input, and so could anything else the command runs, so in those cases a missing
+input leaves the edit unmodeled. <code>-iSUFFIX</code> means the same to both. Rules decide these targets like any
+other read or write, so an Allow limited to project reads does not cover an
+edit. The <code>e</code> command and flag, regex addresses, blocks and GNU’s <code>*</code> backup
+suffixes remain unmodeled; awk supports print statements of
+numeric fields, optionally with <code>-F</code>; jq supports field/index lookups and pipes
+through keys, length, type, sort, unique, values and tostring. Their submitted
+syntax does not load program files, run helpers or access the environment, and
+loads no input other than the named targets.
+Sort output files, uniq’s second output operand and arbitrary programs
+remain unmodeled. Options precede the program and file operands. A <code>-</code> operand
+reads standard input. Packs decide whether to allow these forms or ask.</p>
+<h3 id="create-directories-and-files">Create directories and files</h3>
+<p>Fixed <code>mkdir</code>/<code>touch</code> forms model writes;
+<code>mkdir -p</code> supports new paths but operands containing <code>..</code> remain unverified.
+Touch reference/date options and its special <code>-</code> operand remain unverified.
+For these four models, options precede operands; a leading <code>--</code> admits literal
+option-like operands. These models supply resource facts; pack rules choose
+permissions and supported option subsets.</p>
+<h2 id="understand-wrappers-and-shell-commands">Understand wrappers and shell commands</h2>
+<p>Allowing a command does not automatically allow every wrapper around it. Shield
+looks through supported wrappers to evaluate the inner command, but the wrapper
+can still require review because it changes how that command runs.</p>
+<p>Launch wrappers and child shells are looked through. <code>env</code>, <code>nice</code>, <code>nohup</code>,
+<code>timeout</code>, <code>command</code>, <code>builtin</code>, <code>exec</code> and <code>sudo</code> with recognized options are
+unwrapped, and rules decide the command they launch. An inline script run by
+<code>sh</code>, <code>bash</code>, <code>dash</code> or <code>zsh</code>, by bare name or from <code>/bin</code>, with <code>-c</code> is read as
+shell source and each command in it is decided. A Deny inside the script blocks
+the whole request: with a rule that denies <code>sudo</code>,
+<code>nohup zsh -lc 'make docs; sudo true'</code> is denied. The wrapper or
+child shell itself still asks, because it changes how the command runs, so a
+wrapped request never reaches Allow.</p>
+<p>Unknown options leave a child shell’s script unread, and an unread script asks.
+zsh accepts only <code>-c</code>, <code>-e</code>, <code>-u</code>, <code>-v</code>, <code>-x</code>, <code>-l</code> and <code>-f</code>. Its script is read
+with POSIX rules only when it contains none of the syntax that zsh handles
+differently: <code>$</code>, backticks, <code>*</code>, <code>?</code>, <code>[</code>, <code>]</code>, <code>{</code>, <code>}</code>, <code>(</code>, <code>)</code>, <code>~</code>, <code>^</code>,
+<code>#</code>, <code>!</code>, <code>%</code>, a word starting with <code>=</code>, <code>&amp;&gt;</code>, <code>|&amp;</code>, <code>&amp;|</code>, <code>&lt;&lt;&lt;</code>, or <code>&gt;&amp;</code> and
+<code>&lt;&amp;</code> followed by anything but a descriptor number or <code>-</code>. These characters
+count even inside quotes.</p>
+<p>Rules also cover <code>shell</code>, <code>file</code>, <code>web</code>, <code>mcp</code> and completely bound
+<code>exact_request</code> inputs. File rules permit SDK reads, for example:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">notes</span></span>
+<span class="line"><span style="color:#85E89D">decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">conditions</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">file</span></span>
+<span class="line"><span style="color:#85E89D">  action</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">read</span></span>
+<span class="line"><span style="color:#85E89D">  sources</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    all</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">project</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">path</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">notes.txt</span><span style="color:#E1E4E8">}}</span></span></code></pre>
+<p>This rule needs <code>location-v1</code> and <code>structured-rules-v1</code>. See the
+<a href="/shield/docs/rule-reference/#capabilities">capability reference</a> for other features.
+Pack documents also declare identity and release metadata. Their decisions can
+be scalar or complete monotonic Loose/Recommended/Strict maps; custom decisions
+are scalar.
+A pack rule can set <code>fallback: true</code> so it applies only when no other pack
+decides the request, such as a broad review rule a tool-specific pack replaces.</p>
+<h2 id="allow-searches-and-documentation-fetches">Allow searches and documentation fetches</h2>
+<p>Use web rules to describe the searches or hosts an agent may access. A fetch
+allowance can name one documentation host without allowing every URL.</p>
+<p>Web rules decide Claude’s WebSearch and WebFetch and Codex’s searches and
+direct HTTP(S) URL opens. An open is a typed fetch with method GET. Each search
+or open in a supported Codex batch is evaluated; Deny blocks the whole call,
+and Ask follows the configured host approval behavior. Unsupported forms block
+before policy evaluation. Initial-URL permission does not cover unobserved redirects.
+This pair allows any search and fetches from one documentation host, and needs
+<code>regex-v1</code> and <code>requirements-v1</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">search</span></span>
+<span class="line"><span style="color:#85E89D">  decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">  conditions</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">web</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">action</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">search</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">query</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">regex</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"(?s).*"</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs</span></span>
+<span class="line"><span style="color:#85E89D">  decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">  conditions</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">web</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">action</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">fetch</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">  requirements</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    url</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">schemes</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">https</span><span style="color:#E1E4E8">], </span><span style="color:#85E89D">hosts</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">docs.example.com</span><span style="color:#E1E4E8">]}</span></span>
+<span class="line"><span style="color:#85E89D">  on_unmet</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">ask</span><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Hosts match exactly; list each subdomain. A search can carry project text in
+its query, so allowing every search is a choice to make deliberately.</p>
+<p>Fetch rules also decide plain <code>curl</code> and <code>wget</code> downloads in shell commands.
+With the <code>docs</code> rule above and a writable project folder,
+<code>curl -fsS -o guide.html https://docs.example.com/guide</code> is allowed: Shield
+checks the fetch against web rules and the output file against file rules.
+This covers GET and HEAD requests with one literal URL, inspection options
+such as <code>-fsSL</code>, timeouts, retries and <code>-o</code> for curl, and <code>-q</code>, <code>--spider</code> and <code>-O</code> for
+wget. wget must also pass <code>--no-hsts</code>, because otherwise it rewrites
+<code>~/.wget-hsts</code>; without <code>-O</code> or <code>--spider</code> it is excluded. curl long-option values
+must be separate arguments, such as <code>--output guide.html</code>; wget also accepts
+<code>--output-document=guide.html</code>. Uploads, request
+bodies, headers, credentials, cookies, proxies, configuration files (including
+an existing <code>~/.curlrc</code>, <code>~/.wgetrc</code>, or <code>~/.netrc</code> for wget without
+<code>--no-netrc</code>) and other options leave the command to
+your argv rules, as do explicit argv rules for curl or wget. Fetches carry
+<code>client</code> (<code>agent</code> for WebFetch and Codex opens, <code>shell</code> for curl and wget) and,
+for shell clients, <code>redirects</code> (<code>follow</code> or <code>none</code>), so a rule can cover only
+one of them:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs-downloads</span></span>
+<span class="line"><span style="color:#85E89D">  decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">  conditions</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">web</span></span>
+<span class="line"><span style="color:#85E89D">    action</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">fetch</span></span>
+<span class="line"><span style="color:#85E89D">    url</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">schemes</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">https</span><span style="color:#E1E4E8">], </span><span style="color:#85E89D">hosts</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">docs.example.com</span><span style="color:#E1E4E8">]}</span></span>
+<span class="line"><span style="color:#85E89D">    request_fields</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">/client</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">shell</span><span style="color:#E1E4E8">}}</span></span></code></pre>
+<p>For local smoke tests, restrict shell fetches to loopback hosts and require
+redirects to be disabled. This keeps a localhost URL from granting permission
+to follow a redirect to another host:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">local-smoke-tests</span></span>
+<span class="line"><span style="color:#85E89D">  decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">  conditions</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">web</span></span>
+<span class="line"><span style="color:#85E89D">    action</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">fetch</span></span>
+<span class="line"><span style="color:#85E89D">    url</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">schemes</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">http</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">https</span><span style="color:#E1E4E8">], </span><span style="color:#85E89D">hosts</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">localhost</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"127.0.0.1"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"[::1]"</span><span style="color:#E1E4E8">]}</span></span>
+<span class="line"><span style="color:#85E89D">    request_fields</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      /client</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">shell</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">      /redirects</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">none</span><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Ordinary curl GET/HEAD requests match this rule. <code>curl -L</code> and wget requests
+that follow redirects require another matching rule or approval.
+Shield’s generated localhost suggestion uses this same scope.</p>
+<h2 id="directory-options">Directory options</h2>
+<p>Many tools take an option that only says where to work, such as
+<code>npm --prefix DIR</code>, <code>git -C DIR</code> or <code>make -C DIR</code>. A pack or your project’s
+rules can declare such an option under <code>directory_options</code>, with the
+<code>directory-options-v1</code> capability. When no rule decides a command as written,
+Shield then matches it as the same command without the option, run from that
+folder. With this declaration and rule, <code>npm start</code>, <code>npm --prefix . start</code> and
+<code>npm --prefix /path/to/project start</code> from any folder are all allowed, and
+<code>npm --prefix /somewhere/else start</code> is not:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">directory_options</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - {</span><span style="color:#85E89D">executable</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">npm</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">option</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">--prefix</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">position</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">anywhere</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">paths</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">follow</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">rules</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">npm-start</span></span>
+<span class="line"><span style="color:#85E89D">    decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">    conditions</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">argv</span></span>
+<span class="line"><span style="color:#85E89D">      executable</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">npm</span></span>
+<span class="line"><span style="color:#85E89D">      arguments</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">exact</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">values</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">start</span><span style="color:#E1E4E8">]}</span></span>
+<span class="line"><span style="color:#85E89D">      cwd</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">within</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">project</span><span style="color:#E1E4E8">}}</span></span></code></pre>
+<p><code>paths</code> is required: <code>follow</code> when the tool resolves other relative paths
+against the chosen folder, <code>unchanged</code> when it does not, as with
+<code>cargo --manifest-path</code>; then only a folder equal to the current one is
+normalized. An option whose value names a file, such as a manifest, sets
+<code>value: file</code> and lists the default names in <code>files</code> (<code>files: [Cargo.toml]</code>);
+a value naming any other file leaves the command as written. Other fields set
+the value forms, position and how repeats combine:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Values and default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>forms</code></td>
+<td><code>separate</code>, <code>equals</code>, <code>attached</code>; long options default to separate/equals, short options to separate/attached. Attached values require a single-letter short option.</td>
+</tr>
+<tr>
+<td><code>position</code></td>
+<td><code>leading</code> (default) or <code>anywhere</code> before <code>--</code>.</td>
+</tr>
+<tr>
+<td><code>value</code></td>
+<td><code>directory</code> (default) or <code>file</code>; file values require <code>files</code>.</td>
+</tr>
+<tr>
+<td><code>repeat</code></td>
+<td><code>refuse</code> (default), <code>last</code>, or <code>chain</code> to resolve each relative value against the previous one.</td>
+</tr>
+<tr>
+<td><code>paths</code></td>
+<td>Required: <code>follow</code> or <code>unchanged</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>A rule written for the command as typed keeps deciding it. Values with
+<code>~</code>, <code>$</code> or backquotes left after shell analysis, missing values and undeclared
+forms leave the command as written.</p>
+<p>Unknown keys, source nulls, duplicate keys, and unsupported schemas are rejected.
+See the <a href="/shield/docs/rule-reference/">rule reference</a> for fields and capabilities.
+Policy comparisons outside the finite literal model report incomplete.</p>
+<h2 id="pack-variables-preconditions-and-templates">Pack variables, preconditions and templates</h2>
+<p>A pack can declare typed <code>variables</code> that each project sets for its own
+selection, such as a package manager or a cloud profile. A rule or precondition
+uses <code>{var: NAME}</code> wherever a text selector is accepted, and <code>when</code> tests switch
+entries on for particular values. Shield fills in values when it prepares the
+policy, so hooks evaluate ordinary literal rules. An entry that refers to a
+variable without a value is inactive: unset means no check.</p>
+<p><code>preconditions</code> gate the whole pack. When a precondition’s conditions match and
+none of its <code>requires_any</code> objects holds, the pack answers with its <code>on_unmet</code>
+Ask or Deny, even if a more specific pack rule would allow the request. When one
+object holds, the pack’s ordinary rules decide as usual. A precondition never
+allows anything. In packs that declare <code>templates-v1</code>, reasons, guidance and
+<code>on_unmet</code> text can include <code>{{NAME}}</code>, which is replaced by the value.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">capabilities</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">structured-rules-v1</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">argument-rules-v1</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">variables-v1</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">preconditions-v1</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">templates-v1</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">variables</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  package_manager</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    type</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">choice</span></span>
+<span class="line"><span style="color:#85E89D">    description</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Package manager agents use</span></span>
+<span class="line"><span style="color:#85E89D">    values</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">npm</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">pnpm</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">yarn</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    suggest</span><span style="color:#E1E4E8">: [{</span><span style="color:#85E89D">file</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pnpm-lock.yaml</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">value</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pnpm</span><span style="color:#E1E4E8">}]</span></span>
+<span class="line"><span style="color:#85E89D">preconditions</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">package-manager</span></span>
+<span class="line"><span style="color:#85E89D">    conditions</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">argv</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">executable</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">one_of</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">npm</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">pnpm</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">yarn</span><span style="color:#E1E4E8">]}, </span><span style="color:#85E89D">arguments</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">any</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#85E89D">    requires_any</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">executable</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">var</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">package_manager</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">    on_unmet</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">deny</span></span>
+<span class="line"><span style="color:#85E89D">      message</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">This project uses {{package_manager}}.</span></span>
+<span class="line"><span style="color:#85E89D">rules</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">npx-with-pnpm</span></span>
+<span class="line"><span style="color:#85E89D">    when</span><span style="color:#E1E4E8">: [{</span><span style="color:#85E89D">var</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">package_manager</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">equals</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pnpm</span><span style="color:#E1E4E8">}]</span></span>
+<span class="line"><span style="color:#85E89D">    conditions</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">argv</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">executable</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">npx</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">arguments</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">any</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#85E89D">    decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">deny</span></span></code></pre>
+<p>Variable types are <code>choice</code>, <code>string</code>, <code>list</code>, <code>boolean</code> and <code>path</code>. Use <code>choice</code>
+with <code>values</code> for a fixed selection, <code>string</code> for text, <code>list</code> for several text
+values, <code>boolean</code> for conditional activation, and <code>path</code> for a location.
+Each declaration includes a <code>description</code>; <code>required</code> and <code>default</code> control
+whether the project must supply a value. See
+<a href="/shield/docs/local-registry/#pack-variables-and-rule-overrides">pack configuration</a> for
+setting values without editing the pack.</p>
+<p>Variables are also the pack’s setup flow: <code>shield pack add</code> asks one question per
+variable in the order the pack declares them. An optional <code>setup</code> object words
+the question. <code>question</code> replaces the description as the question text,
+<code>unset</code> labels the answer that leaves an optional variable unset, and <code>value</code>
+and <code>placeholder</code> label the typed row of a string, path or free-text list.
+<code>ask_when</code> takes <code>when</code> tests on variables declared earlier and asks only when
+they hold:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">variables</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  profile</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    type</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">string</span></span>
+<span class="line"><span style="color:#85E89D">    description</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Read-only profile agents must use</span></span>
+<span class="line"><span style="color:#85E89D">    layer</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">local</span></span>
+<span class="line"><span style="color:#85E89D">    setup</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      question</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Allow log filtering only with a specific profile?</span></span>
+<span class="line"><span style="color:#85E89D">      unset</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Any profile (no check)</span></span>
+<span class="line"><span style="color:#85E89D">      value</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Only this profile</span></span>
+<span class="line"><span style="color:#85E89D">      placeholder</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">acme-read-only</span></span>
+<span class="line"><span style="color:#85E89D">  region</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    type</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">string</span></span>
+<span class="line"><span style="color:#85E89D">    description</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Region agents must use with that profile</span></span>
+<span class="line"><span style="color:#85E89D">    setup</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      unset</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Any region</span></span>
+<span class="line"><span style="color:#85E89D">      value</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Only this region</span></span>
+<span class="line"><span style="color:#85E89D">      ask_when</span><span style="color:#E1E4E8">: [{</span><span style="color:#85E89D">var</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">profile</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">set</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">}]</span></span></code></pre>
+<p>A skipped question keeps the variable’s current value. A required variable
+without a default cannot use <code>unset</code> or <code>ask_when</code>.</p>
+<h3 id="optional-checks">Optional checks</h3>
+<p>A <code>{var}</code> reference turns its whole entry off while the variable is unset. To
+keep the rule and drop only one check instead, an option grammar accepts two
+forms:</p>
+<ul>
+<li><code>match: {var: NAME, unset: any}</code> on a valued option accepts any value while
+<code>NAME</code> is unset, and only the bound value once it is set.</li>
+<li>An item of <code>require_all</code>, <code>require_any</code> or <code>forbid</code> can be
+<code>{name: OPTION, when: [TESTS]}</code>; the option is listed only while the tests hold.</li>
+</ul>
+<p>With these, one rule allows <code>aws logs filter-log-events</code> with any profile and
+region until the project sets them, then requires each value that is set:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">logs-filter</span></span>
+<span class="line"><span style="color:#85E89D">    decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span>
+<span class="line"><span style="color:#85E89D">    agents</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      codex</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        prefixes</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">          - [</span><span style="color:#9ECBFF">aws</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">logs</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">filter-log-events</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">    conditions</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">argv</span></span>
+<span class="line"><span style="color:#85E89D">      executable</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">aws</span></span>
+<span class="line"><span style="color:#85E89D">      arguments</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">options</span></span>
+<span class="line"><span style="color:#85E89D">        leading</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">flags</span><span style="color:#E1E4E8">: [], </span><span style="color:#85E89D">values</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--profile</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--region</span><span style="color:#E1E4E8">]}</span></span>
+<span class="line"><span style="color:#85E89D">        prefix</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">logs</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">filter-log-events</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        flags</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">        values</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">--profile</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--region</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--log-group-name</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">--filter-pattern</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        operands</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span></span>
+<span class="line"><span style="color:#85E89D">    requirements</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      arguments</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">options</span></span>
+<span class="line"><span style="color:#85E89D">        leading</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          flags</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">          values</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">            - {</span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">--profile</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">match</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">var</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">profile</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">unset</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">any</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#E1E4E8">            - {</span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">--region</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">match</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">var</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">region</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">unset</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">any</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#85E89D">        prefix</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">logs</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">filter-log-events</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">        flags</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">        values</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">          - {</span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">--profile</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">match</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">var</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">profile</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">unset</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">any</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#E1E4E8">          - {</span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">--region</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">match</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">var</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">region</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">unset</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">any</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#E1E4E8">          - </span><span style="color:#9ECBFF">--log-group-name</span></span>
+<span class="line"><span style="color:#E1E4E8">          - </span><span style="color:#9ECBFF">--filter-pattern</span></span>
+<span class="line"><span style="color:#85E89D">        operands</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span></span>
+<span class="line"><span style="color:#85E89D">        require_all</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">          - {</span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">--profile</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">when</span><span style="color:#E1E4E8">: [{</span><span style="color:#85E89D">var</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">profile</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">set</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">}]}</span></span>
+<span class="line"><span style="color:#E1E4E8">          - {</span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">--region</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">when</span><span style="color:#E1E4E8">: [{</span><span style="color:#85E89D">var</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">region</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">set</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">}]}</span></span>
+<span class="line"><span style="color:#85E89D">    on_unmet</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">deny</span></span></code></pre>
+<p>The rule has no <code>message</code>, because a template naming an unset variable would
+turn the rule off. Agents are told what failed instead, for example
+<code>--profile must be acme-read-only.</code> or <code>Missing required option: --profile.</code></p>
+<p>Shield checks a pack’s rules with every conditional item listed, whatever its
+<code>when</code> tests. An option that one item requires and another forbids is refused
+even when their tests can never hold together.</p>
+<h3 id="codex-prefix-rules">Codex prefix rules</h3>
+<p><code>agents.codex.prefixes</code>, which needs the <code>agent-outputs-v1</code> capability, lists
+the command prefixes Codex may run outside its sandbox. That matters for
+commands such as <code>aws</code> that need the network. While the rule is active and
+allows, Shield writes each prefix to <code>.codex/rules/shield.rules</code>. A position can
+list alternatives:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">    agents</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      codex</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        prefixes</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">          - [</span><span style="color:#9ECBFF">aws</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">logs</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">filter-log-events</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">          - [</span><span style="color:#9ECBFF">aws</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">logs</span><span style="color:#E1E4E8">, [</span><span style="color:#9ECBFF">tail</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">get-log-events</span><span style="color:#E1E4E8">]]</span></span></code></pre>
+<p>Each prefix must start with the rule’s own executable and argument prefix, and
+may add tokens after it. A rule matching <code>aws logs</code> can list
+<code>[aws, logs, tail]</code> but not <code>[aws]</code> or <code>[aws, s3]</code>. The rule’s executable and
+argument prefix must be literals or a <code>one_of</code> of literals.</p>
+<p>Shield’s hooks still decide every command. When policy asks about a command
+whose every part matches one of these prefixes, such as
+<code>aws logs tail --follow</code>, the hook blocks it even under the Allow fallback,
+because Codex would otherwise run it without asking. A command behind a wrapper
+such as <code>env</code> or inside <code>bash -c</code> keeps Codex’s sandbox and follows the
+fallback. Turning the rule off, changing its
+decision or failing its <code>when</code> removes the prefix at the next activation.
+See <a href="/shield/docs/claude-project/">project setup</a> for when the file is written.
+<code>shield rule list --json</code> reports, for each entry that depends on variables or is
+overridden, the values it used and the resolved rule, or why it is inactive.
+Project custom rules do not accept variables, <code>when</code> or templates.</p>
+<h2 id="share-rule-bodies-in-a-pack">Share rule bodies in a pack</h2>
+<p>Packs can share one rule body across commands. Project custom rules use
+independent rules.</p>
+<p>Declare <code>invocations</code> and <code>command_sets</code> on the pack, then reference them from
+a rule. They require <code>invocation-groups-v1</code> and <code>command-sets-v1</code> respectively.
+This pack fragment shares an inspection body between two commands and two
+leading argument forms:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">invocations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  globals</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">id_prefix</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">v</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">segments</span><span style="color:#E1E4E8">: [[[], [</span><span style="color:#9ECBFF">--plain</span><span style="color:#E1E4E8">]]]}</span></span>
+<span class="line"><span style="color:#85E89D">command_sets</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  inspection</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">status</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">base-status</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">diff</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">base-diff</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">rules</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">inspection</span></span>
+<span class="line"><span style="color:#85E89D">    invocation</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">globals</span></span>
+<span class="line"><span style="color:#85E89D">    command_set</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">inspection</span></span>
+<span class="line"><span style="color:#85E89D">    conditions</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">domain</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">argv</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">executable</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">acme</span><span style="color:#E1E4E8">, </span><span style="color:#85E89D">arguments</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">any</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#85E89D">    decision</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">allow</span></span></code></pre>
+<p>The <code>acme --plain status</code> match has ID <code>v1-base-status</code>. Requirements inspect the
+complete original argv. Groups declare finite exact vectors; they do not guess
+global options or strip unknown arguments. Each command set belongs to one rule
+body. <code>shield rule list --json</code> includes shared definitions alongside canonical bodies;
+an exact matched <code>rule_ref</code> returns its complete argument condition. Human pack
+summaries count stored bodies, invocation groups and command members separately.</p>
+<h2 id="next-steps">Next steps</h2>
+<p>Use the <a href="/shield/docs/rule-reference/">rule reference</a> for field lookup,
+<a href="/shield/docs/pack-validation/">pack validation</a> to check candidate documents, and
+<a href="/shield/docs/project-mcp/#rule-suggestions">Project MCP</a> to prepare a change with an agent.
+If a rule behaves unexpectedly, inspect the actual request with the
+<a href="/shield/docs/troubleshooting/#the-request-was-allowed-or-blocked-unexpectedly">troubleshooting guide</a>.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/shield/docs/policy-rules.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/shield/docs/troubleshooting/"><span>← Previous</span><strong>Troubleshoot Shield</strong></a><a href="/shield/docs/rule-reference/"><span>Next →</span><strong>Rule reference</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#your-first-rule">Your first rule</a><a href="#choose-the-right-matching-style">Choose the right matching style</a><a href="#match-commands-and-enforce-requirements">Match commands and enforce requirements</a><a href="#require-a-particular-option-value" class="docs-toc-sub">Require a particular option value</a><a href="#conditions-versus-requirements" class="docs-toc-sub">Conditions versus requirements</a><a href="#match-text-and-arguments">Match text and arguments</a><a href="#example-permit-a-project-test-script-and-its-watch-option" class="docs-toc-sub">Example: permit a project test script and its watch option</a><a href="#restrict-paths">Restrict paths</a><a href="#check-paths-in-command-arguments" class="docs-toc-sub">Check paths in command arguments</a><a href="#search-files-with-grep-and-ripgrep" class="docs-toc-sub">Search files with grep and ripgrep</a><a href="#read-and-transform-file-content" class="docs-toc-sub">Read and transform file content</a><a href="#create-directories-and-files" class="docs-toc-sub">Create directories and files</a><a href="#understand-wrappers-and-shell-commands">Understand wrappers and shell commands</a><a href="#allow-searches-and-documentation-fetches">Allow searches and documentation fetches</a><a href="#directory-options">Directory options</a><a href="#pack-variables-preconditions-and-templates">Pack variables, preconditions and templates</a><a href="#optional-checks" class="docs-toc-sub">Optional checks</a><a href="#codex-prefix-rules" class="docs-toc-sub">Codex prefix rules</a><a href="#share-rule-bodies-in-a-pack">Share rule bodies in a pack</a><a href="#next-steps">Next steps</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

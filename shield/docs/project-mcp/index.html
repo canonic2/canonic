@@ -1,0 +1,516 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Use Shield from an agent (MCP) · Shield docs · Canonic</title><meta name="description" content="MCP lets an agent inspect Shield policy, explain decisions, read guides, and propose changes. You approve changes through the host or terminal. Native hooks check ordinary tool req"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Shield"><div class="wrap"><span class="sub-name">Shield</span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/shield/">Overview</a><a href="/shield/docs/" aria-current="page">Docs</a><a href="/shield/#install">Install</a><a href="https://github.com/canonic2/canonic/tree/main/packages/shield" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/shield/#install">Build from source</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/shield/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Get started</h2><a href="/shield/docs/" data-doc-id="index">Shield documentation</a><a href="/shield/docs/introduction/" data-doc-id="introduction">What is Shield?</a><a href="/shield/docs/getting-started/" data-doc-id="getting-started">Your first Shield project</a><a href="/shield/docs/policy-decisions/" data-doc-id="policy-decisions">Understand policy decisions</a><a href="/shield/docs/operator-experience/" data-doc-id="operator-experience">Shield in the terminal</a></div><div class="docs-group"><h2>Work with your project</h2><a href="/shield/docs/project-review/" data-doc-id="project-review">Project policy, approvals and history</a><a href="/shield/docs/local-registry/" data-doc-id="local-registry">Registry sources and packs</a><a href="/shield/docs/claude-project/" data-doc-id="claude-project">Connect Claude Code and Codex</a><a href="/shield/docs/mcp-connections/" data-doc-id="mcp-connections">Configure project MCP servers</a><a href="/shield/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshoot Shield</a></div><div class="docs-group"><h2>Write rules</h2><a href="/shield/docs/policy-rules/" data-doc-id="policy-rules">Writing policy rules</a><a href="/shield/docs/rule-reference/" data-doc-id="rule-reference">Rule reference</a><a href="/shield/docs/pack-validation/" data-doc-id="pack-validation">Validating permission packs</a></div><div class="docs-group"><h2>Integrate Shield</h2><a href="/shield/docs/project-mcp/" data-doc-id="project-mcp" aria-current="page">Use Shield from an agent (MCP)</a><a href="/shield/docs/claude-read-only/" data-doc-id="claude-read-only">Claude Agent SDK read-only integration</a><a href="/shield/docs/native-run/" data-doc-id="native-run">Bounded native execution</a><a href="/shield/docs/enforcement-handoff/" data-doc-id="enforcement-handoff">Embedded enforcement handoff</a></div><div class="docs-group"><h2>Recovery and development</h2><a href="/shield/docs/runtime-activation/" data-doc-id="runtime-activation">Active policy and repair</a><a href="/shield/docs/compiled-cache/" data-doc-id="compiled-cache">Compiled policy cache</a><a href="/shield/docs/development/" data-doc-id="development">Developing Shield</a></div></nav><a class="docs-install" href="/shield/#install">Get Shield <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/shield/docs/">Shield docs</a><span aria-hidden="true">/</span><span>Integrate Shield</span></div><div class="docs-prose"><h1 id="use-shield-from-an-agent-mcp">Use Shield from an agent (MCP)</h1>
+<p>MCP lets an agent inspect Shield policy, explain decisions, read guides, and
+propose changes. You approve changes through the host or terminal. Native hooks
+check ordinary tool requests separately; MCP alone does not install enforcement.</p>
+<p>For third-party servers and pack-contributed MCP permissions, see
+<a href="/shield/docs/mcp-connections/">project MCP connections</a>.</p>
+<h2 id="start-with-a-task">Start with a task</h2>
+<table>
+<thead>
+<tr>
+<th>You want to…</th>
+<th>Start here</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Check the active policy and setup</td>
+<td><code>status</code>, then <code>doctor</code> if needed.</td>
+</tr>
+<tr>
+<td>Find a suitable pack</td>
+<td><code>pack_search</code>, then <code>pack_info</code> to inspect a result.</td>
+</tr>
+<tr>
+<td>Understand an existing rule</td>
+<td><code>rule_list</code> with its owner-qualified reference.</td>
+</tr>
+<tr>
+<td>Learn to write a rule</td>
+<td><a href="#reading-shields-documentation">Read the bundled guides</a>.</td>
+</tr>
+<tr>
+<td>Change policy</td>
+<td><a href="#proposals-and-operator-review">Propose and review a change</a>.</td>
+</tr>
+<tr>
+<td>Evaluate a hypothetical request</td>
+<td><a href="#diagnostic-input-and-snapshots">Use diagnostic input</a>; this does not execute it.</td>
+</tr>
+</tbody>
+</table>
+<p>For a pack walkthrough, see <a href="#reviewing-an-available-pack">reviewing an available pack</a>.</p>
+<h2 id="connect-the-server">Connect the server</h2>
+<p>Register MCP together with native hooks through the operator CLI. Run
+<code>shield init</code> in your project, then add your chosen agent if you did not select
+it during initialization:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">shield</span><span style="color:#9ECBFF"> mcp</span><span style="color:#9ECBFF"> setup</span><span style="color:#79B8FF"> --agent</span><span style="color:#9ECBFF"> claude</span></span></code></pre>
+<p>Use <code>shield mcp setup --agent codex</code> for Codex. Restart and trust the agent as described in
+<a href="/shield/docs/getting-started/#2-load-the-agent-integration">your first project</a>. The
+server uses that project’s confirmed active policy. You do not need to start
+it manually when using these registrations.</p>
+<p>For client implementation, see <a href="#responses-and-transport-lifetime">transport details</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Tools</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Status</td>
+<td><code>status</code>, <code>doctor</code></td>
+</tr>
+<tr>
+<td>Packs and registries</td>
+<td><code>pack_list</code>, <code>registry_list</code>, <code>pack_search</code>, <code>pack_info</code></td>
+</tr>
+<tr>
+<td>Policy and rules</td>
+<td><code>policy_show</code>, <code>rule_list</code>, <code>suggestion_list</code>, <code>review_defer</code>, <code>policy_propose</code>, <code>policy_apply</code>, <code>policy_withdraw</code>, <code>policy_receipt</code></td>
+</tr>
+<tr>
+<td>Approvals and history</td>
+<td><code>request_list</code>, <code>history_list</code></td>
+</tr>
+<tr>
+<td>Diagnostics</td>
+<td><code>policy_evaluate</code>, <code>policy_compare</code></td>
+</tr>
+<tr>
+<td>Documentation</td>
+<td><code>shield_docs_list</code>, <code>shield_docs_search</code>, <code>shield_docs_read</code></td>
+</tr>
+</tbody>
+</table>
+<p>Packs, rules, policy, approvals and history support list/show through optional
+selectors (<code>reference</code>, <code>rule_ref</code>, <code>proposal_id</code>, <code>request_id</code>, <code>entry_id</code>). A
+selector cannot coexist with filters or paging. Lists accept a limit of 1–100
+(default 50) and an opaque cursor bound to that connection and unchanged query.
+To continue, copy <code>next_cursor</code> into <code>cursor</code> on the same tool and connection,
+preserving all other arguments, including the limit and omitted fields. If the
+cursor is unavailable, restart the list without <code>cursor</code>.
+Retained cursor results remain stable while project data changes. Rules use
+owner-qualified references: custom rule ID, or installed pack selector plus rule ID.
+History returns joined request entries; configuration proposals and diagnostics
+create no request entries or action requests.</p>
+<h2 id="reading-shields-documentation">Reading Shield’s documentation</h2>
+<p>The executable bundles every Markdown page under Shield’s <code>docs/</code> directory at
+build time, including nested pages. The bundle is compressed and decoded in
+memory by Shield; no external decompressor is needed. These tools work offline
+and return the binary’s version; they do not read project files or fetch online documentation.
+Page paths are relative to that directory, such as <code>policy-rules.md</code>.</p>
+<p>Fresh integrations approve the documentation tools without asking by default.
+Existing integrations keep their saved tool approvals. After installing a build
+with additional tools, rerun <code>shield mcp setup --agent codex</code> or <code>shield mcp setup --agent claude</code> and
+mark the documentation tools on the Tool permissions page, then restart the
+agent session. Rerunning setup preserves saved selections until you change them.</p>
+<ul>
+<li><code>shield_docs_list</code>: list page paths, titles and line counts. Optional <code>offset</code>
+starts at zero; <code>limit</code> is 1–100, default 50. Continue with <code>next_offset</code>.</li>
+<li><code>shield_docs_search</code>: find case-insensitive literal <code>query</code> text in the guides.
+Surrounding spaces are significant; whitespace-only queries are invalid.
+Optional <code>path</code> selects one listed page. Results contain <code>path</code>, one-based
+<code>line</code> and matching <code>text</code>, in path and line order. Use <code>offset</code> and <code>limit</code>
+as for listing; continue with <code>next_offset</code> and the same query and path.</li>
+<li><code>shield_docs_read</code>: read a listed <code>path</code>, optionally starting at <code>start_line</code>
+(one-based, default 1). <code>limit</code> is 1–400 lines, default 100. The result includes
+<code>content</code>, <code>total_lines</code> and <code>next_start_line</code> for continuation.</li>
+</ul>
+<p>An unknown page returns <code>not_found</code> and directs the agent to <code>shield_docs_list</code>;
+these are catalog paths, not filesystem paths. Searches with no matches return
+an empty list, and a read past the last line returns empty content. Pagination
+is stable for the lifetime of the installed binary.</p>
+<p>Before drafting a reusable command rule, search for the relevant matching
+grammar and read its explanation and examples. Inspect the current rules with
+<code>rule_list</code> so reviewed variants can extend an existing custom rule.</p>
+<h3 id="example-find-the-argument-matching-guide">Example: find the argument-matching guide</h3>
+<p>Call <code>shield_docs_search</code> with these arguments:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span><span style="color:#79B8FF">"query"</span><span style="color:#E1E4E8">:</span><span style="color:#9ECBFF">"operands"</span><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>The result includes matching page paths, line numbers, and text. Choose a
+relevant match in <code>policy-rules.md</code>. To read that guide from its beginning,
+call <code>shield_docs_read</code> with:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span><span style="color:#79B8FF">"path"</span><span style="color:#E1E4E8">:</span><span style="color:#9ECBFF">"policy-rules.md"</span><span style="color:#E1E4E8">,</span><span style="color:#79B8FF">"start_line"</span><span style="color:#E1E4E8">:</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">,</span><span style="color:#79B8FF">"limit"</span><span style="color:#E1E4E8">:</span><span style="color:#79B8FF">100</span><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>The result’s <code>content</code> contains Markdown. If <code>next_start_line</code> is present and
+non-null, use that number as the next <code>start_line</code> to continue reading. To jump
+to a search result instead, use its returned <code>line</code> as <code>start_line</code>; do not
+assume that line numbers are the same in another installed build.</p>
+<p>For a new reader, read <code>introduction.md</code> or <code>README.md</code> first. These tools
+expose the same public guides used by people configuring Shield.</p>
+<h2 id="reviewing-an-available-pack">Reviewing an available pack</h2>
+<p>Call <code>pack_info</code> with a <code>reference</code> for a compact summary: the selected release
+and provenance, description, rule count, declared outcomes for each profile,
+permission groups, variables, preconditions and dependencies. Repeated command
+variants share an explanation and count. These are declared rule outcomes;
+conditions, requirements, configuration and other active policy still apply.
+The summary contains no full rule bodies and stays within 16 KiB. Large summaries
+identify omitted sections in <code>missing</code> and set <code>truncated</code>.</p>
+<p>For exact evidence, use the same tool with <code>rule_id</code>, or set <code>view</code> to <code>rules</code>
+and optionally <code>query</code> to filter rule IDs and reasons. Rule listings default to
+10 entries per page; <code>limit</code> accepts 1–100. Continue with <code>next_cursor</code> and the
+same reference, view, query and limit. Cursor pages retain the acquired evidence
+even if the registry changes. A <code>rule_id</code> cannot coexist with view, filters or
+paging. Summaries do not accept filters or paging.
+Use <code>view: "settings"</code> for complete variable definitions, preconditions and
+dependencies, including sections omitted from a large summary. This view also
+does not accept filters or paging.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span><span style="color:#79B8FF">"reference"</span><span style="color:#E1E4E8">:</span><span style="color:#9ECBFF">"main/canonic/node"</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">{</span><span style="color:#79B8FF">"reference"</span><span style="color:#E1E4E8">:</span><span style="color:#9ECBFF">"main/canonic/node"</span><span style="color:#E1E4E8">,</span><span style="color:#79B8FF">"view"</span><span style="color:#E1E4E8">:</span><span style="color:#9ECBFF">"rules"</span><span style="color:#E1E4E8">,</span><span style="color:#79B8FF">"query"</span><span style="color:#E1E4E8">:</span><span style="color:#9ECBFF">"install"</span><span style="color:#E1E4E8">,</span><span style="color:#79B8FF">"limit"</span><span style="color:#E1E4E8">:</span><span style="color:#79B8FF">5</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">{</span><span style="color:#79B8FF">"reference"</span><span style="color:#E1E4E8">:</span><span style="color:#9ECBFF">"main/canonic/node"</span><span style="color:#E1E4E8">,</span><span style="color:#79B8FF">"rule_id"</span><span style="color:#E1E4E8">:</span><span style="color:#9ECBFF">"npm-install"</span><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Review through these tools directly; exporting the complete pack to a file or
+processing it with shell tools is unnecessary. Inspection and proposal preparation
+need no policy approval. Explain the relevant permissions, propose the change,
+then submit its exact <code>apply_arguments</code> to <code>policy_apply</code> for the user’s
+approval. Declining leaves the active policy unchanged.</p>
+<h3 id="example-propose-a-pack-installation">Example: propose a pack installation</h3>
+<p>After searching and inspecting a pack, call <code>policy_propose</code> with the
+following shape. Replace <code>PACK_REFERENCE</code> with the exact reference you reviewed:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#79B8FF">  "change"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">    "kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"pack_add"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">    "reference"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"PACK_REFERENCE"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">    "profile"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"recommended"</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#79B8FF">  "reason"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"Use the reviewed Recommended permissions for this project's tool."</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>The response includes the proposal ID and <code>apply_arguments</code>; policy is unchanged.
+Explain the scope, then copy <code>apply_arguments</code> unchanged into <code>policy_apply</code>.
+Wait for the host approval and result. A successful application returns a receipt;
+declined or unavailable approval leaves the proposal inactive. A stale proposal
+needs fresh preparation. See the <a href="#proposals-and-operator-review">review reference</a>.</p>
+<h2 id="proposals-and-operator-review">Proposals and operator review</h2>
+<p><code>policy_propose</code> accepts one tagged <code>change</code> or a <code>changes</code> array of
+1–16 changes. A batch applies in order to one candidate; approval activates all
+changes together or none. Optional fields include a reason, history and
+supersession links, and an ASCII <code>idempotency_key</code> of 1–128 characters.</p>
+<table>
+<thead>
+<tr>
+<th>Change</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rule_add</code>, <code>rule_edit</code>, <code>rule_remove</code></td>
+<td>Add, replace, or remove a custom rule.</td>
+</tr>
+<tr>
+<td><code>pack_add</code>, <code>pack_update</code>, <code>pack_remove</code></td>
+<td>Install, update, or remove a pack and its dependencies.</td>
+</tr>
+<tr>
+<td><code>pack_configure</code></td>
+<td>Set variables or rule overrides on an installed pack.</td>
+</tr>
+<tr>
+<td><code>access_path_add</code>, <code>access_path_remove</code></td>
+<td>Add or remove one absolute read/write directory.</td>
+</tr>
+</tbody>
+</table>
+<p>Every change except <code>pack_update</code> and <code>pack_remove</code> accepts <code>layer: project</code>
+(default) or <code>local</code> for uncommitted local configuration. Rules use the project
+condition schema.</p>
+<p><code>pack_configure</code> requires an installed <code>reference</code> and at least one of <code>set</code>,
+<code>unset</code>, <code>override</code>, or <code>clear_override</code>. Overrides map rule IDs to <code>off</code>,
+<code>allow</code>, <code>ask</code>, <code>deny</code>, or <code>{on_unmet}</code>.</p>
+<p>Pack proposals use CLI resolution and verified acquisition. They require enrolled
+sources and capture the full compatible dependency set for offline confirmation.
+Pins and explicit profiles are preserved. Removal prunes unused dependencies;
+a required pack returns <code>dependency_required</code> with its dependents. Packs cannot
+enroll sources or change trust keys. See
+<a href="/shield/docs/local-registry/#updating-and-removing-dependency-packs">registry workflows</a>.</p>
+<h3 id="apply-the-reviewed-proposal">Apply the reviewed proposal</h3>
+<p>Copy the returned <code>apply_arguments</code> object unchanged into <code>policy_apply</code>.
+Shield compares the complete object with the saved proposal; editing its text
+or reference cannot authorize another change. To recover from a mismatch,
+inspect <code>policy_show</code> with <code>proposal_id</code> and copy its <code>apply_arguments</code>.</p>
+<p>Claude receives the proposal ID, digest, change list, and review summary.
+Codex receives readable <code>change</code>, optional <code>details</code>, and a short <code>reference</code>.
+Detailed evidence remains available through proposal inspection.</p>
+<p>The host confirmation describes pack/profile, rule, setting, or folder changes.
+It shows permissions and comparison limits, including before/after matching
+scope and removed restrictions. Supplied rule names are labeled as such;
+shortened or omitted constraints are identified.</p>
+<table>
+<thead>
+<tr>
+<th>Host</th>
+<th>Approval</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Claude</td>
+<td>An MCP confirmation form. Accept applies the proposal; decline, cancel, disconnect, or timeout leaves it pending.</td>
+</tr>
+<tr>
+<td>Codex</td>
+<td>The per-call tool prompt. Allow applies; Cancel leaves it pending. <code>never</code> approval policy cannot run apply.</td>
+</tr>
+<tr>
+<td>Other or unrecognized host</td>
+<td>Review and activate with <code>shield policy review</code> in a terminal.</td>
+</tr>
+</tbody>
+</table>
+<p>Claude’s form works in <code>default</code>, <code>auto</code>, and <code>bypassPermissions</code> modes and
+requires its own Accept response, independently of ordinary tool approval.
+The client must advertise form elicitation or apply returns
+<code>approval_unavailable</code>. Only one form can be open per connection, with a
+five-minute response deadline. It waits outside the worker so other calls can
+finish. Codex controls its prompt’s heading, buttons, and field rendering.</p>
+<p>Shield rechecks arguments and current policy before committing. Stale or changed
+candidates need a fresh proposal and approval. Success returns a receipt;
+repeating an applied proposal returns that receipt. Terminal review through
+<code>shield policy review</code> is also available.</p>
+<p>Inspection and proposal preparation run without prompts by default; setup
+preserves any tool-permission choices you changed. Native hook messages keep
+proposal payloads separate from their user-facing explanation.</p>
+<h3 id="replay-and-withdrawal">Replay and withdrawal</h3>
+<p>Without an idempotency key, identical arguments return the same proposal;
+changed arguments create another. With a key, the same input returns the saved
+identity and candidate even after state changes; changed input is refused.
+A mapped host session permits reconnect replay. Otherwise the key is
+connection-scoped.</p>
+<p>If <code>policy_propose</code> reports a deadline error, its inactive proposal may
+already be saved. Retry the identical arguments on the same connection to
+recover the proposal and its approval arguments, or inspect pending proposals
+with <code>policy_show</code>. A timeout does not establish that the proposal was absent
+or that policy changed. Report an unresolved failure instead of silently
+dropping the offer.</p>
+<p>Only the original registered proposer can withdraw a proposal. Repeating an
+owned withdrawal makes no further change. Unrecognized hosts can inspect and
+propose, but advertising form support does not grant activation authority or
+install native hooks.</p>
+<h2 id="rule-suggestions">Rule suggestions</h2>
+<p>After completing a task, call <code>suggestion_list</code> with the hook-reported
+<code>session_id</code>. It lists recorded policy Ask requests since the last activation,
+including the reason, count, any pack request for a project rule, and observed
+<code>request.executable</code>, <code>arguments</code>, and optional <code>cwd</code>. Each command in a
+compound request appears separately. Command rows supply evidence, not rule drafts.</p>
+<p>Check <code>coverage</code> before treating the list as complete. Disabled, unavailable,
+evicted or scan-limited history can leave missing evidence. Partial command
+analysis appears as <code>review_status: unsupported</code>, with a history-inspection
+<code>next_action</code>; it does not produce an inferred argv or rule draft. Lists default
+to 16 rows. Copy <code>next_cursor</code> into <code>cursor</code> with the same <code>session_id</code> and
+<code>limit</code> to continue the same view.</p>
+<p><code>times_asked</code> counts recorded decisions, not user approvals. The separate
+<code>intentional_invocations</code> count excludes duplicate tool identities and explicit
+sandbox escalation retries. Missing identity makes recurrence unknown and keeps
+<code>eligible_for_offer</code> false. Offer one grouped custom-rule review when a group
+has two intentional invocations, or when the user explicitly asks for reusable
+permission. Finish already-authorized work first. Unique pack offers follow
+their own once-per-conversation instruction.</p>
+<p>Each row includes a stable <code>review_id</code>, <code>next_action</code> and <code>review_status</code>.
+Structured results also include complete canonical <code>authoring_examples</code> and
+host-specific <code>approval_guidance</code>, so an ordinary review does not need a docs
+search. Inspect effects and relevant existing rules before adapting an example.
+Copy <code>next_action.proposal_context</code> (<code>source_entry_id</code> and <code>review_ids</code>) into the
+proposal alongside its canonical <code>change</code> or <code>changes</code>. A linked pending offer
+returns its proposal-inspection route instead of another automatic offer.</p>
+<p>To defer an unchanged review, call <code>review_defer</code> with its <code>session_id</code>
+and an array of current <code>review_ids</code>. Deferral survives reconnect and history
+clearing; it changes no policy or approval. Storage holds at most 1,024 deferred
+IDs and returns a capacity error rather than silently forgetting a choice.
+Declined or cancelled approval must not be retried without a new user request.</p>
+<p>Recognized read-only curl/wget downloads instead include a web-fetch
+<code>suggested_change</code>, grouped by site. Local-server suggestions cover
+<code>localhost</code>, <code>127.0.0.1</code>, and <code>[::1]</code> on any port. Activation clears the list.</p>
+<h3 id="draft-reusable-rules">Draft reusable rules</h3>
+<p>Offer rules for recurring tasks, skipping one-off lookups such as help output.
+Start from <code>authoring_examples</code> or the complete examples in
+<code>policy_propose</code>’s <code>inputSchema</code>.
+The schema describes argument and path predicates at their definitions. Use
+<code>shield_docs_search</code> and <code>shield_docs_read</code> for additional grammar details.
+Inspect scripts, lifecycle hooks, and option effects before proposing. Group
+reviewed variants in one rule, and inspect <code>rule_list</code> before adding a
+duplicate. If effects are unknown, investigate or skip the offer.</p>
+<p>For example, after reviewing <code>dev</code>, <code>predev</code>, <code>postdev</code> and the code they execute,
+adapt this complete <code>policy_propose</code> call to allow only <code>npm run dev</code>
+from the project root, with no extra arguments:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#79B8FF">  "change"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">    "kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"rule_add"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">    "rule"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">      "id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"allow-reviewed-dev"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "decision"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"allow"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "conditions"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">        "domain"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"argv"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "executable"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"npm"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "arguments"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">          "kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"options"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">          "prefix"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"run"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"dev"</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#79B8FF">          "flags"</span><span style="color:#E1E4E8">: [],</span></span>
+<span class="line"><span style="color:#79B8FF">          "values"</span><span style="color:#E1E4E8">: [],</span></span>
+<span class="line"><span style="color:#79B8FF">          "operands"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span></span>
+<span class="line"><span style="color:#E1E4E8">        },</span></span>
+<span class="line"><span style="color:#79B8FF">        "cwd"</span><span style="color:#E1E4E8">: {</span><span style="color:#79B8FF">"exact"</span><span style="color:#E1E4E8">: {</span><span style="color:#79B8FF">"root"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"project"</span><span style="color:#E1E4E8">}}</span></span>
+<span class="line"><span style="color:#E1E4E8">      }</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#79B8FF">  "agent_reason"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"Allow the reviewed dev command from the project root; later script edits also execute under this permission."</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>This creates an inactive proposal. Copy its returned <code>apply_arguments</code> unchanged
+into <code>policy_apply</code> for user approval. The <code>exact</code> path predicate takes an
+object; <code>{"exact":"/workspace/acme"}</code> is invalid here. Using <code>within</code> instead
+includes subdirectories, so choose it only when that broader scope is intended.
+Script contents are reviewed by the agent; this rule does not pin their bytes.</p>
+<p>Project rules must work across checkouts. <code>policy_propose</code>, <code>shield rule add</code>,
+and <code>shield rule edit</code> reject machine paths in conditions or requirements,
+including project, home, temporary, and agent
+configuration folders. The error suggests a portable form, such as replacing
+<code>--prefix /path/to/project</code> with <code>cwd within {root: project}</code>. Edits preserving
+conditions and requirements are exempt; exact-request rules keep their bound cwd.
+Observed machine paths are marked <code>not_portable</code> in request evidence.</p>
+<p>After reviewing a test script and its watch option, this argument grammar covers
+<code>npm test</code> and <code>npm test -- --watch</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">arguments</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">options</span></span>
+<span class="line"><span style="color:#85E89D">  prefix</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">test</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">  flags</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">  values</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#85E89D">  operands</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    match</span><span style="color:#E1E4E8">: {</span><span style="color:#85E89D">exact</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">--watch</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#85E89D">    min</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span></span>
+<span class="line"><span style="color:#85E89D">    max</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span></span></code></pre>
+<p>The rule also fixes <code>executable: npm</code>. After <code>--</code>, the watch flag is an operand
+matched literally. Other scripts, flags, extra operands, and repeated watch flags
+miss this rule. Optional flags that load code, write elsewhere, or change
+credentials need separate review.</p>
+<h3 id="submit-for-approval">Submit for approval</h3>
+<p>After the task, explain each suitable rule’s scope and examples, propose it,
+then submit its <code>apply_arguments</code> directly to <code>policy_apply</code> before the
+final reply. The host’s approval prompt is the question; no preliminary question
+is needed. Wait for each result before the next proposal. Declining or cancelling
+keeps the existing policy. Unique pack offers use the same flow, once per
+conversation.</p>
+<p><code>policy_receipt</code> reads committed receipts; pending proposals return
+<code>operator_review_required</code>. It cannot apply a change. Stored action requests
+are separate: inspect <code>request_list</code>, then use <code>shield request approve</code> or
+<code>shield request deny</code> in an operator terminal.</p>
+<h2 id="diagnostic-input-and-snapshots">Diagnostic input and snapshots</h2>
+<p><code>status</code> and <code>policy_show</code> expose <code>active_candidate_id</code>. Submission or
+inspection of a proposal exposes <code>before_candidate_id</code> and <code>after_candidate_id</code>.
+Handles retain immutable bytes until the connection closes; policy activation
+cannot retarget them. Reconnect requires new handles. Unknown/foreign handles return
+<code>candidate_unavailable</code>. Each connection retains at most 256 distinct snapshots;
+capacity is reserved before persisting a proposal that needs new handles.</p>
+<p><code>policy_evaluate</code> accepts typed input, its preserved vendor <code>original_input</code>, cwd
+within the enrolled project, and a nullable explicit environment map. It selects
+active policy by default, or a retained <code>candidate_id</code>. For example:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#79B8FF">  "name"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"policy_evaluate"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "arguments"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">    "input"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">      "kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"argv"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "executable"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"git"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "arguments"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"status"</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#79B8FF">      "original_input"</span><span style="color:#E1E4E8">: {</span><span style="color:#79B8FF">"command"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"git status"</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">    },</span></span>
+<span class="line"><span style="color:#79B8FF">    "context"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">      "cwd"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/workspace/acme"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "environment"</span><span style="color:#E1E4E8">: {</span><span style="color:#79B8FF">"PATH"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/usr/bin:/bin"</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>This shows a tool call; pass the inner <code>arguments</code> object when your client
+already selects the tool by name. Replace the example cwd with an existing
+directory inside the registered project and supply the environment available
+for the request you are investigating. The result depends on that project’s
+active policy; <code>git status</code> is not universally allowed.</p>
+<p>Read <code>data.decision</code> for the policy result and the returned matching-rule and
+requirement evidence for its explanation. Keep <code>candidate_id</code> if you want to
+inspect rules from that same snapshot. Changing the arguments or cwd may change
+the result. This diagnostic does not run Git or supply permission for a later
+tool call.</p>
+<p>Supported input kinds are argv, shell, file, web, mcp and unknown. Literal argv and
+structured POSIX/Bash analysis reuse the Rust evaluator. Exact-request conditions
+bind typed input, all vendor fields, canonical cwd, environment and derived launch
+path. Unknown context cannot establish an exact allowance. Broader file/web effect
+matching and complete semantic comparison have incomplete coverage and do not
+manufacture permission. Powershell/Cmd analysis is unsupported.</p>
+<p><code>policy_compare</code> selects two handles and <code>sample</code>, <code>literal_argv</code> or
+<code>supported_semantic</code>. Only sample accepts input/context. A sample is one witness;
+matching sample decisions cannot prove whole-policy equivalence. Unsupported
+normalized comparison regions explicitly return incomplete/unknown evidence.
+Sample reports keep the overall relation unknown and identify any decision change
+inside the request witness.
+Diagnostic Allow has preview disposition and supplies no execution or grant.</p>
+<h2 id="responses-and-transport-lifetime">Responses and transport lifetime</h2>
+<h3 id="client-startup">Client startup</h3>
+<p>Shield exposes project inspection, approved policy changes, and diagnostic
+evaluation over stdio using MCP <code>2025-06-18</code> and <code>2025-11-25</code>. Other clients can
+launch <code>shield mcp serve --project /workspace/acme</code> explicitly, replacing
+the example path with an initialized project. Startup failure exits 2 with a
+fixed stderr diagnostic and empty stdout.</p>
+<p>A launch may supply an agent and an explicitly mapped host session through
+internal registration arguments; tool input cannot appoint either. Client names
+are declarations. Shield generates a new connection ID on each launch.</p>
+<p>The client initializes with a supported protocol version, sends
+<code>notifications/initialized</code>, then uses <code>tools/list</code> or <code>tools/call</code>. The server
+supports ping and cancellation and advertises only tools. Every tool publishes
+strict input and output schemas, with authority annotations. Shield echoes a
+supported requested version. For other version strings it offers <code>2025-11-25</code>;
+the client decides whether it supports that version.</p>
+<h3 id="result-format-and-limits">Result format and limits</h3>
+<p>For compact packs, <code>rule_list</code> lists canonical rule bodies. Its optional
+<code>shared</code> array includes each pack selector, invocation groups and command sets.
+Bindings are pack-only source fields. For a rule present in the active policy,
+a <code>rule_ref</code> selects the materialized rule, including its matched leading
+arguments and command member, without listing every invocation combination.
+Pass the evaluation’s <code>candidate_id</code> with <code>rule_ref</code> to inspect that exact retained
+snapshot, including an old active generation or pending proposal. Omitting the
+handle selects active policy at lookup time. Lists also accept <code>candidate_id</code>;
+preserve it with the other arguments when following <code>next_cursor</code>. Exact rule
+selection accepts the handle but no paging arguments. An unavailable handle
+returns <code>candidate_unavailable</code> without selecting another snapshot.
+Custom-rule inspection includes shared and local rules;
+a local rule with a shared rule’s ID replaces it in lists and exact lookups.
+Inspection uses the same strict source parser and budgets
+as policy admission.</p>
+<p>Results retain the complete envelope in <code>structuredContent</code>. Text block 0 gives
+short guidance; text block 1 is bounded JSON with <code>data</code>, <code>error</code>, <code>missing</code> and
+<code>truncated</code>. Inspection tools include requested data there. Proposal/withdrawal
+text includes IDs, status and candidate handles; use <code>policy_show</code> to inspect
+the complete proposal. Text-only clients parse block 1 rather than block 0. The shared
+envelope has schema_version, project_id, nullable policy_revision, data, missing,
+truncated and nullable error. Allow/Ask/Deny diagnostics are successful results.
+Failures set <code>isError</code> and use fixed safe codes/messages with an applicable operator
+route. Secrets are redacted from exposed evidence; credentials cannot be embedded
+in project rule conditions.</p>
+<p>JSON-RPC framing uses newline-delimited UTF-8, with no batches or Content-Length
+headers. Duplicate decoded keys, NULs, positional parameters, invalid IDs and
+unknown fields refuse. Arguments that do not match a tool’s input schema return
+an <code>invalid_input</code> tool result. Frames are limited to 524,288 bytes plus the
+newline; responses to 4 MiB plus newline; pages to 1 MiB. Each connection’s snapshot handles
+may pin up to 1 GiB of source and compiled bytes, enough for the largest bundle and
+plan that policy limits allow; retained cursor views have a 64 MiB budget and at
+most 256 continuation cursors. Used cursors remain until disconnection; replaying
+one can allocate another continuation. Exhaustion returns <code>overloaded</code>; reconnect
+and start a new list to release the old views. No capacity limit silently evicts a
+live handle. A session accepts at most 1,024 inbound messages; the next one
+ends it with <code>-32000</code> “Session message limit reached”.</p>
+<p>One worker processes tools while the dispatcher handles input and ping. At most
+eight tool calls may be outstanding, including one waiting for confirmation;
+more are refused with <code>-32000</code>. Duplicate outstanding IDs close the session.
+<code>--request-timeout-ms</code> bounds queued work, evaluation and encoding
+(default 5,000 ms, range 1–60,000); a call that exceeds it receives <code>-32001</code>
+“Request deadline exceeded”. Cancellation suppresses pending responses.
+Policy apply uses that budget for preparation, a separate five-minute form wait,
+then a fresh ordinary budget for queued revalidation, commit and encoding.
+Checkpoints do not interrupt native blocking I/O; clients also own process/I/O
+limits. Lost proposal replies can be recovered by resubmitting the same arguments.</p>
+<p>Keep stdin open until you have the replies you need. When it closes, queued
+<code>policy_propose</code>, <code>policy_withdraw</code> and <code>policy_apply</code>
+calls are refused with <code>-32800</code> and never run, a pending confirmation is
+withdrawn, and read-only tools still finish.</p>
+<p>Closing stdin drains admitted work and joins the worker before exit 0. Framing or
+transport failure cancels and joins work and exits 2. Resident clients complete
+each call from its correlated envelope; process exit supplies no missing result or
+permission. Native blocking stdin readers end at process exit after early failure.</p>
+<p>Native macOS tests and pinned official SDK fixtures exercise this interface; live-agent
+setup and Linux/Windows runtime coverage remain separate validation work.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/shield/docs/project-mcp.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/shield/docs/pack-validation/"><span>← Previous</span><strong>Validating permission packs</strong></a><a href="/shield/docs/claude-read-only/"><span>Next →</span><strong>Claude Agent SDK read-only integration</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#start-with-a-task">Start with a task</a><a href="#connect-the-server">Connect the server</a><a href="#reading-shields-documentation">Reading Shield’s documentation</a><a href="#example-find-the-argument-matching-guide" class="docs-toc-sub">Example: find the argument-matching guide</a><a href="#reviewing-an-available-pack">Reviewing an available pack</a><a href="#example-propose-a-pack-installation" class="docs-toc-sub">Example: propose a pack installation</a><a href="#proposals-and-operator-review">Proposals and operator review</a><a href="#apply-the-reviewed-proposal" class="docs-toc-sub">Apply the reviewed proposal</a><a href="#replay-and-withdrawal" class="docs-toc-sub">Replay and withdrawal</a><a href="#rule-suggestions">Rule suggestions</a><a href="#draft-reusable-rules" class="docs-toc-sub">Draft reusable rules</a><a href="#submit-for-approval" class="docs-toc-sub">Submit for approval</a><a href="#diagnostic-input-and-snapshots">Diagnostic input and snapshots</a><a href="#responses-and-transport-lifetime">Responses and transport lifetime</a><a href="#client-startup" class="docs-toc-sub">Client startup</a><a href="#result-format-and-limits" class="docs-toc-sub">Result format and limits</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

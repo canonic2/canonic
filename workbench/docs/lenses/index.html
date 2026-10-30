@@ -1,0 +1,398 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Lenses and URL implementations · Workbench docs · Canonic</title><meta name="description" content="A design page is one picture of something that also exists as code. A   lens   shows that code's version in the design's place: the same artboard, the same size, with your annotati"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.17.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/workbench/">Overview</a><a href="/workbench/docs/" aria-current="page">Docs</a><a href="/workbench/install/">Install</a><a href="/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Getting started</h2><a href="/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/workbench/docs/canvas/" data-doc-id="canvas">Using the canvas</a><a href="/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group"><h2>Previews</h2><a href="/workbench/docs/workbench-previews/" data-doc-id="workbench-previews">TypeScript Workbench previews</a><a href="/workbench/docs/preview-data/" data-doc-id="preview-data">Preview data, mocks, and actions</a><a href="/workbench/docs/react/" data-doc-id="react">React previews</a><a href="/workbench/docs/react-native-web/" data-doc-id="react-native-web">React Native Web previews</a><a href="/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/workbench/docs/astro/" data-doc-id="astro">Astro previews</a><a href="/workbench/docs/html/" data-doc-id="html">HTML previews</a><a href="/workbench/docs/custom-adapters/" data-doc-id="custom-adapters">Custom adapters and compiler settings</a></div><div class="docs-group"><h2>Connect your implementation</h2><a href="/workbench/docs/lenses/" data-doc-id="lenses" aria-current="page">Lenses and URL implementations</a><a href="/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/workbench/docs/ios-simulator/" data-doc-id="ios-simulator">iOS Simulator</a><a href="/workbench/docs/windows/" data-doc-id="windows">App windows</a></div><div class="docs-group"><h2>Reference</h2><a href="/workbench/docs/configuration/" data-doc-id="configuration">workbench.yaml reference</a><a href="/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/workbench/docs/extension/" data-doc-id="extension">The VS Code extension</a><a href="/workbench/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshooting</a></div></nav><a class="docs-install" href="/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span>Connect your implementation</span></div><div class="docs-prose"><h1 id="lenses-and-url-implementations">Lenses and URL implementations</h1>
+<p>A design page is one picture of something that also exists as code. A
+<strong>lens</strong> shows that code’s version in the design’s place: the same artboard, the
+same size, with your annotations over it. Switch between them to compare the
+design with what was built, then hand the difference to an agent.</p>
+<p>There are six kinds of implementation:</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Shows</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>url</code></td>
+<td>A page from any web server: your dev server, a preview deployment, staging</td>
+<td>This page</td>
+</tr>
+<tr>
+<td><code>workbench</code></td>
+<td>A named TypeScript preview from this project</td>
+<td><a href="/workbench/docs/workbench-previews/">Workbench previews</a></td>
+</tr>
+<tr>
+<td><code>storybook</code></td>
+<td>One Storybook story, without Storybook’s own interface</td>
+<td><a href="/workbench/docs/storybook/">Storybook</a></td>
+</tr>
+<tr>
+<td><code>ios-simulator</code></td>
+<td>A live, interactive stream of a booted iOS Simulator</td>
+<td><a href="/workbench/docs/ios-simulator/">iOS Simulator</a></td>
+</tr>
+<tr>
+<td><code>window</code></td>
+<td>A live stream of a window from any macOS app, such as an Android emulator</td>
+<td><a href="/workbench/docs/windows/">App windows</a></td>
+</tr>
+<tr>
+<td><code>docs</code></td>
+<td>A page’s docs, with their examples rendered by an adapter such as React or React Native Web</td>
+<td><a href="/workbench/docs/docs-pages/#lenses">Docs</a></td>
+</tr>
+</tbody>
+</table>
+<p>This page covers how lenses work in general, how to set up a <code>url</code>
+implementation, and how to point a design page at a
+<a href="#compare-a-design-with-a-workbench-preview">Workbench preview</a>.</p>
+<h2 id="how-lenses-work">How lenses work</h2>
+<p>A page that lists any implementations gets a <strong>lens switcher</strong> in the
+top bar: the page’s <a href="#docs-lenses">docs lenses</a> first, then the authored page,
+then one button per implementation the page has. The authored page’s button
+defaults to <strong>Design</strong>. On a page whose <code>src</code> is a <code>.workbench.ts</code> or
+<code>.workbench.tsx</code> file, it defaults to <strong>Preview</strong> instead. The switcher shows
+only when there are two or more lenses to choose from, so a page imported from
+a single catalog, with no design, has none.</p>
+<ul>
+<li><strong>A page opens on its default lens:</strong> its first docs lens when it has docs,
+otherwise the authored page.</li>
+<li><strong>The choice sticks</strong> as you move between pages, like the artboard size.
+A page that doesn’t have the chosen lens shows its default lens.</li>
+<li><strong>The address includes it.</strong> <code>#pages/sign-in.html:error@393~staging</code> is the
+sign-in page in its error scenario, at mobile width, on staging. A copied link
+opens the same view. See <a href="/workbench/docs/canvas/#links-and-the-address">Links and the address</a>.</li>
+<li><strong>Annotations, screenshots, and handoffs work through every lens.</strong> A
+screenshot taken through a lens uses its implementation key in the filename
+(<code>sign-in-error-staging.jpg</code>), and the handoff says which implementation it
+shows, at what URL, and where that implementation’s code is.</li>
+<li><strong>Actions</strong> is always on through a <code>url</code> or <code>storybook</code> lens. Your app
+serves that page, so the workbench can’t stop its links and forms.</li>
+<li><strong>Open on its own</strong> in the top bar opens the current page in your browser,
+outside the workbench, for interaction the iframe can’t provide.</li>
+</ul>
+<h3 id="customize-lens-labels">Customize lens labels</h3>
+<p>Every lens’s display label is customizable, independently of its kind.
+Set <code>label</code> on an implementation
+to call a website lens <strong>Live</strong> or <strong>Prod</strong>, or to rename a Storybook or
+Workbench implementation. Set <code>previews.lensLabel</code> for discovered previews,
+or <code>lensLabel</code> on an authored page for a page-specific override:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">previews</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  lensLabel</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Design</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  live</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">url</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Live</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">https://example.com</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Pages</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Home</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">previews/home.workbench.ts</span></span>
+<span class="line"><span style="color:#85E89D">        lensLabel</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Reference</span></span>
+<span class="line"><span style="color:#85E89D">        implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          live</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/</span></span></code></pre>
+<p>This example labels discovered previews <strong>Design</strong>, while Home’s authored
+lens is <strong>Reference</strong>, beside <strong>Live</strong>. The page’s <code>label: Home</code> still names
+the page in the sidebar.</p>
+<p>The page’s <code>lensLabel</code> takes precedence over <code>previews.lensLabel</code>. Renaming
+changes the existing button; it does not add another lens or change copied
+addresses. Without overrides, HTML pages use <strong>Design</strong> and TypeScript previews
+use <strong>Preview</strong>. Docs lenses use their implementation’s <code>label</code>.</p>
+<p><code>lensLabel</code> values must be nonempty strings; surrounding whitespace is
+trimmed. Invalid values are reported in <code>problems</code> and the fallback label is
+used. These settings belong in <code>workbench.yaml</code>, rather than in <code>definePreview</code>.
+See <a href="/workbench/docs/configuration/#previews">Previews</a> and <a href="/workbench/docs/configuration/#pages">Pages</a>
+in the configuration reference.</p>
+<h3 id="docs-lenses">Docs lenses</h3>
+<p>A page with <a href="/workbench/docs/docs-pages/">docs</a> has a docs lens for each <code>docs</code>
+implementation it maps, listed before its design and its other
+implementations, and it opens on the first. Each docs lens shows the page’s Markdown with its examples rendered by the lens’s
+adapter, such as React or React Native Web. The Markdown is the same in every
+docs lens. In a docs lens, the docs fill the canvas instead of an artboard, and
+the size switcher is disabled. A Markdown page, whose <code>src</code> is its Markdown,
+has no design lens and opens on its own docs lens. See
+<a href="/workbench/docs/docs-pages/#lenses">Lenses</a> in the docs page guide.</p>
+<h2 id="set-up-a-url-implementation">Set up a URL implementation</h2>
+<h3 id="1-declare-the-implementation">1. Declare the implementation</h3>
+<p>Implementations are declared once, at the top of <code>workbench.yaml</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">url</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">http://127.0.0.1:3000</span></span>
+<span class="line"><span style="color:#85E89D">    root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">../acme-web</span></span>
+<span class="line"><span style="color:#85E89D">  staging</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">url</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Staging</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">https://staging.example.com</span></span></code></pre>
+<ul>
+<li>The name (<code>dev</code>, <code>staging</code>) is kebab-case. It labels the lens button unless
+you set <code>label</code>.</li>
+<li><code>base</code> is the server’s origin, plus a base path if every page lives under
+one (<code>https://example.com/app</code>).</li>
+<li><code>root</code> is where the implementation’s code is, relative to <code>workbench.yaml</code> or
+absolute. It is optional, and only needed for <a href="#point-at-the-code">code pointers</a>.</li>
+</ul>
+<p>Gate is a private, unpublished CLI with no public distribution channel. If you
+already have access to it, the optional Gate integration lets you set
+<code>base: gate://demo/dev</code> for a Gate-managed service. Workbench
+uses the <code>demo</code> service’s published endpoint in the task containing this space,
+then appends <code>/dev</code> and the page path. Start the task with <code>gate run demo --detach</code> and
+refresh Workbench after a restart to pick up its current port. Gate owns the
+service, so omit a Workbench <code>start</code> command. See
+<a href="/workbench/docs/configuration/#implementations">Gate service configuration</a> for requirements.</p>
+<p>If the service is stopped or unavailable, opening its lens shows the reason
+and recovery steps on the canvas. Other lenses remain usable, and the sidebar
+does not show a warning for the stopped service. Configuration errors still
+appear in the shared problems list.</p>
+<h3 id="2-tell-each-page-where-it-is">2. Tell each page where it is</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Pages</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Sign in</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">design/sign-in.html</span></span>
+<span class="line"><span style="color:#85E89D">        implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          dev</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/sign-in</span></span>
+<span class="line"><span style="color:#85E89D">          staging</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/sign-in</span></span></code></pre>
+<p>Paths start with <code>/</code> and are appended to <code>base</code>, so <code>dev</code> shows
+<code>http://127.0.0.1:3000/sign-in</code>. A page only gets the lenses it lists.</p>
+<h3 id="3-map-scenarios-to-paths">3. Map scenarios to paths</h3>
+<p>If the implementation can show a scenario through its URL, give the page a map
+of scenario ids to paths instead of a single path:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Sign in</span></span>
+<span class="line"><span style="color:#85E89D">  src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">design/sign-in.html</span></span>
+<span class="line"><span style="color:#85E89D">  scenarios</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">    - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">default</span></span>
+<span class="line"><span style="color:#85E89D">      label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Default</span></span>
+<span class="line"><span style="color:#E1E4E8">    - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">error</span></span>
+<span class="line"><span style="color:#85E89D">      label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Wrong password</span></span>
+<span class="line"><span style="color:#E1E4E8">    - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">locked</span></span>
+<span class="line"><span style="color:#85E89D">      label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Account locked</span></span>
+<span class="line"><span style="color:#85E89D">  implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      default</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/sign-in</span></span>
+<span class="line"><span style="color:#85E89D">      error</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/sign-in?error=invalid</span></span>
+<span class="line"><span style="color:#85E89D">      locked</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/sign-in?error=locked</span></span></code></pre>
+<ul>
+<li>The entry for the first scenario, or <code>default</code>, is required.</li>
+<li>A scenario without an entry uses the default path.</li>
+<li>Picking a scenario in the sidebar loads its path, so you can compare each
+design scenario with the implementation in the same scenario.</li>
+</ul>
+<p>Query strings, fixtures, or mock flags are the usual way to do this. Many apps
+already have them for tests.</p>
+<h3 id="4-keep-machine-specific-values-local">4. Keep machine-specific values local</h3>
+<p>Ports and checkout locations differ between machines. Commit values that work
+for most people, and override the rest in <code>workbench.local.yaml</code>, which is in
+<code>.gitignore</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#6A737D"># workbench.local.yaml</span></span>
+<span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">http://127.0.0.1:4000</span></span>
+<span class="line"><span style="color:#85E89D">    root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/Users/me/src/acme-web</span></span></code></pre>
+<p>Each implementation’s keys are merged over the committed ones, so this keeps
+<code>dev</code>’s <code>kind</code> and any <code>start</code> command. See
+<a href="/workbench/docs/configuration/#local-overrides">Local overrides</a>.</p>
+<h2 id="start-the-server-automatically">Start the server automatically</h2>
+<p>A <code>url</code> implementation can name the command that starts it. When VS Code opens
+the project, Workbench checks whether the server is answering, and only runs
+the command if it isn’t:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">url</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">http://127.0.0.1:3000</span></span>
+<span class="line"><span style="color:#85E89D">    start</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      command</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pnpm dev</span></span>
+<span class="line"><span style="color:#85E89D">      cwd</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">../acme-web</span></span>
+<span class="line"><span style="color:#85E89D">      check</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        port</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">3000</span></span>
+<span class="line"><span style="color:#85E89D">      timeout</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">60</span></span></code></pre>
+<ol>
+<li>On activation, Workbench runs the <code>check</code>: a TCP connection to <code>port</code>
+(on <code>127.0.0.1</code> unless you set <code>host</code>), or an HTTP request to <code>url</code> that
+has to answer with a success status.</li>
+<li>If the check passes, Workbench uses the existing server without starting
+another process.</li>
+<li>If it fails, Workbench opens a VS Code terminal in <code>cwd</code> (relative to
+<code>workbench.yaml</code>) and runs <code>command</code>. The terminal stays open, so you can
+read its output and stop it.</li>
+<li>Workbench opens the canvas while checking for <code>ready</code>, or for <code>check</code> if
+<code>ready</code> is omitted. The page list refreshes when the checks finish.
+<code>timeout</code> defaults to 60 seconds and can be up to 300. If the server isn’t
+ready in time, the <strong>Workbench</strong> output channel records the timeout.</li>
+</ol>
+<p>Use <code>ready</code> when the server listens before it can serve:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">start</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  command</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pnpm dev</span></span>
+<span class="line"><span style="color:#85E89D">  check</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    port</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">3000</span></span>
+<span class="line"><span style="color:#85E89D">  ready</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    url</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">http://127.0.0.1:3000/health</span></span>
+<span class="line"><span style="color:#85E89D">  timeout</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">120</span></span></code></pre>
+<p>Start commands run only in <a href="https://code.visualstudio.com/docs/editor/workspace-trust" target="_blank" rel="noopener">trusted workspaces</a>,
+and only in VS Code. A standalone <code>server/node/server.js</code> doesn’t run them. A local
+override replaces the whole <code>start</code> block, which is useful when your machine
+starts the app differently. Every key is listed in
+<a href="/workbench/docs/configuration/#start-commands">Start commands</a>.</p>
+<h2 id="embedding-and-sign-in">Embedding and sign-in</h2>
+<p>A URL lens loads your app in an ordinary iframe, through a proxy Workbench
+runs for each implementation origin. The proxy listens on its own loopback
+port, such as <code>http://127.0.0.1:50353</code>, and passes every request and WebSocket
+on to your app. Typing, scrolling, selection, and sign-in all happen in your
+app’s own page, and your app sees requests addressed to its own host, with
+<code>Origin</code> and <code>Referer</code> to match. Nothing in your app needs to change.</p>
+<p>On the way back, the proxy:</p>
+<ul>
+<li>adds one script to each page, the preview bridge, which sends the page’s
+live document to the workbench for
+<a href="#screenshots-through-a-url-lens">screenshots</a>;</li>
+<li>drops headers that would keep the page out of a frame: <code>X-Frame-Options</code>,
+<code>Content-Security-Policy</code>, and the cross-origin opener, embedder, and
+resource policies;</li>
+<li>removes <code>Domain</code>, <code>Secure</code>, and <code>SameSite</code> from cookies, so they belong to
+the proxy’s address;</li>
+<li>keeps redirects to your app’s origin on the proxy.</li>
+</ul>
+<h3 id="keep-the-session">Keep the session</h3>
+<p>Sign in inside the lens, and sign out with the app’s own logout. The lens has
+its own browser session, separate from your regular browser. The workbench and
+the proxy are both on <code>127.0.0.1</code>, so your app’s cookies are first-party in the
+lens.</p>
+<ul>
+<li>Sign-in that goes through an identity provider returns to the callback
+address registered with it: your app’s own origin, not the proxy. The lens
+doesn’t keep that session. Use a sign-in your development build serves
+itself.</li>
+<li>Links and scripts that spell out your app’s full origin, such as
+<code>http://localhost:3000/settings</code>, leave the proxy. Relative links stay on it.</li>
+</ul>
+<p>When a page fails to load, the failure stays in the frame; use <strong>Open on its
+own</strong> to compare. If the app isn’t running, the proxy answers that it isn’t
+answering.</p>
+<h2 id="screenshots-through-a-url-lens">Screenshots through a URL lens</h2>
+<p>Screenshots and handoffs of a URL lens show the page as you see it: open
+dialogs and menus, form values, and scroll positions included. The preview
+bridge the proxy adds to each page sends its live document to the workbench,
+which renders it in the capture helper.</p>
+<ul>
+<li>The bridge sends the visible document: DOM, open shadow roots, styles, form
+values, and scroll positions. It doesn’t send cookies, storage,
+credentials, or code.</li>
+<li>It answers only a workbench on a loopback address, and the workbench accepts
+its messages only from the active iframe.</li>
+</ul>
+<p>If the bridge can’t connect, for example because the page hasn’t finished
+loading, the capture helper loads the same URL itself, in its own session,
+and lays your annotations over the result. That copy starts fresh: it doesn’t
+include what you did in the page, and a page behind sign-in may show its
+sign-in page.</p>
+<h2 id="compare-a-design-with-a-workbench-preview">Compare a design with a Workbench preview</h2>
+<p>A <code>workbench</code> implementation shows one of this project’s
+<a href="/workbench/docs/workbench-previews/">TypeScript previews</a> in place of a design. It takes no
+<code>base</code>, <code>start</code>, or <code>root</code> of its own: previews come from this project.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  implementation</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">workbench</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Implementation</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Components</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Button</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">design/button.html</span></span>
+<span class="line"><span style="color:#85E89D">        implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          implementation</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">components/button</span></span></code></pre>
+<ul>
+<li>The value is the preview’s <code>id</code>, such as <code>components/button</code>. An unknown ID
+is reported by the <a href="/workbench/docs/troubleshooting/#read-the-resolved-config">config route</a>.</li>
+<li>A design scenario loads the preview scenario with the same id. Any other
+scenario shows the preview’s first scenario.</li>
+<li><strong>Open the source</strong> lists the preview’s source file, and the handoff names
+it.</li>
+<li>Previews run project code, so they need a
+<a href="https://code.visualstudio.com/docs/editor/workspace-trust" target="_blank" rel="noopener">trusted workspace</a>.</li>
+</ul>
+<h2 id="point-at-the-code">Point at the code</h2>
+<p><code>code</code> tells Workbench where a page’s implementation lives, so the editor can
+open it and handoffs can name it:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">url</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">http://127.0.0.1:3000</span></span>
+<span class="line"><span style="color:#85E89D">    root</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">../acme-web</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Pages</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Sign in</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">design/sign-in.html</span></span>
+<span class="line"><span style="color:#85E89D">        implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          dev</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/sign-in</span></span>
+<span class="line"><span style="color:#85E89D">        code</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">            - </span><span style="color:#9ECBFF">src/routes/sign-in/page.tsx</span></span>
+<span class="line"><span style="color:#E1E4E8">            - </span><span style="color:#9ECBFF">src/components/sign-in-form.tsx</span></span></code></pre>
+<ul>
+<li>Paths are relative to the implementation’s <code>root</code>, or absolute. Folders work
+as well as files. The implementation needs a <code>root</code> either way; without
+one, its code pointers are listed but can’t be opened, and the config route
+reports the problem.</li>
+<li><strong>Open the source</strong> (<code>&lt;/&gt;</code>) in the top bar lists the design file and each code
+pointer, and opens the one you pick in the editor. A file opens in a tab; a
+folder is revealed in the Explorer, or in your file browser when it’s outside
+the window. Opening files needs the extension.</li>
+<li>The handoff includes a <code>Source:</code> line with the absolute paths, and the
+page’s design file. An agent reading it knows which code to change and
+which design to match. Code pointers appear in the handoff even on the Design
+lens.</li>
+<li>Paths are resolved on your machine. A path that doesn’t exist is shown
+disabled in <strong>Open the source</strong>, left out of the handoff, and reported by
+the <a href="/workbench/docs/troubleshooting/#read-the-resolved-config">config route</a> with
+<code>exists: false</code>.</li>
+</ul>
+<p>Code pointers don’t need a lens. A page can list <code>code</code> for an
+implementation without listing it under its own <code>implementations</code>. It then
+gets source links without a lens button.</p>
+<h2 id="examples">Examples</h2>
+<h3 id="a-dev-server-and-staging-with-per-scenario-paths-on-dev">A dev server and staging, with per-scenario paths on dev</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">url</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">http://127.0.0.1:5173</span></span>
+<span class="line"><span style="color:#85E89D">    root</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">.</span></span>
+<span class="line"><span style="color:#85E89D">    start</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">      command</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">npm run dev</span></span>
+<span class="line"><span style="color:#85E89D">      check</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">        port</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">5173</span></span>
+<span class="line"><span style="color:#85E89D">  staging</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">url</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">https://staging.example.com</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Pages</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Checkout</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">design/checkout.html</span></span>
+<span class="line"><span style="color:#85E89D">        scenarios</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">          - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">default</span></span>
+<span class="line"><span style="color:#85E89D">            label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Cart</span></span>
+<span class="line"><span style="color:#E1E4E8">          - </span><span style="color:#85E89D">id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">payment</span></span>
+<span class="line"><span style="color:#85E89D">            label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Payment</span></span>
+<span class="line"><span style="color:#85E89D">        implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          dev</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">            default</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/checkout</span></span>
+<span class="line"><span style="color:#85E89D">            payment</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/checkout?step=payment</span></span>
+<span class="line"><span style="color:#85E89D">          staging</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">/checkout</span></span>
+<span class="line"><span style="color:#85E89D">        code</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          dev</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">src/pages/checkout</span></span></code></pre>
+<h3 id="an-app-under-a-base-path">An app under a base path</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  admin</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">url</span></span>
+<span class="line"><span style="color:#85E89D">    base</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">http://127.0.0.1:8080/admin</span></span></code></pre>
+<p>A page path of <code>/users</code> loads <code>http://127.0.0.1:8080/admin/users</code>.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/lenses.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/workbench/docs/custom-adapters/"><span>← Previous</span><strong>Custom adapters and compiler settings</strong></a><a href="/workbench/docs/storybook/"><span>Next →</span><strong>Storybook</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#how-lenses-work">How lenses work</a><a href="#customize-lens-labels" class="docs-toc-sub">Customize lens labels</a><a href="#docs-lenses" class="docs-toc-sub">Docs lenses</a><a href="#set-up-a-url-implementation">Set up a URL implementation</a><a href="#1-declare-the-implementation" class="docs-toc-sub">1. Declare the implementation</a><a href="#2-tell-each-page-where-it-is" class="docs-toc-sub">2. Tell each page where it is</a><a href="#3-map-scenarios-to-paths" class="docs-toc-sub">3. Map scenarios to paths</a><a href="#4-keep-machine-specific-values-local" class="docs-toc-sub">4. Keep machine-specific values local</a><a href="#start-the-server-automatically">Start the server automatically</a><a href="#embedding-and-sign-in">Embedding and sign-in</a><a href="#keep-the-session" class="docs-toc-sub">Keep the session</a><a href="#screenshots-through-a-url-lens">Screenshots through a URL lens</a><a href="#compare-a-design-with-a-workbench-preview">Compare a design with a Workbench preview</a><a href="#point-at-the-code">Point at the code</a><a href="#examples">Examples</a><a href="#a-dev-server-and-staging-with-per-scenario-paths-on-dev" class="docs-toc-sub">A dev server and staging, with per-scenario paths on dev</a><a href="#an-app-under-a-base-path" class="docs-toc-sub">An app under a base path</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

@@ -1,0 +1,1 @@
+import{t as e}from"./copy._SemiHYW.js";var t=class extends HTMLElement{connectedCallback(){let t=this.querySelector(`.copy`),n=this.querySelector(`code`);t&&n&&(t.onclick=()=>e(t,n.textContent||``))}};customElements.get(`canonic-code-block`)||customElements.define(`canonic-code-block`,t);

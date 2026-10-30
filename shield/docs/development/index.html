@@ -1,0 +1,373 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Developing Shield · Shield docs · Canonic</title><meta name="description" content="Shield is one Cargo package ( canonic-shield ), library  shield , and executable  shield . Rust 1.99.0 is pinned with rustfmt, Clippy and llvm-tools. Cargo.lock owns dependency ver"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Shield"><div class="wrap"><span class="sub-name">Shield</span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/shield/">Overview</a><a href="/shield/docs/" aria-current="page">Docs</a><a href="/shield/#install">Install</a><a href="https://github.com/canonic2/canonic/tree/main/packages/shield" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/shield/#install">Build from source</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/shield/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Get started</h2><a href="/shield/docs/" data-doc-id="index">Shield documentation</a><a href="/shield/docs/introduction/" data-doc-id="introduction">What is Shield?</a><a href="/shield/docs/getting-started/" data-doc-id="getting-started">Your first Shield project</a><a href="/shield/docs/policy-decisions/" data-doc-id="policy-decisions">Understand policy decisions</a><a href="/shield/docs/operator-experience/" data-doc-id="operator-experience">Shield in the terminal</a></div><div class="docs-group"><h2>Work with your project</h2><a href="/shield/docs/project-review/" data-doc-id="project-review">Project policy, approvals and history</a><a href="/shield/docs/local-registry/" data-doc-id="local-registry">Registry sources and packs</a><a href="/shield/docs/claude-project/" data-doc-id="claude-project">Connect Claude Code and Codex</a><a href="/shield/docs/mcp-connections/" data-doc-id="mcp-connections">Configure project MCP servers</a><a href="/shield/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshoot Shield</a></div><div class="docs-group"><h2>Write rules</h2><a href="/shield/docs/policy-rules/" data-doc-id="policy-rules">Writing policy rules</a><a href="/shield/docs/rule-reference/" data-doc-id="rule-reference">Rule reference</a><a href="/shield/docs/pack-validation/" data-doc-id="pack-validation">Validating permission packs</a></div><div class="docs-group"><h2>Integrate Shield</h2><a href="/shield/docs/project-mcp/" data-doc-id="project-mcp">Use Shield from an agent (MCP)</a><a href="/shield/docs/claude-read-only/" data-doc-id="claude-read-only">Claude Agent SDK read-only integration</a><a href="/shield/docs/native-run/" data-doc-id="native-run">Bounded native execution</a><a href="/shield/docs/enforcement-handoff/" data-doc-id="enforcement-handoff">Embedded enforcement handoff</a></div><div class="docs-group"><h2>Recovery and development</h2><a href="/shield/docs/runtime-activation/" data-doc-id="runtime-activation">Active policy and repair</a><a href="/shield/docs/compiled-cache/" data-doc-id="compiled-cache">Compiled policy cache</a><a href="/shield/docs/development/" data-doc-id="development" aria-current="page">Developing Shield</a></div></nav><a class="docs-install" href="/shield/#install">Get Shield <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/shield/docs/">Shield docs</a><span aria-hidden="true">/</span><span>Recovery and development</span></div><div class="docs-prose"><h1 id="developing-shield">Developing Shield</h1>
+<p>Shield is one Cargo package (<code>canonic-shield</code>), library <code>shield</code>, and executable
+<code>shield</code>. Rust 1.99.0 is pinned with rustfmt, Clippy and llvm-tools. Cargo.lock
+owns dependency versions; there is no root Cargo workspace.</p>
+<h2 id="fast-iteration">Fast iteration</h2>
+<p>From this package directory:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">make</span><span style="color:#9ECBFF"> dev</span></span>
+<span class="line"><span style="color:#B392F0">make</span><span style="color:#9ECBFF"> test-focus</span><span style="color:#9ECBFF"> FILTER='policy::'</span></span>
+<span class="line"><span style="color:#6A737D"># Select integration tests explicitly when needed:</span></span>
+<span class="line"><span style="color:#B392F0">make</span><span style="color:#9ECBFF"> test-focus</span><span style="color:#9ECBFF"> FILTER='selected_test_name'</span><span style="color:#9ECBFF"> TEST_TARGET='--test integration'</span></span></code></pre>
+<p><code>dev</code> writes an incremental build to <code>target/debug/shield</code>; run it directly to
+try changes. <code>test-focus</code> uses nextest with a required substring filter and
+defaults to library tests. Replace the integration example’s placeholder with
+a real test name; nextest fails if nothing matches.</p>
+<p>Keep <code>target/</code> between iterations to reuse Cargo’s cache. Use release builds
+for performance measurements.</p>
+<h2 id="source-ownership">Source ownership</h2>
+<p>Shield separates policy decisions from filesystem observations, host adapters,
+and operator workflows. Start with the module for the behavior you are changing:</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Operator commands and routing</td>
+<td><code>src/cli/public.rs</code>, <code>src/cli.rs</code>, <code>src/lib.rs</code></td>
+</tr>
+<tr>
+<td>Policy documents, selectors, requirements</td>
+<td><code>src/policy.rs</code>, <code>policy/model.rs</code>, <code>policy/rules.rs</code>, <code>policy/argument_rules.rs</code></td>
+</tr>
+<tr>
+<td>Typed requests and resource-evidence interface</td>
+<td><code>policy/normalized.rs</code>, <code>policy/resources.rs</code></td>
+</tr>
+<tr>
+<td>Filesystem observations and supported command effects</td>
+<td><code>src/location.rs</code>, <code>location/text.rs</code>, <code>location/node.rs</code></td>
+</tr>
+<tr>
+<td>Shell parsing, expansion, control flow, and PID provenance</td>
+<td><code>src/shell.rs</code> and <code>shell/</code></td>
+</tr>
+<tr>
+<td>Declared directory options</td>
+<td><code>policy/directories.rs</code></td>
+</tr>
+<tr>
+<td>Compiled plans, indexes, and policy comparison</td>
+<td><code>policy/compiled.rs</code>, <code>policy/index.rs</code>, <code>policy/partition.rs</code>, <code>policy/profile_comparison.rs</code>, <code>policy/symbolic.rs</code></td>
+</tr>
+<tr>
+<td>Project composition, captured source, and evaluation</td>
+<td><code>src/configuration.rs</code> and <code>configuration/</code></td>
+</tr>
+<tr>
+<td>Shared project, policy and request inspection</td>
+<td><code>review/project.rs</code>, <code>review/history.rs</code>, <code>review/approvals.rs</code></td>
+</tr>
+<tr>
+<td>Pack discovery, acquisition and candidate preparation</td>
+<td><code>review/packs.rs</code>, <code>review/packs/</code>, <code>review/registries.rs</code></td>
+</tr>
+<tr>
+<td>Confirmed publication and project-file repair</td>
+<td><code>review/publication.rs</code>, <code>review/publication/projections.rs</code>, <code>review/changes/diff.rs</code></td>
+</tr>
+<tr>
+<td>CLI questions, reviews and confirmation</td>
+<td><code>review/operator/</code></td>
+</tr>
+<tr>
+<td>Agent configuration ownership and repair mechanics</td>
+<td><code>review/integrations.rs</code>, <code>review/integrations/</code>, <code>review/path_access.rs</code></td>
+</tr>
+<tr>
+<td>Approval clocks and request-specific grants</td>
+<td><code>review/clock.rs</code>, <code>review/read_approval.rs</code>, <code>review/run_approval.rs</code></td>
+</tr>
+<tr>
+<td>Durable source, disposable cache, and history</td>
+<td><code>review/storage/sources.rs</code>, <code>review/cache.rs</code>, <code>review/storage/history.rs</code>, <code>history/correlation.rs</code></td>
+</tr>
+<tr>
+<td>Agent payloads, setup codecs, and replies</td>
+<td><code>src/agents.rs</code>, <code>agents/claude_code.rs</code>, <code>agents/codex.rs</code>, <code>agents/setup.rs</code></td>
+</tr>
+<tr>
+<td>Shared hook dispatch and feedback</td>
+<td><code>agents/hook.rs</code>, <code>agents/feedback.rs</code>, <code>src/agent_message.rs</code></td>
+</tr>
+<tr>
+<td>Host-specific MCP confirmation</td>
+<td><code>agents/review.rs</code>, <code>agents/*/review.rs</code></td>
+</tr>
+<tr>
+<td>MCP startup, transport handler, and output</td>
+<td><code>src/mcp_io.rs</code>, <code>src/mcp.rs</code>, <code>mcp/response.rs</code>, <code>mcp/messages.rs</code></td>
+</tr>
+<tr>
+<td>MCP tools, schemas, snapshots, and cursors</td>
+<td><code>review/mcp/</code></td>
+</tr>
+<tr>
+<td>Bundled Markdown guides</td>
+<td><code>build.rs</code>, <code>review/mcp/documentation.rs</code></td>
+</tr>
+<tr>
+<td>Runtime snapshots and protected handoff</td>
+<td><code>src/runtime.rs</code>, <code>review/runtime/consumer.rs</code>, <code>src/enforcement.rs</code></td>
+</tr>
+<tr>
+<td>Supported native launches and cleanup</td>
+<td><code>src/execution.rs</code> and <code>execution/</code></td>
+</tr>
+<tr>
+<td>Document validation and pack fixtures</td>
+<td><code>src/application.rs</code></td>
+</tr>
+<tr>
+<td>Private process diagnostics</td>
+<td><code>src/diagnostics.rs</code></td>
+</tr>
+</tbody>
+</table>
+<p>CLI and MCP map their inputs into shared review operations. History queries use
+an application-owned query type; pack operations expose direct list, show, search,
+info and preparation functions. Shared owners can read files and acquire registry
+artifacts, including retaining verification checkpoints, without opening a terminal.
+CLI prompts and host confirmation run before calling the common publication
+workflow. MCP retains its own paging, diagnostic handles and response projection.</p>
+<p>The policy core performs no filesystem I/O and contains no command permission
+tables. Packs and custom rules supply permissions; <code>location/</code> supplies fresh
+request facts. Shell analysis uses submitted source and available context,
+without attesting execution.</p>
+<p><code>build.rs</code> compresses the guides into one DEFLATE bundle in <code>OUT_DIR</code>, with a
+page-range index. Docs tools decompress it in memory when called. Both steps
+use pure Rust code; no host compression tools or shared libraries are needed.</p>
+<p>The <code>canonic-registry</code> dependency handles registry identity, authentication,
+acquisition, checkpoints, resolution, and UTC timestamps. Shield owns pack
+declarations and the review that activates acquired artifacts. <code>canonic-mcp</code>
+handles framing, lifecycle, validation, cancellation, deadlines, and confirmation
+requests; Shield’s handler supplies its tools and limits.</p>
+<p>Agent adapters translate vendor payloads and setup formats. They cannot bypass
+core policy or activation checks. To add an agent, implement its adapter and
+registry entry, then verify payload mapping, setup, and real host behavior.
+CLI detection belongs in the adapter’s <code>is_installed</code> method; it inspects PATH
+without starting the tool.</p>
+<p><code>adapters/</code> contains private Node 24+ ESM modules: <code>process-transport/</code> handles
+subprocess I/O and cancellation, <code>enforcement-response/</code> validates receipts,
+and <code>claude-read-only/</code> maps SDK callbacks. <code>adapters/sdk-tests/</code> pins the SDK
+dependencies. Rust integration tests share <code>tests/integration/main.rs</code>.</p>
+<h2 id="check-tools">Check tools</h2>
+<p>Install the developer tools:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">cargo</span><span style="color:#9ECBFF"> install</span><span style="color:#79B8FF"> --locked</span><span style="color:#9ECBFF"> cargo-nextest@0.9.146</span><span style="color:#9ECBFF"> cargo-deny@0.20.2</span><span style="color:#9ECBFF"> cargo-llvm-cov@0.9.1</span><span style="color:#9ECBFF"> cargo-insta@1.49.0</span></span></code></pre>
+<p>Tests use assert_cmd, assert_fs, predicates, insta, and proptest. Tool versions
+and dependencies are pinned in the package configuration.</p>
+<h2 id="checks">Checks</h2>
+<p>The default nextest profile runs four tests at a time. Run process-heavy Node,
+SDK and Rust suites separately so fixture startup does not compete across runners.
+Do not rebuild a shared executable while installation fixtures run: registrations
+pin its digest, and replacing it changes the fixture’s protection diagnostics.
+In an agent sandbox, request host access before running integration checks:
+PTY fixtures need controlling terminals and process signals, HTTP/TLS fixtures
+need loopback listeners, and cargo-deny needs its advisory cache. A sandbox
+permission refusal requires the same check with host access; product policy
+changes cannot grant that access.</p>
+<p>Run the <a href="#individual-rust-verification">Make targets below</a> from this package
+directory, where rustup selects the pinned toolchain.</p>
+<p><code>cargo test --locked</code> also runs the behavioral tests. <code>cargo llvm-cov nextest --locked</code> produces a coverage report; it is not a coverage threshold. Cargo
+nextest, deny, and llvm-cov are optional developer tools installed separately.
+Use <code>~/.cargo/bin/cargo</code> when Cargo is not on PATH and <code>--offline</code> only with a
+populated dependency cache.</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Configuration and behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lint</td>
+<td>Manifest-owned unsafe-code prohibition, unreachable-public-item warnings, Clippy pedantic/unwrap/self-named-module checks; warnings fail the check</td>
+</tr>
+<tr>
+<td>Test runner</td>
+<td>nextest reports every failure; slow tests are flagged after 30 seconds and terminated after two minutes</td>
+</tr>
+<tr>
+<td>CLI fixtures</td>
+<td>assert_cmd/predicates check status/output; assert_fs owns temporary projects and cleanup</td>
+</tr>
+<tr>
+<td>Property tests</td>
+<td>proptest exercises unknown-command refusal and literal argv exact-match boundaries</td>
+</tr>
+<tr>
+<td>Snapshots</td>
+<td>insta records command help and settled human output under tests/integration/</td>
+</tr>
+<tr>
+<td>API docs</td>
+<td><code>[lints.rustdoc]</code> in Cargo.toml: a doc comment linking to a missing or private item fails <code>cargo doc</code></td>
+</tr>
+<tr>
+<td>Dependencies</td>
+<td>cargo-deny checks advisories, licenses, duplicate versions, and crates.io-only sources; wildcard versions fail</td>
+</tr>
+<tr>
+<td>Coverage</td>
+<td>cargo-llvm-cov reports line, region, and function coverage; no minimum threshold</td>
+</tr>
+</tbody>
+</table>
+<p>Clippy’s <code>too_many_lines</code> remains enabled. Use narrow
+<code>#[expect(..., reason = "...")]</code> annotations when justified. Public fallible APIs
+must document their errors.</p>
+<p>Failure fixtures control transport timing while keeping evaluation and subprocess
+I/O real. Wait for readiness before measuring deadlines, and keep setup budgets
+separate from cleanup assertions. SDK acceptance uses production deadlines.</p>
+<h2 id="output-review-and-deeper-testing">Output review and deeper testing</h2>
+<p>For intended output changes, run <code>cargo insta test</code>, then <code>cargo insta review</code>
+and commit the reviewed snapshots. Snapshots complement status and filesystem
+assertions; they do not replace them. Keep paths and secrets out of snapshots;
+insta filters are available when context-dependent output is implemented.
+Human-output fixtures drive the shared TUI in an owned terminal and snapshot
+settled reviews, choices and results. Separate terminal tests verify live regions,
+input safety and mode restoration.</p>
+<p><code>cargo llvm-cov nextest --locked --html</code> writes a browsable report under
+target/llvm-cov/html/. Generated API documentation is written to target/doc/. Reports and generated
+docs remain under ignored target/.</p>
+<h2 id="local-build-and-adapter-checks">Local build and adapter checks</h2>
+<p>From the repository root:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">make</span><span style="color:#79B8FF"> -C</span><span style="color:#9ECBFF"> packages/shield</span><span style="color:#9ECBFF"> build</span></span>
+<span class="line"><span style="color:#B392F0">npm</span><span style="color:#79B8FF"> --prefix</span><span style="color:#9ECBFF"> packages/shield/adapters</span><span style="color:#9ECBFF"> test</span></span>
+<span class="line"><span style="color:#B392F0">npm</span><span style="color:#79B8FF"> --prefix</span><span style="color:#9ECBFF"> packages/shield/adapters/sdk-tests</span><span style="color:#9ECBFF"> test</span></span></code></pre>
+<p><code>make -C packages/shield install-local</code> installs into <code>~/.local/bin</code>; <code>PREFIX</code>
+selects another root. From this package use <code>make build</code> and <code>make install-local</code>.
+<code>CARGO</code> overrides Cargo discovery and <code>CARGO_FLAGS=--offline</code> uses cached dependencies.
+Make prefers <code>~/.cargo/bin/cargo</code> so rustup selects the pinned toolchain,
+falling back to Cargo on PATH.</p>
+<h2 id="debug-builds-and-diagnostics">Debug builds and diagnostics</h2>
+<p><code>make -C packages/shield build-debug</code> builds <code>target/diagnostic/shield</code> with release
+optimization, debug symbols, debug assertions and automatic JSONL logging. Native
+hook deadlines also apply to diagnostic builds. <code>make -C packages/shield install-local-debug</code>
+installs that build into <code>~/.local/bin</code>. <code>make -C packages/shield install-local</code>
+installs the release build, which has logging disabled by default. After replacing
+the installed executable, run <code>shield mcp setup --agent codex --project /path/to/project</code>
+(or <code>--agent claude</code>) to refresh its pinned digest, then restart the agent.</p>
+<p>Automatic logs live in the OS temporary directory under
+<code>shield-logs/shield-&lt;timestamp&gt;-&lt;pid&gt;.jsonl</code>. On macOS, inspect them with
+<code>ls -lt "${TMPDIR%/}/shield-logs"</code>. Each native hook gets its own file; the MCP
+server keeps a file for its process lifetime. Operator commands print their log
+path on stderr. Native hooks and MCP omit that startup message so protocol output
+and ordinary agent feedback remain clean.</p>
+<p>MCP frame logging uses a separate worker with an eight-frame queue. The
+dispatcher submits frames without waiting for parsing or file writes; a full
+queue drops diagnostic frames. Tool names are cached once per process. The
+logging worker drains accepted frames and is joined when its observer is dropped,
+so slow storage can delay shutdown but does not block live ping or cancellation
+dispatch. Frame sizes remain bounded by the MCP input and output limits.</p>
+<p>Both builds accept <code>--debug-log-dir DIRECTORY</code> to enable logging into another
+directory and <code>--no-debug-log</code> to disable it. <code>SHIELD_DEBUG_LOG_DIR</code> also selects
+the directory for child processes that inherit it; export it before starting the
+agent. Hosts can filter child environments. The CLI directory overrides the environment, and opt-out overrides the
+environment and debug default. Shield uses a directory rather than a single
+file because concurrent native callbacks start separate processes.</p>
+<p>Files are uniquely created, use mode 0600 on Unix, and stop at 8 MiB with a limit
+marker. Logs remain until you delete them or the OS clears temporary files; total
+directory size is not automatically capped. A logging failure reports a warning
+on stderr and disables logging without changing authorization or transport output.</p>
+<p>Records include elapsed milliseconds and PID/version/build type,
+native agent/event/tool and session/turn/tool-call IDs, captured input bytes,
+input validity and overflow, project/snapshot preparation, evaluation, native
+handoff and history stage timings, policy decision/fallback/disposition, completion
+history status, response event/decision/context shape, and MCP method/tool/ID,
+request/response sizes and error status. Commands, arguments, tool results,
+policy content, credentials and raw error text are omitted. Large truncated hook
+input cannot supply parsed IDs; its overflow and captured size are still recorded.
+Pair input/output records by PID and MCP messages by request ID to inspect timing.
+These logs are diagnostic evidence, separate from request history and execution
+attestation. <code>RUST_BACKTRACE=1</code> enables panic backtraces on stderr; debug symbols
+also support native debuggers.</p>
+<h2 id="adapter-and-host-checks">Adapter and host checks</h2>
+<p>The dependency-free adapter suite requires the actual package release executable.
+The SDK runner executes one test file at a time; each file retains its own
+concurrency assertions and owns its host processes and loopback provider.
+Codex fixtures disable plugin discovery in their isolated host so background
+marketplace clones cannot race project cleanup. Their teardown closes the local
+provider before removing the project, including after a failed assertion.
+The SDK suite uses locked MCP SDK 1.32.1 and Claude Agent SDK 0.3.292 dependencies.
+Its temporary projects and scripted loopback provider exercise canonical MCP
+inspection/proposals, dense deadline/cancellation behavior, supported native reads,
+exact retries, state/operator refusals, host discovery and completion privacy. Native command-hook fixtures also exercise
+Claude native Ask permission callbacks (approval and refusal), policy Deny bypassing
+ordinary approval, Codex approval-unavailable blocking, explicit denial, startup
+failure, and the host’s timeout continuation boundary. Confirmed automatic Ask
+allowance has distinct history/dispatch assertions. Codex’s unsupported Ask and
+ignored approval-field rewrites have separate disposable marker probes.
+PermissionRequest boundary tests cover complete-context Allow, Ask abstention,
+Deny, missing IDs and workdir, mixed batches and event-pinned input failures.
+Codex shell approval with an omitted workdir uses reported session cwd and follows
+policy Allow, Ask or Deny. Missing context remains recorded independently of handoff.
+Do not describe callback translation as a verified human approval flow.
+<code>adapters/sdk-tests/claude-interactive.test.mjs</code> separately runs the installed
+Claude CLI in an owned PTY with the ordinary terminal renderer. Its local provider
+requests policy apply in <code>auto</code> and <code>bypassPermissions</code>; actual keyboard input
+answers Accept, Decline and Escape. The fixture observes the host’s permission
+mode and verifies unchanged policy while input is withheld. It uses neither an
+SDK elicitation callback nor an <code>Elicitation</code> hook. Run it independently with
+<code>node --test --test-concurrency=1 packages/shield/adapters/sdk-tests/claude-interactive.test.mjs</code>
+after <code>make -C packages/shield build</code>. It requires the installed <code>claude</code> command,
+Python 3, PTYs, loopback access and permission to reap its owned child processes.
+For a fresh checkout install SDK test dependencies with
+<code>npm --prefix packages/shield/adapters/sdk-tests ci --ignore-scripts --no-fund --no-audit</code>.
+Native host checks are verified on macOS; Linux/Windows behavior is unverified.</p>
+<h2 id="individual-rust-verification">Individual Rust verification</h2>
+<p>Choose the checks needed for your change; there is no aggregate target.
+<code>docs</code> generates HTML in <code>target/doc/</code>; <code>doctest</code> runs documentation examples.
+Rustdoc may recheck dependencies even with <code>--no-deps</code>, which only suppresses
+their generated pages. Keep Cargo caches between runs.</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Command from this package</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Apply formatting</td>
+<td><code>make format</code></td>
+</tr>
+<tr>
+<td>Verify formatting</td>
+<td><code>make format-check</code></td>
+</tr>
+<tr>
+<td>Strict Clippy</td>
+<td><code>make lint</code></td>
+</tr>
+<tr>
+<td>Type checking</td>
+<td><code>make types</code></td>
+</tr>
+<tr>
+<td>Tests</td>
+<td><code>make test</code></td>
+</tr>
+<tr>
+<td>Documentation examples</td>
+<td><code>make doctest</code></td>
+</tr>
+<tr>
+<td>API reference HTML</td>
+<td><code>make docs</code></td>
+</tr>
+<tr>
+<td>Dependency audit</td>
+<td><code>make deps</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>make format FORMAT_FILES='src/cli/public.rs'</code> formats the named files and their
+out-of-line child modules. Name only leaf files (files with no out-of-line child
+modules) to keep edits limited to those files. For example, naming <code>src/agents.rs</code>
+also formats modules under <code>src/agents/</code>.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/shield/docs/development.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/shield/docs/compiled-cache/"><span>← Previous</span><strong>Compiled policy cache</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#fast-iteration">Fast iteration</a><a href="#source-ownership">Source ownership</a><a href="#check-tools">Check tools</a><a href="#checks">Checks</a><a href="#output-review-and-deeper-testing">Output review and deeper testing</a><a href="#local-build-and-adapter-checks">Local build and adapter checks</a><a href="#debug-builds-and-diagnostics">Debug builds and diagnostics</a><a href="#adapter-and-host-checks">Adapter and host checks</a><a href="#individual-rust-verification">Individual Rust verification</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

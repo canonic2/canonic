@@ -1,0 +1,398 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>React previews · Workbench docs · Canonic</title><meta name="description" content="The  react  adapter renders one of your React components on the Workbench canvas, with the preview's inputs as its props. Each named scenario is a set of props, and you can edit th"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.17.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/workbench/">Overview</a><a href="/workbench/docs/" aria-current="page">Docs</a><a href="/workbench/install/">Install</a><a href="/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Getting started</h2><a href="/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/workbench/docs/canvas/" data-doc-id="canvas">Using the canvas</a><a href="/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group"><h2>Previews</h2><a href="/workbench/docs/workbench-previews/" data-doc-id="workbench-previews">TypeScript Workbench previews</a><a href="/workbench/docs/preview-data/" data-doc-id="preview-data">Preview data, mocks, and actions</a><a href="/workbench/docs/react/" data-doc-id="react" aria-current="page">React previews</a><a href="/workbench/docs/react-native-web/" data-doc-id="react-native-web">React Native Web previews</a><a href="/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/workbench/docs/astro/" data-doc-id="astro">Astro previews</a><a href="/workbench/docs/html/" data-doc-id="html">HTML previews</a><a href="/workbench/docs/custom-adapters/" data-doc-id="custom-adapters">Custom adapters and compiler settings</a></div><div class="docs-group"><h2>Connect your implementation</h2><a href="/workbench/docs/lenses/" data-doc-id="lenses">Lenses and URL implementations</a><a href="/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/workbench/docs/ios-simulator/" data-doc-id="ios-simulator">iOS Simulator</a><a href="/workbench/docs/windows/" data-doc-id="windows">App windows</a></div><div class="docs-group"><h2>Reference</h2><a href="/workbench/docs/configuration/" data-doc-id="configuration">workbench.yaml reference</a><a href="/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/workbench/docs/extension/" data-doc-id="extension">The VS Code extension</a><a href="/workbench/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshooting</a></div></nav><a class="docs-install" href="/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span>Previews</span></div><div class="docs-prose"><h1 id="react-previews">React previews</h1>
+<p>The <code>react</code> adapter renders one of your React components on the Workbench
+canvas, with the preview’s inputs as its props. Each named scenario is a set of
+props, and you can edit them in <strong>Preview controls</strong> while you review.</p>
+<p>Use it for components and pages that render in the browser. To review your
+whole application as it runs, use a <a href="/workbench/docs/lenses/">URL lens</a>. For Storybook
+stories, see <a href="/workbench/docs/storybook/">Storybook</a>.</p>
+<p>This guide covers what is specific to React. The definition keys, scenarios,
+controls, lifecycle hooks, command-line tools, and portable exports are the
+same for every adapter and are described in
+<a href="/workbench/docs/workbench-previews/">TypeScript Workbench previews</a>.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li><code>react</code> and <code>react-dom</code> 18 or later, installed in your project. Workbench
+compiles your TypeScript and JSX itself but uses your project’s React. It
+finds <code>react</code> and <code>react-dom</code> from the definition’s folder, the way Node
+does, and never installs or replaces them.</li>
+<li><code>workbench.yaml</code> at the project root. <code>name: Acme</code> is enough.</li>
+<li>A <a href="/workbench/docs/extension/#workspace-trust">trusted workspace</a>, since previews run
+project code.</li>
+</ul>
+<h2 id="write-a-first-preview">Write a first preview</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>acme-web/</span></span>
+<span class="line"><span>├── workbench.yaml</span></span>
+<span class="line"><span>├── package.json            react and react-dom</span></span>
+<span class="line"><span>└── src/components/</span></span>
+<span class="line"><span>    ├── Button.tsx</span></span>
+<span class="line"><span>    ├── Button.css</span></span>
+<span class="line"><span>    └── Button.workbench.ts</span></span></code></pre>
+<p><code>src/components/Button.tsx</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="tsx"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { ReactNode } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#9ECBFF"> './Button.css'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> interface</span><span style="color:#B392F0"> ButtonProps</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#FFAB70">  label</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">  tone</span><span style="color:#F97583">?:</span><span style="color:#9ECBFF"> 'primary'</span><span style="color:#F97583"> |</span><span style="color:#9ECBFF"> 'secondary'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">  disabled</span><span style="color:#F97583">?:</span><span style="color:#79B8FF"> boolean</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">  icon</span><span style="color:#F97583">?:</span><span style="color:#B392F0"> ReactNode</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">  onClick</span><span style="color:#F97583">?:</span><span style="color:#E1E4E8"> () </span><span style="color:#F97583">=&gt;</span><span style="color:#79B8FF"> void</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> Button</span><span style="color:#E1E4E8">({ </span><span style="color:#FFAB70">label</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">tone</span><span style="color:#F97583"> =</span><span style="color:#9ECBFF"> 'primary'</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">disabled</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> false</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">icon</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">onClick</span><span style="color:#E1E4E8"> }</span><span style="color:#F97583">:</span><span style="color:#B392F0"> ButtonProps</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#85E89D">button</span><span style="color:#B392F0"> className</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{</span><span style="color:#9ECBFF">`acme-button acme-button--${</span><span style="color:#E1E4E8">tone</span><span style="color:#9ECBFF">}`</span><span style="color:#E1E4E8">} </span><span style="color:#B392F0">disabled</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{disabled} </span><span style="color:#B392F0">onClick</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{onClick}&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">      {icon}</span></span>
+<span class="line"><span style="color:#E1E4E8">      {label}</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;/</span><span style="color:#85E89D">button</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  );</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>src/components/Button.css</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="css"><code><span class="line"><span style="color:#B392F0">.acme-button</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#79B8FF">  font</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">600</span><span style="color:#79B8FF"> 16</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">/</span><span style="color:#79B8FF">1</span><span style="color:#79B8FF"> system-ui</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">sans-serif</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#79B8FF">  padding</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">12</span><span style="color:#F97583">px</span><span style="color:#79B8FF"> 20</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#79B8FF">  border</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#79B8FF">  border-radius</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">8</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#B392F0">.acme-button--primary</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">background</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">#2563eb</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">color</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">white</span><span style="color:#E1E4E8">; }</span></span>
+<span class="line"><span style="color:#B392F0">.acme-button--secondary</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">background</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">#e5e7eb</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">color</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">#111827</span><span style="color:#E1E4E8">; }</span></span>
+<span class="line"><span style="color:#B392F0">.acme-button:disabled</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">opacity</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.5</span><span style="color:#E1E4E8">; }</span></span></code></pre>
+<p><code>src/components/Button.workbench.ts</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'components/button'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  title: </span><span style="color:#9ECBFF">'Components/Button'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'react'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./Button.tsx'</span><span style="color:#E1E4E8">, export: </span><span style="color:#9ECBFF">'Button'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  inputs: { label: </span><span style="color:#9ECBFF">'Continue'</span><span style="color:#E1E4E8">, tone: </span><span style="color:#9ECBFF">'primary'</span><span style="color:#E1E4E8">, disabled: </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  controls: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    label: { type: </span><span style="color:#9ECBFF">'text'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">    tone: { type: </span><span style="color:#9ECBFF">'select'</span><span style="color:#E1E4E8">, options: [</span><span style="color:#9ECBFF">'primary'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'secondary'</span><span style="color:#E1E4E8">] },</span></span>
+<span class="line"><span style="color:#E1E4E8">    disabled: { type: </span><span style="color:#9ECBFF">'boolean'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    primary: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    secondary: { inputs: { tone: </span><span style="color:#9ECBFF">'secondary'</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">    disabled: { inputs: { disabled: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>Run <strong>Workbench: Refresh Pages</strong>. <strong>Button</strong> appears in a <strong>Components</strong>
+collection of the sidebar, with the scenarios <strong>Primary</strong>, <strong>Secondary</strong>, and
+<strong>Disabled</strong>. To build it without the canvas, run the
+<a href="/workbench/docs/workbench-previews/#command-line-tools">checker</a> on the project; it prints
+<code>Built components/button</code>.</p>
+<p><code>source.export</code> names the component’s export and defaults to <code>default</code>. Each
+scenario renders in a fresh React root, and the previous root is unmounted first.</p>
+<p>Name the component in <code>source</code> rather than importing it into the definition.
+Workbench runs the definition in Node to list your previews, so a definition
+that imports a component which imports an image fails with
+<code>No loader is configured for ".png" files</code>. Importing types with
+<code>import type</code> is fine.</p>
+<h2 id="props-children-and-callbacks">Props, children, and callbacks</h2>
+<p>The merged <code>inputs</code> of the preview, the scenario, and any edits in
+<strong>Preview controls</strong> are passed as the component’s props. Inputs must be plain
+data that can be copied, such as strings, numbers, booleans, arrays, and
+objects.</p>
+<ul>
+<li>
+<p><strong>Text children:</strong> set a <code>children</code> input, such as
+<code>inputs: { children: 'Everything your team needs.' }</code>. Give it a <code>text</code>
+control to edit it.</p>
+</li>
+<li>
+<p><strong>Elements, such as icons or slots:</strong> an element can’t be an input. Write a
+small preview-only module that supplies it, and render that module in a
+scenario with the scenario’s <code>source</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="tsx"><code><span class="line"><span style="color:#6A737D">// src/components/Button.preview.tsx</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { Button, </span><span style="color:#F97583">type</span><span style="color:#E1E4E8"> ButtonProps } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> './Button'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">function</span><span style="color:#B392F0"> StarIcon</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#85E89D">span</span><span style="color:#B392F0"> aria-hidden</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"true"</span><span style="color:#E1E4E8">&gt;★ &lt;/</span><span style="color:#85E89D">span</span><span style="color:#E1E4E8">&gt;;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> WithIcon</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">props</span><span style="color:#F97583">:</span><span style="color:#B392F0"> ButtonProps</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#79B8FF">Button</span><span style="color:#E1E4E8"> {</span><span style="color:#F97583">...</span><span style="color:#E1E4E8">props} </span><span style="color:#B392F0">icon</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{&lt;</span><span style="color:#79B8FF">StarIcon</span><span style="color:#E1E4E8"> /&gt;} /&gt;;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">scenarios</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#B392F0">  primary</span><span style="color:#E1E4E8">: {},</span></span>
+<span class="line"><span style="color:#9ECBFF">  'with-icon'</span><span style="color:#E1E4E8">: { source: { entry: </span><span style="color:#9ECBFF">'./Button.preview.tsx'</span><span style="color:#E1E4E8">, export: </span><span style="color:#9ECBFF">'WithIcon'</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">},</span></span></code></pre>
+<p>The module’s name doesn’t end in <code>.workbench.ts</code>, so it isn’t listed as a
+preview of its own.</p>
+</li>
+<li>
+<p><strong>Callbacks:</strong> a function can’t be an input either. Supply callbacks from an
+<a href="#add-providers-and-context">environment</a> and report each call with
+<code>context.action</code>, so it appears under <strong>Actions</strong> in <strong>Preview controls</strong>.</p>
+</li>
+</ul>
+<h2 id="add-providers-and-context">Add providers and context</h2>
+<p>Name an <code>environment</code> module in the definition to wrap the component in the
+providers it needs: a theme, a router, translations, or a data client. The
+module’s <code>wrap(element, context)</code> receives the component’s element and returns
+the tree to render. It runs on every render, so read the current scenario and
+globals from <code>context</code>.</p>
+<p><code>src/preview/environment.tsx</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="tsx"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { cloneElement, </span><span style="color:#F97583">type</span><span style="color:#E1E4E8"> ReactElement } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PreviewContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { ThemeProvider, </span><span style="color:#F97583">type</span><span style="color:#E1E4E8"> Theme } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@/theme'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> setup</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">  document.documentElement.lang </span><span style="color:#F97583">=</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">(context.globals.locale </span><span style="color:#F97583">??</span><span style="color:#9ECBFF"> 'en'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> wrap</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">element</span><span style="color:#F97583">:</span><span style="color:#B392F0"> ReactElement</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">Record</span><span style="color:#E1E4E8">&lt;</span><span style="color:#79B8FF">string</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">unknown</span><span style="color:#E1E4E8">&gt;&gt;, </span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> withActions</span><span style="color:#F97583"> =</span><span style="color:#B392F0"> cloneElement</span><span style="color:#E1E4E8">(element, {</span></span>
+<span class="line"><span style="color:#B392F0">    onSelect</span><span style="color:#E1E4E8">: (</span><span style="color:#FFAB70">id</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">action</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'select'</span><span style="color:#E1E4E8">, id),</span></span>
+<span class="line"><span style="color:#E1E4E8">  });</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#79B8FF">ThemeProvider</span><span style="color:#B392F0"> theme</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{(context.globals.theme </span><span style="color:#F97583">as</span><span style="color:#B392F0"> Theme</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">??</span><span style="color:#9ECBFF"> 'light'</span><span style="color:#E1E4E8">}&gt;{withActions}&lt;/</span><span style="color:#79B8FF">ThemeProvider</span><span style="color:#E1E4E8">&gt;;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>src/components/Card.workbench.ts</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'components/card'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  title: </span><span style="color:#9ECBFF">'Components/Card'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'react'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./Card.tsx'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  environment: </span><span style="color:#9ECBFF">'../preview/environment.tsx'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  styles: [</span><span style="color:#9ECBFF">'../styles/global.css'</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#E1E4E8">  inputs: { title: </span><span style="color:#9ECBFF">'Acme Pro'</span><span style="color:#E1E4E8">, children: </span><span style="color:#9ECBFF">'Everything your team needs.'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  globals: { theme: </span><span style="color:#9ECBFF">'light'</span><span style="color:#E1E4E8">, locale: </span><span style="color:#9ECBFF">'en'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  controls: { title: { type: </span><span style="color:#9ECBFF">'text'</span><span style="color:#E1E4E8"> }, children: { type: </span><span style="color:#9ECBFF">'text'</span><span style="color:#E1E4E8">, label: </span><span style="color:#9ECBFF">'Body'</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    light: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    dark: { globals: { theme: </span><span style="color:#9ECBFF">'dark'</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<ul>
+<li><code>@/theme</code> stands for your own theme module, resolved through
+<a href="#imports-jsx-and-environment-variables"><code>tsconfig.json</code> <code>paths</code></a>.</li>
+<li><code>cloneElement</code> adds props to the component, here an <code>onSelect</code> callback that
+logs <code>select</code> with its argument. Use the same pattern for <code>onClick</code>,
+<code>onChange</code>, or any other callback prop.</li>
+<li><code>globals</code> carry settings for the environment, such as the theme and locale,
+and each scenario can override them.</li>
+<li>The environment can also export <code>setup</code> and <code>ready</code>, which run with the
+<a href="/workbench/docs/workbench-previews/#lifecycle-hooks">lifecycle hooks</a> of the preview and
+its scenarios.</li>
+<li>Several definitions can share one environment module. For providers every
+preview needs, name it once as the
+<a href="/workbench/docs/preview-data/#environments">project-wide environment</a>
+instead.</li>
+<li>A data client such as Apollo, React Query, or SWR can stay real: wrap the
+component in it as usual and answer its requests with
+<a href="/workbench/docs/preview-data/#request-mocks"><code>requests</code></a>, so each scenario shows its
+own data. To seed the client’s cache instead, do it in <code>wrap</code> or <code>setup</code> from
+<code>context.fixtures</code>.</li>
+</ul>
+<p>Workbench doesn’t add <code>React.StrictMode</code>. Return it from <code>wrap</code> if you want
+it.</p>
+<h2 id="styles-fonts-and-images">Styles, fonts, and images</h2>
+<table>
+<thead>
+<tr>
+<th>What you write</th>
+<th>What Workbench does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>import './Button.css'</code> in a component</td>
+<td>Bundles the CSS and loads it with the preview</td>
+</tr>
+<tr>
+<td><code>import styles from './Card.module.css'</code></td>
+<td>Treats it as a CSS module, with locally scoped class names</td>
+</tr>
+<tr>
+<td><code>styles: ['../styles/global.css']</code> in the definition</td>
+<td>Loads global CSS, such as resets, tokens, and <code>@font-face</code> rules, that no component imports</td>
+</tr>
+<tr>
+<td><code>url(...)</code> in CSS</td>
+<td>Copies the file and rewrites the URL</td>
+</tr>
+<tr>
+<td><code>import logo from './logo.svg'</code></td>
+<td>Copies the file; <code>logo</code> is its URL, for an <code>img</code> <code>src</code></td>
+</tr>
+<tr>
+<td><code>import copy from './copy.json'</code></td>
+<td>Imports the parsed JSON</td>
+</tr>
+</tbody>
+</table>
+<p>A script can import images (<code>.svg</code>, <code>.png</code>, <code>.jpg</code>, <code>.jpeg</code>, <code>.gif</code>,
+<code>.webp</code>, <code>.avif</code>, <code>.ico</code>, <code>.bmp</code>), fonts (<code>.woff</code>, <code>.woff2</code>, <code>.ttf</code>, <code>.otf</code>,
+<code>.eot</code>), media (<code>.mp4</code>, <code>.webm</code>, <code>.mov</code>, <code>.mp3</code>, <code>.ogg</code>, <code>.wav</code>, <code>.m4a</code>), CSS,
+JSON, and script files. A <code>url()</code> in CSS can reference a file of any type. A
+preview waits for its fonts and visible images to load before it counts as
+ready.</p>
+<p>The <code>&lt;html&gt;</code> element carries <code>data-wb-scenario</code>, so a global stylesheet can
+change with the scenario, for example
+<code>:root[data-wb-scenario='dark'] body { background: #111827; }</code>.</p>
+<p>These need more than the built-in compiler:</p>
+<ul>
+<li><strong>Sass, Less, and Stylus</strong> fail with <code>Module parse failed</code>.</li>
+<li><strong>PostCSS and Tailwind</strong> don’t run. <code>@tailwind</code> and <code>@apply</code> are left
+unprocessed, so utility classes have no styles. Build the CSS with your own
+tooling and list the output file in <code>styles</code>.</li>
+<li><strong>SVG as a React component</strong>, such as SVGR’s
+<code>import { ReactComponent as Logo } from './logo.svg'</code>, fails with
+<code>Can't import the named export 'ReactComponent'</code>. An SVG import is a URL.</li>
+<li><strong>Other file types imported from a script</strong>, such as <code>.pdf</code> or <code>.txt</code>, fail
+with <code>Module parse failed</code>.</li>
+</ul>
+<p>For any of these, add a <a href="/workbench/docs/custom-adapters/#rules-and-plugins">rule or plugin</a>
+in <code>workbench.config.ts</code>.</p>
+<h2 id="imports-jsx-and-environment-variables">Imports, JSX, and environment variables</h2>
+<ul>
+<li><strong>JSX</strong> compiles with React’s automatic runtime, so components don’t need
+<code>import React</code>. The <code>jsx</code> and <code>jsxImportSource</code> settings in <code>tsconfig.json</code>
+aren’t read.</li>
+<li><strong><code>paths</code> in <code>tsconfig.json</code></strong>, such as <code>"@/*": ["./src/*"]</code>, resolve as
+they do in your editor.</li>
+<li><strong><code>aliases</code> in <code>workbench.config.ts</code></strong> replace an exact import specifier with
+a package or a project file. Use them to swap a module for a mock. An alias
+for <code>@acme/analytics</code> doesn’t apply to <code>@acme/analytics/track</code>; add that
+specifier as well, or use <code>tsconfig.json</code> <code>paths</code> for a prefix.</li>
+<li><strong><code>process.env.NODE_ENV</code></strong> is <code>development</code> on the canvas and <code>production</code>
+in exports. Any other <code>process.env</code> or <code>import.meta.env</code> value is undefined
+in the browser and fails with <code>process is not defined</code> or
+<code>Cannot read properties of undefined</code>. Set it with <code>define</code>.</li>
+</ul>
+<p><code>workbench.config.ts</code> at the project root:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { defineConfig } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> defineConfig</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  aliases: { </span><span style="color:#9ECBFF">'@acme/analytics'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'./src/preview/analytics-mock.ts'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  define: {</span></span>
+<span class="line"><span style="color:#9ECBFF">    'process.env.API_URL'</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">JSON</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">stringify</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'https://api.example.com'</span><span style="color:#E1E4E8">),</span></span>
+<span class="line"><span style="color:#9ECBFF">    'import.meta.env'</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">JSON</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">stringify</span><span style="color:#E1E4E8">({ VITE_API_URL: </span><span style="color:#9ECBFF">'https://api.example.com'</span><span style="color:#E1E4E8"> }),</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>Each <code>define</code> value is code, so wrap strings in <code>JSON.stringify</code>. Relative
+alias paths start from the project root. Workbench doesn’t read Vite, webpack,
+or Next.js configuration; repeat what your previews need here.</p>
+<h2 id="use-one-copy-of-react-in-a-monorepo">Use one copy of React in a monorepo</h2>
+<p>The adapter loads React from the definition’s folder, and each component
+loads React from its own folder. When those resolve to two installations,
+hooks fail with an error such as
+<code>Cannot read properties of null (reading 'useState')</code>. List the packages in
+<code>dedupe</code> so every import of them resolves from the definition’s folder:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { defineConfig } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> defineConfig</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  dedupe: [</span><span style="color:#9ECBFF">'react'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'react-dom'</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>Add any other package that must have a single copy, such as a context-based
+design system.</p>
+<h2 id="document-components-with-a-docs-page">Document components with a docs page</h2>
+<p>A page’s <a href="/workbench/docs/docs-pages/">docs</a> show a component’s examples in Markdown, each
+in its own panel with its code. Render the examples with React through a
+<code>docs</code> lens whose <code>adapter</code> is <code>react</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  web</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Web</span></span>
+<span class="line"><span style="color:#85E89D">    adapter</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">react</span></span>
+<span class="line"><span style="color:#85E89D">    styles</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#9ECBFF">src/styles/global.css</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Components</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Button</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs/button.md</span></span>
+<span class="line"><span style="color:#85E89D">        implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          web</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">src/components/button-examples/</span></span></code></pre>
+<p>Each example is a React component:</p>
+<ul>
+<li><strong>A folder</strong>, written with a trailing <code>/</code>: each file directly inside it is
+one example, its default export.
+<code>src/components/button-examples/secondary.tsx</code> is the example <code>secondary</code>, and <strong>Show code</strong> shows the whole file.</li>
+<li><strong>A file</strong>: each named export is one example. <code>export function WithIcon()</code>
+in <code>src/components/Button.examples.tsx</code> is the example <code>with-icon</code>, and
+<strong>Show code</strong> shows that export’s statement.</li>
+</ul>
+<p><code>docs/button.md</code> places each example by its ID, in a fenced block whose info
+string is <code>example</code> and the ID, such as <code>example secondary</code>; see
+<a href="/workbench/docs/docs-pages/#write-the-markdown">Write the Markdown</a>.</p>
+<p><code>src/components/button-examples/secondary.tsx</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="tsx"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { Button } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '../Button'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> Secondary</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#79B8FF">Button</span><span style="color:#B392F0"> label</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"Cancel"</span><span style="color:#B392F0"> tone</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"secondary"</span><span style="color:#E1E4E8"> /&gt;;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Examples receive no props and have no controls: write the props in the
+example. The project’s environment for <code>react</code>, and the lens’s <code>environment</code>,
+wrap each example with <code>wrap</code>, so the providers your previews use apply to the
+examples too; see
+<a href="/workbench/docs/preview-data/#examples-on-docs-pages">Examples on docs pages</a>. To render
+the same Markdown with React Native Web, add a second lens with
+<code>adapter: react-native-web</code>. To read the docs beside a component’s design or
+preview, give that page <code>docs: docs/button.md</code> in place of a Markdown <code>src</code>.
+A <code>*.workbench.ts</code> file can declare a Markdown page and its lenses with
+<code>defineDocs</code> instead; see
+<a href="/workbench/docs/docs-pages/#declare-a-markdown-page-in-a-definition">Docs</a>.</p>
+<h2 id="what-isnt-supported">What isn’t supported</h2>
+<ul>
+<li>The adapter renders a component in the browser. It doesn’t run your
+application’s server, server components, server actions, or framework data
+loaders. Supply data through inputs, providers in an environment,
+<a href="/workbench/docs/preview-data/#request-mocks">request mocks</a>, or mocked modules.</li>
+<li>Inputs can’t hold functions or elements. Use a
+<a href="#props-children-and-callbacks">preview-only module or an environment</a>.</li>
+</ul>
+<h2 id="errors-and-fixes">Errors and fixes</h2>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Cause and fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Module not found: Can't resolve 'react/jsx-runtime'</code>, or another <code>react</code> or <code>react-dom</code> import</td>
+<td>React isn’t installed where the definition and component can find it. Install <code>react</code> and <code>react-dom</code> in the project.</td>
+</tr>
+<tr>
+<td><code>Cannot read properties of null (reading 'useState')</code>, or React’s invalid hook call error</td>
+<td>Two copies of React. Add them to <a href="#use-one-copy-of-react-in-a-monorepo"><code>dedupe</code></a>.</td>
+</tr>
+<tr>
+<td><code>The selected source export does not exist for &lt;id&gt; — &lt;scenario&gt;</code></td>
+<td><code>source.export</code> doesn’t match an export of the entry. A named export needs <code>export: 'Button'</code>.</td>
+</tr>
+<tr>
+<td><code>DataCloneError: … could not be cloned</code></td>
+<td>An input holds a function or another value that can’t be copied. See <a href="#props-children-and-callbacks">Props, children, and callbacks</a>.</td>
+</tr>
+<tr>
+<td><code>process is not defined</code>, or <code>Cannot read properties of undefined (reading 'VITE_…')</code></td>
+<td>An environment variable isn’t defined. Add it to <a href="#imports-jsx-and-environment-variables"><code>define</code></a>.</td>
+</tr>
+<tr>
+<td><code>No loader is configured for ".&lt;ext&gt;" files</code></td>
+<td>The definition imports a component, which imports a file such as an image. Name the component in <code>source</code> instead. See <a href="#write-a-first-preview">Write a first preview</a>.</td>
+</tr>
+<tr>
+<td><code>Module parse failed</code></td>
+<td>A script imports a file type Workbench doesn’t compile, such as <code>.scss</code> or <code>.pdf</code>. See <a href="#styles-fonts-and-images">Styles, fonts, and images</a>.</td>
+</tr>
+<tr>
+<td><code>Can't import the named export 'ReactComponent'</code></td>
+<td>An SVG is imported as a React component. An SVG import is a URL.</td>
+</tr>
+<tr>
+<td><code>Module not found: Can't resolve '&lt;package&gt;/&lt;path&gt;'</code> with an alias set</td>
+<td>Aliases match whole specifiers only. Alias that specifier too.</td>
+</tr>
+</tbody>
+</table>
+<p>For previews that don’t appear in the list, see
+<a href="/workbench/docs/troubleshooting/#a-typescript-preview-is-missing-or-broken">A TypeScript preview is missing or broken</a>.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/react.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/workbench/docs/preview-data/"><span>← Previous</span><strong>Preview data, mocks, and actions</strong></a><a href="/workbench/docs/react-native-web/"><span>Next →</span><strong>React Native Web previews</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#requirements">Requirements</a><a href="#write-a-first-preview">Write a first preview</a><a href="#props-children-and-callbacks">Props, children, and callbacks</a><a href="#add-providers-and-context">Add providers and context</a><a href="#styles-fonts-and-images">Styles, fonts, and images</a><a href="#imports-jsx-and-environment-variables">Imports, JSX, and environment variables</a><a href="#use-one-copy-of-react-in-a-monorepo">Use one copy of React in a monorepo</a><a href="#document-components-with-a-docs-page">Document components with a docs page</a><a href="#what-isnt-supported">What isn’t supported</a><a href="#errors-and-fixes">Errors and fixes</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

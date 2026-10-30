@@ -1,0 +1,434 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>HTML previews · Workbench docs · Canonic</title><meta name="description" content="An HTML preview renders an HTML file, or a function that draws into the canvas, as a TypeScript preview with  adapter: 'html' . Workbench compiles the file's scripts, stylesheets, "><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.17.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/workbench/">Overview</a><a href="/workbench/docs/" aria-current="page">Docs</a><a href="/workbench/install/">Install</a><a href="/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Getting started</h2><a href="/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/workbench/docs/canvas/" data-doc-id="canvas">Using the canvas</a><a href="/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group"><h2>Previews</h2><a href="/workbench/docs/workbench-previews/" data-doc-id="workbench-previews">TypeScript Workbench previews</a><a href="/workbench/docs/preview-data/" data-doc-id="preview-data">Preview data, mocks, and actions</a><a href="/workbench/docs/react/" data-doc-id="react">React previews</a><a href="/workbench/docs/react-native-web/" data-doc-id="react-native-web">React Native Web previews</a><a href="/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/workbench/docs/astro/" data-doc-id="astro">Astro previews</a><a href="/workbench/docs/html/" data-doc-id="html" aria-current="page">HTML previews</a><a href="/workbench/docs/custom-adapters/" data-doc-id="custom-adapters">Custom adapters and compiler settings</a></div><div class="docs-group"><h2>Connect your implementation</h2><a href="/workbench/docs/lenses/" data-doc-id="lenses">Lenses and URL implementations</a><a href="/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/workbench/docs/ios-simulator/" data-doc-id="ios-simulator">iOS Simulator</a><a href="/workbench/docs/windows/" data-doc-id="windows">App windows</a></div><div class="docs-group"><h2>Reference</h2><a href="/workbench/docs/configuration/" data-doc-id="configuration">workbench.yaml reference</a><a href="/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/workbench/docs/extension/" data-doc-id="extension">The VS Code extension</a><a href="/workbench/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshooting</a></div></nav><a class="docs-install" href="/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span>Previews</span></div><div class="docs-prose"><h1 id="html-previews">HTML previews</h1>
+<p>An HTML preview renders an HTML file, or a function that draws into the
+canvas, as a <a href="/workbench/docs/workbench-previews/">TypeScript preview</a> with
+<code>adapter: 'html'</code>. Workbench compiles the file’s scripts, stylesheets, and
+assets, and gives the page scenarios, inputs, <strong>Preview controls</strong>, and an action
+log. No framework is involved.</p>
+<p>This guide covers what is specific to HTML. For the definition keys, controls,
+lifecycle hooks, and the command-line checker, see
+<a href="/workbench/docs/workbench-previews/">TypeScript Workbench previews</a>.</p>
+<h2 id="html-previews-or-design-pages">HTML previews or design pages</h2>
+<p>Workbench shows HTML in two ways. A <a href="/workbench/docs/pages-and-scenarios/#design-pages">design page</a>
+is an HTML file listed in <code>workbench.yaml</code> and served as it is. An HTML preview
+is an HTML file named by a <code>.workbench.ts</code> definition and rebuilt by Workbench.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Design page</th>
+<th>HTML preview</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Declared in</td>
+<td><code>workbench.yaml</code>, with its scenarios</td>
+<td>A <code>.workbench.ts</code> definition next to the file</td>
+</tr>
+<tr>
+<td>How it’s served</td>
+<td>The file itself, from the project</td>
+<td>Compiled into a new document</td>
+</tr>
+<tr>
+<td>Scripts</td>
+<td>Run as written</td>
+<td>Bundled, so they can be TypeScript and import local modules, packages, CSS, and JSON</td>
+</tr>
+<tr>
+<td>Scenarios</td>
+<td><code>data-wb-*</code> attributes and CSS; the first scenario is <code>default</code> in the page</td>
+<td>The same, plus scripts that read the scenario and inputs; the scenario ID is used as it is</td>
+</tr>
+<tr>
+<td>Inputs, controls, actions</td>
+<td>None</td>
+<td><code>inputs</code>, <strong>Preview controls</strong>, and <strong>Actions</strong></td>
+</tr>
+<tr>
+<td>Relative links</td>
+<td>Work as on a web server</td>
+<td>Resolve against the compiled preview, not the file (see <a href="#links">Links</a>)</td>
+</tr>
+<tr>
+<td>Portable viewer</td>
+<td>Not included</td>
+<td>Included in <code>build</code> output and the export’s <code>browser/</code> folder</td>
+</tr>
+</tbody>
+</table>
+<p>Use a design page for a mockup or static export that you review as it is,
+especially one with links between pages. Use an HTML preview when the page
+needs data from inputs, TypeScript or bundled imports, controls, or a place in
+the <a href="/workbench/docs/workbench-previews/#portable-exports">portable viewer</a>.</p>
+<h2 id="requirements">Requirements</h2>
+<p>Only the general requirements in
+<a href="/workbench/docs/workbench-previews/">TypeScript Workbench previews</a>: a <code>workbench.yaml</code> and a
+trusted workspace. Packages that your scripts import must be installed in the
+project; Workbench bundles them but never installs them.</p>
+<h2 id="a-minimal-preview">A minimal preview</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>acme/</span></span>
+<span class="line"><span>├── workbench.yaml</span></span>
+<span class="line"><span>└── site/</span></span>
+<span class="line"><span>    ├── images/</span></span>
+<span class="line"><span>    │   ├── hero.svg</span></span>
+<span class="line"><span>    │   ├── logo.svg</span></span>
+<span class="line"><span>    │   └── logo@2x.svg</span></span>
+<span class="line"><span>    └── pricing/</span></span>
+<span class="line"><span>        ├── pricing.css</span></span>
+<span class="line"><span>        ├── pricing.html</span></span>
+<span class="line"><span>        ├── pricing.ts</span></span>
+<span class="line"><span>        └── pricing.workbench.ts</span></span></code></pre>
+<p><code>workbench.yaml</code> only needs a name:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Acme</span></span></code></pre>
+<p><code>site/pricing/pricing.html</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="html"><code><span class="line"><span style="color:#E1E4E8">&lt;!</span><span style="color:#85E89D">doctype</span><span style="color:#B392F0"> html</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;</span><span style="color:#85E89D">html</span><span style="color:#B392F0"> lang</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"en"</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;</span><span style="color:#85E89D">head</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">meta</span><span style="color:#B392F0"> charset</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"utf-8"</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">title</span><span style="color:#E1E4E8">&gt;Pricing — Acme&lt;/</span><span style="color:#85E89D">title</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">link</span><span style="color:#B392F0"> rel</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"stylesheet"</span><span style="color:#B392F0"> href</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"./pricing.css"</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;/</span><span style="color:#85E89D">head</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;</span><span style="color:#85E89D">body</span><span style="color:#B392F0"> class</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"marketing"</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">header</span><span style="color:#B392F0"> class</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"hero"</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#85E89D">img</span><span style="color:#B392F0"> src</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"../images/logo.svg"</span><span style="color:#B392F0"> srcset</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"../images/logo.svg 1x, ../images/logo@2x.svg 2x"</span><span style="color:#B392F0"> alt</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"Acme"</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#85E89D">h1</span><span style="color:#E1E4E8">&gt;Plans for every team&lt;/</span><span style="color:#85E89D">h1</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;/</span><span style="color:#85E89D">header</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">article</span><span style="color:#B392F0"> class</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"plan"</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#85E89D">h2</span><span style="color:#B392F0"> class</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"plan-name"</span><span style="color:#E1E4E8">&gt;Team&lt;/</span><span style="color:#85E89D">h2</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#85E89D">p</span><span style="color:#B392F0"> class</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"plan-price"</span><span style="color:#E1E4E8">&gt;$12.00 / month&lt;/</span><span style="color:#85E89D">p</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#85E89D">p</span><span style="color:#B392F0"> class</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"plan-note"</span><span style="color:#E1E4E8">&gt;Billed yearly&lt;/</span><span style="color:#85E89D">p</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#85E89D">button</span><span style="color:#B392F0"> class</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"plan-cta"</span><span style="color:#B392F0"> type</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"button"</span><span style="color:#E1E4E8">&gt;Choose plan&lt;/</span><span style="color:#85E89D">button</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#85E89D">a</span><span style="color:#B392F0"> href</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"./compare.html"</span><span style="color:#E1E4E8">&gt;Compare plans&lt;/</span><span style="color:#85E89D">a</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;/</span><span style="color:#85E89D">article</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">  &lt;</span><span style="color:#85E89D">script</span><span style="color:#B392F0"> type</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"module"</span><span style="color:#B392F0"> src</span><span style="color:#E1E4E8">=</span><span style="color:#9ECBFF">"./pricing.ts"</span><span style="color:#E1E4E8">&gt;&lt;/</span><span style="color:#85E89D">script</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;/</span><span style="color:#85E89D">body</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">&lt;/</span><span style="color:#85E89D">html</span><span style="color:#E1E4E8">&gt;</span></span></code></pre>
+<p><code>site/pricing/pricing.css</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="css"><code><span class="line"><span style="color:#85E89D">body</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">font</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">16</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">/</span><span style="color:#79B8FF">1.5</span><span style="color:#79B8FF"> system-ui</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">sans-serif</span><span style="color:#E1E4E8">; }</span></span>
+<span class="line"><span style="color:#B392F0">.hero</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">padding</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">32</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">background</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">url</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">../images/hero.svg</span><span style="color:#E1E4E8">) </span><span style="color:#79B8FF">no-repeat</span><span style="color:#79B8FF"> right</span><span style="color:#79B8FF"> center</span><span style="color:#E1E4E8"> / </span><span style="color:#79B8FF">120</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; }</span></span>
+<span class="line"><span style="color:#B392F0">.plan</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">margin</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span><span style="color:#79B8FF"> 32</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">padding</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">24</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">max-width</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">320</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">border</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#F97583">px</span><span style="color:#79B8FF"> solid</span><span style="color:#79B8FF"> #dde3ee</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">border-radius</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">12</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; }</span></span>
+<span class="line"><span style="color:#B392F0">.plan-cta</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">padding</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">12</span><span style="color:#F97583">px</span><span style="color:#79B8FF"> 20</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">border</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">border-radius</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">8</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">background</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">#1f5eff</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">color</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">white</span><span style="color:#E1E4E8">; }</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">.plan-note</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">display</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">none</span><span style="color:#E1E4E8">; }</span></span>
+<span class="line"><span style="color:#85E89D">html</span><span style="color:#E1E4E8">[</span><span style="color:#B392F0">data-wb-scenario</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"annual"</span><span style="color:#E1E4E8">] </span><span style="color:#B392F0">.plan-note</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">display</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">block</span><span style="color:#E1E4E8">; }</span></span>
+<span class="line"><span style="color:#85E89D">html</span><span style="color:#E1E4E8">[</span><span style="color:#B392F0">data-wb-scenario</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"annual"</span><span style="color:#E1E4E8">] </span><span style="color:#B392F0">.plan</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">border-color</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">#1f5eff</span><span style="color:#E1E4E8">; }</span></span></code></pre>
+<p><code>site/pricing/pricing.ts</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PreviewContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// Set while Workbench renders the page, and undefined anywhere else.</span></span>
+<span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> preview</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> (window </span><span style="color:#F97583">as</span><span style="color:#B392F0"> Window</span><span style="color:#F97583"> &amp;</span><span style="color:#E1E4E8"> { </span><span style="color:#FFAB70">workbench</span><span style="color:#F97583">?:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8"> }).workbench;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> (preview) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> plan</span><span style="color:#F97583"> =</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">(preview.inputs.plan);</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> price</span><span style="color:#F97583"> =</span><span style="color:#B392F0"> Number</span><span style="color:#E1E4E8">(preview.inputs.price);</span></span>
+<span class="line"><span style="color:#E1E4E8">  document.</span><span style="color:#B392F0">querySelector</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'.plan-name'</span><span style="color:#E1E4E8">)</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">.textContent </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> plan;</span></span>
+<span class="line"><span style="color:#E1E4E8">  document.</span><span style="color:#B392F0">querySelector</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'.plan-price'</span><span style="color:#E1E4E8">)</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">.textContent </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> '$'</span><span style="color:#F97583"> +</span><span style="color:#E1E4E8"> price.</span><span style="color:#B392F0">toFixed</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">2</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">+</span><span style="color:#9ECBFF"> ' / month'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">  document.</span><span style="color:#B392F0">querySelector</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'.plan-cta'</span><span style="color:#E1E4E8">)</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">addEventListener</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'click'</span><span style="color:#E1E4E8">, () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    preview.</span><span style="color:#B392F0">action</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'choose-plan'</span><span style="color:#E1E4E8">, plan);</span></span>
+<span class="line"><span style="color:#E1E4E8">  });</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>site/pricing/pricing.workbench.ts</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'pages/pricing'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  title: </span><span style="color:#9ECBFF">'Pages/Pricing'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'html'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./pricing.html'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  sizes: [</span><span style="color:#9ECBFF">'laptop'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'mobile'</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#E1E4E8">  inputs: { plan: </span><span style="color:#9ECBFF">'Team'</span><span style="color:#E1E4E8">, price: </span><span style="color:#79B8FF">12</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  controls: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    plan: { type: </span><span style="color:#9ECBFF">'select'</span><span style="color:#E1E4E8">, options: [</span><span style="color:#9ECBFF">'Starter'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'Team'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'Enterprise'</span><span style="color:#E1E4E8">] },</span></span>
+<span class="line"><span style="color:#E1E4E8">    price: { type: </span><span style="color:#9ECBFF">'number'</span><span style="color:#E1E4E8">, min: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, step: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    monthly: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    annual: { inputs: { price: </span><span style="color:#79B8FF">10</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>Run <strong>Workbench: Refresh Pages</strong>. <strong>Pricing</strong> appears in a <strong>Pages</strong> collection
+with the scenarios <strong>Monthly</strong> and <strong>Annual</strong>. <strong>Annual</strong> shows $10.00 and the
+“Billed yearly” note, choosing a plan in <strong>Preview controls</strong> renders the page
+again with that plan, and clicking <strong>Choose plan</strong> records <code>choose-plan</code> under
+<strong>Actions</strong>. The <a href="/workbench/docs/workbench-previews/#command-line-tools">command-line checker</a>
+prints <code>Built pages/pricing</code>.</p>
+<h2 id="how-workbench-rebuilds-the-page">How Workbench rebuilds the page</h2>
+<p>Workbench doesn’t serve your HTML file. It compiles it and puts its content into
+a document of its own:</p>
+<ul>
+<li><code>&lt;title&gt;</code>, <code>&lt;meta&gt;</code>, and <code>&lt;base&gt;</code> are dropped. The page’s title is the
+preview’s <code>title</code>.</li>
+<li>The attributes of your <code>&lt;html&gt;</code> and <code>&lt;body&gt;</code> are copied onto the preview’s
+<code>&lt;html&gt;</code> and <code>&lt;body&gt;</code>, so <code>lang</code>, classes, and inline styles still apply.</li>
+<li>The rest of <code>&lt;head&gt;</code> and the content of <code>&lt;body&gt;</code> go, in that order, into a
+<code>&lt;main id="workbench-preview"&gt;</code> element. Selectors that depend on what is
+directly inside <code>body</code>, such as <code>body &gt; header</code>, don’t match. Rules for
+<code>html</code>, <code>body</code>, and your own classes do.</li>
+<li>The HTML can be a fragment, with no <code>&lt;html&gt;</code>, <code>&lt;head&gt;</code>, or <code>&lt;body&gt;</code>.</li>
+</ul>
+<h3 id="stylesheets">Stylesheets</h3>
+<p><code>&lt;link rel="stylesheet"&gt;</code> files and <code>&lt;style&gt;</code> blocks are compiled with their
+<code>@import</code> rules, and each relative <code>url()</code> is resolved from the file it appears
+in and copied with the preview, whatever its file type. A <code>url()</code> that starts
+with <code>/</code> fails the build with <code>Module not found: Can't resolve '/…'</code>; write it
+relative to the stylesheet. External stylesheets keep their URLs.</p>
+<h3 id="scripts">Scripts</h3>
+<p>Every inline <code>&lt;script&gt;</code> and local <code>&lt;script src&gt;</code>, classic or module, is
+compiled and bundled with what it imports: local modules, installed packages,
+CSS (added to the page), JSON (as data), and images, fonts, and media (as URLs;
+the types are listed in <a href="/workbench/docs/react/#styles-fonts-and-images">Styles, fonts, and images</a>).
+Importing another file type fails the build with <code>Module parse failed</code>.
+External scripts keep their URLs.</p>
+<ul>
+<li>Inline scripts and <code>&lt;script src&gt;</code> files can be TypeScript.</li>
+<li>Each script is wrapped so that its top-level declarations stay private. An
+inline handler such as <code>onclick="hello()"</code> can’t see a <code>function hello()</code>
+declared in a script, and fails with <code>ReferenceError: hello is not defined</code>.
+Add listeners from the script, or assign the function to <code>window</code>.</li>
+<li><code>&lt;script type="application/json"&gt;</code> and <code>application/ld+json</code> blocks are kept
+as they are, so a script can read fixture data from them.</li>
+<li>Stylesheets load first. Then the scripts run one at a time, in document order,
+after all of the markup is in place. <code>DOMContentLoaded</code> has already fired, so
+run your code directly instead of waiting for it or for <code>load</code>.</li>
+</ul>
+<h3 id="images-and-other-files">Images and other files</h3>
+<p>Relative paths in <code>src</code>, <code>poster</code>, and <code>srcset</code> are resolved from the HTML
+file and copied with the preview. A path that starts with <code>/</code> is resolved from
+the project root. A URL with a scheme, such as <code>https:</code> or <code>data:</code>, is kept as
+it is. A local file that doesn’t exist fails the build with
+<code>Module not found: Can't resolve '&lt;path&gt;'</code>.</p>
+<p>These aren’t rewritten, so a relative path in them doesn’t load:</p>
+<ul>
+<li>an attribute value without quotes, such as <code>src=logo.svg</code>,</li>
+<li>a <code>url()</code> inside a <code>style="..."</code> attribute; move it into a stylesheet,</li>
+<li><code>href</code> on <code>&lt;a&gt;</code> elements, and on <code>&lt;link&gt;</code> elements other than stylesheets,
+such as <code>&lt;link rel="icon"&gt;</code>.</li>
+</ul>
+<h3 id="links">Links</h3>
+<p>A relative link resolves against the compiled preview’s folder, not your HTML
+file’s folder, so it doesn’t reach the page next to your file. A link that
+starts with <code>/</code> resolves from the project root. Links don’t add pages to
+Workbench: write a preview for each page you want, and map the addresses your
+page links to in the definition’s <code>links</code>. With the top bar’s <strong>Actions</strong>
+switch on, a mapped
+link opens its preview, and any other link, such as <strong>Compare plans</strong> without a
+<code>pages/compare</code> preview, is recorded under <strong>Actions</strong> as <code>navigate</code>. See
+<a href="/workbench/docs/preview-data/#links-and-navigation">Links and navigation</a>.</p>
+<h2 id="inputs-scenarios-and-actions">Inputs, scenarios, and actions</h2>
+<p>While a scenario renders, <code>window.workbench</code> holds the preview’s context: <code>id</code>,
+<code>scenario</code>, <code>inputs</code>, <code>fixtures</code>, <code>globals</code>, <code>signal</code>, <code>action(name, ...values)</code>,
+<code>navigate(to)</code>, and <code>error(error)</code>. Your HTML doesn’t receive inputs any other
+way; a script reads them and updates the page, as <code>pricing.ts</code> does. Outside
+Workbench, <code>window.workbench</code> is undefined.</p>
+<p>A page whose scripts load their data with <code>fetch</code> or XMLHttpRequest needs no
+changes: answer those requests per scenario with
+<a href="/workbench/docs/preview-data/#request-mocks"><code>requests</code></a>.</p>
+<p>Every scenario change, input edit, and <strong>Reset scenario</strong> renders the page again from
+the start: Workbench removes the content, restores the <code>&lt;html&gt;</code> and <code>&lt;body&gt;</code>
+attributes, inserts the content again, and runs every script again, modules
+included. The window itself is kept, so globals your scripts set and listeners
+they add to <code>window</code> or <code>document</code> survive into the next render. Tie those
+listeners to the render’s signal:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="js"><code><span class="line"><span style="color:#E1E4E8">document.</span><span style="color:#B392F0">addEventListener</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'keydown'</span><span style="color:#E1E4E8">, onKey, { signal: window.workbench?.signal });</span></span></code></pre>
+<p>Scenarios:</p>
+<ul>
+<li><code>&lt;html&gt;</code> carries <code>data-wb-scenario</code> with the scenario’s ID. The first
+scenario uses its own ID, such as <code>monthly</code>, not <code>default</code> as on design pages. CSS keyed off it,
+as in <code>pricing.css</code>, works on the canvas and in exports.</li>
+<li><code>data-wb-scenario-only</code>, <code>data-wb-scenario-not</code>, and <code>data-wb-set-&lt;id&gt;</code>,
+described in <a href="/workbench/docs/pages-and-scenarios/#scenarios">Scenarios</a>, are applied on the canvas before your
+scripts run. They aren’t applied in the
+<a href="/workbench/docs/workbench-previews/#portable-exports">portable viewer</a>, so use CSS or a
+script when the preview must look the same there.</li>
+</ul>
+<p>Call <code>window.workbench.action(name, ...values)</code> to add an entry under
+<strong>Actions</strong>.</p>
+<h2 id="render-from-a-function">Render from a function</h2>
+<p><code>source.entry</code> can also be a TypeScript or JavaScript module that exports a
+function. Workbench calls it with the canvas element and the context, and it
+may return a cleanup function. Use this for a component that isn’t a page.</p>
+<p><code>site/components/banner.ts</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PreviewContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#9ECBFF"> './banner.css'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> mountBanner</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">canvas</span><span style="color:#F97583">:</span><span style="color:#B392F0"> HTMLElement</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> banner</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> document.</span><span style="color:#B392F0">createElement</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'div'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">  banner.className </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> 'banner '</span><span style="color:#F97583"> +</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">(context.inputs.tone);</span></span>
+<span class="line"><span style="color:#E1E4E8">  banner.textContent </span><span style="color:#F97583">=</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">(context.inputs.message);</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> close</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> document.</span><span style="color:#B392F0">createElement</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'button'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">  close.type </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> 'button'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">  close.textContent </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> 'Dismiss'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">  close.</span><span style="color:#B392F0">addEventListener</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'click'</span><span style="color:#E1E4E8">, () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">action</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'dismiss'</span><span style="color:#E1E4E8">), { signal: context.signal });</span></span>
+<span class="line"><span style="color:#E1E4E8">  banner.</span><span style="color:#B392F0">append</span><span style="color:#E1E4E8">(close);</span></span>
+<span class="line"><span style="color:#E1E4E8">  canvas.</span><span style="color:#B392F0">append</span><span style="color:#E1E4E8">(banner);</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">  // Anything outside the canvas needs its own cleanup.</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#B392F0"> onKey</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">event</span><span style="color:#F97583">:</span><span style="color:#B392F0"> KeyboardEvent</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> { </span><span style="color:#F97583">if</span><span style="color:#E1E4E8"> (event.key </span><span style="color:#F97583">===</span><span style="color:#9ECBFF"> 'Escape'</span><span style="color:#E1E4E8">) context.</span><span style="color:#B392F0">action</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'dismiss'</span><span style="color:#E1E4E8">); };</span></span>
+<span class="line"><span style="color:#E1E4E8">  document.</span><span style="color:#B392F0">addEventListener</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'keydown'</span><span style="color:#E1E4E8">, onKey);</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> document.</span><span style="color:#B392F0">removeEventListener</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'keydown'</span><span style="color:#E1E4E8">, onKey);</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>site/components/banner.css</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="css"><code><span class="line"><span style="color:#B392F0">.banner</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">display</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">flex</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">gap</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">12</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">align-items</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">center</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">padding</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">12</span><span style="color:#F97583">px</span><span style="color:#79B8FF"> 16</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">border-radius</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">8</span><span style="color:#F97583">px</span><span style="color:#E1E4E8">; </span><span style="color:#79B8FF">font</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">15</span><span style="color:#F97583">px</span><span style="color:#79B8FF"> system-ui</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">sans-serif</span><span style="color:#E1E4E8">; }</span></span>
+<span class="line"><span style="color:#B392F0">.banner.info</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">background</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">rgb</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">232</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">237</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">247</span><span style="color:#E1E4E8">); }</span></span>
+<span class="line"><span style="color:#B392F0">.banner.warning</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">background</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">rgb</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">255</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">240</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">200</span><span style="color:#E1E4E8">); }</span></span></code></pre>
+<p><code>site/components/banner.workbench.ts</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'components/banner'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  title: </span><span style="color:#9ECBFF">'Components/Banner'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'html'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./banner.ts'</span><span style="color:#E1E4E8">, export: </span><span style="color:#9ECBFF">'mountBanner'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  sizes: [</span><span style="color:#9ECBFF">'fit'</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#E1E4E8">  inputs: { message: </span><span style="color:#9ECBFF">'Your trial ends in 3 days.'</span><span style="color:#E1E4E8">, tone: </span><span style="color:#9ECBFF">'info'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  controls: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    message: { type: </span><span style="color:#9ECBFF">'text'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">    tone: { type: </span><span style="color:#9ECBFF">'select'</span><span style="color:#E1E4E8">, options: [</span><span style="color:#9ECBFF">'info'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'warning'</span><span style="color:#E1E4E8">] },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    info: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    warning: { inputs: { tone: </span><span style="color:#9ECBFF">'warning'</span><span style="color:#E1E4E8">, message: </span><span style="color:#9ECBFF">'Payment failed.'</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>Workbench empties the canvas before each render, so you only clean up what you
+added elsewhere. If the named export isn’t a function, the preview shows
+<code>An HTML JavaScript entry must export a mount function.</code></p>
+<h2 id="environment-mount">Environment mount</h2>
+<p>An <code>environment</code> module can export <code>mount(canvas, context)</code>. For an HTML file,
+Workbench calls it after the content is in place and the page’s scripts have
+run, and runs the cleanup it returns before the next render. It isn’t called
+for a <a href="#render-from-a-function">function source</a>. The environment can also
+export <code>setup</code> and <code>ready</code>; see
+<a href="/workbench/docs/workbench-previews/#lifecycle-hooks">Lifecycle hooks</a>.</p>
+<p><code>site/pricing/pricing-environment.ts</code> makes <strong>Choose plan</strong>, a button rather
+than a link, open a checkout preview:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PreviewContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// Runs after the HTML is in place and its scripts have run.</span></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> mount</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">canvas</span><span style="color:#F97583">:</span><span style="color:#B392F0"> HTMLElement</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">  canvas.</span><span style="color:#B392F0">querySelector</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'.plan-cta'</span><span style="color:#E1E4E8">)?.</span><span style="color:#B392F0">addEventListener</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'click'</span><span style="color:#E1E4E8">, () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    context.</span><span style="color:#B392F0">navigate</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'pages/checkout'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">  }, { signal: context.signal });</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Add it to the definition, with a path relative to the definition:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">  source</span><span style="color:#E1E4E8">: { </span><span style="color:#B392F0">entry</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'./pricing.html'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#B392F0">  environment</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'./pricing-environment.ts'</span><span style="color:#E1E4E8">,</span></span></code></pre>
+<p>With a <code>pages/checkout</code> preview in the project and <strong>Actions</strong> on, clicking
+<strong>Choose plan</strong> opens it. <code>pricing.ts</code> still records <code>choose-plan</code> first.</p>
+<h2 id="document-components-with-a-docs-page">Document components with a docs page</h2>
+<p>A page’s <a href="/workbench/docs/docs-pages/">docs</a> can show HTML components as live examples.
+Give the page a <code>docs</code> lens with <code>adapter: html</code>. Each example is a function
+<code>(canvas, context)</code> that draws into <code>canvas</code>, like a
+<a href="#render-from-a-function">function source</a>, and may return a cleanup function.
+HTML files aren’t examples.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  web</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Web</span></span>
+<span class="line"><span style="color:#85E89D">    adapter</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">html</span></span>
+<span class="line"><span style="color:#85E89D">    styles</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#9ECBFF">site/components/banner.css</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Components</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Banner</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs/banner.md</span></span>
+<span class="line"><span style="color:#85E89D">        implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          web</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">site/components/banner.examples.ts</span></span></code></pre>
+<p><code>site/components/banner.examples.ts</code> holds two examples, <code>info</code> and <code>warning</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PreviewContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">function</span><span style="color:#B392F0"> banner</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">canvas</span><span style="color:#F97583">:</span><span style="color:#B392F0"> HTMLElement</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">tone</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">message</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> element</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> document.</span><span style="color:#B392F0">createElement</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'div'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">  element.className </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> 'banner '</span><span style="color:#F97583"> +</span><span style="color:#E1E4E8"> tone;</span></span>
+<span class="line"><span style="color:#E1E4E8">  element.textContent </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> message;</span></span>
+<span class="line"><span style="color:#E1E4E8">  canvas.</span><span style="color:#B392F0">append</span><span style="color:#E1E4E8">(element);</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> element;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> info</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">canvas</span><span style="color:#F97583">:</span><span style="color:#B392F0"> HTMLElement</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#B392F0">  banner</span><span style="color:#E1E4E8">(canvas, </span><span style="color:#9ECBFF">'info'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'Your trial ends in 3 days.'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> warning</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">canvas</span><span style="color:#F97583">:</span><span style="color:#B392F0"> HTMLElement</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> element</span><span style="color:#F97583"> =</span><span style="color:#B392F0"> banner</span><span style="color:#E1E4E8">(canvas, </span><span style="color:#9ECBFF">'warning'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'Payment failed.'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> close</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> document.</span><span style="color:#B392F0">createElement</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'button'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">  close.type </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> 'button'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">  close.textContent </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> 'Dismiss'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">  close.</span><span style="color:#B392F0">addEventListener</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'click'</span><span style="color:#E1E4E8">, () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">action</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'dismiss'</span><span style="color:#E1E4E8">), { signal: context.signal });</span></span>
+<span class="line"><span style="color:#E1E4E8">  element.</span><span style="color:#B392F0">append</span><span style="color:#E1E4E8">(close);</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>docs/banner.md</code> places each one with a fenced block, such as
+<code>```example warning</code>; see
+<a href="/workbench/docs/docs-pages/#write-the-markdown">Docs</a>. A folder works too, with one
+<code>.ts</code> or <code>.js</code> file per example and the function as its default export.</p>
+<p>Examples get no inputs or controls, so set what each one shows in its code.
+The lens’s <code>styles</code> load with the examples, and an <code>environment</code>’s <code>setup</code> and
+<code>ready</code> run once for the docs. Its <code>mount</code> isn’t called, as for a function
+source. To read the docs beside a design page, give that page
+<code>docs: docs/banner.md</code> in place of a Markdown <code>src</code>.</p>
+<h2 id="errors-and-fixes">Errors and fixes</h2>
+<p>The <a href="/workbench/docs/workbench-previews/#command-line-tools">command-line checker</a> reports
+build errors. Errors that happen while the page renders, such as a mistyped
+<code>export</code> name or a failing script, appear only in the preview’s frame. An
+uncaught error in a script or an event handler replaces the page with the error;
+fix it and save, or use <strong>Reset scenario</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Cause and fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Module not found: Can't resolve '&lt;path&gt;'</code></td>
+<td>A <code>src</code>, <code>srcset</code>, or <code>poster</code>, or a stylesheet’s <code>&lt;link href&gt;</code>, names a local file that doesn’t exist. Fix the path.</td>
+</tr>
+<tr>
+<td><code>Module not found: Can't resolve '/…'</code> from a stylesheet</td>
+<td>A stylesheet’s <code>url()</code> starts with <code>/</code>. Make it relative to the stylesheet.</td>
+</tr>
+<tr>
+<td><code>Module build failed (from builtin:swc-loader)</code></td>
+<td>A script has a syntax error. The lines after it give the message and position.</td>
+</tr>
+<tr>
+<td><code>Module parse failed</code></td>
+<td>A script imports a file type Workbench doesn’t compile. See <a href="#scripts">Scripts</a>.</td>
+</tr>
+<tr>
+<td><code>ReferenceError: &lt;name&gt; is not defined</code> from an <code>onclick</code> or other inline handler</td>
+<td>Script declarations are private. Add the listener from the script, or assign the function to <code>window</code>.</td>
+</tr>
+<tr>
+<td><code>The selected source export does not exist for &lt;id&gt; — &lt;scenario&gt;</code></td>
+<td><code>source.export</code> names an export the module doesn’t have.</td>
+</tr>
+<tr>
+<td><code>An HTML JavaScript entry must export a mount function.</code></td>
+<td>The module’s selected export isn’t a function.</td>
+</tr>
+<tr>
+<td><code>Could not load HTML resource: &lt;url&gt;</code> or <code>HTML resource load timed out: &lt;url&gt;</code></td>
+<td>A stylesheet or script failed to load, or took more than 5 seconds. Check the URL, especially an external one.</td>
+</tr>
+<tr>
+<td>An image or background is missing, with no error</td>
+<td>The path is in an unquoted attribute or a <code>style</code> attribute. See <a href="#images-and-other-files">Images and other files</a>.</td>
+</tr>
+<tr>
+<td>Code in a <code>DOMContentLoaded</code> listener never runs</td>
+<td>The event has already fired. Run the code directly.</td>
+</tr>
+</tbody>
+</table>
+<p>For problems that apply to every preview, such as a preview missing from the
+list, see
+<a href="/workbench/docs/troubleshooting/#a-typescript-preview-is-missing-or-broken">A TypeScript preview is missing or broken</a>.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/html.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/workbench/docs/astro/"><span>← Previous</span><strong>Astro previews</strong></a><a href="/workbench/docs/custom-adapters/"><span>Next →</span><strong>Custom adapters and compiler settings</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#html-previews-or-design-pages">HTML previews or design pages</a><a href="#requirements">Requirements</a><a href="#a-minimal-preview">A minimal preview</a><a href="#how-workbench-rebuilds-the-page">How Workbench rebuilds the page</a><a href="#stylesheets" class="docs-toc-sub">Stylesheets</a><a href="#scripts" class="docs-toc-sub">Scripts</a><a href="#images-and-other-files" class="docs-toc-sub">Images and other files</a><a href="#links" class="docs-toc-sub">Links</a><a href="#inputs-scenarios-and-actions">Inputs, scenarios, and actions</a><a href="#render-from-a-function">Render from a function</a><a href="#environment-mount">Environment mount</a><a href="#document-components-with-a-docs-page">Document components with a docs page</a><a href="#errors-and-fixes">Errors and fixes</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

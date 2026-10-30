@@ -1,0 +1,371 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Troubleshooting · Workbench docs · Canonic</title><meta name="description" content="Workbench reports what it can't use instead of guessing, so most problems have a message somewhere. This page lists where to look, then common symptoms."><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.17.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/workbench/">Overview</a><a href="/workbench/docs/" aria-current="page">Docs</a><a href="/workbench/install/">Install</a><a href="/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Getting started</h2><a href="/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/workbench/docs/canvas/" data-doc-id="canvas">Using the canvas</a><a href="/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group"><h2>Previews</h2><a href="/workbench/docs/workbench-previews/" data-doc-id="workbench-previews">TypeScript Workbench previews</a><a href="/workbench/docs/preview-data/" data-doc-id="preview-data">Preview data, mocks, and actions</a><a href="/workbench/docs/react/" data-doc-id="react">React previews</a><a href="/workbench/docs/react-native-web/" data-doc-id="react-native-web">React Native Web previews</a><a href="/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/workbench/docs/astro/" data-doc-id="astro">Astro previews</a><a href="/workbench/docs/html/" data-doc-id="html">HTML previews</a><a href="/workbench/docs/custom-adapters/" data-doc-id="custom-adapters">Custom adapters and compiler settings</a></div><div class="docs-group"><h2>Connect your implementation</h2><a href="/workbench/docs/lenses/" data-doc-id="lenses">Lenses and URL implementations</a><a href="/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/workbench/docs/ios-simulator/" data-doc-id="ios-simulator">iOS Simulator</a><a href="/workbench/docs/windows/" data-doc-id="windows">App windows</a></div><div class="docs-group"><h2>Reference</h2><a href="/workbench/docs/configuration/" data-doc-id="configuration">workbench.yaml reference</a><a href="/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/workbench/docs/extension/" data-doc-id="extension">The VS Code extension</a><a href="/workbench/docs/troubleshooting/" data-doc-id="troubleshooting" aria-current="page">Troubleshooting</a></div></nav><a class="docs-install" href="/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span>Reference</span></div><div class="docs-prose"><h1 id="troubleshooting">Troubleshooting</h1>
+<p>Workbench reports what it can’t use instead of guessing, so most problems have
+a message somewhere. This page lists where to look, then common symptoms.</p>
+<h2 id="where-to-look">Where to look</h2>
+<h3 id="trace-a-slow-page">Trace a slow page</h3>
+<p>In VS Code settings, enable <strong>Workbench: Trace</strong> (<code>workbench.trace</code>), then run
+<strong>Developer: Reload Window</strong>. Open <strong>Output → Workbench</strong> and select a few pages,
+including a return to a page you already opened. Tracing is off by default;
+disable it and reload when finished.</p>
+<p><code>preview.request.completed</code> lines show the route, page, lens, status and total
+server milliseconds. Docs requests also show catalog readiness, Markdown,
+highlighting, startup warm-up wait and bundle work when those phases run.
+The docs document and its examples bundle are separate requests.
+<code>preview.browser.phase</code> lines show selection, renderer/document loading,
+bundle loading, example mounting, readiness and frame promotion. Match their
+<code>selection</code> IDs, page, scenario and lens; the final <code>visible</code> phase’s <code>totalMs</code>
+shows the selection-to-visible time. A retained page can skip loading/mounting.</p>
+<p><strong>Developer: Open Webview Developer Tools</strong> also shows server durations in
+the Network panel’s <code>Server-Timing</code> response header. Diagnostic output is
+bounded; <code>log.limit.reached</code> means the session budget is exhausted. Reload to
+start a new session.</p>
+<p>For the standalone command, add <code>--trace</code> and read the terminal:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">node</span><span style="color:#9ECBFF"> packages/workbench/server/node/server.js</span><span style="color:#9ECBFF"> /path/to/acme</span><span style="color:#79B8FF"> --trace</span></span></code></pre>
+<h3 id="read-the-resolved-config">Read the resolved config</h3>
+<p>The server answers with the config as your machine resolves it, including
+every problem it found:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">curl</span><span style="color:#79B8FF"> -s</span><span style="color:#9ECBFF"> http://127.0.0.1:3579/_workbench/config</span></span></code></pre>
+<p>Use <strong>Workbench: Copy Canvas URL</strong> for the actual port. The answer includes:</p>
+<ul>
+<li><code>problems</code>: every line Workbench couldn’t use, named by collection and page,
+such as <code>Pages › Sign in: implementation “dev” isn’t declared under implementations.</code></li>
+<li><code>pages</code>: each page’s <code>design</code> file as an absolute path, and its <code>code</code>
+pointers resolved against their implementation’s <code>root</code>, each with <code>exists</code>
+saying whether it is on disk. For a Markdown page, <code>design</code> is its Markdown
+file. For any other page with docs, <code>code</code> includes its Markdown, labeled
+<code>Docs</code>. For both, <code>code</code> includes each docs lens’s example source,</li>
+<li><code>implementations</code>: each implementation’s resolved address, <code>root</code>, and start
+command, including values from <code>workbench.local.yaml</code>,</li>
+<li><code>files</code>: whether <code>workbench.yaml</code> (<code>main</code>) and <code>workbench.local.yaml</code>
+(<code>local</code>) were read.</li>
+</ul>
+<p>Read <code>problems</code> first whenever a lens, story, preview, catalog page, docs
+example, or source link is missing, or a hand-written page was dropped; see
+<a href="#a-page-is-missing-from-the-list">A page is missing from the list</a>.</p>
+<p>The problems list above the page list shows the same problems, in VS Code’s
+sidebar and in a browser window’s sidebar.</p>
+<h3 id="check-a-storybook-title">Check a Storybook title</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">curl</span><span style="color:#79B8FF"> -s</span><span style="color:#9ECBFF"> "http://127.0.0.1:3579/_workbench/stories?implementation=storybook&amp;title=Components%2FButton"</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Answer</th>
+<th>Means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>200</td>
+<td>The title’s stories, with ids, names, scenarios, and resolved source paths.</td>
+</tr>
+<tr>
+<td>404</td>
+<td>The title doesn’t exist. The answer names the nearest titles, including the prefixed title when only the prefix differs.</td>
+</tr>
+<tr>
+<td>400</td>
+<td>No Storybook implementation has that name, <code>url: auto</code> found no running Storybook, or the request has no <code>title</code>.</td>
+</tr>
+<tr>
+<td>502</td>
+<td>Something answered at the address, but <code>/index.json</code> returned an error. It may not be Storybook 7 or later.</td>
+</tr>
+<tr>
+<td>503</td>
+<td>Storybook isn’t answering at the configured address.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="other-places">Other places</h3>
+<ul>
+<li><strong>The Workbench log.</strong> Run <strong>Workbench: Show Log</strong> for screenshot, server,
+handoff, preview compiler, Simulator, and window stream errors. For slow
+TypeScript previews, <code>preview.request.completed</code> events give the time the
+server spent compiling and serving each request (<code>workMs</code>), and
+<code>preview.browser.phase</code> events time setup, mounting,
+fonts, images, and readiness.</li>
+<li><strong>The canvas’s developer tools.</strong> In VS Code, run
+<strong>Developer: Open Webview Developer Tools</strong> to see the canvas’s console.
+Config problems are logged there, as well as framing and cookie errors from
+lenses.</li>
+<li><strong>The page on its own.</strong> <strong>Open on its own</strong> opens the current page outside
+the workbench, which shows whether a problem is the page’s or Workbench’s.</li>
+</ul>
+<h2 id="the-workbench-view-doesnt-appear">The Workbench view doesn’t appear</h2>
+<ul>
+<li><code>workbench.yaml</code> must be at the root of an open folder, not in a subfolder.
+Open the folder that contains it, or add that folder to the workspace; see
+<a href="/workbench/docs/extension/#projects-in-a-subfolder">Projects in a subfolder</a>.</li>
+<li>In a multi-root workspace, every folder with a <code>workbench.yaml</code> adds its
+spaces, but the view shows one at a time. Use the switcher at the top of the
+view; see <a href="/workbench/docs/spaces/">Several spaces</a>.</li>
+<li>The workspace must be trusted. VS Code doesn’t run Workbench in Restricted
+Mode.</li>
+<li>After installing or updating, run <strong>Developer: Reload Window</strong>.</li>
+</ul>
+<h2 id="the-canvas-says-theres-a-problem-in-workbenchyaml">The canvas says there’s a problem in workbench.yaml</h2>
+<p>The message names the file and, for a YAML syntax error, the line. Common
+causes:</p>
+<table>
+<thead>
+<tr>
+<th>Message or cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A tab character</td>
+<td>Indent with spaces.</td>
+</tr>
+<tr>
+<td><code>{a: b}</code> or <code>[a, b]</code></td>
+<td>Write the map or list in block style. Flow collections aren’t supported.</td>
+</tr>
+<tr>
+<td>A value cut short at <code>#</code></td>
+<td>A space followed by <code>#</code> starts a comment. Quote the value.</td>
+</tr>
+<tr>
+<td><em>nothing to show</em></td>
+<td>No collection has a usable page. Read <code>problems</code> for why each was dropped.</td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="/workbench/docs/configuration/#yaml-that-the-reader-accepts">YAML that the reader accepts</a>.</p>
+<h2 id="a-page-is-missing-from-the-list">A page is missing from the list</h2>
+<p>A page, group, or collection that can’t be used is dropped, and the rest of
+the list still builds. The problems list and <code>problems</code> in the config route
+name each one and why. The usual reasons:</p>
+<ul>
+<li>It has no <code>label</code> or no <code>src</code>.</li>
+<li>Its <code>src</code> starts with <code>/</code>, contains <code>..</code>, or contains <code>:</code>, <code>+</code>, <code>!</code>, or <code>~</code>.</li>
+<li>Another page earlier in the list has the same <code>src</code>, or another collection
+has the same name; the first one is kept.</li>
+<li>It is in a group inside another group. Groups don’t nest.</li>
+<li>Its collection (its <code>collections</code> entry) has no <code>name</code>.</li>
+</ul>
+<p>HTML pages aren’t scanned for. A page that isn’t listed in <code>workbench.yaml</code>
+isn’t shown, except for pages imported by a <a href="/workbench/docs/configuration/#catalogs">catalog</a>
+and the previews and docs pages that <code>*.workbench.ts</code> files define.</p>
+<h2 id="a-page-is-blank-or-shows-a-404">A page is blank or shows a 404</h2>
+<ul>
+<li>The <code>src</code> path is relative to the project root, not to <code>workbench.yaml</code>’s
+folder or the page’s folder. Check the page’s <code>design</code> path in the config
+route.</li>
+<li>Assets with root-relative paths (<code>/styles/app.css</code>) resolve from the project
+root. If your pages expect another root, use relative paths.</li>
+<li>Open the page with <strong>Open on its own</strong> to see its own errors.</li>
+</ul>
+<h2 id="a-typescript-preview-is-missing-or-broken">A TypeScript preview is missing or broken</h2>
+<ul>
+<li><strong>Missing from the list:</strong> read <code>problems</code>. Each definition that couldn’t be
+loaded is named with its file and reason, such as a duplicate id or a
+<code>source.entry</code> that doesn’t exist. The other previews still show.</li>
+<li><strong>Never discovered:</strong> the file must end in <code>.workbench.ts</code> or
+<code>.workbench.tsx</code>, match <code>previews.include</code> when you set it, and sit outside
+hidden folders, <code>node_modules</code>, build output such as <code>dist</code> and <code>build</code>,
+and anything a <code>.gitignore</code> in the project ignores. <code>previews: false</code> turns
+discovery off.</li>
+<li><strong>Added or removed a file:</strong> in VS Code the list updates on its own when a
+definition is added, removed, renamed or retitled; <strong>Workbench: Refresh
+Pages</strong> does the same by hand. A canvas opened in a browser from the
+standalone server needs a reload.</li>
+<li><strong><code>Workbench previews: …</code></strong> Listing the previews or reading
+<code>workbench.config.ts</code> failed. In the log, <code>server.exited</code> holds the error
+output of a Workbench server that stopped.</li>
+<li><strong><code>unknown Workbench preview “…”</code></strong> A page’s <code>kind: workbench</code> lens names an
+id that no definition declares.</li>
+<li><strong>The canvas shows an error instead of the component:</strong> the message is the
+compile or render error, such as an unknown adapter or a framework package
+that isn’t installed in the project.</li>
+<li><strong><code>link … names unknown Workbench preview</code> or <code>… unknown scenario</code>:</strong> an entry
+in the definition’s <code>links</code> names a preview ID or scenario no definition
+declares. See <a href="/workbench/docs/preview-data/#links-and-navigation">Links and navigation</a>.</li>
+<li><strong><code>request … must be "[METHOD] /path [Operation]" or a full URL</code>:</strong> a
+<code>requests</code> key isn’t in that form. Paths start with <code>/</code>.</li>
+<li><strong><code>The preview config environment must be a file inside the project</code>:</strong>
+<code>environment</code> in <code>workbench.config.ts</code> names a missing file. It’s relative to
+the project root.</li>
+</ul>
+<h2 id="a-docs-pages-examples-dont-render">A docs page’s examples don’t render</h2>
+<p>A page’s <a href="/workbench/docs/docs-pages/">docs</a> render their Markdown even when the examples
+can’t, and each example’s panel says why it is empty.</p>
+<ul>
+<li><strong>Examples run your project’s code.</strong> They render only in a trusted
+workspace, and not when <code>workbench.yaml</code> sets <code>previews: false</code>.</li>
+<li><strong>Read the problems list,</strong> or <code>problems</code> in the config route. It names the
+page for a missing Markdown file, an example block with an unknown key or a
+duplicate ID (with its line), an example a lens has that the docs never
+place, example file names that aren’t kebab-case, and a lens that fails to
+build.</li>
+<li><strong>A panel says <em>Not available in …</em>:</strong> the lens showing has no example with
+that ID. Switch lenses, or add the example to that lens’s source.</li>
+<li><strong>A panel says there is no docs lens rendering examples:</strong> the page is in
+its built-in <strong>Docs</strong> lens because it maps no <code>docs</code> implementation. Declare
+one and map it to the page’s example source. See
+<a href="/workbench/docs/docs-pages/#lenses">Lenses</a>.</li>
+</ul>
+<p>See <a href="/workbench/docs/docs-pages/#requirements-and-problems">Requirements and problems</a>.</p>
+<h2 id="a-preview-shows-the-wrong-data-or-a-request-fails">A preview shows the wrong data, or a request fails</h2>
+<ul>
+<li><strong>A request answers <code>404</code> with <code>No Workbench request mock for …</code>:</strong> the
+preview has <code>requests</code>, and none matches this one. <strong>Actions</strong> in
+<strong>Preview controls</strong> lists it as <code>request … — no mock</code>. Add a key for it, or
+answer it with <code>{ passthrough: true }</code> to let it reach the network.</li>
+<li><strong>The preview shows live data:</strong> the preview has no <code>requests</code>, so every
+request reaches the network. Add mocks; once there is one, unmatched requests
+stop reaching live services.</li>
+<li><strong>A mock doesn’t apply:</strong> check the method, that the path starts with <code>/</code>,
+and that a GraphQL key’s operation name matches the one the client sends. A
+scenario’s <code>requests</code> replace the preview’s for the same key only.</li>
+<li><strong>A request isn’t mocked at all:</strong> request mocks answer <code>fetch</code> and
+XMLHttpRequest. WebSocket, EventSource, <code>navigator.sendBeacon</code>, synchronous
+XMLHttpRequest, and requests from workers reach the network.</li>
+<li><strong>An Astro page fails after 10 seconds:</strong> a frontmatter <code>fetch</code> answered by a
+<code>pending</code> or long <code>delay</code> mock. A server render can’t show a loading state;
+see <a href="/workbench/docs/astro/#preview-a-page">Astro</a>.</li>
+</ul>
+<p>See <a href="/workbench/docs/preview-data/#choose-how-to-give-a-page-its-data">Give a page its data</a>.</p>
+<p>To check every preview without the canvas, run the extension’s checker on the
+project. It builds each preview and lists the failures:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#F97583">~</span><span style="color:#E1E4E8">/.vscode/extensions/canonic.canonic-workbench-</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">/server/bin/</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">/workbench-server check path/to/project</span></span></code></pre>
+<p>See <a href="/workbench/docs/workbench-previews/">TypeScript Workbench previews</a>.</p>
+<h2 id="scenarios-dont-show-or-dont-change-anything">Scenarios don’t show or don’t change anything</h2>
+<ul>
+<li><strong>No scenarios in the page list:</strong> a page needs at least two valid scenarios.
+Each needs an <code>id</code> and a <code>label</code>, and ids must be kebab-case.</li>
+<li><strong>The scenario is listed, but the page doesn’t change:</strong> the page has to
+answer to the id. Check the spelling matches, and that you used one of the
+<a href="/workbench/docs/pages-and-scenarios/#scenarios">three hooks</a>.</li>
+<li><strong>The first scenario doesn’t match:</strong> the first scenario always appears in
+the page as <code>data-wb-scenario="default"</code>, whatever its id.</li>
+<li><strong>Content added by scripts doesn’t change:</strong> <code>data-wb-scenario-only</code>, <code>-not</code>,
+and <code>data-wb-set-*</code> are applied once, at <code>DOMContentLoaded</code>. Style late
+content with <code>html[data-wb-scenario=…]</code> instead.</li>
+<li><strong>The page opened from disk ignores scenarios:</strong> only pages served by
+Workbench get <code>scenarios.js</code>.</li>
+</ul>
+<h2 id="links-dont-work-in-a-page">Links don’t work in a page</h2>
+<p>Actions are off by default, so links don’t navigate and forms don’t submit.
+Turn on <strong>Actions</strong> in the top bar. With actions on, a link to an <code>.html</code> page
+in the project that isn’t listed in <code>workbench.yaml</code> still does nothing; add
+the page there. See <a href="/workbench/docs/pages-and-scenarios/#links-and-actions">Links and actions</a>.</p>
+<p>In a <a href="/workbench/docs/preview-data/#links-and-navigation">Workbench preview</a>, a link
+opens another page only when the definition’s <code>links</code> maps its address to a
+preview. Every other link and form is recorded under <strong>Actions</strong> in
+<strong>Preview controls</strong>, by design; map the address to make it open a preview.</p>
+<h2 id="a-size-is-disabled">A size is disabled</h2>
+<p>The page’s <code>sizes</code> doesn’t list it. In a docs lens, every size in the size
+switcher is disabled, because the docs fill the canvas and there is no
+artboard; switch to the design lens to choose a size. Hover over the button to
+see why. See <a href="/workbench/docs/pages-and-scenarios/#sizes">Sizes</a>.</p>
+<h2 id="a-lens-is-missing">A lens is missing</h2>
+<ul>
+<li>The lens switcher shows only when the page has two or more lenses.</li>
+<li>The page must list the implementation under its own <code>implementations</code>,
+and the implementation must be declared at the top level. Read <code>problems</code>.</li>
+<li>A docs lens needs the page’s Markdown: a <code>.md</code> <code>src</code>, or <code>docs</code> on the
+page. A Markdown page has no design lens. See <a href="/workbench/docs/docs-pages/#lenses">Lenses</a>.</li>
+<li>For <code>url</code>, every path must start with <code>/</code>, and a scenario map needs a path
+for the default scenario.</li>
+<li>For <code>storybook</code>, the title must match exactly. <a href="#check-a-storybook-title">Check the title</a>.</li>
+<li>An implementation whose <code>base</code> or <code>url</code> isn’t an <code>http://</code> or <code>https://</code>
+address is dropped.</li>
+</ul>
+<h2 id="a-lens-has-the-wrong-name">A lens has the wrong name</h2>
+<ul>
+<li>For an implementation lens, set <code>label</code> on the top-level implementation,
+whatever its kind. Renaming its key also changes page mappings and addresses;
+use the display label to keep them working.</li>
+<li>For the page’s own authored lens, use <code>lensLabel</code> on its page entry. For
+discovered TypeScript previews, <code>previews.lensLabel</code> supplies the default;
+an explicit page’s <code>lensLabel</code> wins over it.</li>
+<li>A page’s <code>label</code> and a preview’s <code>title</code> name the page in the sidebar,
+rather than its lens. <code>lensLabel</code> belongs in YAML, not <code>definePreview</code>.</li>
+<li>Blank or non-string <code>lensLabel</code> values are reported and ignored. Read
+<code>problems</code> in the <a href="#read-the-resolved-config">resolved config</a>.</li>
+<li>A docs lens takes its name from its <code>docs</code> implementation’s <code>label</code>. A
+Markdown page has no authored lens, so <code>lensLabel</code> doesn’t apply to it.</li>
+</ul>
+<p>See <a href="/workbench/docs/lenses/#customize-lens-labels">Customize lens labels</a> for examples.</p>
+<h2 id="a-url-lens-is-blank-refuses-to-load-or-loses-its-sign-in">A URL lens is blank, refuses to load, or loses its sign-in</h2>
+<p>Workbench loads the page through a loopback proxy that removes framing
+headers (see <a href="/workbench/docs/lenses/#embedding-and-sign-in">Embedding and sign-in</a>). If it
+still doesn’t load:</p>
+<ul>
+<li><strong>The frame says the app isn’t answering:</strong> the server isn’t running. Add a
+<a href="/workbench/docs/lenses/#start-the-server-automatically">start command</a>, or start it.</li>
+<li><strong>Sign-in doesn’t stick:</strong> the sign-in returned to your app’s own origin
+instead of the proxy. See <a href="/workbench/docs/lenses/#keep-the-session">Keep the session</a>.</li>
+<li><strong>Something else:</strong> open the canvas’s developer tools and read the frame’s
+console.</li>
+</ul>
+<p>Workbench never falls back to another way of showing the page. <strong>Open on its
+own</strong> works while you fix the app.</p>
+<h2 id="a-start-command-doesnt-run">A start command doesn’t run</h2>
+<ul>
+<li>The workspace must be trusted, and you must be in VS Code. Standalone servers
+don’t run start commands.</li>
+<li>If the <code>check</code> already passes, nothing is started. Check that the port or URL
+is the right one.</li>
+<li>If startup times out, raise <code>timeout</code> (up to 300 seconds), or point <code>ready</code>
+at a URL that answers once the server can actually serve.</li>
+<li>The command’s terminal stays open in VS Code. Read its output.</li>
+</ul>
+<h2 id="storybook-problems">Storybook problems</h2>
+<p>See <a href="/workbench/docs/storybook/#troubleshooting">Storybook troubleshooting</a>.</p>
+<h2 id="simulator-and-window-streams">Simulator and window streams</h2>
+<p>See <a href="/workbench/docs/ios-simulator/#troubleshooting">iOS Simulator troubleshooting</a> and
+<a href="/workbench/docs/windows/#troubleshooting">App window troubleshooting</a>.</p>
+<h2 id="screenshots-look-wrong">Screenshots look wrong</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A lens screenshot shows a sign-in page, or not what you typed, opened, or scrolled to</td>
+<td>The page hadn’t finished loading, so its preview bridge hadn’t connected, and the helper loaded the URL itself. Take the screenshot again. See <a href="/workbench/docs/lenses/#screenshots-through-a-url-lens">Screenshots through a URL lens</a>.</td>
+</tr>
+<tr>
+<td>Screenshots of one page fail with a message</td>
+<td>The page contains an <code>iframe</code>, <code>object</code>, or <code>embed</code>, or a canvas or video loaded from another origin without CORS. These pages can’t be captured.</td>
+</tr>
+<tr>
+<td>A font or image is missing in the first screenshot after loading</td>
+<td>The helper’s copy was still loading assets. Take it again.</td>
+</tr>
+<tr>
+<td>Screenshots fail with an error</td>
+<td>Read <strong>Workbench: Show Log</strong>. The capture helper needs macOS 13 or later, Windows, or Linux with a display; see <a href="/workbench/docs/extension/#the-capture-helper">The capture helper</a>.</td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="/workbench/docs/annotations-and-handoff/#what-screenshots-can-and-cant-include">What screenshots can and can’t include</a>.</p>
+<h2 id="copy-handoff-is-missing">Copy handoff is missing</h2>
+<p>Handoffs need the VS Code extension’s server. They work in the editor and in a
+browser opened with <strong>Workbench: Open Canvas in Browser</strong>, but not with a server
+you started yourself with <code>node server/node/server.js</code>. Use the camera there instead.</p>
+<h2 id="an-agent-cant-find-the-handoffs-screenshot">An agent can’t find the handoff’s screenshot</h2>
+<p>The prompt’s <code>Screenshot:</code> path is relative to the folder that holds
+<code>workbench.yaml</code>. Run the agent in that folder, or give it the file from
+<code>.canonic/.handoffs/</code> yourself. See
+<a href="/workbench/docs/annotations-and-handoff/#pasting-into-an-agent">Pasting into an agent</a>.</p>
+<h2 id="source-links-dont-open">Source links don’t open</h2>
+<ul>
+<li>Hover over the entry in the <strong>Open the source</strong> menu. Its tooltip says
+<em>Not on this machine</em> when the path doesn’t exist, or that the implementation
+has no <code>root</code>.</li>
+<li>The implementation needs a <code>root</code>, and each <code>code</code> path is relative to it.
+Check <code>exists</code> in the config route.</li>
+<li>Opening files needs the VS Code extension’s server. With a server you started
+yourself, the menu lists the entries, but picking one reports <em>Couldn’t open it</em>.</li>
+</ul>
+<h2 id="something-changed-after-an-update">Something changed after an update</h2>
+<p>Run <strong>Developer: Reload Window</strong> in every open project window. Running windows
+keep the previous version’s server and helper until they reload.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/troubleshooting.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/workbench/docs/extension/"><span>← Previous</span><strong>The VS Code extension</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#where-to-look">Where to look</a><a href="#trace-a-slow-page" class="docs-toc-sub">Trace a slow page</a><a href="#read-the-resolved-config" class="docs-toc-sub">Read the resolved config</a><a href="#check-a-storybook-title" class="docs-toc-sub">Check a Storybook title</a><a href="#other-places" class="docs-toc-sub">Other places</a><a href="#the-workbench-view-doesnt-appear">The Workbench view doesn’t appear</a><a href="#the-canvas-says-theres-a-problem-in-workbenchyaml">The canvas says there’s a problem in workbench.yaml</a><a href="#a-page-is-missing-from-the-list">A page is missing from the list</a><a href="#a-page-is-blank-or-shows-a-404">A page is blank or shows a 404</a><a href="#a-typescript-preview-is-missing-or-broken">A TypeScript preview is missing or broken</a><a href="#a-docs-pages-examples-dont-render">A docs page’s examples don’t render</a><a href="#a-preview-shows-the-wrong-data-or-a-request-fails">A preview shows the wrong data, or a request fails</a><a href="#scenarios-dont-show-or-dont-change-anything">Scenarios don’t show or don’t change anything</a><a href="#links-dont-work-in-a-page">Links don’t work in a page</a><a href="#a-size-is-disabled">A size is disabled</a><a href="#a-lens-is-missing">A lens is missing</a><a href="#a-lens-has-the-wrong-name">A lens has the wrong name</a><a href="#a-url-lens-is-blank-refuses-to-load-or-loses-its-sign-in">A URL lens is blank, refuses to load, or loses its sign-in</a><a href="#a-start-command-doesnt-run">A start command doesn’t run</a><a href="#storybook-problems">Storybook problems</a><a href="#simulator-and-window-streams">Simulator and window streams</a><a href="#screenshots-look-wrong">Screenshots look wrong</a><a href="#copy-handoff-is-missing">Copy handoff is missing</a><a href="#an-agent-cant-find-the-handoffs-screenshot">An agent can’t find the handoff’s screenshot</a><a href="#source-links-dont-open">Source links don’t open</a><a href="#something-changed-after-an-update">Something changed after an update</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

@@ -1,0 +1,903 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Preview data, mocks, and actions · Workbench docs · Canonic</title><meta name="description" content="A Workbench preview renders your real component or page, but not your app: there is no server, no router, no API, and nobody signed in. This guide covers everything a preview suppl"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.17.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/workbench/">Overview</a><a href="/workbench/docs/" aria-current="page">Docs</a><a href="/workbench/install/">Install</a><a href="/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Getting started</h2><a href="/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/workbench/docs/canvas/" data-doc-id="canvas">Using the canvas</a><a href="/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group"><h2>Previews</h2><a href="/workbench/docs/workbench-previews/" data-doc-id="workbench-previews">TypeScript Workbench previews</a><a href="/workbench/docs/preview-data/" data-doc-id="preview-data" aria-current="page">Preview data, mocks, and actions</a><a href="/workbench/docs/react/" data-doc-id="react">React previews</a><a href="/workbench/docs/react-native-web/" data-doc-id="react-native-web">React Native Web previews</a><a href="/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/workbench/docs/astro/" data-doc-id="astro">Astro previews</a><a href="/workbench/docs/html/" data-doc-id="html">HTML previews</a><a href="/workbench/docs/custom-adapters/" data-doc-id="custom-adapters">Custom adapters and compiler settings</a></div><div class="docs-group"><h2>Connect your implementation</h2><a href="/workbench/docs/lenses/" data-doc-id="lenses">Lenses and URL implementations</a><a href="/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/workbench/docs/ios-simulator/" data-doc-id="ios-simulator">iOS Simulator</a><a href="/workbench/docs/windows/" data-doc-id="windows">App windows</a></div><div class="docs-group"><h2>Reference</h2><a href="/workbench/docs/configuration/" data-doc-id="configuration">workbench.yaml reference</a><a href="/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/workbench/docs/extension/" data-doc-id="extension">The VS Code extension</a><a href="/workbench/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshooting</a></div></nav><a class="docs-install" href="/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span>Previews</span></div><div class="docs-prose"><h1 id="preview-data-mocks-and-actions">Preview data, mocks, and actions</h1>
+<p>A <a href="/workbench/docs/workbench-previews/">Workbench preview</a> renders your real component or
+page, but not your app: there is no server, no router, no API, and nobody
+signed in. This guide covers everything a preview supplies in their place, and
+how to change it for each scenario and while you review:</p>
+<ul>
+<li><strong><a href="#inputs-and-controls">Inputs and controls</a></strong>: the props your component
+receives, and the fields that edit them live.</li>
+<li><strong><a href="#fixtures-and-globals">Fixtures and globals</a></strong>: data and settings for the
+code around your component.</li>
+<li><strong><a href="#environments">Environments</a></strong>: providers, plugins, stores, and setup,
+for one preview or for the whole project.</li>
+<li><strong><a href="#request-mocks">Request mocks</a></strong>: answers to the requests your page makes
+itself.</li>
+<li><strong><a href="#actions">Actions</a></strong>: a log of what your page tried to do.</li>
+<li><strong><a href="#links-and-navigation">Links and navigation</a></strong>: where links and forms go,
+and how one preview leads to another.</li>
+</ul>
+<p><a href="#recipes">Recipes</a> at the end put them together for common kinds of pages.</p>
+<h2 id="choose-how-to-give-a-page-its-data">Choose how to give a page its data</h2>
+<p>Supply data the way your page already receives it, so the component renders
+unchanged. The options combine freely, and each can change per scenario.</p>
+<table>
+<thead>
+<tr>
+<th>The page gets its data from</th>
+<th>Give it</th>
+<th>With</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Props, or <code>Astro.props</code></td>
+<td>Values for those props</td>
+<td><a href="#inputs-and-controls"><code>inputs</code></a></td>
+</tr>
+<tr>
+<td>A context, store, or provider</td>
+<td>A provider holding fixture data, or a seeded store</td>
+<td>An <a href="#environments">environment</a>, reading <a href="#fixtures-and-globals"><code>fixtures</code></a></td>
+</tr>
+<tr>
+<td>Its own <code>fetch</code> or XMLHttpRequest, or a client built on them, such as Apollo Client, axios, React Query, or SWR</td>
+<td>Answers to those requests</td>
+<td><a href="#request-mocks"><code>requests</code></a></td>
+</tr>
+<tr>
+<td>Browser storage, such as a saved session</td>
+<td>Values written before it mounts</td>
+<td>A <a href="#seed-storage-and-stores"><code>setup</code> hook</a></td>
+</tr>
+<tr>
+<td>A module that can’t run in a preview, such as analytics or a native API</td>
+<td>A stand-in module</td>
+<td><a href="/workbench/docs/custom-adapters/#aliases"><code>aliases</code></a> in <code>workbench.config.ts</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="what-you-can-set-and-where">What you can set, and where</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Set on the preview</th>
+<th>Overridden by a scenario</th>
+<th>Edited while you review</th>
+<th>Reaches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>inputs</code></td>
+<td>Yes</td>
+<td>Yes, key by key</td>
+<td>Yes, through <code>controls</code></td>
+<td>The component: props, <code>Astro.props</code>, or <code>window.workbench.inputs</code></td>
+</tr>
+<tr>
+<td><code>fixtures</code>, <code>globals</code></td>
+<td>Yes</td>
+<td>Yes, key by key</td>
+<td>No</td>
+<td><code>context</code> in environments, hooks, and request handlers</td>
+</tr>
+<tr>
+<td><code>requests</code></td>
+<td>Yes</td>
+<td>Yes, tried first</td>
+<td>No</td>
+<td>The page’s <code>fetch</code> and XMLHttpRequest calls</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>Yes</td>
+<td>Yes</td>
+<td>No</td>
+<td>Which file and export renders</td>
+</tr>
+<tr>
+<td><code>environment</code></td>
+<td>Yes, and once for the project</td>
+<td>No; read <code>context.scenario</code></td>
+<td>No</td>
+<td>Providers, plugins, and setup around the component</td>
+</tr>
+<tr>
+<td><code>setup</code>, <code>play</code>, <code>ready</code></td>
+<td>Yes</td>
+<td>Yes, both run</td>
+<td>No</td>
+<td>Code before and after the component mounts</td>
+</tr>
+<tr>
+<td><code>links</code></td>
+<td>Yes</td>
+<td>No</td>
+<td>No</td>
+<td>Where the page’s links and forms go</td>
+</tr>
+</tbody>
+</table>
+<p>A scenario overrides a preview <strong>key by key, one level deep</strong>. If the preview has
+<code>inputs: { user: { name: 'Ada', role: 'admin' }, compact: false }</code> and a scenario
+has <code>inputs: { user: { name: 'Grace' } }</code>, the scenario’s <code>user</code> replaces the whole
+<code>user</code> object, so <code>role</code> is gone, while <code>compact</code> keeps the preview’s value.
+Repeat the fields a scenario still needs, or spread a shared object:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> ada</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> { name: </span><span style="color:#9ECBFF">'Ada'</span><span style="color:#E1E4E8">, role: </span><span style="color:#9ECBFF">'admin'</span><span style="color:#E1E4E8"> };</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#6A737D">  // …</span></span>
+<span class="line"><span style="color:#E1E4E8">  inputs: { user: ada, compact: </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    default: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    viewer: { inputs: { user: { </span><span style="color:#F97583">...</span><span style="color:#E1E4E8">ada, role: </span><span style="color:#9ECBFF">'viewer'</span><span style="color:#E1E4E8"> } } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<h2 id="how-a-render-runs">How a render runs</h2>
+<p>Workbench renders the scenario again whenever you pick a scenario, edit a control,
+or choose <strong>Reset scenario</strong>. Each render:</p>
+<ol>
+<li>Merges <code>inputs</code>, <code>fixtures</code>, and <code>globals</code>: the preview’s, then the
+scenario’s, then, for inputs, your control edits. Each render gets a fresh
+copy, so code can’t change the authored values.</li>
+<li>Turns on <a href="#request-mocks">request mocks</a>: the scenario’s, then the preview’s.</li>
+<li>Runs <code>setup</code> hooks: the project’s environment, the preview’s environment,
+the preview, then the scenario.</li>
+<li>Mounts the component with the inputs, inside the environments’ providers.</li>
+<li>Runs <code>play</code> hooks (the preview’s, then the scenario’s) and <code>ready</code> hooks (the
+environments’, the preview’s, then the scenario’s).</li>
+<li>Waits for fonts and visible images, then marks the preview ready.
+Screenshots and handoffs wait for this.</li>
+</ol>
+<p>Before the next render, Workbench aborts <code>context.signal</code>, which also cancels
+any mocked request still waiting, and runs cleanups in reverse order. See
+<a href="/workbench/docs/workbench-previews/#lifecycle-hooks">Lifecycle hooks</a> for timing and errors.</p>
+<h2 id="inputs-and-controls">Inputs and controls</h2>
+<p><code>inputs</code> are the values your component receives:</p>
+<table>
+<thead>
+<tr>
+<th>Adapter</th>
+<th>Inputs arrive as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>react</code>, <code>react-native-web</code></td>
+<td>Props</td>
+</tr>
+<tr>
+<td><code>vue</code></td>
+<td>Props, and attributes for anything the component doesn’t declare</td>
+</tr>
+<tr>
+<td><code>astro</code></td>
+<td><code>Astro.props</code></td>
+</tr>
+<tr>
+<td><code>html</code></td>
+<td><code>window.workbench.inputs</code>, read by the page’s scripts, or the <code>context</code> passed to a <a href="/workbench/docs/html/#render-from-a-function">function source</a></td>
+</tr>
+<tr>
+<td>Custom</td>
+<td>However the <a href="/workbench/docs/custom-adapters/#the-runtime-module">runtime</a> passes them</td>
+</tr>
+</tbody>
+</table>
+<p>Inputs must be plain data: strings, numbers, booleans, <code>null</code>, arrays, and
+objects of those. For functions, elements, and slots, see
+<a href="#callbacks-children-and-slots">Callbacks, children, and slots</a>.</p>
+<h3 id="controls">Controls</h3>
+<p><code>controls</code> turns inputs into fields under <strong>Preview controls</strong> in the top bar.
+Each key names an input:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">inputs</span><span style="color:#E1E4E8">: { </span><span style="color:#B392F0">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'Continue'</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">size</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'md'</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">count</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">3</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">disabled</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">items</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">'Ada'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'Grace'</span><span style="color:#E1E4E8">] },</span></span>
+<span class="line"><span style="color:#B392F0">controls</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#B392F0">  label</span><span style="color:#E1E4E8">: { </span><span style="color:#B392F0">type</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'text'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#B392F0">  size</span><span style="color:#E1E4E8">: { </span><span style="color:#B392F0">type</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'select'</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">options</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">'sm'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'md'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'lg'</span><span style="color:#E1E4E8">] },</span></span>
+<span class="line"><span style="color:#B392F0">  count</span><span style="color:#E1E4E8">: { </span><span style="color:#B392F0">type</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'number'</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">min</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">max</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">10</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">step</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'Item count'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#B392F0">  disabled</span><span style="color:#E1E4E8">: { </span><span style="color:#B392F0">type</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'boolean'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#B392F0">  items</span><span style="color:#E1E4E8">: { </span><span style="color:#B392F0">type</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'json'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">},</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th><code>type</code></th>
+<th>Field</th>
+<th>Options</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>text</code></td>
+<td>Text box</td>
+<td></td>
+</tr>
+<tr>
+<td><code>number</code></td>
+<td>Number box</td>
+<td><code>min</code>, <code>max</code>, <code>step</code></td>
+</tr>
+<tr>
+<td><code>boolean</code></td>
+<td>Checkbox</td>
+<td></td>
+</tr>
+<tr>
+<td><code>select</code></td>
+<td>Menu</td>
+<td><code>options</code>, a nonempty list of strings or numbers</td>
+</tr>
+<tr>
+<td><code>json</code></td>
+<td>Text area of JSON</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Every control also takes a <code>label</code>, which defaults to the input’s name.</p>
+<ul>
+<li>An edit applies when the field changes, and renders the current scenario again
+with that input replaced. A <code>json</code> edit replaces the whole value.</li>
+<li>Edits last until you choose <strong>Reset scenario</strong>, pick another scenario, or leave
+the page. They never change the definition, exports, or the screenshots
+an export takes of each scenario.</li>
+<li>An Astro preview renders each edit on the Workbench server. A
+<a href="/workbench/docs/workbench-previews/#portable-exports">portable export</a> of an Astro
+preview has its authored scenarios but no controls.</li>
+</ul>
+<h3 id="callbacks-children-and-slots">Callbacks, children, and slots</h3>
+<p>Inputs can’t hold functions or elements. To give a component a callback, an
+element, or a slot, wrap it in an <a href="#environments">environment</a> or render it
+through a preview-only file:</p>
+<ul>
+<li><strong>React:</strong> add props in the environment’s <code>wrap</code> with <code>cloneElement</code>, or
+point <code>source</code> at a small wrapper component in a preview-only file. See
+<a href="/workbench/docs/react/#props-children-and-callbacks">Props, children, and callbacks</a>.</li>
+<li><strong>Vue:</strong> pass listeners and slots from the environment’s <code>wrap</code>. See
+<a href="/workbench/docs/vue/#events-and-actions">Events and actions</a> and <a href="/workbench/docs/vue/#slots">Slots</a>.</li>
+<li><strong>Astro:</strong> see <a href="/workbench/docs/astro/#props-slots-and-scenarios">Props, slots, and scenarios</a>.</li>
+<li><strong>HTML:</strong> attach listeners in a page script or an
+<a href="/workbench/docs/html/#environment-mount">environment <code>mount</code></a>.</li>
+</ul>
+<h2 id="fixtures-and-globals">Fixtures and globals</h2>
+<p><code>fixtures</code> and <code>globals</code> are plain data for the code around your component:
+environments, hooks, and request handlers read them from <code>context</code>. The
+component doesn’t receive them unless that code passes them on. By convention,
+<code>fixtures</code> hold records, such as customers or an order, and <code>globals</code> hold
+settings, such as a theme or a locale.</p>
+<p>They merge like inputs, key by key, and controls can’t edit them. A scenario that
+changes only its data can change only <code>fixtures</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'pages/customers'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'react'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./CustomersPage.tsx'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  fixtures: { customers: [{ id: </span><span style="color:#9ECBFF">'c-1'</span><span style="color:#E1E4E8">, name: </span><span style="color:#9ECBFF">'Ada'</span><span style="color:#E1E4E8"> }, { id: </span><span style="color:#9ECBFF">'c-2'</span><span style="color:#E1E4E8">, name: </span><span style="color:#9ECBFF">'Grace'</span><span style="color:#E1E4E8"> }] },</span></span>
+<span class="line"><span style="color:#E1E4E8">  requests: {</span></span>
+<span class="line"><span style="color:#9ECBFF">    'GET /api/customers'</span><span style="color:#E1E4E8">: (</span><span style="color:#FFAB70">request</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> ({ body: context.fixtures.customers }),</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    default: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    empty: { fixtures: { customers: [] } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>An Astro component doesn’t see <code>fixtures</code> or <code>globals</code> in <code>Astro.props</code>; pass
+what it needs as <code>inputs</code>. Request handlers that answer its frontmatter do
+see them.</p>
+<h2 id="environments">Environments</h2>
+<p>An environment is a module that runs around the component on every render. Use
+it for providers, plugins, stores, and anything else a page expects the app
+to have set up. There are two kinds, and a preview can use both:</p>
+<ul>
+<li><strong>A preview’s environment:</strong> <code>environment</code> in the definition, relative to
+the definition. Several definitions can name the same module.</li>
+<li><strong>The project’s environment:</strong> <code>environment</code> in <code>workbench.config.ts</code>,
+relative to the project root. It applies to every preview, like global
+decorators in Storybook.</li>
+</ul>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#6A737D">// workbench.config.ts</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { defineConfig } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> defineConfig</span><span style="color:#E1E4E8">({ environment: </span><span style="color:#9ECBFF">'./src/workbench/environment.tsx'</span><span style="color:#E1E4E8"> });</span></span></code></pre>
+<p>Environment exports are specific to an adapter: a React <code>wrap</code> can’t wrap a
+Vue component. When your previews use more than one adapter, give each its
+own project environment, keyed by adapter name. Previews whose adapter isn’t
+listed get none:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> defineConfig</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  environment: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    react: </span><span style="color:#9ECBFF">'./src/workbench/react-environment.tsx'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    vue: </span><span style="color:#9ECBFF">'./src/workbench/vue-environment.ts'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>An environment can export:</p>
+<table>
+<thead>
+<tr>
+<th>Export</th>
+<th>Adapters</th>
+<th>Runs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>setup(context)</code></td>
+<td>All</td>
+<td>Before the component mounts. May return a cleanup function.</td>
+</tr>
+<tr>
+<td><code>wrap(element, context)</code></td>
+<td><code>react</code>, <code>react-native-web</code></td>
+<td>Returns the element wrapped in providers.</td>
+</tr>
+<tr>
+<td><code>wrap(vnode, context)</code></td>
+<td><code>vue</code></td>
+<td>Returns the vnode wrapped in other components.</td>
+</tr>
+<tr>
+<td><code>configure(app, context)</code></td>
+<td><code>vue</code></td>
+<td>Before mount, to install plugins and <code>provide</code> values. May be async.</td>
+</tr>
+<tr>
+<td><code>mount(canvas, context)</code></td>
+<td><code>html</code>, <code>astro</code></td>
+<td>After the HTML is in place and its scripts have run. May return a cleanup function.</td>
+</tr>
+<tr>
+<td><code>ready(context)</code></td>
+<td>All</td>
+<td>After the component mounts, for anything the preview must wait for.</td>
+</tr>
+<tr>
+<td>Anything else</td>
+<td>Custom adapters</td>
+<td>Whatever the <a href="/workbench/docs/custom-adapters/#the-runtime-module">runtime</a> reads.</td>
+</tr>
+</tbody>
+</table>
+<p>When a preview has both, the project’s environment goes on the outside: its
+<code>setup</code>, <code>configure</code>, <code>mount</code>, and <code>ready</code> run first, its cleanups run last,
+and its <code>wrap</code> receives what the preview’s <code>wrap</code> returned. For exports a
+custom adapter defines itself, the preview’s environment wins.</p>
+<p>An environment runs on every render, so read the current scenario and data from
+<code>context</code>, never from a value saved when the module loaded. This project
+environment gives every React preview a theme and a signed-in user, both
+changeable per scenario:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="tsx"><code><span class="line"><span style="color:#6A737D">// src/workbench/environment.tsx</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { ReactElement } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PreviewContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { ThemeProvider } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '../theme'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { SessionContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '../session'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> ada</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> { id: </span><span style="color:#9ECBFF">'u-1'</span><span style="color:#E1E4E8">, name: </span><span style="color:#9ECBFF">'Ada Lovelace'</span><span style="color:#E1E4E8">, email: </span><span style="color:#9ECBFF">'ada@example.com'</span><span style="color:#E1E4E8"> };</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> wrap</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">element</span><span style="color:#F97583">:</span><span style="color:#B392F0"> ReactElement</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> user</span><span style="color:#F97583"> =</span><span style="color:#9ECBFF"> 'user'</span><span style="color:#F97583"> in</span><span style="color:#E1E4E8"> context.fixtures </span><span style="color:#F97583">?</span><span style="color:#E1E4E8"> context.fixtures.user </span><span style="color:#F97583">:</span><span style="color:#E1E4E8"> ada;</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#79B8FF">ThemeProvider</span><span style="color:#B392F0"> theme</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{context.globals.theme </span><span style="color:#F97583">===</span><span style="color:#9ECBFF"> 'dark'</span><span style="color:#F97583"> ?</span><span style="color:#9ECBFF"> 'dark'</span><span style="color:#F97583"> :</span><span style="color:#9ECBFF"> 'light'</span><span style="color:#E1E4E8">}&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">      &lt;</span><span style="color:#79B8FF">SessionContext.Provider</span><span style="color:#B392F0"> value</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{{ user }}&gt;{element}&lt;/</span><span style="color:#79B8FF">SessionContext.Provider</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;/</span><span style="color:#79B8FF">ThemeProvider</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  );</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>A scenario then shows a signed-out page with <code>fixtures: { user: null }</code>, or the
+dark theme with <code>globals: { theme: 'dark' }</code>.</p>
+<h3 id="seed-storage-and-stores">Seed storage and stores</h3>
+<p><code>setup</code> runs before the component mounts, so it can put things where the
+page will look for them. Return a cleanup that puts them back, so the next
+scenario starts clean:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> setup</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> previous</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> localStorage.</span><span style="color:#B392F0">getItem</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'acme.session'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">  localStorage.</span><span style="color:#B392F0">setItem</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'acme.session'</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">JSON</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">stringify</span><span style="color:#E1E4E8">({ email: </span><span style="color:#9ECBFF">'ada@example.com'</span><span style="color:#E1E4E8"> }));</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> (previous </span><span style="color:#F97583">===</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">) localStorage.</span><span style="color:#B392F0">removeItem</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'acme.session'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#F97583">    else</span><span style="color:#E1E4E8"> localStorage.</span><span style="color:#B392F0">setItem</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'acme.session'</span><span style="color:#E1E4E8">, previous);</span></span>
+<span class="line"><span style="color:#E1E4E8">  };</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>The same pattern seeds a global store: set its state in <code>setup</code> from
+<code>context.fixtures</code>, and restore it in the cleanup. For a Vue store installed
+as a plugin, create it in <code>configure</code> instead; Workbench creates a new app on
+every render.</p>
+<h3 id="examples-on-docs-pages">Examples on docs pages</h3>
+<p>The examples in a page’s <a href="/workbench/docs/docs-pages/">docs</a> render through environments too:
+the project’s environment for the lens’s adapter, with the lens’s own
+<a href="/workbench/docs/docs-pages/#lenses"><code>environment</code></a> inside it. Exports such as <code>wrap</code>,
+<code>configure</code>, and <code>mount</code> run for each example. <code>setup</code> runs once for the docs
+before the first example mounts, and <code>ready</code> once after the last.</p>
+<p>An example’s context has <code>scenario</code>, <code>signal</code>, <code>action</code>, and <code>navigate</code>, but its
+<code>inputs</code>, <code>fixtures</code>, and <code>globals</code> are empty, so an environment that reads
+them gets its defaults in a docs lens. Docs have no request mocks or
+controls.</p>
+<h2 id="request-mocks">Request mocks</h2>
+<p><code>requests</code> answers your page’s own <code>fetch</code> and XMLHttpRequest calls, so a
+page that loads its data renders unchanged, and each scenario shows the data,
+emptiness, delay, or failure you choose:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'pages/customers'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'react'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./CustomersPage.tsx'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  requests: {</span></span>
+<span class="line"><span style="color:#9ECBFF">    'GET /api/customers'</span><span style="color:#E1E4E8">: { body: [{ id: </span><span style="color:#9ECBFF">'c-1'</span><span style="color:#E1E4E8">, name: </span><span style="color:#9ECBFF">'Ada'</span><span style="color:#E1E4E8"> }] },</span></span>
+<span class="line"><span style="color:#9ECBFF">    'POST /api/customers'</span><span style="color:#E1E4E8">: (</span><span style="color:#FFAB70">request</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> ({ status: </span><span style="color:#79B8FF">201</span><span style="color:#E1E4E8">, body: { id: </span><span style="color:#9ECBFF">'c-2'</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">...</span><span style="color:#E1E4E8">request.body } }),</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    default: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    empty: { requests: { </span><span style="color:#9ECBFF">'GET /api/customers'</span><span style="color:#E1E4E8">: { body: [] } } },</span></span>
+<span class="line"><span style="color:#E1E4E8">    loading: { requests: { </span><span style="color:#9ECBFF">'GET /api/customers'</span><span style="color:#E1E4E8">: { pending: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8"> } } },</span></span>
+<span class="line"><span style="color:#9ECBFF">    'server-error'</span><span style="color:#E1E4E8">: { requests: { </span><span style="color:#9ECBFF">'GET /api/customers'</span><span style="color:#E1E4E8">: { status: </span><span style="color:#79B8FF">500</span><span style="color:#E1E4E8"> } } },</span></span>
+<span class="line"><span style="color:#E1E4E8">    offline: { requests: { </span><span style="color:#9ECBFF">'GET /api/customers'</span><span style="color:#E1E4E8">: { failed: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8"> } } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>Mocks work with every adapter. Workbench installs them before any of your code
+loads, so a client that keeps a reference to <code>fetch</code> from the start, as many
+data clients do, is answered too. They don’t depend on the <strong>Actions</strong> switch.</p>
+<h3 id="keys">Keys</h3>
+<p>Each key says which requests it answers:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Answers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'GET /api/customers'</code></td>
+<td><code>GET</code> requests to that path, with any query string, on any host</td>
+</tr>
+<tr>
+<td><code>'/api/customers'</code></td>
+<td>Any method to that path</td>
+</tr>
+<tr>
+<td><code>'/api/customers/*'</code></td>
+<td>Any path that starts <code>/api/customers/</code>; <code>*</code> matches any characters, including <code>/</code></td>
+</tr>
+<tr>
+<td><code>'GET /search?q=acme'</code></td>
+<td>Requests whose query string includes <code>q=acme</code>, whatever else it has</td>
+</tr>
+<tr>
+<td><code>'POST /graphql Customers'</code></td>
+<td>The GraphQL operation named <code>Customers</code>; see <a href="#graphql">GraphQL</a></td>
+</tr>
+<tr>
+<td><code>'GET https://api.example.com/me'</code></td>
+<td>That path on that host only</td>
+</tr>
+</tbody>
+</table>
+<p>A path starts with <code>/</code>. The method is optional and written in capitals. A
+path without a host matches requests to any host, so the same key answers
+<code>/api/customers</code> on your page’s own address and <code>https://api.example.com/api/customers</code>.</p>
+<h3 id="which-mock-answers">Which mock answers</h3>
+<p>Workbench tries the scenario’s mocks first, then the preview’s, each in the order
+you wrote them, and the first match answers. A scenario’s key doesn’t have to
+repeat the preview’s to win: a scenario’s <code>'/api/*'</code> answers every request under
+<code>/api/</code>, ahead of all of the preview’s mocks. Put specific keys before broad
+ones.</p>
+<p>Once any mock applies to a preview, a request that matches none answers <code>404</code>,
+with a JSON body that names it, such as
+<code>{ "error": "No Workbench request mock for GET /api/invoices" }</code>. A preview
+with mocks therefore never reaches a live service by accident. A preview with
+no mocks at all leaves every request alone.</p>
+<p>Requests to Workbench itself, under <code>/_workbench/</code> on the preview’s address,
+are never mocked.</p>
+<h3 id="responses">Responses</h3>
+<p>A mock’s value is a response:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>status</code></td>
+<td>The HTTP status. Defaults to <code>200</code>.</td>
+</tr>
+<tr>
+<td><code>statusText</code></td>
+<td>The status text.</td>
+</tr>
+<tr>
+<td><code>headers</code></td>
+<td>Response headers, such as <code>{ 'x-total-count': '42' }</code>.</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td>The body. A string is sent as it is; anything else is sent as JSON with <code>content-type: application/json</code>.</td>
+</tr>
+<tr>
+<td><code>delay</code></td>
+<td>Milliseconds to wait before answering.</td>
+</tr>
+<tr>
+<td><code>pending</code></td>
+<td><code>true</code> never answers, for a loading scenario. The request is cancelled when the scenario renders again.</td>
+</tr>
+<tr>
+<td><code>failed</code></td>
+<td><code>true</code> fails like a network error, as when offline: <code>fetch</code> rejects with a <code>TypeError</code>, and XMLHttpRequest fires <code>error</code>.</td>
+</tr>
+<tr>
+<td><code>passthrough</code></td>
+<td><code>true</code> sends the request to the network after all.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="handlers">Handlers</h3>
+<p>A mock’s value can also be a function, which receives the request and the
+preview’s context and returns a response, a promise of one, or a <code>Response</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#9ECBFF">'GET /api/customers'</span><span style="color:#E1E4E8">: (</span><span style="color:#FFAB70">request</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> search</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> (request.query.search </span><span style="color:#F97583">||</span><span style="color:#9ECBFF"> ''</span><span style="color:#E1E4E8">).</span><span style="color:#B392F0">toLowerCase</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> customers</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> context.fixtures.customers.</span><span style="color:#B392F0">filter</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">customer</span><span style="color:#F97583"> =&gt;</span><span style="color:#E1E4E8"> customer.name.</span><span style="color:#B392F0">toLowerCase</span><span style="color:#E1E4E8">().</span><span style="color:#B392F0">includes</span><span style="color:#E1E4E8">(search));</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> { body: customers, headers: { </span><span style="color:#9ECBFF">'x-total-count'</span><span style="color:#E1E4E8">: </span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">(customers.</span><span style="color:#79B8FF">length</span><span style="color:#E1E4E8">) } };</span></span>
+<span class="line"><span style="color:#E1E4E8">},</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Request field</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>method</code></td>
+<td>The method, in capitals.</td>
+</tr>
+<tr>
+<td><code>url</code></td>
+<td>The full URL.</td>
+</tr>
+<tr>
+<td><code>path</code></td>
+<td>The path, without the query string.</td>
+</tr>
+<tr>
+<td><code>query</code></td>
+<td>The query string as an object. A repeated parameter keeps its last value.</td>
+</tr>
+<tr>
+<td><code>headers</code></td>
+<td>The request headers, with lowercase names.</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td>The body: an object or array for JSON, an object for a URL-encoded form, otherwise the text, or <code>undefined</code> for none.</td>
+</tr>
+<tr>
+<td><code>operationName</code>, <code>variables</code></td>
+<td>For a GraphQL request; otherwise <code>null</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>The context is the same one hooks receive: <code>scenario</code>, <code>inputs</code>, <code>fixtures</code>,
+<code>globals</code>, <code>action</code>, and the rest. Handlers run in the browser, so they can
+use anything your definition imports.</p>
+<p>A handler that keeps data between calls acts as a small backend, so a list
+shows what a form just added. Reset that data in the preview’s <code>setup</code>, so
+each render starts from the authored data:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> seed</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> [{ id: </span><span style="color:#9ECBFF">'c-1'</span><span style="color:#E1E4E8">, name: </span><span style="color:#9ECBFF">'Ada'</span><span style="color:#E1E4E8"> }];</span></span>
+<span class="line"><span style="color:#F97583">let</span><span style="color:#E1E4E8"> customers </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> [</span><span style="color:#F97583">...</span><span style="color:#E1E4E8">seed];</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#6A737D">  // …</span></span>
+<span class="line"><span style="color:#B392F0">  setup</span><span style="color:#E1E4E8">: () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> { customers </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> [</span><span style="color:#F97583">...</span><span style="color:#E1E4E8">seed]; },</span></span>
+<span class="line"><span style="color:#E1E4E8">  requests: {</span></span>
+<span class="line"><span style="color:#9ECBFF">    'GET /api/customers'</span><span style="color:#E1E4E8">: () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> ({ body: customers }),</span></span>
+<span class="line"><span style="color:#9ECBFF">    'POST /api/customers'</span><span style="color:#E1E4E8">: (</span><span style="color:#FFAB70">request</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">      const</span><span style="color:#79B8FF"> customer</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> { id: </span><span style="color:#9ECBFF">'c-'</span><span style="color:#F97583"> +</span><span style="color:#E1E4E8"> (customers.</span><span style="color:#79B8FF">length</span><span style="color:#F97583"> +</span><span style="color:#79B8FF"> 1</span><span style="color:#E1E4E8">), </span><span style="color:#F97583">...</span><span style="color:#E1E4E8">request.body };</span></span>
+<span class="line"><span style="color:#E1E4E8">      customers </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> [</span><span style="color:#F97583">...</span><span style="color:#E1E4E8">customers, customer];</span></span>
+<span class="line"><span style="color:#F97583">      return</span><span style="color:#E1E4E8"> { status: </span><span style="color:#79B8FF">201</span><span style="color:#E1E4E8">, body: customer };</span></span>
+<span class="line"><span style="color:#E1E4E8">    },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<h3 id="graphql">GraphQL</h3>
+<p>A key with a third word matches a GraphQL operation by name. Workbench reads
+the name from the request’s <code>operationName</code>, or from the <code>query</code> text when the
+client doesn’t send one (<code>query Customers { … }</code> names <code>Customers</code>), in the
+body of a <code>POST</code> or the query string of a <code>GET</code>. Clients such as Apollo Client
+send the operation name with each request.</p>
+<p>Answer with the usual GraphQL response shape:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">requests</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#9ECBFF">  'POST /graphql Customers'</span><span style="color:#E1E4E8">: (</span><span style="color:#FFAB70">request</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> ({</span></span>
+<span class="line"><span style="color:#E1E4E8">    body: { data: { customers: context.fixtures.customers.</span><span style="color:#B392F0">slice</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, request.variables?.first </span><span style="color:#F97583">??</span><span style="color:#79B8FF"> 20</span><span style="color:#E1E4E8">) } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  }),</span></span>
+<span class="line"><span style="color:#9ECBFF">  'POST /graphql RenameCustomer'</span><span style="color:#E1E4E8">: (</span><span style="color:#FFAB70">request</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> ({</span></span>
+<span class="line"><span style="color:#E1E4E8">    body: { data: { renameCustomer: { id: request.variables.id, name: request.variables.name } } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  }),</span></span>
+<span class="line"><span style="color:#E1E4E8">},</span></span>
+<span class="line"><span style="color:#B392F0">scenarios</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#F97583">  default</span><span style="color:#E1E4E8">: {},</span></span>
+<span class="line"><span style="color:#9ECBFF">  'load-error'</span><span style="color:#E1E4E8">: { requests: { </span><span style="color:#9ECBFF">'POST /graphql Customers'</span><span style="color:#E1E4E8">: { body: { errors: [{ message: </span><span style="color:#9ECBFF">'Internal server error'</span><span style="color:#E1E4E8"> }] } } } },</span></span>
+<span class="line"><span style="color:#E1E4E8">},</span></span></code></pre>
+<p>A request that sends several operations at once, as an array, has no single
+operation name, so only keys without one match it.</p>
+<h3 id="share-mocks-between-previews">Share mocks between previews</h3>
+<p>Definitions are modules, so keep mocks your previews share in a file of their
+own and spread them in. Keys are tried in the order they appear, so put a
+preview’s own keys before the shared ones:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#6A737D">// src/workbench/mocks.ts</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { RequestMocks } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> const</span><span style="color:#79B8FF"> session</span><span style="color:#F97583">:</span><span style="color:#B392F0"> RequestMocks</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#9ECBFF">  'GET /api/me'</span><span style="color:#E1E4E8">: { body: { id: </span><span style="color:#9ECBFF">'u-1'</span><span style="color:#E1E4E8">, name: </span><span style="color:#9ECBFF">'Ada Lovelace'</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#9ECBFF">  'GET /api/notifications'</span><span style="color:#E1E4E8">: { body: [] },</span></span>
+<span class="line"><span style="color:#E1E4E8">};</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// src/pages/customers.workbench.tsx</span></span>
+<span class="line"><span style="color:#B392F0">requests</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#9ECBFF">  'GET /api/customers'</span><span style="color:#E1E4E8">: { body: customers },</span></span>
+<span class="line"><span style="color:#F97583">  ...</span><span style="color:#E1E4E8">session,</span></span>
+<span class="line"><span style="color:#E1E4E8">},</span></span></code></pre>
+<h3 id="astro-frontmatter">Astro frontmatter</h3>
+<p>For an <a href="/workbench/docs/astro/">Astro</a> preview, <code>requests</code> also answers <code>fetch</code> in the
+component’s frontmatter, which runs on the Workbench server rather than in the
+browser:</p>
+<ul>
+<li>A relative URL, such as <code>fetch('/api/plans')</code>, resolves against
+<code>http://localhost/</code>, and a path-only key matches it.</li>
+<li>The handler’s context has <code>id</code>, <code>scenario</code>, <code>inputs</code>, <code>fixtures</code>, and
+<code>globals</code>.</li>
+<li>The page waits for every request before it renders, so a server render has
+no loading state to show. A render that waits more than 10 seconds, for a
+<code>pending</code> or long <code>delay</code> mock, fails.</li>
+<li>Unmatched requests answer <code>404</code> but aren’t listed under <strong>Actions</strong>.</li>
+</ul>
+<p>Scripts on the rendered page run in the browser and get the browser behavior.</p>
+<h3 id="what-request-mocks-dont-cover">What request mocks don’t cover</h3>
+<p>Mocks answer <code>fetch</code> and asynchronous XMLHttpRequest. These reach the network
+as they would without Workbench: WebSocket, EventSource,
+<code>navigator.sendBeacon</code>, synchronous XMLHttpRequest, and requests made from web
+workers or service workers.</p>
+<h2 id="actions">Actions</h2>
+<p><strong>Actions</strong>, in <strong>Preview controls</strong>, lists the last 30 things your page
+tried to do, newest last. <strong>Reset scenario</strong> clears it.</p>
+<table>
+<thead>
+<tr>
+<th>Entry</th>
+<th>Logged when</th>
+<th>Values</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Any name you choose</td>
+<td>Your code calls <code>context.action(name, ...values)</code></td>
+<td>The values you pass</td>
+</tr>
+<tr>
+<td><code>navigate</code></td>
+<td>A link is clicked with <strong>Actions</strong> on, and <code>links</code> doesn’t map it</td>
+<td>The link’s <code>href</code></td>
+</tr>
+<tr>
+<td><code>submit</code></td>
+<td>A form is submitted with <strong>Actions</strong> on, and <code>links</code> doesn’t map its <code>action</code></td>
+<td>The form’s <code>action</code>, when it has one, and its fields</td>
+</tr>
+<tr>
+<td><code>request</code></td>
+<td>The page sends a write: any method but <code>GET</code>, <code>HEAD</code>, and <code>OPTIONS</code>, or a GraphQL mutation</td>
+<td>The method, path, and operation, and the body</td>
+</tr>
+<tr>
+<td><code>request</code></td>
+<td>A request matches no mock in a preview that has some</td>
+<td>The method, path, and operation, followed by <code>no mock</code></td>
+</tr>
+</tbody>
+</table>
+<p>Values are shown as text; objects are shown as JSON.</p>
+<p>In a <a href="/workbench/docs/docs-pages/">docs lens</a>, <strong>Actions</strong> lists the examples’
+<code>context.action</code> calls, and the docs’ links and forms when <strong>Actions</strong> is on.</p>
+<p>Log your own events with <code>context.action</code>. Components usually report them
+through callback props or events; connect those in an environment or a page
+script:</p>
+<ul>
+<li><strong>React:</strong> <a href="/workbench/docs/react/#props-children-and-callbacks">Props, children, and callbacks</a></li>
+<li><strong>Vue:</strong> <a href="/workbench/docs/vue/#events-and-actions">Events and actions</a></li>
+<li><strong>React Native Web:</strong> an environment that adds <code>onPress</code>, as in
+<a href="/workbench/docs/react-native-web/#write-a-first-preview">Write a first preview</a></li>
+<li><strong>Astro and HTML:</strong> a page script calling <code>window.workbench?.action(…)</code>;
+see <a href="/workbench/docs/astro/#styles-scripts-and-assets">Styles, scripts, and assets</a> and
+<a href="/workbench/docs/html/#inputs-scenarios-and-actions">Inputs, scenarios, and actions</a></li>
+</ul>
+<h2 id="links-and-navigation">Links and navigation</h2>
+<p>A preview never leaves itself through the browser. Workbench decides where its
+links and forms go, and the top bar’s <strong>Actions</strong> switch decides whether they
+go anywhere:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Actions off (the default)</th>
+<th>Actions on</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A link to a spot on the same page, such as <code>#pricing</code></td>
+<td>Scrolls to it</td>
+<td>Scrolls to it</td>
+</tr>
+<tr>
+<td>A link or form whose address is in <code>links</code></td>
+<td>Nothing</td>
+<td>Opens that preview, and the sidebar follows</td>
+</tr>
+<tr>
+<td>Any other link or form: another route, another site, a download, <code>mailto:</code></td>
+<td>Nothing</td>
+<td>Logged as <code>navigate</code> or <code>submit</code></td>
+</tr>
+</tbody>
+</table>
+<p>Router components that render a real link, such as React Router’s <code>Link</code> and
+Vue Router’s <code>RouterLink</code>, follow the same rules: they don’t navigate when
+Workbench has already handled the click.</p>
+<h3 id="map-links-to-previews">Map links to previews</h3>
+<p><code>links</code> maps an address to a preview ID, to <code>{ preview, scenario }</code>, or to
+<code>{ scenario }</code> for another scenario of the same preview:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'pages/pricing'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'astro'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'../src/pages/pricing.astro'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  links: {</span></span>
+<span class="line"><span style="color:#9ECBFF">    '/'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'pages/home'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    '/checkout/'</span><span style="color:#E1E4E8">: { preview: </span><span style="color:#9ECBFF">'pages/checkout'</span><span style="color:#E1E4E8">, scenario: </span><span style="color:#9ECBFF">'annual'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#9ECBFF">    '/pricing/?billing=monthly'</span><span style="color:#E1E4E8">: { scenario: </span><span style="color:#9ECBFF">'monthly'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: { annual: {}, monthly: {} },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<ul>
+<li>An address matches a link that resolves to the same place, ignoring any
+<code>#fragment</code>: <code>'/'</code> matches <code>href="/"</code> and <code>href="/#features"</code>. A query string
+must match exactly.</li>
+<li>Write addresses the way your source writes its links. Relative addresses
+resolve against the preview’s own address, as the page’s relative links do.</li>
+<li>A form matches by its <code>action</code>.</li>
+<li>A target that names a preview or scenario that doesn’t exist is reported with
+the other <a href="/workbench/docs/troubleshooting/#read-the-resolved-config">configuration problems</a>,
+such as <code>&lt;file&gt;: link /checkout/ names unknown Workbench preview “pages/checkout”.</code></li>
+</ul>
+<h3 id="navigate-from-code">Navigate from code</h3>
+<p>When your page navigates from code rather than a link, such as a router call
+in a click handler, call <code>context.navigate</code> with the same kinds of targets:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#E1E4E8">context.</span><span style="color:#B392F0">navigate</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'pages/checkout'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">context.</span><span style="color:#B392F0">navigate</span><span style="color:#E1E4E8">({ preview: </span><span style="color:#9ECBFF">'pages/checkout'</span><span style="color:#E1E4E8">, scenario: </span><span style="color:#9ECBFF">'annual'</span><span style="color:#E1E4E8"> });</span></span>
+<span class="line"><span style="color:#E1E4E8">context.</span><span style="color:#B392F0">navigate</span><span style="color:#E1E4E8">({ scenario: </span><span style="color:#9ECBFF">'monthly'</span><span style="color:#E1E4E8"> });</span></span></code></pre>
+<p>It does nothing while <strong>Actions</strong> is off. Page scripts in HTML and Astro
+previews reach it as <code>window.workbench?.navigate(…)</code>. To route your app’s own
+navigation through it, give the page a navigation function from an
+environment, in the same provider your app uses to supply it.</p>
+<h3 id="portable-exports">Portable exports</h3>
+<p>In a <a href="/workbench/docs/workbench-previews/#portable-exports">portable export</a>, previews
+behave as if <strong>Actions</strong> were on: a mapped link opens that preview in the
+viewer, and other links and forms are logged.</p>
+<h2 id="recipes">Recipes</h2>
+<h3 id="a-page-that-loads-its-own-data">A page that loads its own data</h3>
+<p>The page fetches on mount and shows loading, error, empty, and filled states.
+It needs no changes for Workbench.</p>
+<p><code>src/pages/CustomersPage.tsx</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="tsx"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { useEffect, useState } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Customer</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> { </span><span style="color:#FFAB70">id</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">; </span><span style="color:#FFAB70">name</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8"> };</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> CustomersPage</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#E1E4E8"> [</span><span style="color:#79B8FF">customers</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">setCustomers</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#B392F0"> useState</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">Customer</span><span style="color:#E1E4E8">[] </span><span style="color:#F97583">|</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">&gt;(</span><span style="color:#79B8FF">null</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#E1E4E8"> [</span><span style="color:#79B8FF">error</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">setError</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#B392F0"> useState</span><span style="color:#E1E4E8">&lt;</span><span style="color:#79B8FF">string</span><span style="color:#F97583"> |</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">&gt;(</span><span style="color:#79B8FF">null</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#B392F0">  useEffect</span><span style="color:#E1E4E8">(() </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">    fetch</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'/api/customers'</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">      .</span><span style="color:#B392F0">then</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">response</span><span style="color:#F97583"> =&gt;</span><span style="color:#E1E4E8"> { </span><span style="color:#F97583">if</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">response.ok) </span><span style="color:#F97583">throw</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> Error</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'HTTP '</span><span style="color:#F97583"> +</span><span style="color:#E1E4E8"> response.status); </span><span style="color:#F97583">return</span><span style="color:#E1E4E8"> response.</span><span style="color:#B392F0">json</span><span style="color:#E1E4E8">(); })</span></span>
+<span class="line"><span style="color:#E1E4E8">      .</span><span style="color:#B392F0">then</span><span style="color:#E1E4E8">(setCustomers, </span><span style="color:#FFAB70">failure</span><span style="color:#F97583"> =&gt;</span><span style="color:#B392F0"> setError</span><span style="color:#E1E4E8">(failure.message));</span></span>
+<span class="line"><span style="color:#E1E4E8">  }, []);</span></span>
+<span class="line"><span style="color:#F97583">  if</span><span style="color:#E1E4E8"> (error) </span><span style="color:#F97583">return</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#85E89D">p</span><span style="color:#B392F0"> role</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"alert"</span><span style="color:#E1E4E8">&gt;Customers could not load: {error}&lt;/</span><span style="color:#85E89D">p</span><span style="color:#E1E4E8">&gt;;</span></span>
+<span class="line"><span style="color:#F97583">  if</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">customers) </span><span style="color:#F97583">return</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#85E89D">p</span><span style="color:#E1E4E8">&gt;Loading customers…&lt;/</span><span style="color:#85E89D">p</span><span style="color:#E1E4E8">&gt;;</span></span>
+<span class="line"><span style="color:#F97583">  if</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">customers.</span><span style="color:#79B8FF">length</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">return</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#85E89D">p</span><span style="color:#E1E4E8">&gt;No customers yet.&lt;/</span><span style="color:#85E89D">p</span><span style="color:#E1E4E8">&gt;;</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#85E89D">ul</span><span style="color:#E1E4E8">&gt;{customers.</span><span style="color:#B392F0">map</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">customer</span><span style="color:#F97583"> =&gt;</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#85E89D">li</span><span style="color:#B392F0"> key</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{customer.id}&gt;{customer.name}&lt;/</span><span style="color:#85E89D">li</span><span style="color:#E1E4E8">&gt;)}&lt;/</span><span style="color:#85E89D">ul</span><span style="color:#E1E4E8">&gt;;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>src/pages/customers.workbench.tsx</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'pages/customers'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  title: </span><span style="color:#9ECBFF">'Pages/Customers'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'react'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./CustomersPage.tsx'</span><span style="color:#E1E4E8">, export: </span><span style="color:#9ECBFF">'CustomersPage'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  fixtures: { customers: [{ id: </span><span style="color:#9ECBFF">'c-1'</span><span style="color:#E1E4E8">, name: </span><span style="color:#9ECBFF">'Ada'</span><span style="color:#E1E4E8"> }, { id: </span><span style="color:#9ECBFF">'c-2'</span><span style="color:#E1E4E8">, name: </span><span style="color:#9ECBFF">'Grace'</span><span style="color:#E1E4E8"> }] },</span></span>
+<span class="line"><span style="color:#E1E4E8">  requests: {</span></span>
+<span class="line"><span style="color:#9ECBFF">    'GET /api/customers'</span><span style="color:#E1E4E8">: (</span><span style="color:#FFAB70">request</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> ({ body: context.fixtures.customers }),</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    default: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    empty: { fixtures: { customers: [] } },</span></span>
+<span class="line"><span style="color:#E1E4E8">    loading: { requests: { </span><span style="color:#9ECBFF">'GET /api/customers'</span><span style="color:#E1E4E8">: { pending: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8"> } } },</span></span>
+<span class="line"><span style="color:#9ECBFF">    'server-error'</span><span style="color:#E1E4E8">: { requests: { </span><span style="color:#9ECBFF">'GET /api/customers'</span><span style="color:#E1E4E8">: { status: </span><span style="color:#79B8FF">500</span><span style="color:#E1E4E8"> } } },</span></span>
+<span class="line"><span style="color:#E1E4E8">    offline: { requests: { </span><span style="color:#9ECBFF">'GET /api/customers'</span><span style="color:#E1E4E8">: { failed: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8"> } } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p><strong>Default</strong> lists Ada and Grace, <strong>Empty</strong> says there are no customers yet,
+<strong>Loading</strong> stays on its loading text, <strong>Server Error</strong> shows <code>HTTP 500</code>, and
+<strong>Offline</strong> shows the browser’s network error.</p>
+<h3 id="a-view-that-reads-a-context">A view that reads a context</h3>
+<p>Some apps split a page into a provider that loads data and a view that reads
+it from a context. Render the view, and provide the context from an
+environment with each scenario’s fixtures:</p>
+<p><code>src/pages/album/album-environment.tsx</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="tsx"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { ReactElement } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PreviewContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { AlbumContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> './album-context'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> wrap</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">element</span><span style="color:#F97583">:</span><span style="color:#B392F0"> ReactElement</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> value</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    album: context.fixtures.album </span><span style="color:#F97583">??</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    isLoading: context.scenario </span><span style="color:#F97583">===</span><span style="color:#9ECBFF"> 'loading'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    isError: context.scenario </span><span style="color:#F97583">===</span><span style="color:#9ECBFF"> 'error'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#B392F0">    onPlay</span><span style="color:#E1E4E8">: (</span><span style="color:#FFAB70">trackId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">action</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'play'</span><span style="color:#E1E4E8">, trackId),</span></span>
+<span class="line"><span style="color:#E1E4E8">  };</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#79B8FF">AlbumContext.Provider</span><span style="color:#B392F0"> value</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{value}&gt;{element}&lt;/</span><span style="color:#79B8FF">AlbumContext.Provider</span><span style="color:#E1E4E8">&gt;;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>src/pages/album/album.workbench.tsx</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { album } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> './album-fixtures'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'pages/album'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'react'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./AlbumView.tsx'</span><span style="color:#E1E4E8">, export: </span><span style="color:#9ECBFF">'AlbumView'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  environment: </span><span style="color:#9ECBFF">'./album-environment.tsx'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  fixtures: { album },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: { default: {}, loading: {}, error: {} },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>Playing a track logs <code>play</code> under <strong>Actions</strong>.</p>
+<h3 id="a-vue-component-with-app-provided-data">A Vue component with app-provided data</h3>
+<p>A Vue component that reads a <code>provide</code>d value or a store gets it from the
+environment’s <code>configure</code>, which runs for every render’s new app:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#6A737D">// src/workbench/vue-environment.ts</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { App } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'vue'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PreviewContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { cartKey } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '../cart'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> configure</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">app</span><span style="color:#F97583">:</span><span style="color:#B392F0"> App</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">  app.</span><span style="color:#B392F0">provide</span><span style="color:#E1E4E8">(cartKey, { items: context.fixtures.cart </span><span style="color:#F97583">??</span><span style="color:#E1E4E8"> [] });</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>A store such as Pinia works the same way: create it in <code>configure</code>, install
+it with <code>app.use</code>, and set its state from <code>context.fixtures</code> before the
+component mounts.</p>
+<h3 id="an-astro-page-that-fetches-in-its-frontmatter">An Astro page that fetches in its frontmatter</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="astro"><code><span class="line"><span style="color:#6A737D">---</span></span>
+<span class="line"><span style="color:#6A737D">// src/pages/plans.astro</span></span>
+<span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> response</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#B392F0"> fetch</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'/api/plans'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> plans</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> response.ok </span><span style="color:#F97583">?</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> response.</span><span style="color:#B392F0">json</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">:</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#6A737D">---</span></span>
+<span class="line"><span style="color:#E1E4E8">{plans </span><span style="color:#F97583">?</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#85E89D">ul</span><span style="color:#E1E4E8">&gt;{plans.</span><span style="color:#B392F0">map</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">plan</span><span style="color:#F97583"> =&gt;</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#85E89D">li</span><span style="color:#E1E4E8">&gt;{plan.name}&lt;/</span><span style="color:#85E89D">li</span><span style="color:#E1E4E8">&gt;)}&lt;/</span><span style="color:#85E89D">ul</span><span style="color:#E1E4E8">&gt; </span><span style="color:#F97583">:</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#85E89D">p</span><span style="color:#E1E4E8">&gt;Plans could not load&lt;/</span><span style="color:#85E89D">p</span><span style="color:#E1E4E8">&gt;}</span></span></code></pre>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#6A737D">// src/pages/plans.workbench.ts</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'pages/plans'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'astro'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./plans.astro'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  requests: { </span><span style="color:#9ECBFF">'GET /api/plans'</span><span style="color:#E1E4E8">: { body: [{ name: </span><span style="color:#9ECBFF">'Team'</span><span style="color:#E1E4E8"> }, { name: </span><span style="color:#9ECBFF">'Business'</span><span style="color:#E1E4E8"> }] } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    default: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    failed: { requests: { </span><span style="color:#9ECBFF">'GET /api/plans'</span><span style="color:#E1E4E8">: { status: </span><span style="color:#79B8FF">500</span><span style="color:#E1E4E8"> } } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<h3 id="pages-that-lead-to-each-other">Pages that lead to each other</h3>
+<p>Give each page its own preview, map the routes between them in <code>links</code>, and
+turn on <strong>Actions</strong> to walk the flow:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#6A737D">// sign-in.workbench.ts</span></span>
+<span class="line"><span style="color:#B392F0">links</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#9ECBFF">  '/forgot-password'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'auth/reset-password'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">  '/dashboard'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'pages/dashboard'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">},</span></span></code></pre>
+<p>A sign-in form whose <code>action</code> is <code>/dashboard</code> opens the dashboard preview when
+submitted. A form that only calls <code>fetch</code> does not navigate by itself; answer
+its request with a mock, and call <code>context.navigate</code> from the code that would
+move on in your app.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/preview-data.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/workbench/docs/workbench-previews/"><span>← Previous</span><strong>TypeScript Workbench previews</strong></a><a href="/workbench/docs/react/"><span>Next →</span><strong>React previews</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#choose-how-to-give-a-page-its-data">Choose how to give a page its data</a><a href="#what-you-can-set-and-where">What you can set, and where</a><a href="#how-a-render-runs">How a render runs</a><a href="#inputs-and-controls">Inputs and controls</a><a href="#controls" class="docs-toc-sub">Controls</a><a href="#callbacks-children-and-slots" class="docs-toc-sub">Callbacks, children, and slots</a><a href="#fixtures-and-globals">Fixtures and globals</a><a href="#environments">Environments</a><a href="#seed-storage-and-stores" class="docs-toc-sub">Seed storage and stores</a><a href="#examples-on-docs-pages" class="docs-toc-sub">Examples on docs pages</a><a href="#request-mocks">Request mocks</a><a href="#keys" class="docs-toc-sub">Keys</a><a href="#which-mock-answers" class="docs-toc-sub">Which mock answers</a><a href="#responses" class="docs-toc-sub">Responses</a><a href="#handlers" class="docs-toc-sub">Handlers</a><a href="#graphql" class="docs-toc-sub">GraphQL</a><a href="#share-mocks-between-previews" class="docs-toc-sub">Share mocks between previews</a><a href="#astro-frontmatter" class="docs-toc-sub">Astro frontmatter</a><a href="#what-request-mocks-dont-cover" class="docs-toc-sub">What request mocks don’t cover</a><a href="#actions">Actions</a><a href="#links-and-navigation">Links and navigation</a><a href="#map-links-to-previews" class="docs-toc-sub">Map links to previews</a><a href="#navigate-from-code" class="docs-toc-sub">Navigate from code</a><a href="#portable-exports" class="docs-toc-sub">Portable exports</a><a href="#recipes">Recipes</a><a href="#a-page-that-loads-its-own-data" class="docs-toc-sub">A page that loads its own data</a><a href="#a-view-that-reads-a-context" class="docs-toc-sub">A view that reads a context</a><a href="#a-vue-component-with-app-provided-data" class="docs-toc-sub">A Vue component with app-provided data</a><a href="#an-astro-page-that-fetches-in-its-frontmatter" class="docs-toc-sub">An Astro page that fetches in its frontmatter</a><a href="#pages-that-lead-to-each-other" class="docs-toc-sub">Pages that lead to each other</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

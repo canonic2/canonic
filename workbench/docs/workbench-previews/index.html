@@ -1,0 +1,451 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>TypeScript Workbench previews · Workbench docs · Canonic</title><meta name="description" content="A Workbench preview renders a component or page from your own source code, in named scenarios, next to your design pages. You define it in a  .workbench.ts  or  .workbench.tsx  fil"><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.17.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/workbench/">Overview</a><a href="/workbench/docs/" aria-current="page">Docs</a><a href="/workbench/install/">Install</a><a href="/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Getting started</h2><a href="/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/workbench/docs/canvas/" data-doc-id="canvas">Using the canvas</a><a href="/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group"><h2>Previews</h2><a href="/workbench/docs/workbench-previews/" data-doc-id="workbench-previews" aria-current="page">TypeScript Workbench previews</a><a href="/workbench/docs/preview-data/" data-doc-id="preview-data">Preview data, mocks, and actions</a><a href="/workbench/docs/react/" data-doc-id="react">React previews</a><a href="/workbench/docs/react-native-web/" data-doc-id="react-native-web">React Native Web previews</a><a href="/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/workbench/docs/astro/" data-doc-id="astro">Astro previews</a><a href="/workbench/docs/html/" data-doc-id="html">HTML previews</a><a href="/workbench/docs/custom-adapters/" data-doc-id="custom-adapters">Custom adapters and compiler settings</a></div><div class="docs-group"><h2>Connect your implementation</h2><a href="/workbench/docs/lenses/" data-doc-id="lenses">Lenses and URL implementations</a><a href="/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/workbench/docs/ios-simulator/" data-doc-id="ios-simulator">iOS Simulator</a><a href="/workbench/docs/windows/" data-doc-id="windows">App windows</a></div><div class="docs-group"><h2>Reference</h2><a href="/workbench/docs/configuration/" data-doc-id="configuration">workbench.yaml reference</a><a href="/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/workbench/docs/extension/" data-doc-id="extension">The VS Code extension</a><a href="/workbench/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshooting</a></div></nav><a class="docs-install" href="/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span>Previews</span></div><div class="docs-prose"><h1 id="typescript-workbench-previews">TypeScript Workbench previews</h1>
+<p>A Workbench preview renders a component or page from your own source code,
+in named scenarios, next to your design pages. You define it in a
+<code>.workbench.ts</code> or <code>.workbench.tsx</code> file, with an adapter for HTML, React, Vue,
+Astro, React Native Web, or a technology you register yourself.</p>
+<p>Like a story in Storybook, a preview renders your real component or page, but
+not a running copy of your app. Each scenario supplies the data the page would
+load, through props, providers, or <a href="/workbench/docs/preview-data/#request-mocks">mocked requests</a>,
+and Workbench keeps it on the canvas: its links open other previews, and
+everything else it would do on a real site, such as following a route,
+submitting a form, or starting a download, is recorded under <strong>Actions</strong>
+instead. See <a href="/workbench/docs/preview-data/">Preview data, mocks, and actions</a>.</p>
+<p>Workbench mounts your content into a container that fills the artboard width,
+including with a flex body and loading, empty, or error content. Styles targeting
+your production root, such as <code>#app</code>, do not target the preview mount; keep any
+additional root styling in your preview source or environment.</p>
+<p>This page covers what every preview shares: definitions, scenarios, controls,
+lifecycle hooks, the command-line tools, and portable exports. Each framework
+has its own guide:</p>
+<table>
+<thead>
+<tr>
+<th>Adapter</th>
+<th>Renders</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>react</code></td>
+<td>A React component, with <code>inputs</code> as props</td>
+<td><a href="/workbench/docs/react/">React</a></td>
+</tr>
+<tr>
+<td><code>react-native-web</code></td>
+<td>A React Native component through React Native Web</td>
+<td><a href="/workbench/docs/react-native-web/">React Native Web</a></td>
+</tr>
+<tr>
+<td><code>vue</code></td>
+<td>A Vue 3 single-file component or module, with <code>inputs</code> as props</td>
+<td><a href="/workbench/docs/vue/">Vue</a></td>
+</tr>
+<tr>
+<td><code>astro</code></td>
+<td>An Astro component or page, rendered on the server</td>
+<td><a href="/workbench/docs/astro/">Astro</a></td>
+</tr>
+<tr>
+<td><code>html</code></td>
+<td>An HTML file with its styles and scripts, or a module that mounts into the canvas</td>
+<td><a href="/workbench/docs/html/">HTML</a></td>
+</tr>
+<tr>
+<td>Your own</td>
+<td>Anything you can mount from a browser module</td>
+<td><a href="/workbench/docs/custom-adapters/">Custom adapters</a></td>
+</tr>
+</tbody>
+</table>
+<p>You need:</p>
+<ul>
+<li><code>workbench.yaml</code> at the project root. <code>name: Acme</code> alone is enough when
+previews supply every page.</li>
+<li>A <a href="/workbench/docs/extension/#workspace-trust">trusted workspace</a>, since previews run
+project code.</li>
+<li>The framework you render with, installed in your project. Workbench compiles
+TypeScript, JSX, and Vue files itself, but uses your project’s React, Vue,
+Astro, or React Native Web. It never installs or replaces them.</li>
+</ul>
+<h2 id="add-a-preview">Add a preview</h2>
+<ol>
+<li>
+<p>Write a definition next to the component, such as <code>src/Button.workbench.ts</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'components/button'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  title: </span><span style="color:#9ECBFF">'Components/Button'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'react'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./Button.tsx'</span><span style="color:#E1E4E8">, export: </span><span style="color:#9ECBFF">'Button'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  inputs: { label: </span><span style="color:#9ECBFF">'Continue'</span><span style="color:#E1E4E8">, disabled: </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  controls: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    label: { type: </span><span style="color:#9ECBFF">'text'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">    disabled: { type: </span><span style="color:#9ECBFF">'boolean'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    default: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    disabled: { inputs: { disabled: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>Workbench supplies <code>@canonic2/workbench</code> when it compiles the file. For
+TypeScript and your editor, install it as a development dependency; see
+<a href="#types">Types</a>.
+This example renders a React component; each framework guide has a complete
+example of its own.</p>
+</li>
+<li>
+<p>Run <strong>Workbench: Refresh Pages</strong>, or save <code>workbench.yaml</code>. The preview
+appears in the page list with its scenarios, and opens on the canvas like any
+other page.</p>
+</li>
+</ol>
+<p>Workbench finds every <code>*.workbench.ts</code> and <code>*.workbench.tsx</code> file in the
+project. It skips hidden folders, <code>node_modules</code>, <code>dist</code>, <code>build</code>, and
+<code>coverage</code>, and whatever your project’s <code>.gitignore</code> files ignore, such as
+Rust’s <code>target</code> folder. To choose other files or turn previews off, see
+<a href="/workbench/docs/configuration/#previews">Previews in the configuration reference</a>.</p>
+<p>The <code>title</code> places the preview in the sidebar. Its first segment names the
+collection, its last the page, and any segments between them a group:
+<code>Components/Forms/Button</code> is <strong>Button</strong>, in a <strong>Forms</strong> group, in the
+<strong>Components</strong> collection. A title without <code>/</code> goes in a <strong>Previews</strong>
+collection.
+Without a <code>title</code>, the <code>id</code> is used.</p>
+<p>Set <code>icon: 'monitor'</code> on <code>definePreview</code> for a page preview, or use
+<code>previews.icons</code> in <code>workbench.yaml</code> to assign icons by title prefix. A
+definition’s icon wins over the longest matching prefix, then <code>previews.icon</code>,
+then the default <code>component</code>. Collection icons are configured separately; an
+icon-only handwritten collection can style a collection shared with Storybook.
+See <a href="/workbench/docs/configuration/#previews">preview icon settings</a> and
+<a href="/workbench/docs/configuration/#collections">collection precedence</a>.</p>
+<p>Collections and groups with exactly matching names are shared with your
+hand-written pages. For example, a preview titled <code>Web App/Pages/Jobs</code> and a
+hand-written page in the <strong>Pages</strong> group of the <strong>Web App</strong> collection appear
+in one <strong>Pages</strong> group under <strong>Web App</strong>.</p>
+<p>A file that fails to load or has an invalid definition is reported with the
+other <a href="/workbench/docs/troubleshooting/#read-the-resolved-config">configuration problems</a>.
+The remaining previews still load.</p>
+<p>To place a preview yourself, give a page in <code>workbench.yaml</code> the definition
+as its <code>src</code>, such as <code>src: src/Button.workbench.ts</code>. The page keeps its place
+and label, and takes its scenarios from the definition. The file must still match
+the discovery patterns.</p>
+<p>A <code>.workbench.ts</code> or <code>.workbench.tsx</code> file can also default-export
+<code>defineDocs({...})</code> from <code>@canonic2/workbench</code> instead of <code>definePreview</code>, to
+declare a <a href="/workbench/docs/docs-pages/#declare-a-markdown-page-in-a-definition">Markdown page</a>:
+Markdown with live examples and the docs lenses that render them. It is
+discovered with the previews and placed by its <code>title</code> the same way, except
+that a title without <code>/</code> goes in a <strong>Docs</strong> collection. If <code>workbench.yaml</code> also lists its Markdown
+file, the listed page is used instead. To give a preview page its own docs,
+set <code>docs</code> on its entry in <code>workbench.yaml</code>. See <a href="/workbench/docs/docs-pages/">Docs</a>.</p>
+<h2 id="name-the-preview-lens">Name the preview lens</h2>
+<p>To rename the preview’s own lens, set <code>previews.lensLabel</code> in <code>workbench.yaml</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">previews</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  lensLabel</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Design</span></span></code></pre>
+<p>This changes the default <strong>Preview</strong> label to <strong>Design</strong> for discovered
+previews. An explicitly listed page can set its own <code>lensLabel</code> to override
+that value. These are YAML settings, separate from the preview definition’s
+<code>title</code>, which places and names the page in the sidebar. They rename the
+existing lens without adding a second button. If a preview is used as a
+<code>kind: workbench</code> implementation, set that implementation’s <code>label</code> instead.
+See <a href="/workbench/docs/lenses/#customize-lens-labels">Customize lens labels</a>.</p>
+<h2 id="define-a-preview">Define a preview</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>Required. Kebab-case segments separated by <code>/</code>, such as <code>components/button</code>. Unique in the project, across previews and docs pages.</td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td>Where the preview appears in the sidebar. Defaults to <code>id</code>.</td>
+</tr>
+<tr>
+<td><code>adapter</code></td>
+<td>Required. <code>html</code>, <code>react</code>, <code>vue</code>, <code>astro</code>, <code>react-native-web</code>, or a <a href="#register-other-technologies">registered</a> name.</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>Required. <code>entry</code> is the file to render, relative to the definition and inside the project. <code>export</code> names its export and defaults to <code>default</code>.</td>
+</tr>
+<tr>
+<td><code>inputs</code></td>
+<td>Data passed to the source: props for React and Vue, <code>Astro.props</code> for Astro.</td>
+</tr>
+<tr>
+<td><code>controls</code></td>
+<td>Inputs you can edit in <strong>Preview controls</strong>. See <a href="/workbench/docs/preview-data/#controls">Controls</a>.</td>
+</tr>
+<tr>
+<td><code>scenarios</code></td>
+<td>A map of kebab-case scenario IDs to <a href="#scenarios">scenarios</a>.</td>
+</tr>
+<tr>
+<td><code>artboards</code></td>
+<td>An explicit map of artboards shown together within this page. Each has an optional <code>label</code>, integer <code>width</code> and <code>height</code> from 1 to 8192, and optional <code>inputs</code>. See <a href="#multiple-artboards">Multiple artboards</a>.</td>
+</tr>
+<tr>
+<td><code>links</code></td>
+<td>The addresses the source links or submits to, each mapped to the preview it opens. See <a href="/workbench/docs/preview-data/#links-and-navigation">Links and navigation</a>.</td>
+</tr>
+<tr>
+<td><code>requests</code></td>
+<td>Answers to the page’s <code>fetch</code> and <code>XMLHttpRequest</code> calls. See <a href="/workbench/docs/preview-data/#request-mocks">Request mocks</a>.</td>
+</tr>
+<tr>
+<td><code>sizes</code></td>
+<td>The artboard sizes the preview supports: any of <code>fit</code>, <code>laptop</code>, <code>mobile</code>, and <code>resizable</code>. See <a href="/workbench/docs/pages-and-scenarios/#sizes">Sizes</a>.</td>
+</tr>
+<tr>
+<td><code>docs</code></td>
+<td>Text shown under <strong>Documentation</strong> in <strong>Preview controls</strong>.</td>
+</tr>
+<tr>
+<td><code>fixtures</code>, <code>globals</code></td>
+<td>Data and settings that environments, hooks, and request handlers read from the context. See <a href="/workbench/docs/preview-data/#fixtures-and-globals">Fixtures and globals</a>.</td>
+</tr>
+<tr>
+<td><code>styles</code></td>
+<td>Stylesheets to load with the preview, relative to the definition.</td>
+</tr>
+<tr>
+<td><code>assets</code></td>
+<td>Extra local files or folders the source or a loader reads at runtime, relative to the definition.</td>
+</tr>
+<tr>
+<td><code>environment</code></td>
+<td>A module, relative to the definition, that wraps or configures every scenario. See <a href="/workbench/docs/preview-data/#environments">Environments</a>.</td>
+</tr>
+<tr>
+<td><code>setup</code>, <code>play</code>, <code>ready</code></td>
+<td><a href="#lifecycle-hooks">Lifecycle hooks</a> for every scenario.</td>
+</tr>
+</tbody>
+</table>
+<p><code>inputs</code>, <code>fixtures</code>, and <code>globals</code> must be plain, cloneable data.</p>
+<h3 id="scenarios">Scenarios</h3>
+<p>Each scenario can set:</p>
+<ul>
+<li><code>label</code>, the name in the sidebar. It defaults to the ID in sentence case, so
+<code>is-busy</code> reads <strong>Is busy</strong>.</li>
+<li><code>inputs</code>, <code>fixtures</code>, and <code>globals</code>, which override the preview’s values
+key by key; see <a href="/workbench/docs/preview-data/#what-you-can-set-and-where">What you can set, and where</a>.</li>
+<li><code>source</code>, to render a different entry or export in this scenario.</li>
+<li><code>requests</code>, tried before the preview’s
+<a href="/workbench/docs/preview-data/#which-mock-answers">request mocks</a>.</li>
+<li><code>setup</code>, <code>play</code>, and <code>ready</code> hooks.</li>
+</ul>
+<p>The first scenario is the one a preview opens in. Every scenario also opens directly
+with <code>?scenario=&lt;id&gt;</code> on the preview’s address; an unknown scenario shows an error.
+A preview without <code>scenarios</code> has one scenario, <code>default</code>.</p>
+<p>SVG icon sprites registered when your preview module loads remain available
+when you switch scenarios or return to that preview.</p>
+<p>Returning to a preview preserves form edits, filters, scroll, open menus, and
+live application state. The canvas keeps up to three previews you left loaded
+for 15 minutes. <strong>Reload</strong> starts the current preview again;
+<strong>Reset scenario</strong> restores its declared inputs. A source change rebuilds the
+preview. Closing the canvas releases the previews it kept.</p>
+<p>The <code>&lt;html&gt;</code> element carries <code>data-wb-scenario</code> with the current scenario ID, so CSS
+keyed off it works as it does in <a href="/workbench/docs/pages-and-scenarios/#1-css-keyed-off-the-root">design pages</a>.</p>
+<h2 id="multiple-artboards">Multiple artboards</h2>
+<p>Use <code>artboards</code> when one page contains several independently sized examples.
+Scenarios remain alternatives selected with the scenario switcher; declaring scenarios
+does not create artboards. A page may have both: the selected scenario applies to
+each of its declared artboards.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">artboards</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#B392F0">  info</span><span style="color:#E1E4E8">: { </span><span style="color:#B392F0">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'Info'</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">width</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">560</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">height</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">79</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#B392F0">  success</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#B392F0">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'Success'</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">width</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">560</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">height</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">119</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#B392F0">    inputs</span><span style="color:#E1E4E8">: { </span><span style="color:#B392F0">tone</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'success'</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">title</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'Import complete'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Declare 1–32 artboards with kebab-case IDs. These are children of one page,
+not scenario entries or additional pages in the sidebar. Each renderer receives
+<code>context.artboard</code> and its own inputs. Inputs merge from the preview, then the
+artboard, then the selected scenario, then temporary control edits. Reset restores
+that artboard’s authored inputs. The page’s supported sizes must permit its
+dimensions; include Resizable for arbitrary dimensions.</p>
+<p>Artboard labels remain selectable while their previews initialize. You can pan
+and zoom during loading. With the canvas focused, Left and Right select and
+center neighboring artboards. Only the selected artboard runs its preview. The
+others show a background image of it, or, when they are large enough on screen
+to read, a static copy of the page without scripts; see
+<a href="/workbench/docs/canvas/">Using the canvas</a>. If an artboard’s background image cannot be
+rendered, its label shows the reason; it is tried again after the next source
+edit, or when the artboard comes back into view.</p>
+<p>Select an artboard to interact with it. Once you click or type in it, its
+application state is kept when you select another one, so returning to it keeps
+its document, inputs and scroll position. Selecting artboards only to look at
+them keeps nothing. Up to eight artboards keep application state; using a ninth
+releases the one used longest ago, and a message names it. A released artboard
+shows a kept image of what you did. <strong>Release</strong>, in the selected artboard’s
+label, does the same on request: it keeps that image and ends its document. <strong>Restart</strong>, in the same place
+once released, starts a fresh document: application drafts, counters and other
+JavaScript state reset, while Workbench annotations and input overrides survive.</p>
+<p>Capture includes the complete declared group. It uses each artboard’s running
+document or its kept image, and starts artboards that never ran
+one at a time. The background images are not used. If a kept image is out of
+date after a source edit, capture fails and asks you to restart that artboard
+rather than leaving it out.</p>
+<p>For a component that should fit its content, put <code>data-wb-fit-content</code> on its
+origin-aligned root and remove surrounding padding, backgrounds and viewport
+minimum heights. Natural bounds follow content edits independently per artboard.</p>
+<h2 id="adapters">Adapters</h2>
+<p><code>adapter</code> picks how the <code>source</code> renders. The built-in adapters are <code>html</code>,
+<code>react</code>, <code>vue</code>, <code>astro</code>, and <code>react-native-web</code>; see the table at the top of
+this page for each one’s guide. Any other name must be
+<a href="#register-other-technologies">registered</a>.</p>
+<h2 id="data-controls-and-actions">Data, controls, and actions</h2>
+<p>A preview gets the data its real page would load, and you can change it per
+scenario and while you review. <a href="/workbench/docs/preview-data/">Preview data, mocks, and actions</a>
+covers all of it:</p>
+<ul>
+<li><strong>Inputs and controls:</strong> props for the component, and fields under
+<strong>Preview controls</strong> that edit them live. <strong>Reset scenario</strong> drops your edits
+and the action log.</li>
+<li><strong>Fixtures and globals:</strong> data and settings for the code around the component.</li>
+<li><strong>Environments:</strong> providers, plugins, stores, and setup, for one preview or,
+from <code>workbench.config.ts</code>, for the whole project.</li>
+<li><strong>Request mocks:</strong> answers to the page’s own <code>fetch</code> and XMLHttpRequest
+calls, for empty, loading, error, and offline scenarios.</li>
+<li><strong>Actions:</strong> what the page tried to do, listed under <strong>Actions</strong> in
+<strong>Preview controls</strong>.</li>
+<li><strong>Links and navigation:</strong> links that open other previews, with the
+top bar’s <strong>Actions</strong> switch on.</li>
+</ul>
+<h2 id="lifecycle-hooks">Lifecycle hooks</h2>
+<p>Hooks and sources receive a context with <code>id</code>, <code>scenario</code>, <code>inputs</code>, <code>fixtures</code>,
+<code>globals</code>, an abort <code>signal</code>, <code>action(name, ...values)</code>, <code>navigate(to)</code>, and
+<code>error(error)</code>. Examples in a page’s <a href="/workbench/docs/docs-pages/#examples">docs</a> get the same
+context, with empty <code>inputs</code>, <code>fixtures</code>, and <code>globals</code>.</p>
+<ul>
+<li><code>setup(context)</code> runs before the source mounts and may return a cleanup
+function. It runs from the project’s <a href="/workbench/docs/preview-data/#environments">environment</a>,
+then the preview’s <code>environment</code>, then the preview, then the scenario.
+<a href="/workbench/docs/preview-data/#request-mocks">Request mocks</a> are already active, so
+<code>setup</code> can fetch.</li>
+<li><code>play({ canvas, ...context })</code> runs after mounting, for an interaction
+sequence such as opening a menu. The preview’s runs before the scenario’s.</li>
+<li><code>ready(context)</code> runs last, for anything the preview must wait for.</li>
+</ul>
+<p>An <a href="/workbench/docs/preview-data/#environments">environment</a> module can export <code>setup</code> and
+<code>ready</code> too, and a hook for its adapter, such as <code>wrap</code> for React.</p>
+<p>A preview is ready once its hooks finish, its fonts load, and its visible
+images load or 3 seconds pass. Screenshots and handoffs wait for that, and fail
+with the rendering error, or with <code>Workbench preview did not finish rendering before capture</code> after 8 seconds.</p>
+<p>Before a preview renders again, its signal is aborted and cleanups run in
+reverse order. Tie subscriptions, timers, and listeners to <code>context.signal</code> or a
+cleanup. A failed cleanup doesn’t stop the others, and <strong>Reset scenario</strong> recovers
+after a failed render.</p>
+<p>Errors are shown in the preview’s frame: thrown errors, rejected promises,
+React error boundaries, Vue’s error handler, and anything a custom adapter
+passes to <code>context.error(error)</code>.</p>
+<p>An error after the first render also makes the artboard unavailable for capture
+until it recovers. A declared artboard that fails shows its error and starts
+again after the next save or resize, or with <strong>Release</strong> and then <strong>Restart</strong>.
+An ordinary preview can use <strong>Reset scenario</strong> to render again.</p>
+<p>Saving a file updates the open previews that use it, usually within a fraction
+of a second, without reloading the canvas:</p>
+<ul>
+<li>React components keep their state through React Fast Refresh, as long as
+the order of their hooks is unchanged.</li>
+<li>Vue components update through Vue’s hot reload. A template or style edit
+keeps the component’s state; a script edit resets it.</li>
+<li>Stylesheets, CSS modules, and Vue style blocks are replaced in place.</li>
+<li>HTML and Astro previews render again in place, with the selected scenario and
+inputs.</li>
+<li>Saving the definition, an environment, or a module that can’t update in
+place reloads the preview, keeping its scenario, size, and inputs.</li>
+<li>Saving <code>workbench.config.ts</code> restarts the compilers and reloads the open
+previews.</li>
+<li>A syntax error shows in the frame, and the next good save recovers it.</li>
+</ul>
+<p>If you add or remove a definition, or change its <code>title</code> or scenarios, run
+<strong>Workbench: Refresh Pages</strong> to update the sidebar.</p>
+<p>Workbench compiles previews with <a href="https://rspack.rs/" target="_blank" rel="noopener">Rspack</a>, bundled with the
+extension. It starts building when the project opens, and builds all of the
+project’s previews and docs examples together, so code they share loads once:
+moving to another page loads only that page’s own code. The saved page list and
+build cache are kept in the system’s temporary folder, never in your project,
+and are reused when Workbench restarts. Your project does not need to install
+a compiler.</p>
+<h2 id="register-other-technologies">Register other technologies</h2>
+<p>Adapter names aren’t a fixed list. <code>workbench.config.ts</code> at the project root,
+or the file named by <a href="/workbench/docs/configuration/#previews"><code>previews.config</code></a>, registers
+adapters and sets Rspack <code>rules</code>, <code>plugins</code> made with Workbench’s helpers, <code>aliases</code>, <code>dedupe</code>,
+<code>resolveExtensions</code>, and <code>define</code> for every preview. An adapter whose name isn’t built in or
+registered fails with <code>Unknown adapter</code>. See <a href="/workbench/docs/custom-adapters/">Custom adapters</a>.</p>
+<h2 id="compare-a-design-with-a-preview">Compare a design with a preview</h2>
+<p>A page can show a preview as a lens next to its design, with a <code>workbench</code>
+implementation. See
+<a href="/workbench/docs/lenses/#compare-a-design-with-a-workbench-preview">Compare a design with a Workbench preview</a>.</p>
+<h2 id="types">Types</h2>
+<p>Install the authoring types so <code>tsc</code> and your editor resolve
+<code>@canonic2/workbench</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">npm</span><span style="color:#9ECBFF"> install</span><span style="color:#79B8FF"> --save-dev</span><span style="color:#9ECBFF"> @canonic2/workbench</span></span></code></pre>
+<p>Use <code>pnpm add -D</code> or <code>yarn add -D</code> with those package managers. The types
+check that each scenario’s <code>inputs</code> match the preview’s. Workbench still compiles
+previews with its own copy, so the installed version affects types only; keep
+it at the version of your extension to type the newest fields.</p>
+<p>Without an installed package, the <code>init</code> command below writes the same types to
+a <code>workbench-env.d.ts</code> file. Include that file in your <code>tsconfig.json</code>.</p>
+<h2 id="command-line-tools">Command-line tools</h2>
+<p>The extension includes the <code>workbench-server</code> command in its install folder,
+at <code>server/bin/&lt;platform&gt;-&lt;arch&gt;/workbench-server</code>. Project code in
+definitions and configuration runs on Node 24 or later: the <code>node</code> on your
+<code>PATH</code>, or the program <code>--node</code> names.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#F97583">~</span><span style="color:#E1E4E8">/.vscode/extensions/canonic.canonic-workbench-</span><span style="color:#F97583">&lt;</span><span style="color:#E1E4E8">version</span><span style="color:#F97583">&gt;</span><span style="color:#E1E4E8">/server/bin/darwin-arm64/workbench-server check </span><span style="color:#79B8FF">.</span></span></code></pre>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>init &lt;project&gt;</code></td>
+<td>Writes <code>workbench-env.d.ts</code>, the types for <code>@canonic2/workbench</code>, and a <code>workbench.yaml</code> named after the folder. Existing files are left alone.</td>
+</tr>
+<tr>
+<td><code>list &lt;project&gt;</code></td>
+<td>Prints, as JSON, the previews, docs pages and definition errors Workbench finds.</td>
+</tr>
+<tr>
+<td><code>check &lt;project&gt;</code></td>
+<td>Finds and compiles every preview without opening a browser. Prints <code>Built &lt;id&gt;</code> for each, lists every failure, and exits with an error if there were any.</td>
+</tr>
+<tr>
+<td><code>build &lt;project&gt; [output]</code></td>
+<td>Writes the <a href="#portable-exports">standalone viewer</a> to <code>output</code>, or <code>workbench-static</code> in the project. The folder must be empty or missing. Successful previews are written even when others fail; failures are listed and the exit code is nonzero.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="portable-exports">Portable exports</h2>
+<p><strong>Export…</strong> › <strong>Source package (ZIP)</strong> includes compiled previews in a <code>browser/</code>
+folder, alongside their editable sources. See
+<a href="/workbench/docs/design-system-export/">Design-system export</a>. Serve the extracted folder
+with any static HTTP server and open <code>browser/index.html</code>. The <code>build</code> command
+writes the same viewer on its own. Viewing it needs no Workbench, Electron,
+package installation, or build step.</p>
+<p>The viewer has:</p>
+<ul>
+<li>a searchable list of previews, and the build warnings, if any,</li>
+<li><strong>Scenario</strong> and <strong>Size</strong> menus, with <strong>Width</strong> and <strong>Height</strong> for
+<strong>Resizable</strong>,</li>
+<li><strong>Reload</strong>, and <strong>Preview controls</strong> with the same inputs, reset, actions,
+and documentation as the canvas,</li>
+<li><strong>Open preview</strong>, which opens the preview on its own page. That page also
+accepts <code>?scenario=&lt;id&gt;</code>.</li>
+</ul>
+<p>The viewer’s address keeps the preview, scenario, size, and resizable dimensions, so
+you can copy it to share a selection.</p>
+<p>Astro previews carry every authored scenario but no input controls; see
+<a href="/workbench/docs/astro/#portable-exports">Astro portable exports</a>.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/workbench-previews.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/workbench/docs/spaces/"><span>← Previous</span><strong>Several spaces</strong></a><a href="/workbench/docs/preview-data/"><span>Next →</span><strong>Preview data, mocks, and actions</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#add-a-preview">Add a preview</a><a href="#name-the-preview-lens">Name the preview lens</a><a href="#define-a-preview">Define a preview</a><a href="#scenarios" class="docs-toc-sub">Scenarios</a><a href="#multiple-artboards">Multiple artboards</a><a href="#adapters">Adapters</a><a href="#data-controls-and-actions">Data, controls, and actions</a><a href="#lifecycle-hooks">Lifecycle hooks</a><a href="#register-other-technologies">Register other technologies</a><a href="#compare-a-design-with-a-preview">Compare a design with a preview</a><a href="#types">Types</a><a href="#command-line-tools">Command-line tools</a><a href="#portable-exports">Portable exports</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>

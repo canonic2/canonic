@@ -1,0 +1,454 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>React Native Web previews · Workbench docs · Canonic</title><meta name="description" content="The  react-native-web  adapter renders a React Native component in the browser through React Native Web, with the preview's inputs as its props. Use it to review shared components "><link rel="icon" href="/canonic.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400;500&display=swap"><script>document.documentElement.classList.add("js");</script><link rel="stylesheet" href="/_astro/Base.B-g1u7rd.css"><link rel="stylesheet" href="/_astro/DocsPage.zXSrYpm6.css"></head><body><a class="skip" href="#content">Skip to content</a><header class="top"><nav class="products" aria-label="Products"><div class="wrap"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="tabs"><a class="tab" href="/workbench/" aria-current="page"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4L19 4L19 29L44 29L44 36L12 36Z" fill="currentColor"></path><path d="M22 12L36 12L36 26L29 26L29 19L22 19ZM4 12L9 12L9 19L4 19ZM29 39L36 39L36 44L29 44Z" class="accent"></path></svg>Workbench</a><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 20.92L22.5 31.6L22.5 40.93L4 30.25ZM44 20.92L25.5 31.6L25.5 40.93L44 30.25Z" fill="currentColor"></path><path d="M5 18.04L24 7.07L43 18.04L36 22.08L24 15.15L12 22.08Z" fill="currentColor"></path></svg>Testrun<span class="soon">Soon</span><span class="tip" aria-hidden="true">Testrun: QA, coming soon</span></span><span class="tab is-soon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M4 5.5L17.5 5.5L17.5 12.5L11 12.5L11 22.5L4 22.5ZM4 25.5L11 25.5L11 35.5L17.5 35.5L17.5 42.5L4 42.5Z" fill="currentColor"></path><path d="M44 5.5L30.5 5.5L30.5 12.5L37 12.5L37 22.5L44 22.5ZM44 25.5L37 25.5L37 35.5L30.5 35.5L30.5 42.5L44 42.5Z" fill="currentColor"></path></svg>Playground<span class="soon">Soon</span><span class="tip" aria-hidden="true">Playground: API playground, coming soon</span></span><a class="tab" href="/shield/"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6.68 14L22.5 4.87L22.5 12.95L6.68 22.08ZM6.68 25.54L6.68 34L22.5 43.13L22.5 35.05L13.68 29.96L13.68 21.5ZM41.32 25.54L41.32 34L25.5 43.13L25.5 35.05L34.32 29.96L34.32 21.5Z" fill="currentColor"></path><path d="M41.32 14L25.5 4.87L25.5 12.95L41.32 22.08Z" class="accent"></path></svg>Shield</a></div><a class="github" href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div></nav><nav class="sub" aria-label="Workbench"><div class="wrap"><span class="sub-name">Workbench<span class="sub-version">v0.17.0</span></span><span class="sub-rule" aria-hidden="true"></span><div class="sub-links"><a href="/workbench/">Overview</a><a href="/workbench/docs/" aria-current="page">Docs</a><a href="/workbench/install/">Install</a><a href="/workbench/changelog/">Changelog</a><a href="https://github.com/canonic2/canonic" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></div><a class="btn btn-sm" href="/workbench/install/">Install</a></div></nav></header><main id="content" tabindex="-1"><div class="docs-shell wrap"><canonic-docs-sidebar><details class="docs-sidebar" open><summary>Documentation <span aria-hidden="true">⌄</span></summary><div class="docs-sidebar-body"><div class="docs-search" hidden><label for="docs-search">Search the docs</label><input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" aria-controls="docs-navigation" data-index="/workbench/docs/search.json"><p class="docs-search-status" role="status"></p></div><nav id="docs-navigation" aria-label="Documentation"><div class="docs-group"><h2>Getting started</h2><a href="/workbench/docs/" data-doc-id="index">Workbench documentation</a><a href="/workbench/docs/getting-started/" data-doc-id="getting-started">Getting started</a><a href="/workbench/docs/pages-and-scenarios/" data-doc-id="pages-and-scenarios">Pages and scenarios</a><a href="/workbench/docs/docs-pages/" data-doc-id="docs-pages">Docs</a><a href="/workbench/docs/canvas/" data-doc-id="canvas">Using the canvas</a><a href="/workbench/docs/annotations-and-handoff/" data-doc-id="annotations-and-handoff">Annotations and handoff</a><a href="/workbench/docs/spaces/" data-doc-id="spaces">Several spaces</a></div><div class="docs-group"><h2>Previews</h2><a href="/workbench/docs/workbench-previews/" data-doc-id="workbench-previews">TypeScript Workbench previews</a><a href="/workbench/docs/preview-data/" data-doc-id="preview-data">Preview data, mocks, and actions</a><a href="/workbench/docs/react/" data-doc-id="react">React previews</a><a href="/workbench/docs/react-native-web/" data-doc-id="react-native-web" aria-current="page">React Native Web previews</a><a href="/workbench/docs/vue/" data-doc-id="vue">Vue previews</a><a href="/workbench/docs/astro/" data-doc-id="astro">Astro previews</a><a href="/workbench/docs/html/" data-doc-id="html">HTML previews</a><a href="/workbench/docs/custom-adapters/" data-doc-id="custom-adapters">Custom adapters and compiler settings</a></div><div class="docs-group"><h2>Connect your implementation</h2><a href="/workbench/docs/lenses/" data-doc-id="lenses">Lenses and URL implementations</a><a href="/workbench/docs/storybook/" data-doc-id="storybook">Storybook</a><a href="/workbench/docs/ios-simulator/" data-doc-id="ios-simulator">iOS Simulator</a><a href="/workbench/docs/windows/" data-doc-id="windows">App windows</a></div><div class="docs-group"><h2>Reference</h2><a href="/workbench/docs/configuration/" data-doc-id="configuration">workbench.yaml reference</a><a href="/workbench/docs/design-system-export/" data-doc-id="design-system-export">Design-system export</a><a href="/workbench/docs/extension/" data-doc-id="extension">The VS Code extension</a><a href="/workbench/docs/troubleshooting/" data-doc-id="troubleshooting">Troubleshooting</a></div></nav><a class="docs-install" href="/workbench/install/">Get Workbench <span aria-hidden="true">→</span></a></div></details></canonic-docs-sidebar><script type="module">var e=class extends HTMLElement{connectedCallback(){let e=this.querySelector(`.docs-sidebar`),t=matchMedia(`(max-width: 820px)`);e&&(e.open=!t.matches,t.addEventListener(`change`,()=>{e.open=!t.matches}));let n=this.querySelector(`input[type=search]`),r=this.querySelector(`.docs-search-status`);if(!n||!r)return;n.closest(`.docs-search`).hidden=!1;let i=[...this.querySelectorAll(`[data-doc-id]`)],a=[...this.querySelectorAll(`.docs-group`)],o,s=0;n.addEventListener(`input`,async()=>{let e=++s,t=n.value.trim().toLowerCase();if(!t){i.forEach(e=>{e.hidden=!1}),a.forEach(e=>{e.hidden=!1}),r.textContent=``;return}try{o||=fetch(n.dataset.index||``).then(e=>{if(!e.ok)throw Error(`Search unavailable`);return e.json()}).catch(e=>{throw o=void 0,e});let c=await o;if(e!==s)return;let l=t.split(/\s+/),u=new Set(c.filter(e=>l.every(t=>e.text.includes(t))).map(e=>e.id));i.forEach(e=>{e.hidden=!u.has(e.dataset.docId||``)}),a.forEach(e=>{e.hidden=!e.querySelector(`a:not([hidden])`)}),r.textContent=u.size?`${u.size} matching guides`:`No matching guides`}catch{e===s&&(r.textContent=`Search unavailable. Browse the guides below.`)}})}};customElements.get(`canonic-docs-sidebar`)||customElements.define(`canonic-docs-sidebar`,e);</script><article class="docs-article"><div class="docs-breadcrumb"><a href="/workbench/docs/">Workbench docs</a><span aria-hidden="true">/</span><span>Previews</span></div><div class="docs-prose"><h1 id="react-native-web-previews">React Native Web previews</h1>
+<p>The <code>react-native-web</code> adapter renders a React Native component in the
+browser through <a href="https://necolas.github.io/react-native-web/" target="_blank" rel="noopener">React Native Web</a>,
+with the preview’s inputs as its props. Use it to review shared components and
+screens at real device widths, next to their designs, without building the app.</p>
+<p>It shows the web rendering, which can differ from iOS and Android. To review
+the native app itself, stream it from the <a href="/workbench/docs/ios-simulator/">iOS Simulator</a> or
+an <a href="/workbench/docs/windows/">app window</a>, such as an Android emulator.</p>
+<p>The adapter works like the <a href="/workbench/docs/react/">React adapter</a>, with two differences:
+imports of <code>react-native</code> load <code>react-native-web</code>, and <code>.web.*</code> files are
+preferred. Inputs, callbacks, providers, styles, aliases, and <code>dedupe</code> work as
+described in that guide. The definition keys, scenarios, controls, and hooks are
+described in <a href="/workbench/docs/workbench-previews/">TypeScript Workbench previews</a>.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li><code>react-native-web</code>, <code>react</code>, and <code>react-dom</code> 18 or later, installed in your
+project. The <code>react-native</code> package isn’t used by previews and doesn’t need
+to be installed for them. Workbench finds these packages from the
+definition’s folder and never installs or replaces them.</li>
+<li><code>workbench.yaml</code> at the project root. <code>name: Acme</code> is enough.</li>
+<li>A <a href="/workbench/docs/extension/#workspace-trust">trusted workspace</a>, since previews run
+project code.</li>
+</ul>
+<h2 id="write-a-first-preview">Write a first preview</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>acme-app/</span></span>
+<span class="line"><span>├── workbench.yaml</span></span>
+<span class="line"><span>├── package.json             react, react-dom, react-native-web</span></span>
+<span class="line"><span>└── src/</span></span>
+<span class="line"><span>    ├── assets/</span></span>
+<span class="line"><span>    │   ├── avatar.png</span></span>
+<span class="line"><span>    │   └── acme-sans.woff2</span></span>
+<span class="line"><span>    ├── components/</span></span>
+<span class="line"><span>    │   ├── ProfileCard.tsx</span></span>
+<span class="line"><span>    │   └── ProfileCard.workbench.ts</span></span>
+<span class="line"><span>    ├── haptics.ts           the native implementation</span></span>
+<span class="line"><span>    ├── haptics.web.ts       the web implementation, used by previews</span></span>
+<span class="line"><span>    └── preview/</span></span>
+<span class="line"><span>        ├── canvas.css</span></span>
+<span class="line"><span>        └── environment.tsx</span></span></code></pre>
+<p><code>src/components/ProfileCard.tsx</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="tsx"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { Image, Platform, Pressable, StyleSheet, Text, View } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react-native'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { tap } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '../haptics'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> avatar </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '../assets/avatar.png'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> interface</span><span style="color:#B392F0"> ProfileCardProps</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#FFAB70">  name</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">  role</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">  online</span><span style="color:#F97583">?:</span><span style="color:#79B8FF"> boolean</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">  onPress</span><span style="color:#F97583">?:</span><span style="color:#E1E4E8"> () </span><span style="color:#F97583">=&gt;</span><span style="color:#79B8FF"> void</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> ProfileCard</span><span style="color:#E1E4E8">({ </span><span style="color:#FFAB70">name</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">role</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">online</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> false</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">onPress</span><span style="color:#E1E4E8"> }</span><span style="color:#F97583">:</span><span style="color:#B392F0"> ProfileCardProps</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#79B8FF">Pressable</span></span>
+<span class="line"><span style="color:#B392F0">      accessibilityRole</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"button"</span></span>
+<span class="line"><span style="color:#B392F0">      onPress</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{() </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> { </span><span style="color:#B392F0">tap</span><span style="color:#E1E4E8">(); </span><span style="color:#B392F0">onPress</span><span style="color:#E1E4E8">?.(); }}</span></span>
+<span class="line"><span style="color:#B392F0">      style</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{styles.card}</span></span>
+<span class="line"><span style="color:#E1E4E8">    &gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">      &lt;</span><span style="color:#79B8FF">Image</span><span style="color:#B392F0"> source</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{{ uri: avatar }} </span><span style="color:#B392F0">style</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{styles.avatar} /&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">      &lt;</span><span style="color:#79B8FF">View</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">        &lt;</span><span style="color:#79B8FF">Text</span><span style="color:#B392F0"> style</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{styles.name}&gt;{name}&lt;/</span><span style="color:#79B8FF">Text</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">        &lt;</span><span style="color:#79B8FF">Text</span><span style="color:#B392F0"> style</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{styles.role}&gt;{role} · {Platform.</span><span style="color:#79B8FF">OS</span><span style="color:#E1E4E8">}&lt;/</span><span style="color:#79B8FF">Text</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">      &lt;/</span><span style="color:#79B8FF">View</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">      {online </span><span style="color:#F97583">&amp;&amp;</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#79B8FF">View</span><span style="color:#B392F0"> style</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{styles.dot} /&gt;}</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;/</span><span style="color:#79B8FF">Pressable</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  );</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> styles</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> StyleSheet.</span><span style="color:#B392F0">create</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  card: { flexDirection: </span><span style="color:#9ECBFF">'row'</span><span style="color:#E1E4E8">, alignItems: </span><span style="color:#9ECBFF">'center'</span><span style="color:#E1E4E8">, gap: </span><span style="color:#79B8FF">12</span><span style="color:#E1E4E8">, padding: </span><span style="color:#79B8FF">16</span><span style="color:#E1E4E8">, borderRadius: </span><span style="color:#79B8FF">12</span><span style="color:#E1E4E8">, backgroundColor: </span><span style="color:#9ECBFF">'#ffffff'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  avatar: { width: </span><span style="color:#79B8FF">48</span><span style="color:#E1E4E8">, height: </span><span style="color:#79B8FF">48</span><span style="color:#E1E4E8">, borderRadius: </span><span style="color:#79B8FF">24</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  name: { fontFamily: </span><span style="color:#9ECBFF">'Acme Sans'</span><span style="color:#E1E4E8">, fontSize: </span><span style="color:#79B8FF">17</span><span style="color:#E1E4E8">, fontWeight: </span><span style="color:#9ECBFF">'600'</span><span style="color:#E1E4E8">, color: </span><span style="color:#9ECBFF">'#111827'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  role: { fontSize: </span><span style="color:#79B8FF">14</span><span style="color:#E1E4E8">, color: </span><span style="color:#9ECBFF">'#6b7280'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  dot: { width: </span><span style="color:#79B8FF">10</span><span style="color:#E1E4E8">, height: </span><span style="color:#79B8FF">10</span><span style="color:#E1E4E8">, borderRadius: </span><span style="color:#79B8FF">5</span><span style="color:#E1E4E8">, backgroundColor: </span><span style="color:#9ECBFF">'#16a34a'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p><code>src/haptics.ts</code> uses a native module, and <code>src/haptics.web.ts</code> replaces it in
+the browser:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#6A737D">// src/haptics.ts</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> Haptics </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react-native-haptic-feedback'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> tap</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">  Haptics.</span><span style="color:#B392F0">trigger</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'impactLight'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#6A737D">// src/haptics.web.ts</span></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> tap</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#6A737D">  // Browsers have no haptic feedback.</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>src/components/ProfileCard.workbench.ts</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'components/profile-card'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  title: </span><span style="color:#9ECBFF">'Components/Profile Card'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'react-native-web'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'./ProfileCard.tsx'</span><span style="color:#E1E4E8">, export: </span><span style="color:#9ECBFF">'ProfileCard'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  environment: </span><span style="color:#9ECBFF">'../preview/environment.tsx'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  styles: [</span><span style="color:#9ECBFF">'../preview/canvas.css'</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#E1E4E8">  sizes: [</span><span style="color:#9ECBFF">'mobile'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'fit'</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#E1E4E8">  inputs: { name: </span><span style="color:#9ECBFF">'Avery Example'</span><span style="color:#E1E4E8">, role: </span><span style="color:#9ECBFF">'Designer'</span><span style="color:#E1E4E8">, online: </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  controls: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    name: { type: </span><span style="color:#9ECBFF">'text'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">    role: { type: </span><span style="color:#9ECBFF">'text'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">    online: { type: </span><span style="color:#9ECBFF">'boolean'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">  scenarios: {</span></span>
+<span class="line"><span style="color:#E1E4E8">    offline: {},</span></span>
+<span class="line"><span style="color:#E1E4E8">    online: { inputs: { online: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p><code>src/preview/environment.tsx</code> fills the frame and reports presses under
+<strong>Actions</strong> in <strong>Preview controls</strong>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="tsx"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { cloneElement, </span><span style="color:#F97583">type</span><span style="color:#E1E4E8"> ReactElement } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { View } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react-native'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PreviewContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> wrap</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">element</span><span style="color:#F97583">:</span><span style="color:#B392F0"> ReactElement</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">Record</span><span style="color:#E1E4E8">&lt;</span><span style="color:#79B8FF">string</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">unknown</span><span style="color:#E1E4E8">&gt;&gt;, </span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#79B8FF">View</span><span style="color:#B392F0"> style</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{{ flex: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">, padding: </span><span style="color:#79B8FF">16</span><span style="color:#E1E4E8">, backgroundColor: </span><span style="color:#9ECBFF">'#f3f4f6'</span><span style="color:#E1E4E8"> }}&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">      {</span><span style="color:#B392F0">cloneElement</span><span style="color:#E1E4E8">(element, { </span><span style="color:#B392F0">onPress</span><span style="color:#E1E4E8">: () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">action</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'press'</span><span style="color:#E1E4E8">) })}</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;/</span><span style="color:#79B8FF">View</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  );</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>src/preview/canvas.css</code> declares the font. A stylesheet is only needed when
+the preview uses custom fonts or other project CSS:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="css"><code><span class="line"><span style="color:#F97583">@font-face</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#79B8FF">  font-family</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'Acme Sans'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#79B8FF">  src</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">url</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">../assets/acme-sans.woff2</span><span style="color:#E1E4E8">) </span><span style="color:#79B8FF">format</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'woff2'</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Run <strong>Workbench: Refresh Pages</strong>. <strong>Profile Card</strong> appears in a
+<strong>Components</strong> collection with the scenarios <strong>Offline</strong> and <strong>Online</strong>, and
+<code>Platform.OS</code> is <code>web</code>.</p>
+<p>Keep the definition free of component imports: Workbench runs it in Node to
+list previews. Import only types from component files.</p>
+<h2 id="how-imports-resolve">How imports resolve</h2>
+<ul>
+<li>An import of exactly <code>react-native</code> loads <code>react-native-web</code>. Deep imports
+such as <code>react-native/Libraries/...</code> aren’t rewritten and fail with
+<code>Module not found: Can't resolve</code>. Give each one an alias, or move the code into a
+<code>.web.*</code> file.</li>
+<li>For an import without an extension, Workbench tries <code>.web.tsx</code>, <code>.web.ts</code>,
+<code>.web.jsx</code>, and <code>.web.js</code> first, then <code>.tsx</code>, <code>.ts</code>, <code>.jsx</code>, <code>.js</code>, <code>.mjs</code>,
+<code>.cjs</code>, <code>.json</code>, <code>.vue</code>, and <code>.html</code>. Files ending in <code>.ios.*</code>,
+<code>.android.*</code>, or <code>.native.*</code> are never chosen.</li>
+<li>Setting <code>resolveExtensions</code> in <code>workbench.config.ts</code> replaces the whole list,
+including the <code>.web.*</code> entries. Include them if you set it.</li>
+<li>An alias for <code>react-native</code> in <code>workbench.config.ts</code> replaces the built-in
+one, if you need your own shim.</li>
+</ul>
+<h2 id="data-and-providers">Data and providers</h2>
+<p>Providers, inputs, and data work as they do for <a href="/workbench/docs/react/#add-providers-and-context">React</a>.
+A component that loads its data over the network keeps doing so: answer its
+<code>fetch</code> and XMLHttpRequest calls per scenario with
+<a href="/workbench/docs/preview-data/#request-mocks"><code>requests</code></a>, or wrap it in a provider
+holding fixture data from an environment.</p>
+<h2 id="preview-a-screen-inside-its-app-layout">Preview a screen inside its app layout</h2>
+<p>A preview mounts the component named in <code>source</code>. Pointing it at a screen
+doesn’t mount the app’s parent layouts. In an Expo Router app, a route such as
+<code>app/(tabs)/index.tsx</code> therefore renders without the tabs from
+<code>app/(tabs)/_layout.tsx</code>, the root navigation theme, or the app’s other
+providers. A full-height preview supplies space; the project supplies the
+screen’s surroundings.</p>
+<p>Use an <a href="/workbench/docs/preview-data/#environments">environment</a> to wrap screen previews in
+the same providers, background, header, and tab bar as the app. Keep isolated
+component previews in a separate environment so a button or card doesn’t get
+the app’s navigation around it.</p>
+<p>Prefer sharing the app’s shell components and navigation options. If the
+production layout depends on file-based routing, extract the reusable shell
+or create a preview wrapper with an in-memory navigator. Mount the previewed
+screen as the active route’s content. This retains the navigator’s scene
+sizing and tab-bar space instead of drawing a tab bar over the screen.
+Keep any preview-specific composition in step with the production layout.</p>
+<p>For example, suppose your project has <code>AppProviders</code> for its theme and session,
+and a <code>ScreenPreviewShell</code> that renders children inside the app’s tab layout.
+These are project components, not Workbench APIs. The shell accepts <code>activeTab</code>
+and calls <code>onTabPress</code> with <code>'home'</code> or <code>'explore'</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="tsx"><code><span class="line"><span style="color:#6A737D">// src/preview/screen-environment.tsx</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { ReactElement } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PreviewContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { AppProviders } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '../app/AppProviders'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { ScreenPreviewShell } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> './ScreenPreviewShell'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> wrap</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">element</span><span style="color:#F97583">:</span><span style="color:#B392F0"> ReactElement</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">context</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PreviewContext</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> activeTab</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> context.globals.activeTab </span><span style="color:#F97583">===</span><span style="color:#9ECBFF"> 'explore'</span><span style="color:#F97583"> ?</span><span style="color:#9ECBFF"> 'explore'</span><span style="color:#F97583"> :</span><span style="color:#9ECBFF"> 'home'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#79B8FF">AppProviders</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">      &lt;</span><span style="color:#79B8FF">ScreenPreviewShell</span></span>
+<span class="line"><span style="color:#B392F0">        activeTab</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{activeTab}</span></span>
+<span class="line"><span style="color:#B392F0">        onTabPress</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{</span><span style="color:#FFAB70">tab</span><span style="color:#F97583"> =&gt;</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">navigate</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">'mobile-app/'</span><span style="color:#F97583"> +</span><span style="color:#E1E4E8"> tab)}</span></span>
+<span class="line"><span style="color:#E1E4E8">      &gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">        {element}</span></span>
+<span class="line"><span style="color:#E1E4E8">      &lt;/</span><span style="color:#79B8FF">ScreenPreviewShell</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;/</span><span style="color:#79B8FF">AppProviders</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  );</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Wire that environment into each tab screen’s definition and map its tab
+addresses to previews:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#6A737D">// src/preview/home.workbench.ts</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { definePreview } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> definePreview</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  id: </span><span style="color:#9ECBFF">'mobile-app/home'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  title: </span><span style="color:#9ECBFF">'Mobile App/Home'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  adapter: </span><span style="color:#9ECBFF">'react-native-web'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  source: { entry: </span><span style="color:#9ECBFF">'../screens/HomeScreen.tsx'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  environment: </span><span style="color:#9ECBFF">'./screen-environment.tsx'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  sizes: [</span><span style="color:#9ECBFF">'mobile'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'resizable'</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#E1E4E8">  globals: { activeTab: </span><span style="color:#9ECBFF">'home'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  links: { </span><span style="color:#9ECBFF">'/home'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'mobile-app/home'</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">'/explore'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'mobile-app/explore'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p>Create the Explore definition with its own source, <code>id: 'mobile-app/explore'</code>,
+and <code>globals: { activeTab: 'explore' }</code>. Reuse the environment and link map.
+The callback navigates by preview ID; <code>links</code> handles anchors using those
+addresses. Navigation runs while <strong>Actions</strong> is on. See
+<a href="/workbench/docs/preview-data/#links-and-navigation">Links and navigation</a>. Alternatively, keep
+the other tabs decorative and report presses with <code>context.action('tab', tab)</code>
+so reviewing a scenario doesn’t leave that screen.</p>
+<p>Use a separate shell for modal or stack screens: their header, background,
+and available content area may differ from a tab screen. Providers shared by
+all React Native Web previews can live in an adapter-scoped project environment;
+each preview’s environment then supplies its own shell. The project environment
+wraps the preview environment on the outside. See
+<a href="/workbench/docs/preview-data/#environments">Environments</a>.</p>
+<p>Keep <code>.workbench.ts</code> files and preview wrappers outside Expo Router’s route
+directory. Files in that directory are interpreted as routes. A router mock
+that implements links can support isolated screens, but doesn’t supply layouts
+or navigation context; screens that use navigation hooks need a compatible
+navigator or a mock that implements those hooks.</p>
+<h3 id="safe-areas-and-device-dimensions">Safe areas and device dimensions</h3>
+<p>Choose the same logical width and height as the device you are comparing with,
+using the <a href="/workbench/docs/canvas/#artboard-sizes">Resizable artboard</a> when needed. A Simulator image’s
+pixel dimensions can be larger than the device’s logical dimensions. The
+<code>mobile</code> size is a preset, not a simulation of every phone model.</p>
+<p>If the app uses <code>react-native-safe-area-context</code>, supply its contexts in the
+preview environment. A desktop browser usually reports zero phone insets.
+<code>SafeAreaProvider initialMetrics</code> seeds the first render; its web implementation
+then measures browser insets, so initial values alone don’t hold simulated
+phone insets throughout the preview.</p>
+<p>For deterministic browser previews, a project wrapper can provide the frame
+and inset contexts directly. This example requires
+<code>react-native-safe-area-context</code> in the project. The inset values are illustrative;
+choose values for the device and orientation being reviewed:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="tsx"><code><span class="line"><span style="color:#6A737D">// src/preview/PhoneMetrics.tsx</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#F97583"> type</span><span style="color:#E1E4E8"> { PropsWithChildren } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { useWindowDimensions } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react-native'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { SafeAreaFrameContext, SafeAreaInsetsContext } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> 'react-native-safe-area-context'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> insets</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> { top: </span><span style="color:#79B8FF">59</span><span style="color:#E1E4E8">, right: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, bottom: </span><span style="color:#79B8FF">34</span><span style="color:#E1E4E8">, left: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8"> };</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> PhoneMetrics</span><span style="color:#E1E4E8">({ </span><span style="color:#FFAB70">children</span><span style="color:#E1E4E8"> }</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PropsWithChildren</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#E1E4E8"> { </span><span style="color:#79B8FF">width</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">height</span><span style="color:#E1E4E8"> } </span><span style="color:#F97583">=</span><span style="color:#B392F0"> useWindowDimensions</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;</span><span style="color:#79B8FF">SafeAreaFrameContext.Provider</span><span style="color:#B392F0"> value</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{{ x: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, y: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, width, height }}&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">      &lt;</span><span style="color:#79B8FF">SafeAreaInsetsContext.Provider</span><span style="color:#B392F0"> value</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{insets}&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">        {children}</span></span>
+<span class="line"><span style="color:#E1E4E8">      &lt;/</span><span style="color:#79B8FF">SafeAreaInsetsContext.Provider</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">    &lt;/</span><span style="color:#79B8FF">SafeAreaFrameContext.Provider</span><span style="color:#E1E4E8">&gt;</span></span>
+<span class="line"><span style="color:#E1E4E8">  );</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Place <code>PhoneMetrics</code> outside the shell that consumes it. Avoid nesting another
+<code>SafeAreaProvider</code> that replaces those simulated values. Supplying insets
+doesn’t add padding: the app’s <code>SafeAreaView</code>, navigator, or layout must consume
+them. Preserve the app’s ownership of that spacing so the preview doesn’t
+apply the same inset twice. This wrapper doesn’t draw a status bar, notch, or
+home indicator.</p>
+<p>A standalone preview’s window is its iframe, so <code>useWindowDimensions</code> measures
+that frame as it resizes. A docs example lives in a panel inside a larger
+document; a phone surface embedded there needs its own measurements rather
+than assuming the document’s window is the panel size.</p>
+<h3 id="compare-browser-and-native-rendering">Compare browser and native rendering</h3>
+<p>Even with the app shell, React Native Web renders the web platform:</p>
+<ul>
+<li><code>Platform.OS</code> is <code>'web'</code>, so <code>Platform.select</code> can choose different copy or
+behavior. An iOS branch isn’t selected by choosing a phone-sized frame.</li>
+<li>Fonts, text wrapping, scrolling, and native controls can differ. Load the
+project’s web fonts and compare at the same logical size and theme.</li>
+<li>Native menus, keyboards, system bars, and gestures need the native runtime.</li>
+</ul>
+<p>Use the <a href="/workbench/docs/ios-simulator/">iOS Simulator lens</a> or an
+<a href="/workbench/docs/windows/">Android emulator window</a> to review those differences alongside
+the browser preview. Check the native screen itself for missing safe-area
+handling before adding preview-only padding to make it look correct.</p>
+<h2 id="replace-native-only-modules">Replace native-only modules</h2>
+<p>A module that needs native code can’t run in the browser. Replace it in one of
+two ways:</p>
+<ul>
+<li>
+<p><strong>A <code>.web.*</code> file</strong> next to your own module, as <code>haptics.web.ts</code> above. This
+also serves a web build of the app, if you have one.</p>
+</li>
+<li>
+<p><strong>An alias</strong> in <code>workbench.config.ts</code> that points the package at a mock. The
+mock affects previews only:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { defineConfig } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> defineConfig</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  aliases: { </span><span style="color:#9ECBFF">'react-native-haptic-feedback'</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">'./src/preview/haptics-mock.ts'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#6A737D">// src/preview/haptics-mock.ts</span></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#E1E4E8"> { </span><span style="color:#B392F0">trigger</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">_type</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">) {} };</span></span></code></pre>
+</li>
+</ul>
+<p>Aliases match whole import specifiers, and relative alias paths start from the
+project root. See
+<a href="/workbench/docs/react/#imports-jsx-and-environment-variables">Imports, JSX, and environment variables</a>.</p>
+<h2 id="layout-and-full-height-screens">Layout and full-height screens</h2>
+<p>The component renders inside an element with the ID <code>workbench-preview</code>, which
+is at least as tall as the frame and uses a column flex layout. A root view with
+<code>flex: 1</code> fills the frame without a stylesheet, including when the frame is
+resized. Project CSS can override the host’s default layout.</p>
+<p>Choose the artboard sizes with <code>sizes</code>; <code>mobile</code> suits most app screens. See
+<a href="/workbench/docs/pages-and-scenarios/#sizes">Sizes</a>.</p>
+<h2 id="images-and-fonts">Images and fonts</h2>
+<ul>
+<li>Importing an image, with <code>import avatar from './avatar.png'</code> or
+<code>require('./avatar.png')</code>, gives its URL. <code>Image</code> accepts it as
+<code>source={{ uri: avatar }}</code> or <code>source={avatar}</code>.</li>
+<li>Workbench loads the file you name. It doesn’t pick <code>@2x</code> or <code>@3x</code> variants.</li>
+<li>Declare custom fonts with <code>@font-face</code> in a stylesheet listed in <code>styles</code>,
+then use the family name in <code>fontFamily</code>.</li>
+</ul>
+<p>The other file types, and what needs a rule, are listed in
+<a href="/workbench/docs/react/#styles-fonts-and-images">Styles, fonts, and images</a>.</p>
+<h2 id="packages-that-need-extra-settings">Packages that need extra settings</h2>
+<p>Some React Native packages assume Metro, React Native’s bundler. Settings in
+<code>workbench.config.ts</code> cover the common cases:</p>
+<ul>
+<li><strong><code>__DEV__</code></strong> fails with <code>__DEV__ is not defined</code>. Define it.</li>
+<li><strong>JSX in <code>.js</code> files</strong> fails with <code>Module parse failed</code>. Workbench compiles
+your own files but not the packages in <code>node_modules</code>, so add a rule that
+compiles that package’s <code>.js</code> files as JSX.</li>
+<li><strong>Flow type annotations</strong> also fail with <code>Module parse failed</code>. They need a
+rule with a loader that strips Flow types, or an alias to a compiled build of
+the package.</li>
+</ul>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { defineConfig } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '@canonic2/workbench'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#B392F0"> defineConfig</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">  define: { __DEV__: </span><span style="color:#9ECBFF">'true'</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">  rules: [</span></span>
+<span class="line"><span style="color:#E1E4E8">    {</span></span>
+<span class="line"><span style="color:#6A737D">      // acme-native-lib publishes JSX in .js files.</span></span>
+<span class="line"><span style="color:#E1E4E8">      test:</span><span style="color:#9ECBFF"> /</span><span style="color:#85E89D;font-weight:bold">\.</span><span style="color:#DBEDFF">js</span><span style="color:#F97583">$</span><span style="color:#9ECBFF">/</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">      include:</span><span style="color:#9ECBFF"> /</span><span style="color:#DBEDFF">node_modules</span><span style="color:#79B8FF">[</span><span style="color:#85E89D;font-weight:bold">\\</span><span style="color:#79B8FF">/]</span><span style="color:#DBEDFF">acme-native-lib</span><span style="color:#9ECBFF">/</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">      loader: </span><span style="color:#9ECBFF">'builtin:swc-loader'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">      options: {</span></span>
+<span class="line"><span style="color:#E1E4E8">        jsc: {</span></span>
+<span class="line"><span style="color:#E1E4E8">          parser: { syntax: </span><span style="color:#9ECBFF">'ecmascript'</span><span style="color:#E1E4E8">, jsx: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#E1E4E8">          transform: { react: { runtime: </span><span style="color:#9ECBFF">'automatic'</span><span style="color:#E1E4E8"> } },</span></span>
+<span class="line"><span style="color:#E1E4E8">        },</span></span>
+<span class="line"><span style="color:#E1E4E8">      },</span></span>
+<span class="line"><span style="color:#E1E4E8">    },</span></span>
+<span class="line"><span style="color:#E1E4E8">  ],</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<p><code>builtin:swc-loader</code> is Rspack’s built-in compiler for JavaScript and
+TypeScript. See <a href="/workbench/docs/custom-adapters/#rules-and-plugins">Rules and plugins</a>.</p>
+<h2 id="document-components-with-a-docs-page">Document components with a docs page</h2>
+<p>A page’s <a href="/workbench/docs/docs-pages/">docs</a> can show React Native components as live
+examples. Give the page a <code>docs</code> lens with <code>adapter: react-native-web</code>. Each
+example exports a component: the default export of each file in a folder, or
+each named export of one file. Imports resolve as they do for previews, with
+<code>react-native</code> loading <code>react-native-web</code> and <code>.web.*</code> files preferred. Example
+file names must be kebab-case, so <code>online.web.tsx</code> isn’t an example; put the
+<code>.web.*</code> file next to the module the example imports instead.</p>
+<p>When the component also has a React DOM implementation for the web, give the
+page a lens for each. Both show the same Markdown, and the lens switcher in
+the top bar changes what renders the examples:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  web</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Web</span></span>
+<span class="line"><span style="color:#85E89D">    adapter</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">react</span></span>
+<span class="line"><span style="color:#85E89D">  native</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">    kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs</span></span>
+<span class="line"><span style="color:#85E89D">    label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">React Native Web</span></span>
+<span class="line"><span style="color:#85E89D">    adapter</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">react-native-web</span></span>
+<span class="line"><span style="color:#85E89D">    environment</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">src/preview/environment.tsx</span></span>
+<span class="line"><span style="color:#85E89D">    styles</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#9ECBFF">src/preview/canvas.css</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#85E89D">collections</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Components</span></span>
+<span class="line"><span style="color:#85E89D">    items</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">      - </span><span style="color:#85E89D">label</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Profile Card</span></span>
+<span class="line"><span style="color:#85E89D">        src</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">docs/profile-card.md</span></span>
+<span class="line"><span style="color:#85E89D">        lens</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">native</span></span>
+<span class="line"><span style="color:#85E89D">        implementations</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">          web</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">web/src/profile-card/examples/</span></span>
+<span class="line"><span style="color:#85E89D">          native</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">src/components/profile-card-examples/</span></span></code></pre>
+<p><code>src/components/profile-card-examples/online.tsx</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="tsx"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { ProfileCard } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> '../ProfileCard'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#F97583"> default</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> Online</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> &lt;</span><span style="color:#79B8FF">ProfileCard</span><span style="color:#B392F0"> name</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"Avery Example"</span><span style="color:#B392F0"> role</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"Designer"</span><span style="color:#B392F0"> online</span><span style="color:#E1E4E8"> /&gt;;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>The web lens’s folder has its own <code>online.tsx</code> that renders the web
+component. An example one lens has and the other doesn’t shows
+<em>Not available in</em> and the lens’s label.</p>
+<p>Examples get no inputs or controls, so set the props in each example. The
+lens’s <code>environment</code> wraps each example as it wraps a preview, and its
+<code>styles</code> load with the examples, here for the <code>@font-face</code> rule. The
+adapter supplies a column flex host in each panel, so a root view with
+<code>flex: 1</code> fills the panel’s available content area. Panels keep their own
+padding and content-based height; they don’t become full-screen frames.</p>
+<h2 id="errors-and-fixes">Errors and fixes</h2>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Cause and fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Cannot find module 'react-native' for matched aliased key 'react-native'</code></td>
+<td><code>react-native-web</code> isn’t installed where the definition can find it. Install it in the project.</td>
+</tr>
+<tr>
+<td><code>Module not found: Can't resolve 'react/jsx-runtime'</code>, or another <code>react</code> or <code>react-dom</code> import</td>
+<td>React isn’t installed where the definition can find it. Install <code>react</code> and <code>react-dom</code> in the project.</td>
+</tr>
+<tr>
+<td><code>Module not found: Can't resolve '&lt;native package&gt;'</code></td>
+<td>A native-only module. <a href="#replace-native-only-modules">Replace it</a> with a <code>.web.*</code> file or an alias.</td>
+</tr>
+<tr>
+<td><code>Module not found: Can't resolve 'react-native/…'</code></td>
+<td>A deep import into <code>react-native</code>. <a href="#how-imports-resolve">Alias it or move it into a <code>.web.*</code> file</a>.</td>
+</tr>
+<tr>
+<td><code>__DEV__ is not defined</code></td>
+<td>Add it to <code>define</code>. See <a href="#packages-that-need-extra-settings">Packages that need extra settings</a>.</td>
+</tr>
+<tr>
+<td><code>Module parse failed</code></td>
+<td>A package publishes JSX or Flow types in <code>.js</code> files. Add a <a href="#packages-that-need-extra-settings">rule</a>.</td>
+</tr>
+<tr>
+<td>A full-screen view is only as tall as its content</td>
+<td>Check that the root view and any environment wrappers grow with <code>flex: 1</code>. See <a href="#layout-and-full-height-screens">Layout and full-height screens</a>.</td>
+</tr>
+<tr>
+<td>Tabs, a header, or the app background are missing</td>
+<td>The preview mounts the screen without its parent layout. Add a <a href="#preview-a-screen-inside-its-app-layout">screen environment</a>.</td>
+</tr>
+<tr>
+<td>Phone safe-area spacing is missing or changes after mount</td>
+<td>Supply and consume deterministic metrics in the preview wrapper. See <a href="#safe-areas-and-device-dimensions">Safe areas and device dimensions</a>.</td>
+</tr>
+</tbody>
+</table>
+<p>The errors shared with the React adapter, such as duplicate React copies,
+missing exports, and environment variables, are listed in
+<a href="/workbench/docs/react/#errors-and-fixes">React previews</a>.</p>
+</div><div class="docs-page-footer"><a target="_blank" rel="noopener" href="https://github.com/canonic2/canonic/blob/main/packages/workbench/docs/react-native-web.md">View Markdown on GitHub ↗</a></div><nav class="docs-pagination" aria-label="Guide navigation"><a href="/workbench/docs/react/"><span>← Previous</span><strong>React previews</strong></a><a href="/workbench/docs/vue/"><span>Next →</span><strong>Vue previews</strong></a></nav></article><aside class="docs-toc" aria-label="On this page"><h2>On this page</h2><nav><a href="#requirements">Requirements</a><a href="#write-a-first-preview">Write a first preview</a><a href="#how-imports-resolve">How imports resolve</a><a href="#data-and-providers">Data and providers</a><a href="#preview-a-screen-inside-its-app-layout">Preview a screen inside its app layout</a><a href="#safe-areas-and-device-dimensions" class="docs-toc-sub">Safe areas and device dimensions</a><a href="#compare-browser-and-native-rendering" class="docs-toc-sub">Compare browser and native rendering</a><a href="#replace-native-only-modules">Replace native-only modules</a><a href="#layout-and-full-height-screens">Layout and full-height screens</a><a href="#images-and-fonts">Images and fonts</a><a href="#packages-that-need-extra-settings">Packages that need extra settings</a><a href="#document-components-with-a-docs-page">Document components with a docs page</a><a href="#errors-and-fixes">Errors and fixes</a></nav><a class="docs-back-top" href="#content">Back to top ↑</a></aside></div></main><footer class="foot"><div class="wrap"><div class="foot-top"><a class="logo" href="/" aria-label="Canonic home"><svg viewBox="0 -10 197 38" role="img" aria-label="canonic"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpjMmY5MjI0OC1hYTBiLTQxOGEtYTY2OS0zMzkyM2Y0N2YxYzAAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaDLGWHSl5JoSZ+W85OxqZEYAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphMzZhOWRjZC0xODZiLTQ4MjgtODE0Yy1lYmEyZjQyZWI5NzJscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoZIhDi0aHiLAMdxEah+RlcQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggJf4/3u3fYxxWShd1/iioo5k/sQBU1/Wqy+WCnQecuYGkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaPtbRLzQIBR1jlefUBFG8K8AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCA3ez32oMVE7DJVy4UE2OB9qKRd9zwPrbxDKEVyc71J+WRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi3Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmMyZjkyMjQ4LWFhMGItNDE4YS1hNjY5LTMzOTIzZjQ3ZjFjMC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjJlOGI2OGUyLWJkNDktNGVhNC1hOTUxLTZkMGUxYTYwZWQ0YnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAl/j/e7d9jHFZKF3X+KKijmT+xAFTX9arL5YKdB5y5gaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggk7cyZJxWFQae48JCBXcs944XKmTYeSePmNy5IvdaY+2iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggiM5Szgg1CCf/NInB6jp1+Bqgwf4q8ryHrOZluSHyvO10Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQPqZ+elhJTFKPVyXHvET0pc0IvvFohYSYMYfLPmrTnq8wCSil9Dl9GAkfXGxySYm8FJ1/7M0yG7RRI2RMGDUgJY=</c2pa:manifest></metadata><path fill="currentColor" d="M0 0L24 0L24 7L7 7L7 21L24 21L24 28L0 28ZM30 0L48 0L48 7L37 7L37 21L51 21L51 0L58 0L58 28L30 28ZM64 0L87.96 0L100.08 21L113 21L113 7L100.08 7L97.77 11L93.73 4L96.04 0L120 0L120 28L96.04 28L83.92 7L71 7L71 28L64 28ZM86.23 17L90.27 24L87.96 28L79.88 28ZM126 0L154 0L154 28L147 28L147 7L133 7L133 28L126 28ZM160 0L167 0L167 28L160 28ZM160 -10L167 -10L167 -3L160 -3ZM173 0L197 0L197 7L180 7L180 21L197 21L197 28L173 28Z"/><path class="accent" d="M103 11L109 11L109 17L103 17Z"/></svg></a><div class="foot-col"><span class="foot-head">Products</span><a href="/workbench/">Workbench</a><span class="foot-soon">Testrun · Soon</span><span class="foot-soon">Playground · Soon</span><a href="/shield/">Shield</a></div></div><div class="foot-bottom"><span>© 2026 Canonic</span></div></div></footer></body></html>
