@@ -1,7 +1,7 @@
 //! Real startup races, lease death, parent signals and minimal-environment acceptance.
 
 use super::fixtures::*;
-use canonic_background_runtime::{Error, client, endpoint::Lease, launch::Launcher};
+use canonic_process_kit::{Error, client, endpoint::Lease, launch::Launcher};
 use serde_json::json;
 use std::{
     io::Write,
@@ -12,11 +12,11 @@ use std::{
 #[test]
 fn one_client_activates_once_while_its_child_has_not_acquired_the_lease() {
     struct Delayed {
-        root: canonic_background_runtime::endpoint::Root,
+        root: canonic_process_kit::endpoint::Root,
         children: std::sync::Mutex<Vec<ChildGuard>>,
     }
     impl Launcher for Delayed {
-        fn start(&self) -> canonic_background_runtime::Result<()> {
+        fn start(&self) -> canonic_process_kit::Result<()> {
             self.children
                 .lock()
                 .unwrap()
@@ -80,13 +80,13 @@ fn simultaneous_starters_converge_and_losers_exit_distinctly() {
 #[test]
 fn clients_connect_or_start_race_reaches_one_winner() {
     struct Tracked {
-        launch: canonic_background_runtime::launch::Spawn,
+        launch: canonic_process_kit::launch::Spawn,
         reapers: std::sync::Mutex<
             Vec<std::thread::JoinHandle<std::io::Result<std::process::ExitStatus>>>,
         >,
     }
     impl Launcher for Tracked {
-        fn start(&self) -> canonic_background_runtime::Result<()> {
+        fn start(&self) -> canonic_process_kit::Result<()> {
             self.reapers
                 .lock()
                 .unwrap()
@@ -224,21 +224,19 @@ fn account_home_ignores_home_environment_in_a_separate_process() {
 #[test]
 fn service_launch_path_is_selected_without_spawning_the_binary() {
     struct Registered {
-        root: canonic_background_runtime::endpoint::Root,
-        gate: canonic_background_runtime::core::Admission,
+        root: canonic_process_kit::endpoint::Root,
+        gate: canonic_process_kit::core::Admission,
         count: std::sync::atomic::AtomicUsize,
-        running: std::sync::Mutex<
-            Option<std::thread::JoinHandle<canonic_background_runtime::Result<()>>>,
-        >,
+        running: std::sync::Mutex<Option<std::thread::JoinHandle<canonic_process_kit::Result<()>>>>,
     }
     impl Launcher for Registered {
-        fn start(&self) -> canonic_background_runtime::Result<()> {
+        fn start(&self) -> canonic_process_kit::Result<()> {
             self.count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             *self.running.lock().unwrap() = Some(thread_server(
                 &self.root,
                 &self.gate,
                 Arc::new(Acme::default()),
-                canonic_background_runtime::server::Options::default(),
+                canonic_process_kit::server::Options::default(),
             ));
             Ok(())
         }
@@ -246,7 +244,7 @@ fn service_launch_path_is_selected_without_spawning_the_binary() {
     let (_temp, root) = root();
     let registered = Registered {
         root: root.clone(),
-        gate: canonic_background_runtime::core::Admission::new(),
+        gate: canonic_process_kit::core::Admission::new(),
         count: std::sync::atomic::AtomicUsize::new(0),
         running: std::sync::Mutex::new(None),
     };

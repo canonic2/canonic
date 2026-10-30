@@ -1,7 +1,7 @@
 //! Control roles preserve idle epochs and allow bounded cleanup through drain.
 
 use super::fixtures::*;
-use canonic_background_runtime::{
+use canonic_process_kit::{
     Error, client,
     core::{Admission, ControlRole, Explicit, Hold},
     endpoint::Lease,
@@ -93,7 +93,7 @@ fn inspection_preserves_idle_and_cleanup_remains_available_during_drain() {
     assert!(
         !gate
             .events()
-            .contains(&canonic_background_runtime::core::Event::IdleCancelled)
+            .contains(&canonic_process_kit::core::Event::IdleCancelled)
     );
     assert_eq!(
         client::control(&root, &control(&root, "acme_work"), &options())

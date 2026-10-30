@@ -1,4 +1,4 @@
-# Background runtime documentation
+# Process Kit documentation
 
 Use this library when many short-lived commands need one per-user process
 to retain shared live state. Your application decides what that state means

@@ -1,4 +1,4 @@
-# canonic-background-runtime
+# Process Kit
 
 A Rust library for one background manager per user and data root. It provides
 private local IPC, kernel-owned single-instance leases, explicit startup,
@@ -21,7 +21,7 @@ extensions declare inspection, ordinary-work or drain-cleanup roles.
 
 ```toml
 [dependencies]
-canonic-background-runtime = { path = "../background-runtime" }
+canonic-process-kit = { path = "../process-kit" }
 ```
 
 This public library is unpublished. macOS and Linux adapters are implemented;

@@ -1,7 +1,7 @@
 //! Product-owned duplex streams, bounded handshakes and drain cleanup.
 
 use super::fixtures::*;
-use canonic_background_runtime::{
+use canonic_process_kit::{
     Error, client,
     connection::{Connection, Handoff},
     core::{Admission, Explicit},
@@ -61,11 +61,11 @@ impl Handler for Sessions {
 }
 
 fn start(
-    root: &canonic_background_runtime::endpoint::Root,
+    root: &canonic_process_kit::endpoint::Root,
     gate: &Admission,
     handler: &Arc<Sessions>,
     capacity: usize,
-) -> std::thread::JoinHandle<canonic_background_runtime::Result<()>> {
+) -> std::thread::JoinHandle<canonic_process_kit::Result<()>> {
     let lease = Lease::acquire(root, Duration::ZERO).unwrap();
     let gate = gate.clone();
     let handler = handler.clone();
@@ -204,7 +204,7 @@ fn disabled_or_missing_capability_never_dispatches_open() {
 
 #[test]
 fn failed_final_reply_never_delivers_and_a_handoff_racing_drain_is_closed() {
-    use canonic_background_runtime::{endpoint, frame};
+    use canonic_process_kit::{endpoint, frame};
     use std::net::Shutdown;
     for draining in [false, true] {
         let (_temp, root) = root();
@@ -222,15 +222,14 @@ fn failed_final_reply_never_delivers_and_a_handoff_racing_drain_is_closed() {
             2048,
         )
         .unwrap();
-        let ack: canonic_background_runtime::protocol::Reply =
-            frame::read_json(&mut peer, 2048).unwrap();
+        let ack: canonic_process_kit::protocol::Reply = frame::read_json(&mut peer, 2048).unwrap();
         assert_eq!(ack.accepted, Some(true));
         wait(|| (handler.opened.load(Ordering::SeqCst) == 1).then_some(()));
         if draining {
             stop(&root, "drain");
             assert!(root.leased().unwrap());
             release.send(()).unwrap();
-            let reply: canonic_background_runtime::protocol::Reply =
+            let reply: canonic_process_kit::protocol::Reply =
                 frame::read_json(&mut peer, 2048).unwrap();
             assert_eq!(reply.code, None);
             assert_eq!(peer.read(&mut [0]).unwrap(), 0);
