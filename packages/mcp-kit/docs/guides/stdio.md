@@ -82,6 +82,11 @@ List product methods in `SessionOptions::extension_methods` (requests) and
 `Request::Notification` after initialization. Return `Outcome::Method` for a
 request and `Outcome::Done` for a notification.
 
+Optional [Tasks](tasks.md) uses `Request::Task` and `Outcome::Task`; its methods
+are protocol-owned and must not be registered as product methods. Returning a
+handle releases the original RPC's worker and key. Your execution service owns
+the job and its resource ordering after that point.
+
 ## When the host disconnects
 
 When stdin closes:

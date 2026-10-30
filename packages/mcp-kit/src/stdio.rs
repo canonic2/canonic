@@ -81,6 +81,8 @@ pub trait Handler: Send + Sync + 'static {
 /// Work a [`Handler`] runs.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
+    /// A validated management operation; the consumer owns record access and effects.
+    Task(crate::task::TaskRequest),
     /// Immutable library-owned resource bytes, exposed to admission only.
     Resource(crate::BundledRead),
     /// A tool call whose name and arguments the session has checked.
@@ -104,6 +106,8 @@ pub enum Request {
 
 /// What a request produced.
 pub enum Outcome {
+    /// Typed task creation, snapshot, acknowledgement or management failure.
+    Task(Result<crate::task::TaskResult, RpcError>),
     /// A prepared bundled read, normally produced internally by the driver.
     Bundled(crate::BundledRead),
     /// Unknown/inaccessible resource, encoded for the admitted protocol revision.
@@ -486,6 +490,10 @@ impl<H: Handler, W: Write> Connection<H, W> {
 
     fn inbound(&mut self, inbound: Inbound) -> Result<(), ServeError> {
         match inbound {
+            Inbound::Task { id, request } => {
+                let read_only = matches!(request, crate::task::TaskRequest::Get { .. });
+                self.schedule(Some(id), Request::Task(request), read_only, None)
+            }
             Inbound::BundledResource {
                 id,
                 read,

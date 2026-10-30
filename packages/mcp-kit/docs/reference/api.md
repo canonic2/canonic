@@ -6,6 +6,10 @@
 | Publish bundled workflows | `SkillCatalog`, `SkillDefinition`, `SkillFile`, `SessionOptions::skills` |
 | Publish your guides as documentation tools | `docs::build::embed` (feature `docs-build`), `include_docs!`, `docs::Bundle`, `docs::Documentation`, `docs::DocsError` |
 | Enable modern protocol handling | `ModernOptions`, `SessionOptions::modern`, `Session::try_new` |
+| Enable optional task handles | `task::TaskOptions`, `SessionOptions::tasks`, `RequestContext::task_eligible` |
+| Handle task operations | `task::TaskRequest`, `Inbound::Task`, `stdio::Request::Task`, `stdio::Outcome::Task`, `task::TaskResult` |
+| Validate persisted task state | `task::Metadata`, `task::Snapshot`, `task::State`, `task::Timestamp`, `task::InputHistory` |
+| Encode task replies in another runtime | `RequestContext::encode_task` |
 | Inspect per-request metadata and retries | `Context::request_context`, `Session::request_context`, `RequestContext` |
 | Set cache freshness and scope | `CachePolicy`, `CacheScope`, `ModernOptions` |
 | Publish resources and templates | `Resource`, `ResourceTemplate`, `ResourceCatalog::new`, `SessionOptions::resources` |

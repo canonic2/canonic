@@ -31,6 +31,8 @@ cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2 cargo-llvm-cov@0.
 ```sh
 make dev
 make test-focus FILTER='session::'
+# Build the runnable Tasks example with the existing development profile:
+make dev CARGO_FLAGS='--example tasks'
 # Integration tests:
 make test-focus FILTER='scheduling::' TEST_TARGET='--test integration'
 # Repeat the integration tests to expose races:
@@ -59,6 +61,10 @@ binary, `tests/integration/main.rs`, runs `stdio::serve` on a thread with
 in-memory pipes and a scriptable handler; it opens no sockets or processes.
 Wait on recorded events with the fixture's bounded wait rather than sleeping,
 and keep deadlines short only to make expiry happen.
+
+Tasks integration fixtures use the Acme example's consumer-owned store in
+private temporary folders. Those persistence fixtures require Unix directory
+flushes; they test reopen/recovery alongside the in-memory protocol transport.
 
 See the [documentation index](../README.md) for usage guides. When changing
 an API, keep its rustdoc and the corresponding guide consistent.

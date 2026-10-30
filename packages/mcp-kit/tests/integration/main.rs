@@ -10,3 +10,5 @@ mod modern;
 mod resources;
 mod scheduling;
 mod skills;
+#[cfg(unix)]
+mod tasks;

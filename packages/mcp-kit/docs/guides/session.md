@@ -14,6 +14,10 @@ protocol behavior. `Session` performs no I/O and starts no threads.
 
 ## The loop
 
+This sketch uses consumer-supplied runtime functions such as `spawn_tool` and
+`write`; it is not a standalone server. The [Tasks example](../../examples/tasks.rs)
+provides a complete server with a consumer-owned store.
+
 ```rust,ignore
 use canonic_mcp_kit::{Inbound, Session, SessionOptions};
 
@@ -27,6 +31,8 @@ for frame in frames {
             write(&session.accept_initialize(id, &server_info(&client)));
         }
         Inbound::Tool { id, call } => spawn_tool(id, call),
+        Inbound::Task { id, request } => spawn_task(id, request),
+        Inbound::BundledResource { id, read, .. } => spawn_bundled_read(id, read),
         Inbound::InvalidArguments { id, error, .. } => {
             if session.finish(&id) { write_tool_error(&id, &error.message); }
         }
@@ -44,8 +50,8 @@ for frame in frames {
 - Pass the pending `Inbound::Initialize` ID to `accept_initialize`. An ID
   mismatch or a call without a pending initialization returns `-32600` and
   leaves the session state unchanged.
-- Call `session.finish(&id)` before writing the reply to a tool call or
-  extension request, and write it only when `finish` returns `true`. After
+- Call `session.finish(&id)` before writing the reply to a tool call, task,
+  resource read or extension request, and write it only when `finish` returns `true`. After
   `Inbound::Cancel` it returns `false`, so a cancelled request gets no reply.
 - Write frames from one place so they never interleave.
 - Use `session.request_confirmation(message)` to start a confirmation: send the
@@ -59,3 +65,8 @@ for frame in frames {
 `rpc::encode_success` encodes a reply directly from a `ToolResult` within an
 output limit, and `json::encode_checked` stops encoding when your
 cancellation check fails.
+
+Optional [Tasks](tasks.md) adds typed management events and
+`RequestContext::encode_task`. Capture the request context before settling its
+ID. Persistent task lifetime belongs to the consumer, separately from the
+RPC ID; cancelling a poll does not cancel its job.

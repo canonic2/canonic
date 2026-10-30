@@ -1,7 +1,7 @@
 //! Model Context Protocol server building blocks.
 //!
 //! The library has two layers. The protocol core ([`Session`], [`rpc`],
-//! [`tool`], [`resource`], [`skill`], [`docs`], [`modern`], [`schema`], [`json`] and [`control`]) performs no I/O and starts
+//! [`tool`], [`resource`], [`skill`], [`docs`], [`task`], [`modern`], [`schema`], [`json`] and [`control`]) performs no I/O and starts
 //! no threads, so any runtime can drive it. The [`stdio`] driver runs a
 //! [`stdio::Handler`] over newline-delimited JSON-RPC with bounded lanes,
 //! deadlines, cancellation, progress, host confirmation and disconnection
@@ -42,6 +42,7 @@ pub mod schema;
 mod session;
 pub mod skill;
 pub mod stdio;
+pub mod task;
 pub mod tool;
 
 pub use control::{Control, Interrupted};

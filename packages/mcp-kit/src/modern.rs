@@ -159,6 +159,8 @@ pub struct RequestContext {
     pub input_responses: Option<Value>,
     server: Value,
     cache: Option<CachePolicy>,
+    tasks: Option<crate::task::TaskOptions>,
+    task_id: Option<String>,
 }
 
 impl RequestContext {
@@ -166,6 +168,7 @@ impl RequestContext {
         params: &Value,
         options: &ModernOptions,
         method: &str,
+        tasks: Option<&crate::task::TaskOptions>,
     ) -> Result<Arc<Self>, RpcError> {
         let meta = &params["_meta"];
         let capabilities = meta[CAPABILITIES_KEY]
@@ -179,6 +182,15 @@ impl RequestContext {
                 .is_some_and(|map| map.values().all(Value::is_object))
         {
             return Err(invalid("Invalid extension declarations"));
+        }
+        if let Some(declaration) = capabilities
+            .get("extensions")
+            .and_then(|extensions| extensions.get(crate::task::EXTENSION))
+            && !declaration
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(invalid("Invalid Tasks extension declaration"));
         }
         if let Some(elicitation) = capabilities.get("elicitation")
             && !elicitation.as_object().is_some_and(|map| {
@@ -210,7 +222,9 @@ impl RequestContext {
                     .ok_or_else(|| invalid("Invalid requestState"))
             })
             .transpose()?;
-        let input_responses = params.get("inputResponses").cloned();
+        let input_responses = (method != "tasks/update")
+            .then(|| params.get("inputResponses").cloned())
+            .flatten();
         if let Some(responses) = &input_responses {
             validate_responses(responses)?;
         }
@@ -235,6 +249,10 @@ impl RequestContext {
             input_responses,
             server,
             cache,
+            tasks: tasks.cloned(),
+            task_id: crate::task::method(method)
+                .then(|| params["taskId"].as_str().map(str::to_owned))
+                .flatten(),
         }))
     }
 
@@ -277,7 +295,7 @@ impl RequestContext {
         Ok(InputRequiredResult { value })
     }
 
-    fn require_form(&self) -> Result<(), RpcError> {
+    pub(crate) fn require_form(&self) -> Result<(), RpcError> {
         if self.capabilities["elicitation"]
             .as_object()
             .is_some_and(|map| map.is_empty() || map.get("form").is_some_and(Value::is_object))
@@ -294,6 +312,113 @@ impl RequestContext {
             context.cache = Some(cache);
         }
         Arc::new(context)
+    }
+
+    /// Whether this tool call may return a task. Check before reserving or launching work.
+    #[must_use]
+    pub fn task_eligible(&self) -> bool {
+        self.method == "tools/call" && self.require_tasks().is_ok()
+    }
+
+    /// The explicitly configured consumer policy; absent when Tasks is disabled.
+    #[must_use]
+    pub fn task_options(&self) -> Option<&crate::task::TaskOptions> {
+        self.tasks.as_ref()
+    }
+
+    pub(crate) fn task_request_matches(&self, request: &crate::task::TaskRequest) -> bool {
+        self.method == request.method() && self.task_id.as_deref() == Some(request.id().as_str())
+    }
+
+    /// Checks this request's Tasks declaration and explicit server opt-in.
+    ///
+    /// # Errors
+    /// Returns method-not-found when disabled, or a missing-capability error.
+    pub fn require_tasks(&self) -> Result<(), RpcError> {
+        if self.tasks.is_none() {
+            return Err(RpcError::new(rpc::METHOD_NOT_FOUND, "Tasks disabled"));
+        }
+        if self.capabilities["extensions"][crate::task::EXTENSION]
+            .as_object()
+            .is_some_and(serde_json::Map::is_empty)
+        {
+            return Ok(());
+        }
+        Err(RpcError::new(-32021, "Client lacks Tasks support")
+            .with_data(json!({"requiredCapabilities":{"extensions":{crate::task::EXTENSION:{}}}})))
+    }
+
+    /// Encodes typed task outcomes for their exact eligible operation and record.
+    /// Consumers must commit task state before returning creation/acknowledgement.
+    ///
+    /// # Errors
+    /// Returns invalid for incompatible outcomes/capabilities, or the bounded encoder's error.
+    pub fn encode_task(
+        &self,
+        id: &Value,
+        result: &crate::task::TaskResult,
+        limit: usize,
+        check: &dyn Fn() -> Result<(), Interrupted>,
+    ) -> Result<Vec<u8>, EncodeError> {
+        self.validate_task_result(result)
+            .map_err(|_| EncodeError::Invalid)?;
+        self.encode_task_payload(id, result, limit, check)
+    }
+
+    pub(crate) fn encode_task_payload(
+        &self,
+        id: &Value,
+        result: &crate::task::TaskResult,
+        limit: usize,
+        check: &dyn Fn() -> Result<(), Interrupted>,
+    ) -> Result<Vec<u8>, EncodeError> {
+        use crate::task::TaskResult;
+        let mut value = match result {
+            TaskResult::Created(snapshot) => {
+                let mut value = snapshot.creation_value();
+                value["resultType"] = json!("task");
+                value
+            }
+            TaskResult::Snapshot(snapshot) => {
+                let mut value = serde_json::to_value(snapshot).map_err(|_| EncodeError::Invalid)?;
+                value["resultType"] = json!("complete");
+                value
+            }
+            TaskResult::Updated | TaskResult::Cancelled => {
+                json!({"resultType":"complete"})
+            }
+        };
+        value["_meta"] = json!({SERVER_KEY:self.server});
+        rpc::encode_success(id, &value, limit, check)
+    }
+
+    pub(crate) fn validate_task_result(
+        &self,
+        result: &crate::task::TaskResult,
+    ) -> Result<(), RpcError> {
+        use crate::task::TaskResult;
+        self.require_tasks()?;
+        let snapshot = match result {
+            TaskResult::Created(snapshot) if self.method == "tools/call" => Some(snapshot),
+            TaskResult::Snapshot(snapshot)
+                if self.method == "tasks/get"
+                    && self.task_id.as_deref() == Some(snapshot.metadata().id().as_str()) =>
+            {
+                Some(snapshot)
+            }
+            TaskResult::Updated if self.method == "tasks/update" => None,
+            TaskResult::Cancelled if self.method == "tasks/cancel" => None,
+            _ => {
+                return Err(RpcError::new(
+                    rpc::INTERNAL_ERROR,
+                    "Task outcome does not match its request",
+                ));
+            }
+        };
+        if snapshot.is_some_and(|snapshot| snapshot.pending_key().is_some()) {
+            self.require_form()?;
+        }
+        Ok(())
     }
 
     /// Encodes a modern success with captured identity, result type and applicable cache hints.
@@ -318,7 +443,7 @@ impl RequestContext {
             #[serde(flatten)]
             cache: Option<CachePolicy>,
         }
-        if !result.valid_payload() {
+        if crate::task::method(&self.method) || !result.valid_payload() {
             return Err(EncodeError::Invalid);
         }
         let cache = self.cache.map(|policy| {
@@ -407,8 +532,13 @@ fn validate_responses(value: &Value) -> Result<(), RpcError> {
     if map.len() != 1 || !map.contains_key("confirmation") {
         return Err(invalid("Unexpected input response"));
     }
-    let response = &map["confirmation"];
+    confirmation_answer(&map["confirmation"])?;
+    Ok(())
+}
+
+pub(crate) fn confirmation_answer(response: &Value) -> Result<Decision, RpcError> {
     if !rpc::only(response, &["action", "content", "_meta"])
+        || response.get("_meta").is_some_and(|meta| !meta.is_object())
         || !matches!(
             response["action"].as_str(),
             Some("accept" | "decline" | "cancel")
@@ -419,7 +549,11 @@ fn validate_responses(value: &Value) -> Result<(), RpcError> {
     {
         return Err(invalid("Invalid confirmation response"));
     }
-    Ok(())
+    Ok(if response["action"] == "accept" {
+        Decision::Accepted
+    } else {
+        Decision::Declined
+    })
 }
 
 pub(crate) fn bounded(value: &Value, bytes: usize, depth: usize) -> Result<(), RpcError> {

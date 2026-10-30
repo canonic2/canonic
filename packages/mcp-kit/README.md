@@ -23,6 +23,9 @@ with a ready-to-use stdio driver or a core you can drive from your own runtime.
   continuations or modern input-required replies and retries.
 - **Your runtime.** The protocol core performs no I/O and starts no threads.
   Use the shared driver or bring your own transport and scheduler.
+- **Optional Tasks.** Return a handle for long operations, then serve status,
+  input and cancellation through the protocol. Your server owns durable records,
+  execution and recovery; ordinary tool results remain available.
 
 ## Installation
 
@@ -99,6 +102,7 @@ authority by itself.
 - [User confirmation](docs/guides/confirmation.md)
 - [Resources and templates](docs/guides/resources.md)
 - [Bundled skills](docs/guides/skills.md)
+- [Long-running tasks](docs/guides/tasks.md)
 - [API map](docs/reference/api.md)
 - [Errors and recovery](docs/reference/errors.md)
 - [All guides](docs/README.md)

@@ -4,7 +4,7 @@ use crate::{
     rpc::{self, RpcError},
     schema,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashSet;
 
@@ -235,8 +235,9 @@ impl ToolCall {
     }
 }
 
-/// One content block of a tool result.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// One supported content block of a tool result. Deserialization ignores extra
+/// object fields; unsupported content variants are refused.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Content {
     /// Plain text.
@@ -276,7 +277,9 @@ impl Content {
 /// A tool's own failure, such as invalid arguments or a refused operation, is
 /// a result with `is_error` set, so the caller's model can read it. Protocol
 /// failures are [`RpcError`]s instead.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+/// Deserialization defaults an absent `isError` to false and ignores extra
+/// object fields. This payload type is not a lossless protocol-frame decoder.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolResult {
     /// Content blocks in display order.
@@ -285,6 +288,7 @@ pub struct ToolResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub structured_content: Option<Value>,
     /// Whether the tool failed.
+    #[serde(default)]
     pub is_error: bool,
 }
 
@@ -501,6 +505,24 @@ mod tests {
             serde_json::to_value(ToolResult::error(vec![Content::text("No Acme service")]))
                 .unwrap(),
             json!({"content":[{"type":"text","text":"No Acme service"}],"isError":true})
+        );
+    }
+
+    #[test]
+    fn results_deserialize_optional_error_and_ignore_extra_payload_fields() {
+        let result: ToolResult = serde_json::from_value(json!({"content":[]})).unwrap();
+        assert_eq!(result, ToolResult::success(vec![]));
+        let result: ToolResult = serde_json::from_value(json!({
+            "content":[{"type":"text","text":"Acme","extra":true}],
+            "isError":true,"extra":{"future":true}
+        }))
+        .unwrap();
+        assert_eq!(result, ToolResult::error(vec![Content::text("Acme")]));
+        assert!(
+            serde_json::from_value::<ToolResult>(json!({"content":[],"isError":null})).is_err()
+        );
+        assert!(
+            serde_json::from_value::<Content>(json!({"type":"unsupported","extra":true})).is_err()
         );
     }
 }

@@ -167,6 +167,7 @@ fn metadata_and_confirmation_bounds_are_enforced() {
         &params,
         &ModernOptions::new(ServerInfo::new("acme", "1")),
         "tools/call",
+        None,
     )
     .unwrap();
     assert_eq!(
@@ -197,7 +198,8 @@ fn metadata_and_confirmation_bounds_are_enforced() {
         RequestContext::parse(
             &params,
             &ModernOptions::new(ServerInfo::new("acme", "1")),
-            "tools/list"
+            "tools/list",
+            None,
         )
         .is_ok()
     );
@@ -212,4 +214,50 @@ fn default_off_discovery_retains_the_legacy_probe_error() {
     let result = reply(session.receive_value(request(1, "server/discover", json!({}), json!({}))));
     assert_eq!(result["error"]["code"], rpc::SERVER_ERROR);
     assert!(result.get("result").is_none());
+}
+
+#[test]
+fn ordinary_confirmation_retries_validate_answer_metadata_before_dispatch() {
+    let mut session = session();
+    for meta in [None, Some(json!({})), Some(json!({"acme/tag":"retained"}))] {
+        let mut params = json!({"name":"acme_echo","requestState":"signed-state",
+            "inputResponses":{"confirmation":{"action":"accept"}}});
+        if let Some(meta) = meta {
+            params["inputResponses"]["confirmation"]["_meta"] = meta;
+        }
+        let Inbound::Tool { id, .. } = session.receive_value(request(
+            1,
+            "tools/call",
+            params,
+            json!({"elicitation":{"form":{}}}),
+        )) else {
+            panic!("valid ordinary retry")
+        };
+        assert_eq!(
+            session
+                .request_context(&id)
+                .unwrap()
+                .confirmation_decision(),
+            Ok(Some(Decision::Accepted))
+        );
+        assert!(session.finish(&id));
+    }
+    for meta in [
+        Value::Null,
+        json!([]),
+        json!(true),
+        json!(1),
+        json!("invalid"),
+    ] {
+        let params = json!({"name":"acme_echo","requestState":"signed-state",
+            "inputResponses":{"confirmation":{"action":"accept","_meta":meta}}});
+        let refused = reply(session.receive_value(request(
+            1,
+            "tools/call",
+            params,
+            json!({"elicitation":{"form":{}}}),
+        )));
+        assert_eq!(refused["error"]["code"], rpc::INVALID_PARAMS);
+        assert_eq!(session.outstanding(), 0);
+    }
 }

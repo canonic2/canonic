@@ -753,6 +753,22 @@ fn settle(
     };
     match outcome {
         Err(_) => internal("Request failed"),
+        Ok(Outcome::Task(Ok(result))) => match context {
+            Some(context) => match context.validate_task_result(&result).and_then(|()| {
+                context
+                    .encode_task_payload(id, &result, limit, &|| Ok(()))
+                    .map_err(|_| {
+                        RpcError::new(
+                            rpc::INTERNAL_ERROR,
+                            "Cannot encode task response within its output limit",
+                        )
+                    })
+            }) {
+                Ok(bytes) => Finish::Bytes(bytes),
+                Err(error) => Finish::Reply(rpc::failure(id.clone(), &error)),
+            },
+            None => internal("Tasks require modern protocol metadata"),
+        },
         Ok(Outcome::Tool(result)) => encoded(id, &result, limit, context),
         Ok(Outcome::Resource(result)) => encoded(id, &result, limit, context),
         Ok(Outcome::Bundled(read)) => encoded(id, read.result(), limit, context),
@@ -803,12 +819,14 @@ fn settle(
             error.code = rpc::INVALID_PARAMS;
             Finish::Reply(rpc::failure(id.clone(), &error))
         }
-        Ok(Outcome::Method(Err(error)))
+        Ok(Outcome::Task(Err(error)) | Outcome::Method(Err(error)))
             if context.is_some() && [rpc::RESOURCE_NOT_FOUND, -32042].contains(&error.code) =>
         {
             internal("Legacy-only error returned for a modern request")
         }
-        Ok(Outcome::Method(Err(error))) => Finish::Reply(rpc::failure(id.clone(), &error)),
+        Ok(Outcome::Task(Err(error)) | Outcome::Method(Err(error))) => {
+            Finish::Reply(rpc::failure(id.clone(), &error))
+        }
         Ok(Outcome::Done) => internal("Request produced no reply"),
         Ok(Outcome::Confirm(_)) if resumed => internal("Request asked for confirmation twice"),
         Ok(Outcome::Confirm(confirm)) => Finish::Confirm(confirm),

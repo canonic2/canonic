@@ -32,6 +32,8 @@ pub const DEFAULT_MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 pub struct SessionOptions {
     /// Explicit modern protocol opt-in; absent preserves legacy behavior.
     pub modern: Option<crate::ModernOptions>,
+    /// Optional consumer task policy; requires modern opt-in. Allocates no store.
+    pub tasks: Option<crate::task::TaskOptions>,
     /// Immutable bundled skills; requires modern opt-in at construction.
     pub skills: Option<Arc<crate::SkillCatalog>>,
     /// Optional immutable resource catalog; `None` disables resource methods.
@@ -50,6 +52,7 @@ impl Default for SessionOptions {
     fn default() -> Self {
         Self {
             modern: None,
+            tasks: None,
             skills: None,
             resources: None,
             max_message_bytes: DEFAULT_MAX_MESSAGE_BYTES,
@@ -132,6 +135,13 @@ pub enum Decision {
 /// What a received message requires of the caller.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Inbound {
+    /// Dispatch a validated task-management call; settle through [`Session::finish`].
+    Task {
+        /// Independent RPC request ID, not the task ID.
+        id: Value,
+        /// Operation and opaque record identity; consumers check access scope.
+        request: crate::task::TaskRequest,
+    },
     /// Schedule this immutable library-owned file read and finish its ID normally.
     BundledResource {
         /// Request ID.
@@ -219,7 +229,7 @@ enum Phase {
 ///
 /// Feed each received frame to [`Session::receive`] and act on the returned
 /// [`Inbound`]. Send every reply to an [`Inbound::Tool`],
-/// [`Inbound::InvalidArguments`] or [`Inbound::Method`] only after
+/// [`Inbound::InvalidArguments`], [`Inbound::Task`] or [`Inbound::Method`] only after
 /// [`Session::finish`] returns `true`: it returns `false` once the client
 /// has cancelled that request.
 #[derive(Debug)]
@@ -561,6 +571,7 @@ impl Session {
             },
             _ if !self.ready() => reply(RpcError::new(rpc::SERVER_ERROR, "Server not initialized")),
             _ if method.starts_with("skills/")
+                || method.starts_with("tasks/")
                 || ["resources/directory/read", "server/discover"].contains(&method) =>
             {
                 reply(RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found"))
@@ -703,7 +714,12 @@ impl Session {
                     .with_data(json!({"requested":version,"supported":supported})),
             );
         };
-        let context = match crate::RequestContext::parse(&params, options, method) {
+        let context = match crate::RequestContext::parse(
+            &params,
+            options,
+            method,
+            self.options.tasks.as_ref(),
+        ) {
             Ok(context) => context,
             Err(error) => return failure(error),
         };
@@ -745,6 +761,9 @@ impl Session {
         context: &Arc<crate::RequestContext>,
     ) -> Inbound {
         let failure = |error: RpcError| Inbound::Reply(rpc::failure(id.clone(), &error));
+        if method.starts_with("tasks/") {
+            return self.task_request(id, method, &params, context);
+        }
         if method == "server/discover" {
             if !rpc::only(&params, &["_meta"]) {
                 return failure(crate::modern::invalid("Invalid discovery parameters"));
@@ -838,6 +857,29 @@ impl Session {
 }
 
 impl Session {
+    fn task_request(
+        &mut self,
+        id: Value,
+        method: &str,
+        params: &Value,
+        context: &crate::RequestContext,
+    ) -> Inbound {
+        let failure = |error: RpcError| Inbound::Reply(rpc::failure(id.clone(), &error));
+        if !crate::task::method(method) || self.options.tasks.is_none() {
+            return failure(RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found"));
+        }
+        if let Err(error) = context.require_tasks() {
+            return failure(error);
+        }
+        match crate::task::TaskRequest::parse(method, params) {
+            Ok(request) => {
+                self.outstanding.insert(id.to_string());
+                Inbound::Task { id, request }
+            }
+            Err(error) => failure(error),
+        }
+    }
+
     fn discovery(&self) -> Value {
         let mut versions = SUPPORTED_PROTOCOL_VERSIONS.to_vec();
         versions.push(crate::modern::PROTOCOL_VERSION);
@@ -847,6 +889,12 @@ impl Session {
         }
         if self.options.skills.is_some() {
             result["capabilities"]["extensions"] = json!({crate::skill::EXTENSION:{}});
+        }
+        if self.options.tasks.is_some() {
+            if result["capabilities"].get("extensions").is_none() {
+                result["capabilities"]["extensions"] = json!({});
+            }
+            result["capabilities"]["extensions"][crate::task::EXTENSION] = json!({});
         }
         if let Some(instructions) = self
             .options
@@ -861,6 +909,30 @@ impl Session {
 }
 
 fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
+    if let Some(tasks) = &options.tasks {
+        if options.modern.is_none() {
+            return Err(ConfigurationError(
+                "Tasks require modern protocol support".into(),
+            ));
+        }
+        tasks
+            .validate()
+            .map_err(|error| ConfigurationError(error.to_string()))?;
+    }
+    if options
+        .extension_methods
+        .iter()
+        .chain(&options.extension_notifications)
+        .any(|method| {
+            method.starts_with("tasks/")
+                || method == crate::task::EXTENSION
+                || method == "notifications/tasks"
+        })
+    {
+        return Err(ConfigurationError(
+            "Tasks methods and identifier are reserved".into(),
+        ));
+    }
     if let Some(modern) = &options.modern {
         let info = json!({"name":modern.server.name,"version":modern.server.version,"title":modern.server.title});
         if json::measure(&info, 16384, &|| Ok(())).is_err()

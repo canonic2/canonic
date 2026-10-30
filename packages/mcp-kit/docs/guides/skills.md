@@ -138,8 +138,8 @@ that a particular host supports skill activation.
 
 Both legacy revisions remain supported. They use initialization, omit Skills
 from capabilities and refuse `skills/*`; the bundled files remain ordinary
-resources. Existing consumers stay legacy by default until they explicitly
-adapt and opt in.
+resources. A server stays legacy-only until it explicitly enables the modern
+path.
 
 Cache policy defaults to `ttlMs: 0` and private scope. Configure the policy for
 discovery, tools, resources, skills and consumer reads in `ModernOptions`.

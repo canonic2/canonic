@@ -23,6 +23,9 @@
 | `-32001` | Confirmation deadline exceeded | The user did not answer in time | Ask again if still needed |
 | `-32002` | Resource not found | The consumer refused an unknown or inaccessible URI | Check the address and authorization; `data.uri` identifies the resource |
 | `-32021` | Client lacks form elicitation | A modern operation needs unsupported user input | Provide form capability on that request or handle the unavailable path |
+| `-32021` | Client lacks Tasks support | A task operation requires the current request's Tasks declaration | Declare the extension or use the server's ordinary fallback before starting work |
+| `-32602` | Task not found or unavailable | The record is unknown, expired or inaccessible | Check the retained handle and access scope; do not infer that work stopped |
+| `-32603` | Task outcome does not match its request | The consumer returned the wrong typed outcome or record | Fix the adapter; preserve any already committed task |
 | `-32022` | Unsupported protocol version | The requested version is unsupported or modern support is disabled | Select a supported version from the reply |
 | `-32800` | Connection closed before dispatch or confirmation | The host disconnected | None; queued work and confirmation continuations did not run |
 
@@ -34,7 +37,7 @@ receives a failed tool result naming the field.
 | Variant | Cause |
 | --- | --- |
 | `Options` | No lanes, a lane without workers, capacity below workers, or limits too small |
-| `Configuration` | Invalid modern identity, Skills without modern opt-in, or conflicting resource namespace ownership |
+| `Configuration` | Invalid modern identity, Skills or Tasks without modern opt-in, invalid task policy/reserved method registration, or conflicting resource namespace ownership |
 | `Spawn` | A reader or worker thread could not start |
 | `Input` | Reading stdin failed; admitted work settled first |
 | `Output` | Writing stdout failed |
