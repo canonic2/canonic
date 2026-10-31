@@ -10,8 +10,9 @@ with a ready-to-use stdio driver or a core you can drive from your own runtime.
 ## Highlights
 
 - **Validated tools.** Publish tool descriptions and argument schemas. Calls
-  are checked before your handler runs; results support text, images,
-  resource links, embedded resources and structured data.
+  are checked before your handler runs; results support text, images, audio,
+  resource links, embedded resources and structured data, with optional
+  audience, priority and modification hints.
 - **Resources and templates.** Serve guides, reports and binary artifacts by
   URI, with paginated catalogs and parameterized addresses.
 - **Bundled skills.** Publish workflows alongside their tools, with parsed
@@ -103,6 +104,7 @@ authority by itself.
 - [Lanes, deadlines and cancellation](docs/guides/stdio.md)
 - [User confirmation](docs/guides/confirmation.md)
 - [Resources and templates](docs/guides/resources.md)
+- [Audio and content hints](docs/guides/audio.md)
 - [Bundled skills](docs/guides/skills.md)
 - [Long-running tasks](docs/guides/tasks.md)
 - [Structured input and URL interactions](docs/guides/elicitation.md)

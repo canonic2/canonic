@@ -22,6 +22,8 @@
 | Run a stdio server | `stdio::serve`, `stdio::Handler`, `stdio::Options` |
 | Choose where a request runs | `Handler::admit` returning `stdio::Admission`; `stdio::Lane` |
 | Return a result | `stdio::Outcome::Tool` with `ToolResult` and `Content` |
+| Return audio | `Content::audio`, `AudioContent`, `ContentError`; see [audio results](../guides/audio.md) |
+| Attach presentation hints | `ContentAnnotations`, `Role`, `Content::with_annotations`, `Resource::annotations`, `ResourceTemplate::annotations` |
 | Reply to an extension request | `stdio::Outcome::Method`; list methods in `SessionOptions` |
 | Stop work on cancellation or deadline | `stdio::Context::check`, `Context::remaining` |
 | Report progress | `stdio::Context::progress` |

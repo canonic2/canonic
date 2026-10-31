@@ -541,6 +541,64 @@ fn tasks_terminal_identity_and_clock_rules_reject_stale_updates() {
 }
 
 #[test]
+fn tasks_audio_content_and_annotations_preserve_payloads_after_restore() {
+    let hints = crate::ContentAnnotations::new(
+        Some(vec![crate::Role::User]),
+        Some(0.5),
+        Some("2026-10-31T12:00:00.000Z".into()),
+    )
+    .unwrap();
+    let snapshot = Snapshot::new(
+        metadata(),
+        State::Completed(ToolResult::success(vec![
+            Content::audio(&[0, 255, 42], "audio/wav")
+                .unwrap()
+                .with_annotations(hints.clone()),
+            Content::text("Acme").with_annotations(hints.clone()),
+            Content::image(&[0, 255], "image/png").with_annotations(hints.clone()),
+            Content::resource_link(crate::Resource::new("acme://report", "Report"))
+                .unwrap()
+                .with_annotations(hints.clone()),
+            Content::resource(
+                crate::ResourceContents::text("acme://summary", None, "Passed").unwrap(),
+            )
+            .with_annotations(hints.clone()),
+            Content::resource(
+                crate::ResourceContents::blob("acme://capture", None, &[0, 255]).unwrap(),
+            )
+            .with_annotations(hints),
+        ])),
+    )
+    .unwrap();
+    let saved = json!(&snapshot);
+    assert_eq!(Snapshot::restore(&saved).unwrap(), snapshot);
+    assert_eq!(json!(Snapshot::restore(&saved).unwrap()), saved);
+    let mut integer_priority = saved.clone();
+    integer_priority["result"]["content"][0]["annotations"]["priority"] = json!(1);
+    assert_eq!(
+        json!(Snapshot::restore(&integer_priority).unwrap()),
+        integer_priority
+    );
+    for value in [
+        json!({"priority":2}),
+        json!({"audience":["system"]}),
+        json!({"priority":0.5,"future":true}),
+    ] {
+        let mut bad = saved.clone();
+        bad["result"]["content"][0]["annotations"] = value;
+        assert!(Snapshot::restore(&bad).is_err());
+    }
+    let full = Content::audio(&vec![0; crate::content::MAX_AUDIO_BYTES], "audio/wav").unwrap();
+    assert!(
+        Snapshot::new(
+            metadata(),
+            State::Completed(ToolResult::success(vec![full]))
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn tasks_resource_content_survives_restore_without_loss() {
     use crate::{Resource, ResourceContents};
     let snapshot = Snapshot::new(

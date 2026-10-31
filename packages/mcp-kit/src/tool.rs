@@ -244,6 +244,13 @@ pub enum Content {
     Text {
         /// The text.
         text: String,
+        /// Optional audience, priority and modification hints.
+        #[serde(
+            default,
+            deserialize_with = "crate::content::annotations",
+            skip_serializing_if = "Option::is_none"
+        )]
+        annotations: Option<crate::ContentAnnotations>,
     },
     /// An inline image.
     Image {
@@ -252,6 +259,26 @@ pub enum Content {
         /// The image's media type, such as `image/png`.
         #[serde(rename = "mimeType")]
         mime_type: String,
+        /// Optional audience, priority and modification hints.
+        #[serde(
+            default,
+            deserialize_with = "crate::content::annotations",
+            skip_serializing_if = "Option::is_none"
+        )]
+        annotations: Option<crate::ContentAnnotations>,
+    },
+    /// Inline audio; the consumer supplies the bytes and MIME type.
+    Audio {
+        /// Validated base64 data and MIME metadata.
+        #[serde(flatten)]
+        audio: crate::AudioContent,
+        /// Optional audience, priority and modification hints.
+        #[serde(
+            default,
+            deserialize_with = "crate::content::annotations",
+            skip_serializing_if = "Option::is_none"
+        )]
+        annotations: Option<crate::ContentAnnotations>,
     },
     /// A reference to a resource the host may retrieve separately.
     #[serde(rename = "resource_link")]
@@ -264,10 +291,53 @@ pub enum Content {
     Resource {
         /// Validated contents; construction performs no I/O.
         resource: crate::resource::ResourceContents,
+        /// Hints on the enclosing block, rather than nested resource contents.
+        #[serde(
+            default,
+            deserialize_with = "crate::content::annotations",
+            skip_serializing_if = "Option::is_none"
+        )]
+        annotations: Option<crate::ContentAnnotations>,
     },
 }
 
 impl Content {
+    /// An audio block from bounded raw bytes, without decoding its container.
+    ///
+    /// # Errors
+    /// Returns [`crate::ContentError`] for excessive audio bytes or invalid MIME metadata.
+    pub fn audio(bytes: &[u8], mime_type: impl Into<String>) -> Result<Self, crate::ContentError> {
+        Ok(Self::Audio {
+            audio: crate::AudioContent::new(bytes, mime_type)?,
+            annotations: None,
+        })
+    }
+
+    /// Attaches validated presentation hints, replacing any existing hints.
+    #[must_use]
+    pub fn with_annotations(mut self, hints: crate::ContentAnnotations) -> Self {
+        match &mut self {
+            Self::Text { annotations, .. }
+            | Self::Image { annotations, .. }
+            | Self::Audio { annotations, .. }
+            | Self::Resource { annotations, .. } => *annotations = Some(hints),
+            Self::ResourceLink { link } => link.set_annotations(hints),
+        }
+        self
+    }
+
+    /// Returns presentation hints when present.
+    #[must_use]
+    pub fn annotations(&self) -> Option<&crate::ContentAnnotations> {
+        match self {
+            Self::Text { annotations, .. }
+            | Self::Image { annotations, .. }
+            | Self::Audio { annotations, .. }
+            | Self::Resource { annotations, .. } => annotations.as_ref(),
+            Self::ResourceLink { link } => link.resource().annotations.as_ref(),
+        }
+    }
+
     /// A resource link independent of the resource catalog.
     ///
     /// # Errors
@@ -283,13 +353,19 @@ impl Content {
     /// Embeds already validated resource contents without fetching their URI.
     #[must_use]
     pub fn resource(resource: crate::resource::ResourceContents) -> Self {
-        Self::Resource { resource }
+        Self::Resource {
+            resource,
+            annotations: None,
+        }
     }
 
     /// A text block.
     #[must_use]
     pub fn text(text: impl Into<String>) -> Self {
-        Self::Text { text: text.into() }
+        Self::Text {
+            text: text.into(),
+            annotations: None,
+        }
     }
 
     /// An image block from raw bytes. Callers bound the bytes they read.
@@ -298,6 +374,7 @@ impl Content {
         Self::Image {
             data: base64(bytes),
             mime_type: mime_type.into(),
+            annotations: None,
         }
     }
 }
@@ -361,27 +438,7 @@ impl ToolResult {
     }
 }
 
-pub(crate) fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut text = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let triple = chunk
-            .iter()
-            .enumerate()
-            .fold(0_u32, |triple, (index, byte)| {
-                triple | u32::from(*byte) << (16 - 8 * index)
-            });
-        for index in 0..4 {
-            if index <= chunk.len() {
-                let sextet = (triple >> (18 - 6 * index)) & 0x3f;
-                text.push(char::from(ALPHABET[sextet as usize]));
-            } else {
-                text.push('=');
-            }
-        }
-    }
-    text
-}
+pub(crate) use crate::content::base64;
 
 #[cfg(test)]
 mod tests {

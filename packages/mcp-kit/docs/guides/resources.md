@@ -148,6 +148,11 @@ retrieval support depend on the host.
 
 ## Catalog and content reference
 
+Resources, templates and tool-result blocks support optional audience, priority
+and modification hints through `ContentAnnotations`. See
+[Annotate content and resources](audio.md#annotate-content-and-resources) for
+construction, bounds and how hints differ from access and cache policy.
+
 `SessionOptions::resources` defaults to `None`: resource methods return `-32601`.
 `Some` enables the capability, including when the catalog is empty. Catalogs
 are immutable and list in insertion order. Subscriptions, change notifications

@@ -2,8 +2,9 @@
 
 use crate::fixture::{Host, Script, catalog};
 use canonic_mcp_kit::{
-    Content, Inbound, ModernOptions, ReadResourceResult, Resource, ResourceCatalog,
-    ResourceContents, ServerInfo, Session, SessionOptions, ToolResult,
+    Content, ContentAnnotations, Inbound, ModernOptions, ReadResourceResult, Resource,
+    ResourceCatalog, ResourceContents, ResourceTemplate, Role, ServerInfo, Session, SessionOptions,
+    ToolResult,
     control::Interrupted,
     json::EncodeError,
     modern, rpc,
@@ -13,7 +14,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 fn result() -> ToolResult {
-    ToolResult::structured(json!({"passed":true}), false)
+    let mut result = ToolResult::structured(json!({"passed":true}), false)
         .with_content(Content::image(&[0, 255], "image/png"))
         .with_content(
             Content::resource_link(Resource::new("acme://reports/a%2Fb", "Report"))
@@ -27,6 +28,19 @@ fn result() -> ToolResult {
             ResourceContents::blob("acme://capture", Some("image/png".into()), &[0, 255, 42])
                 .expect("valid capture"),
         ))
+        .with_content(Content::audio(&[0, 255, 42], "audio/wav").expect("valid audio"));
+    let hints = ContentAnnotations::new(
+        Some(vec![Role::User]),
+        Some(0.7),
+        Some("2026-10-31T12:00:00Z".into()),
+    )
+    .expect("valid hints");
+    result.content = result
+        .content
+        .into_iter()
+        .map(|block| block.with_annotations(hints.clone()))
+        .collect();
+    result
 }
 
 fn params(modern_request: bool) -> Value {
@@ -88,6 +102,10 @@ fn resource_content_driver_all_revisions_can_read_unlisted_links() {
             expected["structuredContent"]
         );
         assert_eq!(reply["result"]["isError"], false);
+        assert_eq!(
+            reply["result"]["content"][5],
+            json!({"type":"audio","data":"AP8q","mimeType":"audio/wav","annotations":{"audience":["user"],"priority":0.7,"lastModified":"2026-10-31T12:00:00Z"}})
+        );
         if modern_request {
             assert_eq!(reply["result"]["resultType"], "complete");
         }
@@ -193,4 +211,61 @@ fn resource_content_independent_runtime_encodes_with_bound_and_cancellation() {
         Err(EncodeError::Interrupted)
     );
     assert!(session.finish(&json!(1)));
+}
+
+#[test]
+fn content_annotations_driver_discovery_in_legacy_and_modern() {
+    for modern_request in [false, true] {
+        let hints = ContentAnnotations::new(Some(vec![Role::Assistant]), Some(1.0), None).unwrap();
+        let mut resource = Resource::new("acme://guide", "Guide");
+        resource.annotations = Some(hints.clone());
+        let mut template = ResourceTemplate::new("acme://reports/{id}", "Reports");
+        template.annotations = Some(hints.clone());
+        let mut options = Options::default();
+        options.session.resources = Some(Arc::new(
+            ResourceCatalog::new(vec![resource], vec![template]).unwrap(),
+        ));
+        options.session.modern = Some(ModernOptions::new(ServerInfo::new("acme", "1")));
+        let mut host = Host::start(
+            Script::new(|_, _| panic!("discovery does not dispatch")),
+            options,
+        );
+        if !modern_request {
+            host.initialize(json!({}));
+        }
+        for (id, method, field) in [
+            (1, "resources/list", "resources"),
+            (2, "resources/templates/list", "resourceTemplates"),
+        ] {
+            host.send(&rpc::request(json!(id), method, params(modern_request)));
+            assert_eq!(
+                host.recv()["result"][field][0]["annotations"],
+                json!(&hints)
+            );
+        }
+        host.finish().0.unwrap();
+    }
+}
+
+#[test]
+fn content_audio_driver_overflow_does_not_publish_partial_audio() {
+    let options = Options {
+        max_output_bytes: 1024,
+        ..Options::default()
+    };
+    let host = Host::ready(
+        Script::new(|_, _| {
+            Outcome::Tool(ToolResult::success(vec![
+                Content::audio(&vec![0; 2048], "audio/wav").unwrap(),
+            ]))
+        }),
+        options,
+        json!({}),
+    );
+    host.call(1, "acme_echo", json!({}));
+    let reply = host.recv();
+    assert_eq!(reply["error"]["code"], rpc::INTERNAL_ERROR);
+    assert!(reply.get("result").is_none());
+    host.assert_quiet();
+    host.finish().0.unwrap();
 }

@@ -55,6 +55,13 @@ pub struct Resource {
     /// Optional raw size in bytes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
+    /// Optional presentation hints, independent of access and cache policy.
+    #[serde(
+        default,
+        deserialize_with = "crate::content::annotations",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub annotations: Option<crate::ContentAnnotations>,
 }
 
 /// Validated resource metadata for a tool-result link, independent of discovery.
@@ -64,6 +71,9 @@ pub struct Resource {
 pub struct ResourceLink(Resource);
 
 impl ResourceLink {
+    pub(crate) fn set_annotations(&mut self, annotations: crate::ContentAnnotations) {
+        self.0.annotations = Some(annotations);
+    }
     /// Validates a concrete URI and the same metadata bounds as a catalog entry.
     ///
     /// # Errors
@@ -103,6 +113,7 @@ impl Resource {
             description: None,
             mime_type: None,
             size: None,
+            annotations: None,
         }
     }
 }
@@ -124,6 +135,9 @@ pub struct ResourceTemplate {
     /// Optional media type.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
+    /// Optional presentation hints for the template.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub annotations: Option<crate::ContentAnnotations>,
 }
 
 impl ResourceTemplate {
@@ -136,6 +150,7 @@ impl ResourceTemplate {
             title: None,
             description: None,
             mime_type: None,
+            annotations: None,
         }
     }
 }
@@ -423,38 +438,11 @@ impl<'de> Deserialize<'de> for ResourceContents {
     }
 }
 
-// Validate canonical padded base64 and recover accounting without decoding/copying
-// binary data. Constructors and restored tool results retain the same raw limits.
 fn base64_size(blob: &str) -> Result<usize, ResourceError> {
-    if blob.len() > MAX_BYTES.div_ceil(3) * 4 {
-        return Err(ResourceError::Limit("content bytes"));
-    }
-    if !blob.len().is_multiple_of(4) {
-        return Err(ResourceError::Field("blob"));
-    }
-    let padding = blob.bytes().rev().take_while(|byte| *byte == b'=').count();
-    if padding > 2 {
-        return Err(ResourceError::Field("blob"));
-    }
-    let mut last = 0;
-    for byte in blob.bytes().take(blob.len() - padding) {
-        last = match byte {
-            b'A'..=b'Z' => byte - b'A',
-            b'a'..=b'z' => byte - b'a' + 26,
-            b'0'..=b'9' => byte - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            _ => return Err(ResourceError::Field("blob")),
-        };
-    }
-    if (padding == 1 && last & 3 != 0) || (padding == 2 && last & 15 != 0) {
-        return Err(ResourceError::Field("blob"));
-    }
-    let raw_bytes = blob.len() / 4 * 3 - padding;
-    if raw_bytes > MAX_BYTES {
-        return Err(ResourceError::Limit("content bytes"));
-    }
-    Ok(raw_bytes)
+    crate::content::decoded_size(blob, MAX_BYTES).map_err(|error| match error {
+        crate::content::BinaryError::Invalid => ResourceError::Field("blob"),
+        crate::content::BinaryError::TooLarge => ResourceError::Limit("content bytes"),
+    })
 }
 
 /// A validated resource read result, serializable without an intermediate JSON tree.
