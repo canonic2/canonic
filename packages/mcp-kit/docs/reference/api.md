@@ -17,6 +17,7 @@
 | Set cache freshness and scope | `CachePolicy`, `CacheScope`, `ModernOptions` |
 | Publish resources and templates | `Resource`, `ResourceTemplate`, `ResourceCatalog::new`, `SessionOptions::resources` |
 | Return resource contents | `ResourceContents`, `ReadResourceResult`, `stdio::Outcome::Resource` |
+| Return tool artifacts | `Content::resource_link`, `ResourceLink`, `Content::resource`, `ResourceContents`; see [artifact results](../guides/resources.md#return-artifacts-from-tools) |
 | Refuse an unknown resource | `Outcome::ResourceNotFound` for revision-aware replies; `resource::not_found` emits a legacy error |
 | Run a stdio server | `stdio::serve`, `stdio::Handler`, `stdio::Options` |
 | Choose where a request runs | `Handler::admit` returning `stdio::Admission`; `stdio::Lane` |

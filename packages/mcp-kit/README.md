@@ -10,8 +10,8 @@ with a ready-to-use stdio driver or a core you can drive from your own runtime.
 ## Highlights
 
 - **Validated tools.** Publish tool descriptions and argument schemas. Calls
-  are checked before your handler runs; results support text, images and
-  structured data.
+  are checked before your handler runs; results support text, images,
+  resource links, embedded resources and structured data.
 - **Resources and templates.** Serve guides, reports and binary artifacts by
   URI, with paginated catalogs and parameterized addresses.
 - **Bundled skills.** Publish workflows alongside their tools, with parsed

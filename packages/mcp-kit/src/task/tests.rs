@@ -541,6 +541,49 @@ fn tasks_terminal_identity_and_clock_rules_reject_stale_updates() {
 }
 
 #[test]
+fn tasks_resource_content_survives_restore_without_loss() {
+    use crate::{Resource, ResourceContents};
+    let snapshot = Snapshot::new(
+        metadata(),
+        State::Completed(ToolResult::success(vec![
+            Content::resource_link(Resource::new("acme://report", "Report")).unwrap(),
+            Content::resource(ResourceContents::text("acme://summary", None, "Passed").unwrap()),
+            Content::resource(
+                ResourceContents::blob("acme://capture", Some("image/png".into()), &[0, 255, 42])
+                    .unwrap(),
+            ),
+        ])),
+    )
+    .unwrap();
+    let saved = serde_json::to_value(&snapshot).unwrap();
+    assert_eq!(Snapshot::restore(&saved).unwrap(), snapshot);
+    for index in [0, 1, 2] {
+        let mut extra = saved.clone();
+        if index == 0 {
+            extra["result"]["content"][index]["future"] = json!(true);
+        } else {
+            extra["result"]["content"][index]["resource"]["future"] = json!(true);
+        }
+        assert!(Snapshot::restore(&extra).is_err());
+    }
+    let mut malformed = saved;
+    malformed["result"]["content"][2]["resource"]["blob"] = json!("AB==");
+    assert!(Snapshot::restore(&malformed).is_err());
+    // A valid individual block can still exceed the enclosing snapshot budget.
+    let full = Content::resource(
+        ResourceContents::blob("acme://capture", None, &vec![0; crate::resource::MAX_BYTES])
+            .unwrap(),
+    );
+    assert!(
+        Snapshot::new(
+            metadata(),
+            State::Completed(ToolResult::success(vec![full]))
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn tasks_restore_refuses_extra_fields_inside_tool_results() {
     let snapshot = Snapshot::new(
         metadata(),

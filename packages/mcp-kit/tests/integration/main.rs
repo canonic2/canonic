@@ -8,6 +8,7 @@ mod elicitation;
 mod fixture;
 mod lifecycle;
 mod modern;
+mod resource_content;
 mod resources;
 mod scheduling;
 mod skills;

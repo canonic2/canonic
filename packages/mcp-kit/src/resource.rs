@@ -5,7 +5,7 @@ use crate::{
     rpc::{self, RpcError},
 };
 use iri_string::{template::UriTemplateStr, types::UriStr};
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::{Value, json};
 use std::collections::HashSet;
 
@@ -34,8 +34,9 @@ pub enum ResourceError {
     Limit(&'static str),
 }
 
-/// A discoverable resource. Validated when inserted into a [`ResourceCatalog`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// Resource metadata, validated by [`ResourceCatalog`] or [`ResourceLink`].
+/// Deserializing this mutable definition alone does not validate its fields.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Resource {
     /// Exact concrete URI.
@@ -54,6 +55,41 @@ pub struct Resource {
     /// Optional raw size in bytes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
+}
+
+/// Validated resource metadata for a tool-result link, independent of discovery.
+/// Creating a link neither publishes it in a catalog nor grants access to its URI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct ResourceLink(Resource);
+
+impl ResourceLink {
+    /// Validates a concrete URI and the same metadata bounds as a catalog entry.
+    ///
+    /// # Errors
+    /// Returns [`ResourceError`] for invalid URI or metadata.
+    pub fn new(resource: Resource) -> Result<Self, ResourceError> {
+        validate_uri(&resource.uri)?;
+        metadata(
+            &resource.name,
+            resource.title.as_deref(),
+            resource.description.as_deref(),
+            resource.mime_type.as_deref(),
+        )?;
+        Ok(Self(resource))
+    }
+
+    /// Returns the validated definition without permitting mutation.
+    #[must_use]
+    pub fn resource(&self) -> &Resource {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for ResourceLink {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::new(Resource::deserialize(deserializer)?).map_err(de::Error::custom)
+    }
 }
 
 impl Resource {
@@ -354,6 +390,73 @@ impl ResourceContents {
     }
 }
 
+impl<'de> Deserialize<'de> for ResourceContents {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let Value::Object(mut fields) = Value::deserialize(deserializer)? else {
+            return Err(de::Error::custom("resource contents must be an object"));
+        };
+        let string = |value, key| -> Result<String, D::Error> {
+            match value {
+                Some(Value::String(text)) => Ok(text),
+                _ => Err(de::Error::custom(format!("invalid resource field: {key}"))),
+            }
+        };
+        let uri = string(fields.remove("uri"), "uri")?;
+        let mime_type = fields
+            .remove("mimeType")
+            .map(|value| string(Some(value), "mimeType"))
+            .transpose()?;
+        match (fields.remove("text"), fields.remove("blob")) {
+            (Some(text), None) => {
+                Self::text(uri, mime_type, string(Some(text), "text")?).map_err(de::Error::custom)
+            }
+            (None, Some(blob)) => {
+                let blob = string(Some(blob), "blob")?;
+                let raw_bytes = base64_size(&blob).map_err(de::Error::custom)?;
+                Self::new(uri, mime_type, raw_bytes, || Data::Blob { blob })
+                    .map_err(de::Error::custom)
+            }
+            _ => Err(de::Error::custom(
+                "resource requires exactly one of text or blob",
+            )),
+        }
+    }
+}
+
+// Validate canonical padded base64 and recover accounting without decoding/copying
+// binary data. Constructors and restored tool results retain the same raw limits.
+fn base64_size(blob: &str) -> Result<usize, ResourceError> {
+    if blob.len() > MAX_BYTES.div_ceil(3) * 4 {
+        return Err(ResourceError::Limit("content bytes"));
+    }
+    if !blob.len().is_multiple_of(4) {
+        return Err(ResourceError::Field("blob"));
+    }
+    let padding = blob.bytes().rev().take_while(|byte| *byte == b'=').count();
+    if padding > 2 {
+        return Err(ResourceError::Field("blob"));
+    }
+    let mut last = 0;
+    for byte in blob.bytes().take(blob.len() - padding) {
+        last = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return Err(ResourceError::Field("blob")),
+        };
+    }
+    if (padding == 1 && last & 3 != 0) || (padding == 2 && last & 15 != 0) {
+        return Err(ResourceError::Field("blob"));
+    }
+    let raw_bytes = blob.len() / 4 * 3 - padding;
+    if raw_bytes > MAX_BYTES {
+        return Err(ResourceError::Limit("content bytes"));
+    }
+    Ok(raw_bytes)
+}
+
 /// A validated resource read result, serializable without an intermediate JSON tree.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ReadResourceResult {
@@ -383,3 +486,6 @@ impl ReadResourceResult {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod content_tests;

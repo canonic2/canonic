@@ -49,7 +49,7 @@ pub mod tool;
 pub use control::{Control, Interrupted};
 pub use modern::{CachePolicy, CacheScope, InputRequiredResult, ModernOptions, RequestContext};
 pub use resource::{
-    ReadResourceResult, Resource, ResourceCatalog, ResourceContents, ResourceError,
+    ReadResourceResult, Resource, ResourceCatalog, ResourceContents, ResourceError, ResourceLink,
     ResourceTemplate,
 };
 pub use rpc::RpcError;

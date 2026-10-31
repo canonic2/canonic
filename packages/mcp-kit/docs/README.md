@@ -12,7 +12,7 @@ Start with the [quick start](getting-started.md).
 - [Quick start](getting-started.md) — dependency, a first tool and a stdio server.
 - [Serve over stdio](guides/stdio.md) — lanes, keys, deadlines, progress, extension methods and disconnection.
 - [Ask the user to confirm](guides/confirmation.md) — form confirmation and its continuation.
-- [Publish resources and templates](guides/resources.md) — guides, reports and binary artifacts through validated URIs.
+- [Publish resources and templates](guides/resources.md) — guides, reports and binary artifacts through validated URIs, tool-result links and embedded contents.
 - [Publish bundled skills](guides/skills.md) — offline workflows, verified manifests, modern request context and legacy resource fallback.
 - [Bundle your guides as documentation tools](guides/documentation.md) — build-time guide bundles and the list, search and read tools.
 - [Return a task for long-running work](guides/tasks.md) — optional handles, durable consumer state, polling, input and cancellation.

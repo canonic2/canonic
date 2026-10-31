@@ -79,6 +79,73 @@ do not grant access. URIs may name unlisted resources. Exact spelling, including
 percent escapes, reaches the handler unchanged; decoding and path confinement
 belong to your resolver.
 
+## Return artifacts from tools
+
+Use a resource link when a report or capture should be retrieved separately.
+Embed resource contents when the host needs the bytes with the tool result.
+Both work alongside text, images and structured data in all three supported
+protocol revisions.
+
+Inside a tool handler, build the result with validated resource types:
+
+```rust
+use canonic_mcp_kit::{Content, Resource, ResourceContents, ResourceError, ToolResult};
+
+fn report_result() -> Result<ToolResult, ResourceError> {
+    let mut report = Resource::new("acme://reports/latest", "Report");
+    report.mime_type = Some("text/plain".into());
+    Ok(ToolResult::success(vec![
+        Content::text("Checks passed. Read the report for details."),
+        Content::resource_link(report)?,
+        Content::resource(ResourceContents::text(
+            "acme://summary", Some("text/plain".into()), "Passed",
+        )?),
+        Content::resource(ResourceContents::blob(
+            "acme://evidence", Some("application/octet-stream".into()), &[0, 255, 42],
+        )?),
+    ]))
+}
+```
+
+Return this through `Outcome::Tool`. Invalid server-generated metadata or
+content is an internal error; build and validate the result before publishing
+success. The resource blocks serialize as:
+
+```json
+[
+  {"type":"resource_link","uri":"acme://reports/latest","name":"Report","mimeType":"text/plain"},
+  {"type":"resource","resource":{"uri":"acme://summary","mimeType":"text/plain","text":"Passed"}},
+  {"type":"resource","resource":{"uri":"acme://evidence","mimeType":"application/octet-stream","blob":"AP8q"}}
+]
+```
+
+The [complete Acme server](../../examples/artifacts.rs) returns these blocks
+and serves the full report through `resources/read`. Build it from the package
+directory with `make dev CARGO_FLAGS='--example artifacts'`; the executable is
+`target/debug/examples/artifacts`. A call to `acme_report` with `{}` returns a
+text block, the report link and embedded summary and evidence; reading
+`acme://reports/latest` returns the full report.
+
+`Content::resource_link` validates a `Resource` and stores an immutable
+`ResourceLink`. Its `resource()` accessor exposes the URI, name and optional
+title, description, MIME type and raw size hint. A link need not appear in
+`resources/list`. Returning it does not enable resource methods, add a catalog
+entry, fetch bytes or grant access. Configure `SessionOptions::resources` and
+a read resolver when serving the URI through this server; an empty catalog is
+enough to enable reads. Servers embedding resources should also enable the
+resources capability. Consumers own artifact retention, authorization and
+the reply when an artifact expires or becomes inaccessible.
+
+`Content::resource` takes an already validated `ResourceContents`; it adds no
+read or worker job. Each embedded block permits at most 1 MiB of raw text or
+binary data. The combined tool result must fit the output frame limit, including
+JSON escaping and base64 expansion; Task results must also fit their snapshot
+budget. No content is truncated. Deserialization validates resource URIs,
+metadata and content bounds, requires exactly one of `text` or `blob`, and
+requires canonical padded standard base64 for binary resources. Task restoration
+preserves the blocks and refuses data it would discard. Host rendering and
+retrieval support depend on the host.
+
 ## Catalog and content reference
 
 `SessionOptions::resources` defaults to `None`: resource methods return `-32601`.

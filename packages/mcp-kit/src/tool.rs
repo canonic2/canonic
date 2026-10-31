@@ -253,9 +253,39 @@ pub enum Content {
         #[serde(rename = "mimeType")]
         mime_type: String,
     },
+    /// A reference to a resource the host may retrieve separately.
+    #[serde(rename = "resource_link")]
+    ResourceLink {
+        /// Validated URI and display metadata, flattened into this block.
+        #[serde(flatten)]
+        link: crate::resource::ResourceLink,
+    },
+    /// Inline text or binary resource contents with their URI.
+    Resource {
+        /// Validated contents; construction performs no I/O.
+        resource: crate::resource::ResourceContents,
+    },
 }
 
 impl Content {
+    /// A resource link independent of the resource catalog.
+    ///
+    /// # Errors
+    /// Returns [`crate::resource::ResourceError`] for invalid URI or metadata.
+    pub fn resource_link(
+        resource: crate::resource::Resource,
+    ) -> Result<Self, crate::resource::ResourceError> {
+        Ok(Self::ResourceLink {
+            link: crate::resource::ResourceLink::new(resource)?,
+        })
+    }
+
+    /// Embeds already validated resource contents without fetching their URI.
+    #[must_use]
+    pub fn resource(resource: crate::resource::ResourceContents) -> Self {
+        Self::Resource { resource }
+    }
+
     /// A text block.
     #[must_use]
     pub fn text(text: impl Into<String>) -> Self {
