@@ -32,6 +32,7 @@ for frame in frames {
         }
         Inbound::Tool { id, call } => spawn_tool(id, call),
         Inbound::Task { id, request } => spawn_task(id, request),
+        Inbound::Elicitation { id, answer } => resume_rich_input(id, answer),
         Inbound::BundledResource { id, read, .. } => spawn_bundled_read(id, read),
         Inbound::InvalidArguments { id, error, .. } => {
             if session.finish(&id) { write_tool_error(&id, &error.message); }

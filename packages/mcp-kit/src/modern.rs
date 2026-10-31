@@ -269,6 +269,13 @@ impl RequestContext {
             return Ok(None);
         }
         self.require_form()?;
+        if responses
+            .as_object()
+            .is_none_or(|map| map.len() != 1 || !map.contains_key("confirmation"))
+        {
+            return Err(invalid("Unexpected confirmation response"));
+        }
+        confirmation_answer(&responses["confirmation"])?;
         match responses["confirmation"]["action"].as_str() {
             Some("accept") => Ok(Some(Decision::Accepted)),
             Some("decline" | "cancel") => Ok(Some(Decision::Declined)),
@@ -292,7 +299,50 @@ impl RequestContext {
         }
         let value = json!({"resultType":"input_required","inputRequests":{"confirmation":{"method":"elicitation/create","params":{"mode":"form","message":message,"requestedSchema":{"type":"object","properties":{}}}}},"requestState":state});
         bounded(&value, 1024 * 1024, 32)?;
-        Ok(InputRequiredResult { value })
+        Ok(InputRequiredResult {
+            value,
+            requests: None,
+        })
+    }
+
+    /// Creates a rich interim round. The caller binds and authenticates the questions and state.
+    ///
+    /// # Errors
+    /// Refuses ineligible operations, missing modes, excessive state or output budgets.
+    pub fn elicitation(
+        &self,
+        requests: crate::elicitation::Requests,
+        state: Option<&str>,
+    ) -> Result<InputRequiredResult, RpcError> {
+        if !["tools/call", "resources/read"].contains(&self.method.as_str()) {
+            return Err(invalid("Operation cannot request input"));
+        }
+        requests.require_capabilities(&self.capabilities)?;
+        let mut value = json!({"resultType":"input_required","inputRequests":requests.as_value()});
+        if let Some(state) = state {
+            if state.len() > 65536 {
+                return Err(invalid("Invalid requestState"));
+            }
+            value["requestState"] = json!(state);
+        }
+        bounded(&value, 1024 * 1024, 32)?;
+        Ok(InputRequiredResult {
+            value,
+            requests: Some(requests),
+        })
+    }
+
+    /// Validates retry input against consumer-authenticated, retained questions.
+    /// This does not authenticate state, consume answers or grant authority.
+    ///
+    /// # Errors
+    /// Refuses current capability or known-answer mismatches and aggregate bounds.
+    pub fn elicitation_answers(
+        &self,
+        requests: &crate::elicitation::Requests,
+    ) -> Result<std::collections::BTreeMap<String, crate::elicitation::Response>, RpcError> {
+        requests.require_capabilities(&self.capabilities)?;
+        requests.answers(self.input_responses.as_ref().unwrap_or(&json!({})))
     }
 
     pub(crate) fn require_form(&self) -> Result<(), RpcError> {
@@ -380,7 +430,9 @@ impl RequestContext {
                 value
             }
             TaskResult::Snapshot(snapshot) => {
-                let mut value = serde_json::to_value(snapshot).map_err(|_| EncodeError::Invalid)?;
+                let mut value = snapshot
+                    .protocol_value()
+                    .map_err(|_| EncodeError::Invalid)?;
                 value["resultType"] = json!("complete");
                 value
             }
@@ -415,8 +467,8 @@ impl RequestContext {
                 ));
             }
         };
-        if snapshot.is_some_and(|snapshot| snapshot.pending_key().is_some()) {
-            self.require_form()?;
+        if let Some(snapshot) = snapshot {
+            snapshot.require_input_capabilities(self)?;
         }
         Ok(())
     }
@@ -498,7 +550,11 @@ impl RequestContext {
         if !["tools/call", "resources/read"].contains(&self.method.as_str()) {
             return Err(invalid("Operation cannot request input"));
         }
-        self.require_form()?;
+        if let Some(requests) = &result.requests {
+            requests.require_capabilities(&self.capabilities)?;
+        } else {
+            self.require_form()?;
+        }
         let mut value = result.value.clone();
         value["_meta"] = json!({SERVER_KEY:self.server});
         Ok(value)
@@ -510,6 +566,8 @@ impl RequestContext {
 #[serde(transparent)]
 pub struct InputRequiredResult {
     value: Value,
+    #[serde(skip)]
+    requests: Option<crate::elicitation::Requests>,
 }
 
 impl InputRequiredResult {
@@ -522,17 +580,14 @@ impl InputRequiredResult {
 }
 
 fn validate_responses(value: &Value) -> Result<(), RpcError> {
-    bounded(value, 16384, 32)?;
-    let map = value
-        .as_object()
-        .ok_or_else(|| invalid("Invalid inputResponses"))?;
-    if map.is_empty() {
-        return Ok(());
+    crate::elicitation::validate_responses(value)?;
+    // Metadata has a protocol-wide shape, independently of pending-question semantics.
+    if value.as_object().is_some_and(|map| {
+        map.values()
+            .any(|answer| answer.get("_meta").is_some_and(|meta| !meta.is_object()))
+    }) {
+        return Err(invalid("Invalid answer metadata"));
     }
-    if map.len() != 1 || !map.contains_key("confirmation") {
-        return Err(invalid("Unexpected input response"));
-    }
-    confirmation_answer(&map["confirmation"])?;
     Ok(())
 }
 

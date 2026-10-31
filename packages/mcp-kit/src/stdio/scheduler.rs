@@ -5,8 +5,8 @@
 //! requests and send back an encoded reply or a confirmation step.
 
 use super::{
-    Admission, Confirm, Context, Handler, Options, Outcome, Outgoing, PROGRESS_BUFFER, Progress,
-    Request, Resume, ServeError,
+    Admission, Confirm, Context, Elicit, ElicitResume, ElicitationPolicy, Handler, Options,
+    Outcome, Outgoing, PROGRESS_BUFFER, Progress, Request, Resume, ServeError,
 };
 use crate::{
     control::Control,
@@ -29,6 +29,9 @@ use std::{
 /// What a queued or running request is, independent of its work.
 #[derive(Clone)]
 struct Meta {
+    admitted: Instant,
+    rich_rounds: u8,
+    rich_deadline: Option<Instant>,
     request_context: Option<Arc<crate::RequestContext>>,
     id: Option<Value>,
     lane: usize,
@@ -41,6 +44,7 @@ struct Meta {
 enum Work {
     Call(Request),
     Resume(Resume, Decision),
+    ElicitResume(ElicitResume, crate::elicitation::Answer),
 }
 
 struct Job {
@@ -61,6 +65,7 @@ struct Assignment {
 }
 
 enum Finish {
+    Elicit(Elicit),
     Bytes(Vec<u8>),
     Reply(Value),
     Confirm(Confirm),
@@ -78,9 +83,30 @@ struct Running {
 
 struct Waiting {
     meta: Meta,
-    resume: Resume,
+    resume: Continuation,
     elicitation: Value,
     control: Control,
+}
+
+enum Continuation {
+    Confirm(Resume),
+    Elicit(ElicitResume),
+}
+
+impl Continuation {
+    fn closed_message(&self) -> &'static str {
+        match self {
+            Self::Confirm(_) => "Connection closed before confirmation",
+            Self::Elicit(_) => "Connection closed before elicitation",
+        }
+    }
+
+    fn deadline_message(&self) -> &'static str {
+        match self {
+            Self::Confirm(_) => "Confirmation deadline exceeded",
+            Self::Elicit(_) => "Elicitation deadline exceeded",
+        }
+    }
 }
 
 struct LaneState {
@@ -110,6 +136,7 @@ struct Worker {
 }
 
 pub(super) struct Scheduler {
+    elicitation_policy: ElicitationPolicy,
     lanes: Vec<LaneState>,
     workers: Vec<Worker>,
     running: HashMap<u64, Running>,
@@ -135,6 +162,7 @@ impl Scheduler {
         let (finished_sender, finished) = mpsc::channel();
         let (progress_sender, progress) = mpsc::sync_channel(PROGRESS_BUFFER);
         let mut scheduler = Self {
+            elicitation_policy: options.elicitation.clone(),
             lanes: Vec::new(),
             workers: Vec::new(),
             running: HashMap::new(),
@@ -214,6 +242,9 @@ impl Scheduler {
         let timeout = admission.timeout.unwrap_or(self.timeout);
         lane.queue.push_back(Job {
             meta: Meta {
+                admitted: Instant::now(),
+                rich_rounds: 0,
+                rich_deadline: None,
                 request_context: id.as_ref().and_then(|id| session.request_context(id)),
                 id,
                 lane: admission.lane,
@@ -318,7 +349,46 @@ impl Scheduler {
         }
         if let Some(waiting) = self.waiting.take() {
             self.lanes[waiting.meta.lane].waiting -= 1;
-            self.queue_resume(waiting.meta, waiting.resume, decision);
+            if let Continuation::Confirm(resume) = waiting.resume {
+                self.queue_resume(waiting.meta, resume, decision);
+            }
+        }
+        out
+    }
+
+    pub(super) fn elicited(
+        &mut self,
+        session: &mut Session,
+        elicitation: &Value,
+        answer: crate::elicitation::Answer,
+    ) -> Vec<Outgoing> {
+        let mut out = Vec::new();
+        if !self
+            .waiting
+            .as_ref()
+            .is_some_and(|wait| &wait.elicitation == elicitation)
+        {
+            return out;
+        }
+        if self
+            .waiting
+            .as_ref()
+            .is_some_and(|wait| wait.control.expired())
+        {
+            if let Some(wait) = self.take_waiting() {
+                refuse(
+                    session,
+                    wait.meta.id.as_ref(),
+                    rpc::DEADLINE_EXCEEDED,
+                    "Elicitation deadline exceeded",
+                    &mut out,
+                );
+            }
+        } else if let Some(wait) = self.waiting.take() {
+            self.lanes[wait.meta.lane].waiting -= 1;
+            if let Continuation::Elicit(resume) = wait.resume {
+                self.queue_elicit_resume(wait.meta, resume, answer);
+            }
         }
         out
     }
@@ -335,14 +405,14 @@ impl Scheduler {
                 session,
                 waiting.meta.id.as_ref(),
                 rpc::REQUEST_CANCELLED,
-                "Connection closed before confirmation",
+                waiting.resume.closed_message(),
                 &mut out,
             );
         }
         for lane in &mut self.lanes {
             let mut kept = VecDeque::new();
             for job in lane.queue.drain(..) {
-                if job.meta.read_only {
+                if job.meta.read_only && !matches!(job.work, Work::ElicitResume(..)) {
                     kept.push_back(job);
                     continue;
                 }
@@ -429,7 +499,9 @@ impl Scheduler {
         // Work that returns after its deadline, even before the next deadline
         // sweep, is answered with the deadline error; its outcome is discarded.
         let expired = !running.answered && running.control.expired();
-        let confirming = matches!(finish, Finish::Confirm(_)) && !running.answered && !expired;
+        let confirming = matches!(finish, Finish::Confirm(_) | Finish::Elicit(_))
+            && !running.answered
+            && !expired;
         let lane = &mut self.lanes[running.meta.lane];
         lane.running -= 1;
         lane.idle.push(running.worker);
@@ -473,6 +545,7 @@ impl Scheduler {
             Finish::Confirm(confirm) => {
                 self.begin_confirmation(session, running.meta, confirm, out);
             }
+            Finish::Elicit(elicit) => self.begin_elicitation(session, running.meta, elicit, out),
         }
     }
 
@@ -507,7 +580,7 @@ impl Scheduler {
                 self.lanes[meta.lane].waiting += 1;
                 self.waiting = Some(Waiting {
                     meta,
-                    resume: confirm.resume,
+                    resume: Continuation::Confirm(confirm.resume),
                     elicitation,
                     control: Control::new(self.confirmation_timeout),
                 });
@@ -517,11 +590,84 @@ impl Scheduler {
     }
 
     fn queue_resume(&mut self, meta: Meta, resume: Resume, decision: Decision) {
-        let control = Arc::new(Control::new(meta.timeout));
+        let control = resume_control(&meta);
         let holds_key = meta.key.is_some();
         self.lanes[meta.lane].queue.push_front(Job {
             meta,
             work: Work::Resume(resume, decision),
+            control,
+            holds_key,
+        });
+    }
+
+    fn begin_elicitation(
+        &mut self,
+        session: &mut Session,
+        mut meta: Meta,
+        step: Elicit,
+        out: &mut Vec<Outgoing>,
+    ) {
+        meta.rich_deadline = Some(meta.admitted + self.elicitation_policy.timeout);
+        let deadline = meta.rich_deadline.unwrap_or(meta.admitted);
+        if self.disconnected
+            || Instant::now() >= deadline
+            || meta.rich_rounds >= self.elicitation_policy.max_rounds
+        {
+            self.lanes[meta.lane].release(meta.key.as_ref());
+            let (code, message) = if self.disconnected {
+                (
+                    rpc::REQUEST_CANCELLED,
+                    "Connection closed before elicitation",
+                )
+            } else if Instant::now() >= deadline {
+                (
+                    rpc::DEADLINE_EXCEEDED,
+                    "Elicitation workflow deadline exceeded",
+                )
+            } else {
+                (rpc::INTERNAL_ERROR, "Elicitation round limit exceeded")
+            };
+            refuse(session, meta.id.as_ref(), code, message, out);
+            return;
+        }
+        meta.rich_rounds += 1;
+        match session.request_elicitation(step.question) {
+            Ok((elicitation, request)) => {
+                let Ok(bytes) = json::encode(&request, self.max_output_bytes) else {
+                    session.cancel_confirmation(&elicitation);
+                    self.queue_elicit_resume(
+                        meta,
+                        step.resume,
+                        crate::elicitation::Answer::Unavailable,
+                    );
+                    return;
+                };
+                out.push(Outgoing::Bytes(bytes));
+                self.lanes[meta.lane].waiting += 1;
+                self.waiting = Some(Waiting {
+                    meta,
+                    resume: Continuation::Elicit(step.resume),
+                    elicitation,
+                    control: Control::until(deadline.min(
+                        Instant::now() + self.confirmation_timeout.min(crate::control::MAX_TIMEOUT),
+                    )),
+                });
+            }
+            Err(answer) => self.queue_elicit_resume(meta, step.resume, answer),
+        }
+    }
+
+    fn queue_elicit_resume(
+        &mut self,
+        meta: Meta,
+        resume: ElicitResume,
+        answer: crate::elicitation::Answer,
+    ) {
+        let control = resume_control(&meta);
+        let holds_key = meta.key.is_some();
+        self.lanes[meta.lane].queue.push_front(Job {
+            meta,
+            work: Work::ElicitResume(resume, answer),
             control,
             holds_key,
         });
@@ -589,7 +735,7 @@ impl Scheduler {
                 session,
                 waiting.meta.id.as_ref(),
                 rpc::DEADLINE_EXCEEDED,
-                "Confirmation deadline exceeded",
+                waiting.resume.deadline_message(),
                 out,
             );
         }
@@ -706,12 +852,14 @@ fn work<H: Handler>(
             control: assignment.control,
             progress: assignment.progress,
         };
-        let resumed = matches!(assignment.work, Work::Resume(..));
+        let rich_resumed = matches!(assignment.work, Work::ElicitResume(..));
+        let resumed = rich_resumed || matches!(assignment.work, Work::Resume(..));
         let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
             let outcome = match assignment.work {
                 Work::Call(Request::Resource(read)) => Outcome::Bundled(read),
                 Work::Call(request) => handler.call(request, &context),
                 Work::Resume(resume, decision) => resume(decision, &context),
+                Work::ElicitResume(resume, answer) => resume(answer, &context),
             };
             match outcome {
                 Outcome::Confirm(confirm) if context.protocol.is_some() => {
@@ -726,6 +874,7 @@ fn work<H: Handler>(
             resumed || context.protocol.is_some(),
             limit,
             context.protocol.as_deref(),
+            rich_resumed,
         );
         if finished.send((assignment.sequence, finish)).is_err() {
             return;
@@ -740,6 +889,7 @@ fn settle(
     resumed: bool,
     limit: usize,
     context: Option<&crate::RequestContext>,
+    rich_resumed: bool,
 ) -> Finish {
     // A notification's outcome, including a confirmation step, has no reply.
     let Some(id) = id else {
@@ -828,9 +978,24 @@ fn settle(
             Finish::Reply(rpc::failure(id.clone(), &error))
         }
         Ok(Outcome::Done) => internal("Request produced no reply"),
+        Ok(Outcome::Elicit(_)) if context.is_some() || (resumed && !rich_resumed) => internal(
+            "Use typed interim input for modern calls; confirmation cannot resume into rich input",
+        ),
+        Ok(Outcome::Elicit(step)) => Finish::Elicit(step),
+        Ok(Outcome::Confirm(_)) if rich_resumed => {
+            internal("Rich elicitation cannot resume into legacy confirmation")
+        }
         Ok(Outcome::Confirm(_)) if resumed => internal("Request asked for confirmation twice"),
         Ok(Outcome::Confirm(confirm)) => Finish::Confirm(confirm),
     }
+}
+
+fn resume_control(meta: &Meta) -> Arc<Control> {
+    let deadline = Instant::now() + meta.timeout.min(crate::control::MAX_TIMEOUT);
+    Arc::new(Control::until(
+        meta.rich_deadline
+            .map_or(deadline, |total| total.min(deadline)),
+    ))
 }
 
 fn encoded(

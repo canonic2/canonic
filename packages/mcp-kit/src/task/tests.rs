@@ -400,6 +400,122 @@ fn tasks_snapshots_restore_and_refuse_contradictions() {
 }
 
 #[test]
+fn tasks_rich_questions_restore_and_validate_updates_atomically() {
+    use crate::elicitation::{Action, Form, Request, Requests};
+    let form = Request::form("Choose report", Form::new(json!({"type":"object","properties":{"format":{"type":"string","enum":["md","json"]}},"required":["format"]})).unwrap()).unwrap();
+    let questions = Requests::new(vec![
+        ("format".into(), form.clone()),
+        ("review".into(), form),
+    ])
+    .unwrap();
+    let initial = Snapshot::new(metadata(), State::RichInputRequired(questions)).unwrap();
+    let saved = serde_json::to_value(&initial).unwrap();
+    let restored = Snapshot::restore(&saved).unwrap();
+    assert_eq!(restored, initial);
+    assert_eq!(
+        restored.pending_keys().collect::<Vec<_>>(),
+        vec!["format", "review"]
+    );
+    let mut session = session(true);
+    let update = |id, responses| {
+        request(
+            id,
+            "tasks/update",
+            json!({"taskId":"acme-job","inputResponses":responses}),
+            capabilities(),
+        )
+    };
+    let mut dispatch = |id, responses| {
+        let Inbound::Task {
+            id: rpc_id,
+            request,
+        } = session.receive_value(update(id, responses))
+        else {
+            panic!("admitted update")
+        };
+        let context = session.request_context(&rpc_id).unwrap();
+        let result = restored.input_answers(&request, &context, &now());
+        assert!(session.finish(&rpc_id));
+        result
+    };
+    assert!(dispatch(1,json!({"format":{"action":"accept","content":{"format":"md"}},"review":{"action":"accept","content":{"format":"wrong"}}})).is_err());
+    let partial = dispatch(
+        2,
+        json!({"format":{"action":"accept","content":{"format":"json"}},"unknown":{}}),
+    )
+    .unwrap();
+    assert_eq!(partial.len(), 1);
+    assert_eq!(partial["format"].action, Action::Accept);
+    assert_eq!(partial["format"].content, Some(json!({"format":"json"})));
+    assert_eq!(serde_json::to_value(&restored).unwrap(), saved);
+    let mut changed = saved.clone();
+    changed["inputRequests"]["review"]["params"]["message"] = json!("Different meaning");
+    let changed = Snapshot::restore(&changed).unwrap();
+    assert!(initial.validate_successor(&changed, &now()).is_err());
+    let mut corrupt = saved;
+    corrupt["inputRequests"]["format"]["params"]["requestedSchema"]["properties"]["format"]["pattern"] =
+        json!(".*");
+    assert!(Snapshot::restore(&corrupt).is_err());
+}
+
+#[test]
+fn tasks_rich_empty_form_keeps_answer_semantics_after_restore() {
+    use crate::elicitation::{Form, Request, Requests};
+    let question = Request::form(
+        "Continue?",
+        Form::new(json!({"type":"object","properties":{}})).unwrap(),
+    )
+    .unwrap();
+    let rich = Snapshot::new(
+        metadata(),
+        State::RichInputRequired(Requests::new(vec![("review".into(), question)]).unwrap()),
+    )
+    .unwrap();
+    let restored = Snapshot::restore(&serde_json::to_value(&rich).unwrap()).unwrap();
+    let update_context = context("tasks/update", Some("acme-job"));
+    let update = |answer| TaskRequest::Update {
+        task_id: TaskId::new("acme-job").unwrap(),
+        responses: InputResponses::new(json!({"review":answer})).unwrap(),
+    };
+    let decline_with_content = update(json!({"action":"decline","content":{"ignored":true}}));
+    let before = rich
+        .input_answers(&decline_with_content, &update_context, &now())
+        .unwrap();
+    assert_eq!(
+        restored
+            .input_answers(&decline_with_content, &update_context, &now())
+            .unwrap(),
+        before
+    );
+    let decline = update(json!({"action":"decline"}));
+    for snapshot in [&rich, &restored] {
+        assert!(
+            snapshot
+                .input_decision(&decline, &update_context, &now())
+                .is_err()
+        );
+    }
+    let basic = Snapshot::new(
+        metadata(),
+        State::InputRequired(Question::new(&update_context, "review", "Continue?").unwrap()),
+    )
+    .unwrap();
+    assert_ne!(rich, basic);
+    assert_eq!(
+        Snapshot::restore(&serde_json::to_value(&basic).unwrap()).unwrap(),
+        basic
+    );
+    assert_eq!(serde_json::to_value(&rich).unwrap()["inputKind"], "rich");
+    let get = context("tasks/get", Some("acme-job"));
+    let reply: Value = serde_json::from_slice(
+        &get.encode_task(&json!(1), &TaskResult::Snapshot(rich), 4096, &|| Ok(()))
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(reply["result"].get("inputKind").is_none());
+}
+
+#[test]
 fn tasks_terminal_identity_and_clock_rules_reject_stale_updates() {
     let initial = Snapshot::new(metadata(), State::Working).unwrap();
     let later = time("2026-10-30T12:00:01Z");

@@ -295,6 +295,8 @@ pub enum State {
     Working,
     /// Execution waits for one persisted yes/no answer.
     InputRequired(Question),
+    /// Execution waits for a validated set of rich form/URL answers.
+    RichInputRequired(crate::elicitation::Requests),
     /// The original tool payload, without a polling envelope.
     Completed(ToolResult),
     /// A protocol/executor failure.
@@ -303,14 +305,25 @@ pub enum State {
     Cancelled,
 }
 
-/// A validated immutable detailed snapshot, suitable for consumer persistence.
+/// A validated immutable snapshot. Serialization is the persistence format;
+/// protocol replies must use [`RequestContext::encode_task`], which omits storage-only fields.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Snapshot {
+    #[serde(rename = "inputKind", skip_serializing_if = "Option::is_none")]
+    input_kind: Option<InputKind>,
+    #[serde(skip)]
+    questions: Option<crate::elicitation::Requests>,
     #[serde(flatten)]
     metadata: Metadata,
     status: Status,
     #[serde(flatten)]
     payload: Value,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum InputKind {
+    Rich,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -355,6 +368,7 @@ impl Snapshot {
                 "statusMessage",
                 "pollIntervalMs",
                 "inputRequests",
+                "inputKind",
                 "result",
                 "error",
             ],
@@ -397,27 +411,7 @@ impl Snapshot {
                     data: error.get("data").cloned(),
                 })
             }
-            "input_required" => {
-                let requests = value["inputRequests"]
-                    .as_object()
-                    .filter(|map| map.len() == 1)
-                    .ok_or_else(invalid)?;
-                let (key, request) = requests.iter().next().ok_or_else(invalid)?;
-                identifier(key)?;
-                let question = Question {
-                    key: key.clone(),
-                    message: request["params"]["message"]
-                        .as_str()
-                        .ok_or_else(invalid)?
-                        .into(),
-                };
-                modern::bounded(&question.value(), MAX_INPUT_BYTES, 32)
-                    .map_err(|_| TaskError::Limit)?;
-                if question.value() != value["inputRequests"] {
-                    return Err(invalid());
-                }
-                State::InputRequired(question)
-            }
+            "input_required" => restore_input(&value["inputRequests"], value.get("inputKind"))?,
             _ => return Err(invalid()),
         };
         let snapshot = Self::new(metadata, state)?;
@@ -432,11 +426,19 @@ impl Snapshot {
     /// # Errors
     /// Returns a size/depth error rather than accepting an unreadable result.
     pub fn new(metadata: Metadata, state: State) -> Result<Self, TaskError> {
+        let questions = match &state {
+            State::RichInputRequired(requests) => Some(requests.clone()),
+            _ => None,
+        };
         let (status, payload) = match state {
             State::Working => (Status::Working, json!({})),
             State::InputRequired(question) => (
                 Status::InputRequired,
                 json!({"inputRequests":question.value()}),
+            ),
+            State::RichInputRequired(requests) => (
+                Status::InputRequired,
+                json!({"inputRequests":requests.as_value()}),
             ),
             State::Completed(result) => {
                 if let Some(structured) = &result.structured_content {
@@ -458,6 +460,8 @@ impl Snapshot {
             State::Cancelled => (Status::Cancelled, json!({})),
         };
         let snapshot = Self {
+            input_kind: questions.as_ref().map(|_| InputKind::Rich),
+            questions,
             metadata,
             status,
             payload,
@@ -496,6 +500,14 @@ impl Snapshot {
             .map(String::as_str)
     }
 
+    /// Every pending key. Persist lifetime-unique issuance history for each one.
+    pub fn pending_keys(&self) -> impl Iterator<Item = &str> {
+        self.payload["inputRequests"]
+            .as_object()
+            .into_iter()
+            .flat_map(|map| map.keys().map(String::as_str))
+    }
+
     /// Checks a proposed stored successor. The consumer must commit with a
     /// compare-and-set or equivalent ownership guard; this helper performs no write.
     ///
@@ -509,9 +521,15 @@ impl Snapshot {
             || next.metadata.last_updated_at < self.metadata.last_updated_at
             || next.metadata.last_updated_at > *now
             || (self.terminal() && self != next)
-            || (self.pending_key().is_some()
-                && self.pending_key() == next.pending_key()
-                && self.payload["inputRequests"] != next.payload["inputRequests"])
+            || self.payload["inputRequests"]
+                .as_object()
+                .is_some_and(|map| {
+                    map.iter().any(|(key, request)| {
+                        next.payload["inputRequests"]
+                            .get(key)
+                            .is_some_and(|next| request != next)
+                    })
+                })
         {
             return Err(TaskError::Transition);
         }
@@ -529,6 +547,9 @@ impl Snapshot {
         context: &RequestContext,
         now: &Timestamp,
     ) -> Result<Option<Decision>, RpcError> {
+        if self.questions.is_some() {
+            return Err(modern::invalid("Use typed rich task answers"));
+        }
         context.require_tasks()?;
         if !context.task_request_matches(request) {
             return Err(modern::invalid(
@@ -549,11 +570,116 @@ impl Snapshot {
         modern::confirmation_answer(answer).map(Some)
     }
 
+    /// Checks capability for every retained question without consuming input.
+    ///
+    /// # Errors
+    /// Returns the missing current form/URL capability.
+    pub fn require_input_capabilities(&self, context: &RequestContext) -> Result<(), RpcError> {
+        if let Some(questions) = &self.questions {
+            questions.require_capabilities(&context.capabilities)
+        } else if self.pending_key().is_some() {
+            context.require_form()
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Validates an entire rich update before the consumer atomically persists answers and intent.
+    /// Unknown or consumed keys are ignored; no answer is consumed by this pure helper.
+    ///
+    /// # Errors
+    /// Refuses wrong operation/record/context, expiry, missing modes and malformed known answers.
+    pub fn input_answers(
+        &self,
+        request: &TaskRequest,
+        context: &RequestContext,
+        now: &Timestamp,
+    ) -> Result<std::collections::BTreeMap<String, crate::elicitation::Response>, RpcError> {
+        context.require_tasks()?;
+        if !context.task_request_matches(request) {
+            return Err(modern::invalid("Task update context mismatch"));
+        }
+        self.metadata.ensure_live(now).map_err(|_| not_found())?;
+        if request.id() != self.metadata.id() {
+            return Err(not_found());
+        }
+        let TaskRequest::Update { responses, .. } = request else {
+            return Err(modern::invalid("Expected task update"));
+        };
+        self.require_input_capabilities(context)?;
+        if let Some(questions) = &self.questions {
+            return questions.answers(&responses.0);
+        }
+        let mut answers = std::collections::BTreeMap::new();
+        if let Some(key) = self.pending_key()
+            && let Some(value) = responses.0.get(key)
+        {
+            let decision = modern::confirmation_answer(value)?;
+            let action = match value["action"].as_str() {
+                Some("accept") => crate::elicitation::Action::Accept,
+                Some("cancel") => crate::elicitation::Action::Cancel,
+                _ => crate::elicitation::Action::Decline,
+            };
+            answers.insert(
+                key.to_owned(),
+                crate::elicitation::Response {
+                    action,
+                    content: (decision == Decision::Accepted).then(|| json!({})),
+                    meta: value.get("_meta").cloned(),
+                },
+            );
+        }
+        Ok(answers)
+    }
+
     pub(crate) fn creation_value(&self) -> Value {
         let mut value = serde_json::to_value(&self.metadata).expect("serializable metadata");
         value["status"] = json!(self.status);
         value
     }
+
+    pub(crate) fn protocol_value(&self) -> Result<Value, serde_json::Error> {
+        let mut value = serde_json::to_value(self)?;
+        if let Some(fields) = value.as_object_mut() {
+            fields.remove("inputKind");
+        }
+        Ok(value)
+    }
+}
+
+fn restore_input(value: &Value, kind: Option<&Value>) -> Result<State, TaskError> {
+    let invalid = || TaskError::Invalid("stored input requests");
+    if let Some(kind) = kind {
+        if kind != "rich" {
+            return Err(invalid());
+        }
+        return Ok(State::RichInputRequired(
+            crate::elicitation::Requests::restore(value).map_err(|_| invalid())?,
+        ));
+    }
+    let requests = value.as_object().ok_or_else(invalid)?;
+    if requests.len() == 1 {
+        let (key, request) = requests.iter().next().ok_or_else(invalid)?;
+        if request["params"]["mode"] == "form"
+            && request["params"]["requestedSchema"] == json!({"type":"object","properties":{}})
+        {
+            identifier(key)?;
+            let question = Question {
+                key: key.clone(),
+                message: request["params"]["message"]
+                    .as_str()
+                    .ok_or_else(invalid)?
+                    .into(),
+            };
+            modern::bounded(&question.value(), MAX_INPUT_BYTES, 32)
+                .map_err(|_| TaskError::Limit)?;
+            if question.value() != *value {
+                return Err(invalid());
+            }
+            return Ok(State::InputRequired(question));
+        }
+    }
+    Err(invalid())
 }
 
 /// Structurally bounded task input responses. Known question semantics are

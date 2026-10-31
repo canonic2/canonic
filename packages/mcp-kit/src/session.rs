@@ -135,6 +135,13 @@ pub enum Decision {
 /// What a received message requires of the caller.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Inbound {
+    /// A response to a connection-bound rich question, validated against its issued definition.
+    Elicitation {
+        /// Server request ID, separate from the originating client RPC.
+        id: Value,
+        /// Reported answer, invalid response or unavailable host.
+        answer: crate::elicitation::Answer,
+    },
     /// Dispatch a validated task-management call; settle through [`Session::finish`].
     Task {
         /// Independent RPC request ID, not the task ID.
@@ -241,6 +248,7 @@ pub struct Session {
     received: u64,
     outstanding: HashSet<String>,
     confirmation: Option<Value>,
+    rich_question: Option<crate::elicitation::Request>,
     confirmations: u64,
     closed: bool,
     contexts: HashMap<String, Arc<crate::RequestContext>>,
@@ -270,6 +278,7 @@ impl Session {
             received: 0,
             outstanding: HashSet::new(),
             confirmation: None,
+            rich_question: None,
             confirmations: 0,
             closed: false,
             contexts: HashMap::new(),
@@ -457,12 +466,39 @@ impl Session {
         Ok((id, request))
     }
 
-    /// Withdraws a pending confirmation. Returns the cancellation notice to send.
+    /// Starts a rich legacy question in the shared confirmation slot.
+    /// Answers arrive as [`Inbound::Elicitation`]. The caller owns continuation lifetime.
+    ///
+    /// # Errors
+    /// Returns unavailable if closed, busy, unsupported or not representable in this revision.
+    pub fn request_elicitation(
+        &mut self,
+        question: crate::elicitation::Request,
+    ) -> Result<(Value, Value), crate::elicitation::Answer> {
+        let client = self
+            .client
+            .as_ref()
+            .ok_or(crate::elicitation::Answer::Unavailable)?;
+        if self.closed || self.confirmation.is_some() {
+            return Err(crate::elicitation::Answer::Unavailable);
+        }
+        let params = question
+            .legacy_params(&client.protocol_version, &client.capabilities)
+            .map_err(|_| crate::elicitation::Answer::Unavailable)?;
+        self.confirmations += 1;
+        let id = json!(format!("confirmation-{}", self.confirmations));
+        self.confirmation = Some(id.clone());
+        self.rich_question = Some(question);
+        Ok((id.clone(), rpc::request(id, "elicitation/create", params)))
+    }
+
+    /// Withdraws a pending confirmation or rich question. Returns the cancellation notice to send.
     pub fn cancel_confirmation(&mut self, id: &Value) -> Option<Value> {
         if self.confirmation.as_ref() != Some(id) {
             return None;
         }
         self.confirmation = None;
+        self.rich_question = None;
         Some(rpc::notification(
             "notifications/cancelled",
             json!({"requestId": id, "reason": "The confirmation request ended"}),
@@ -482,6 +518,23 @@ impl Session {
             return Inbound::Ignored;
         }
         self.confirmation = None;
+        if let Some(question) = self.rich_question.take() {
+            let answer = match outcome {
+                Some(Ok(value)) => question.answer(&value).map_or(
+                    crate::elicitation::Answer::Invalid,
+                    crate::elicitation::Answer::Response,
+                ),
+                Some(Err(error))
+                    if rpc::only(&error, &["code", "message", "data"])
+                        && error["code"].as_i64().is_some()
+                        && error["message"].is_string() =>
+                {
+                    crate::elicitation::Answer::Unavailable
+                }
+                Some(Err(_)) | None => crate::elicitation::Answer::Invalid,
+            };
+            return Inbound::Elicitation { id, answer };
+        }
         let decision = match outcome {
             Some(Ok(result)) if result["action"] == "accept" => Decision::Accepted,
             Some(Ok(_)) => Decision::Declined,

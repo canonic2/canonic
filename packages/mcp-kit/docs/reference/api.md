@@ -7,6 +7,9 @@
 | Publish your guides as documentation tools | `docs::build::embed` (feature `docs-build`), `include_docs!`, `docs::Bundle`, `docs::Documentation`, `docs::DocsError` |
 | Enable modern protocol handling | `ModernOptions`, `SessionOptions::modern`, `Session::try_new` |
 | Enable optional task handles | `task::TaskOptions`, `SessionOptions::tasks`, `RequestContext::task_eligible` |
+| Collect fields, choices or URL consent | `elicitation::Form`, `elicitation::Request`, `elicitation::Requests`, `elicitation::Response` |
+| Drive rich legacy waits | `Session::request_elicitation`, `Inbound::Elicitation`, `stdio::Elicit`, `stdio::Outcome::Elicit`, `stdio::ElicitationPolicy` |
+| Validate modern rounds or task input | `RequestContext::elicitation`, `RequestContext::elicitation_answers`, `task::State::RichInputRequired`, `task::Snapshot::input_answers` |
 | Handle task operations | `task::TaskRequest`, `Inbound::Task`, `stdio::Request::Task`, `stdio::Outcome::Task`, `task::TaskResult` |
 | Validate persisted task state | `task::Metadata`, `task::Snapshot`, `task::State`, `task::Timestamp`, `task::InputHistory` |
 | Encode task replies in another runtime | `RequestContext::encode_task` |

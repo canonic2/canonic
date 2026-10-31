@@ -16,6 +16,7 @@ Start with the [quick start](getting-started.md).
 - [Publish bundled skills](guides/skills.md) — offline workflows, verified manifests, modern request context and legacy resource fallback.
 - [Bundle your guides as documentation tools](guides/documentation.md) — build-time guide bundles and the list, search and read tools.
 - [Return a task for long-running work](guides/tasks.md) — optional handles, durable consumer state, polling, input and cancellation.
+- [Collect choices, fields and external consent](guides/elicitation.md) — rich forms and bounded legacy/modern interactions.
 - [Drive the session yourself](guides/session.md) — use the protocol core from another runtime.
 
 ## Reference

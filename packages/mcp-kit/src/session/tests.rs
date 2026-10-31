@@ -303,6 +303,46 @@ fn confirmations_need_form_elicitation_and_match_their_reply() {
 }
 
 #[test]
+fn rich_elicitation_distinguishes_malformed_replies_from_host_errors() {
+    use crate::elicitation::{Answer, Form, Request};
+    let mut session = ready(SessionOptions::default(), &json!({"elicitation":{}}));
+    let question = Request::form(
+        "Continue?",
+        Form::new(json!({"type":"object","properties":{}})).unwrap(),
+    )
+    .unwrap();
+    for (payload, answer) in [
+        (json!({}), Answer::Invalid),
+        (
+            json!({"result":{"action":"accept"},"error":{"code":-32601,"message":"Unavailable"}}),
+            Answer::Invalid,
+        ),
+        (json!({"error":null}), Answer::Invalid),
+        (
+            json!({"error":{"code":"bad","message":"Unavailable"}}),
+            Answer::Invalid,
+        ),
+        (json!({"result":null}), Answer::Invalid),
+        (
+            json!({"error":{"code":-32601,"message":"Unavailable"}}),
+            Answer::Unavailable,
+        ),
+    ] {
+        let (id, _) = session.request_elicitation(question.clone()).unwrap();
+        let mut reply = json!({"jsonrpc":"2.0","id":id});
+        reply
+            .as_object_mut()
+            .unwrap()
+            .extend(payload.as_object().unwrap().clone());
+        assert_eq!(
+            session.receive_value(reply.clone()),
+            Inbound::Elicitation { id, answer }
+        );
+        assert_eq!(session.receive_value(reply), Inbound::Ignored);
+    }
+}
+
+#[test]
 fn older_protocol_confirmations_omit_the_mode_field() {
     let mut session = Session::new(catalog(), SessionOptions::default());
     let Inbound::Initialize { id, .. } = session.receive(&frame(&initialize(

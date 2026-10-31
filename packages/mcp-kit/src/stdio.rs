@@ -106,6 +106,8 @@ pub enum Request {
 
 /// What a request produced.
 pub enum Outcome {
+    /// Ask a rich legacy question. Modern callers use typed input-required rounds instead.
+    Elicit(Elicit),
     /// Typed task creation, snapshot, acknowledgement or management failure.
     Task(Result<crate::task::TaskResult, RpcError>),
     /// A prepared bundled read, normally produced internally by the driver.
@@ -143,6 +145,45 @@ pub struct Confirm {
 }
 
 type Resume = Box<dyn FnOnce(Decision, &Context) -> Outcome + Send>;
+
+type ElicitResume = Box<dyn FnOnce(crate::elicitation::Answer, &Context) -> Outcome + Send>;
+
+/// A legacy form or URL wait with a typed continuation. No worker is held while waiting.
+pub struct Elicit {
+    question: crate::elicitation::Request,
+    resume: ElicitResume,
+}
+
+impl Elicit {
+    /// Creates a wait. The driver enforces capacity, round count and total lifetime.
+    pub fn new(
+        question: crate::elicitation::Request,
+        resume: impl FnOnce(crate::elicitation::Answer, &Context) -> Outcome + Send + 'static,
+    ) -> Self {
+        Self {
+            question,
+            resume: Box::new(resume),
+        }
+    }
+}
+
+/// Bounds for a rich legacy workflow, including all its waits and execution rounds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ElicitationPolicy {
+    /// Maximum rich questions issued for one original RPC, within 1..=64.
+    pub max_rounds: u8,
+    /// Total time from admission, positive and at most 24 hours.
+    pub timeout: Duration,
+}
+
+impl Default for ElicitationPolicy {
+    fn default() -> Self {
+        Self {
+            max_rounds: 8,
+            timeout: Duration::from_secs(300),
+        }
+    }
+}
 
 impl Confirm {
     /// A confirmation showing `message`, continued by `resume`.
@@ -206,6 +247,8 @@ pub type Observer = Arc<dyn Fn(Direction, &[u8]) + Send + Sync>;
 /// Server limits and scheduling.
 #[derive(Clone)]
 pub struct Options {
+    /// Round and total-time bounds for the separate rich legacy API.
+    pub elicitation: ElicitationPolicy,
     /// Protocol limits and extension methods.
     pub session: SessionOptions,
     /// Worker lanes; [`Admission::lane`] indexes this list.
@@ -228,6 +271,7 @@ impl Default for Options {
     /// One worker with up to eight outstanding requests.
     fn default() -> Self {
         Self {
+            elicitation: ElicitationPolicy::default(),
             session: SessionOptions::default(),
             lanes: vec![Lane::new("tools", 1, 8)],
             timeout: DEFAULT_TIMEOUT,
@@ -397,6 +441,14 @@ pub fn serve<H: Handler>(
 }
 
 fn validate(options: &Options) -> Result<(), ServeError> {
+    if !(1..=64).contains(&options.elicitation.max_rounds)
+        || options.elicitation.timeout.is_zero()
+        || options.elicitation.timeout > crate::control::MAX_TIMEOUT
+    {
+        return Err(ServeError::Options(
+            "rich elicitation requires finite round and time limits",
+        ));
+    }
     if options.lanes.is_empty() {
         return Err(ServeError::Options("at least one lane is required"));
     }
@@ -557,6 +609,10 @@ impl<H: Handler, W: Write> Connection<H, W> {
             }
             Inbound::Confirmation { id, decision } => {
                 let outgoing = self.scheduler.confirmed(&mut self.session, &id, decision);
+                self.output.send(outgoing)
+            }
+            Inbound::Elicitation { id, answer } => {
+                let outgoing = self.scheduler.elicited(&mut self.session, &id, answer);
                 self.output.send(outgoing)
             }
             Inbound::Ignored => Ok(()),

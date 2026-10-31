@@ -4,6 +4,7 @@ mod confirmation;
 mod disconnection;
 #[cfg(feature = "docs-build")]
 mod docs;
+mod elicitation;
 mod fixture;
 mod lifecycle;
 mod modern;

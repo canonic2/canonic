@@ -99,8 +99,13 @@ Outcome::Task(Ok(TaskResult::Created(snapshot)))
 
 This fragment assumes a validated, durably committed `task::Snapshot`. The
 complete example contains the imports, construction and persistence code.
-Metadata and snapshot constructors check bounds. `Snapshot::restore` validates
-stored values without authenticating the store or recovering execution.
+Metadata and snapshot constructors check bounds. In the persistence
+representation, rich input includes the storage-only
+`inputKind: "rich"` marker, so even an empty rich form retains its answer
+semantics after reopening. Untagged basic question records remain readable.
+Use `RequestContext::encode_task` for wire replies; it omits this marker.
+`Snapshot::restore` validates stored values without authenticating the store
+or recovering execution.
 `Timestamp::from_unix_millis` converts a supplied clock reading without reading
 the clock itself. TTL is measured from creation, not completion or last access.
 
@@ -138,7 +143,7 @@ checks immutable identity, clock ordering, retention and terminal immutability.
 Commit with a compare-and-set or equivalent owner check: pure validation
 cannot prevent two concurrent writers from settling different outcomes.
 
-The supported input kind is the existing yes/no form. Create a `Question`
+The basic input kind is the existing yes/no form. Create a `Question`
 using the originating request context. Persist its meaning, authority scope,
 expiry and lifetime-unique key. `InputHistory` helps reject key reuse and
 enforces your input-round limit; persist it with the question and count its
@@ -150,10 +155,16 @@ keys are ignored; malformed known answers fail without consuming input.
 Commit consumption and continuation intent before acknowledging. Revalidate
 authority and action identity before effects; a host answer alone grants none.
 
+For several questions, fields or URL consent, use
+`State::RichInputRequired(elicitation::Requests)` and `Snapshot::input_answers`.
+It validates the full update before returning known answers, including partial
+valid sets. Persist answers and continuation intent before acknowledging and
+track every `pending_keys()` value. The [richer input guide](elicitation.md)
+explains construction, capability checks and external completion.
+
 Complete ordinary multi-round-trip confirmation before creating a task.
 After creation, input flows through get/update, without `requestState` or a
-retry of the original tool. Rich forms, URL mode and sampling are outside the
-supported task-input profile.
+retry of the original tool. Sampling is outside the supported task-input profile.
 
 ## Recovery and retention
 
@@ -181,7 +192,7 @@ information if cleanup still needs it. Deleting a handle does not stop a job.
 | Status message | 4096 UTF-8 bytes |
 | UTC RFC 3339 timestamp | 64 UTF-8 bytes |
 | TTL and optional polling interval | Positive safe JSON integer milliseconds; null TTL is outside this profile |
-| Pending input | One yes/no question; map at most 64 KiB and 32 containers deep |
+| Pending input | One basic yes/no question or up to eight rich questions; map at most 64 KiB and 32 containers deep |
 | Input response map | 16 KiB and 32 containers deep |
 | Detailed snapshot | 1 MiB encoded JSON and 64 containers deep |
 
