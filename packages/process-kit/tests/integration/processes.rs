@@ -167,16 +167,109 @@ fn detached_start_has_only_allowlist_null_stdin_and_new_session() {
     ready(&root);
     let reply = client::call(&root, &request(json!("environment")), &options()).unwrap();
     let data = reply.data;
-    assert_eq!(data["env"].as_object().unwrap().len(), 2);
+    let mut names: Vec<_> = data["env"].as_object().unwrap().keys().cloned().collect();
+    names.sort_by_key(|name| name.to_ascii_uppercase());
+    // Windows adds only SystemRoot, which sockets need.
+    #[cfg(unix)]
+    assert_eq!(names, ["ACME_MODE", "ACME_ROOT"]);
+    #[cfg(windows)]
+    assert_eq!(names, ["ACME_MODE", "ACME_ROOT", "SystemRoot"]);
     assert_eq!(data["env"]["ACME_MODE"], "manager");
     assert_eq!(data["stdin"], 0);
-    assert_eq!(data["pid"], data["sid"]);
-    assert_eq!(data["pid"], data["group"]);
+    #[cfg(unix)]
+    {
+        assert_eq!(data["pid"], data["sid"]);
+        assert_eq!(data["pid"], data["group"]);
+    }
     stop(&root, "drain");
     assert!(reap.join().unwrap().unwrap().success());
 }
 
 #[test]
+#[cfg(windows)]
+fn detached_manager_survives_parent_exit_termination_console_break_and_job_close() {
+    for ending in ["exit", "terminate", "break", "job"] {
+        let (_temp, root) = root();
+        let mut parent = child(&root, "parent-on-input");
+        // The job must hold the parent before it starts the manager.
+        let job = (ending == "job").then(|| windows_job::kill_on_close(&parent.0));
+        parent.0.stdin.as_mut().unwrap().write_all(b"x").unwrap();
+        ready(&root);
+        match ending {
+            "exit" => drop(parent.0.stdin.take()),
+            "terminate" => parent.0.kill().unwrap(),
+            "break" => windows_job::console_break(&parent.0),
+            _ => drop(job),
+        }
+        parent.0.wait().unwrap();
+        assert_eq!(
+            client::call(&root, &request(json!("survived")), &options())
+                .unwrap()
+                .data,
+            "survived",
+            "{ending}"
+        );
+        stop(&root, "drain");
+        wait(|| (!root.leased().unwrap()).then_some(()));
+    }
+}
+
+#[cfg(windows)]
+#[allow(
+    unsafe_code,
+    reason = "std exposes no job-object or console-event calls; each block states its invariants"
+)]
+mod windows_job {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows_sys::Win32::System::{
+        Console::{CTRL_BREAK_EVENT, GenerateConsoleCtrlEvent},
+        JobObjects::{
+            AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_BREAKAWAY_OK,
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+            JobObjectExtendedLimitInformation, SetInformationJobObject,
+        },
+    };
+
+    /// A job that ends its processes when closed, like a terminal or remote
+    /// session's job, and lets children break away.
+    pub(super) fn kill_on_close(process: &std::process::Child) -> OwnedHandle {
+        // SAFETY: null attributes and name create an unnamed job with the
+        // default descriptor; a non-null result is a handle this call owns.
+        let raw = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+        assert!(!raw.is_null(), "{}", std::io::Error::last_os_error());
+        // SAFETY: `raw` is an open handle nothing else owns.
+        let job = unsafe { OwnedHandle::from_raw_handle(raw) };
+        let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        limits.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+        // SAFETY: the pointer and size describe `limits`, which outlives the call.
+        let set = unsafe {
+            SetInformationJobObject(
+                job.as_raw_handle(),
+                JobObjectExtendedLimitInformation,
+                (&raw const limits).cast(),
+                u32::try_from(size_of_val(&limits)).unwrap(),
+            )
+        };
+        assert_ne!(set, 0, "{}", std::io::Error::last_os_error());
+        // SAFETY: both handles are open for the duration of the call.
+        let assigned =
+            unsafe { AssignProcessToJobObject(job.as_raw_handle(), process.as_raw_handle()) };
+        assert_ne!(assigned, 0, "{}", std::io::Error::last_os_error());
+        job
+    }
+
+    /// Ctrl+Break to the process group the fixture child leads, on the console
+    /// this test shares with it.
+    pub(super) fn console_break(process: &std::process::Child) {
+        // SAFETY: the call takes only plain integers.
+        let sent = unsafe { GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, process.id()) };
+        assert_ne!(sent, 0, "{}", std::io::Error::last_os_error());
+    }
+}
+
+#[test]
+#[cfg(unix)]
 fn detached_manager_survives_parent_exit_and_parent_group_signals() {
     for signal in [
         None,
@@ -211,13 +304,16 @@ fn detached_manager_survives_parent_exit_and_parent_group_signals() {
 fn account_home_ignores_home_environment_in_a_separate_process() {
     let (_temp, root) = root();
     let mut command = std::process::Command::new(std::env::current_exe().unwrap());
-    let status = command
+    command
         .args(["--exact", "fixtures::entry", "--nocapture"])
         .env("ACME_ROOT", root.path())
-        .env("ACME_MODE", "home")
-        .env("HOME", "/tmp/acme-not-account-home")
-        .status()
-        .unwrap();
+        .env("ACME_MODE", "home");
+    let changed = root.path().join("acme-not-account-home");
+    #[cfg(windows)]
+    command
+        .env("ACME_PROFILE", std::env::var_os("USERPROFILE").unwrap())
+        .env("USERPROFILE", &changed);
+    let status = command.env("HOME", &changed).status().unwrap();
     assert!(status.success());
 }
 

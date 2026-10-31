@@ -1,6 +1,6 @@
 [package]
 name = "canonic-process-kit"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.99"
 publish = false
@@ -32,13 +32,12 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_Shell",
 ] }
 
-[features]
-# Enables the Windows adapter for acceptance. Windows runtime use stays
-# Unsupported without it until the adapter's acceptance requirements are met.
-unstable-windows = []
-
 [dev-dependencies]
 tempfile = "3.0"
+
+[target.'cfg(windows)'.dev-dependencies]
+# Console events and kill-on-close jobs for the detached-start fixtures.
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_JobObjects"] }
 
 [[test]]
 name = "integration"

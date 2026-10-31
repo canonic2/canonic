@@ -112,6 +112,25 @@ fn inherited_permissive_and_reparse_roots_are_refused_without_changes() {
 }
 
 #[test]
+#[ignore = "raising an object's label above medium needs an elevated session"]
+fn an_existing_object_labelled_above_medium_is_refused_without_changes() {
+    let temporary = tempfile::tempdir().unwrap();
+    let directory = temporary.path().join("acme");
+    create_private_directory(&directory).unwrap();
+    let status = Command::new("icacls")
+        .arg(&directory)
+        .args(["/setintegritylevel", "H"])
+        .stdout(std::process::Stdio::null())
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let before = sddl(&directory);
+    assert!(before.contains(";HI)"), "{before}");
+    assert!(private(&directory, Kind::Directory).unwrap().is_none());
+    assert_eq!(sddl(&directory), before);
+}
+
+#[test]
 fn restricted_sockets_are_private_and_identity_changes_on_replacement() {
     let temporary = tempfile::tempdir().unwrap();
     let root = temporary.path().join("acme");
@@ -155,6 +174,76 @@ fn same_user_peers_pass_in_both_directions_and_connect_is_bounded() {
     assert!(
         matches!(connect(&path, Duration::ZERO), Err(e) if e.kind() == io::ErrorKind::InvalidInput)
     );
+}
+
+#[test]
+fn a_forged_sid_for_another_account_fails_the_peer_comparison() {
+    let user = user().unwrap();
+    assert!(is_user(user));
+    // The same domain with the final relative ID changed names another account.
+    let mut forged = user.0.clone();
+    let last = forged.len() - 4;
+    let rid = u32::from_le_bytes(forged[last..].try_into().unwrap());
+    forged[last..].copy_from_slice(&rid.wrapping_add(1).to_le_bytes());
+    assert!(!is_user(&Sid(forged)));
+}
+
+#[test]
+fn pending_socket_deletion_respects_connection_and_readiness_budgets() {
+    use crate::{client, endpoint};
+    use windows_sys::Win32::Storage::FileSystem::{FILE_DISPOSITION_INFO, FileDispositionInfo};
+
+    let temporary = tempfile::tempdir().unwrap();
+    let root = endpoint::Root::explicit(temporary.path().join("acme")).unwrap();
+    let lease = endpoint::Lease::acquire(&root, Duration::ZERO).unwrap();
+    let _endpoint = lease.bind(true).unwrap();
+    let path = root.socket(true);
+    let pending = OpenOptions::new()
+        .access_mode(DELETE | FILE_READ_ATTRIBUTES)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(&path)
+        .unwrap();
+    let disposition = FILE_DISPOSITION_INFO { DeleteFile: 1 };
+    // SAFETY: the handle has DELETE access; the pointer and size describe
+    // `disposition`, which outlives the call. Keeping the handle holds deletion pending.
+    check(unsafe {
+        SetFileInformationByHandle(
+            pending.as_raw_handle(),
+            FileDispositionInfo,
+            (&raw const disposition).cast(),
+            u32::try_from(size_of::<FILE_DISPOSITION_INFO>()).unwrap(),
+        )
+    })
+    .unwrap();
+    // Establish a lasting access denial, rather than relying on a deletion race.
+    assert_eq!(
+        OpenOptions::new()
+            .access_mode(FILE_READ_ATTRIBUTES)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(&path)
+            .unwrap_err()
+            .raw_os_error(),
+        i32::try_from(ERROR_ACCESS_DENIED).ok()
+    );
+    let budget = Duration::from_millis(5);
+    let started = Instant::now();
+    let result = endpoint::connect(&root, true, budget);
+    assert!(
+        matches!(result, Err(crate::Error::Io(e)) if e.raw_os_error() == i32::try_from(ERROR_ACCESS_DENIED).ok())
+    );
+    assert!(started.elapsed() < DELETION_SETTLE);
+    let started = Instant::now();
+    let result = client::connect(
+        &root,
+        None,
+        &client::Options {
+            readiness: budget,
+            ..client::Options::default()
+        },
+    );
+    assert!(matches!(result, Err(crate::Error::Starting)));
+    assert!(started.elapsed() < DELETION_SETTLE);
 }
 
 #[test]

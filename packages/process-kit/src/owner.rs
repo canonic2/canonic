@@ -18,8 +18,7 @@ impl Connection {
     /// application framing or send application bytes after establishing it.
     ///
     /// # Errors
-    /// Returns `Unsupported` on Windows without `unstable-windows`, or `Peer`
-    /// for a different user or a peer-credential failure.
+    /// Returns `Peer` for a different user or a peer-credential failure.
     pub fn new(stream: Stream, hold: Hold) -> Result<Self> {
         endpoint::check_peer(&stream)?;
         Ok(Self {
@@ -80,15 +79,10 @@ impl Connection {
     /// counts as closure: Windows reports a terminated owner's endpoint that way.
     ///
     /// # Errors
-    /// Returns `Unsupported` without `unstable-windows`, without socket I/O.
-    /// Otherwise returns poll/socket errors, or `Envelope` if the silent owner
-    /// channel contains data. An error does not establish owner death or drop
-    /// the hold.
+    /// Returns poll/socket errors, or `Envelope` if the silent owner channel
+    /// contains data. An error does not establish owner death or drop the hold.
     #[cfg(windows)]
     pub fn wait(&mut self, timeout: Duration) -> Result<bool> {
-        if !crate::WINDOWS_ENABLED {
-            return Err(Error::Unsupported);
-        }
         let deadline = Instant::now() + timeout;
         while !self.disconnected {
             let remaining = deadline.saturating_duration_since(Instant::now());
@@ -107,36 +101,5 @@ impl Connection {
             }
         }
         Ok(true)
-    }
-}
-
-#[cfg(all(test, windows, not(feature = "unstable-windows")))]
-mod tests {
-    //! Exercise the wait refusal independently of the constructor's peer refusal.
-
-    use super::*;
-    use crate::core::Admission;
-
-    #[test]
-    fn unsupported_wait_never_reports_death_or_releases_the_hold() {
-        let (stream, peer) = Stream::pair().unwrap();
-        let gate = Admission::new();
-        let mut owner = Connection {
-            stream,
-            _hold: gate.hold().unwrap(),
-            disconnected: false,
-        };
-        for timeout in [Duration::ZERO, Duration::from_millis(1)] {
-            assert!(matches!(owner.wait(timeout), Err(Error::Unsupported)));
-            assert_eq!(gate.snapshot().held, 1);
-        }
-        drop(peer);
-        assert!(matches!(
-            owner.wait(Duration::ZERO),
-            Err(Error::Unsupported)
-        ));
-        assert_eq!(gate.snapshot().held, 1);
-        drop(owner);
-        assert_eq!(gate.snapshot().held, 0);
     }
 }

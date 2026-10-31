@@ -6,6 +6,7 @@
 use super::{Handler, Pool, Shared};
 use crate::{Error, Result, core::ExitPolicy, endpoint::Endpoint, net::Stream};
 use std::{
+    path::Path,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -26,6 +27,23 @@ struct Signal {
     sender: mpsc::Sender<Event>,
     pending: AtomicBool,
     driver: Thread,
+}
+
+impl Signal {
+    /// Consume notifications covered by the next state observation.
+    fn clear(&self, events: impl Iterator<Item = Event>) -> Result<()> {
+        for event in events {
+            if let Event::Failed(error) = event {
+                return Err(error.into());
+            }
+        }
+        // Clear after draining: a wake consumed above must not leave pending
+        // set with an empty queue and suppress every later notification.
+        // Changes before this clear are covered by the next state observation;
+        // changes after it can enqueue a message before the driver waits.
+        self.pending.store(false, Ordering::Release);
+        Ok(())
+    }
 }
 
 impl Wake for Signal {
@@ -98,17 +116,35 @@ pub(super) fn run<H: Handler>(
             }));
         }
         drop(sender);
-        let result = drive(shared, policy, &signal, &events, start);
-        // Unblock each accept with a connection the stopped thread discards.
-        stop.store(true, Ordering::SeqCst);
-        for (endpoint, _, _) in &lanes {
-            let _ = Stream::connect(endpoint.path());
-        }
+        let result = {
+            // Stops the accept threads even when a policy or product callback
+            // panics, so the scope can join them and report the panic.
+            let _stopping = StopAccepting {
+                stop: &stop,
+                paths: lanes.map(|(endpoint, _, _)| endpoint.path()),
+            };
+            drive(shared, policy, &signal, &events, start)
+        };
         for thread in accepting {
             let _ = thread.join();
         }
         result
     })
+}
+
+struct StopAccepting<'a> {
+    stop: &'a AtomicBool,
+    paths: [&'a Path; 2],
+}
+
+impl Drop for StopAccepting<'_> {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        // Unblock each accept with a connection the stopped thread discards.
+        for path in self.paths {
+            let _ = Stream::connect(path);
+        }
+    }
 }
 
 fn drive<H: Handler>(
@@ -119,8 +155,9 @@ fn drive<H: Handler>(
     start: Instant,
 ) -> Result<()> {
     loop {
-        // Clear before observing, so a change racing the observation posts again.
-        signal.pending.store(false, Ordering::Release);
+        // Wakes already queued are covered by this observation; acting on them
+        // later would check the policy again with nothing changed.
+        signal.clear(events.try_iter())?;
         if shared.gate.tick(start.elapsed(), policy) {
             return Ok(());
         }
@@ -141,6 +178,9 @@ fn drive<H: Handler>(
 
 #[cfg(all(test, unix))]
 mod tests;
+
+#[cfg(test)]
+mod signal_tests;
 
 fn closed() -> Error {
     Error::Io(std::io::Error::new(

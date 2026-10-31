@@ -9,10 +9,11 @@ use canonic_process_kit::{
     server::{self, Context, Handler},
 };
 use serde_json::{Value, json};
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::{
     fs::OpenOptions,
     io::Read,
-    os::unix::process::CommandExt,
     path::Path,
     process::{Child, Command, Stdio},
     sync::{Arc, Condvar, Mutex},
@@ -29,10 +30,14 @@ pub(super) fn identity() -> Identity {
     }
 }
 pub(super) fn root() -> (tempfile::TempDir, Root) {
+    // macOS's per-user temporary directory is too long for socket paths.
+    #[cfg(unix)]
     let temp = tempfile::Builder::new()
         .prefix("acme-")
         .tempdir_in("/tmp")
         .unwrap();
+    #[cfg(windows)]
+    let temp = tempfile::Builder::new().prefix("acme-").tempdir().unwrap();
     let root = Root::explicit(temp.path().join("run")).unwrap();
     (temp, root)
 }
@@ -114,9 +119,15 @@ impl Handler for Acme {
         }
         if r.payload == "environment" {
             let stdin = std::io::stdin().read(&mut [0]).unwrap();
-            return Ok(
-                json!({"env":std::env::vars().collect::<std::collections::BTreeMap<_,_>>(),"stdin":stdin,"pid":std::process::id(),"sid":nix::unistd::getsid(None).unwrap().as_raw(),"group":nix::unistd::getpgrp().as_raw()}),
-            );
+            let report = json!({"env":std::env::vars().collect::<std::collections::BTreeMap<_,_>>(),"stdin":stdin,"pid":std::process::id()});
+            #[cfg(unix)]
+            let report = {
+                let mut report = report;
+                report["sid"] = json!(nix::unistd::getsid(None).unwrap().as_raw());
+                report["group"] = json!(nix::unistd::getpgrp().as_raw());
+                report
+            };
+            return Ok(report);
         }
         Ok(r.payload.clone())
     }
@@ -183,7 +194,15 @@ pub(super) fn child(root: &Root, mode: &str) -> ChildGuard {
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::inherit());
+    // Its own process group, so tests can signal the child and its descendants.
+    #[cfg(unix)]
     command.process_group(0);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        command.creation_flags(CREATE_NEW_PROCESS_GROUP);
+    }
     ChildGuard(command.spawn().unwrap())
 }
 pub(super) fn spawn(root: &Root) -> Spawn {
@@ -238,18 +257,25 @@ fn entry() {
                 canonic_process_kit::endpoint::Home::Account,
             )
             .unwrap();
+            #[cfg(unix)]
             let expected = nix::unistd::User::from_uid(nix::unistd::geteuid())
                 .unwrap()
                 .unwrap()
-                .dir
-                .join(".acme");
-            assert_eq!(actual.path(), expected);
-            assert_ne!(
-                actual.path(),
-                Path::new(&std::env::var_os("HOME").unwrap()).join(".acme")
-            );
+                .dir;
+            // The parent passes the profile its own environment named.
+            #[cfg(windows)]
+            let expected = std::path::PathBuf::from(std::env::var_os("ACME_PROFILE").unwrap());
+            assert_eq!(actual.path(), expected.join(".acme"));
+            for name in ["HOME", "USERPROFILE"] {
+                if let Some(changed) = std::env::var_os(name) {
+                    assert_ne!(actual.path(), Path::new(&changed).join(".acme"));
+                }
+            }
         }
-        "parent" => {
+        "parent" | "parent-on-input" => {
+            if mode == "parent-on-input" {
+                std::io::stdin().read_exact(&mut [0]).unwrap();
+            }
             let _reaper = spawn(&root).start_reaped().unwrap();
             ready(&root);
             let _ = std::io::stdin().read(&mut [0]);

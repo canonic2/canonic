@@ -6,24 +6,38 @@ use canonic_process_kit::{
     core::Admission,
     endpoint::{self, Lease},
     frame,
+    net::{Listener, Stream},
     protocol::{Code, Reply},
     server,
 };
 use serde_json::{Value, json};
+use std::{io::Write, sync::Arc, time::Duration};
+#[cfg(unix)]
 use std::{
-    io::Write,
-    os::unix::{
-        fs::{MetadataExt, PermissionsExt},
-        net::UnixStream,
-    },
-    sync::Arc,
-    time::Duration,
+    os::unix::fs::{MetadataExt, PermissionsExt},
+    path::Path,
 };
+
+/// A private socket at `path`, left behind when dropped.
+#[cfg(unix)]
+fn foreign_listener(path: &Path) -> Listener {
+    let listener = Listener::bind(path).unwrap();
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    listener
+}
+
+/// The live endpoint still answers: replacement attempts left it in place.
+fn still_bound(root: &endpoint::Root, endpoint: &endpoint::Endpoint<'_>) {
+    let connection = endpoint::connect(root, false, Duration::from_secs(1)).unwrap();
+    wait(|| endpoint.listener().accept().ok());
+    drop(connection);
+}
 
 #[test]
 #[cfg(target_os = "macos")]
 fn macos_backlog_and_stale_socket_refusals_share_the_starting_outcome() {
     use nix::sys::socket::{Backlog, listen};
+    use std::os::unix::net::UnixStream;
 
     let (_temp, root) = root();
     let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
@@ -55,9 +69,7 @@ fn macos_backlog_and_stale_socket_refusals_share_the_starting_outcome() {
     drop(connection);
     drop(queued);
     drop(endpoint);
-    let stale = std::os::unix::net::UnixListener::bind(root.socket(false)).unwrap();
-    std::fs::set_permissions(root.socket(false), std::fs::Permissions::from_mode(0o600)).unwrap();
-    drop(stale);
+    drop(foreign_listener(&root.socket(false)));
     let stale_error = UnixStream::connect(root.socket(false)).unwrap_err();
     assert_eq!(stale_error.raw_os_error(), backlog_error.raw_os_error());
     assert!(matches!(
@@ -158,6 +170,7 @@ fn invalid_frames(control_lane: bool) -> Vec<(Vec<u8>, &'static str)> {
 }
 
 #[test]
+#[cfg(unix)]
 fn real_socket_checks_peer_and_forged_other_uid_is_refused() {
     let (_temp, root) = root();
     let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
@@ -191,12 +204,13 @@ fn absent_inspection_creates_nothing_and_long_paths_are_refused() {
     assert!(!root.path().exists());
     assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
     assert!(matches!(
-        endpoint::Root::explicit(format!("/tmp/{}", "a".repeat(110))),
+        endpoint::Root::explicit(temp.path().join("a".repeat(110))),
         Err(Error::PathTooLong)
     ));
 }
 
 #[test]
+#[cfg(unix)]
 fn private_roots_refuse_symlinks_and_permissive_directories() {
     let (temp, root) = root();
     root.prepare().unwrap();
@@ -211,6 +225,7 @@ fn private_roots_refuse_symlinks_and_permissive_directories() {
 }
 
 #[test]
+#[cfg(unix)]
 fn owned_socket_permissions_in_progress_require_a_live_lease_and_never_connect() {
     let (_temp, root) = root();
     let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
@@ -234,18 +249,23 @@ fn owned_socket_permissions_in_progress_require_a_live_lease_and_never_connect()
 fn stale_socket_replacement_and_live_lease_preservation() {
     let (_temp, root) = root();
     root.prepare().unwrap();
-    let stale = std::os::unix::net::UnixListener::bind(root.socket(false)).unwrap();
-    std::fs::set_permissions(root.socket(false), std::fs::Permissions::from_mode(0o600)).unwrap();
-    drop(stale);
+    // A plain bind on Windows gets the creator's default owner, which is the
+    // Administrators group when elevated, so the library rightly refuses it.
+    // The killed-manager test covers stale sockets a manager restricted.
+    #[cfg(unix)]
+    drop(foreign_listener(&root.socket(false)));
     let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
     let endpoint = lease.bind(false).unwrap();
+    #[cfg(unix)]
     let inode = std::fs::metadata(root.socket(false)).unwrap().ino();
     assert!(matches!(lease.bind(false), Err(Error::EndpointBound)));
     assert!(matches!(
         Lease::acquire(&root, Duration::ZERO),
         Err(Error::AlreadyRunning)
     ));
+    #[cfg(unix)]
     assert_eq!(std::fs::metadata(root.socket(false)).unwrap().ino(), inode);
+    still_bound(&root, &endpoint);
     endpoint.unlink().unwrap();
     assert!(root.leased().unwrap());
     assert!(matches!(
@@ -263,11 +283,51 @@ fn cleanup_preserves_a_replaced_socket_identity() {
     let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
     let endpoint = lease.bind(false).unwrap();
     std::fs::remove_file(root.socket(false)).unwrap();
-    let replacement = std::os::unix::net::UnixListener::bind(root.socket(false)).unwrap();
+    let replacement = Listener::bind(root.socket(false)).unwrap();
     endpoint.unlink().unwrap();
     drop(endpoint);
     assert!(root.socket(false).exists());
     drop(replacement);
+}
+
+#[test]
+fn connections_to_a_listener_that_never_accepts_end_at_their_deadlines() {
+    let (_temp, root) = root();
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    let _endpoint = lease.bind(true).unwrap();
+    let bound = Duration::from_secs(2);
+    let mut queued = vec![];
+    let mut unfinished = 0;
+    // Fill the backlog: later attempts are refused or never complete.
+    while unfinished < 8 && queued.len() < 20_000 {
+        let started = std::time::Instant::now();
+        let result = endpoint::connect(&root, true, Duration::from_millis(100));
+        assert!(started.elapsed() < bound, "{result:?}");
+        match result {
+            Ok(stream) => queued.push(stream),
+            Err(Error::Starting | Error::Capacity) => unfinished += 1,
+            Err(error) => panic!("{error}"),
+        }
+    }
+    assert!(
+        unfinished > 0,
+        "the backlog never filled after {} connections",
+        queued.len()
+    );
+    let started = std::time::Instant::now();
+    let probe = client::connect(
+        &root,
+        None,
+        &client::Options {
+            readiness: Duration::from_millis(100),
+            ..options()
+        },
+    );
+    assert!(started.elapsed() < bound, "{probe:?}");
+    assert!(
+        matches!(probe, Err(Error::Starting | Error::Capacity)),
+        "{probe:?}"
+    );
 }
 
 #[test]
@@ -335,6 +395,70 @@ fn queued_frame_budget_starts_when_a_worker_takes_the_connection() {
 }
 
 #[test]
+#[cfg(windows)]
+fn windows_arrivals_during_the_exit_decision_are_served_and_postpone_exit() {
+    use canonic_process_kit::core::ExitPolicy;
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+        mpsc,
+    };
+
+    /// Holds only the first decision open; later decisions exit at once.
+    struct Deciding {
+        entered: mpsc::Sender<()>,
+        release: Mutex<mpsc::Receiver<()>>,
+        decisions: AtomicUsize,
+    }
+    impl ExitPolicy for Deciding {
+        fn exit(&self, _: Duration) -> bool {
+            if self.decisions.fetch_add(1, Ordering::SeqCst) == 0 {
+                self.entered.send(()).unwrap();
+                self.release
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap();
+            }
+            true
+        }
+        fn next_check(&self, _: Duration) -> Option<Duration> {
+            None
+        }
+    }
+    let (_temp, root) = root();
+    let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+    let handler = Arc::new(Acme::default());
+    let observed = handler.clone();
+    let (entered, waiting) = mpsc::channel();
+    let (release, resume) = mpsc::channel();
+    let server = std::thread::spawn(move || {
+        server::serve(
+            lease,
+            identity(),
+            Admission::new(),
+            handler,
+            &Deciding {
+                entered,
+                release: Mutex::new(resume),
+                decisions: AtomicUsize::new(0),
+            },
+            server::Options::default(),
+        )
+    });
+    waiting.recv_timeout(Duration::from_secs(5)).unwrap();
+    // Each lane has its own accept thread, so arrivals are admitted while the
+    // policy decides; the admission cancels that decision's exit.
+    let reply = client::call(&root, &request(json!("arrival")), &options()).unwrap();
+    release.send(()).unwrap();
+    server.join().unwrap().unwrap();
+    assert_eq!(reply.data, "arrival");
+    assert_eq!(observed.dispatched.load(Ordering::SeqCst), 1);
+    assert!(!root.leased().unwrap());
+}
+
+#[test]
+#[cfg(unix)]
 fn shutdown_refuses_arrivals_during_the_exit_decision() {
     use canonic_process_kit::core::ExitPolicy;
     use std::sync::{Mutex, mpsc};
@@ -581,6 +705,8 @@ fn controls_ignore_product_version_and_unknown_actions_have_no_effects() {
 fn real_oversize_and_idle_read_deadline_release_connection_slots() {
     let (_temp, root) = root();
     let gate = Admission::new();
+    let io_timeout = Duration::from_millis(200);
+    let allowance = Duration::from_millis(100);
     let server = thread_server(
         &root,
         &gate,
@@ -589,18 +715,25 @@ fn real_oversize_and_idle_read_deadline_release_connection_slots() {
             workers: 1,
             capacity: 1,
             frame_limit: 1024,
-            io_timeout: Duration::from_millis(100),
+            io_timeout,
             ..Default::default()
         },
     );
     ready(&root);
-    let mut stream = UnixStream::connect(root.socket(false)).unwrap();
+    let mut stream = Stream::connect(root.socket(false)).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap();
-    stream.write_all(&1025_u32.to_be_bytes()).unwrap();
+    let mut oversized = 1025_u32.to_be_bytes().to_vec();
+    oversized.extend_from_slice(&[0; 1025]);
+    let oversized_started = std::time::Instant::now();
+    stream.write_all(&oversized).unwrap();
     let reply: Reply = frame::read_json(&mut stream, 1024).unwrap();
     assert_eq!(reply.code, Some(Code::FrameTooLarge));
+    // Keep the sender open after reading the refusal: cleanup must not wait
+    // for another full frame budget or for the client to close.
+    wait(|| (gate.snapshot().work == 0).then_some(()));
+    let oversized_elapsed = oversized_started.elapsed();
     drop(stream);
     wait(|| {
         (client::control(&root, &control(&root, "status"), &options())
@@ -609,9 +742,11 @@ fn real_oversize_and_idle_read_deadline_release_connection_slots() {
             == 0)
             .then_some(())
     });
-    let silent = UnixStream::connect(root.socket(false)).unwrap();
+    let silent_started = std::time::Instant::now();
+    let silent = Stream::connect(root.socket(false)).unwrap();
     wait(|| (gate.snapshot().work == 1).then_some(()));
     wait(|| (gate.snapshot().work == 0).then_some(()));
+    let silent_elapsed = silent_started.elapsed();
     drop(silent);
     assert_eq!(
         client::call(&root, &request(json!("ok")), &options())
@@ -621,6 +756,14 @@ fn real_oversize_and_idle_read_deadline_release_connection_slots() {
     );
     stop(&root, "drain");
     server.join().unwrap().unwrap();
+    assert!(
+        oversized_elapsed < allowance,
+        "oversized frame held its slot for {oversized_elapsed:?}"
+    );
+    assert!(
+        silent_elapsed < io_timeout + allowance,
+        "silent frame held its slot for {silent_elapsed:?}"
+    );
 }
 
 #[test]
@@ -631,7 +774,7 @@ fn lost_admission_ack_is_ambiguous_and_never_replayed() {
     let path = root.clone();
     let caller =
         std::thread::spawn(move || client::call(&path, &request(json!("acme")), &options()));
-    let (mut stream, _) = wait(|| endpoint.listener().accept().ok());
+    let mut stream = accept_blocking(&endpoint);
     let r: canonic_process_kit::protocol::Request =
         frame::read_json(&mut stream, frame::DEFAULT_LIMIT).unwrap();
     assert_eq!(r.request_id, "acme-request");
@@ -642,10 +785,19 @@ fn lost_admission_ack_is_ambiguous_and_never_replayed() {
     assert!(endpoint.listener().accept().is_err());
 }
 
-fn acknowledge_submission(
-    endpoint: &canonic_process_kit::endpoint::Endpoint<'_>,
-) -> canonic_process_kit::net::Stream {
-    let (mut stream, _) = wait(|| endpoint.listener().accept().ok());
+/// Accept from the endpoint's nonblocking listener. Accepted sockets can keep
+/// the listener's mode, so reads switch to blocking with a bounded timeout.
+fn accept_blocking(endpoint: &canonic_process_kit::endpoint::Endpoint<'_>) -> Stream {
+    let (stream, _) = wait(|| endpoint.listener().accept().ok());
+    stream.set_nonblocking(false).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    stream
+}
+
+fn acknowledge_submission(endpoint: &canonic_process_kit::endpoint::Endpoint<'_>) -> Stream {
+    let mut stream = accept_blocking(endpoint);
     let r: canonic_process_kit::protocol::Request =
         frame::read_json(&mut stream, frame::DEFAULT_LIMIT).unwrap();
     assert_eq!(r.request_id, "acme-request");

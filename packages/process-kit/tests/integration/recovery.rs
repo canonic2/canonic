@@ -438,7 +438,7 @@ fn recovery_can_return_a_durable_result_without_replaying_or_refuse_unsafe_repla
 fn owner_channel_data_is_not_death_and_invalid_recovery_bounds_start_nothing() {
     use std::io::Write;
     let gate = Admission::new();
-    let (stream, mut peer) = std::os::unix::net::UnixStream::pair().unwrap();
+    let (stream, mut peer) = canonic_process_kit::net::Stream::pair().unwrap();
     let mut owner = owner::Connection::new(stream, gate.hold().unwrap()).unwrap();
     peer.write_all(b"unexpected").unwrap();
     assert!(matches!(

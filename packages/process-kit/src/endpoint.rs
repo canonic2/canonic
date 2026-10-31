@@ -1,8 +1,8 @@
 //! Private roots, peer credentials, kernel leases and identity-owned sockets.
 //!
 //! Unix checks ownership and modes on every path and verifies peer credentials.
-//! Windows roots and peers return `Unsupported` until owner and access-list
-//! validation enforce the same private-user boundary.
+//! Windows checks each path's owner, protected access list and integrity label,
+//! and verifies the peer process's token user.
 
 use crate::{
     Error, Result,
@@ -32,13 +32,9 @@ impl Root {
     /// Resolve a default root beneath the account home, or explicitly opt into `HOME`.
     ///
     /// # Errors
-    /// Returns `Unsupported` on Windows without `unstable-windows`, or identity
-    /// lookup, missing-home, invalid relative path or path-length errors.
+    /// Returns identity lookup, missing-home, invalid relative path or
+    /// path-length errors.
     pub fn for_user(relative: &Path, home: Home) -> Result<Self> {
-        #[cfg(windows)]
-        if !crate::WINDOWS_ENABLED {
-            return Err(Error::Unsupported);
-        }
         if relative.as_os_str().is_empty()
             || relative
                 .components()
@@ -52,14 +48,9 @@ impl Root {
     /// Select an independent explicit root. Relative paths become absolute.
     ///
     /// # Errors
-    /// Returns `Unsupported` on Windows without `unstable-windows`, or I/O or
-    /// path-length errors. Parent components and symlinks are refused, as are
-    /// Windows roots that are not on a local drive letter.
+    /// Returns I/O or path-length errors. Parent components and symlinks are
+    /// refused, as are Windows roots that are not on a local drive letter.
     pub fn explicit(path: impl AsRef<Path>) -> Result<Self> {
-        #[cfg(windows)]
-        if !crate::WINDOWS_ENABLED {
-            return Err(Error::Unsupported);
-        }
         let path = std::path::absolute(path)?;
         if path.components().any(|c| matches!(c, Component::ParentDir)) || !local_prefix(&path) {
             return Err(Error::PrivatePath);
@@ -359,6 +350,19 @@ fn owned_socket(path: &Path) -> io::Result<Option<Identity>> {
     crate::windows::socket_identity(path)
 }
 
+/// Remove a socket whose identity the caller has just checked.
+#[cfg(unix)]
+fn remove_socket(path: &Path, _: Identity) -> io::Result<()> {
+    fs::remove_file(path)
+}
+
+/// Remove a socket, rechecking its identity on the deleting handle. The name
+/// disappears at once, so concurrent clients see it absent rather than denied.
+#[cfg(windows)]
+fn remove_socket(path: &Path, identity: Identity) -> io::Result<()> {
+    crate::windows::remove_socket(path, identity)
+}
+
 /// Restrict a newly bound socket before publishing it.
 #[cfg(unix)]
 fn restrict_socket(path: &Path) -> io::Result<()> {
@@ -401,13 +405,10 @@ pub fn check_peer(stream: &Stream) -> Result<()> {
 /// peer process's token user.
 ///
 /// # Errors
-/// Returns `Unsupported` without `unstable-windows`, `Peer` when the peer
-/// process belongs to another user or cannot be queried, or the socket error.
+/// Returns `Peer` when the peer process belongs to another user or cannot be
+/// queried, or the socket error.
 #[cfg(windows)]
 pub fn check_peer(stream: &Stream) -> Result<()> {
-    if !crate::WINDOWS_ENABLED {
-        return Err(Error::Unsupported);
-    }
     if crate::windows::peer_is_user(stream)? {
         Ok(())
     } else {
@@ -485,8 +486,8 @@ impl Lease {
         let path = self.root.socket(control);
         match fs::symlink_metadata(&path) {
             Ok(_) => {
-                private(&path, true)?;
-                fs::remove_file(&path)?;
+                let identity = private(&path, true)?;
+                remove_socket(&path, identity)?;
             }
             Err(e) if e.kind() == io::ErrorKind::NotFound => {}
             Err(e) => return Err(e.into()),
@@ -532,7 +533,7 @@ impl Endpoint<'_> {
         self.lease.verify()?;
         match owned_socket(&self.path) {
             Ok(Some(identity)) if identity == self.identity => {
-                fs::remove_file(&self.path)?;
+                remove_socket(&self.path, identity)?;
             }
             Ok(_) => {}
             Err(e) if e.kind() == io::ErrorKind::NotFound => {}
@@ -556,18 +557,22 @@ impl Drop for Endpoint<'_> {
 /// errors. An ambiguous refused connection to a leased endpoint is `Starting`;
 /// on macOS this includes a full backlog as well as a stale/closed listener.
 pub fn connect(root: &Root, control: bool, timeout: Duration) -> Result<Stream> {
-    match private(root.path(), false) {
+    if timeout.is_zero() {
+        return Err(io::Error::from(io::ErrorKind::InvalidInput).into());
+    }
+    let until = Instant::now() + timeout;
+    match private_for_connect(root.path(), false, until) {
         Ok(_) => {}
         Err(Error::Io(e)) if e.kind() == io::ErrorKind::NotFound => return Err(Error::Absent),
         Err(e) => return Err(e),
     }
-    match private(&root.socket(control), true) {
+    match private_for_connect(&root.socket(control), true, until) {
         Ok(_) => {}
         Err(Error::PrivatePath) => {
             // bind publishes an owned socket before it is restricted. A live
             // lease proves startup may still be preparing that endpoint. Do not
             // connect until a later probe validates private permissions.
-            if owned_socket(&root.socket(control))?.is_some() && root.leased()? {
+            if owned_socket_for_connect(&root.socket(control), until)?.is_some() && root.leased()? {
                 return Err(Error::Starting);
             }
             return Err(Error::PrivatePath);
@@ -581,13 +586,17 @@ pub fn connect(root: &Root, control: bool, timeout: Duration) -> Result<Stream> 
         }
         Err(e) => return Err(e),
     }
-    let stream = match connect_bounded(&root.socket(control), timeout) {
+    let remaining = until.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return Err(Error::Capacity);
+    }
+    let stream = match connect_bounded(&root.socket(control), remaining) {
         Ok(stream) => stream,
         Err(e)
             if matches!(
                 e.kind(),
                 io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
-            ) =>
+            ) || queue_full(&e) =>
         {
             return Err(Error::Capacity);
         }
@@ -611,9 +620,49 @@ pub fn connect(root: &Root, control: bool, timeout: Duration) -> Result<Stream> 
     Ok(stream)
 }
 
+fn private_for_connect(path: &Path, socket: bool, until: Instant) -> Result<Identity> {
+    #[cfg(windows)]
+    {
+        use crate::windows::Kind;
+        let kind = if socket {
+            Kind::Socket
+        } else {
+            Kind::Directory
+        };
+        crate::windows::private_until(path, kind, until)?.ok_or(Error::PrivatePath)
+    }
+    #[cfg(unix)]
+    {
+        let _ = until;
+        private(path, socket)
+    }
+}
+
+fn owned_socket_for_connect(path: &Path, until: Instant) -> io::Result<Option<Identity>> {
+    #[cfg(windows)]
+    {
+        crate::windows::socket_identity_until(path, until)
+    }
+    #[cfg(unix)]
+    {
+        let _ = until;
+        owned_socket(path)
+    }
+}
+
 #[cfg(windows)]
 fn connect_bounded(path: &Path, timeout: Duration) -> io::Result<Stream> {
     crate::windows::connect(path, timeout)
+}
+
+#[cfg(windows)]
+fn queue_full(error: &io::Error) -> bool {
+    crate::windows::queue_full(error)
+}
+
+#[cfg(unix)]
+fn queue_full(_: &io::Error) -> bool {
+    false
 }
 
 #[cfg(unix)]
@@ -685,33 +734,9 @@ fn wait_for_connect(
     }
 }
 
-#[cfg(all(test, windows, not(feature = "unstable-windows")))]
-mod windows_tests {
-    //! Without `unstable-windows`, Windows cannot select a root or accept a peer.
-
-    use super::*;
-
-    #[test]
-    fn windows_roots_and_peers_refuse_before_accessing_paths_or_account_environment() {
-        assert!(matches!(crate::supported(), Err(Error::Unsupported)));
-        assert!(matches!(
-            Root::explicit(r"C:\Acme\runtime"),
-            Err(Error::Unsupported)
-        ));
-        for home in [Home::Account, Home::Environment] {
-            assert!(matches!(
-                Root::for_user(Path::new("Acme"), home),
-                Err(Error::Unsupported)
-            ));
-        }
-        let (stream, _peer) = Stream::pair().unwrap();
-        assert!(matches!(check_peer(&stream), Err(Error::Unsupported)));
-    }
-}
-
-#[cfg(all(test, windows, feature = "unstable-windows"))]
+#[cfg(all(test, windows))]
 mod windows_roots {
-    //! Root resolution on a Windows host with the adapter enabled.
+    //! Root resolution on a Windows host.
 
     use super::*;
 
@@ -733,6 +758,43 @@ mod windows_roots {
         drop(client);
         endpoint.unlink().unwrap();
         assert!(!root.socket(false).exists());
+    }
+
+    #[test]
+    #[ignore = "mapping the administrative share needs an elevated session"]
+    fn a_mapped_network_drive_root_is_refused_without_changes() {
+        struct Mapping(String);
+        impl Drop for Mapping {
+            fn drop(&mut self) {
+                let _ = std::process::Command::new("net")
+                    .args(["use", &self.0, "/delete", "/y"])
+                    .stdout(std::process::Stdio::null())
+                    .status();
+            }
+        }
+        let temporary = tempfile::tempdir().unwrap();
+        let relative = temporary.path().strip_prefix(r"C:\").unwrap();
+        // A letter can be free yet keep a remembered mapping, which refuses `net use`.
+        let drive = ('M'..='Z')
+            .rev()
+            .map(|letter| format!("{letter}:"))
+            .filter(|drive| !Path::new(&format!(r"{drive}\")).exists())
+            .find(|drive| {
+                std::process::Command::new("net")
+                    .args(["use", drive, r"\\localhost\C$", "/persistent:no"])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .unwrap()
+                    .success()
+            })
+            .expect("no drive letter could map the administrative share");
+        let _mapping = Mapping(drive.clone());
+        let path = Path::new(&format!(r"{drive}\")).join(relative).join("acme");
+        assert!(path.parent().unwrap().is_dir(), "{}", path.display());
+        let refused = Root::explicit(&path).and_then(|root| root.prepare());
+        assert!(matches!(refused, Err(Error::PrivatePath)), "{refused:?}");
+        assert!(!temporary.path().join("acme").exists());
     }
 
     #[test]

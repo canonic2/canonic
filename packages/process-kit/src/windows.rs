@@ -24,13 +24,15 @@ use std::{
     time::{Duration, Instant},
 };
 use windows_sys::Win32::{
-    Foundation::{GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, LocalFree},
+    Foundation::{
+        ERROR_ACCESS_DENIED, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, LocalFree,
+    },
     Networking::WinSock::{
         AF_UNIX, FD_SET, FIONBIO, INVALID_SOCKET, MSG_PEEK, POLLRDNORM, SIO_AF_UNIX_GETPEERPID,
         SO_ERROR, SOCK_STREAM, SOCKADDR, SOCKADDR_UN, SOCKET, SOCKET_ERROR, SOL_SOCKET, TIMEVAL,
-        WSA_FLAG_NO_HANDLE_INHERIT, WSA_FLAG_OVERLAPPED, WSADATA, WSAEWOULDBLOCK, WSAGetLastError,
-        WSAIoctl, WSAPOLLFD, WSAPoll, WSASocketW, WSAStartup, connect as wsa_connect, getsockopt,
-        ioctlsocket, recv, select,
+        WSA_FLAG_NO_HANDLE_INHERIT, WSA_FLAG_OVERLAPPED, WSADATA, WSAEINVAL, WSAENOBUFS,
+        WSAEWOULDBLOCK, WSAGetLastError, WSAIoctl, WSAPOLLFD, WSAPoll, WSASocketW, WSAStartup,
+        connect as wsa_connect, getsockopt, ioctlsocket, recv, select,
     },
     Security::{
         ACCESS_ALLOWED_ACE, ACE_HEADER, ACL, ACL_SIZE_INFORMATION, AclSizeInformation,
@@ -47,13 +49,15 @@ use windows_sys::Win32::{
         TOKEN_QUERY, TOKEN_USER, TokenUser,
     },
     Storage::FileSystem::{
-        CreateDirectoryW, CreateFileW, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
-        FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FILE_FLAG_BACKUP_SEMANTICS,
-        FILE_FLAG_OPEN_REPARSE_POINT, FILE_ID_INFO, FILE_INFO_BY_HANDLE_CLASS,
-        FILE_NAME_NORMALIZED, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
-        FILE_SHARE_WRITE, FILE_STANDARD_INFO, FileAttributeTagInfo, FileIdInfo, FileStandardInfo,
-        GetDriveTypeW, GetFileInformationByHandleEx, GetFinalPathNameByHandleW, OPEN_ALWAYS,
-        READ_CONTROL, VOLUME_NAME_DOS, WRITE_DAC, WRITE_OWNER,
+        CreateDirectoryW, CreateFileW, DELETE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
+        FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FILE_DISPOSITION_FLAG_DELETE,
+        FILE_DISPOSITION_FLAG_POSIX_SEMANTICS, FILE_DISPOSITION_INFO_EX,
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_ID_INFO,
+        FILE_INFO_BY_HANDLE_CLASS, FILE_NAME_NORMALIZED, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
+        FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_STANDARD_INFO, FileAttributeTagInfo,
+        FileDispositionInfoEx, FileIdInfo, FileStandardInfo, GetDriveTypeW,
+        GetFileInformationByHandleEx, GetFinalPathNameByHandleW, OPEN_ALWAYS, READ_CONTROL,
+        SetFileInformationByHandle, VOLUME_NAME_DOS, WRITE_DAC, WRITE_OWNER,
     },
     System::{
         SystemServices::{
@@ -345,15 +349,47 @@ pub(crate) fn open_anchor(path: &Path) -> io::Result<File> {
 
 /// Open a path itself, never a reparse target, for inspection.
 fn open(path: &Path, write_security: bool) -> io::Result<File> {
+    open_until(path, write_security, Instant::now() + DELETION_SETTLE)
+}
+
+fn open_until(path: &Path, write_security: bool, until: Instant) -> io::Result<File> {
     let mut access = READ_CONTROL | FILE_READ_ATTRIBUTES;
     if write_security {
         access |= WRITE_DAC | WRITE_OWNER;
     }
-    OpenOptions::new()
-        .access_mode(access)
-        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
-        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
-        .open(path)
+    let deadline = until.min(Instant::now() + DELETION_SETTLE);
+    let mut delay = Duration::from_millis(1);
+    loop {
+        let opened = OpenOptions::new()
+            .access_mode(access)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path);
+        match opened {
+            Err(error)
+                if error.raw_os_error() == i32::try_from(ERROR_ACCESS_DENIED).ok()
+                    && settle(deadline, &mut delay) => {}
+            other => return other,
+        }
+    }
+}
+
+/// How long to retry while another process finishes deleting a socket. A
+/// file being deleted refuses opens with access denied, and a socket refuses
+/// connects with an invalid-argument error, until the deleting handle closes;
+/// the path then is absent or holds a replacement. The bound keeps a lasting
+/// denial a prompt error.
+const DELETION_SETTLE: Duration = Duration::from_millis(100);
+
+/// Sleep with capped backoff before another attempt, unless `deadline` passed.
+fn settle(deadline: Instant, delay: &mut Duration) -> bool {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return false;
+    }
+    std::thread::sleep((*delay).min(remaining));
+    *delay = (*delay * 2).min(Duration::from_millis(10));
+    true
 }
 
 /// Read one fixed-size information class.
@@ -559,7 +595,16 @@ fn is_private_descriptor(file: &File) -> io::Result<bool> {
 /// Returns its identity, or `None` when it is the wrong type, remote or not
 /// private. Missing paths return the `NotFound` error.
 pub(crate) fn private(path: &Path, kind: Kind) -> io::Result<Option<Identity>> {
-    let file = open(path, false)?;
+    private_until(path, kind, Instant::now() + DELETION_SETTLE)
+}
+
+/// Validate a path without retrying deletion beyond the caller's deadline.
+pub(crate) fn private_until(
+    path: &Path,
+    kind: Kind,
+    until: Instant,
+) -> io::Result<Option<Identity>> {
+    let file = open_until(path, false, until)?;
     let info = info(&file)?;
     let shape = match kind {
         Kind::Directory => info.directory && info.tag.is_none(),
@@ -591,8 +636,42 @@ pub(crate) fn path_identity(path: &Path) -> io::Result<Identity> {
 /// Identity of an `AF_UNIX` socket file, or `None` for anything else. Callers
 /// have validated the private root, which only the user can write into.
 pub(crate) fn socket_identity(path: &Path) -> io::Result<Option<Identity>> {
-    let info = info(&open(path, false)?)?;
+    socket_identity_until(path, Instant::now() + DELETION_SETTLE)
+}
+
+/// Inspect a socket without retrying deletion beyond the caller's deadline.
+pub(crate) fn socket_identity_until(path: &Path, until: Instant) -> io::Result<Option<Identity>> {
+    let info = info(&open_until(path, false, until)?)?;
     Ok((info.tag == Some(IO_REPARSE_TAG_AF_UNIX)).then_some(info.identity))
+}
+
+/// Remove the socket at `path` when it still has `expected` identity, checked
+/// on the same handle that deletes it. POSIX semantics remove the name at once
+/// even while other processes hold the file open; an ordinary delete leaves it
+/// pending until they close, and opening a pending file reports access denied.
+pub(crate) fn remove_socket(path: &Path, expected: Identity) -> io::Result<()> {
+    let file = OpenOptions::new()
+        .access_mode(DELETE | FILE_READ_ATTRIBUTES)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)?;
+    let info = info(&file)?;
+    if info.tag != Some(IO_REPARSE_TAG_AF_UNIX) || info.identity != expected {
+        return Ok(());
+    }
+    let disposition = FILE_DISPOSITION_INFO_EX {
+        Flags: FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_POSIX_SEMANTICS,
+    };
+    // SAFETY: the handle has DELETE access, and the pointer and size describe
+    // `disposition`, which outlives the call.
+    check(unsafe {
+        SetFileInformationByHandle(
+            file.as_raw_handle(),
+            FileDispositionInfoEx,
+            (&raw const disposition).cast(),
+            u32::try_from(size_of::<FILE_DISPOSITION_INFO_EX>()).unwrap_or(u32::MAX),
+        )
+    })
 }
 
 /// Replace a bound socket's inherited descriptor and creator-default owner
@@ -680,7 +759,12 @@ pub(crate) fn peer_is_user(stream: &Stream) -> io::Result<bool> {
     let process = unsafe { OwnedHandle::from_raw_handle(process) };
     Ok(open_token(process.as_raw_handle())
         .and_then(|token| token_user(&token))
-        .is_ok_and(|sid| user().is_ok_and(|user| sid == *user)))
+        .is_ok_and(|sid| is_user(&sid)))
+}
+
+/// Whether a peer's token user is the effective user; a lookup failure refuses.
+fn is_user(peer: &Sid) -> bool {
+    user().is_ok_and(|user| peer == user)
 }
 
 fn startup() {
@@ -726,6 +810,19 @@ pub(crate) fn connect(path: &Path, timeout: Duration) -> io::Result<Stream> {
     let length = i32::try_from(size_of::<u16>() + bytes.len() + 1)
         .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
     startup();
+    let settle_until = deadline.min(Instant::now() + DELETION_SETTLE);
+    let mut delay = Duration::from_millis(1);
+    loop {
+        match connect_once(&address, length, deadline) {
+            Err(error)
+                if error.raw_os_error() == Some(WSAEINVAL) && settle(settle_until, &mut delay) => {}
+            other => return other,
+        }
+    }
+}
+
+/// One connection attempt on a new socket.
+fn connect_once(address: &SOCKADDR_UN, length: i32, deadline: Instant) -> io::Result<Stream> {
     // SAFETY: creates a new socket; the result is checked before use.
     let raw = unsafe {
         WSASocketW(
@@ -746,7 +843,7 @@ pub(crate) fn connect(path: &Path, timeout: Duration) -> io::Result<Stream> {
     set_nonblocking(raw, true)?;
     // SAFETY: `address` is a valid SOCKADDR_UN and `length` covers the family,
     // the path and its terminator.
-    let result = unsafe { wsa_connect(raw, (&raw const address).cast::<SOCKADDR>(), length) };
+    let result = unsafe { wsa_connect(raw, ptr::from_ref(address).cast::<SOCKADDR>(), length) };
     if result == SOCKET_ERROR {
         // SAFETY: reads this thread's last Winsock error.
         let error = unsafe { WSAGetLastError() };
@@ -757,6 +854,12 @@ pub(crate) fn connect(path: &Path, timeout: Duration) -> io::Result<Stream> {
     }
     set_nonblocking(raw, false)?;
     Ok(stream)
+}
+
+/// Windows refuses a connection to a listener whose queue is full with
+/// `WSAENOBUFS`, where Unix reports a refusal or leaves the connect pending.
+pub(crate) fn queue_full(error: &io::Error) -> bool {
+    error.raw_os_error() == Some(WSAENOBUFS)
 }
 
 fn wait_connected(socket: SOCKET, deadline: Instant) -> io::Result<()> {

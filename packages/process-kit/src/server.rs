@@ -435,7 +435,28 @@ fn refuse_until<H>(
         stream,
         &response(s, id, Some(false), Some(code), Value::Null),
         until,
-    )
+    )?;
+    #[cfg(windows)]
+    finish_refusal(stream, until);
+    Ok(())
+}
+
+/// Windows resets a connection closed with request bytes still unread, which
+/// discards a refusal the client has not read yet. Ending this side and
+/// briefly draining input lets the client receive the refusal. Cleanup has a
+/// short cap independent of the worker's frame budget, and never extends the
+/// refusal's write deadline.
+#[cfg(windows)]
+fn finish_refusal(stream: &Stream, until: Instant) {
+    if stream.shutdown(std::net::Shutdown::Write).is_err() {
+        return;
+    }
+    let mut reader = Deadline {
+        stream,
+        until: until.min(Instant::now() + ACCEPT_REFUSAL_TIMEOUT),
+    };
+    let mut discarded = [0_u8; 4096];
+    while matches!(std::io::Read::read(&mut reader, &mut discarded), Ok(read) if read > 0) {}
 }
 
 fn handle<H: Handler>(s: &Shared<H>, job: &mut Job, control_lane: bool) -> Result<()> {
@@ -768,6 +789,42 @@ mod tests {
         ) -> std::result::Result<Value, protocol::ProductError> {
             Err(protocol::ProductError(Value::Null))
         }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn unix_refusals_do_not_read_input_while_the_client_stays_open() {
+        use std::io::Read;
+
+        let shared = Shared {
+            identity: Identity::new("1.0.0".into(), 1, vec![]).unwrap(),
+            version: None,
+            gate: Admission::new(),
+            handler: Arc::new(Unused),
+            options: Options::default(),
+            ordinary_count: Arc::new(AtomicUsize::new(0)),
+            control_count: Arc::new(AtomicUsize::new(0)),
+            connections: Slots::new(0),
+        };
+        let (mut stream, mut peer) = Stream::pair().unwrap();
+        peer.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+        peer.write_all(b"acme").unwrap();
+        refuse_until(
+            &shared,
+            &mut &stream,
+            "",
+            Code::Capacity,
+            Instant::now() + Duration::from_secs(1),
+        )
+        .unwrap();
+        let reply: Reply = frame::read_json(&mut peer, frame::DEFAULT_LIMIT).unwrap();
+        assert_eq!(reply.code, Some(Code::Capacity));
+        // No request bytes should be consumed by Unix refusal cleanup. Use a
+        // nonblocking read so the assertion detects consumption without a timer.
+        stream.set_nonblocking(true).unwrap();
+        let mut unread = [0; 4];
+        stream.read_exact(&mut unread).unwrap();
+        assert_eq!(&unread, b"acme");
     }
 
     #[test]

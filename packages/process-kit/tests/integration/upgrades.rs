@@ -1,6 +1,7 @@
 //! Upgrade reuse, incarnation checks and admission-independent control acceptance.
 
 use super::fixtures::*;
+use canonic_process_kit::net::Stream;
 use canonic_process_kit::{
     Error,
     client::{self, Upgrade},
@@ -14,9 +15,9 @@ use canonic_process_kit::{
 };
 use serde_json::json;
 use std::sync::Arc;
-use std::{os::unix::net::UnixStream, time::Duration};
+use std::time::Duration;
 
-fn read_control(endpoint: &Endpoint<'_>) -> (UnixStream, Control) {
+fn read_control(endpoint: &Endpoint<'_>) -> (Stream, Control) {
     let (mut stream, _) = wait(|| endpoint.listener().accept().ok());
     stream.set_nonblocking(false).unwrap();
     stream
@@ -29,12 +30,7 @@ fn read_control(endpoint: &Endpoint<'_>) -> (UnixStream, Control) {
     (stream, request)
 }
 
-fn reply_control(
-    stream: &mut UnixStream,
-    request: &Control,
-    data: serde_json::Value,
-    result: bool,
-) {
+fn reply_control(stream: &mut Stream, request: &Control, data: serde_json::Value, result: bool) {
     let ack = Reply {
         control_version: 1,
         manager_id: identity().manager_id,

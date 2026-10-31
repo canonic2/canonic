@@ -24,10 +24,8 @@ extensions declare inspection, ordinary-work or drain-cleanup roles.
 canonic-process-kit = { path = "../process-kit" }
 ```
 
-This public library is unpublished. macOS and Linux adapters are implemented;
-the socket and process fixtures run on both platforms. Windows root selection
-and peer checks return `Unsupported` because owner and access-list validation
-are not implemented.
+This public library is unpublished. It supports macOS, Linux and Windows 10
+version 1803 or later; the socket and process fixtures run on all three.
 
 - [Get started](docs/getting-started.md): a minimal manager and client.
 - [API reference](docs/reference.md): responsibilities, options and errors.

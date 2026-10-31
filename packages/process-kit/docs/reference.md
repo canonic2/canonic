@@ -30,9 +30,9 @@ are re-exports of the platform types, with their native methods:
 | Unix | `std::os::unix::net::UnixStream` | `std::os::unix::net::UnixListener` |
 | Windows | `uds_windows::UnixStream` | `uds_windows::UnixListener` |
 
-The Windows type re-exports do not enable manager connections: Windows root
-constructors and peer checks return `Error::Unsupported`. The manager runtime
-is supported on macOS and Linux.
+The manager runtime is supported on macOS, Linux and Windows 10 version 1803 or
+later, which provides `AF_UNIX` sockets. On Windows, a root must be on a local
+drive letter; network shares and mapped network drives are refused.
 
 For a custom driver, `Lease::bind(control)` returns an `Endpoint` borrowing the
 lease. `Endpoint::listener() -> &net::Listener` borrows its bound listener.
@@ -223,17 +223,16 @@ A definite refusal of a later replay cannot resolve an earlier uncertain send;
 recovery preserves `OutcomeUnknown` with the original request ID. Refusals before
 any ambiguity retain their normal reply or error.
 
-On macOS and Linux, `owner::Connection::new(stream, hold)` attaches a resource
+`owner::Connection::new(stream, hold)` attaches a resource
 hold to a dedicated silent same-user connection. The product must arrange for
 the owning process to retain the other endpoint, bound these channels and drive
 `wait(timeout)` on its runtime. Do not share the read side with request framing. A timeout
 returns false; EOF, including after owner death, returns true. Unexpected data
 or a socket failure returns an error. The hold remains live after EOF: clean up
 the resource before dropping the connection, and retain it if cleanup is
-uncertain. EOF requires every copy of the peer endpoint to close.
-
-Windows owner-channel construction and `wait` return `Unsupported`. A wait
-refusal does not report owner death or release a retained resource hold.
+uncertain. EOF requires every copy of the peer endpoint to close. On Windows a
+terminated owner's endpoint can report a reset instead of EOF; `wait` returns
+true for both.
 
 ## Explicit force-stop
 
@@ -274,6 +273,10 @@ handler and operation deadlines and separately bound retained owner channels.
 Refusals on the accept thread use an absolute write budget of at most 20 ms,
 capped by a shorter `io_timeout`, so backpressure cannot consume a worker's full
 reply budget on that thread. Worker replies retain their configured I/O budget.
+On Windows, after a refusal write, input draining lasts at most 20 ms and is
+also capped by the remaining write budget, so a client that stays open does not
+occupy the worker for another frame-read budget.
+Unix closes after the refusal write without waiting for the client to close.
 Waiting in a bounded worker queue does not spend the server's frame-read budget.
 Clients still bound their own acknowledgement wait with `io`; that wait includes
 queueing. Set client budgets for the calls and queue waits the product supports.
@@ -282,6 +285,11 @@ queueing. Set client budgets for the calls and queue waits the product supports.
 
 `Spawn` clears the environment, installs only explicit pairs, sets null stdin,
 uses the product's log and directory, and creates a new session/process group.
+On Windows it also passes the client's `SystemRoot` unless the pairs set it,
+because sockets cannot start without it. The manager runs without a console, in
+a new process group, and outside the client's job object when that job allows
+breakaway; a job that forbids breakaway keeps the manager inside it, so closing
+that job ends the manager.
 The client reaps it on a dedicated thread while alive; `start_reaped()` returns
 the join handle when the caller needs its exit result. An OS registration owns
 the manager when `Service` activates it; registration/removal stay with the
@@ -300,7 +308,8 @@ missing, empty or relative values return `Options`. Task names beginning with
 `Starting` means readiness is unconfirmed or an authorized startup wait expired.
 On macOS it also covers a refused leased endpoint: the OS uses the same error
 for a full backlog and a stale/closed listener, so those cases cannot be safely
-distinguished. Interrupted kernel connection polls retry on the same socket
+distinguished. On Windows a full listener queue refuses at once and is reported
+as `Capacity`. Interrupted kernel connection polls retry on the same socket
 within the original deadline.
 Local frame rejection writes nothing. A complete refusal is definite
 non-admission. After any potentially partial send, lost admission or result
@@ -308,7 +317,12 @@ produces `OutcomeUnknown(request_id)`; inspect the product's durable outcome.
 Malformed JSON and selected-envelope decode failures receive a bounded
 `Code::Invalid` refusal attempt before closure, with no product callback.
 The refusal preserves a valid bounded request ID when available and uses an
-empty ID otherwise. A lost refusal remains ambiguous to the caller.
+empty ID otherwise. After any refusal the Windows server ends its side of the
+connection and reads what the client already sent until the client closes,
+for at most 20 ms within the refusal's write budget; on Windows, closing with
+unread request bytes would reset the connection and discard the refusal. A lost refusal
+remains ambiguous to the caller. Unix closes after the refusal write without
+draining input.
 Never infer non-admission just because an acknowledgement was not received.
 One-shot calls never replay. Explicit recovery requires the product decision
 described above. Products allocate stable IDs and deduplicate durable mutations

@@ -21,7 +21,9 @@ pub trait Launcher {
 pub struct Spawn {
     /// Hidden subcommand and arguments, including the explicit root when selected.
     pub args: Vec<OsString>,
-    /// Complete environment; all inherited variables are cleared first.
+    /// Complete environment; all inherited variables are cleared first. On
+    /// Windows the client's `SystemRoot` is added unless this list sets it,
+    /// because sockets cannot start without it.
     pub environment: Vec<(OsString, OsString)>,
     /// Product-owned log already opened with its chosen privacy policy.
     pub log: File,
@@ -47,6 +49,17 @@ impl Spawn {
             .stdin(Stdio::null())
             .stdout(self.log.try_clone()?)
             .stderr(self.log.try_clone()?);
+        // Winsock cannot load its providers without SystemRoot, so a manager
+        // started without it fails every socket call.
+        #[cfg(windows)]
+        if !self
+            .environment
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("SystemRoot"))
+            && let Some(root) = std::env::var_os("SystemRoot")
+        {
+            command.env("SystemRoot", root);
+        }
         let mut child = spawn_detached(&mut command)?;
         Ok(std::thread::spawn(move || child.wait()))
     }
