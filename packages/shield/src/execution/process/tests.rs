@@ -1,10 +1,39 @@
 use super::*;
+
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_proc_stat_ignores_zombies_and_handles_parentheses_in_names() {
+    assert_eq!(
+        linux_live_group(b"17 (Acme ) child) S 1 42 0").unwrap(),
+        Some(42)
+    );
+    assert_eq!(
+        linux_live_group(b"17 (Acme \xff) S 1 42 0").unwrap(),
+        Some(42)
+    );
+    for state in ["Z", "X", "x"] {
+        assert_eq!(
+            linux_live_group(format!("17 (Acme) {state} 1 42 0").as_bytes()).unwrap(),
+            None
+        );
+    }
+    for broken in ["", "17 Acme S 1 42", "17 (Acme) S 1 wrong"] {
+        assert!(linux_live_group(broken.as_bytes()).is_err());
+    }
+}
+
 fn request() -> policy::Request {
+    let cwd = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
     policy::Request {
         executable: "/bin/sleep".into(),
         arguments: vec!["10".into()],
-        cwd: "/private/tmp".into(),
-        project: "/private/tmp".into(),
+        cwd: cwd.clone(),
+        project: cwd,
     }
 }
 #[test]

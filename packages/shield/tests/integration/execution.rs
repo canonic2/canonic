@@ -1,4 +1,6 @@
 //! Native launch fidelity, policy blocks and actual owned child outcomes.
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(windows)]
 mod windows;
 #[cfg(target_os = "macos")]

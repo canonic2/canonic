@@ -17,6 +17,9 @@ See [development](development.md) for build details. macOS and AMD64 Windows hav
 native verification; ARM64 Windows is implemented but unverified. On Windows,
 follow the [portable installation instructions](development.md#portable-windows-packages)
 and read the [command coverage](development.md#supported-windows-commands-and-acceptance).
+On GNU/Linux, use the [Linux build and portable installation instructions](development.md#native-linux-development).
+The Linux binary's glibc requirement is recorded with its build; broader host
+coverage and ARM64 behavior are accepted without extra tests for this stage.
 
 Open a terminal in your project. Default setup downloads a signed baseline
 pack from Shield's main registry, so you need network access.

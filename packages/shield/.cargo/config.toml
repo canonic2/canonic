@@ -11,3 +11,5 @@ GIT_CONFIG_GLOBAL = { value = "tests/git/config", relative = true, force = true 
 # procedural macros, even when the build host is Windows AMD64 itself.
 build-windows = ["build", "--release", "--locked", "--target", "x86_64-pc-windows-msvc", "--config", ".cargo/windows-release.toml"]
 build-windows-arm64 = ["build", "--release", "--locked", "--target", "aarch64-pc-windows-msvc", "--config", ".cargo/windows-release.toml"]
+build-linux-x64 = ["build", "--release", "--locked", "--target", "x86_64-unknown-linux-gnu"]
+build-linux-arm64 = ["build", "--release", "--locked", "--target", "aarch64-unknown-linux-gnu"]

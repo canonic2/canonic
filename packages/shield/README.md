@@ -49,6 +49,10 @@ PowerShell supports a bounded single native invocation; other PowerShell syntax
 and cmd requests are blocked. See
 [development](docs/development.md#native-windows-development).
 
+GNU/Linux compatibility is implemented for x64 and ARM64, including the used
+MCP, Registry and TUI libraries. See [Linux development and packaging](docs/development.md#native-linux-development)
+for build prerequisites, the glibc baseline and the focused verification scope.
+
 ## Quick start
 
 In your project's folder:
@@ -131,7 +135,9 @@ the review shows this setting, and Deny still blocks. See
 - A host that skips, disables or times out a hook bypasses Shield. `status`
   reports installed integrations, not live interception.
 - Claude Code and Codex integration has native verification on macOS and AMD64
-  Windows. ARM64 Windows is implemented but unverified; Linux remains unverified.
+  Windows. GNU/Linux uses the shared Unix hooks; focused native execution and
+  operator checks pass. Linux agent-host coverage and ARM64 runtime behavior
+  are accepted without additional tests for this stage.
 
 ## Documentation
 

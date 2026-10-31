@@ -1,8 +1,10 @@
 //! Fixed Git inspection forms and deterministic launch settings, independent of policy.
 use crate::policy::Request;
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 pub(super) const EXECUTABLE: &str = "/Library/Developer/CommandLineTools/usr/bin/git";
+#[cfg(target_os = "linux")]
+pub(super) const EXECUTABLE: &str = "/usr/bin/git";
 
 pub(super) fn supported(request: &Request) -> bool {
     let args = request
@@ -14,7 +16,7 @@ pub(super) fn supported(request: &Request) -> bool {
         || matches!(args.as_slice(), ["log", "-n", count] if count.parse::<u16>().is_ok_and(|n| (1..=100).contains(&n)) && count.bytes().all(|b| b.is_ascii_digit()))
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 pub(super) fn launch(request: &Request) -> Request {
     let mut launch = request.clone();
     launch.arguments = [
@@ -56,7 +58,7 @@ pub(super) fn launch(request: &Request) -> Request {
     launch
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) fn capture(request: &Request) -> Result<serde_json::Value, super::Error> {
     use std::{fs, os::unix::fs::MetadataExt, path::Path};
     let directory = Path::new(&request.project).join(".git");
@@ -64,7 +66,9 @@ pub(super) fn capture(request: &Request) -> Result<serde_json::Value, super::Err
         return Err(super::Error::Unsupported);
     }
     let metadata = fs::metadata(&directory)?;
-    if directory.join("info/attributes").try_exists()? {
+    if directory.join("info/attributes").try_exists()?
+        || directory.join("commondir").try_exists()?
+    {
         return Err(super::Error::Unsupported);
     }
     let mut files = Vec::new();

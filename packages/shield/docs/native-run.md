@@ -1,6 +1,6 @@
 # Bounded native execution
 
-`shield __internal run` launches a small set of macOS and Windows commands
+`shield __internal run` launches a small set of macOS, GNU/Linux and Windows commands
 under active policy and records their outcomes. For ordinary Claude or Codex sessions, use
 [native project setup](claude-project.md).
 
@@ -19,6 +19,12 @@ below. Start with the supported commands, then
 | `/usr/bin/false` | None |
 | `/bin/sleep` | One finite nonnegative decimal number, at most 86400 seconds |
 | `/Library/Developer/CommandLineTools/usr/bin/git` | `status`, `diff`, `diff --cached`, or `log -n N` with decimal N from 1 to 100 |
+
+GNU/Linux accepts the same four leaf paths (`/bin/echo`, `/usr/bin/true`,
+`/usr/bin/false`, `/bin/sleep`) and argument forms, plus `/usr/bin/git` version
+`2.53.0` with the Git forms above. Root-owned distribution symlinks such as a
+merged `/bin` resolve to their captured native images. Linux bindings require
+ELF64 images matching x64 or ARM64, a supported glibc 1.1 loader cache and kernel procfs.
 
 On AMD64 or ARM64 Windows, use an absolute System32 path for system leaves or the
 protected installation path for Git:
@@ -42,7 +48,7 @@ shield __internal run --project C:\Acme -- "$env:SystemRoot\System32\hostname.ex
 ```
 
 Other executables, scripts, wrappers, PATH names, and argument forms block even
-if policy allows them. Linux returns unsupported without launching.
+if policy allows them.
 The runner neither enables SDK Bash nor installs an agent integration.
 
 The macOS leaf binding requires canonical root-owned executable and dyld files on the same
@@ -70,6 +76,28 @@ Shield trusts the protected OS loader, API-set mappings and transitive system
 libraries; it does not hash every transitive DLL or isolate privileged OS changes.
 Other drives, network cwd paths and local executable copies remain unsupported.
 
+On GNU/Linux, the executable, glibc interpreter and complete declared library
+closure must be root-owned regular files without set-ID or group/other write
+bits, beneath root-owned non-writable-to-other-users directories. Bindings retain
+open image handles, file identities and digests and revalidate them at handoff.
+Every executable, interpreter and library path is walked before resolution;
+symlinks must be root-owned, each traversed directory must be root-owned without
+group/other write permission, and link chains are retained for comparison.
+Custom RPATH/RUNPATH, audit/filter/auxiliary loaders, nondefault library search,
+escaping library names and
+nonempty `/etc/ld.so.preload` are refused. A protected empty preload file is
+retained when present.
+
+The runner uses normal kernel execution, preserving argv[0] and `/proc/self/exe`.
+It retains and verifies the root-protected glibc 1.1 loader cache, a native
+baseline entry for each declared library, and every recorded native variant in
+the dependency closure. Cache files with unsupported formats, malformed bounds
+or missing baseline entries are refused. Hardware-variant selection remains the
+protected OS loader's responsibility. No LD environment or custom library search
+is inherited. The kernel, protected system implementation, privileged changes
+and external cwd replacement remain outside the binding's guarantees.
+This is bounded execution, not a sandbox.
+
 ## Git inspection
 
 On macOS, Git requires Apple's Command Line Tools Git 2.50.1 (Apple Git-155) at the exact path
@@ -77,6 +105,11 @@ in the table and an ordinary `.git` directory at the enrolled project root. Link
 worktrees, bare repositories, the `/usr/bin/git` dispatcher, Xcode/Homebrew Git,
 aliases, extra flags and other commands are unsupported.
 Repositories with `.git/info/attributes` are unsupported.
+
+GNU/Linux Git uses the same fixed inspection arguments and repository capture as
+macOS, at `/usr/bin/git` version `2.53.0`. The ELF executable and library closure
+use the Linux binding above. Bare repositories, linked worktrees, `commondir`,
+local copies, helpers selected by extra argv and other versions remain refused.
 
 On Windows, Git requires version `2.56.0.windows.3` in a protected `ucrt64/bin`
 (AMD64) or `clangarm64/bin` (ARM64) installation on the OS boot drive. The defaults
@@ -247,6 +280,13 @@ the group and unrestricted same-user interference are outside this ownership
 contract. The supported leaf commands do not spawn descendants; wider commands
 remain blocked. Parent SIGKILL or machine failure cannot run cleanup. Descendant
 zombies are reaped by their parent or the OS, not by Shield.
+
+On GNU/Linux the same Unix process owner retains the unreaped direct child's
+PID and original process group. Kernel procfs observations distinguish live group
+members from zombies, so terminated descendants do not block cleanup merely
+because the OS has not reaped them. Process-group/session escapes remain outside
+containment, as on macOS; this does not claim cgroup isolation or parent-death
+cleanup after SIGKILL.
 
 On Windows the child starts suspended and joins an independently retained
 kill-on-close Job before running. Normal exit, failure, timeout, cancellation and

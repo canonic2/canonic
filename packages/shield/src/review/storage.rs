@@ -230,9 +230,7 @@ impl Store {
 
     /// A proposal compares the same validated source it used to prepare the
     /// base plan. Retain that capture instead of parsing every pack twice.
-    pub(in crate::review) fn read_for_comparison(
-        &self,
-    ) -> Result<ComparisonCapture, Error> {
+    pub(in crate::review) fn read_for_comparison(&self) -> Result<ComparisonCapture, Error> {
         let state = self.read_unprepared()?;
         let snapshots = super::snapshots(&state.candidates)?;
         let evaluator = crate::configuration::Evaluator::new(snapshots.clone())?;
@@ -499,7 +497,7 @@ impl Store {
     }
     /// Publish minimum authority before the short callback, without releasing the
     /// activation lock. A publication/release failure never restores a grant.
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     pub(crate) fn transition_handoff<T>(
         &self,
         context: &Context,

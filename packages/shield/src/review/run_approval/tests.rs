@@ -20,7 +20,7 @@ fn fixture() -> (assert_fs::TempDir, Context, EvaluatedRequest, Value) {
     .expect("native approval fixture");
     context.surface = "run".into();
     context.cwd = Some(context.project_root.clone());
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let (executable, arguments) = ("/bin/echo".to_owned(), vec!["Acme text".into()]);
     #[cfg(windows)]
     let (executable, arguments) = (
@@ -259,7 +259,7 @@ fn changed_request_origin_resources_deadline_and_activation_block() {
             {
                 resources["loader_identity"][1] = json!(42);
             }
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "linux"))]
             {
                 resources["images"][0]["identity"][1] = json!(42);
             }
@@ -277,7 +277,7 @@ fn changed_request_origin_resources_deadline_and_activation_block() {
     }
     let project = Project::open(Path::new(&context.project_root)).expect("native approval fixture");
     let mut request = evidence.request().clone();
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     request.arguments.push("extra".into());
     #[cfg(windows)]
     {

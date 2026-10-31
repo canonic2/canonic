@@ -154,6 +154,7 @@ impl OwnedChild {
             Err(e) => Err(std::io::Error::from(e).into()),
         }
     }
+    #[cfg(target_os = "macos")]
     fn group_quiescent(&self) -> Result<bool, Error> {
         use libproc::processes::{ProcFilter, pids_by_type};
         // libproc's safe wrapper distinguishes an empty list from failure via
@@ -173,6 +174,71 @@ impl OwnedChild {
                 }
                 Ok(_) | Err(nix::errno::Errno::ESRCH) => {}
                 Err(error) => return Err(std::io::Error::from(error).into()),
+            }
+        }
+        Ok(true)
+    }
+    #[cfg(target_os = "linux")]
+    fn group_quiescent(&self) -> Result<bool, Error> {
+        use std::io::Read as _;
+        let proc = std::fs::File::open("/proc")?;
+        if rustix::fs::fstatfs(&proc)
+            .map_err(std::io::Error::from)?
+            .f_type
+            != rustix::fs::PROC_SUPER_MAGIC
+        {
+            return Err(Error::Unsupported);
+        }
+        let own = std::fs::read("/proc/self/stat")?;
+        let own_pid = own
+            .split(|byte| *byte == b' ')
+            .next()
+            .and_then(|bytes| std::str::from_utf8(bytes).ok())
+            .and_then(|pid| pid.parse::<u32>().ok());
+        let own_group =
+            u32::try_from(nix::unistd::getpgrp().as_raw()).map_err(|_| Error::Unsupported)?;
+        if own.len() > 8192
+            || own_pid != Some(std::process::id())
+            || linux_live_group(&own)? != Some(own_group)
+        {
+            return Err(Error::Unsupported);
+        }
+        for (count, entry) in std::fs::read_dir("/proc")?.enumerate() {
+            if count >= 65_536 {
+                return Err(Error::CleanupIncomplete);
+            }
+            let entry = entry?;
+            if !entry
+                .file_name()
+                .as_encoded_bytes()
+                .iter()
+                .all(u8::is_ascii_digit)
+            {
+                continue;
+            }
+            let file = match std::fs::File::open(entry.path().join("stat")) {
+                Ok(file) => file,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+            };
+            let mut text = Vec::new();
+            match file.take(8193).read_to_end(&mut text) {
+                Ok(_) => {}
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::NotFound
+                        || error.raw_os_error().is_some_and(|value| {
+                            nix::errno::Errno::from_raw(value) == nix::errno::Errno::ESRCH
+                        }) =>
+                {
+                    continue;
+                }
+                Err(error) => return Err(error.into()),
+            }
+            if text.len() > 8192 {
+                return Err(Error::Unsupported);
+            }
+            if linux_live_group(&text)? == Some(self.child.id()) {
+                return Ok(false);
             }
         }
         Ok(true)
@@ -278,6 +344,24 @@ impl Drop for OwnedChild {
             }
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_live_group(stat: &[u8]) -> Result<Option<u32>, Error> {
+    // comm may contain spaces and parentheses; fields follow its final closing delimiter.
+    let end = stat
+        .windows(2)
+        .rposition(|part| part == b") ")
+        .ok_or(Error::Unsupported)?;
+    let fields = std::str::from_utf8(&stat[end + 2..]).map_err(|_| Error::Unsupported)?;
+    let mut fields = fields.split_ascii_whitespace();
+    let state = fields.next().ok_or(Error::Unsupported)?;
+    let _parent = fields.next().ok_or(Error::Unsupported)?;
+    let group = fields
+        .next()
+        .and_then(|group| group.parse().ok())
+        .ok_or(Error::Unsupported)?;
+    Ok((!matches!(state, "Z" | "X" | "x")).then_some(group))
 }
 
 #[cfg(test)]

@@ -23,6 +23,74 @@ a real test name; nextest fails if nothing matches.
 Keep `target/` between iterations to reuse Cargo's cache. Use release builds
 for performance measurements.
 
+## Native Linux development
+
+GNU/Linux builds support x64 and ARM64 with the pinned Rust toolchain, a GNU C
+compiler and ordinary Unix file permissions, terminal leases and native hooks.
+Shield includes MCP Kit, Registry Kit and TUI Kit; Process Kit is not used.
+The CLI needs no Node installation. Interactive commands require terminal
+stdin/stdout and a cursor-capable `TERM`; hooks and MCP stdio remain noninteractive.
+
+From this package directory, `make dev` builds `target/debug/shield`.
+The distribution helper additionally requires Python 3.11+ and GNU binutils:
+
+```sh
+python3 scripts/release-linux.py build --architecture x64
+python3 scripts/release-linux.py package --architecture x64
+```
+
+Outputs are `target/x86_64-unknown-linux-gnu/release/shield` and
+`dist/shield-<version>-x86_64-unknown-linux-gnu.tar.gz`, with a `.sha256` sidecar.
+`CARGO_TARGET_DIR` selects another build directory; `--output-directory` selects
+another package directory. Existing archives/checksums are refused. The helper
+remaps publisher paths in Rust/C code, checks the ELF architecture and scans the
+binary for publisher paths before accepting a build. Clear custom Rust/C flags
+before using it. Package after rebuilding changed code or dependencies.
+
+For a cross-build from x64, install an `aarch64-linux-gnu-gcc` cross-compiler
+and its GNU target libraries, then add the pinned Rust target:
+
+```sh
+rustup target add --toolchain 1.99.0 aarch64-unknown-linux-gnu
+python3 scripts/release-linux.py build --architecture arm64
+python3 scripts/release-linux.py package --architecture arm64
+```
+
+An ARM64 Linux host can build that target with its native C compiler. Cross-builds
+do not establish native ARM64 acceptance. The packager includes Canonic's license,
+resolved normal/build dependency notices and Rust standard-library notices.
+It normalizes archive ownership and indexes notices in `BUILD.json`, alongside
+the executable checksum, versioned glibc symbol requirements and a conservative
+minimum glibc baseline at least as new as the selected compiler's target libc.
+The helper locates `libc.so.6` through that compiler, checks its architecture
+and reads its release version without executing it. An unavailable or
+unrecognized target libc refuses the build, including cross-builds.
+These are workspace candidates without source-revision attestation.
+
+### Linux installation and compatibility
+
+Extract the archive, then copy its `shield` executable to a stable folder on PATH,
+for example `~/.local/bin/shield`, with mode 755. Check `shield --version` and
+follow [Your first Shield project](getting-started.md). Close Shield and connected
+agents before replacing the executable; repair each project's registrations with
+`shield mcp setup --repair` after an update or move. To remove an installation,
+run `shield mcp remove` for each connected agent in each project, then delete the
+executable. Preserve project `.shield` folders to retain policy and history.
+
+The GNU executable's minimum glibc version depends on the target toolchain and is
+recorded in `BUILD.json`. Build on the oldest intended supported GNU system to
+target older hosts; a successful build on a new Ubuntu release does not prove
+compatibility with older distributions. The bounded native runner additionally
+requires a supported glibc 1.1 loader cache, readable kernel procfs, protected
+system images and the exact commands in [native execution](native-run.md#supported-contract).
+Musl-only hosts are outside this GNU build target.
+
+Linux compatibility completion is owner-accepted for this stage with focused
+x64 checks and other behavior assumed from the shared Unix implementation.
+Full package suites, live Claude/Codex sessions, additional distributions and
+ARM64 build/runtime acceptance are not claimed. Signing and publication remain
+separate distribution work; these scripts perform neither.
+
 ## Native Windows development
 
 Use the pinned MSVC Rust toolchain and Visual Studio C++ build tools. From this
@@ -403,7 +471,8 @@ For a fresh checkout install SDK test dependencies with
 `npm --prefix packages/shield/adapters/sdk-tests ci --ignore-scripts --no-fund --no-audit`.
 These SDK and interactive host fixtures are verified on macOS. The separate
 Windows native fixtures and their limits are described
-[above](#native-windows-development). Linux remains unverified.
+[above](#native-windows-development). Linux uses focused platform checks and
+owner-accepted shared behavior [described above](#native-linux-development).
 
 ## Individual Rust verification
 

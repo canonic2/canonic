@@ -7,7 +7,7 @@ struct ApprovalBinding {
     timeout_ms: u64,
     resources: serde_json::Value,
 }
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Resources {
@@ -45,7 +45,11 @@ pub(crate) fn valid_approval_binding(
     {
         super::windows_binding::valid(request, &binding.resources)
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        super::linux_binding::valid(request, &binding.resources)
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let Ok(resources) = serde_json::from_value::<Resources>(binding.resources) else {
             return false;
@@ -77,7 +81,7 @@ pub(crate) fn verify_approval_binding(
     request: &crate::policy::Request,
     resource: &serde_json::Value,
 ) -> Result<(), crate::review::Error> {
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     {
         let timeout = resource["timeout_ms"]
             .as_u64()
@@ -86,14 +90,14 @@ pub(crate) fn verify_approval_binding(
             return Ok(());
         }
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
     let _ = (request, resource);
     Err(crate::review::Error::Invalid(
         "unsupported or changed native approval binding",
     ))
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 pub(crate) fn capture(
     request: &crate::policy::Request,
     timeout: u64,

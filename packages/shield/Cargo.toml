@@ -1,6 +1,6 @@
 [package]
 name = "canonic-shield"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2024"
 rust-version = "1.99"
 publish = false
@@ -60,7 +60,11 @@ canonic-mcp-kit = { version = "0.7.0", path = "../mcp-kit", features = ["docs-bu
 
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.3"
-rustix = { version = "1.1", features = ["process", "termios"] }
+rustix = { version = "1.1", features = ["process", "termios", "fs"] }
+nix = { version = "0.31", features = ["fs", "signal", "process"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+object = { version = "0.39.1", default-features = false, features = ["read_core", "elf", "std"] }
 
 [target.'cfg(windows)'.dependencies]
 atomicwrites = "0.4.4"
@@ -77,12 +81,11 @@ windows-permissions = "0.2.4"
 winsafe = { version = "0.0.29", features = ["advapi"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-nix = { version = "0.31", features = ["fs", "signal", "process"] }
 libproc = "0.14.11"
 
 [dev-dependencies]
 # Exercise the Windows PE contract on every development host.
-object = { version = "0.39.1", default-features = false, features = ["read_core", "pe", "std"] }
+object = { version = "0.39.1", default-features = false, features = ["read_core", "pe", "elf", "std"] }
 base64 = "0.22.1"
 canonic-registry-kit = { version = "0.3.0", path = "../registry-kit", features = ["test-support"] }
 # Builds fixture documentation bundles for the bundled-docs integration tests.

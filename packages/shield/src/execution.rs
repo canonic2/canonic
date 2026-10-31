@@ -1,23 +1,31 @@
 //! Bounded native leaf-command orchestration; unknown identity/effects never launch.
 use crate::cli;
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 use crate::{
     enforcement::{self, AgentAccess},
     policy, review,
     runtime::Project,
 };
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 use serde_json::{Value, json};
 use std::process::ExitCode;
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 use std::{path::Path, time::Instant};
 
 #[cfg(target_os = "macos")]
 mod binding;
+#[cfg(any(target_os = "linux", test))]
+mod elf;
+#[cfg(target_os = "linux")]
+mod linux_binding;
+#[cfg(any(target_os = "linux", test))]
+mod linux_cache;
 #[cfg(any(target_os = "macos", test))]
 mod macho;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod process;
+#[cfg(target_os = "linux")]
+use linux_binding as binding;
 #[cfg(windows)]
 mod windows_binding;
 #[cfg(windows)]
@@ -33,7 +41,7 @@ use windows_process as process;
 
 mod approval;
 mod git;
-#[cfg(all(test, any(target_os = "macos", windows)))]
+#[cfg(all(test, any(target_os = "macos", target_os = "linux", windows)))]
 pub(crate) use approval::capture as approval_fixture;
 pub(crate) use approval::{valid_approval_binding, verify_approval_binding};
 
@@ -56,27 +64,27 @@ fn supported(request: &crate::policy::Request) -> bool {
     }
 }
 
-#[cfg(any(target_os = "macos", windows, test))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows, test))]
 #[derive(Debug, thiserror::Error)]
 enum Error {
     #[error("unsupported native execution binding")]
     Unsupported,
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     #[error("execution binding changed")]
     Changed,
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     #[error("owned processes did not stop within the cleanup observation window")]
     CleanupIncomplete,
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     #[error("execution interrupted before launch")]
     Interrupted(u8),
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
 
 pub(crate) fn run(input: &cli::Run) -> ExitCode {
-    #[cfg(any(target_os = "macos", windows))]
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     {
         match execute(input) {
             Ok(code) => ExitCode::from(code),
@@ -94,7 +102,7 @@ pub(crate) fn run(input: &cli::Run) -> ExitCode {
             }
         }
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
     {
         let _ = input;
         eprintln!("Shield blocked execution: no verified native binding for this platform");
@@ -102,7 +110,7 @@ pub(crate) fn run(input: &cli::Run) -> ExitCode {
     }
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 fn execute(input: &cli::Run) -> Result<u8, Box<dyn std::error::Error>> {
     let started = Instant::now();
     let signals = process::Signals::new()?;
@@ -205,9 +213,9 @@ fn execute(input: &cli::Run) -> Result<u8, Box<dyn std::error::Error>> {
     Ok(outcome.code)
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 fn launch_request(request: &policy::Request) -> policy::Request {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     if request.executable == git::EXECUTABLE {
         return git::launch(request);
     }
@@ -218,7 +226,7 @@ fn launch_request(request: &policy::Request) -> policy::Request {
     request.clone()
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 struct PreparedRun {
     context: review::Context,
     request: policy::Request,
@@ -227,7 +235,7 @@ struct PreparedRun {
     binding: binding::Binding,
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 fn refusal(decision: &Value) -> Box<dyn std::error::Error> {
     if let Some(id) = decision["approval"]["request_id"].as_str() {
         eprintln!("{}", request_line(id, decision));
@@ -250,7 +258,7 @@ fn refusal(decision: &Value) -> Box<dyn std::error::Error> {
 }
 
 /// The refused native request's identity, decision code and inspection route.
-#[cfg(any(target_os = "macos", windows, test))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows, test))]
 fn request_line(id: &str, decision: &serde_json::Value) -> String {
     format!(
         "Shield native request {id}: {}. Inspect with shield request show {id}.",
@@ -259,7 +267,7 @@ fn request_line(id: &str, decision: &serde_json::Value) -> String {
 }
 
 /// A runtime failure, naming the registered project in the cache repair route.
-#[cfg(any(target_os = "macos", windows, test))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows, test))]
 fn runtime_failure(error: crate::runtime::Error, project_root: &str) -> Box<dyn std::error::Error> {
     if matches!(error, crate::runtime::Error::CacheUnavailable) {
         let route = crate::agent_message::cache_repair(project_root)
@@ -270,7 +278,7 @@ fn runtime_failure(error: crate::runtime::Error, project_root: &str) -> Box<dyn 
     }
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 fn prepare(input: &cli::Run) -> Result<PreparedRun, Box<dyn std::error::Error>> {
     let mut context = review::cli_context(&input.context)?;
     context.surface = "run".into();
@@ -293,7 +301,7 @@ fn prepare(input: &cli::Run) -> Result<PreparedRun, Box<dyn std::error::Error>> 
         project: context.project_root.clone(),
     };
     request.validate()?;
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let operation = if request.executable == git::EXECUTABLE {
         json!({"kind":"native-git-inspection","request":request,"environment":"cleared-git-inspection-v1"})
     } else {
@@ -334,7 +342,7 @@ fn protected_cwd(cwd: &std::path::Path, project: &std::path::Path) -> bool {
         })
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 fn observe(context: &review::Context, mut details: Value, disposition: &str) -> Value {
     details["host_decision"] = json!(disposition);
     details["decision"] = details["evaluation"]["decision"].clone();
@@ -346,7 +354,7 @@ fn observe(context: &review::Context, mut details: Value, disposition: &str) -> 
     receipt
 }
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 fn record_completion(
     context: &review::Context,
     receipt: &Value,

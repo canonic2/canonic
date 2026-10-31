@@ -78,7 +78,9 @@ fn relocated_agent_configuration_is_protected_with_temporary_access() {
                 .env("TMPDIR", &scratch)
                 .env(variable, &config);
             if missing_home {
-                command.env_remove("HOME");
+                // Unsetting HOME permits the native account-database fallback.
+                // Use an absent directory to exercise an unverified boundary.
+                command.env("HOME", environment.path().join("missing-home"));
             }
             let output = command.write_stdin(json!({
                 "hook_event_name":"PreToolUse","tool_name":"Bash","tool_use_id":"acme-working-files",
