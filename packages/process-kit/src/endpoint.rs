@@ -32,10 +32,11 @@ impl Root {
     /// Resolve a default root beneath the account home, or explicitly opt into `HOME`.
     ///
     /// # Errors
-    /// Returns `Unsupported` on Windows, or identity lookup, missing-home,
-    /// invalid relative path or path-length errors.
+    /// Returns `Unsupported` on Windows without `unstable-windows`, or identity
+    /// lookup, missing-home, invalid relative path or path-length errors.
     pub fn for_user(relative: &Path, home: Home) -> Result<Self> {
-        if cfg!(windows) {
+        #[cfg(windows)]
+        if !crate::WINDOWS_ENABLED {
             return Err(Error::Unsupported);
         }
         if relative.as_os_str().is_empty()
@@ -51,14 +52,16 @@ impl Root {
     /// Select an independent explicit root. Relative paths become absolute.
     ///
     /// # Errors
-    /// Returns `Unsupported` on Windows, or I/O or path-length errors.
-    /// Parent components and symlinks are refused.
+    /// Returns `Unsupported` on Windows without `unstable-windows`, or I/O or
+    /// path-length errors. Parent components and symlinks are refused, as are
+    /// Windows roots that are not on a local drive letter.
     pub fn explicit(path: impl AsRef<Path>) -> Result<Self> {
-        if cfg!(windows) {
+        #[cfg(windows)]
+        if !crate::WINDOWS_ENABLED {
             return Err(Error::Unsupported);
         }
         let path = std::path::absolute(path)?;
-        if path.components().any(|c| matches!(c, Component::ParentDir)) {
+        if path.components().any(|c| matches!(c, Component::ParentDir)) || !local_prefix(&path) {
             return Err(Error::PrivatePath);
         }
         // Resolve existing parent aliases such as the system's /tmp alias, but
@@ -80,6 +83,11 @@ impl Root {
             }
         }
         let path = simplify(resolved);
+        // Resolution turns mapped network drives into UNC paths, so check again;
+        // prepare and every privacy check also inspect the opened volume.
+        if !local_prefix(&path) {
+            return Err(Error::PrivatePath);
+        }
         if path
             .join("manager.sock")
             .as_os_str()
@@ -118,7 +126,7 @@ impl Root {
                 Ok(meta) if meta.is_dir() => {}
                 Ok(_) => return Err(Error::PrivatePath),
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                    match private_dir_builder().create(&path) {
+                    match create_private_dir(&path) {
                         Ok(()) => {}
                         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
                         Err(e) => return Err(e.into()),
@@ -162,6 +170,15 @@ const SOCKET_PATH_LIMIT: usize = 108;
 #[cfg(all(unix, not(target_os = "linux")))]
 const SOCKET_PATH_LIMIT: usize = 104;
 
+/// Windows roots must name a local drive letter: UNC, device and verbatim
+/// forms are refused before they are opened. Unix paths have no prefix.
+fn local_prefix(path: &Path) -> bool {
+    match path.components().next() {
+        Some(Component::Prefix(prefix)) => matches!(prefix.kind(), std::path::Prefix::Disk(_)),
+        _ => cfg!(unix),
+    }
+}
+
 /// Strip Windows' verbatim prefix from canonical paths: `AF_UNIX` addresses
 /// cannot use it. Other platforms keep the path unchanged.
 fn simplify(path: PathBuf) -> PathBuf {
@@ -189,45 +206,70 @@ fn home_dir(home: Home) -> Result<PathBuf> {
     }
 }
 
-/// Windows has no safe account-database lookup; the profile directory comes
-/// from `USERPROFILE`, which Windows sets for every logon session.
 #[cfg(windows)]
 fn home_dir(home: Home) -> Result<PathBuf> {
-    let variables: &[&str] = match home {
-        Home::Account => &["USERPROFILE"],
-        Home::Environment => &["HOME", "USERPROFILE"],
-    };
-    variables
-        .iter()
-        .find_map(std::env::var_os)
-        .map(PathBuf::from)
-        .ok_or(Error::PrivatePath)
+    match home {
+        Home::Account => Ok(crate::windows::profile_directory()?),
+        Home::Environment => ["HOME", "USERPROFILE"]
+            .iter()
+            .find_map(std::env::var_os)
+            .map(PathBuf::from)
+            .ok_or(Error::PrivatePath),
+    }
 }
 
-fn private_dir_builder() -> fs::DirBuilder {
-    #[allow(unused_mut, reason = "only Unix sets a mode")]
-    let mut builder = fs::DirBuilder::new();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
-    builder
+/// What identifies a path across replacement: device and inode on Unix,
+/// volume serial number and 128-bit file ID on Windows.
+#[cfg(unix)]
+type Identity = (u64, u64);
+#[cfg(windows)]
+type Identity = crate::windows::Identity;
+
+#[cfg(unix)]
+fn create_private_dir(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    fs::DirBuilder::new().mode(0o700).create(path)
+}
+
+#[cfg(windows)]
+fn create_private_dir(path: &Path) -> io::Result<()> {
+    crate::windows::create_private_directory(path)
 }
 
 fn no_follow() -> OpenOptions {
-    #[allow(unused_mut, reason = "only Unix adds the no-follow flag")]
     let mut options = OpenOptions::new();
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(nix::libc::O_NOFOLLOW);
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT);
+    }
     options
 }
 
 #[cfg(unix)]
-fn private(path: &Path, socket: bool) -> Result<fs::Metadata> {
+fn open_anchor(path: &Path) -> io::Result<File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    no_follow()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(path)
+}
+
+#[cfg(windows)]
+fn open_anchor(path: &Path) -> io::Result<File> {
+    crate::windows::open_anchor(path)
+}
+
+#[cfg(unix)]
+fn private(path: &Path, socket: bool) -> Result<Identity> {
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
     let meta = fs::symlink_metadata(path)?;
     if meta.uid() != nix::unistd::geteuid().as_raw()
@@ -240,12 +282,18 @@ fn private(path: &Path, socket: bool) -> Result<fs::Metadata> {
     {
         return Err(Error::PrivatePath);
     }
-    Ok(meta)
+    Ok((meta.dev(), meta.ino()))
 }
 
 #[cfg(windows)]
-fn private(_path: &Path, _socket: bool) -> Result<fs::Metadata> {
-    Err(Error::Unsupported)
+fn private(path: &Path, socket: bool) -> Result<Identity> {
+    use crate::windows::Kind;
+    let kind = if socket {
+        Kind::Socket
+    } else {
+        Kind::Directory
+    };
+    crate::windows::private(path, kind)?.ok_or(Error::PrivatePath)
 }
 
 #[cfg(unix)]
@@ -264,35 +312,63 @@ fn private_file(file: &File) -> Result<()> {
 
 #[cfg(windows)]
 fn private_file(file: &File) -> Result<()> {
-    if !file.metadata()?.is_file() {
-        return Err(Error::PrivatePath);
+    if crate::windows::private_file(file)? {
+        Ok(())
+    } else {
+        Err(Error::PrivatePath)
     }
-    Ok(())
 }
 
-/// The device and inode that identify a path across replacement. Windows
-/// exposes no stable file identity safely, so there every path compares equal
-/// and cleanup relies on the lease alone.
 #[cfg(unix)]
-fn identity(meta: &fs::Metadata) -> (u64, u64) {
+fn file_identity(file: &File) -> io::Result<Identity> {
     use std::os::unix::fs::MetadataExt;
-    (meta.dev(), meta.ino())
+    file.metadata().map(|meta| (meta.dev(), meta.ino()))
 }
 
 #[cfg(windows)]
-fn identity(_: &fs::Metadata) -> (u64, u64) {
-    (0, 0)
+fn file_identity(file: &File) -> io::Result<Identity> {
+    crate::windows::file_identity(file)
 }
 
 #[cfg(unix)]
-fn is_owned_socket(meta: &fs::Metadata) -> bool {
-    use std::os::unix::fs::{FileTypeExt, MetadataExt};
-    meta.file_type().is_socket() && meta.uid() == nix::unistd::geteuid().as_raw()
+fn path_identity(path: &Path) -> io::Result<Identity> {
+    use std::os::unix::fs::MetadataExt;
+    fs::symlink_metadata(path).map(|meta| (meta.dev(), meta.ino()))
 }
 
 #[cfg(windows)]
-fn is_owned_socket(meta: &fs::Metadata) -> bool {
-    !meta.is_dir() && !meta.file_type().is_symlink()
+fn path_identity(path: &Path) -> io::Result<Identity> {
+    crate::windows::path_identity(path)
+}
+
+/// The identity of a socket this user owns at `path`, or `None` for any other
+/// file. Windows sockets carry the creator's default owner until restricted,
+/// so there the private root, validated first, establishes ownership.
+#[cfg(unix)]
+fn owned_socket(path: &Path) -> io::Result<Option<Identity>> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    let meta = fs::symlink_metadata(path)?;
+    Ok(
+        (meta.file_type().is_socket() && meta.uid() == nix::unistd::geteuid().as_raw())
+            .then_some((meta.dev(), meta.ino())),
+    )
+}
+
+#[cfg(windows)]
+fn owned_socket(path: &Path) -> io::Result<Option<Identity>> {
+    crate::windows::socket_identity(path)
+}
+
+/// Restrict a newly bound socket before publishing it.
+#[cfg(unix)]
+fn restrict_socket(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+}
+
+#[cfg(windows)]
+fn restrict_socket(path: &Path) -> io::Result<()> {
+    crate::windows::restrict_socket(path)
 }
 
 /// Check a kernel-reported UID, also usable by platform adapters and forged-peer tests.
@@ -321,20 +397,29 @@ pub fn check_peer(stream: &Stream) -> Result<()> {
     check_uid(uid, nix::unistd::geteuid().as_raw())
 }
 
-/// Refuse Windows peers until private-root access-list validation is implemented.
+/// Verify every accepted or connected stream before reading a frame, by the
+/// peer process's token user.
 ///
 /// # Errors
-/// Always returns `Unsupported` on Windows.
+/// Returns `Unsupported` without `unstable-windows`, `Peer` when the peer
+/// process belongs to another user or cannot be queried, or the socket error.
 #[cfg(windows)]
-pub fn check_peer(_stream: &Stream) -> Result<()> {
-    Err(Error::Unsupported)
+pub fn check_peer(stream: &Stream) -> Result<()> {
+    if !crate::WINDOWS_ENABLED {
+        return Err(Error::Unsupported);
+    }
+    if crate::windows::peer_is_user(stream)? {
+        Ok(())
+    } else {
+        Err(Error::Peer)
+    }
 }
 
 /// Kernel-owned exclusive lock. The anchor is never unlinked or rewritten.
 pub struct Lease {
     root: Root,
     file: File,
-    identity: (u64, u64),
+    identity: Identity,
     bound: [std::sync::atomic::AtomicBool; 2],
 }
 impl Lease {
@@ -344,17 +429,9 @@ impl Lease {
     /// Returns `AlreadyRunning` at the deadline; validation and I/O errors remain distinct.
     pub fn acquire(root: &Root, wait: Duration) -> Result<Self> {
         root.prepare()?;
-        let mut options = no_follow();
-        options.read(true).write(true).create(true).truncate(false);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let file = options.open(root.path.join("manager.lock"))?;
+        let file = open_anchor(&root.path.join("manager.lock"))?;
         private_file(&file)?;
-        let meta = private(root.path(), false)?;
-        let identity = identity(&meta);
+        let identity = private(root.path(), false)?;
         let deadline = Instant::now() + wait;
         let mut delay = Duration::from_millis(2);
         loop {
@@ -379,10 +456,9 @@ impl Lease {
         }
     }
     fn verify(&self) -> Result<()> {
-        let meta = private(self.root.path(), false)?;
-        let anchor = fs::symlink_metadata(self.root.path.join("manager.lock"))?;
-        let file = self.file.metadata()?;
-        if identity(&meta) != self.identity || identity(&anchor) != identity(&file) {
+        let root = private(self.root.path(), false)?;
+        let anchor = path_identity(&self.root.path.join("manager.lock"))?;
+        if root != self.identity || anchor != file_identity(&self.file)? {
             return Err(Error::PrivatePath);
         }
         Ok(())
@@ -416,17 +492,13 @@ impl Lease {
             Err(e) => return Err(e.into()),
         }
         let listener = Listener::bind(&path)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
-        }
-        let meta = private(&path, true)?;
+        restrict_socket(&path)?;
+        let identity = private(&path, true)?;
         listener.set_nonblocking(true)?;
         Ok(Endpoint {
             lease: self,
             listener,
-            identity: identity(&meta),
+            identity,
             path,
             control,
         })
@@ -438,7 +510,7 @@ pub struct Endpoint<'a> {
     lease: &'a Lease,
     listener: Listener,
     path: PathBuf,
-    identity: (u64, u64),
+    identity: Identity,
     control: bool,
 }
 impl Endpoint<'_> {
@@ -458,8 +530,8 @@ impl Endpoint<'_> {
     /// Returns root/lease replacement or I/O errors. Foreign replacements are preserved.
     pub fn unlink(&self) -> Result<()> {
         self.lease.verify()?;
-        match fs::symlink_metadata(&self.path) {
-            Ok(meta) if identity(&meta) == self.identity && is_owned_socket(&meta) => {
+        match owned_socket(&self.path) {
+            Ok(Some(identity)) if identity == self.identity => {
                 fs::remove_file(&self.path)?;
             }
             Ok(_) => {}
@@ -492,11 +564,10 @@ pub fn connect(root: &Root, control: bool, timeout: Duration) -> Result<Stream> 
     match private(&root.socket(control), true) {
         Ok(_) => {}
         Err(Error::PrivatePath) => {
-            // bind publishes an owned socket before chmod restricts its mode.
-            // A live lease proves startup may still be preparing that endpoint.
-            // Do not connect until a later probe validates private permissions.
-            let metadata = fs::symlink_metadata(root.socket(control))?;
-            if is_owned_socket(&metadata) && root.leased()? {
+            // bind publishes an owned socket before it is restricted. A live
+            // lease proves startup may still be preparing that endpoint. Do not
+            // connect until a later probe validates private permissions.
+            if owned_socket(&root.socket(control))?.is_some() && root.leased()? {
                 return Err(Error::Starting);
             }
             return Err(Error::PrivatePath);
@@ -540,14 +611,9 @@ pub fn connect(root: &Root, control: bool, timeout: Duration) -> Result<Stream> 
     Ok(stream)
 }
 
-/// A local connect either completes or is refused at once; Windows offers no
-/// safe nonblocking connect, so the timeout applies only on Unix.
 #[cfg(windows)]
 fn connect_bounded(path: &Path, timeout: Duration) -> io::Result<Stream> {
-    if timeout.is_zero() {
-        return Err(io::ErrorKind::InvalidInput.into());
-    }
-    Stream::connect(path)
+    crate::windows::connect(path, timeout)
 }
 
 #[cfg(unix)]
@@ -619,14 +685,14 @@ fn wait_for_connect(
     }
 }
 
-#[cfg(all(test, windows))]
+#[cfg(all(test, windows, not(feature = "unstable-windows")))]
 mod windows_tests {
-    //! Windows cannot select a root without an enforced privacy boundary.
+    //! Without `unstable-windows`, Windows cannot select a root or accept a peer.
 
     use super::*;
 
     #[test]
-    fn windows_roots_refuse_before_accessing_paths_or_account_environment() {
+    fn windows_roots_and_peers_refuse_before_accessing_paths_or_account_environment() {
         assert!(matches!(crate::supported(), Err(Error::Unsupported)));
         assert!(matches!(
             Root::explicit(r"C:\Acme\runtime"),
@@ -638,12 +704,49 @@ mod windows_tests {
                 Err(Error::Unsupported)
             ));
         }
-        for socket in [false, true] {
-            assert!(matches!(
-                private(Path::new(r"C:\Acme\runtime"), socket),
-                Err(Error::Unsupported)
-            ));
-        }
+        let (stream, _peer) = Stream::pair().unwrap();
+        assert!(matches!(check_peer(&stream), Err(Error::Unsupported)));
+    }
+}
+
+#[cfg(all(test, windows, feature = "unstable-windows"))]
+mod windows_roots {
+    //! Root resolution on a Windows host with the adapter enabled.
+
+    use super::*;
+
+    #[test]
+    fn network_roots_are_refused_and_local_roots_prepare_privately() {
+        assert!(matches!(
+            Root::explicit(r"\\localhost\C$\Acme\runtime"),
+            Err(Error::PrivatePath)
+        ));
+        let temporary = tempfile::tempdir().unwrap();
+        let root = Root::explicit(temporary.path().join("acme").join("runtime")).unwrap();
+        root.prepare().unwrap();
+        assert!(!root.leased().unwrap());
+        let lease = Lease::acquire(&root, Duration::ZERO).unwrap();
+        assert!(root.leased().unwrap());
+        let endpoint = lease.bind(false).unwrap();
+        let client = connect(&root, false, Duration::from_secs(2)).unwrap();
+        check_peer(&client).unwrap();
+        drop(client);
+        endpoint.unlink().unwrap();
+        assert!(!root.socket(false).exists());
+    }
+
+    #[test]
+    fn an_existing_inherited_root_is_refused_without_repair() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("ordinary");
+        fs::create_dir(&path).unwrap();
+        let root = Root::explicit(&path).unwrap();
+        assert!(matches!(root.prepare(), Err(Error::PrivatePath)));
+        assert!(matches!(
+            Lease::acquire(&root, Duration::ZERO),
+            Err(Error::PrivatePath)
+        ));
+        assert!(!path.join("manager.lock").exists());
     }
 }
 

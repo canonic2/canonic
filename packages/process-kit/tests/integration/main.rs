@@ -20,3 +20,5 @@ mod recovery;
 mod transport;
 #[cfg(unix)]
 mod upgrades;
+#[cfg(all(windows, feature = "unstable-windows"))]
+mod windows_integrity;

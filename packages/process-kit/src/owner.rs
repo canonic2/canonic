@@ -1,18 +1,12 @@
 //! Dedicated owner-channel death detection without releasing product responsibility.
 
 use crate::{Error, Result, core::Hold, endpoint, net::Stream};
-use std::time::Duration;
-#[cfg(unix)]
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// A dedicated, silent same-user connection plus its live-resource hold.
 /// The client retains its endpoint while it owns work. Kernel EOF detects owner
 /// exit even after SIGKILL, without PID reuse or a renewable heartbeat timeout.
 /// Products bound the number of channels and drive waits on their own workers.
-#[cfg_attr(
-    windows,
-    allow(dead_code, reason = "Windows owner monitoring is unsupported")
-)]
 pub struct Connection {
     stream: Stream,
     _hold: Hold,
@@ -24,8 +18,8 @@ impl Connection {
     /// application framing or send application bytes after establishing it.
     ///
     /// # Errors
-    /// Returns `Unsupported` on Windows, or `Peer` for a different user or a
-    /// peer-credential syscall failure.
+    /// Returns `Unsupported` on Windows without `unstable-windows`, or `Peer`
+    /// for a different user or a peer-credential failure.
     pub fn new(stream: Stream, hold: Hold) -> Result<Self> {
         endpoint::check_peer(&stream)?;
         Ok(Self {
@@ -80,18 +74,43 @@ impl Connection {
         Ok(true)
     }
 
-    /// Windows owner monitoring is unsupported. This call performs no socket
-    /// I/O and retains the connection and product hold.
+    /// Wait at most `timeout` for kernel EOF, with the same results as on Unix.
+    /// It polls for readability, then peeks one byte without consuming it, and
+    /// never sets a receive timeout on the retained stream. A connection reset
+    /// counts as closure: Windows reports a terminated owner's endpoint that way.
     ///
     /// # Errors
-    /// Always returns `Unsupported`; this does not establish owner death.
+    /// Returns `Unsupported` without `unstable-windows`, without socket I/O.
+    /// Otherwise returns poll/socket errors, or `Envelope` if the silent owner
+    /// channel contains data. An error does not establish owner death or drop
+    /// the hold.
     #[cfg(windows)]
-    pub fn wait(&mut self, _timeout: Duration) -> Result<bool> {
-        Err(Error::Unsupported)
+    pub fn wait(&mut self, timeout: Duration) -> Result<bool> {
+        if !crate::WINDOWS_ENABLED {
+            return Err(Error::Unsupported);
+        }
+        let deadline = Instant::now() + timeout;
+        while !self.disconnected {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if !crate::windows::wait_readable(&self.stream, remaining)? {
+                return Ok(false);
+            }
+            // Process termination closes the owner's endpoint abortively, which
+            // Windows reports as a reset rather than an orderly EOF.
+            match crate::windows::peek(&self.stream) {
+                Ok(0) => self.disconnected = true,
+                Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => {
+                    self.disconnected = true;
+                }
+                Ok(_) => return Err(Error::Envelope),
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Ok(true)
     }
 }
 
-#[cfg(all(test, windows))]
+#[cfg(all(test, windows, not(feature = "unstable-windows")))]
 mod tests {
     //! Exercise the wait refusal independently of the constructor's peer refusal.
 

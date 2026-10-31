@@ -26,6 +26,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "uds_windows",
+ "windows-sys",
 ]
 
 [[package]]

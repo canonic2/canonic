@@ -28,6 +28,13 @@ pub mod server;
 pub mod version;
 #[cfg(unix)]
 mod wakeup;
+#[cfg(windows)]
+mod windows;
+
+/// Windows runtime use stays disabled until the adapter's acceptance passes;
+/// the `unstable-windows` feature enables it for that acceptance.
+#[cfg(windows)]
+const WINDOWS_ENABLED: bool = cfg!(feature = "unstable-windows");
 
 /// A typed failure at the manager boundary. Messages never contain payloads.
 #[derive(Debug, thiserror::Error)]
@@ -111,10 +118,14 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Verify availability before selecting platform-specific adapters.
 ///
 /// # Errors
-/// Returns [`Error::Unsupported`] outside macOS and Linux. Windows lacks
-/// enforced private-root ownership and access-list validation.
+/// Returns [`Error::Unsupported`] outside macOS and Linux, and on Windows
+/// unless the `unstable-windows` feature enables its adapter for acceptance.
 pub const fn supported() -> Result<()> {
-    if cfg!(any(target_os = "macos", target_os = "linux")) {
+    if cfg!(any(
+        target_os = "macos",
+        target_os = "linux",
+        all(windows, feature = "unstable-windows")
+    )) {
         Ok(())
     } else {
         Err(Error::Unsupported)
