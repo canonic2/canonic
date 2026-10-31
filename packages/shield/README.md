@@ -39,8 +39,15 @@ make -C packages/shield install-local
 This installs `shield` into `~/.local/bin`; add that folder to your `PATH`, or
 set `PREFIX=/path/to/prefix` to install somewhere else.
 
-macOS is the verified platform. Native agent setup uses Unix command hooks and
-refuses to run on Windows.
+macOS and AMD64 Windows have native verification. Windows source builds support enrollment,
+setup, Claude Code/Codex hooks, bounded System32 checked execution and protected
+Git for Windows inspection. Windows release tooling targets AMD64 and ARM64;
+ARM64 compatibility is implemented and accepted for this stage without a build
+or native runtime verification. Portable build/package commands and installation
+instructions are in the development guide. Windows signing and publication remain pending.
+PowerShell supports a bounded single native invocation; other PowerShell syntax
+and cmd requests are blocked. See
+[development](docs/development.md#native-windows-development).
 
 ## Quick start
 
@@ -123,7 +130,8 @@ the review shows this setting, and Deny still blocks. See
   command does, and it does not replace your agent's sandbox.
 - A host that skips, disables or times out a hook bypasses Shield. `status`
   reports installed integrations, not live interception.
-- It supports Claude Code and Codex. Linux and Windows have not been verified.
+- Claude Code and Codex integration has native verification on macOS and AMD64
+  Windows. ARM64 Windows is implemented but unverified; Linux remains unverified.
 
 ## Documentation
 

@@ -124,7 +124,7 @@ impl Server {
             .clone()
     }
 
-    /// A fetcher that trusts only the fixture CA.
+    /// A fetcher that trusts only the fixture CA and uses its IPv4 listener.
     ///
     /// # Panics
     /// Panics if the bundled fixture CA cannot be parsed.

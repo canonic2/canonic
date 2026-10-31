@@ -74,7 +74,7 @@ fn unreadable_plans_report_the_cache_preparation_route() {
     assert!(matches!(loaded, Err(Error::CacheUnavailable)));
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn preparation_removes_only_exited_writers_temporaries() {
     let (root, context) = fixture();
@@ -82,12 +82,13 @@ fn preparation_removes_only_exited_writers_temporaries() {
     let partition = current.path().parent().unwrap().to_path_buf();
     let plan = &current.plan_key;
     let dead = review::storage::exited_pid();
+    let unverified = i32::from(!cfg!(windows));
     let exited = [
         format!("{plan}.{dead}-0-1.tmp"),
         format!("{plan}.inputs.{dead}-0-1.tmp"),
     ];
     let kept = [
-        format!("{plan}.1-0-1.tmp"),
+        format!("{plan}.{unverified}-0-1.tmp"),
         format!("{plan}.{}-0-1.tmp", std::process::id()),
         format!("{plan}.{dead}-0.tmp"),
         format!("acme.{dead}-0-1.tmp"),

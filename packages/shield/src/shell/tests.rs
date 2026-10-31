@@ -1,5 +1,41 @@
 use super::*;
 
+fn analyze(
+    source: &str,
+    dialect: Dialect,
+    cwd: &str,
+    project: &str,
+    evaluator: &Evaluator,
+) -> Result<Value, Error> {
+    super::analyze(
+        source,
+        dialect,
+        &crate::test_support::absolute(cwd),
+        &crate::test_support::absolute(project),
+        evaluator,
+    )
+}
+
+fn analyze_controlled(
+    source: &str,
+    dialect: Dialect,
+    cwd: &str,
+    environment: Option<&BTreeMap<String, String>>,
+    project: &str,
+    evaluator: &Evaluator,
+    checkpoint: &dyn Fn() -> Result<(), Error>,
+) -> Result<Value, Error> {
+    super::analyze_controlled(
+        source,
+        dialect,
+        &crate::test_support::absolute(cwd),
+        environment,
+        &crate::test_support::absolute(project),
+        evaluator,
+        checkpoint,
+    )
+}
+
 #[test]
 fn pagers_require_command_policy_even_when_their_input_is_readable() {
     use crate::{configuration::Candidate, policy::Scope};
@@ -513,6 +549,10 @@ fn actual_shells_keep_revision_tildes_literal() {
 #[test]
 fn declared_directory_options_use_command_policy_and_preserve_raw_refusals() {
     use crate::{configuration::Candidate, policy::Scope};
+    let status_source = format!(
+        "git -C {} status",
+        crate::test_support::absolute("/acme/project")
+    );
     let mut document = json!({"schema_version":1,"kind":"pack","id":"acme/git","version":"1.0.0","description":"Acme Git fixture","license":"MIT","maintainers":["Acme"],"engines":{"shield":env!("CARGO_PKG_VERSION")},"capabilities":["argument-rules-v1","directory-options-v1","fallback-rules-v1","structured-rules-v1"],"rules":[
         {"id":"status","decision":"allow","conditions":{"domain":"argv","executable":"git","arguments":{"kind":"prefix","values":["status"]}}},
         {"id":"reset","decision":"deny","conditions":{"domain":"argv","executable":"git","arguments":{"kind":"prefix","values":["reset"]}}},
@@ -538,7 +578,7 @@ fn declared_directory_options_use_command_policy_and_preserve_raw_refusals() {
     let undeclared = Evaluator::new(vec![(Scope::Project, undeclared)]).unwrap();
     assert_eq!(
         analyze(
-            "git -C /acme/project status",
+            &status_source,
             Dialect::Posix,
             "/acme/project",
             "/acme/project",
@@ -559,7 +599,7 @@ fn declared_directory_options_use_command_policy_and_preserve_raw_refusals() {
             .unwrap();
         let evaluator = Evaluator::new(vec![(Scope::Project, captured)]).unwrap();
         let result = analyze(
-            "git -C /acme/project status",
+            &status_source,
             Dialect::Posix,
             "/acme/project",
             "/acme/project",
@@ -574,7 +614,10 @@ fn declared_directory_options_use_command_policy_and_preserve_raw_refusals() {
             );
             assert_eq!(
                 analyze(
-                    "git -C /acme/project reset --hard",
+                    &format!(
+                        "git -C {} reset --hard",
+                        crate::test_support::absolute("/acme/project")
+                    ),
                     Dialect::Posix,
                     "/acme/project",
                     "/acme/project",
@@ -595,8 +638,13 @@ fn declared_directory_options_use_command_policy_and_preserve_raw_refusals() {
             .unwrap();
             assert_eq!(elsewhere["decision"], "allow", "{elsewhere}");
             assert_eq!(
-                elsewhere["operations"][0]["policy_request"]["cwd"],
-                "/acme/project/../elsewhere"
+                std::path::Path::new(
+                    elsewhere["operations"][0]["policy_request"]["cwd"]
+                        .as_str()
+                        .unwrap()
+                ),
+                std::path::Path::new(crate::test_support::absolute("/acme/project").as_ref())
+                    .join("../elsewhere")
             );
         }
     }
@@ -609,6 +657,8 @@ fn a_project_declared_directory_option_lets_one_project_rule_cover_every_form() 
     let project = root.path().canonicalize().unwrap();
     let outside = project.parent().unwrap().to_str().unwrap().to_owned();
     let project = project.to_str().unwrap();
+    let project_word = format!("'{}'", project.replace('\'', "'\\''"));
+    let outside_word = format!("'{}'", outside.replace('\'', "'\\''"));
     let rule = json!({"id":"npm-start","decision":"allow","reason":"Acme start",
         "conditions":{"domain":"argv","executable":"npm","arguments":{"kind":"exact","values":["start"]},
             "cwd":{"within":{"root":"project"}}}});
@@ -627,10 +677,13 @@ fn a_project_declared_directory_option_lets_one_project_rule_cover_every_form() 
     };
     for (source, cwd) in [
         ("npm start".to_owned(), project),
-        (format!("npm --prefix {project} start"), "/"),
-        (format!("npm --prefix={project} start"), "/"),
+        (format!("npm --prefix {project_word} start"), "/"),
+        (format!("npm --prefix={project_word} start"), "/"),
         ("npm --prefix . start".to_owned(), project),
-        (format!("npm start --prefix {project}"), outside.as_str()),
+        (
+            format!("npm start --prefix {project_word}"),
+            outside.as_str(),
+        ),
     ] {
         assert_eq!(
             decide(&source, cwd)["decision"],
@@ -639,13 +692,13 @@ fn a_project_declared_directory_option_lets_one_project_rule_cover_every_form() 
         );
     }
     // Normalization never widens the folder a rule covers.
-    let elsewhere = decide(&format!("npm --prefix {outside} start"), project);
+    let elsewhere = decide(&format!("npm --prefix {outside_word} start"), project);
     assert_eq!(elsewhere["decision"], "ask", "{elsewhere}");
     // After `cd` to an unknown folder, a relative value names nothing known,
     // and no request is normalized from an unknown cwd.
     for source in [
         "cd \"$ACME_DIR\"; npm --prefix . start".to_owned(),
-        format!("cd \"$ACME_DIR\"; npm --prefix {project} start"),
+        format!("cd \"$ACME_DIR\"; npm --prefix {project_word} start"),
     ] {
         let unknown = decide(&source, project);
         assert_ne!(unknown["decision"], "allow", "{source}: {unknown}");
@@ -659,7 +712,7 @@ fn a_project_declared_directory_option_lets_one_project_rule_cover_every_form() 
     }
     // A command no rule covers is reported as the plain command in its folder,
     // which is what rule drafts are built from.
-    let unmatched = decide(&format!("npm --prefix {project} run dev"), "/");
+    let unmatched = decide(&format!("npm --prefix {project_word} run dev"), "/");
     assert_eq!(unmatched["decision"], "ask");
     let typed = &unmatched["operations"][0]["policy_request"];
     assert_eq!(typed["directory_option"], true, "{unmatched}");
@@ -710,6 +763,56 @@ fn evaluator() -> Evaluator {
         candidate.capture(&[], Some(&custom)).unwrap(),
     )])
     .unwrap()
+}
+
+#[test]
+fn powershell_native_preview_uses_policy_without_posix_reinterpretation() {
+    use crate::{configuration::Candidate, policy::Scope};
+    let rules = crate::policy::rules::document(&[
+        json!({"id":"status","decision":"allow","conditions":{"domain":"argv","executable":"git","arguments":{"kind":"exact","values":["status"]}}}),
+        json!({"id":"push","decision":"deny","conditions":{"domain":"argv","executable":"git","arguments":{"kind":"prefix","values":["push"]}}}),
+    ]).unwrap().to_string();
+    let candidate = Candidate::from_yaml("schema_version: 1\npacks: []\nrules: rules.yml\n")
+        .unwrap()
+        .capture(&[], Some(&rules))
+        .unwrap();
+    let evaluator = Evaluator::new(vec![(Scope::Project, candidate)]).unwrap();
+    for (source, decision, coverage) in [
+        ("git status", "allow", "single-literal-invocation"),
+        ("git push origin main", "deny", "single-literal-invocation"),
+        (
+            "git 'push' origin main",
+            "deny",
+            "single-literal-invocation",
+        ),
+        ("git status; git push", "ask", "partial"),
+        ("git $(whoami)", "ask", "partial"),
+        ("Get-Content notes.txt", "ask", "partial"),
+    ] {
+        let result = analyze(source, Dialect::Powershell, "/acme", "/acme", &evaluator).unwrap();
+        assert_eq!(result["decision"], decision, "{source}: {result}");
+        assert_eq!(result["coverage"], coverage, "{source}: {result}");
+        let normalized = evaluator
+            .evaluate_normalized(
+                &crate::policy::normalized::Input::Shell {
+                    source: source.into(),
+                    dialect: "powershell".into(),
+                    dialect_version: None,
+                    original_input: json!({"command":source}),
+                },
+                &crate::policy::normalized::Context {
+                    cwd: crate::test_support::absolute("/acme").into_owned(),
+                    environment: None,
+                    working_files: None,
+                },
+                &crate::test_support::absolute("/acme"),
+                None,
+                "2026-10-30T00:00:00Z",
+                &|| Ok(()),
+            )
+            .unwrap();
+        assert_eq!(normalized["decision"], decision, "{source}: {normalized}");
+    }
 }
 
 fn preview(source: &str) -> Value {
@@ -779,7 +882,8 @@ fn restriction_evaluator(kind: &str, cwd: Option<&str>, tool: &str) -> Evaluator
     };
     let mut matcher = json!({"executable":tool,"arguments":arguments});
     if let Some(cwd) = cwd {
-        matcher["cwd"] = json!({"exact":{"root":"absolute","path":cwd}});
+        matcher["cwd"] =
+            json!({"exact":{"root":"absolute","path":crate::test_support::absolute(cwd)}});
     }
     matcher["domain"] = json!("argv");
     let document = crate::policy::rules::document(&[json!({"id":"cap","decision":"deny","reason":"Acme project restriction","conditions":matcher})]).unwrap();
@@ -1783,9 +1887,9 @@ fn finite_loops_aggregate_command_policy_without_a_structural_ask() {
         let result = super::analyze_controlled(
             source,
             Dialect::Bash,
-            "/acme",
+            &crate::test_support::absolute("/acme"),
             environment,
-            "/acme",
+            &crate::test_support::absolute("/acme"),
             &evaluator(),
             &|| Ok(()),
         )
@@ -3010,6 +3114,8 @@ fn every_structured_branch_retains_denials_and_allows_only_complete_literal_list
 #[test]
 fn cd_to_the_current_directory_preserves_known_context_and_policy_refusals() {
     use crate::{configuration::Candidate, policy::Scope};
+    let preview =
+        |source: &str| preview(&source.replace("/acme", &crate::test_support::absolute("/acme")));
     for source in [
         "cd /acme; acme read",
         "cd . && acme read",
@@ -3213,7 +3319,7 @@ fn project_restrictions_and_mid_analysis_cancellation_survive_aggregation() {
     );
     let candidate =
         Candidate::from_yaml("schema_version: 1\npacks: []\nrules: rules.json\n").unwrap();
-    let contextual = json!({"schema_version":1,"rules":[{"id":"cwd","decision":"deny","reason":"Acme context restriction","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"},"cwd":{"exact":{"root":"absolute","path":"/acme"}}}}],"kind":"custom","capabilities":["argument-rules-v1","location-v1","structured-rules-v1"]}).to_string();
+    let contextual = json!({"schema_version":1,"rules":[{"id":"cwd","decision":"deny","reason":"Acme context restriction","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"},"cwd":{"exact":{"root":"absolute","path":crate::test_support::absolute("/acme")}}}}],"kind":"custom","capabilities":["argument-rules-v1","location-v1","structured-rules-v1"]}).to_string();
     let contextual = Evaluator::new(vec![(
         Scope::Project,
         candidate.capture(&[], Some(&contextual)).unwrap(),
@@ -3262,7 +3368,8 @@ fn indirect_tool_execution_retains_only_guaranteed_project_restrictions() {
         let mut matcher =
             json!({"executable":"acme","arguments":{"kind":"exact","values":["write"]}});
         if let Some(cwd) = cwd {
-            matcher["cwd"] = json!({"exact":{"root":"absolute","path":cwd}});
+            matcher["cwd"] =
+                json!({"exact":{"root":"absolute","path":crate::test_support::absolute(cwd)}});
         }
         matcher["domain"] = json!("argv");
         let rules = crate::policy::rules::document(&[

@@ -26,7 +26,10 @@ no catalog provenance.
 An existing valid copy is kept. A write with the correct bytes repairs a corrupt
 or wrongly sized regular entry. Writes use a unique temporary file and atomic
 rename, not an in-place modification. On Unix, newly created directories are
-0700 and files are 0600.
+0700 and files are 0600. On Windows, created directories and replacement files
+receive a protected DACL allowing only the current user and SYSTEM. Existing
+parent-directory permissions are preserved. Final-component links and reparse
+points are refused when opening reads.
 
 ## Read offline
 
@@ -57,7 +60,8 @@ Symlink roots, symlink entries and entries of the wrong file kind are refused.
 A write does not replace those entries. Refused writes leave existing entries
 unchanged, although they may have created a missing root directory.
 
-Files are synced before rename. On Unix, the cache also attempts a directory
+Files are synced before rename. Windows replacements request write-through.
+On Unix, the cache also attempts a directory
 sync. If that final sync fails, a cache write still succeeds: after a crash the
 entry may need fetching again, and every read verifies its bytes.
 

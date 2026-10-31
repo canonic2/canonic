@@ -1,8 +1,12 @@
 //! Public workflows use a real controlling terminal, without a confirmation bypass.
 use assert_cmd::cargo::cargo_bin_cmd;
 use assert_fs::{TempDir, prelude::*};
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(any(unix, windows))]
+use serde_json::json;
+#[cfg(any(unix, windows))]
 use sha2::{Digest, Sha256};
+#[cfg(any(unix, windows))]
 use std::fmt::Write;
 
 #[test]
@@ -50,7 +54,7 @@ fn human_errors_are_actionable_plain_text_and_json_errors_keep_their_contract() 
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn onboarding_selects_both_agents_together_and_skip_leaves_integrations_absent() {
     let root = TempDir::new().expect("project");
     assert_eq!(
@@ -110,7 +114,7 @@ fn onboarding_selects_both_agents_together_and_skip_leaves_integrations_absent()
     assert!(!skipped.path().join(".mcp.json").exists());
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(super) fn interactive(root: &TempDir, args: &[&str], answers: &str) -> Value {
     let mut selected = args.to_vec();
     if selected.first().is_some_and(|a| *a == "init") && !selected.contains(&"--agent") {
@@ -162,12 +166,20 @@ fn guided(root: &TempDir, args: &[&str], answers: &str) -> Value {
     );
     serde_json::from_slice(&output.stdout).expect("PTY harness receipt")
 }
+
+#[cfg(windows)]
+fn guided(root: &TempDir, args: &[&str], answers: &str) -> Value {
+    super::windows::prompts::run(root.path(), args, answers)
+}
+
+#[cfg(any(unix, windows))]
 pub(super) fn query(root: &TempDir, args: &[&str]) -> Value {
     let output = cargo_bin_cmd!("shield")
         .args(args)
         .args(["--json", "--project"])
         .arg(root.path())
         .env("HOME", root.path())
+        .env("USERPROFILE", root.path())
         .assert()
         .success()
         .get_output()
@@ -177,7 +189,7 @@ pub(super) fn query(root: &TempDir, args: &[&str]) -> Value {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn guided_mcp_setup_cancellation_repair_and_removal_preserve_project_policy() {
     let root = TempDir::new().expect("project");
     root.child(".mcp.json")
@@ -245,7 +257,7 @@ fn guided_mcp_setup_cancellation_repair_and_removal_preserve_project_policy() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn invalid_mcp_setup_and_json_requests_never_enroll_or_modify_a_project() {
     let root = TempDir::new().expect("project");
     root.child(".mcp.json")
@@ -268,7 +280,7 @@ fn invalid_mcp_setup_and_json_requests_never_enroll_or_modify_a_project() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn setup_defaults_to_allow_and_preserves_saved_fallback_without_reinitializing_policy() {
     let root = TempDir::new().expect("project");
     cargo_bin_cmd!("shield")
@@ -350,7 +362,7 @@ fn setup_defaults_to_allow_and_preserves_saved_fallback_without_reinitializing_p
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn global_sources_work_before_enrollment_and_project_defaults_take_precedence() {
     let root = TempDir::new().expect("project");
     let source = TempDir::new().expect("registry");
@@ -387,7 +399,7 @@ fn global_sources_work_before_enrollment_and_project_defaults_take_precedence() 
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn policy_repair_recreates_missing_files_without_using_init_or_changing_active_policy() {
     let root = TempDir::new().expect("project");
     assert_eq!(interactive(&root, &["init"], "yes\n")["code"], 0);
@@ -405,7 +417,7 @@ fn policy_repair_recreates_missing_files_without_using_init_or_changing_active_p
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn guided_add_asks_setup_questions_in_declaration_order_and_reasks_refused_values() {
     let root = TempDir::new().expect("project");
     let source = TempDir::new().expect("registry");
@@ -516,7 +528,7 @@ fn guided_add_asks_setup_questions_in_declaration_order_and_reasks_refused_value
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn guided_rule_overrides_mark_a_filtered_rule_with_space() {
     let root = TempDir::new().expect("project");
     let source = TempDir::new().expect("registry");
@@ -574,7 +586,7 @@ fn guided_rule_overrides_mark_a_filtered_rule_with_space() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn going_back_through_rule_overrides_keeps_an_existing_override() {
     let root = TempDir::new().expect("project");
     let source = TempDir::new().expect("registry");
@@ -648,7 +660,7 @@ fn going_back_through_rule_overrides_keeps_an_existing_override() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn local_registration_install_profile_change_and_offline_removal_are_atomic() {
     let root = TempDir::new().expect("project");
     let source = TempDir::new().expect("registry");
@@ -776,13 +788,14 @@ fn old_public_commands_and_unattended_mutations_are_refused() {
 }
 
 /// Run an interactive command, confirm its review and require success.
+#[cfg(any(unix, windows))]
 fn confirmed(root: &TempDir, args: &[&str]) {
     let result = interactive(root, args, "yes\n");
     assert_eq!(result["code"], 0, "{result}");
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn registry_short_refs_preserve_pins_profiles_and_unchanged_activation() {
     let root = TempDir::new().expect("project");
     let source = TempDir::new().expect("registry");
@@ -880,7 +893,7 @@ fn registry_short_refs_preserve_pins_profiles_and_unchanged_activation() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn init_from_project_files_writes_a_portable_lock() {
     let locks: Vec<String> = (0..2)
         .map(|_| {
@@ -909,7 +922,7 @@ fn init_from_project_files_writes_a_portable_lock() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn rule_edit_preserves_conditions_and_only_changes_explicit_values() {
     let root = TempDir::new().expect("project");
     let conditions = json!({"domain":"argv","executable":"acme","arguments":{"kind":"prefix","values":["read"]},"cwd":{"exact":{"root":"absolute","path":root.path()}}});
@@ -930,7 +943,7 @@ fn rule_edit_preserves_conditions_and_only_changes_explicit_values() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn rule_add_and_edit_refuse_rules_naming_the_checkout() {
     let root = TempDir::new().expect("project");
     let checkout = root.path().canonicalize().expect("project path");
@@ -973,7 +986,7 @@ fn rule_add_and_edit_refuse_rules_naming_the_checkout() {
     assert_eq!(query(&root, &["status"])["active"], before);
 }
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn confirmed_rules_publish_immediately_and_cancellation_preserves_authority() {
     let root = TempDir::new().expect("fixture");
     let cancelled = interactive(&root, &["init"], "no\n");
@@ -1018,7 +1031,7 @@ fn confirmed_rules_publish_immediately_and_cancellation_preserves_authority() {
     );
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(super) fn local_dependency_source() -> TempDir {
     let source = TempDir::new().expect("registry");
     let child_file = super::policy::candidate(&source);
@@ -1058,7 +1071,7 @@ pub(super) fn local_dependency_source() -> TempDir {
     source
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn fixture_digest(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
@@ -1068,7 +1081,7 @@ fn fixture_digest(bytes: &[u8]) -> String {
         })
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn cross_source_sources() -> (TempDir, TempDir, String) {
     let a = local_dependency_source();
     let b = local_dependency_source();
@@ -1097,7 +1110,7 @@ fn cross_source_sources() -> (TempDir, TempDir, String) {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn cross_source_cli_reviews_foreign_updates_and_prunes_offline() {
     let root = TempDir::new().unwrap();
     let (a, b, identity) = cross_source_sources();
@@ -1182,7 +1195,7 @@ fn cross_source_cli_reviews_foreign_updates_and_prunes_offline() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn dependency_update_cli_reviews_all_changes_and_preserves_cancelled_activation() {
     let root = TempDir::new().unwrap();
     let source = local_dependency_source();
@@ -1247,7 +1260,7 @@ fn dependency_update_cli_reviews_all_changes_and_preserves_cancelled_activation(
 }
 
 /// The shared lock records the local registry by identity, not its path.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn assert_lock_names_source_by_identity(root: &TempDir, source: &TempDir) {
     let lock = std::fs::read_to_string(root.path().join(".shield/shield.lock")).expect("lock");
     let canonical = source.path().canonicalize().expect("canonical source");
@@ -1263,7 +1276,7 @@ fn assert_lock_names_source_by_identity(root: &TempDir, source: &TempDir) {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn local_dependency_installation_reviews_complete_closure_preserves_profiles_and_works_offline() {
     let root = TempDir::new().expect("project");
     let source = local_dependency_source();
@@ -1361,7 +1374,7 @@ fn local_dependency_installation_reviews_complete_closure_preserves_profiles_and
 /// An initialized project with an Ask rule for `/bin/echo`, a `company`
 /// registry and its `acme/test` pack installed. Returns the project and the
 /// registry folder, which must outlive the project's use of it.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn inspected_project() -> (TempDir, TempDir) {
     let root = TempDir::new().expect("project");
     let rule = json!({"id":"echo","decision":"ask","reason":"Acme echo needs approval","conditions":{"domain":"argv","executable":"/bin/echo","arguments":{"kind":"any"}}});
@@ -1403,7 +1416,7 @@ fn inspected_project() -> (TempDir, TempDir) {
 }
 
 /// Every file under `root` with its bytes.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn files(root: &std::path::Path) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
     let mut files = std::collections::BTreeMap::new();
     let mut folders = vec![root.to_path_buf()];
@@ -1424,7 +1437,7 @@ fn files(root: &std::path::Path) -> std::collections::BTreeMap<std::path::PathBu
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn every_inspection_result_carries_the_schema_version() {
     let (root, _source) = inspected_project();
     #[cfg_attr(not(target_os = "macos"), expect(unused_mut))]
@@ -1481,7 +1494,7 @@ fn every_inspection_result_carries_the_schema_version() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn every_mutation_refuses_json_before_preparing_anything() {
     let (root, source) = inspected_project();
     let location = source.path().to_str().expect("path");
@@ -1527,7 +1540,7 @@ fn every_mutation_refuses_json_before_preparing_anything() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn escape_in_protection_goes_back_with_answers_kept() {
     let root = TempDir::new().expect("project");
     assert_eq!(interactive(&root, &["init"], "yes\n")["code"], 0);
@@ -1552,7 +1565,7 @@ fn escape_in_protection_goes_back_with_answers_kept() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn escape_in_init_and_setup_goes_back_with_answers_kept() {
     let root = TempDir::new().expect("project");
     // The agent page is init's first step without a baseline question.
@@ -1581,7 +1594,7 @@ fn escape_in_init_and_setup_goes_back_with_answers_kept() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn mcp_setup_dry_run_reviews_without_writing() {
     let root = TempDir::new().expect("project");
     assert_eq!(interactive(&root, &["init"], "yes\n")["code"], 0);
@@ -1596,7 +1609,7 @@ fn mcp_setup_dry_run_reviews_without_writing() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn escape_in_policy_history_and_rule_add_goes_back_with_answers_kept() {
     let root = TempDir::new().expect("project");
     assert_eq!(interactive(&root, &["init"], "yes\n")["code"], 0);

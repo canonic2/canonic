@@ -58,17 +58,23 @@ pub struct PausedInline {
     options: InlineOptions,
     #[cfg(unix)]
     original: Option<rustix::termios::Termios>,
+    #[cfg(windows)]
+    original: Option<(u32, u32)>,
 }
 impl PausedInline {
     /// Resume below intervening shell output using a newly verified anchor.
     /// # Errors
     /// Returns acquisition/capability errors without consuming caller data.
     pub fn resume(self) -> io::Result<InlineSession> {
-        let mut session = InlineSession::open(self.options)?;
-        #[cfg(unix)]
-        if let Some(lease) = &mut session.lease {
-            lease.original = self.original;
-        }
+        let session = InlineSession::open(self.options)?;
+        #[cfg(any(unix, windows))]
+        let session = {
+            let mut session = session;
+            if let Some(lease) = &mut session.lease {
+                lease.original = self.original;
+            }
+            session
+        };
         Ok(session)
     }
 }
@@ -433,6 +439,8 @@ impl InlineSession {
     pub fn pause(mut self) -> io::Result<PausedInline> {
         #[cfg(unix)]
         let original = self.lease.as_ref().and_then(|lease| lease.original.clone());
+        #[cfg(windows)]
+        let original = self.lease.as_ref().and_then(|lease| lease.original);
         if self.alternate {
             self.leave_alternate()?;
         }
@@ -443,7 +451,7 @@ impl InlineSession {
         }
         Ok(PausedInline {
             options: self.options,
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             original,
         })
     }

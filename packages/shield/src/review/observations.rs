@@ -130,7 +130,7 @@ pub(crate) fn completion(
 }
 
 /// Records an owned native child's result, separate from SDK-supplied observations.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 pub(crate) fn execution_completion(
     context: &Context,
     request: Option<&str>,

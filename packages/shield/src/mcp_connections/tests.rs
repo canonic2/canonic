@@ -8,6 +8,21 @@ use crate::{
 };
 use serde_json::json;
 
+#[test]
+fn windows_mcp_environment_refuses_case_collisions_before_launch_review() {
+    let mut transport = Transport::Stdio {
+        command: "acme-connector".into(),
+        args: vec![],
+        env: BTreeMap::from([("ACME_PROFILE".into(), "first".into())]),
+    };
+    assert!(transport.validate().is_ok());
+    let Transport::Stdio { env, .. } = &mut transport else {
+        unreachable!()
+    };
+    env.insert("acme_profile".into(), "second".into());
+    assert_eq!(transport.validate().is_err(), cfg!(windows));
+}
+
 fn pack() -> String {
     json!({"schema_version":1,"kind":"pack","id":"acme/cloud","version":"1.0.0","description":"Acme cloud permissions","license":"MIT","maintainers":["Acme"],"engines":{"shield":"*"},
         "capabilities":["structured-rules-v1","argument-rules-v1","mcp-integrations-v1"],
@@ -41,11 +56,11 @@ fn decide(evaluator: &Evaluator, server: &str, tool: &str) -> Value {
                 original_input: json!({}),
             },
             &Context {
-                cwd: "/acme".into(),
+                cwd: crate::test_support::absolute("/acme").into_owned(),
                 environment: None,
                 working_files: None,
             },
-            "/acme",
+            &crate::test_support::absolute("/acme"),
             None,
             "2026-01-01T00:00:00Z",
             &|| Ok(()),
@@ -72,7 +87,7 @@ fn mcp_connections_packs_cannot_bypass_associations_with_exact_requests() {
     let mut source: Value = policy::parse(&pack()).unwrap();
     source["rules"].as_array_mut().unwrap().push(json!({"id":"unbound-exact","decision":"allow","conditions":{"domain":"exact_request",
         "input":{"kind":"mcp","server":"project-cloud","tool":"inspect","arguments":{},"original_input":{}},
-        "context":{"cwd":"/acme","environment":null},"executable":null}}));
+        "context":{"cwd":crate::test_support::absolute("/acme"),"environment":null},"executable":null}}));
     assert!(matches!(
         policy::Pack::from_yaml(&source.to_string()),
         Err(Error::Contract(
@@ -97,8 +112,8 @@ fn absent_disabled_and_unassociated_mcp_leave_commands_working_without_mcp_allow
         let request = policy::Request {
             executable: "acme-cloud".into(),
             arguments: vec!["inspect".into()],
-            cwd: "/acme".into(),
-            project: "/acme".into(),
+            cwd: crate::test_support::absolute("/acme").into_owned(),
+            project: crate::test_support::absolute("/acme").into_owned(),
         };
         assert_eq!(
             image.evaluate(&request).unwrap().decision,
@@ -197,11 +212,11 @@ fn gate_decision(image: &Evaluator, server: &str, mode: &str) -> Value {
                 original_input: json!({}),
             },
             &Context {
-                cwd: "/acme".into(),
+                cwd: crate::test_support::absolute("/acme").into_owned(),
                 environment: None,
                 working_files: None,
             },
-            "/acme",
+            &crate::test_support::absolute("/acme"),
             None,
             "2026-01-01T00:00:00Z",
             &|| Ok(()),
@@ -214,8 +229,8 @@ fn assert_cli_still_allowed(image: &Evaluator) {
     let request = policy::Request {
         executable: "acme-cloud".into(),
         arguments: vec!["inspect".into()],
-        cwd: "/acme".into(),
-        project: "/acme".into(),
+        cwd: crate::test_support::absolute("/acme").into_owned(),
+        project: crate::test_support::absolute("/acme").into_owned(),
     };
     assert_eq!(
         image.evaluate(&request).unwrap().decision,
@@ -437,7 +452,7 @@ fn command_mapping_keeps_outer_and_inner_restrictions_and_unknown_remote_paths()
             {"id":"region","decision":"deny","conditions":{"domain":"mcp","server":"cloud","tool":"call","fields":{"/region":{"exact":"blocked"}}}},
             {"id":"read","decision":"allow","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"exact","values":["inspect","a b"]}}},
             {"id":"delete","decision":"deny","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"prefix","values":["delete"]}}},
-            {"id":"exact-local","decision":"allow","conditions":{"domain":"exact_request","input":{"kind":"argv","executable":"acme","arguments":["exact"],"original_input":{}},"context":{"cwd":"/acme","environment":null},"executable":null}},
+            {"id":"exact-local","decision":"allow","conditions":{"domain":"exact_request","input":{"kind":"argv","executable":"acme","arguments":["exact"],"original_input":{}},"context":{"cwd":crate::test_support::absolute("/acme"),"environment":null},"executable":null}},
             {"id":"folder","decision":"allow","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"prefix","values":["local"]},"cwd":{"exact":{"root":"project"}}}}
         ]),
         json!(["structured-rules-v1", "argument-rules-v1", "location-v1"]),
@@ -462,11 +477,11 @@ fn command_mapping_keeps_outer_and_inner_restrictions_and_unknown_remote_paths()
                     original_input: json!({}),
                 },
                 &Context {
-                    cwd: "/acme".into(),
+                    cwd: crate::test_support::absolute("/acme").into_owned(),
                     environment: None,
                     working_files: None,
                 },
-                "/acme",
+                &crate::test_support::absolute("/acme"),
                 None,
                 "2026-01-01T00:00:00Z",
                 &|| Ok(()),
@@ -526,11 +541,11 @@ fn mandatory_fields_fail_closed_with_safe_field_evidence() {
                     original_input: json!({}),
                 },
                 &Context {
-                    cwd: "/acme".into(),
+                    cwd: crate::test_support::absolute("/acme").into_owned(),
                     environment: None,
                     working_files: None,
                 },
-                "/acme",
+                &crate::test_support::absolute("/acme"),
                 None,
                 "2026-01-01T00:00:00Z",
                 &|| Ok(()),
@@ -574,11 +589,11 @@ fn mcp_field_evidence_omits_expected_values_from_sensitive_effective_sources() {
                     original_input: json!({}),
                 },
                 &Context {
-                    cwd: "/acme".into(),
+                    cwd: crate::test_support::absolute("/acme").into_owned(),
                     environment: None,
                     working_files: None,
                 },
-                "/acme",
+                &crate::test_support::absolute("/acme"),
                 None,
                 "2026-01-01T00:00:00Z",
                 &|| Ok(()),
@@ -611,7 +626,7 @@ fn mcp_connections_exact_request_binds_submitted_input_without_internal_facts() 
         json!({"transport":{"type":"http","url":"https://cloud.example.com/mcp"},"agents":{"codex":"acme"}}),
         json!([{"id":"exact","decision":"allow","conditions":{"domain":"exact_request",
             "input":{"kind":"mcp","server":"cloud","tool":"inspect","arguments":{},"original_input":{}},
-            "context":{"cwd":"/acme","environment":null},"executable":null}}]),
+            "context":{"cwd":crate::test_support::absolute("/acme"),"environment":null},"executable":null}}]),
         json!(["structured-rules-v1"]),
     );
     assert_eq!(decide(&image, "cloud", "inspect"), "allow");
@@ -647,11 +662,11 @@ fn mcp_connections_effective_fields_distinguish_known_defaults_and_explicit_inva
                     original_input: json!({}),
                 },
                 &Context {
-                    cwd: "/acme".into(),
+                    cwd: crate::test_support::absolute("/acme").into_owned(),
                     environment: None,
                     working_files: None,
                 },
-                "/acme",
+                &crate::test_support::absolute("/acme"),
                 None,
                 "2026-01-01T00:00:00Z",
                 &|| Ok(()),

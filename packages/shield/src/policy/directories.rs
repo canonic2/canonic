@@ -427,7 +427,10 @@ pub(crate) fn normalize(request: &Request, declarations: &[DirectoryOption]) -> 
     {
         return None;
     }
-    let start = lexical(&request.cwd).filter(|cwd| cwd.is_absolute())?;
+    let start = lexical(&request.cwd);
+    if !start.is_absolute() {
+        return None;
+    }
     let values: Vec<&str> = if declaration.repeat == Repeat::Last {
         found.last().map(|(_, value)| *value).into_iter().collect()
     } else {
@@ -463,6 +466,17 @@ fn resolve(base: &Path, value: &str, declaration: &DirectoryOption) -> Option<Pa
     {
         return None;
     }
+    let native = Path::new(value);
+    if cfg!(windows)
+        && !native.is_absolute()
+        && (native.has_root()
+            || matches!(
+                native.components().next(),
+                Some(std::path::Component::Prefix(_))
+            ))
+    {
+        return None;
+    }
     // Joining drops `.` components and keeps `..`.
     let path: PathBuf = base.join(value).components().collect();
     if !file {
@@ -494,12 +508,13 @@ mod tests {
     }
 
     fn request(command: &str, cwd: &str) -> Request {
+        let command = command.replace("/srv", &crate::test_support::absolute("/srv"));
         let mut words = command.split(' ').map(str::to_owned);
         Request {
             executable: words.next().unwrap(),
             arguments: words.collect(),
-            cwd: cwd.into(),
-            project: "/srv/acme".into(),
+            cwd: crate::test_support::absolute(cwd).into_owned(),
+            project: crate::test_support::absolute("/srv/acme").into_owned(),
         }
     }
 
@@ -519,7 +534,10 @@ mod tests {
         reason = "the expected value of the optional normalization"
     )]
     fn pair(command: &str, cwd: &str) -> Option<(String, String)> {
-        Some((command.into(), cwd.into()))
+        let cwd: PathBuf = Path::new(crate::test_support::absolute(cwd).as_ref())
+            .components()
+            .collect();
+        Some((command.into(), cwd.to_str().unwrap().into()))
     }
 
     #[test]

@@ -405,8 +405,11 @@ impl Declaration {
                     if self.within != Some(Within::Anywhere) {
                         return Err(Error::Contract("path variable must stay in the project"));
                     }
-                    normalized(path.trim_start_matches('/'))?;
+                    normalized(absolute_body(path))?;
                 } else {
+                    if !project_relative(path) {
+                        return Err(Error::Contract("path variable must stay in the project"));
+                    }
                     normalized(path)?;
                 }
             }
@@ -599,18 +602,73 @@ fn string(value: &Value, matcher: Option<&Value>, max_length: Option<usize>) -> 
 fn normalized(path: &str) -> Result<(), Error> {
     if path.is_empty()
         || path.contains('\0')
-        || path.split('/').any(|part| matches!(part, "" | "." | ".."))
+        || path
+            .split(|character| character == '/' || (cfg!(windows) && character == '\\'))
+            .any(|part| matches!(part, "" | "." | ".."))
     {
         return Err(Error::Contract("path variables are normalized paths"));
     }
     Ok(())
 }
 
+fn absolute_body(path: &str) -> &str {
+    #[cfg(windows)]
+    let path = match std::path::Path::new(path).components().next() {
+        Some(std::path::Component::Prefix(prefix)) => path
+            .strip_prefix(prefix.as_os_str().to_str().unwrap_or_default())
+            .unwrap_or(path),
+        _ => path,
+    };
+    path.trim_start_matches(|character| character == '/' || (cfg!(windows) && character == '\\'))
+}
+
+fn project_relative(path: &str) -> bool {
+    let path = std::path::Path::new(path);
+    !path.has_root()
+        && !path
+            .components()
+            .any(|component| matches!(component, std::path::Component::Prefix(_)))
+}
+
 fn relative_path(path: &str) -> Result<(), Error> {
-    if path.len() > 4096 || std::path::Path::new(path).is_absolute() {
+    if path.len() > 4096 || !project_relative(path) {
         return Err(Error::Contract("suggestion files are project-relative"));
     }
     normalized(path)
+}
+
+#[cfg(all(test, windows))]
+mod windows_paths {
+    use super::*;
+
+    #[test]
+    fn windows_variables_reject_relative_escape_and_accept_native_absolute_paths() {
+        let project: Declaration =
+            serde_json::from_value(json!({"type":"path","description":"Acme input"})).unwrap();
+        let anywhere: Declaration = serde_json::from_value(
+            json!({"type":"path","description":"Acme input","within":"anywhere"}),
+        )
+        .unwrap();
+        for path in [
+            r"..\secret",
+            r"src\..\secret",
+            r"src\.\file",
+            r"C:secret",
+            r"\secret",
+            r"C:\Acme\input",
+            r"\\server\share\input",
+        ] {
+            assert!(project.check(&json!(path)).is_err(), "{path}");
+            assert!(relative_path(path).is_err(), "{path}");
+        }
+        for path in [r"src\file", "src/file"] {
+            assert!(project.check(&json!(path)).is_ok(), "{path}");
+        }
+        for path in [r"C:\Acme\input", r"\\server\share\input"] {
+            assert!(anywhere.check(&json!(path)).is_ok(), "{path}");
+        }
+        assert!(anywhere.check(&json!(r"C:\Acme\..\secret")).is_err());
+    }
 }
 
 /// One `when` test on a variable of the owning pack.

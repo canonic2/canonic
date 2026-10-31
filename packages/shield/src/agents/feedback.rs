@@ -19,6 +19,7 @@ fn raw_deny(code: &str) -> Reply {
         "policy-deny" => format!("Shield: denied by active policy. Do not work around this; inspect the matching rule with rule_list if useful. {PROPOSE}"),
         // A rule cannot cover a tool Shield does not model, so no proposal helps.
         "unsupported-operation" => "Shield: unsupported tool; blocked. Continue without it, or explain to the user why it is needed.".to_owned(),
+        "unsupported-shell" => "Shield: blocked this shell dialect because its file effects cannot be verified. Use supported file tools or ask the user to run the command.".to_owned(),
         "operator-cli" => "Shield: inspect with the status or rule_list tools; propose changes with policy_propose and copy the returned apply_arguments object unchanged into policy_apply for approval.".to_owned(),
         "protected-access" => format!("{PROTECTED_ACCESS} Never read or change .shield/review or the cache. Propose policy changes with policy_propose; direct policy/settings edits require the user's shield protection set choice. Do not bypass protection."),
         "sensitive-read" => "Shield: settings may contain credentials; this callback cannot request read approval. Continue without them unless essential; then ask the user to inspect them in a terminal.".to_owned(),

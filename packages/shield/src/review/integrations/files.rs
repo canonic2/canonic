@@ -7,6 +7,18 @@ use std::{
     path::{Component, Path},
 };
 
+fn linked(metadata: &fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x0400 != 0
+    }
+    #[cfg(not(windows))]
+    {
+        metadata.file_type().is_symlink()
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(in crate::review) struct Change {
@@ -30,7 +42,7 @@ fn checked_path(root: &Path, name: &str) -> Result<std::path::PathBuf, Error> {
         }
         path.push(part);
         match fs::symlink_metadata(&path) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
+            Ok(metadata) if linked(&metadata) => {
                 return Err(Error::Invalid("linked integration configuration path"));
             }
             Ok(_) => (),
@@ -52,9 +64,11 @@ pub(in crate::review) fn read(root: &Path, name: &str) -> Result<Option<String>,
                 }
             }
             let mut text = String::new();
-            fs::File::open(path)?
-                .take(MAX_CONFIG + 1)
-                .read_to_string(&mut text)?;
+            #[cfg(windows)]
+            let file = crate::windows_security::read_regular(&path)?;
+            #[cfg(not(windows))]
+            let file = fs::File::open(path)?;
+            file.take(MAX_CONFIG + 1).read_to_string(&mut text)?;
             if text.len() as u64 > MAX_CONFIG {
                 return Err(Error::Invalid("integration configuration exceeds limit"));
             }
@@ -122,12 +136,31 @@ pub(in crate::review) fn validate_recovery(root: &Path, files: &[Change]) -> Res
 pub(in crate::review) fn create_like(temporary: &Path, target: &Path) -> Result<fs::File, Error> {
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.access_mode(0x4006_0080);
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o666);
     }
     let file = options.open(temporary)?;
+    #[cfg(windows)]
+    let file = {
+        let mut file = file;
+        match crate::windows_security::copy_dacl(&mut file, target) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                drop(file);
+                let _ = fs::remove_file(temporary);
+                return Err(error.into());
+            }
+        }
+        file
+    };
     match fs::metadata(target) {
         Ok(existing) => file.set_permissions(existing.permissions())?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -159,7 +192,7 @@ pub(in crate::review) fn publish(root: &Path, files: &[Change]) -> Result<(), Er
                         "integration file changed during publication",
                     ));
                 }
-                fs::rename(&tmp, &path)?;
+                crate::review::storage::replace(&tmp, &path)?;
                 Ok::<(), Error>(())
             })();
             drop(file);
@@ -177,4 +210,66 @@ pub(in crate::review) fn publish(root: &Path, files: &[Change]) -> Result<(), Er
         crate::review::storage::sync(&fs::File::open(parent)?)?;
     }
     Ok(())
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_permissions::{
+        constants::{SeObjectType, SecurityInformation},
+        wrappers,
+    };
+
+    fn dacl(path: &Path) -> std::ffi::OsString {
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .access_mode(0x0002_0080)
+            .custom_flags(0x0020_0000)
+            .open(path)
+            .expect("open settings security descriptor");
+        wrappers::GetSecurityInfo(
+            &file,
+            SeObjectType::SE_FILE_OBJECT,
+            SecurityInformation::Dacl,
+        )
+        .expect("read settings DACL")
+        .as_sddl()
+        .expect("encode settings DACL")
+    }
+
+    #[test]
+    fn windows_settings_replacements_preserve_private_and_inherited_permissions() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let target = root.path().join("settings.json");
+        for private in [false, true] {
+            fs::write(&target, "Acme").unwrap();
+            if private {
+                crate::windows_security::make_private(&target).unwrap();
+            }
+            let temporary = root.path().join("replacement");
+            drop(create_like(&temporary, &target).unwrap());
+            assert_eq!(dacl(&target), dacl(&temporary));
+            fs::remove_file(temporary).unwrap();
+        }
+    }
+
+    #[test]
+    fn windows_settings_reads_refuse_hard_link_aliases() {
+        let root = assert_fs::TempDir::new().unwrap();
+        fs::create_dir(root.path().join(".claude")).unwrap();
+        let target = root.path().join(".claude/settings.local.json");
+        fs::write(&target, "{}").unwrap();
+        assert_eq!(
+            read(root.path(), ".claude/settings.local.json")
+                .unwrap()
+                .as_deref(),
+            Some("{}")
+        );
+        let alias = root.path().join("alias");
+        fs::hard_link(&target, &alias).unwrap();
+        assert!(read(root.path(), ".claude/settings.local.json").is_err());
+        fs::remove_file(alias).unwrap();
+        assert!(read(root.path(), ".claude/settings.local.json").is_ok());
+    }
 }

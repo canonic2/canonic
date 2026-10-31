@@ -103,6 +103,9 @@ pub struct ReviewContext {
 /// Project MCP server; the enrolled project comes from `--project` or the working directory.
 #[derive(Args)]
 pub struct McpServe {
+    /// Serve bundled skills and resources without opening a project or exposing tools.
+    #[arg(long)]
+    pub skills_only: bool,
     /// Agent label, recorded as caller attribution.
     #[arg(long)]
     pub agent: Option<String>,

@@ -78,7 +78,7 @@ impl PackDocument {
         self.capabilities.iter().any(|c| c == "templates-v1")
     }
 }
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct CustomDocument {
     schema_version: u8,

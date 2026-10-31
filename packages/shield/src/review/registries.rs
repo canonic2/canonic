@@ -109,13 +109,13 @@ pub(super) fn artifact(fetcher: &Fetcher, source: &Source, entry: &Entry) -> Res
 
 pub(super) fn global_file() -> Result<GlobalFile, Error> {
     Ok(GlobalFile::new(
-        global_path(std::env::var_os("HOME"))?,
+        global_path(std::env::home_dir().map(PathBuf::into_os_string))?,
         BUILTIN,
     ))
 }
 
 /// The user's global registrations under an absolute home directory; a relative
-/// or empty `HOME` would otherwise resolve against the working directory.
+/// or empty home path would otherwise resolve against the working directory.
 fn global_path(home: Option<std::ffi::OsString>) -> Result<PathBuf, Error> {
     home.map(PathBuf::from)
         .filter(|home| home.is_absolute())

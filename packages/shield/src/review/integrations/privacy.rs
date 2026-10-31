@@ -5,6 +5,54 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg_attr(
+    not(windows),
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "Windows must discover a native Git executable before creating the shared command"
+    )
+)]
+fn git(root: &Path) -> Result<Command, Error> {
+    #[cfg(windows)]
+    let executable = std::env::var_os("PATH")
+        .into_iter()
+        .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .filter(|directory| directory.is_absolute())
+        .filter_map(|directory| directory.join("git.exe").canonicalize().ok())
+        .find(|path| path.is_file() && !path.starts_with(root))
+        .ok_or(Error::Invalid(
+            "Git for Windows is required to verify private MCP destinations",
+        ))?;
+    #[cfg(not(windows))]
+    let executable = std::path::PathBuf::from("/usr/bin/git");
+    let mut command = Command::new(executable);
+    command
+        .current_dir(root)
+        .env_clear()
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env(
+            "GIT_CONFIG_GLOBAL",
+            if cfg!(windows) { "NUL" } else { "/dev/null" },
+        )
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .args([
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "maintenance.auto=false",
+            "-c",
+            "gc.auto=0",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    if let Some(system_root) = std::env::var_os("SystemRoot") {
+        command.env("SystemRoot", system_root);
+    }
+    Ok(command)
+}
+
 pub(crate) fn private_mcp_destination(root: &Path, agent: &str) -> Result<(), Error> {
     let adapter = agents::find(agent).ok_or(Error::Invalid("unsupported MCP agent"))?;
     let path = adapter.spec().mcp_path.unwrap_or(".mcp.json");
@@ -49,16 +97,9 @@ pub(super) fn validate(root: &Path, plan: &Plan) -> Result<(), Error> {
 fn untracked(root: &Path, path: &str) -> Result<(), Error> {
     // Do not inherit GIT_DIR, GIT_WORK_TREE or an alternate index: the check
     // must describe the destination's actual repository, not the caller's.
-    let mut child = Command::new("/usr/bin/git")
-        .current_dir(root)
-        .env_clear()
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_OPTIONAL_LOCKS", "0")
+    let mut child = git(root)?
         .args([
             "--literal-pathspecs",
-            "-c",
-            "core.fsmonitor=false",
             "ls-files",
             "--cached",
             "--error-unmatch",
@@ -97,5 +138,30 @@ fn untracked(root: &Path, path: &str) -> Result<(), Error> {
                 ));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_git_tracking_refuses_private_projection_into_the_index() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let root = root.path().canonicalize().unwrap();
+        assert!(untracked(&root, ".mcp.json").is_err());
+        assert!(git(&root).unwrap().arg("init").status().unwrap().success());
+        std::fs::write(root.join(".mcp.json"), "{}").unwrap();
+        assert!(untracked(&root, ".mcp.json").is_ok());
+        assert!(
+            git(&root)
+                .unwrap()
+                .args(["add", "--", ".mcp.json"])
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(untracked(&root, ".mcp.json").is_err());
+        assert!(untracked(&root, ".claude/settings.local.json").is_ok());
     }
 }

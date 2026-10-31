@@ -12,7 +12,8 @@ fn pack_candidates_preserve_current_alias_source_and_installed_identity() {
     let (_root, context) = review::tests::enrolled();
     let registry = assert_fs::TempDir::new().unwrap();
     let source =
-        canonic_registry_kit::source::Source::local(&registry.path().canonicalize().unwrap()).unwrap();
+        canonic_registry_kit::source::Source::local(&registry.path().canonicalize().unwrap())
+            .unwrap();
     let root = Path::new(&context.project_root);
     Store::open(root).unwrap().update(&context, &|| Ok(()), |state| {
         state.operator["sources"]["acme"] = json!(source);

@@ -6,6 +6,73 @@ use serde_json::{Value, json};
 use std::fs;
 use toml_edit::{DocumentMut, value};
 
+#[test]
+fn windows_hook_paths_remain_literal_inside_an_encoded_command() {
+    use base64::Engine as _;
+    let binary = Path::new(r"C:\Acme tools\shield.exe");
+    let project = Path::new(r"C:\Acme's $HOME & %TEMP%\project");
+    let command = windows_command(
+        Path::new(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"),
+        binary,
+        project,
+        "codex",
+        "PreToolUse",
+    )
+    .unwrap();
+    assert!(command.starts_with("C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe "));
+    assert!(!command.contains("Acme"));
+    let (_, encoded) = command.split_once(" -EncodedCommand ").unwrap();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .unwrap();
+    let utf16: Vec<_> = bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|bytes| u16::from_le_bytes(*bytes))
+        .collect();
+    let script = String::from_utf16(&utf16).unwrap();
+    assert!(script.starts_with("& 'C:\\Acme tools\\shield.exe' __internal native-hook "));
+    assert!(script.contains("--project 'C:\\Acme''s $HOME & %TEMP%\\project'"));
+    assert!(script.contains("--agent 'codex' --event 'PreToolUse'"));
+    assert!(script.ends_with("if ($LASTEXITCODE -ne 0) { exit 2 }"));
+}
+
+#[test]
+fn windows_hooks_refuse_shell_lookup_and_control_characters_in_paths() {
+    let binary = Path::new(r"C:\Tools\shield.exe");
+    let project = Path::new(r"C:\Acme");
+    for shell in [
+        "",
+        "powershell.exe",
+        "C:\\Windows tools\\powershell.exe",
+        "C:\\shell&other.exe",
+        "C:\\shell%PATH%.exe",
+    ] {
+        assert!(windows_command(Path::new(shell), binary, project, "codex", "PreToolUse").is_err());
+    }
+    assert!(
+        windows_command(
+            Path::new(r"C:\Windows\powershell.exe"),
+            binary,
+            Path::new("C:\\Acme\nother"),
+            "codex",
+            "PreToolUse",
+        )
+        .is_err()
+    );
+    assert!(
+        windows_command(
+            Path::new(r"C:\Windows\powershell.exe"),
+            binary,
+            Path::new(&format!(r"C:\{}", "a".repeat(4096))),
+            "codex",
+            "PreToolUse"
+        )
+        .is_err()
+    );
+}
+
 // Deliberately uses neither shipping hook schema and stores hooks and MCP in
 // one TOML file. The shared workflow must not parse or independently write it.
 struct Acme;

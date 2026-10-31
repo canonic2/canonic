@@ -6,6 +6,11 @@ use canonic_tui_kit::{
     event::{Event, KeyCode, KeyEventKind, KeyModifiers},
     permission_review::{self, Kind, PermissionReview, Resource},
     picker::{Choice, ChoicePicker, Filter, Intent, PickerView, SelectionMode},
+    ratatui::{
+        Frame,
+        layout::{Constraint, Layout, Rect},
+        widgets::Paragraph,
+    },
     runtime::{Capabilities, InlineOptions, InlineSession},
     theme::{ColorMode, Presentation},
     tool_call_card::Output,
@@ -22,12 +27,13 @@ pub(super) fn open(height: u16) -> Result<Host, Error> {
     let term = std::env::var("TERM").unwrap_or_default();
     if !std::io::stdin().is_terminal()
         || !std::io::stdout().is_terminal()
-        || !["xterm", "screen", "tmux", "linux", "vt", "ansi"]
-            .iter()
-            .any(|p| term.starts_with(p))
+        || !(cfg!(windows) && term.is_empty()
+            || ["xterm", "screen", "tmux", "linux", "vt", "ansi"]
+                .iter()
+                .any(|p| term.starts_with(p)))
     {
         return Err(Error::Invalid(
-            "interactive TUI requires terminal stdin/stdout and a cursor-capable TERM",
+            "interactive TUI requires terminal stdin/stdout and a native console or cursor-capable TERM",
         ));
     }
     let signals = signals::Signals::new()?;
@@ -386,11 +392,15 @@ pub(super) fn question(
     loop {
         session = signals.check(session)?;
         let width = session.area().width;
-        session.set_height(questions.height(width, presentation()).max(8))?;
+        session.set_height(
+            questions
+                .height(width, presentation())
+                .max(8)
+                .saturating_add(1),
+        )?;
         let area = session.area();
         session.draw(|frame| {
-            questions.render_with(frame, area, presentation(), 0);
-            questions.render_overlay(frame, area, presentation());
+            render_question(&mut questions, frame, area);
         })?;
         let Some(event) = session.poll(Duration::from_millis(100))? else {
             questions.tick(Duration::from_millis(100));
@@ -433,7 +443,21 @@ pub(super) fn question(
     }
 }
 
-use canonic_tui_kit::question_form::{self as form, AnswerValue, Kind as Shape, QuestionForm, Request};
+use canonic_tui_kit::question_form::{
+    self as form, AnswerValue, Kind as Shape, QuestionForm, Request,
+};
+
+/// The reusable panel leaves its keyboard hint to its host's footer.
+fn render_question(questions: &mut QuestionForm, frame: &mut Frame<'_>, area: Rect) {
+    let [body, footer] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
+    let presentation = presentation();
+    questions.render_with(frame, body, presentation, 0);
+    frame.render_widget(
+        Paragraph::new(questions.hint_for(area.width)).style(presentation.muted()),
+        footer,
+    );
+    questions.render_overlay(frame, area, presentation);
+}
 
 fn setup_form(question: &super::Question) -> Result<QuestionForm, Error> {
     let shape = match (question.multiple, question.choices.is_empty()) {
@@ -549,6 +573,38 @@ mod tests {
         event::KeyEvent,
         ratatui::{Terminal, backend::TestBackend},
     };
+    #[test]
+    fn setup_questions_show_controls_for_choices_and_text_entry() {
+        let question = super::super::Question {
+            title: "Acme profile".into(),
+            prompt: "Restrict the profile?".into(),
+            context: String::new(),
+            choices: vec![("unset".into(), "Any profile".into(), String::new())],
+            multiple: false,
+            typed: Some(("Only this profile".into(), None)),
+            default: None,
+            back: false,
+        };
+        let mut questions = setup_form(&question).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(120, 12)).unwrap();
+        for expected in ["enter choose", "ctrl+j new line"] {
+            terminal
+                .draw(|frame| render_question(&mut questions, frame, frame.area()))
+                .unwrap();
+            let text = terminal
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .map(canonic_tui_kit::ratatui::buffer::Cell::symbol)
+                .collect::<String>();
+            assert!(text.contains(expected), "{text}");
+            questions.update(&Event::Key(KeyEvent::new(
+                KeyCode::Char('2'),
+                KeyModifiers::NONE,
+            )));
+        }
+    }
     fn card(stale: bool) -> Card {
         Card {
             title: "pack add".into(),

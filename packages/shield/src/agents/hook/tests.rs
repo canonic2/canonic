@@ -13,12 +13,17 @@ mod working_files;
 fn native_denial_names_pipeline_commands_without_inventing_folder_access() {
     let (root, _) = fixture();
     fs::write(root.path().join("report.txt"), "Acme report").unwrap();
+    fs::write(root.path().join("report.js"), "// Acme report\n").unwrap();
     for agent in ["claude", "codex"] {
         for source in [
             "head report.txt | head report.txt",
             "git reset --hard | head report.txt",
         ] {
             let value = call(root.path(), agent, source);
+            if cfg!(windows) && agent == "codex" {
+                assert_unsupported_shell(&value);
+                continue;
+            }
             let summary = value["hookSpecificOutput"]["permissionDecisionReason"]
                 .as_str()
                 .unwrap();
@@ -36,7 +41,13 @@ fn native_denial_names_pipeline_commands_without_inventing_folder_access() {
                 assert_eq!(summary.matches("`head` (rule `head`)").count(), 2);
             }
         }
-        assert_permitted(&call(root.path(), agent, "cat report.txt"), agent);
+        let read = call(root.path(), agent, "cat report.txt");
+        if cfg!(windows) && agent == "codex" {
+            assert_unsupported_shell(&read);
+            assert_permitted(&call(root.path(), agent, "node --check report.js"), agent);
+        } else {
+            assert_permitted(&read, agent);
+        }
     }
     let value = tool(
         root.path(),
@@ -292,7 +303,12 @@ fn heredoc_scaffolding_checks_destinations_without_an_extra_approval() {
             "cat > package.json <<'EOF'\n{\"private\":true}\nEOF\ncat > app.js <<'EOF'\nconst example = '$(acme write)';\nEOF\n",
             "cat > app.js <<< 'literal content'",
         ] {
-            assert_permitted(&call(root.path(), agent, source), agent);
+            let value = call(root.path(), agent, source);
+            if cfg!(windows) && agent == "codex" {
+                assert_unsupported_shell(&value);
+            } else {
+                assert_permitted(&value, agent);
+            }
         }
         for source in [
             "cat > ../outside.js <<'EOF'\ndata\nEOF\n",
@@ -306,6 +322,18 @@ fn heredoc_scaffolding_checks_destinations_without_an_extra_approval() {
                 "{source}: {value}"
             );
         }
+    }
+    if cfg!(windows) {
+        let patch = "*** Begin Patch\n*** Add File: app.js\n+const example = '$(acme write)';\n*** End Patch";
+        assert_permitted(
+            &tool(
+                root.path(),
+                "codex",
+                "apply_patch",
+                &json!({"command":patch}),
+            ),
+            "codex",
+        );
     }
     assert!(!root.path().join("package.json").exists());
     assert!(!root.path().join("app.js").exists());
@@ -326,7 +354,9 @@ fn output_text_is_not_a_protected_path_but_its_io_still_is() {
             "/usr/bin/printf '%s' .shield/review/state.json > notes.txt",
         ] {
             let value = call(root.path(), agent, source);
-            if agent == "codex" {
+            if cfg!(windows) && agent == "codex" {
+                assert_unsupported_shell(&value);
+            } else if agent == "codex" {
                 assert_permitted(&value, agent);
             } else {
                 assert_eq!(
@@ -353,10 +383,14 @@ fn output_text_is_not_a_protected_path_but_its_io_still_is() {
                 value["hookSpecificOutput"]["permissionDecision"], "deny",
                 "{agent}: {source}: {value}"
             );
-            assert!(
-                reason(&value).starts_with("Shield: protected path."),
-                "{agent}: {source}: {value}"
-            );
+            if cfg!(windows) && agent == "codex" {
+                assert_unsupported_shell(&value);
+            } else {
+                assert!(
+                    reason(&value).starts_with("Shield: protected path."),
+                    "{agent}: {source}: {value}"
+                );
+            }
         }
     }
 }
@@ -386,7 +420,9 @@ fn git_permission_accepts_reported_cwd_and_keeps_policy_ask_and_deny() {
                 Event::Permission,
                 &serde_json::to_vec(&host).unwrap(),
             );
-            let expected = if policy == "deny" {
+            // Native Windows Codex uses PowerShell 5.1: compound POSIX
+            // source is refused before a policy Allow or Ask handoff.
+            let expected = if policy == "deny" || (cfg!(windows) && command.contains("&&")) {
                 "deny"
             } else if policy == "allow" {
                 "allow"
@@ -441,28 +477,42 @@ fn ripgrep_lists_names_and_searches_bounded_trees_without_reading_protected_stat
             );
         }
         let result = call(root.path(), agent, "rg --no-config Acme .");
-        assert!(reason(&result).contains(".shield/review"), "{result}");
+        assert!(
+            reason(&result).contains(&Path::new(".shield").join("review").display().to_string()),
+            "{result}"
+        );
         assert!(
             reason(&result).contains("Search a narrower path"),
             "{result}"
         );
         // A pattern-only search after a pipe reads the pipe, not the project;
         // a path, closed input or no pipe still walks the directory.
-        assert_permitted(&call(root.path(), agent, "rg --files | rg app"), agent);
-        assert_permitted(
-            &call(root.path(), agent, "rg --files | rg -i -m 3 app"),
-            agent,
-        );
+        for source in ["rg --files | rg app", "rg --files | rg -i -m 3 app"] {
+            let reply = call(root.path(), agent, source);
+            if cfg!(windows) && agent == "codex" {
+                assert_eq!(reply["hookSpecificOutput"]["permissionDecision"], "deny");
+                assert!(reason(&reply).contains("shell dialect"), "{reply}");
+            } else {
+                assert_permitted(&reply, agent);
+            }
+        }
         for source in [
             "rg --no-config Acme",
             "rg --files | rg --no-config Acme .",
             "rg --files | rg --no-config Acme <&-",
             "rg --files | { rg --no-config Acme; }",
         ] {
-            assert!(
-                reason(&call(root.path(), agent, source)).contains(".shield"),
-                "{source}"
+            let reply = call(root.path(), agent, source);
+            let expected = if cfg!(windows) && agent == "codex" && source.contains('|') {
+                "shell dialect"
+            } else {
+                ".shield"
+            };
+            assert_eq!(
+                reply["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{reply}"
             );
+            assert!(reason(&reply).contains(expected), "{source}: {reply}");
         }
         fs::create_dir_all(root.path().join("src/nested/.shield/review")).unwrap();
         assert!(reason(&call(root.path(), agent, "rg --no-config Acme src")).contains(".shield"));
@@ -534,8 +584,9 @@ fn uncertain_search_footprints_explain_narrowing_and_sensitive_reads_explain_con
         reason(&result).contains("Search a narrower path"),
         "{result}"
     );
-    let root = argv_fixture("cat", "allow");
-    let result = call(root.path(), "codex", "cat .mcp.json");
+    let root = argv_fixture("rg", "allow");
+    fs::write(root.path().join(".mcp.json"), "{}").unwrap();
+    let result = call(root.path(), "codex", "rg --no-config Acme .mcp.json");
     assert_eq!(result["hookSpecificOutput"]["permissionDecision"], "deny");
     assert!(reason(&result).contains("terminal"), "{result}");
     assert!(!reason(&result).contains("policy_propose"), "{result}");
@@ -561,6 +612,19 @@ fn assert_permitted(value: &Value, agent: &str) {
     } else {
         assert_eq!(output["permissionDecision"], "allow", "{value}");
     }
+}
+
+/// The native Windows adapter must refuse these POSIX/alias fixtures as a
+/// complete request, without emitting a rewritten command or an exact allowance.
+fn assert_unsupported_shell(value: &Value) {
+    let output = &value["hookSpecificOutput"];
+    assert_eq!(output["permissionDecision"], "deny", "{value}");
+    assert!(reason(value).contains("shell dialect"), "{value}");
+    assert!(output.get("updatedInput").is_none(), "{value}");
+    assert!(
+        !reason(value).contains("policy_propose with change"),
+        "{value}"
+    );
 }
 
 #[test]
@@ -777,10 +841,10 @@ fn unrecoverable_compiled_plan_blocks_allow_fallback_with_a_short_repair_route()
     fs::remove_file(&file).unwrap();
     // A missing plan recovers even with an Allow fallback; a path occupied by
     // another object cannot be replaced and must still fail closed.
-    assert_permitted(&call(root.path(), "codex", "echo acme"), "codex");
+    assert_permitted(&call(root.path(), "codex", "git add acme.txt"), "codex");
     fs::remove_file(&file).unwrap();
     fs::create_dir(file).unwrap();
-    let value = call(root.path(), "codex", "echo acme");
+    let value = call(root.path(), "codex", "git add acme.txt");
     assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
     let reason = value["hookSpecificOutput"]["permissionDecisionReason"]
         .as_str()
@@ -904,7 +968,7 @@ fn translate_for(root: &Path, agent: &str, event: Event, bytes: &[u8]) -> Value 
 fn permission_with_missing_execution_context_follows_policy() {
     let (root, _) = fixture();
     for (command, expected) in [
-        ("acme read", "allow"),
+        ("acme read", if cfg!(windows) { "deny" } else { "allow" }),
         ("git status", "allow"),
         ("git push", ""),
         ("git reset --hard", "deny"),
@@ -1003,7 +1067,7 @@ fn permission_request_uses_current_policy_and_never_the_ask_fallback() {
             "deny"
         );
         assert_eq!(
-            permission(root.path(), "Bash", json!({"command":"unmatched-acme"})),
+            permission(root.path(), "Bash", json!({"command":"git acme-unmatched"})),
             json!({})
         );
     }
@@ -1713,7 +1777,12 @@ fn agents_cannot_launch_renamed_mcp_transports_from_shell_tools() {
     std::fs::copy(&original, &copy).unwrap();
     std::fs::hard_link(&original, &link).unwrap();
     for agent in ["claude", "codex"] {
-        assert_permitted(&call(root.path(), agent, "acme-shield-copy read"), agent);
+        let read = call(root.path(), agent, "acme-shield-copy read");
+        if cfg!(windows) && agent == "codex" {
+            assert_unsupported_shell(&read);
+        } else {
+            assert_permitted(&read, agent);
+        }
         for executable in [
             "acme-shield-copy",
             "./acme-shield-copy",
@@ -1728,9 +1797,23 @@ fn agents_cannot_launch_renamed_mcp_transports_from_shell_tools() {
                     value["hookSpecificOutput"]["permissionDecision"], "deny",
                     "{value}"
                 );
-                assert!(reason(&value).contains("policy_propose"), "{value}");
+                if cfg!(windows) && agent == "codex" {
+                    assert_unsupported_shell(&value);
+                } else {
+                    assert!(reason(&value).contains("policy_propose"), "{value}");
+                }
             }
         }
+    }
+    if cfg!(windows) {
+        let native = argv_fixture("git", "allow");
+        assert_permitted(&call(native.path(), "codex", "git status"), "codex");
+        let transport = call(native.path(), "codex", "git mcp serve --agent codex");
+        assert_eq!(
+            transport["hookSpecificOutput"]["permissionDecision"],
+            "deny"
+        );
+        assert!(reason(&transport).contains("policy_propose"), "{transport}");
     }
 }
 
@@ -1745,14 +1828,22 @@ fn uninspectable_source_returns_to_the_agent_to_rewrite() {
         );
         assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
         let reason = reason(&value);
-        assert!(
-            reason.starts_with("Shield: rewrite this request"),
-            "{reason}"
-        );
-        assert!(
-            reason.contains("Candidate: Use literal arguments"),
-            "{reason}"
-        );
+        if cfg!(windows) && agent == "codex" {
+            assert!(
+                reason.starts_with("Shield: blocked this shell dialect"),
+                "{reason}"
+            );
+            assert!(reason.contains("Use supported file tools"), "{reason}");
+        } else {
+            assert!(
+                reason.starts_with("Shield: rewrite this request"),
+                "{reason}"
+            );
+            assert!(
+                reason.contains("Candidate: Use literal arguments"),
+                "{reason}"
+            );
+        }
         // A command no rule covers names the reason in Claude's user prompt;
         // Codex's agent-facing refusal also explains how to propose a rule.
         let value = call(Path::new(&context.project_root), agent, "git add acme.txt");
@@ -1785,11 +1876,15 @@ fn background_pid_origin_reaches_approval_without_literal_pid_authorization() {
             "{agent}: {reply}"
         );
         let text = reason(&reply);
-        assert!(text.contains("background job"), "{agent}: {reply}");
-        assert!(
-            text.contains("runtime ownership is unverified"),
-            "{agent}: {reply}"
-        );
+        if cfg!(windows) && agent == "codex" {
+            assert_unsupported_shell(&reply);
+        } else {
+            assert!(text.contains("background job"), "{agent}: {reply}");
+            assert!(
+                text.contains("runtime ownership is unverified"),
+                "{agent}: {reply}"
+            );
+        }
         assert!(!text.contains("rewrite this request"), "{agent}: {reply}");
         assert!(
             !text.contains("\"executable\":\"kill\""),
@@ -1817,7 +1912,11 @@ fn finite_loop_feedback_names_the_command_requiring_approval() {
             } else {
                 "acme-unlisted"
             };
-            assert!(text.contains(command), "{agent}: {value}");
+            if cfg!(windows) && agent == "codex" {
+                assert_unsupported_shell(&value);
+            } else {
+                assert!(text.contains(command), "{agent}: {value}");
+            }
             assert!(!text.contains("rewrite this request"), "{agent}: {value}");
             assert!(!text.contains("`break`"), "{agent}: {value}");
             assert!(!text.contains("`continue`"), "{agent}: {value}");
@@ -1828,7 +1927,11 @@ fn finite_loop_feedback_names_the_command_requiring_approval() {
             "(PORT=3999 node src/server.js & pid=$!; for i in 1 2 3 4 5 6 7 8 9 10; do curl -s localhost:3999/health && break; sleep 0.3; done; echo; kill $pid)",
         );
         let text = reason(&value);
-        assert!(text.contains("`kill $pid`"), "{agent}: {value}");
+        if cfg!(windows) && agent == "codex" {
+            assert_unsupported_shell(&value);
+        } else {
+            assert!(text.contains("`kill $pid`"), "{agent}: {value}");
+        }
         assert!(!text.contains("`break`"), "{agent}: {value}");
     }
 }
@@ -1837,20 +1940,31 @@ fn finite_loop_feedback_names_the_command_requiring_approval() {
 fn native_policy_allow_ask_and_deny_reach_the_host_without_executing_source() {
     let (root, context) = fixture();
     for agent in ["claude", "codex"] {
-        for (source, decision, code) in [
-            ("acme read", "allow", "permits this request"),
-            ("git status", "allow", "permits this request"),
-            ("git reset --hard", "deny", "policy-deny"),
-            ("git add acme.txt", "deny", "approval-required"),
-            ("git status; git reset --hard", "deny", "policy-deny"),
-            ("git status; touch side-effect", "deny", "approval-required"),
+        for (source, decision, code, native_powershell) in [
+            ("acme read", "allow", "permits this request", false),
+            ("git status", "allow", "permits this request", true),
+            ("git reset --hard", "deny", "policy-deny", true),
+            ("git add acme.txt", "deny", "approval-required", true),
+            ("git status; git reset --hard", "deny", "policy-deny", false),
+            (
+                "git status; touch side-effect",
+                "deny",
+                "approval-required",
+                false,
+            ),
             (
                 "git -c alias.status='!touch side-effect' status",
                 "deny",
                 "approval-required",
+                false,
             ),
         ] {
             let value = call(Path::new(&context.project_root), agent, source);
+            if cfg!(windows) && agent == "codex" && !native_powershell {
+                assert_unsupported_shell(&value);
+                assert!(!root.path().join("side-effect").exists());
+                continue;
+            }
             let expected = if agent == "claude" && code == "approval-required" {
                 "ask"
             } else {
@@ -1882,11 +1996,18 @@ fn native_policy_allow_ask_and_deny_reach_the_host_without_executing_source() {
             }
             assert!(!root.path().join("side-effect").exists());
         }
+    }
+}
+
+#[test]
+fn native_shell_envelopes_preserve_capacity_and_source_limits() {
+    let (_root, context) = fixture();
+    for agent in ["claude", "codex"] {
         // Retaining vendor arguments must not reduce the native envelope capacity
         // by serializing the same source twice in the normalized envelope.
         let host = json!({"hook_event_name":"PreToolUse","tool_name":"Bash",
             "tool_use_id":"acme-large","session_id":"acme-session","cwd":context.project_root,
-            "tool_input":{"command":format!("acme read{}", " ".repeat(3_000)),
+            "tool_input":{"command":format!("git status{}", " ".repeat(3_000)),
                 "description":" ".repeat(61_000)}});
         assert_permitted(
             &translate(
@@ -1899,15 +2020,20 @@ fn native_policy_allow_ask_and_deny_reach_the_host_without_executing_source() {
         // Commands past the 4,096-byte argument bound reach their policy
         // decision, including JSON escaping; source over 64 KiB is refused.
         for long in [
-            format!("acme read{}", " ".repeat(8_000)),
-            format!("acme read # {}", "\"".repeat(34_000)),
+            format!("git status{}", " ".repeat(8_000)),
+            format!("git status # {}", "\"".repeat(34_000)),
         ] {
-            assert_permitted(&call(Path::new(&context.project_root), agent, &long), agent);
+            let value = call(Path::new(&context.project_root), agent, &long);
+            if cfg!(windows) && agent == "codex" && long.contains('#') {
+                assert_unsupported_shell(&value);
+            } else {
+                assert_permitted(&value, agent);
+            }
         }
         let value = call(
             Path::new(&context.project_root),
             agent,
-            &format!("acme read{}", " ".repeat(65_536)),
+            &format!("git status{}", " ".repeat(65_536)),
         );
         assert_eq!(
             value["hookSpecificOutput"]["permissionDecision"], "deny",
@@ -2182,6 +2308,107 @@ fn shell_history_redacts_named_secrets_without_retaining_analyzer_syntax_trees()
 }
 
 #[test]
+fn powershell_tool_uses_its_own_grammar_and_preserves_claude_policy_decisions() {
+    let (root, _) = fixture();
+    assert_permitted(
+        &tool(
+            root.path(),
+            "claude",
+            "PowerShell",
+            &json!({"command":"git status"}),
+        ),
+        "claude",
+    );
+    for (source, expected) in [
+        ("git push", "ask"),
+        ("git reset --hard", "deny"),
+        ("Get-Content .shield/review/state.json", "deny"),
+        ("git status; Remove-Item .shield", "deny"),
+    ] {
+        let reply = tool(
+            root.path(),
+            "claude",
+            "PowerShell",
+            &json!({"command":source}),
+        );
+        assert_eq!(
+            reply["hookSpecificOutput"]["permissionDecision"], expected,
+            "{source}: {reply}"
+        );
+    }
+}
+
+#[test]
+#[cfg(windows)]
+fn windows_powershell_native_commands_keep_policy_and_protected_access() {
+    let (root, _) = fixture();
+    assert_permitted(&call(root.path(), "codex", "git status"), "codex");
+    let asked = call(root.path(), "codex", "git push");
+    assert_eq!(
+        asked["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{asked}"
+    );
+    assert!(reason(&asked).contains("approval"), "{asked}");
+    crate::review::operator::integrations::configure_fixture(
+        root.path(),
+        crate::cli::public::IntegrationChoice::agent("codex"),
+        crate::review::integrations::AskFallback::Allow,
+    );
+    assert_permitted(&call(root.path(), "codex", "git push"), "codex");
+    for source in [
+        "git reset --hard",
+        "git diff --output=.shield/config.yml",
+        "rg ACME .shield/review/state.json",
+        "rg ACME .codex/hooks.json",
+        "shield mcp serve",
+        "node -e 'dangerous()'",
+        "git status; Remove-Item .shield",
+        "git $(Get-Content .shield/review/state.json)",
+        "Get-Content .shield/review/state.json",
+    ] {
+        let reply = call(root.path(), "codex", source);
+        assert_eq!(
+            reply["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{source}: {reply}"
+        );
+    }
+}
+
+#[test]
+#[cfg(windows)]
+fn windows_opaque_shells_never_use_allow_fallback() {
+    let (root, _) = fixture();
+    crate::review::operator::integrations::configure_fixture(
+        root.path(),
+        crate::cli::public::IntegrationChoice::agent("codex"),
+        crate::review::integrations::AskFallback::Allow,
+    );
+    for source in [
+        "Write-Output ACME",
+        "Set-Content .shield/config.yml ACME",
+        "echo ACME > .codex/hooks.json",
+    ] {
+        for shell in [None, Some("powershell.exe"), Some("cmd.exe")] {
+            let mut host = json!({"hook_event_name":"PreToolUse", "tool_name":"Bash", "tool_use_id":"acme-opaque-shell", "session_id":"acme-session", "cwd":root.path(), "tool_input":{"command":source}});
+            if let Some(shell) = shell {
+                host["tool_input"]["shell"] = json!(shell);
+            }
+            let reply = translate_for(
+                root.path(),
+                "codex",
+                Event::Before,
+                &serde_json::to_vec(&host).unwrap(),
+            );
+            assert_eq!(
+                reply["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{source} {shell:?}: {reply}"
+            );
+            assert!(reason(&reply).contains("shell dialect"), "{reply}");
+        }
+    }
+}
+
+#[test]
 fn native_ask_fallback_is_scoped_truthful_and_never_permits_failures_or_protected_access() {
     use crate::{
         cli::public::IntegrationChoice,
@@ -2195,8 +2422,17 @@ fn native_ask_fallback_is_scoped_truthful_and_never_permits_failures_or_protecte
         AskFallback::Allow,
     );
     fs::create_dir_all(root.path().join(".claude/skills/acme")).unwrap();
+    fs::write(
+        root.path().join(".claude/skills/acme/SKILL.md"),
+        "Acme fixture",
+    )
+    .unwrap();
     assert_permitted(
-        &call(root.path(), "codex", "cat .claude/skills/acme/SKILL.md"),
+        &call(
+            root.path(),
+            "codex",
+            "rg --no-config Acme .claude/skills/acme/SKILL.md",
+        ),
         "codex",
     );
     assert_permitted(&call(root.path(), "codex", "git push"), "codex");
@@ -2314,7 +2550,34 @@ fn native_paths_bind_cwd_and_distinguish_move_sources_from_directory_destination
         "printf hello > ordinary.txt",
         "cd src; echo hello >&2",
     ] {
-        assert_permitted(&call(root.path(), "codex", source), "codex");
+        let value = call(root.path(), "codex", source);
+        if cfg!(windows) {
+            assert_unsupported_shell(&value);
+        } else {
+            assert_permitted(&value, "codex");
+        }
+    }
+    if cfg!(windows) {
+        fs::write(root.path().join("acme.txt"), "Acme").unwrap();
+        for (destination, allowed) in [("renamed.txt", true), (".codex/hooks.json", false)] {
+            let patch = format!(
+                "*** Begin Patch\n*** Update File: acme.txt\n*** Move to: {destination}\n@@\n-Acme\n+updated\n*** End Patch"
+            );
+            let value = tool(
+                root.path(),
+                "codex",
+                "apply_patch",
+                &json!({"command":patch}),
+            );
+            if allowed {
+                assert_permitted(&value, "codex");
+            } else {
+                assert_eq!(
+                    value["hookSpecificOutput"]["permissionDecision"], "deny",
+                    "{value}"
+                );
+            }
+        }
     }
     for (directory, file) in [(".codex", "hooks.json"), (".shield/review", "state.json")] {
         let cwd = root.path().join(directory);
@@ -2391,12 +2654,12 @@ fn native_shell_rules_match_complete_input_like_mcp_diagnostics() {
         cli::public::IntegrationChoice,
         review::{integrations::AskFallback, operator::integrations},
     };
-    for source in ["acme read", "acme read; acme opaque"] {
+    for source in ["git status", "git status; git add acme.txt"] {
         let root = assert_fs::TempDir::new().unwrap();
         let original = json!({"command":source,"description":"exact denied request"});
-        let input = json!({"kind":"shell","source":source,"dialect":"posix","dialect_version":null,"original_input":original});
+        let input = json!({"kind":"shell","source":source,"dialect":if cfg!(windows) {"powershell"} else {"posix"},"dialect_version":null,"original_input":original});
         let ctx = json!({"cwd":root.path().canonicalize().unwrap(),"environment":null});
-        let rules = json!({"schema_version":1,"rules":[{"id":"literal","decision":"allow","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"exact","values":["read"]}}},{"id":"full-deny","decision":"deny","conditions":{"domain":"exact_request","input":input,"context":ctx,"executable":null},"reason":"Exact denial"}],"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"]}).to_string();
+        let rules = json!({"schema_version":1,"rules":[{"id":"literal","decision":"allow","conditions":{"domain":"argv","executable":"git","arguments":{"kind":"exact","values":["status"]}}},{"id":"full-deny","decision":"deny","conditions":{"domain":"exact_request","input":input,"context":ctx,"executable":null},"reason":"Exact denial"}],"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"]}).to_string();
         let bundle = Bundle::capture(
             "schema_version: 1\npacks: []\nrules: custom.json\n",
             &[],
@@ -2425,10 +2688,12 @@ fn native_shell_rules_match_complete_input_like_mcp_diagnostics() {
             "deny"
         );
         host["tool_input"]["description"] = json!("different request");
-        assert_permitted(
-            &translate(root.path(), "codex", &serde_json::to_vec(&host).unwrap()),
-            "codex",
-        );
+        let changed = translate(root.path(), "codex", &serde_json::to_vec(&host).unwrap());
+        if cfg!(windows) && source.contains(';') {
+            assert_unsupported_shell(&changed);
+        } else {
+            assert_permitted(&changed, "codex");
+        }
     }
 }
 
@@ -2558,7 +2823,7 @@ fn agents_read_and_record_policy_files_but_not_state_and_ask_for_agent_settings(
         "{value}"
     );
     assert!(reason(&value).contains("credentials"), "{value}");
-    let value = call(root, "codex", "cat .mcp.json");
+    let value = call(root, "codex", "rg --no-config Acme .mcp.json");
     assert_eq!(
         value["hookSpecificOutput"]["permissionDecision"], "deny",
         "{value}"
@@ -2990,9 +3255,19 @@ fn guarded_project_reads_preserve_location_evidence() {
                 "ls -la && rg --files --hidden -g '!.git' && if [ -f AGENTS.md ]; then cat AGENTS.md; fi",
             ] {
                 let value = call(root.path(), agent, source);
-                assert_ne!(
-                    value["hookSpecificOutput"]["permissionDecision"], "deny",
-                    "{agent} present={present} {source}: {value}"
+                if cfg!(windows) && agent == "codex" {
+                    assert_unsupported_shell(&value);
+                } else {
+                    assert_ne!(
+                        value["hookSpecificOutput"]["permissionDecision"], "deny",
+                        "{agent} present={present} {source}: {value}"
+                    );
+                }
+            }
+            if present && cfg!(windows) && agent == "codex" {
+                assert_permitted(
+                    &call(root.path(), agent, "rg --no-config Acme AGENTS.md"),
+                    agent,
                 );
             }
         }
@@ -3069,7 +3344,7 @@ fn refusals_offer_command_drafting_guidance_or_non_command_proposals() {
     let root = Path::new(&context.project_root);
     // Unmatched commands direct the agent to learn the grammar and draft a
     // reusable rule, with no complete command allowance to copy.
-    let value = call(root, "codex", "npm install acme@5");
+    let value = call(root, "codex", "git add acme.txt");
     let guidance = reason(&value);
     assert!(guidance.contains("suggestion_list"), "{guidance}");
     assert!(guidance.contains("eligible recurring"), "{guidance}");
@@ -3143,7 +3418,7 @@ fn a_fallback_allow_in_a_session_defers_rule_offers_to_its_suggestions() {
     // However often it repeats, the agent finishes its task and then offers
     // every rule at once from suggestion_list, instead of one inline offer.
     for _ in 1..=3 {
-        let value = call(project, "codex", "npm test");
+        let value = call(project, "codex", "node --version");
         let text = value["hookSpecificOutput"]["additionalContext"]
             .as_str()
             .unwrap();
@@ -3174,7 +3449,7 @@ fn a_command_a_registry_pack_covers_proposes_that_pack() {
         assert!(text.contains("pack_info"), "{text}");
     }
     // Other commands get drafting guidance instead of a command rule payload.
-    let text = reason(&call(root, "codex", "npm test")).to_owned();
+    let text = reason(&call(root, "codex", "node --version")).to_owned();
     assert!(text.contains("suggestion_list"), "{text}");
     assert!(!text.contains(r#""kind":"rule_add""#), "{text}");
 }
@@ -3221,10 +3496,16 @@ fn outside_paths_are_named_and_broad_folders_are_never_proposed() {
     // In a compound command, the refused command's outside path is named.
     let value = call(root, "codex", "ls -la; cat /acme-missing.md");
     let text = reason(&value);
-    assert!(text.contains("`/acme-missing.md` is outside"), "{text}");
+    if cfg!(windows) {
+        assert_unsupported_shell(&value);
+    } else {
+        assert!(text.contains("`/acme-missing.md` is outside"), "{text}");
+    }
     // `/`, and folders holding the project, are too broad to offer.
     assert!(!text.contains("policy_propose with"), "{text}");
-    assert!(text.contains("do not propose it"), "{text}");
+    if !cfg!(windows) {
+        assert!(text.contains("do not propose it"), "{text}");
+    }
     let value = unscoped_shell(root, "codex", "cat ../acme.txt");
     let text = reason(&value);
     assert!(text.contains("is outside"), "{text}");
@@ -3234,8 +3515,8 @@ fn outside_paths_are_named_and_broad_folders_are_never_proposed() {
     let pid = scratch.path().join("acme.pid");
     for agent in ["claude", "codex"] {
         for source in [
-            format!("echo x > {}", pid.display()),
-            format!("(acme serve & echo $! > {}; )", pid.display()),
+            format!("echo x > '{}'", pid.display()),
+            format!("(acme serve & echo $! > '{}'; )", pid.display()),
         ] {
             let value = unscoped_shell(root, agent, &source);
             assert_eq!(
@@ -3259,9 +3540,17 @@ fn a_denial_of_words_shield_cannot_resolve_asks_for_literal_paths() {
         let value = call(root, agent, "cat \"$ACME_TARGET\"");
         assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
         let text = reason(&value);
-        assert!(text.starts_with("Shield: rewrite this request"), "{text}");
-        assert!(text.contains("`cat \"$ACME_TARGET\"`"), "{text}");
-        assert!(text.contains("Use literal arguments"), "{text}");
+        if cfg!(windows) && agent == "codex" {
+            assert!(
+                text.starts_with("Shield: blocked this shell dialect"),
+                "{text}"
+            );
+            assert!(text.contains("Use supported file tools"), "{text}");
+        } else {
+            assert!(text.starts_with("Shield: rewrite this request"), "{text}");
+            assert!(text.contains("`cat \"$ACME_TARGET\"`"), "{text}");
+            assert!(text.contains("Use literal arguments"), "{text}");
+        }
         assert!(!text.contains("access_path_add"), "{text}");
     }
 }
@@ -3277,8 +3566,12 @@ fn a_catch_all_denial_of_an_outside_read_names_the_path() {
         "for p in /AGENTS.md /acme/AGENTS.md; do head \"$p\"; done",
     );
     let text = reason(&value);
-    assert!(text.contains("`/AGENTS.md` is outside"), "{text}");
-    assert!(text.contains("do not propose it"), "{text}");
+    if cfg!(windows) {
+        assert_unsupported_shell(&value);
+    } else {
+        assert!(text.contains("`/AGENTS.md` is outside"), "{text}");
+        assert!(text.contains("do not propose it"), "{text}");
+    }
     assert!(!text.contains("access_path_add"), "{text}");
 }
 
@@ -3291,8 +3584,8 @@ fn codex_prefix_covered_asks_block_even_under_the_allow_fallback() {
     let root = assert_fs::TempDir::new().unwrap();
     let rules = json!({"schema_version":1,"kind":"custom",
         "capabilities":["agent-outputs-v1","argument-rules-v1","structured-rules-v1"],
-        "rules":[{"id":"logs","decision":"allow","agents":{"codex":{"prefixes":[["acme","logs"]]}},
-            "conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"options","prefix":["logs"],"flags":[],"values":[],"operands":false}}}]}).to_string();
+        "rules":[{"id":"logs","decision":"allow","agents":{"codex":{"prefixes":[["git","log"]]}},
+            "conditions":{"domain":"argv","executable":"git","arguments":{"kind":"options","prefix":["log"],"flags":[],"values":[],"operands":false}}}]}).to_string();
     let bundle = Bundle::capture(
         "schema_version: 1\npacks: []\nrules: rules.yml\n",
         &[],
@@ -3305,18 +3598,15 @@ fn codex_prefix_covered_asks_block_even_under_the_allow_fallback() {
         IntegrationChoice::agent("codex"),
         AskFallback::Allow,
     );
-    assert_permitted(&call(root.path(), "codex", "acme logs"), "codex");
+    assert_permitted(&call(root.path(), "codex", "git log"), "codex");
     // Policy asks about an undeclared option; Codex would run it unsandboxed.
-    let covered = call(root.path(), "codex", "acme logs --debug");
+    let covered = call(root.path(), "codex", "git log --debug");
     assert_eq!(
         covered["hookSpecificOutput"]["permissionDecision"], "deny",
         "{covered}"
     );
     // Codex skips its sandbox when every part of a chain matches a prefix.
-    for chain in [
-        "acme logs && acme logs --debug",
-        "acme logs --debug | acme logs",
-    ] {
+    for chain in ["git log && git log --debug", "git log --debug | git log"] {
         let covered = call(root.path(), "codex", chain);
         assert_eq!(
             covered["hookSpecificOutput"]["permissionDecision"], "deny",
@@ -3326,12 +3616,18 @@ fn codex_prefix_covered_asks_block_even_under_the_allow_fallback() {
     // An Ask no Shield prefix covers still follows the configured fallback:
     // an uncovered part, a wrapper or an embedded script keeps Codex's sandbox.
     for sandboxed in [
-        "acme other",
-        "acme logs --debug && acme other",
-        "nice acme logs --debug",
-        "bash -c 'acme logs --debug'",
+        "git status",
+        "git log --debug && git status",
+        "nice git log --debug",
+        "bash -c 'git log --debug'",
     ] {
-        assert_permitted(&call(root.path(), "codex", sandboxed), "codex");
+        let reply = call(root.path(), "codex", sandboxed);
+        if cfg!(windows) && sandboxed != "git status" {
+            assert_eq!(reply["hookSpecificOutput"]["permissionDecision"], "deny");
+            assert!(reason(&reply).contains("shell dialect"), "{reply}");
+        } else {
+            assert_permitted(&reply, "codex");
+        }
     }
     // The agent is told why the allowing fallback did not apply.
     assert!(
@@ -3348,7 +3644,7 @@ fn codex_prefix_covered_asks_block_even_under_the_allow_fallback() {
         "prefix_rule(pattern = [\"acme\"], decision = \"allow\")\n",
     )
     .unwrap();
-    let drifted = call(root.path(), "codex", "acme other");
+    let drifted = call(root.path(), "codex", "git status");
     assert_eq!(
         drifted["hookSpecificOutput"]["permissionDecision"], "deny",
         "{drifted}"
@@ -3361,5 +3657,5 @@ fn codex_prefix_covered_asks_block_even_under_the_allow_fallback() {
         .to_vec();
     let codex = crate::agents::find("codex").unwrap();
     std::fs::write(&path, codex.prefix_rules(&prefixes).unwrap()).unwrap();
-    assert_permitted(&call(root.path(), "codex", "acme other"), "codex");
+    assert_permitted(&call(root.path(), "codex", "git status"), "codex");
 }

@@ -28,11 +28,15 @@ fn working_files_default_temporary_access_reaches_both_native_adapters() {
     let environment = assert_fs::TempDir::new().unwrap();
     let root = environment.path().canonicalize().unwrap();
     let home = root.join("home");
-    let scratch = root.join("scratch");
+    let scratch = if cfg!(windows) {
+        home.join("AppData/Local/Temp")
+    } else {
+        root.join("scratch")
+    };
     let claude = home.join("claude-config");
     let codex = home.join("codex-config");
     for path in [&home, &scratch, &claude, &codex] {
-        fs::create_dir(path).unwrap();
+        fs::create_dir_all(path).unwrap();
     }
     // Do not mutate process-wide environment while other Rust tests run.
     let output = std::process::Command::new(std::env::current_exe().unwrap())
@@ -44,6 +48,7 @@ fn working_files_default_temporary_access_reaches_both_native_adapters() {
         ])
         .env_clear()
         .env("HOME", &home)
+        .env("USERPROFILE", &home)
         .env("CLAUDE_CONFIG_DIR", &claude)
         .env("CODEX_HOME", &codex)
         .env("TMPDIR", &scratch)
@@ -68,17 +73,40 @@ fn default_temporary_access_fixture() {
     let root = Path::new(&context.project_root);
     let temp = assert_fs::TempDir::new().unwrap();
     let file = temp.path().join("arbitrary-existing.output");
+    let new_file = temp.path().join("new-unowned-name");
     fs::write(&file, "acme").unwrap();
     let state = fs::read(root.join(".shield/review/state.json")).unwrap();
     for agent in ["claude", "codex"] {
-        for source in [
+        let sources = [
             format!("cat '{}'", file.display()),
             format!(
                 "printf acme > '{}'",
                 temp.path().join("new-unowned-name").display()
             ),
-        ] {
-            let value = call(root, agent, &source);
+        ];
+        let input = |write: bool, path: &Path| {
+            let (tool, input) = if write {
+                (
+                    "apply_patch",
+                    json!({"command":format!("*** Begin Patch\n*** Add File: {}\n+Acme\n*** End Patch",path.display())}),
+                )
+            } else {
+                ("view_image", json!({"path":path}))
+            };
+            let host = json!({"hook_event_name":"PreToolUse","tool_name":tool,"tool_use_id":"acme-native-file","tool_input":input,"cwd":root,"session_id":"acme-session"});
+            translate_for(
+                root,
+                agent,
+                Event::Before,
+                &serde_json::to_vec(&host).unwrap(),
+            )
+        };
+        for (write, source) in sources.iter().enumerate() {
+            let value = if cfg!(windows) && agent == "codex" {
+                input(write == 1, if write == 0 { &file } else { &new_file })
+            } else {
+                call(root, agent, source)
+            };
             assert_ne!(
                 value["hookSpecificOutput"]["permissionDecision"], "deny",
                 "{agent}: {value}"
@@ -93,11 +121,15 @@ fn default_temporary_access_fixture() {
             "deny"
         );
         let protected = temp.path().join(".shield/review/state.json");
-        let value = call(
-            root,
-            agent,
-            &format!("printf acme > '{}'", protected.display()),
-        );
+        let value = if cfg!(windows) && agent == "codex" {
+            input(true, &protected)
+        } else {
+            call(
+                root,
+                agent,
+                &format!("printf acme > '{}'", protected.display()),
+            )
+        };
         assert_eq!(
             value["hookSpecificOutput"]["permissionDecision"], "deny",
             "{value}"

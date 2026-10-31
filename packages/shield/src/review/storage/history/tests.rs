@@ -41,6 +41,54 @@ fn event(store: &Store, receipt: &Value) -> Option<Value> {
         .find(|e| e["event_id"] == receipt["event_id"])
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_history_refuses_an_explicit_public_acl_inside_a_private_directory() {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_permissions::{
+        LocalBox, SecurityDescriptor,
+        constants::{SeObjectType, SecurityInformation},
+        wrappers,
+    };
+    let (root, context) = enrolled();
+    let store = Store::open(root.path()).unwrap();
+    decision(&context, "Acme history");
+    let path = active(&store, &store.read().unwrap());
+    assert!(regular(&path).is_ok());
+    let original = fs::read(&path).unwrap();
+    let mut file = OpenOptions::new()
+        .read(true)
+        .access_mode(0x0006_0080)
+        .open(&path)
+        .unwrap();
+    let descriptor = wrappers::GetSecurityInfo(
+        &file,
+        SeObjectType::SE_FILE_OBJECT,
+        SecurityInformation::Dacl,
+    )
+    .unwrap();
+    let broad: LocalBox<SecurityDescriptor> = format!(
+        "{}(A;;FR;;;WD)",
+        descriptor.as_sddl().unwrap().to_str().unwrap()
+    )
+    .parse()
+    .unwrap();
+    wrappers::SetSecurityInfo(
+        &mut file,
+        SeObjectType::SE_FILE_OBJECT,
+        SecurityInformation::Dacl | SecurityInformation::ProtectedDacl,
+        None,
+        None,
+        broad.dacl(),
+        None,
+    )
+    .unwrap();
+    assert!(regular(&path).is_err());
+    assert_eq!(fs::read(&path).unwrap(), original);
+    crate::windows_security::make_private(&path).unwrap();
+    assert!(regular(&path).is_ok());
+}
+
 #[test]
 fn parallel_append_preserves_all_unique_records_and_leaves_authority_unchanged() {
     let (root, context) = enrolled();

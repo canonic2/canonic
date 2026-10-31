@@ -144,6 +144,14 @@ impl AgentAdapter for ClaudeCode {
     fn hook_group(&self, command: &str) -> Value {
         json!({"matcher":".*","hooks":[{"type":"command","command":command,"timeout":10,"statusMessage":"Shield project enforcement"}]})
     }
+    #[cfg(windows)]
+    fn direct_hook_group(&self, binary: &Path, root: &Path, event: &str) -> Option<Value> {
+        Some(
+            json!({"matcher":".*","hooks":[{"type":"command","command":binary.to_str()?,
+            "args":["__internal","native-hook","--project",root.to_str()?,"--agent",SPEC.id,"--event",event],
+            "onFailure":"block","timeout":10,"statusMessage":"Shield project enforcement"}]}),
+        )
+    }
     fn mcp_entry(&self, binary: &Path, root: &Path, _approved: &[String]) -> String {
         json!({"type":"stdio","command":binary,"args":["mcp","serve","--project",root,"--agent",SPEC.history_agent]}).to_string()
     }
@@ -256,7 +264,7 @@ fn operation(host: &Value) -> Option<Value> {
             let source = text(&input["command"], 65_536)?;
             Some(json!({"kind":"shell","source":source,"dialect":"bash"}))
         }
-        "Bash" => {
+        "Bash" | "PowerShell" => {
             if input.keys().any(|k| {
                 ![
                     "command",
@@ -270,7 +278,12 @@ fn operation(host: &Value) -> Option<Value> {
                 return None;
             }
             let source = text(&input["command"], 65_536)?;
-            Some(json!({"kind":"shell","source":source,"dialect":"bash"}))
+            let dialect = if tool == "PowerShell" {
+                "powershell"
+            } else {
+                "bash"
+            };
+            Some(json!({"kind":"shell","source":source,"dialect":dialect}))
         }
         "Read" => {
             if input

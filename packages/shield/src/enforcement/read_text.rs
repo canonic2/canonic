@@ -1,5 +1,6 @@
 //! Verified bounded text-read resource binding, shared by transport and operator approval.
 use crate::policy;
+#[cfg(any(unix, windows))]
 use serde_json::json;
 use std::{
     fs,
@@ -47,19 +48,28 @@ impl Binding {
         let roots = crate::location::Observer::readable_roots(root, cwd, paths).ok_or(())?;
         if canonical != path
             || !roots.iter().any(|root| canonical.starts_with(root))
-            || roots
-                .iter()
-                .any(|root| canonical.starts_with(root.join(".shield")))
+            || roots.iter().any(|root| {
+                canonical
+                    .strip_prefix(root)
+                    .ok()
+                    .and_then(|path| path.components().next())
+                    .is_some_and(|part| {
+                        crate::location::native_name(
+                            part.as_os_str(),
+                            std::ffi::OsStr::new(".shield"),
+                        )
+                    })
+            })
         {
             return Err(());
         }
         let metadata = fs::symlink_metadata(&canonical).map_err(|_| ())?;
-        if !metadata.is_file() || metadata.len() > MAX_TEXT || !same_file(&metadata, &metadata) {
+        if !metadata.is_file() || metadata.len() > MAX_TEXT {
             return Err(());
         }
         let file = fs::File::open(&canonical).map_err(|_| ())?;
         let actual = file.metadata().map_err(|_| ())?;
-        if !same_file(&metadata, &actual) || !actual.is_file() || actual.len() > MAX_TEXT {
+        if !same_file(&metadata, &actual, &file, &canonical) || actual.len() > MAX_TEXT {
             return Err(());
         }
         let mut bytes = Vec::new();
@@ -74,7 +84,7 @@ impl Binding {
         {
             return Err(());
         }
-        let digest = resource_digest(&canonical, cwd, &actual, &bytes);
+        let digest = resource_digest(&canonical, cwd, &actual, &bytes, &file)?;
         let binding = Self {
             path: canonical,
             cwd: cwd.to_owned(),
@@ -101,8 +111,8 @@ impl Binding {
         }
         let current = fs::symlink_metadata(&self.path).map_err(|_| ())?;
         let actual = self.file.metadata().map_err(|_| ())?;
-        if !same_file(&current, &actual)
-            || !same_file(&self.metadata, &actual)
+        if !same_file(&current, &actual, &self.file, &self.path)
+            || !same_file(&self.metadata, &actual, &self.file, &self.path)
             || actual.len() != self.metadata.len()
             || actual.modified().map_err(|_| ())? != self.metadata.modified().map_err(|_| ())?
         {
@@ -115,7 +125,7 @@ impl Binding {
             .read_to_end(&mut bytes)
             .map_err(|_| ())?;
         if bytes.len() as u64 > MAX_TEXT
-            || resource_digest(&self.path, &self.cwd, &actual, &bytes) != self.digest
+            || resource_digest(&self.path, &self.cwd, &actual, &bytes, &self.file)? != self.digest
         {
             return Err(());
         }
@@ -124,9 +134,19 @@ impl Binding {
 }
 
 #[cfg(unix)]
-fn resource_digest(path: &Path, cwd: &Path, metadata: &fs::Metadata, bytes: &[u8]) -> String {
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "The shared binding interface must propagate fallible Windows handle identity reads"
+)]
+fn resource_digest(
+    path: &Path,
+    cwd: &Path,
+    metadata: &fs::Metadata,
+    bytes: &[u8],
+    _: &fs::File,
+) -> Result<String, ()> {
     use std::os::unix::fs::MetadataExt;
-    policy::fingerprint(
+    Ok(policy::fingerprint(
         json!([
             path,
             cwd,
@@ -139,11 +159,41 @@ fn resource_digest(path: &Path, cwd: &Path, metadata: &fs::Metadata, bytes: &[u8
         ])
         .to_string()
         .as_bytes(),
-    )
+    ))
 }
-#[cfg(not(unix))]
-fn resource_digest(_: &Path, _: &Path, _: &fs::Metadata, _: &[u8]) -> String {
-    String::new()
+#[cfg(windows)]
+fn resource_digest(
+    path: &Path,
+    cwd: &Path,
+    metadata: &fs::Metadata,
+    bytes: &[u8],
+    file: &fs::File,
+) -> Result<String, ()> {
+    let info = winapi_util::file::information(file).map_err(|_| ())?;
+    Ok(policy::fingerprint(
+        json!([
+            path,
+            cwd,
+            info.volume_serial_number(),
+            info.file_index(),
+            metadata.len(),
+            info.creation_time(),
+            info.last_write_time(),
+            policy::fingerprint(bytes)
+        ])
+        .to_string()
+        .as_bytes(),
+    ))
+}
+#[cfg(not(any(unix, windows)))]
+fn resource_digest(
+    _: &Path,
+    _: &Path,
+    _: &fs::Metadata,
+    _: &[u8],
+    _: &fs::File,
+) -> Result<String, ()> {
+    Err(())
 }
 
 pub(crate) fn verify_approval_read(
@@ -196,7 +246,7 @@ pub(crate) fn valid_request(request: &policy::Request) -> bool {
 }
 
 #[cfg(unix)]
-fn same_file(a: &fs::Metadata, b: &fs::Metadata) -> bool {
+fn same_file(a: &fs::Metadata, b: &fs::Metadata, _: &fs::File, _: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
     a.is_file()
         && b.is_file()
@@ -205,7 +255,45 @@ fn same_file(a: &fs::Metadata, b: &fs::Metadata) -> bool {
         && a.nlink() == 1
         && b.nlink() == 1
 }
-#[cfg(not(unix))]
-fn same_file(_: &fs::Metadata, _: &fs::Metadata) -> bool {
+#[cfg(windows)]
+fn same_file(a: &fs::Metadata, b: &fs::Metadata, file: &fs::File, path: &Path) -> bool {
+    a.is_file()
+        && b.is_file()
+        && winapi_util::file::information(file).is_ok_and(|info| {
+            info.number_of_links() == 1
+                && crate::location::windows::entry(path).is_ok_and(|identity| {
+                    identity == (info.volume_serial_number(), info.file_index())
+                })
+        })
+}
+#[cfg(not(any(unix, windows)))]
+fn same_file(_: &fs::Metadata, _: &fs::Metadata, _: &fs::File, _: &Path) -> bool {
     false
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn text_bindings_refuse_replacements_and_new_hard_link_aliases() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let canonical = root.path().canonicalize().unwrap();
+        let path = canonical.join("notes.txt");
+        fs::write(&path, "Acme notes").unwrap();
+        let binding = Binding::open(&canonical, &canonical, path.to_str().unwrap()).unwrap();
+        binding.verify().unwrap();
+        let alias = canonical.join("alias.txt");
+        fs::hard_link(&path, &alias).unwrap();
+        assert!(binding.verify().is_err());
+        assert!(Binding::open(&canonical, &canonical, path.to_str().unwrap()).is_err());
+        fs::remove_file(&alias).unwrap();
+        binding.verify().unwrap();
+        fs::rename(&path, canonical.join("original.txt")).unwrap();
+        fs::write(&path, "Acme notes").unwrap();
+        assert!(binding.verify().is_err());
+        let replacement = Binding::open(&canonical, &canonical, path.to_str().unwrap()).unwrap();
+        assert_ne!(replacement.digest, binding.digest);
+        replacement.verify().unwrap();
+    }
 }

@@ -31,12 +31,18 @@ clap = { version = "4.5", features = ["derive"], optional = true }
 rustix = { version = "1.1", features = ["termios", "process"] }
 signal-hook = { version = "0.3", optional = true, default-features = false }
 
+[target.'cfg(windows)'.dependencies]
+winapi-util = "0.1.11"
+
 [dev-dependencies]
 assert_cmd = "2.2"
 assert_fs = "1.1"
 insta = { version = "1.49", features = ["filters", "json"] }
 predicates = "3.1"
 proptest = { version = "1.11", default-features = false, features = ["std"] }
+
+[target.'cfg(windows)'.dev-dependencies]
+portable-pty = "0.9.0"
 
 [lints.rust]
 unsafe_code = "forbid"

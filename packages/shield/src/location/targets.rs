@@ -100,7 +100,7 @@ fn destructive_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
     let mut recursive = false;
     let mut no_directory = false;
     let mut target_directory = None;
-    let mut complete = cfg!(unix);
+    let mut complete = cfg!(any(unix, windows));
     let mut forced_copy = false;
     let mut position = 0;
     while position < arguments.len() {
@@ -171,7 +171,7 @@ fn destructive_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
 fn read_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
     let mut operands = Vec::new();
     let mut options = true;
-    let mut complete = cfg!(unix);
+    let mut complete = cfg!(any(unix, windows));
     let mut position = 0;
     while position < arguments.len() {
         let argument = &arguments[position];
@@ -228,7 +228,7 @@ fn read_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
             .map(|path| Target {
                 action: "read",
                 role: "source",
-                path: cwd.join(path),
+                path: super::join_operand(cwd, path, &mut complete),
                 recursive: false,
                 descendants: Descendants::All,
                 follow: true,
@@ -243,7 +243,7 @@ fn grep_argv(arguments: &[String], cwd: &Path) -> Targets {
     let mut operands = Vec::new();
     let mut options = true;
     let mut terminated = false;
-    let mut complete = cfg!(unix);
+    let mut complete = cfg!(any(unix, windows));
     for argument in arguments {
         if options && argument == "--" {
             options = false;
@@ -261,7 +261,7 @@ fn grep_argv(arguments: &[String], cwd: &Path) -> Targets {
         .into_iter()
         .skip(1)
         .map(|operand| {
-            let path = cwd.join(operand);
+            let path = super::join_operand(cwd, operand, &mut complete);
             let metadata = fs::metadata(&path);
             complete &= operand != "-" && metadata.is_ok_and(|m| m.is_file());
             Target {
@@ -329,7 +329,7 @@ pub(super) fn rg_model(arguments: &[String], cwd: &Path) -> (Targets, bool) {
     let mut hidden = false;
     // Glob and type selections override ripgrep's other filters, hidden ones too.
     let mut selects = false;
-    let mut complete = cfg!(unix);
+    let mut complete = cfg!(any(unix, windows));
     let mut arguments = arguments.iter();
     while let Some(argument) = arguments.next() {
         let long = argument
@@ -380,7 +380,7 @@ pub(super) fn rg_model(arguments: &[String], cwd: &Path) -> (Targets, bool) {
     let items = paths
         .into_iter()
         .map(|operand| {
-            let path = cwd.join(operand);
+            let path = super::join_operand(cwd, operand, &mut complete);
             let metadata = fs::metadata(&path);
             let directory = metadata.as_ref().is_ok_and(std::fs::Metadata::is_dir);
             complete &= operand != "-" && (directory || metadata.is_ok_and(|m| m.is_file()));
@@ -412,7 +412,7 @@ fn find_argv(arguments: &[String], cwd: &Path) -> Targets {
     const VALUED: &str = "-name -iname -path -ipath -wholename -iwholename -regex -iregex -lname -ilname \
         -type -maxdepth -mindepth -size -mtime -mmin -atime -amin -ctime -cmin -Btime -Bmin -perm \
         -user -group -uid -gid -links -inum -regextype -fstype -printf -flags";
-    let mut complete = cfg!(unix);
+    let mut complete = cfg!(any(unix, windows));
     let mut rest = arguments.iter().peekable();
     while let Some(argument) = rest.next_if(|a| {
         a.as_str() == "--"
@@ -445,7 +445,7 @@ fn find_argv(arguments: &[String], cwd: &Path) -> Targets {
             .map(|start| Target {
                 action: "read",
                 role: "source",
-                path: cwd.join(start),
+                path: super::join_operand(cwd, start, &mut complete),
                 recursive: true,
                 descendants: Descendants::Present,
                 follow: true,
@@ -461,7 +461,7 @@ fn write_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
     let mut items = Vec::new();
     let mut options = true;
     let mut terminated = false;
-    let mut complete = cfg!(unix);
+    let mut complete = cfg!(any(unix, windows));
     for argument in arguments {
         if options && argument == "--" {
             options = false;
@@ -479,7 +479,7 @@ fn write_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
             items.push(Target {
                 action: "write",
                 role: "destination",
-                path: cwd.join(argument),
+                path: super::join_operand(cwd, argument, &mut complete),
                 recursive: false,
                 descendants: Descendants::All,
                 follow: true,
@@ -508,9 +508,9 @@ fn resources(
 ) -> Targets {
     let mut result = Targets {
         items: vec![],
-        complete: cfg!(unix),
+        complete: cfg!(any(unix, windows)),
     };
-    let destination = destination.map(|p| cwd.join(p));
+    let destination = destination.map(|p| super::join_operand(cwd, p, &mut result.complete));
     let directory = destination
         .as_ref()
         .is_some_and(|p| !no_directory && fs::metadata(p).is_ok_and(|m| m.is_dir()));
@@ -520,7 +520,7 @@ fn resources(
         result.complete = false;
     }
     for source in sources {
-        let source = cwd.join(source);
+        let source = super::join_operand(cwd, source, &mut result.complete);
         let remove = ["remove", "move"].contains(&action);
         let metadata = if remove {
             fs::symlink_metadata(&source)

@@ -22,6 +22,7 @@ pub use domain_comparison::{DomainComparison, Relation, compare_argv, compare_po
 
 /// Validated artifacts retained in memory with their exact candidate lock.
 /// Construction captures no trust, approval, or atomic filesystem revision.
+#[derive(Clone)]
 pub struct Snapshot {
     lock: Lock,
     packs: Vec<Pack>,

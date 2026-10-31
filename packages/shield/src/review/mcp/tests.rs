@@ -1433,7 +1433,8 @@ fn cursors_keep_a_consistent_query_and_refuse_changed_filters_or_selectors() {
 #[test]
 fn exact_conditions_match_vendor_fields_environment_and_observed_executable() {
     let (_root, context, connection) = fixture();
-    let executable = Path::new("/bin/echo")
+    let executable = std::env::current_exe()
+        .unwrap()
         .canonicalize()
         .unwrap()
         .to_string_lossy()
@@ -1694,7 +1695,7 @@ fn local_layer_changes_bind_personal_values_rules_roots_and_packs() {
     commit_pack_change(
         &context,
         &connection,
-        json!({"kind":"access_path_add","access":"read","path":"/srv/acme","layer":"local"}),
+        json!({"kind":"access_path_add","access":"read","path":crate::test_support::absolute("/srv/acme"),"layer":"local"}),
         "local-root",
     );
     let active = Store::open(root.path()).unwrap().read().unwrap();
@@ -1717,7 +1718,10 @@ fn local_layer_changes_bind_personal_values_rules_roots_and_packs() {
     assert!(inspected["error"].is_null(), "{inspected}");
     assert_eq!(inspected["data"]["decision"], "deny");
     let merged = crate::configuration::layers::merged(candidate).unwrap();
-    assert_eq!(merged["local_access_paths"]["read"], json!(["/srv/acme"]));
+    assert_eq!(
+        merged["local_access_paths"]["read"],
+        json!([crate::test_support::absolute("/srv/acme")])
+    );
     assert!(
         merged
             .get("access_paths")

@@ -41,7 +41,21 @@ impl Analysis<'_> {
                 span,
                 words,
                 redirections,
-            } => self.simple_command(*span, words, redirections, state, depth),
+            } => {
+                if self.dialect == Dialect::Powershell {
+                    // The PowerShell parser admits only a whole native command
+                    // with resolved arguments and no parent-shell effects. Do
+                    // not reinterpret its quoting as POSIX expansion/bindings.
+                    let words = words
+                        .iter()
+                        .map(|word| word.literal.clone())
+                        .collect::<Option<Vec<_>>>()
+                        .ok_or(Error::Contract("unresolved PowerShell native argument"))?;
+                    self.literal_command(*span, &words, state, depth, false)
+                } else {
+                    self.simple_command(*span, words, redirections, state, depth)
+                }
+            }
             Node::Sequence { children } => {
                 let mut decision = Decision::Allow;
                 for child in children {

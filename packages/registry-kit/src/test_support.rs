@@ -22,7 +22,12 @@ pub(crate) fn now() -> SystemTime {
 
 /// A local source at a fixed absolute path that is never read.
 pub(crate) fn local(path: &str) -> Source {
-    Source::local(Path::new(path)).expect("absolute fixture path")
+    let native = if cfg!(windows) && path.starts_with('/') && !Path::new(path).is_absolute() {
+        format!("C:{path}")
+    } else {
+        path.to_owned()
+    };
+    Source::local(Path::new(&native)).expect("absolute fixture path")
 }
 
 /// A pinned built-in source named `main`.

@@ -1,174 +1,61 @@
-//! Read-only, bounded access to the Markdown guides embedded at build time.
-use super::{Checkpoint, Error, fields, required, text};
-use miniz_oxide::inflate::decompress_to_vec_with_limit;
-use serde_json::{Value, json};
+//! Shield's bundled guides, served through canonic-mcp-kit's shared
+//! documentation tools, and their mapping into Shield's result envelope.
+use super::{Checkpoint, Error};
+use canonic_mcp_kit::{
+    Interrupted,
+    docs::{Bundle, DocsError, Documentation},
+};
+use serde_json::Value;
+use std::sync::LazyLock;
 
-include!(concat!(env!("OUT_DIR"), "/shield_docs.rs"));
-const COMPRESSED_DOCUMENTS: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/shield_docs.deflate"));
+static GUIDES: Bundle = canonic_mcp_kit::include_docs!();
+static DOCS: LazyLock<Documentation> =
+    LazyLock::new(|| Documentation::new(&GUIDES, "shield", "Shield", env!("CARGO_PKG_VERSION")));
 
-pub(super) fn call(name: &str, args: &Value, checkpoint: Checkpoint<'_>) -> Result<Value, Error> {
-    checkpoint()?;
-    let source = decode(COMPRESSED_DOCUMENTS, DOCUMENT_SIZE)?;
-    checkpoint()?;
-    match name {
-        "shield_docs_list" => {
-            fields(args, &["offset", "limit"])?;
-            let rows = DOCUMENTS
-                .iter()
-                .map(|(path, start, end)| {
-                    let content = page_text(&source, *start, *end)?;
-                    Ok(json!({"path":path,"title":title(content),"total_lines":content.lines().count()}))
-                })
-                .collect::<Result<Vec<_>, Error>>()?;
-            page(args, &rows, "documents")
-        }
-        "shield_docs_search" => search(&source, args, checkpoint),
-        "shield_docs_read" => read(&source, args),
-        _ => Err(Error::Invalid("unknown documentation tool")),
-    }
+/// Whether `name` is one of the documentation tools.
+pub(super) fn handles(name: &str) -> bool {
+    DOCS.handles(name)
 }
 
-fn decode(compressed: &[u8], expected_size: usize) -> Result<String, Error> {
-    let bytes = decompress_to_vec_with_limit(compressed, expected_size)
-        .map_err(|_| Error::Invalid("invalid bundled documentation compression"))?;
-    if bytes.len() != expected_size {
-        return Err(Error::Invalid("invalid bundled documentation size"));
-    }
-    String::from_utf8(bytes).map_err(|_| Error::Invalid("invalid bundled documentation text"))
-}
-
-fn page_text(source: &str, start: usize, end: usize) -> Result<&str, Error> {
-    source
-        .get(start..end)
-        .ok_or(Error::Invalid("invalid bundled documentation range"))
-}
-
-fn title(content: &str) -> &str {
-    content
-        .lines()
-        .find_map(|line| line.strip_prefix("# "))
-        .unwrap_or_default()
-}
-
-fn document<'a>(source: &'a str, path: &str) -> Result<&'a str, Error> {
-    let (_, start, end) = DOCUMENTS
+/// The documentation tool definitions, as listing entries. Building them does
+/// not read the bundle.
+pub(super) fn tools() -> Vec<Value> {
+    DOCS.tools()
         .iter()
-        .find(|(id, _, _)| *id == path)
-        .ok_or(Error::Missing)?;
-    page_text(source, *start, *end)
+        .map(|tool| serde_json::to_value(tool).expect("tool definitions serialize"))
+        .collect()
 }
 
-fn number(args: &Value, key: &str, default: usize, min: usize, max: usize) -> Result<usize, Error> {
-    match args.get(key) {
-        None => Ok(default),
-        Some(value) => value
-            .as_u64()
-            .and_then(|value| usize::try_from(value).ok())
-            .filter(|value| (min..=max).contains(value))
-            .ok_or(Error::Invalid("invalid documentation page bounds")),
-    }
+/// Runs a call to one of the bundled documentation tools.
+pub(super) fn call(
+    name: &str,
+    args: &Value,
+    checkpoint: Checkpoint<'_>,
+) -> Result<Value, DocsError> {
+    call_with(&DOCS, name, args, checkpoint)
 }
 
-fn page(args: &Value, rows: &[Value], field: &str) -> Result<Value, Error> {
-    let offset = number(args, "offset", 0, 0, usize::MAX)?;
-    let limit = number(args, "limit", 50, 1, 100)?;
-    let end = offset.saturating_add(limit).min(rows.len());
-    let mut result = json!({"version":env!("CARGO_PKG_VERSION"),"total":rows.len(),
-        "next_offset":(end < rows.len()).then_some(end)});
-    result[field] = json!(&rows[offset.min(rows.len())..end]);
-    Ok(result)
+/// Runs a documentation call, polling Shield's request checkpoint.
+pub(super) fn call_with(
+    docs: &Documentation,
+    name: &str,
+    args: &Value,
+    checkpoint: Checkpoint<'_>,
+) -> Result<Value, DocsError> {
+    let check = || checkpoint().map_err(|_| Interrupted);
+    docs.call(name, args, &check).unwrap_or_else(|| {
+        Err(DocsError::InvalidArguments(
+            "Unknown documentation tool.".into(),
+        ))
+    })
 }
 
-fn search(source: &str, args: &Value, checkpoint: Checkpoint<'_>) -> Result<Value, Error> {
-    fields(args, &["query", "path", "offset", "limit"])?;
-    let query = required(args, "query")?.to_lowercase();
-    if query.trim().is_empty() {
-        return Err(Error::Invalid(
-            "documentation search query must not be blank",
-        ));
-    }
-    let path = text(args, "path")?;
-    if let Some(path) = path {
-        document(source, path)?;
-    }
-    let mut rows = Vec::new();
-    for (id, start, end) in DOCUMENTS {
-        checkpoint()?;
-        if path.is_some_and(|path| path != *id) {
-            continue;
-        }
-        let content = page_text(source, *start, *end)?;
-        for (index, line) in content.lines().enumerate() {
-            checkpoint()?;
-            if line.to_lowercase().contains(&query) {
-                rows.push(json!({"path":id,"line":index + 1,"text":line}));
-            }
-        }
-    }
-    page(args, &rows, "matches")
-}
-
-fn read(source: &str, args: &Value) -> Result<Value, Error> {
-    fields(args, &["path", "start_line", "limit"])?;
-    let path = required(args, "path")?;
-    let content = document(source, path)?;
-    let start = number(args, "start_line", 1, 1, usize::MAX)?;
-    let limit = number(args, "limit", 100, 1, 400)?;
-    let lines = content.lines().collect::<Vec<_>>();
-    let offset = (start - 1).min(lines.len());
-    let end = offset.saturating_add(limit).min(lines.len());
-    Ok(
-        json!({"version":env!("CARGO_PKG_VERSION"),"path":path,"title":title(content),
-        "start_line":start,"total_lines":lines.len(),"content":lines[offset..end].join("\n"),
-        "next_start_line":(end < lines.len()).then_some(end + 1)}),
-    )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use miniz_oxide::deflate::compress_to_vec;
-
-    #[test]
-    fn compressed_documentation_restores_every_source_byte() {
-        assert!(COMPRESSED_DOCUMENTS.len() < DOCUMENT_SIZE);
-        let source = decode(COMPRESSED_DOCUMENTS, DOCUMENT_SIZE).unwrap();
-        let mut previous_end = 0;
-        for (path, start, end) in DOCUMENTS {
-            assert_eq!(*start, previous_end);
-            let expected = std::fs::read(
-                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("docs")
-                    .join(path),
-            )
-            .unwrap();
-            assert_eq!(
-                document(&source, path).unwrap().as_bytes(),
-                expected,
-                "{path}"
-            );
-            previous_end = *end;
-        }
-        assert_eq!(previous_end, source.len());
-    }
-
-    #[test]
-    fn documentation_decode_checks_compression_size_and_utf8() {
-        let source = "Acme café\r\n规则\n";
-        let compressed = compress_to_vec(source.as_bytes(), 10);
-        assert_eq!(decode(&compressed, source.len()).unwrap(), source);
-        assert!(decode(&compressed, source.len() - 1).is_err());
-        assert!(decode(&compressed, source.len() + 1).is_err());
-        assert!(decode(&compressed[..compressed.len() / 2], source.len()).is_err());
-        assert!(decode(&compress_to_vec(&[0xff], 10), 1).is_err());
-    }
-
-    #[test]
-    fn documentation_ranges_reject_invalid_utf8_boundaries_and_offsets() {
-        assert_eq!(page_text("é\nAcme", 0, 2).unwrap(), "é");
-        for (start, end) in [(0, 1), (1, 2), (3, 2), (0, 100)] {
-            assert!(page_text("é\nAcme", start, end).is_err());
-        }
+/// The code and recovery-bearing message of a documentation failure.
+pub(super) fn error_fields(error: &DocsError) -> (&'static str, String) {
+    match error {
+        DocsError::InvalidArguments(message) => ("invalid_input", message.clone()),
+        DocsError::NotFound { .. } => ("not_found", error.to_string()),
+        DocsError::Cancelled => super::error_fields(&Error::Cancelled),
+        DocsError::Unavailable => ("documentation_unavailable", error.to_string()),
     }
 }

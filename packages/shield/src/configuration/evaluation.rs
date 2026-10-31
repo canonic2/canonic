@@ -251,7 +251,9 @@ impl Evaluator {
         {
             value["decision"] = analysis["decision"].clone();
         }
-        if !["bash", "posix"].contains(&dialect.as_str()) {
+        if !(["bash", "posix"].contains(&dialect.as_str())
+            || dialect == "powershell" && analysis["coverage"] == "single-literal-invocation")
+        {
             if value["decision"] != "deny" {
                 value["decision"] = serde_json::json!("ask");
             }

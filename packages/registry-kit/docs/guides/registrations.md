@@ -72,7 +72,9 @@ The file is bounded to 1 MiB and must be regular. Symlink files and symlink
 parents are refused. The `.lock` and `.new` sibling paths replace the document's
 extension: `registries.json` uses `registries.lock` and `registries.new`.
 Choose a path with a parent and an extension other than `.lock` or `.new`, in
-any case. On Unix, created directories are 0700 and files are 0600.
+any case. On Unix, created directories are 0700 and files are 0600. On Windows,
+created directories and replacement files receive a protected DACL allowing only
+the current user and SYSTEM. Existing parent-directory permissions are preserved.
 
 The serialized shape has a `sources` map from alias to `Source` and an optional
 `default` alias. Serialize library types instead of calculating identities or

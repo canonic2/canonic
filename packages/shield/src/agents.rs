@@ -205,6 +205,11 @@ pub(crate) trait AgentAdapter: Sync {
     fn reply(&self, event: Event, reply: &Reply) -> Value;
     fn completion(&self, event: &str, note: Option<&str>) -> Value;
     fn hook_group(&self, command: &str) -> Value;
+    /// A native argv hook when the host supports launching without a shell.
+    /// Other hosts use the platform's quoted command-string launcher.
+    fn direct_hook_group(&self, _binary: &Path, _root: &Path, _event: &str) -> Option<Value> {
+        None
+    }
     fn capture_hooks(
         &self,
         source: Option<&str>,

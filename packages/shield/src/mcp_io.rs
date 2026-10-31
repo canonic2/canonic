@@ -11,6 +11,23 @@ pub(crate) fn run(
     input: &McpServe,
     log: &Arc<crate::diagnostics::Log>,
 ) -> ExitCode {
+    let options = mcp::options(
+        Duration::from_millis(input.request_timeout_ms),
+        Some(log.clone()),
+    );
+    if input.skills_only {
+        return match mcp::serve_static(
+            io::BufReader::new(io::stdin()),
+            io::stdout().lock(),
+            &options,
+        ) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     let context = ReviewContext {
         project: project.unwrap_or(Path::new(".")).to_path_buf(),
         agent: input.agent.clone(),
@@ -26,10 +43,6 @@ pub(crate) fn run(
         eprintln!("Cannot start Shield project review server");
         return ExitCode::FAILURE;
     };
-    let options = mcp::options(
-        Duration::from_millis(input.request_timeout_ms),
-        Some(log.clone()),
-    );
     match mcp::serve(
         server,
         io::BufReader::new(io::stdin()),

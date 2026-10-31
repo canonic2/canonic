@@ -279,7 +279,8 @@ pack, in the order the pack declares them, preselecting a value when a
 suggested file such as `pnpm-lock.yaml` exists. An optional variable lists
 leaving it unset as its first answer, which turns its checks off; a text value
 is typed into the question's last row. A pack can word each question and skip
-it depending on an earlier answer. With more than one question, the answers
+it depending on an earlier answer. The footer shows the controls for choosing,
+typing, continuing and going back. With more than one question, the answers
 are shown together before saving, and choosing one asks it again. Bind values directly with
 `shield pack add acme/node --set package_manager=pnpm`. A list value is a JSON array
 or comma-separated items; booleans are `true` or `false`.

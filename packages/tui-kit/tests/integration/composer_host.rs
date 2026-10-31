@@ -1,7 +1,9 @@
 //! Verifies storage decoding, real editor processes and native terminal handoff.
 
+use canonic_tui_kit::composer::{Composer, SavedComposer};
+#[cfg(unix)]
 use canonic_tui_kit::{
-    composer::{Composer, EditorResult, SavedComposer, editor_command, run_editor},
+    composer::{EditorResult, editor_command, run_editor},
     runtime::TerminalSession,
 };
 

@@ -1176,7 +1176,7 @@ fn shell_file_redirections_and_nested_requirements_reach_agent_diagnostics() {
         .to_str()
         .unwrap()
         .to_owned();
-    std::fs::create_dir(format!("{root}/.git")).unwrap();
+    std::fs::create_dir(std::path::Path::new(&root).join(".git")).unwrap();
     let file = json!({"id":"writes","decision":"allow","conditions":{"domain":"file","action":"write"},"requirements":{"destination":{"within":{"root":"project"},"exclude":[{"root":"project","path":".git"}]}},"on_unmet":{"decision":"deny","message":"Preserve .git; choose an ordinary project file."}});
     let readonly = json!({"id":"mysql","decision":"allow","conditions":{"domain":"argv","executable":"mysql"},"requirements":{"arguments":{"kind":"options","prefix":[],"flags":["--read-only"],"values":[],"operands":false,"require_all":["--read-only"]}},"on_unmet":{"decision":"deny","message":"Add --read-only and submit again.","alternatives":["mysql --read-only"]}});
     let allow = json!({"id":"echo","decision":"allow","conditions":{"domain":"argv","executable":"echo","arguments":{"kind":"any"}}});
@@ -1774,8 +1774,22 @@ fn alternatives_only_guidance_is_delivered_without_inventing_a_failure() {
 
 #[test]
 fn cache_repair_command_preserves_the_project_as_one_literal_argument() {
-    let project = "/workspace/acme's $(echo private); project";
-    let route = crate::agent_message::cache_repair(project).unwrap();
+    let project = crate::test_support::absolute("/workspace/acme's $(echo private); project");
+    let route = crate::agent_message::cache_repair(&project).unwrap();
+    for invalid in [
+        "relative",
+        "/workspace/acme\nproject",
+        "/workspace/acme\0project",
+    ] {
+        assert!(crate::agent_message::cache_repair(invalid).is_none());
+    }
+    if cfg!(windows) {
+        assert_eq!(
+            route,
+            "shield cache prepare --project 'C:/workspace/acme''s $(echo private); project'"
+        );
+        return;
+    }
     let bundle =
         configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
     let evaluator =
@@ -1783,8 +1797,8 @@ fn cache_repair_command_preserves_the_project_as_one_literal_argument() {
     let parsed = crate::shell::analyze(
         &route,
         crate::shell::Dialect::Posix,
-        "/workspace",
-        "/workspace",
+        &crate::test_support::absolute("/workspace"),
+        &crate::test_support::absolute("/workspace"),
         &evaluator,
     )
     .unwrap();
@@ -1794,13 +1808,6 @@ fn cache_repair_command_preserves_the_project_as_one_literal_argument() {
         operations[0]["request"]["arguments"],
         json!(["cache", "prepare", "--project", project])
     );
-    for invalid in [
-        "relative",
-        "/workspace/acme\nproject",
-        "/workspace/acme\0project",
-    ] {
-        assert!(crate::agent_message::cache_repair(invalid).is_none());
-    }
 }
 
 #[test]

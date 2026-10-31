@@ -274,8 +274,14 @@ fn operation(host: &Value) -> Option<Value> {
                 return None;
             }
             let source = text(&input["command"], 65_536)?;
+            // The native Windows default is PowerShell. Its aliases, quoting
+            // and operators cannot be interpreted using the POSIX grammar.
+            // An explicitly selected shell stays opaque until its provenance
+            // and dialect can be established from the host contract.
             let dialect = if input.contains_key("shell") {
                 "cmd"
+            } else if cfg!(windows) {
+                "powershell"
             } else {
                 "posix"
             };
@@ -339,6 +345,25 @@ fn patch_changes(source: &str, host: &Value) -> Option<Vec<Value>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_shell_mapping_never_parses_windows_defaults_as_posix() {
+        let mut host = json!({"tool_name":"Bash", "tool_input":{"command":"cat report.txt"}});
+        let mapped = operation(&host).unwrap();
+        assert_eq!(
+            mapped["dialect"],
+            if cfg!(windows) { "powershell" } else { "posix" }
+        );
+        for shell in [
+            json!("powershell.exe"),
+            json!("cmd.exe"),
+            json!("bash.exe"),
+            Value::Null,
+        ] {
+            host["tool_input"]["shell"] = shell;
+            assert_eq!(operation(&host).unwrap()["dialect"], "cmd");
+        }
+    }
 
     #[test]
     fn codex_ask_preserves_both_the_reason_and_agent_context() {

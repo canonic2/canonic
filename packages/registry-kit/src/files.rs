@@ -2,7 +2,8 @@
 //! filesystem adapters.
 //!
 //! Every file the library writes is private to the user on Unix (0600, in
-//! directories it creates as 0700) and appears complete or not at all.
+//! directories it creates as 0700), uses a protected operator/SYSTEM DACL on
+//! Windows, and appears complete or not at all.
 
 use std::{
     fs::{self, File, FileType},
@@ -12,6 +13,9 @@ use std::{
 };
 
 static TEMPORARY: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(windows)]
+mod windows;
 
 /// Outcome of a bounded read of a path expected to be a regular file.
 pub(crate) enum Bounded {
@@ -26,14 +30,19 @@ pub(crate) enum Bounded {
 /// Reads a whole regular file, refusing anything longer than `max_bytes`.
 ///
 /// Every caller passes a path whose final component it has already checked
-/// or canonicalized. On Unix that component is opened without following a
+/// or canonicalized. On Unix and Windows that component is opened without following a
 /// link, so a link swapped in after the check is refused as
 /// [`Bounded::NotFile`]; directory components are still followed. The file
-/// is also opened without blocking, so a FIFO or device in place of the file
+/// is also opened without blocking on Unix, so a FIFO or device in place of the file
 /// is refused instead of waiting for a writer.
 pub(crate) fn read_bounded(path: &Path, max_bytes: u64) -> io::Result<Bounded> {
     let mut options = fs::OpenOptions::new();
     options.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(0x0200_0000 | 0x0020_0000);
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
@@ -46,6 +55,10 @@ pub(crate) fn read_bounded(path: &Path, max_bytes: u64) -> io::Result<Bounded> {
         Err(error) => return Err(error),
     };
     let metadata = file.metadata()?;
+    #[cfg(windows)]
+    if !windows::regular(&file)? {
+        return Ok(Bounded::NotFile);
+    }
     if !metadata.is_file() {
         return Ok(Bounded::NotFile);
     }
@@ -72,16 +85,24 @@ pub(crate) fn kind(path: &Path) -> io::Result<Option<FileType>> {
     }
 }
 
-/// Creates `path` and missing parents, private to the user on Unix.
+/// Creates `path` and missing parents, protecting `path` with native private permissions.
 pub(crate) fn create_private_dir(path: &Path) -> io::Result<()> {
-    let mut builder = fs::DirBuilder::new();
-    builder.recursive(true);
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
+        windows::create_private_dir(path)
     }
-    builder.create(path)
+    #[cfg(not(windows))]
+    {
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(path)?;
+        Ok(())
+    }
 }
 
 /// A temporary path in `directory`, unique to this process and call.
@@ -115,15 +136,27 @@ pub(crate) enum Commit {
 pub(crate) fn replace_private(temporary: &Path, target: &Path, bytes: &[u8]) -> io::Result<Commit> {
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // GENERIC_WRITE, READ_CONTROL, WRITE_DAC and FILE_READ_ATTRIBUTES.
+        options.access_mode(0x4006_0080);
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
     let mut file = options.open(temporary)?;
-    let synced = file.write_all(bytes).and_then(|()| sync(&file));
+    #[cfg(windows)]
+    let prepared = windows::private(&mut file);
+    #[cfg(not(windows))]
+    let prepared: io::Result<()> = Ok(());
+    let synced = prepared
+        .and_then(|()| file.write_all(bytes))
+        .and_then(|()| sync(&file));
     drop(file);
-    let written = synced.and_then(|()| fs::rename(temporary, target));
+    let written = synced.and_then(|()| replace(temporary, target));
     if let Err(error) = written {
         // Best effort: the temporary file belongs to this write alone.
         let _ = fs::remove_file(temporary);
@@ -133,6 +166,27 @@ pub(crate) fn replace_private(temporary: &Path, target: &Path, bytes: &[u8]) -> 
         Ok(()) => Commit::Durable,
         Err(error) => Commit::NotDurable(error),
     })
+}
+
+/// Windows has no directory fsync equivalent here. Request a synchronous
+/// replacement rather than reporting an ordinary rename as crash durable.
+fn replace(temporary: &Path, target: &Path) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        if [temporary, target]
+            .iter()
+            .any(|path| path.as_os_str().encode_wide().any(|unit| unit == 0))
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "replacement path contains NUL",
+            ));
+        }
+        atomicwrites::replace_atomic(temporary, target)
+    }
+    #[cfg(not(windows))]
+    fs::rename(temporary, target)
 }
 
 /// Flushes a file, or a directory opened as one, through the filesystem so a
@@ -152,6 +206,13 @@ fn sync(file: &File) -> io::Result<()> {
 }
 
 /// Syncs the directory holding `path`, making a rename into it durable.
+#[cfg_attr(
+    not(unix),
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "Unix directory flushing can fail; Windows uses write-through replacement and shares the fallible call interface"
+    )
+)]
 fn sync_directory(path: &Path) -> io::Result<()> {
     #[cfg(unix)]
     {
@@ -163,7 +224,7 @@ fn sync_directory(path: &Path) -> io::Result<()> {
     }
     #[cfg(not(unix))]
     {
-        // Directories cannot be opened for syncing; the rename itself is atomic.
+        // Windows replace() requests MOVEFILE_WRITE_THROUGH before this point.
         let _ = path;
         Ok(())
     }
@@ -243,6 +304,18 @@ mod tests {
         ));
         replace_private(&temporary_path(&dir, "file"), &target, b"two").unwrap();
         assert_eq!(fs::read(&target).unwrap(), b"two");
+        #[cfg(windows)]
+        {
+            assert!(
+                replace_private(
+                    &temporary_path(&dir, "nul"),
+                    &dir.join("file\0suffix"),
+                    b"truncated"
+                )
+                .is_err()
+            );
+            assert_eq!(fs::read(&target).unwrap(), b"two");
+        }
         assert_eq!(
             fs::read_dir(&dir).unwrap().count(),
             1,

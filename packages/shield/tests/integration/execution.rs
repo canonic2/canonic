@@ -1,4 +1,6 @@
 //! Native launch fidelity, policy blocks and actual owned child outcomes.
+#[cfg(windows)]
+mod windows;
 #[cfg(target_os = "macos")]
 mod macos {
     use assert_cmd::cargo::cargo_bin_cmd;

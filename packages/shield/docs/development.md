@@ -23,6 +23,151 @@ a real test name; nextest fails if nothing matches.
 Keep `target/` between iterations to reuse Cargo's cache. Use release builds
 for performance measurements.
 
+## Native Windows development
+
+Use the pinned MSVC Rust toolchain and Visual Studio C++ build tools. From this
+package directory in a Windows developer terminal:
+
+```powershell
+cargo build --locked
+cargo test --locked --lib windows_opaque_shells_never_use_allow_fallback
+```
+
+Run strict native lint separately with
+`cargo clippy --locked --all-targets -- -D warnings`.
+
+The development binary is `target/debug/shield.exe`. Windows acceptance covers
+AMD64 source builds, enrollment, setup/repair/removal, native console ownership,
+private ACLs, MCP stdio, and Registry installation/offline reproduction. Claude
+Code 2.1.312 file and PowerShell tools pass Allow/Deny/Ask and missing/timeout-hook checks with
+an isolated local provider. Codex 0.166.0 loads the generated project hooks:
+native command Allow/Deny, configured Ask allowance and prefix-covered Ask
+blocking pass with retained Shield decisions. Unsupported PowerShell source
+is also withheld by the generated hook.
+
+To prepare an AMD64 release binary from the same developer terminal, run:
+
+```powershell
+powershell -NoProfile -File scripts/build-windows.ps1
+```
+
+For ARM64, install the Visual Studio C++ ARM64 tools and ARM64 Windows SDK
+libraries, add the pinned Rust target, and use an MSVC developer terminal targeting
+ARM64 (for example, the **x64_arm64 Cross Tools Command Prompt**):
+
+```powershell
+rustup target add --toolchain 1.99.0 aarch64-pc-windows-msvc
+powershell -NoProfile -File scripts/build-windows.ps1 -Architecture arm64
+```
+
+An x64 Windows host can cross-build ARM64; it does not need to run the ARM64
+executable. Native ARM64 development hosts can use an ARM64 developer terminal.
+Both builds include MCP Kit, Registry Kit and TUI Kit. Process Kit is not used.
+
+The outputs are `target/x86_64-pc-windows-msvc/release/shield.exe` and
+`target/aarch64-pc-windows-msvc/release/shield.exe`, respectively. The checked-in
+release configuration requests static C runtime linkage for Shield and its
+dependencies. The script adds neutral source/cache diagnostic paths through a
+private temporary Cargo configuration, then runs the `cargo build-windows` or
+`cargo build-windows-arm64` alias. It checks the MSVC terminal's target architecture
+and the resulting executable's PE architecture.
+It refuses Rust flag overrides that would replace the verified build settings.
+The explicit target keeps those flags away from host build
+scripts and procedural macros. Inspect the executable's imported DLLs with
+`dumpbin /DEPENDENTS` before distributing it; the development build uses the
+toolchain's default runtime linkage.
+
+Verify the built executable in a temporary installation with spaces in its path:
+
+```powershell
+$env:SHIELD_WINDOWS_RELEASE_BINARY = Join-Path (Get-Location) 'target\x86_64-pc-windows-msvc\release\shield.exe'
+cargo test --locked --test integration windows_release_binary_runs_from_owned_installation -- --ignored
+```
+
+This checks startup, confirmed offline enrollment, replacement after exit and
+removal while preserving the enrolled project. It verifies the portable binary;
+package-manager installation and migration between released versions need their
+own acceptance.
+
+### Portable Windows packages
+
+After building, optionally Authenticode-sign and timestamp `shield.exe`, then
+package that final executable from the same checkout and toolchain:
+
+```powershell
+powershell -NoProfile -File scripts/package-windows.ps1 -Architecture x64
+powershell -NoProfile -File scripts/package-windows.ps1 -Architecture arm64
+```
+
+Each command writes `dist/shield-<version>-<Rust target>.zip` and a `.sha256`
+sidecar. `-OutputDirectory C:\Acme\shield-candidates` selects another directory;
+existing outputs are refused. `CARGO_TARGET_DIR`, when set, selects the same
+build directory for both scripts. The packager checks the binary architecture,
+includes the product license, resolved normal/build dependency notices and Rust
+standard-library notices, and indexes them in `BUILD.json`. Package metadata
+describes a workspace candidate with no source-revision attestation; it is not
+proof of a clean source checkout, a signature or native acceptance. Build again
+after source or dependency changes before packaging.
+
+The scripts do not sign or publish anything. Sign before packaging and compute
+checksums after signing. ARM64 build/package execution has not been verified;
+its implementation is accepted for this stage without native runtime acceptance.
+
+To install a portable package, extract it into a stable folder you own and add
+that folder to PATH. Check `shield --version`, then follow
+[Your first Shield project](getting-started.md). Before an update, close Shield
+and connected agents, replace the executable, run `shield mcp setup --repair`
+for each project's agent registration, and restart the agent. After moving the
+installation, repair those registrations as well. To remove it, run
+`shield mcp remove` for each connected agent in each project, then delete the
+installation folder. Preserve project `.shield` folders to keep policy/history.
+
+### Supported Windows commands and acceptance
+
+The PowerShell preview supports one literal invocation of `git`, `rg`, `node`,
+`rustc`, `cargo`, `make`, `just` or `shield`. Arguments may be unquoted or use
+single/double quotes without expansion. Empty arguments, embedded double quotes,
+whitespace-containing arguments ending in a backslash,
+compound commands, redirections, cmdlets, aliases and explicit shell overrides
+are outside that grammar. Native handoff blocks unsupported PowerShell and cmd
+source, including when Ask fallback allows ordinary policy Ask requests.
+The [checked native runner](native-run.md) also supports three bounded System32
+leaf forms on AMD64 and ARM64 Windows, requiring matching native PE images.
+Native AMD64 acceptance covers Allow/Deny/Ask, exact
+one-time grants, replay refusal, timeout, Ctrl-Break and console restoration.
+Checked Git inspections support a protected Git for Windows `2.56.0.windows.3`
+ucrt64 installation on AMD64, or clangarm64 installation on ARM64. Native AMD64
+acceptance covers helper suppression, index preservation,
+exact grants and refusal of wrappers, local copies and unsupported argv.
+ARM64 checked execution uses the same ACL, held-image, grant and Job contracts;
+it refuses foreign-architecture executables/DLLs, including x64 Git under
+emulation. ARM64 runtime behavior is assumed working for this stage, not tested.
+There are no published Windows installers or native ARM64 acceptance results.
+
+The ignored native-host fixtures need Node 24+, Git for Windows and isolated
+copies of Claude Code 2.1.312 and Codex 0.166.0. Install the pinned CLIs in an
+owned directory outside the Windows temporary folder, then point
+`SHIELD_WINDOWS_AGENTS_ROOT` at it:
+
+```powershell
+npm install --prefix C:\Acme\shield-agent-tests --no-save @anthropic-ai/claude-code@2.1.312 @openai/codex@0.166.0
+$env:SHIELD_WINDOWS_AGENTS_ROOT = 'C:\Acme\shield-agent-tests'
+cargo test --locked --test integration windows_agent_hosts_load_native_hooks_against_local_providers -- --ignored
+cargo test --locked --test integration windows_agent_hosts_codex_loads_native_hooks_against_local_provider -- --ignored
+```
+
+Run these host checks separately. They use private ConPTY sessions, temporary
+projects/profiles and scripted loopback providers. They make no external model
+requests and do not change your ordinary agent profile. The public fixtures
+include their provider implementation; no private SDK test package is needed.
+
+With the protected Git version above installed in the default Program Files
+location, run its isolated repository acceptance separately:
+
+```powershell
+cargo test --locked --test integration windows_git_inspections -- --ignored
+```
+
 ## Source ownership
 
 Shield separates policy decisions from filesystem observations, host adapters,
@@ -68,15 +213,19 @@ tables. Packs and custom rules supply permissions; `location/` supplies fresh
 request facts. Shell analysis uses submitted source and available context,
 without attesting execution.
 
-`build.rs` compresses the guides into one DEFLATE bundle in `OUT_DIR`, with a
-page-range index. Docs tools decompress it in memory when called. Both steps
-use pure Rust code; no host compression tools or shared libraries are needed.
+`build.rs` checks the bundled skill's sources and calls `canonic-mcp-kit`'s
+documentation build helper, which validates every guide under `docs/` and
+writes one compressed bundle to `OUT_DIR`. An invalid guide, such as a symbolic
+link or a page that is not UTF-8, fails the build with its relative path.
 
 The `canonic-registry-kit` dependency handles registry identity, authentication,
 acquisition, checkpoints, resolution, and UTC timestamps. Shield owns pack
 declarations and the review that activates acquired artifacts. `canonic-mcp-kit`
 handles framing, lifecycle, validation, cancellation, deadlines, and confirmation
-requests; Shield's handler supplies its tools and limits.
+requests; Shield's handler supplies its tools and limits. Its documentation
+module also supplies the `shield_docs_*` tool definitions and queries;
+`src/review/mcp/documentation.rs` embeds the bundle and maps the library's
+failures into Shield's result envelope.
 
 Agent adapters translate vendor payloads and setup formats. They cannot bypass
 core policy or activation checks. To add an agent, implement its adapter and
@@ -252,7 +401,9 @@ after `make -C packages/shield build`. It requires the installed `claude` comman
 Python 3, PTYs, loopback access and permission to reap its owned child processes.
 For a fresh checkout install SDK test dependencies with
 `npm --prefix packages/shield/adapters/sdk-tests ci --ignore-scripts --no-fund --no-audit`.
-Native host checks are verified on macOS; Linux/Windows behavior is unverified.
+These SDK and interactive host fixtures are verified on macOS. The separate
+Windows native fixtures and their limits are described
+[above](#native-windows-development). Linux remains unverified.
 
 ## Individual Rust verification
 

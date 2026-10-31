@@ -172,8 +172,8 @@ fn local_values_bind_the_effective_selection_and_change_the_revision() {
             .evaluate(&Request {
                 executable: executable.into(),
                 arguments: vec![],
-                cwd: "/acme".into(),
-                project: "/acme".into(),
+                cwd: crate::test_support::absolute("/acme").into_owned(),
+                project: crate::test_support::absolute("/acme").into_owned(),
             })
             .unwrap()
             .decision;

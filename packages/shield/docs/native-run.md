@@ -1,12 +1,13 @@
 # Bounded native execution
 
-`shield __internal run` launches a small set of macOS commands under active
-policy and records their outcomes. For ordinary Claude or Codex sessions, use
+`shield __internal run` launches a small set of macOS and Windows commands
+under active policy and records their outcomes. For ordinary Claude or Codex sessions, use
 [native project setup](claude-project.md).
 
 The runner uses literal argv, an explicit canonical cwd, and inherited standard
-streams. It adds no shell or PATH lookup. Leaf commands receive only `LC_ALL=C`;
-Git uses the settings below. Start with the supported commands, then
+streams. It adds no shell or PATH lookup. macOS leaf commands receive only
+`LC_ALL=C`; Windows leaves receive only the OS `SystemRoot`. Git uses the settings
+below. Start with the supported commands, then
 [run an example](#run-with-active-policy).
 
 ## Supported contract
@@ -19,11 +20,32 @@ Git uses the settings below. Start with the supported commands, then
 | `/bin/sleep` | One finite nonnegative decimal number, at most 86400 seconds |
 | `/Library/Developer/CommandLineTools/usr/bin/git` | `status`, `diff`, `diff --cached`, or `log -n N` with decimal N from 1 to 100 |
 
+On AMD64 or ARM64 Windows, use an absolute System32 path for system leaves or the
+protected installation path for Git:
+
+| Executable | Arguments |
+| --- | --- |
+| `hostname.exe` | None |
+| `whoami.exe` | None |
+| `timeout.exe` | `/t N /nobreak`, with decimal N from 0 to 86400 |
+| `<protected Git installation>\ucrt64\bin\git.exe` | `status`, `diff`, `diff --cached`, or `log -n N` with decimal N from 1 to 100 |
+
+On ARM64 use `clangarm64` in place of `ucrt64`. Executables and DLLs must have
+the native architecture of Shield: AMD64 for its x64 build, ARM64 for its ARM64
+build. The ARM64 implementation is accepted for this stage without native
+runtime tests; this is not an ARM64 acceptance result.
+
+For example, from PowerShell with an enrolled project and a matching active rule:
+
+```powershell
+shield __internal run --project C:\Acme -- "$env:SystemRoot\System32\hostname.exe"
+```
+
 Other executables, scripts, wrappers, PATH names, and argument forms block even
-if policy allows them. Linux and Windows return unsupported without launching.
+if policy allows them. Linux returns unsupported without launching.
 The runner neither enables SDK Bash nor installs an agent integration.
 
-The leaf binding requires canonical root-owned executable and dyld files on the same
+The macOS leaf binding requires canonical root-owned executable and dyld files on the same
 read-only filesystem as `/`, without group/other write or set-ID mode. The native
 Mach-O slice must declare exactly `/usr/lib/dyld` and
 `/usr/lib/libSystem.B.dylib`, without rpaths, embedded dyld environment, custom
@@ -36,13 +58,37 @@ boot seal or hash the full transitive cache. Privileged remounts, OS replacement
 and unrestricted external processes are outside its protection. Cwd is passed by
 pathname after revalidation, so external directory replacement remains possible.
 
+Windows requires canonical project/cwd paths on the OS boot drive, with cwd outside
+the project's `.shield` directory. It holds cwd ancestors against deletion and binds
+their volume/file identities. System leaves, their declared PE libraries and the
+loader/API-set baseline must be protected System32 files owned by SYSTEM,
+Administrators or TrustedInstaller, without ordinary-user write/delete rights.
+Held file handles deny write/delete sharing; issuance and handoff recheck file
+identity, ACLs and the recorded digests. The child inherits an explicit System32
+DLL search directory and no PATH, preventing project-folder DLL fallback.
+Shield trusts the protected OS loader, API-set mappings and transitive system
+libraries; it does not hash every transitive DLL or isolate privileged OS changes.
+Other drives, network cwd paths and local executable copies remain unsupported.
+
 ## Git inspection
 
-Git requires Apple's Command Line Tools Git 2.50.1 (Apple Git-155) at the exact path
+On macOS, Git requires Apple's Command Line Tools Git 2.50.1 (Apple Git-155) at the exact path
 in the table and an ordinary `.git` directory at the enrolled project root. Linked
 worktrees, bare repositories, the `/usr/bin/git` dispatcher, Xcode/Homebrew Git,
 aliases, extra flags and other commands are unsupported.
 Repositories with `.git/info/attributes` are unsupported.
+
+On Windows, Git requires version `2.56.0.windows.3` in a protected `ucrt64/bin`
+(AMD64) or `clangarm64/bin` (ARM64) installation on the OS boot drive. The defaults
+are `C:\Program Files\Git\ucrt64\bin\git.exe` and
+`C:\Program Files\Git\clangarm64\bin\git.exe`. The `cmd/git.exe` dispatcher, other
+versions/layouts, bare repositories and linked worktrees are unsupported.
+The executable, its four declared application DLLs, helper directory and OS
+libraries require protected owners/ACLs. Bindings hold the application namespace,
+image identities/digests, repository directory, main config and HEAD.
+Git receives ordinary drive paths because it rejects verbatim `\\?\` spelling in
+its environment. Names ending in spaces/dots, DOS devices and alternate streams
+are refused during that conversion.
 
 Policy and approval match the original executable and arguments. Shield adds
 fixed launch arguments: no pager, fsmonitor, untracked cache, hooks, automatic
@@ -58,8 +104,10 @@ are disabled; repository attributes are read from the empty SHA-1 tree instead
 of working/index attributes, preventing clean/process filters. Diff therefore
 reports raw working bytes rather than filter-normalized content. These settings
 use the [Git attribute-source contract](https://git-scm.com/docs/git/2.46.0).
+Windows also receives `SystemRoot` and the bound installation's helper path.
+Disabled file settings use `NUL` on Windows and `/dev/null` on macOS.
 
-The root-owned Git executable and its root-owned, non-writable-to-other-users
+On macOS the root-owned Git executable and its root-owned, non-writable-to-other-users
 parent directories are verified. Its native Mach-O contract permits only dyld,
 libSystem, libz, libiconv, CoreServices and CoreFoundation; the OS libraries/cache
 remain trusted. The native image must contain the observed version marker; that
@@ -69,6 +117,13 @@ along with ordinary identity checks. Approvals also bind the repository director
 identity, main config and HEAD contents, exact derived launch arguments and settings.
 Changing those bindings requires a fresh request.
 
+Windows captures executable/application DLL digests at issuance and run preparation,
+retains handles that deny write/delete sharing, and revalidates identity and ACLs
+at handoff. It verifies that the submitted executable selects the captured image.
+The protected OS loader and transitive OS libraries remain trusted.
+The Windows version marker checks compatibility, without independently
+authenticating the publisher.
+
 Approval does not freeze working files, the index, refs, included configuration,
 or objects. Git effects are not fully isolated, and privileged executable changes
 or external pathname races remain possible.
@@ -76,6 +131,10 @@ or external pathname races remain possible.
 ```sh
 shield __internal run --project /path/to/acme -- /Library/Developer/CommandLineTools/usr/bin/git status
 shield __internal run --project /path/to/acme -- /Library/Developer/CommandLineTools/usr/bin/git log -n 10
+```
+
+```powershell
+shield __internal run --project C:\Acme -- "$env:ProgramFiles\Git\ucrt64\bin\git.exe" status
 ```
 
 ## Run with active policy
@@ -127,7 +186,8 @@ shield __internal run --project /path/to/acme --timeout-ms 5000 --approval-reque
 Repeat the original argv, cwd, timeout and supplied `--agent`, `--session-id` and
 `--tool-use-id` exactly. The selector supplies no authority by itself. Grants bind
 enrollment, activation, revision and candidate digest; literal request; cwd device/
-inode; executable/dyld device/inode/size/mtime/digests and verified loader contract;
+inode or Windows volume/file identity; native executable/loader identities,
+metadata, digests and verified loader contract;
 the fixed environment; timeout duration; declared origin; and the private
 `shield-native-run-v1` consumer. The timeout begins afresh with each run attempt;
 grant expiry is a separate wall-clock limit on consumption. The fixed consumer
@@ -163,8 +223,8 @@ The existing 16 MiB state and 1024 authorization-event limits also apply.
 ## Process ownership and history
 
 The timeout defaults to 5000 ms and accepts 1..3600000 ms, including preparation.
-Native filesystem calls have no hard deadline. A running child gets its own process
-group. SIGINT, SIGTERM and SIGHUP are forwarded to the exact direct child and
+Native filesystem calls have no hard deadline. On macOS a running child gets its
+own process group. SIGINT, SIGTERM and SIGHUP are forwarded to the exact direct child and
 original group; timeout sends TERM. A child still in that group may receive the
 signal twice. After a 500 ms
 grace, KILL escalates even if the direct child has already exited. On ordinary
@@ -188,6 +248,16 @@ contract. The supported leaf commands do not spawn descendants; wider commands
 remain blocked. Parent SIGKILL or machine failure cannot run cleanup. Descendant
 zombies are reaped by their parent or the OS, not by Shield.
 
+On Windows the child starts suspended and joins an independently retained
+kill-on-close Job before running. Normal exit, failure, timeout, cancellation and
+guard teardown terminate owned Job members and verify that membership becomes
+empty before releasing ownership. The retained process handle reserves the direct
+child's PID. Ctrl-C/Ctrl-Break cancellation exits 130; timeout exits 124. Completion
+keeps the actual Windows exit code and no POSIX signal. Input/output/error console
+modes are restored after cleanup. Abrupt launcher loss closes the Job and lets
+Windows terminate its remaining members. This covers Job descendants; external
+hosts and privileged interference remain outside ownership.
+
 The launcher holds the activation lock only through verification and spawn,
 then releases it before history writes and waiting. Child ownership survives
 post-spawn failures; errors terminate/reap the owned child. Policy changes after
@@ -202,6 +272,7 @@ follow the existing redaction contract. Opt-out/purge and unavailable history do
 not change execution permission or child results; failures are reported separately.
 The [project history guide](project-review.md) describes inspection and settings.
 
-Native acceptance covers macOS 15.7.9 with x86_64 approval fixtures. Other tools,
-loader configurations, and platforms are unverified. Operator identity is
-caller-declared.
+Native acceptance covers macOS 15.7.9 with x86_64 approval fixtures and AMD64
+Windows with MSVC, including exact grant retries, timeout and real Ctrl-Break
+with console restoration. Other tools, loader configurations, and platforms are
+unverified. Operator identity is caller-declared.

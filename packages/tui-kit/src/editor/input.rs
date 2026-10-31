@@ -8,14 +8,25 @@ impl Editor {
         match event {
             Event::Paste(text) => self.insert(text),
             Event::Key(key) if key.kind != KeyEventKind::Release => {
-                if !kill_key(key.code, key.modifiers) {
+                // Windows reports printable AltGr input as Ctrl+Alt. Keep
+                // those characters out of shortcut handling, including kills.
+                let altgr = KeyModifiers::CONTROL | KeyModifiers::ALT;
+                let modifiers = if cfg!(windows)
+                    && key.modifiers.contains(altgr)
+                    && matches!(key.code, KeyCode::Char(c) if !c.is_control())
+                {
+                    key.modifiers.difference(altgr)
+                } else {
+                    key.modifiers
+                };
+                if !kill_key(key.code, modifiers) {
                     self.kill_group = None;
                 }
-                if !(key.code == KeyCode::Char('y') && key.modifiers == KeyModifiers::ALT) {
+                if !(key.code == KeyCode::Char('y') && modifiers == KeyModifiers::ALT) {
                     self.yanked = None;
                 }
                 self.before_key();
-                self.key(key.code, key.modifiers)
+                self.key(key.code, modifiers)
             }
             _ => Outcome::Unhandled,
         }

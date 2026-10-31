@@ -216,7 +216,7 @@ pub(super) fn propose(
     let signature = policy::fingerprint(json!(input).to_string().as_bytes());
     let retry_key = input.retry_key();
     let store = Store::open(Path::new(&context.project_root))?;
-    let (mut before, base_plan) = store.read_evaluated()?;
+    let (mut before, base_plan, base_snapshots) = store.read_for_comparison()?;
     before.check(context)?;
     if before.candidates.len() != 1 {
         return Err(Error::Invalid(
@@ -245,7 +245,6 @@ pub(super) fn propose(
     let (candidate, meta) = prepare_all(context, &mut before, &changes, checkpoint)?;
     let mut after = BTreeMap::new();
     after.insert("project".into(), candidate.clone());
-    let base_snapshots = snapshots(&before.candidates)?;
     let next_snapshots = snapshots(&after)?;
     let mut comparison = json!(configuration::compare_policy(
         &base_snapshots,

@@ -340,7 +340,7 @@ pub(in crate::review) fn publish(root: &Path, plan: &Plan) -> Result<(), Error> 
                 "MCP file changed during publication; confirmed repair preserved",
             ));
         }
-        fs::rename(&temporary, root.join(".mcp.json"))?;
+        super::storage::replace(&temporary, &root.join(".mcp.json"))?;
         #[cfg(unix)]
         review::storage::sync(&fs::File::open(root)?)?;
         Ok::<(), Error>(())

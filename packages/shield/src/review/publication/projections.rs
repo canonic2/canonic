@@ -207,7 +207,7 @@ fn replace(temp: &Path, path: &Path, bytes: &[u8]) -> Result<(), Error> {
         file.write_all(bytes)?;
         review::storage::sync(&file)?;
         drop(file);
-        fs::rename(temp, path)
+        crate::review::storage::replace(temp, path)
     })();
     if written.is_err() {
         let _ = fs::remove_file(temp);

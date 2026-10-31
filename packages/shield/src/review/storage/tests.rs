@@ -22,11 +22,48 @@ fn updates_append_missing_local_state_ignores_to_an_existing_file() {
     );
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_review_state_refuses_junction_directories() {
+    for nested in [false, true] {
+        let project = assert_fs::TempDir::new().unwrap();
+        let outside = assert_fs::TempDir::new().unwrap();
+        let shield = project.path().join(".shield");
+        let path = if nested {
+            fs::create_dir(&shield).unwrap();
+            shield.join("review")
+        } else {
+            shield
+        };
+        crate::test_support::junction(&path, outside.path()).unwrap();
+        assert!(
+            Store::location(project.path()).is_err(),
+            "junction accepted: {path:?}"
+        );
+        assert!(fs::read_dir(outside.path()).unwrap().next().is_none());
+    }
+}
+
 fn names(directory: &Path) -> Vec<String> {
     fs::read_dir(directory)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect()
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_replacement_refuses_nul_without_truncating_the_target() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let source = root.path().join("source");
+    let target = root.path().join("target");
+    fs::write(&source, "Acme replacement").unwrap();
+    fs::write(&target, "Acme original").unwrap();
+    assert!(super::replace(&source, &root.path().join("target\0suffix")).is_err());
+    assert_eq!(fs::read_to_string(&target).unwrap(), "Acme original");
+    super::replace(&source, &target).unwrap();
+    assert_eq!(fs::read_to_string(&target).unwrap(), "Acme replacement");
+    assert!(!source.exists());
 }
 
 #[test]
@@ -47,7 +84,7 @@ fn a_busy_history_lock_without_observations_is_not_a_history_failure() {
     assert!(store.read().unwrap().history_available);
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn writes_remove_leftover_temporaries_that_no_writer_owns() {
     let (root, context) = enrolled();
@@ -57,6 +94,9 @@ fn writes_remove_leftover_temporaries_that_no_writer_owns() {
     fs::create_dir_all(&sources).unwrap();
     let dead = super::exited_pid();
     let digest = "0".repeat(64);
+    // Windows' reserved PID zero cannot establish the exit of a writer;
+    // Unix's init process remains live. Both entries must be retained.
+    let unverified = i32::from(!cfg!(windows));
     // The writer lock serializes state writers, so every state leftover goes.
     let removed = [
         review.join(format!(".state-{dead}-1.tmp")),
@@ -66,7 +106,7 @@ fn writes_remove_leftover_temporaries_that_no_writer_owns() {
     let kept = [
         review.join(".state-acme.tmp"),
         review.join("acme.tmp"),
-        sources.join(format!("{digest}.1-1.tmp")),
+        sources.join(format!("{digest}.{unverified}-1.tmp")),
         sources.join(format!("{digest}.{}-1.tmp", std::process::id())),
         sources.join(format!("acme.{dead}-1.tmp")),
     ];

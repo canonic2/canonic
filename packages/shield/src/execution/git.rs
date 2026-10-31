@@ -1,6 +1,7 @@
 //! Fixed Git inspection forms and deterministic launch settings, independent of policy.
 use crate::policy::Request;
 
+#[cfg(not(windows))]
 pub(super) const EXECUTABLE: &str = "/Library/Developer/CommandLineTools/usr/bin/git";
 
 pub(super) fn supported(request: &Request) -> bool {
@@ -13,7 +14,7 @@ pub(super) fn supported(request: &Request) -> bool {
         || matches!(args.as_slice(), ["log", "-n", count] if count.parse::<u16>().is_ok_and(|n| (1..=100).contains(&n)) && count.bytes().all(|b| b.is_ascii_digit()))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 pub(super) fn launch(request: &Request) -> Request {
     let mut launch = request.clone();
     launch.arguments = [
@@ -35,6 +36,10 @@ pub(super) fn launch(request: &Request) -> Request {
     ]
     .map(str::to_owned)
     .to_vec();
+    #[cfg(windows)]
+    for argument in &mut launch.arguments {
+        *argument = argument.replace("=/dev/null", "=NUL");
+    }
     launch.arguments.extend(request.arguments.clone());
     match request.arguments[0].as_str() {
         "status" => launch.arguments.extend(

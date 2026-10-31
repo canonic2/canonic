@@ -31,6 +31,11 @@ fn pack_advice_reaches_agents_without_cluttering_user_permission_prompts() {
             ),
         ] {
             let value = call(root, agent, source);
+            if cfg!(windows) && agent == "codex" && source != "node --version" {
+                assert_unsupported_shell(&value);
+                assert!(!value.to_string().contains("Briefly offer this rule pack"));
+                continue;
+            }
             assert_eq!(
                 value["hookSpecificOutput"]["permissionDecision"],
                 if agent == "claude" { "ask" } else { "deny" },
@@ -168,11 +173,11 @@ fn installed_missing_and_ambiguous_metadata_do_not_produce_a_unique_install_offe
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
     // No name-based guess when the catalog has no command associations.
-    let missing = call(root, "codex", "npm test");
+    let missing = call(root, "codex", "node --version");
     assert!(!reason(&missing).contains("pack_add"));
     assert!(!missing.to_string().contains("Briefly offer this rule pack"));
-    retain(&context, &json!({"npm":["zeta/runtime","acme/node"]}));
-    let value = call(root, "codex", "npm test");
+    retain(&context, &json!({"node":["zeta/runtime","acme/node"]}));
+    let value = call(root, "codex", "node --version");
     let text = reason(&value);
     assert!(text.contains("Several available packs"), "{text}");
     assert!(text.find("main/acme/node").unwrap() < text.find("main/zeta/runtime").unwrap());
@@ -181,7 +186,7 @@ fn installed_missing_and_ambiguous_metadata_do_not_produce_a_unique_install_offe
     update_advisory_fixture(&context, |operator, _| {
         operator["installed"] = json!([{"id":"acme/node","source_identity":"main"},{"id":"zeta/runtime","source_identity":"main"}]);
     });
-    let installed = call(root, "codex", "npm test");
+    let installed = call(root, "codex", "node --version");
     assert!(!reason(&installed).contains("pack_add"));
     assert!(
         !installed
@@ -226,9 +231,9 @@ fn automatic_fallback_reports_policy_ask_and_the_same_advisory_candidate() {
         crate::cli::public::IntegrationChoice::agent("codex"),
         crate::review::integrations::AskFallback::Allow,
     );
-    retain(&context, &json!({"npm":["canonic/node"]}));
+    retain(&context, &json!({"node":["canonic/node"]}));
     for _ in 0..3 {
-        let value = call(root, "codex", "npm test");
+        let value = call(root, "codex", "node --version");
         assert_permitted(&value, "codex");
         let text = value.to_string();
         assert!(text.contains("configured Ask fallback"), "{value}");
@@ -245,7 +250,8 @@ fn proposed_pack_keeps_the_enrolled_registry_and_publisher_identity() {
     let root = Path::new(&context.project_root);
     let registry = assert_fs::TempDir::new().unwrap();
     let source =
-        canonic_registry_kit::source::Source::local(&registry.path().canonicalize().unwrap()).unwrap();
+        canonic_registry_kit::source::Source::local(&registry.path().canonicalize().unwrap())
+            .unwrap();
     let pack = json!({"schema_version":1,"kind":"pack","id":"acme/runtime","version":"1.0.0",
         "description":"Acme runtime fixture","license":"MIT","maintainers":["Acme"],
         "engines":{"shield":env!("CARGO_PKG_VERSION")},"capabilities":["argument-rules-v1","structured-rules-v1"],
@@ -309,7 +315,28 @@ fn initial_script_asks_keep_proposal_instructions_in_agent_feedback() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
     for agent in ["claude", "codex"] {
-        let value = call(root, agent, "git status; pnpm run acme-check -- --quiet");
+        let native = cfg!(windows) && agent == "codex";
+        let script = if native {
+            "cargo run --bin acme-check -- --quiet"
+        } else {
+            "pnpm run acme-check -- --quiet"
+        };
+        if native {
+            assert_unsupported_shell(&call(
+                root,
+                agent,
+                "git status; pnpm run acme-check -- --quiet",
+            ));
+        }
+        let value = call(
+            root,
+            agent,
+            if native {
+                script
+            } else {
+                "git status; pnpm run acme-check -- --quiet"
+            },
+        );
         assert_eq!(
             value["hookSpecificOutput"]["permissionDecision"],
             if agent == "claude" { "ask" } else { "deny" },
@@ -335,7 +362,7 @@ fn initial_script_asks_keep_proposal_instructions_in_agent_feedback() {
         assert!(!text.contains("with change {"), "{text}");
         // Drafting guidance has not approved the command or activated a rule.
         assert_eq!(
-            call(root, agent, "pnpm run acme-check -- --quiet")["hookSpecificOutput"]["permissionDecision"],
+            call(root, agent, script)["hookSpecificOutput"]["permissionDecision"],
             if agent == "claude" { "ask" } else { "deny" }
         );
     }

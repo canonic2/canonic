@@ -17,6 +17,13 @@ pub(super) fn requested(event: &Event, plain: bool) -> bool {
 /// Release the terminal, stop the process as job control would, and resume
 /// below any shell output once the process is in the foreground again.
 /// Platforms without job control keep the prompt open.
+#[cfg_attr(
+    not(unix),
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "Unix suspension and terminal reacquisition can fail; prompt hosts share the fallible interface"
+    )
+)]
 pub(super) fn suspend(session: &mut Option<InlineSession>) -> io::Result<()> {
     #[cfg(unix)]
     {

@@ -28,6 +28,16 @@ pub(super) fn resolve(
         allow,
         working_files: native.working_files,
     };
+    // No native resource protection can be inferred from an opaque grammar.
+    // A standing Ask fallback must not allow that grammar to edit protected
+    // state without a verified footprint.
+    let shell = &value["_shell_analysis"];
+    if shell["dialect"] == "cmd"
+        || (shell["dialect"] == "powershell" && shell["coverage"] != "single-literal-invocation")
+    {
+        block(value, "unsupported-shell");
+        return Ok(());
+    }
     let file_access = if value["_file_access"] == "read" {
         paths::Access::Read
     } else {

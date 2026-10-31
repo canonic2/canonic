@@ -100,8 +100,8 @@ fn persisted_postings_preserve_complete_reference_evidence_and_unknown_context()
                 let request = Request {
                     executable: "acme".into(),
                     arguments: args.iter().map(|s| (*s).into()).collect(),
-                    cwd: cwd.into(),
-                    project: "/acme".into(),
+                    cwd: crate::test_support::absolute(cwd).into_owned(),
+                    project: crate::test_support::absolute("/acme").into_owned(),
                 };
                 let expected = policy::evaluate_evidence(
                     &[(&reference, Profile::Recommended)],
@@ -141,8 +141,8 @@ fn persisted_postings_preserve_complete_reference_evidence_and_unknown_context()
                 &Request {
                     executable: "acme".into(),
                     arguments: vec!["read".into(), "custom".into()],
-                    cwd: "/acme".into(),
-                    project: "/acme".into()
+                    cwd: crate::test_support::absolute("/acme").into_owned(),
+                    project: crate::test_support::absolute("/acme").into_owned()
                 },
                 &|| Ok(()),
                 true,
@@ -176,8 +176,8 @@ fn environment_field_patterns_decide_alike_through_plans_and_sources() {
     let request = Request {
         executable: "acme".into(),
         arguments: vec!["read".into()],
-        cwd: "/acme".into(),
-        project: "/acme".into(),
+        cwd: crate::test_support::absolute("/acme").into_owned(),
+        project: crate::test_support::absolute("/acme").into_owned(),
     };
     let input = normalized::Input::Argv {
         executable: request.executable.clone(),

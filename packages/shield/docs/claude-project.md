@@ -91,7 +91,7 @@ workflows. Codex passes through plans, questions, permission requests, tool sear
 timing, subagents, and MCP resource listing.
 
 Unsupported tools ask in Claude and block in Codex. Examples include MCP resource
-reads; Claude also asks for session messages, worktrees, LSP, PowerShell, and
+reads; Claude also asks for session messages, worktrees, LSP, and
 artifacts. Tool messages name supported alternatives where available. A rule
 cannot add support for an unmodeled tool.
 
@@ -303,7 +303,10 @@ diagnostic Allow authorizes a command. PostToolUse and Claude PostToolUseFailure
 record available observations without output/error payloads. After you
 complete an Ask call, PostToolUse reports the host completion and why the call
 asked. Completion alone does not prove individual approval. Claude can inspect
-`suggestion_list` after the task for eligible recurring reviews. Native completions
+`suggestion_list` when you ask to review recurring permission interruptions.
+One-time permission requests do not authorize lasting policy changes. Shield
+publishes no MCP skills; its tools include the review guidance and examples.
+Native completions
 are unlinked when the pre-call receipt is unavailable. Shell exit success is
 unknown unless supplied by a supported mapping.
 
@@ -314,7 +317,13 @@ when the Shield process cannot start. A host that skips, disables, kills or time
 out the hook may continue execution; installation cannot promise fail-closed
 protection for those outcomes. Direct same-user processes remain outside isolation.
 
-The current implementation installs Unix command hooks. Windows setup refuses.
+On Windows, Claude Code setup installs direct executable hooks with blocking
+failure handling. Codex setup writes encoded Windows command hooks. Claude's
+`PowerShell` tool and Codex's native default use the PowerShell grammar: one
+literal invocation of a supported native program. See the
+[Windows development limits](development.md#native-windows-development) for
+the supported names and quoting. Other PowerShell syntax and cmd requests block
+even when Ask fallback is set to allow.
 Other agents have no installed native integration. Native hooks cannot consume
 the separate runner's stored approval grants.
 

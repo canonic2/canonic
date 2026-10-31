@@ -72,6 +72,7 @@ enum Failure {
     Refused(&'static Refusal),
     /// Deferrals survive reconnects, so the bound refuses instead of forgetting one.
     DeferralsFull,
+    Documentation(canonic_mcp_kit::docs::DocsError),
 }
 impl From<Error> for Failure {
     fn from(error: Error) -> Self {
@@ -128,11 +129,9 @@ pub(crate) fn call_with_confirmation(
 ) -> Value {
     let result = (|| -> Result<Value, Failure> {
         checkpoint()?;
-        if matches!(
-            name,
-            "shield_docs_list" | "shield_docs_search" | "shield_docs_read"
-        ) {
-            return Ok(documentation::call(name, args, checkpoint)?);
+        // Documentation never waits for connection state held by other calls.
+        if documentation::handles(name) {
+            return documentation::call(name, args, checkpoint).map_err(Failure::Documentation);
         }
         let mut views = connection
             .views
@@ -158,14 +157,7 @@ pub(crate) fn call_with_confirmation(
         Ok(mut data) => {
             // Bundled public docs contain no runtime input. Redacting example
             // flags would corrupt their syntax and Markdown line structure.
-            let redacted = if matches!(
-                name,
-                "shield_docs_list" | "shield_docs_search" | "shield_docs_read"
-            ) {
-                false
-            } else {
-                super::model::redact(&mut data)
-            };
+            let redacted = !documentation::handles(name) && super::model::redact(&mut data);
             let revision = data.get("policy_revision").cloned().unwrap_or(Value::Null);
             let missing = data.get("missing").cloned().unwrap_or_else(|| json!([]));
             let truncated = data
@@ -174,14 +166,11 @@ pub(crate) fn call_with_confirmation(
                 .unwrap_or(false);
             json!({"schema_version":1,"project_id":context.project_id,"policy_revision":revision,"data":data,"missing":missing,"truncated":truncated,"redacted":redacted,"error":null})
         }
-        Err(Failure::Review(Error::Missing))
-            if matches!(name, "shield_docs_read" | "shield_docs_search") =>
-        {
-            let mut value = failure(context, &Error::Missing);
-            value["error"]["message"] = json!("Unknown documentation page; call shield_docs_list.");
-            value
-        }
         Err(Failure::Review(error)) => failure(context, &error),
+        Err(Failure::Documentation(error)) => {
+            let (code, message) = documentation::error_fields(&error);
+            refused(context, code, &message, None)
+        }
         Err(Failure::Refused(refusal)) => {
             refused(context, refusal.code, refusal.message, refusal.route)
         }

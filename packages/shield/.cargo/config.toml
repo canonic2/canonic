@@ -5,3 +5,9 @@
 # settings on their command line.
 [env]
 GIT_CONFIG_GLOBAL = { value = "tests/git/config", relative = true, force = true }
+
+[alias]
+# An explicit target keeps the static CRT flags off host build scripts and
+# procedural macros, even when the build host is Windows AMD64 itself.
+build-windows = ["build", "--release", "--locked", "--target", "x86_64-pc-windows-msvc", "--config", ".cargo/windows-release.toml"]
+build-windows-arm64 = ["build", "--release", "--locked", "--target", "aarch64-pc-windows-msvc", "--config", ".cargo/windows-release.toml"]

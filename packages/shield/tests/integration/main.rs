@@ -10,10 +10,12 @@ mod operator;
 mod operator_terminal;
 mod output;
 mod policy;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod review;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod runtime;
+#[cfg(windows)]
+mod windows;
 mod workflows;
 #[cfg(unix)]
 mod working_files;

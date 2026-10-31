@@ -20,9 +20,20 @@ fn fixture() -> (assert_fs::TempDir, Context, EvaluatedRequest, Value) {
     .expect("native approval fixture");
     context.surface = "run".into();
     context.cwd = Some(context.project_root.clone());
+    #[cfg(target_os = "macos")]
+    let (executable, arguments) = ("/bin/echo".to_owned(), vec!["Acme text".into()]);
+    #[cfg(windows)]
+    let (executable, arguments) = (
+        std::path::PathBuf::from(winsafe::GetSystemDirectory().expect("native system directory"))
+            .join("timeout.exe")
+            .to_str()
+            .expect("UTF-8 fixture executable path")
+            .to_owned(),
+        vec!["/t".into(), "0".into(), "/nobreak".into()],
+    );
     let request = Request {
-        executable: "/bin/echo".into(),
-        arguments: vec!["Acme text".into()],
+        executable,
+        arguments,
         cwd: context.project_root.clone(),
         project: context.project_root.clone(),
     };
@@ -73,7 +84,12 @@ fn shown_requests_carry_their_creation_time_and_policy_basis_without_operands() 
         "{shown}"
     );
     assert!(policy["rules"].as_array().unwrap().len() <= 3, "{shown}");
-    assert!(!policy.to_string().contains("Acme text"), "{policy}");
+    assert!(
+        !policy
+            .to_string()
+            .contains(evidence.request().arguments.last().unwrap()),
+        "{policy}"
+    );
     let listed = review::approvals::inspect(&context, None).unwrap();
     assert_eq!(listed["requests"][0]["policy"], *policy, "{listed}");
     // The summary is review context: the stored binding still validates.
@@ -239,7 +255,14 @@ fn changed_request_origin_resources_deadline_and_activation_block() {
         ("timeout_ms", json!(5001)),
         ("resources", {
             let mut resources = resource["resources"].clone();
-            resources["loader_identity"][1] = json!(42);
+            #[cfg(target_os = "macos")]
+            {
+                resources["loader_identity"][1] = json!(42);
+            }
+            #[cfg(windows)]
+            {
+                resources["images"][0]["identity"][1] = json!(42);
+            }
             resources
         }),
     ] {
@@ -254,7 +277,12 @@ fn changed_request_origin_resources_deadline_and_activation_block() {
     }
     let project = Project::open(Path::new(&context.project_root)).expect("native approval fixture");
     let mut request = evidence.request().clone();
+    #[cfg(target_os = "macos")]
     request.arguments.push("extra".into());
+    #[cfg(windows)]
+    {
+        request.arguments[1] = "1".into();
+    }
     let altered = project
         .snapshot()
         .expect("native approval fixture")

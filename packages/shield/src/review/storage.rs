@@ -10,6 +10,11 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 const MAX_STATE: usize = 16 * 1024 * 1024;
+type ComparisonCapture = (
+    State,
+    crate::configuration::Evaluator,
+    Vec<(crate::policy::Scope, crate::configuration::Snapshot)>,
+);
 
 #[cfg(test)]
 mod tests;
@@ -78,6 +83,8 @@ impl Store {
         if !store.directory.is_dir() {
             return Err(Error::Missing);
         }
+        #[cfg(windows)]
+        crate::windows_security::check_private(&store.directory)?;
         Ok(store)
     }
     #[cfg(test)]
@@ -130,6 +137,8 @@ impl Store {
     ) -> Result<Value, Error> {
         let store = Self::location(project)?;
         fs::create_dir_all(&store.directory)?;
+        #[cfg(windows)]
+        crate::windows_security::make_private(&store.directory)?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -215,15 +224,35 @@ impl Store {
     ) -> Result<(State, crate::configuration::Evaluator), Error> {
         let state = self.read_unprepared()?;
         let evaluator = crate::configuration::Evaluator::new(super::snapshots(&state.candidates)?)?;
+        Self::validate_evaluated(&state, &evaluator)?;
+        Ok((state, evaluator))
+    }
+
+    /// A proposal compares the same validated source it used to prepare the
+    /// base plan. Retain that capture instead of parsing every pack twice.
+    pub(in crate::review) fn read_for_comparison(
+        &self,
+    ) -> Result<ComparisonCapture, Error> {
+        let state = self.read_unprepared()?;
+        let snapshots = super::snapshots(&state.candidates)?;
+        let evaluator = crate::configuration::Evaluator::new(snapshots.clone())?;
+        Self::validate_evaluated(&state, &evaluator)?;
+        Ok((state, evaluator, snapshots))
+    }
+
+    fn validate_evaluated(
+        state: &State,
+        evaluator: &crate::configuration::Evaluator,
+    ) -> Result<(), Error> {
         if evaluator.revision() != state.policy_revision {
             return Err(Error::Invalid(
                 "review revision differs from retained policy",
             ));
         }
         if let Some(active) = &state.active {
-            active.validate_evaluated(&state, evaluator.revision())?;
+            active.validate_evaluated(state, evaluator.revision())?;
         }
-        Ok((state, evaluator))
+        Ok(())
     }
 
     // Diagnostic handles prepare their own immutable active candidate and check its
@@ -253,6 +282,8 @@ impl Store {
     // Current enrollment, authorization and source identities, without preparing policy.
     pub(in crate::review) fn read_checkpoint(&self) -> Result<State, Error> {
         let file = self.directory.join("state.json");
+        #[cfg(windows)]
+        crate::windows_security::check_private(&file)?;
         let metadata = fs::symlink_metadata(&file)?;
         if !metadata.is_file() || metadata.file_type().is_symlink() {
             return Err(Error::Invalid("review state must be a regular file"));
@@ -468,7 +499,7 @@ impl Store {
     }
     /// Publish minimum authority before the short callback, without releasing the
     /// activation lock. A publication/release failure never restores a grant.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     pub(crate) fn transition_handoff<T>(
         &self,
         context: &Context,
@@ -521,7 +552,7 @@ impl Store {
         #[cfg(test)]
         tests::observe(tests::Stage::Synced);
         drop(file);
-        fs::rename(&temporary.path, self.directory.join("state.json"))?;
+        replace(&temporary.path, &self.directory.join("state.json"))?;
         #[cfg(test)]
         tests::observe(tests::Stage::Renamed);
         #[cfg(unix)]
@@ -560,6 +591,8 @@ fn private_directory(path: &Path) -> Result<(), Error> {
     if !metadata.is_dir() || metadata.file_type().is_symlink() {
         return Err(Error::Invalid("private directory cannot be a link or file"));
     }
+    #[cfg(windows)]
+    crate::windows_security::make_private(path)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -581,6 +614,27 @@ pub(in crate::review) fn sync(file: &fs::File) -> std::io::Result<()> {
     {
         file.sync_all()
     }
+}
+
+/// Replace an owned temporary file. Windows requests write-through for the
+/// rename; Unix callers separately flush the containing directory.
+pub(in crate::review) fn replace(temporary: &Path, target: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        if [temporary, target]
+            .iter()
+            .any(|path| path.as_os_str().encode_wide().any(|unit| unit == 0))
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "replacement path contains NUL",
+            ));
+        }
+        atomicwrites::replace_atomic(temporary, target)
+    }
+    #[cfg(not(windows))]
+    fs::rename(temporary, target)
 }
 /// The writer PID of a `.state-<pid>-<nanoseconds>.tmp` name.
 fn state_temporary(name: &str) -> Option<u32> {
@@ -639,7 +693,19 @@ fn writer_running(pid: u32) -> bool {
                 rustix::process::test_kill_process(pid) != Err(rustix::io::Errno::SRCH)
             })
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        use winsafe::{HPROCESS, co};
+        if pid == 0 {
+            return true;
+        }
+        match HPROCESS::OpenProcess(co::PROCESS::SYNCHRONIZE, false, pid) {
+            Ok(process) => process.WaitForSingleObject(Some(0)) != Ok(co::WAIT::OBJECT_0),
+            Err(error) if error == co::ERROR::INVALID_PARAMETER => false,
+            Err(_) => true,
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         true
     }
@@ -652,6 +718,20 @@ pub(in crate::review) fn exited_pid() -> u32 {
         .expect("exiting child");
     let pid = child.id();
     child.wait().expect("reaped child");
+    pid
+}
+#[cfg(all(test, windows))]
+pub(in crate::review) fn exited_pid() -> u32 {
+    let mut child =
+        std::process::Command::new(std::env::current_exe().expect("fixture executable"))
+            .arg("--list")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("owned exiting child");
+    let pid = child.id();
+    assert!(child.wait().expect("reaped child").success());
     pid
 }
 fn private(options: &mut OpenOptions) {

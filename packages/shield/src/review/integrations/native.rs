@@ -16,6 +16,7 @@ pub(in crate::review) struct Installation {
     settings: Option<serde_json::Value>,
 }
 
+#[cfg(not(windows))]
 fn quoted(path: &Path) -> Result<String, Error> {
     let text = path
         .to_str()
@@ -29,28 +30,107 @@ fn quoted(path: &Path) -> Result<String, Error> {
 fn lookup(agent: &str) -> Result<&'static dyn AgentAdapter, Error> {
     agents::find(agent).ok_or(Error::Invalid("unknown agent adapter"))
 }
+
+#[cfg(any(windows, test))]
+fn windows_command(
+    shell: &Path,
+    binary: &Path,
+    root: &Path,
+    agent: &str,
+    event: &str,
+) -> Result<String, Error> {
+    use base64::Engine as _;
+    let shell = shell
+        .to_str()
+        .ok_or(Error::Invalid("hook shell is not UTF-8"))?;
+    // cmd, PowerShell and Git Bash can invoke this unquoted absolute system path.
+    // Refuse an unusual shell location rather than fall back to PATH lookup.
+    if shell.as_bytes().get(1) != Some(&b':')
+        || !shell
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphabetic)
+        || !matches!(shell.as_bytes().get(2), Some(b'\\' | b'/'))
+        || !shell
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b":/\\._-".contains(&byte))
+    {
+        return Err(Error::Invalid("unsupported Windows hook shell path"));
+    }
+    let literal = |text: &str| -> Result<String, Error> {
+        if text.contains(['\0', '\n', '\r']) {
+            return Err(Error::Invalid("invalid integration path"));
+        }
+        Ok(format!("'{}'", text.replace('\'', "''")))
+    };
+    let script = format!(
+        "& {} __internal native-hook --project {} --agent {} --event {}; if ($LASTEXITCODE -ne 0) {{ exit 2 }}",
+        literal(
+            binary
+                .to_str()
+                .ok_or(Error::Invalid("integration path is not UTF-8"))?
+        )?,
+        literal(
+            root.to_str()
+                .ok_or(Error::Invalid("integration path is not UTF-8"))?
+        )?,
+        literal(agent)?,
+        literal(event)?,
+    );
+    let bytes: Vec<_> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    // Forward separators also survive Bash's unquoted word parsing. cmd's
+    // command-string limit is tighter than CreateProcess's native argv limit.
+    let shell = shell.replace('\\', "/");
+    let command = format!("{shell} -NoLogo -NoProfile -NonInteractive -EncodedCommand {encoded}");
+    if command.len() > 8_000 {
+        return Err(Error::Invalid(
+            "Windows hook command exceeds the shell limit",
+        ));
+    }
+    Ok(command)
+}
+
+fn hook_command(binary: &Path, root: &Path, agent: &str, event: &str) -> Result<String, Error> {
+    #[cfg(windows)]
+    {
+        let shell = std::path::PathBuf::from(
+            winsafe::GetSystemDirectory()
+                .map_err(|_| Error::Invalid("Windows system directory unavailable"))?,
+        )
+        .join("WindowsPowerShell/v1.0/powershell.exe");
+        if !shell.is_file() {
+            return Err(Error::Invalid("Windows PowerShell unavailable"));
+        }
+        windows_command(&shell, binary, root, agent, event)
+    }
+    #[cfg(not(windows))]
+    Ok(format!(
+        "{} __internal native-hook --project {} --agent {agent} --event {event} || exit 2",
+        quoted(binary)?,
+        quoted(root)?,
+    ))
+}
+
 fn installation(
     adapter: &dyn AgentAdapter,
     binary: &Path,
     root: &Path,
     approved: &[String],
 ) -> Result<Installation, Error> {
-    let launch = format!(
-        "{} __internal native-hook --project {} --agent {}",
-        quoted(binary)?,
-        quoted(root)?,
-        adapter.spec().id
-    );
     Ok(Installation {
         groups: adapter
             .spec()
             .events
             .iter()
             .map(|(event, _)| {
-                let command = format!("{launch} --event {event} || exit 2");
-                ((*event).into(), adapter.hook_group(&command))
+                if let Some(group) = adapter.direct_hook_group(binary, root, event) {
+                    return Ok(((*event).into(), group));
+                }
+                let command = hook_command(binary, root, adapter.spec().id, event)?;
+                Ok(((*event).into(), adapter.hook_group(&command)))
             })
-            .collect(),
+            .collect::<Result<_, Error>>()?,
         mcp: adapter
             .spec()
             .mcp_path
@@ -119,11 +199,6 @@ fn prepare_adapter(
 ) -> Result<Option<Installation>, Error> {
     if previous.is_none() && binary.is_none() {
         return Ok(None);
-    }
-    if cfg!(windows) {
-        return Err(Error::Invalid(
-            "native command hook installation is not supported on Windows",
-        ));
     }
     let mut desired = binary
         .map(|b| installation(adapter, b, root, approved))

@@ -376,7 +376,11 @@ mod tests {
         assert!(web_fetch("ftp://docs.example.com/").is_none());
         assert!(folder("read", Path::new("relative")).is_none());
         let args = arguments(
-            &folder("read", Path::new("/acme/shared")).unwrap(),
+            &folder(
+                "read",
+                Path::new(crate::test_support::absolute("/acme/shared").as_ref()),
+            )
+            .unwrap(),
             Some("request-acme"),
         );
         assert_eq!(args["source_entry_id"], "request-acme");

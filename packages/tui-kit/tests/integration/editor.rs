@@ -56,6 +56,23 @@ fn redo(editor: &mut Editor) {
     editor.update(&key(KeyCode::Char('z'), KeyModifiers::ALT));
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_altgr_characters_are_text_and_ordinary_shortcuts_still_work() {
+    let mut editor = Editor::default();
+    let altgr = KeyModifiers::CONTROL | KeyModifiers::ALT;
+    for character in "[]{}@\\zky".chars() {
+        editor.update(&key(KeyCode::Char(character), altgr));
+    }
+    editor.update(&key(KeyCode::Char('€'), altgr | KeyModifiers::SHIFT));
+    assert_eq!(editor.text(), "[]{}@\\zky€");
+    ctrl(&mut editor, 'g');
+    press(&mut editor, KeyCode::Backspace);
+    assert_eq!(editor.text(), "");
+    ctrl(&mut editor, 'z');
+    assert_eq!(editor.text(), "[]{}@\\zky€");
+}
+
 #[test]
 fn kill_ring_yank_cycle_is_bounded_atomic_and_instance_local() {
     let mut editor = Editor::default();

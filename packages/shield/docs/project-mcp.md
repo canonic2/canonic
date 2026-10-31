@@ -75,18 +75,28 @@ agent session. Rerunning setup preserves saved selections until you change them.
 - `shield_docs_list`: list page paths, titles and line counts. Optional `offset`
   starts at zero; `limit` is 1–100, default 50. Continue with `next_offset`.
 - `shield_docs_search`: find case-insensitive literal `query` text in the guides.
-  Surrounding spaces are significant; whitespace-only queries are invalid.
-  Optional `path` selects one listed page. Results contain `path`, one-based
-  `line` and matching `text`, in path and line order. Use `offset` and `limit`
-  as for listing; continue with `next_offset` and the same query and path.
+  The query matches within one line: `.*` and `[` match themselves, surrounding
+  spaces are significant, and a query must be 1–1024 bytes, not only whitespace
+  and without line breaks. Optional `path` selects one listed page. Results
+  contain `path`, one-based `line` and the matching line's `text` without its
+  line break, in path and line order. Use `offset` and `limit` as for listing;
+  continue with `next_offset` and the same query and path.
 - `shield_docs_read`: read a listed `path`, optionally starting at `start_line`
   (one-based, default 1). `limit` is 1–400 lines, default 100. The result includes
-  `content`, `total_lines` and `next_start_line` for continuation.
+  `content`, `total_lines` and `next_start_line` for continuation. `content`
+  holds the lines exactly as stored, line breaks included, so joining the
+  `content` of successive reads reproduces the page.
+
+`limit` is a maximum: a result also ends early before its text passes 512 KiB,
+so continue from `next_offset` or `next_start_line` until it is null.
+Every result includes `version`, the Shield version whose guides it returns.
+Unknown arguments are refused.
 
 An unknown page returns `not_found` and directs the agent to `shield_docs_list`;
-these are catalog paths, not filesystem paths. Searches with no matches return
-an empty list, and a read past the last line returns empty content. Pagination
-is stable for the lifetime of the installed binary.
+these are exact catalog paths, not filesystem paths, so `../README.md` or a
+differently cased name is not found. Searches with no matches return an empty
+list, and a read past the last line returns empty content. Pagination is stable
+for the lifetime of the installed binary.
 
 Before drafting a reusable command rule, search for the relevant matching
 grammar and read its explanation and examples. Inspect the current rules with
@@ -115,6 +125,31 @@ assume that line numbers are the same in another installed build.
 
 For a new reader, read `introduction.md` or `README.md` first. These tools
 expose the same public guides used by people configuring Shield.
+
+## Optional policy-review skill
+
+Shield bundles `policy-review` at `skill://shield/policy-review/SKILL.md` for
+user-requested reviews of recurring permission interruptions. A host that supports
+MCP skills can discover and activate it. Tools and documentation remain usable
+without activation. The skill is guidance; reading it never approves an action
+or changes policy. Shield does not install it into local agent skill directories.
+
+Modern clients use MCP `2026-07-28` per-request metadata. For example, send this
+newline-delimited request to the registered server:
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"skills/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}
+```
+
+Use the same `_meta` with `skills/get` and
+`{"uri":"skill://shield/policy-review/SKILL.md"}`, or with `resources/read`
+and that URI. Discovery and reads return private cache scope and zero TTL.
+The manifest includes exact byte lengths and SHA-256 digests. Host support for
+discovery does not establish support for skill activation or user approval.
+
+To expose only the static bundle without an enrolled project, launch
+`shield mcp serve --skills-only`. This mode opens no project and advertises no
+policy tools. The installed executable contains all skill bytes and works offline.
 
 ## Reviewing an available pack
 
@@ -225,8 +260,19 @@ Claude's form works in `default`, `auto`, and `bypassPermissions` modes and
 requires its own Accept response, independently of ordinary tool approval.
 The client must advertise form elicitation or apply returns
 `approval_unavailable`. Only one form can be open per connection, with a
-five-minute response deadline. It waits outside the worker so other calls can
-finish. Codex controls its prompt's heading, buttons, and field rendering.
+five-minute response deadline on legacy connections. It waits outside the worker
+so other calls can finish. Codex controls its prompt's heading, buttons, and field rendering.
+
+For modern requests, Claude's apply returns `resultType: "input_required"`
+with a confirmation form and opaque `requestState`. The host obtains the user's
+answer and retries the same tool and arguments with a new RPC ID, echoed state,
+`inputResponses: {"confirmation":{"action":"accept"}}` (or `decline`/`cancel`),
+and current per-request form capabilities. Agents must never manufacture answers.
+State expires after five minutes, belongs to one connection, and is consumed by
+one retry. Changed arguments, expired state or missing capabilities cannot apply
+policy. At most eight modern confirmations can wait per connection. Disconnect
+revokes them. Cancelling a completed interim RPC ID does not revoke a later retry;
+the host must discard the state or submit a decline/cancel response.
 
 Shield rechecks arguments and current policy before committing. Stale or changed
 candidates need a fresh proposal and approval. Success returns a receipt;
@@ -449,9 +495,10 @@ Diagnostic Allow has preview disposition and supplies no execution or grant.
 ### Client startup
 
 Shield exposes project inspection, approved policy changes, and diagnostic
-evaluation over stdio using MCP `2025-06-18` and `2025-11-25`. Other clients can
+evaluation over stdio using MCP `2025-06-18`, `2025-11-25`, and per-request
+`2026-07-28`. Other clients can
 launch `shield mcp serve --project /workspace/acme` explicitly, replacing
-the example path with an initialized project. Startup failure exits 2 with a
+the example path with an initialized project. Startup failure exits 1 with a
 fixed stderr diagnostic and empty stdout.
 
 A launch may supply an agent and an explicitly mapped host session through
@@ -460,7 +507,9 @@ are declarations. Shield generates a new connection ID on each launch.
 
 The client initializes with a supported protocol version, sends
 `notifications/initialized`, then uses `tools/list` or `tools/call`. The server
-supports ping and cancellation and advertises only tools. Every tool publishes
+supports ping and cancellation and advertises tools and bundled resources. Legacy
+clients read the skill through `resources/list` and `resources/read`; `skills/*`
+requires modern metadata. Every tool publishes
 strict input and output schemas, with authority annotations. Shield echoes a
 supported requested version. For other version strings it offers `2025-11-25`;
 the client decides whether it supports that version.
@@ -510,6 +559,8 @@ ends it with `-32000` "Session message limit reached".
 One worker processes tools while the dispatcher handles input and ping. At most
 eight tool calls may be outstanding, including one waiting for confirmation;
 more are refused with `-32000`. Duplicate outstanding IDs close the session.
+Bundled reads use a separate worker with eight outstanding reads, allowing them
+to finish while the policy evaluator is busy.
 `--request-timeout-ms` bounds queued work, evaluation and encoding
 (default 5,000 ms, range 1–60,000); a call that exceeds it receives `-32001`
 "Request deadline exceeded". Cancellation suppresses pending responses.
@@ -524,7 +575,7 @@ calls are refused with `-32800` and never run, a pending confirmation is
 withdrawn, and read-only tools still finish.
 
 Closing stdin drains admitted work and joins the worker before exit 0. Framing or
-transport failure cancels and joins work and exits 2. Resident clients complete
+transport failure cancels and joins work and exits 1. Resident clients complete
 each call from its correlated envelope; process exit supplies no missing result or
 permission. Native blocking stdin readers end at process exit after early failure.
 

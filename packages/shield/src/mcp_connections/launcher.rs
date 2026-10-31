@@ -6,6 +6,9 @@ use std::{
     process::{Command, ExitCode, Stdio},
 };
 
+#[cfg(windows)]
+mod windows;
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Binding {
@@ -47,7 +50,7 @@ pub(crate) fn private_state(root: &Path) -> Result<(), crate::review::Error> {
         root.join(".shield/review"),
         root.join(".shield/review/state.json"),
     ] {
-        let metadata = std::fs::symlink_metadata(path)?;
+        let metadata = std::fs::symlink_metadata(&path)?;
         if metadata.file_type().is_symlink() {
             return Err(crate::review::Error::Invalid(
                 "private MCP state must not be linked",
@@ -62,7 +65,9 @@ pub(crate) fn private_state(root: &Path) -> Result<(), crate::review::Error> {
                 ));
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        crate::windows_security::check_private(&path)?;
+        #[cfg(not(any(unix, windows)))]
         {
             return Err(crate::review::Error::Invalid(
                 "private MCP launch permissions are unsupported on this platform",
@@ -101,14 +106,20 @@ pub(crate) fn run(input: &crate::cli::McpConnect) -> ExitCode {
         )
         .map_err(|_| ())?;
         let connection = snapshot.mcp_connections().get(&id).ok_or(())?;
-        let mut child = command(snapshot.identity().project_root(), connection, &binding)?;
+        let command = command(snapshot.identity().project_root(), connection, &binding)?;
         // Replace the launcher so the host's signals and stdio lifetime belong
         // directly to the connector; no detached child survives the launcher.
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
-            let _error = child.exec();
+            let _error = {
+                let mut command = command;
+                command.exec()
+            };
         }
+        #[cfg(windows)]
+        return windows::run(command).map_err(|_| ());
+        #[cfg(not(windows))]
         Err::<u8, ()>(())
     })();
     if let Ok(code) = result {

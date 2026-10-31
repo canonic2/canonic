@@ -101,6 +101,9 @@ fn regular(path: &Path) -> Result<(), Error> {
     if !m.is_file() || m.file_type().is_symlink() {
         return Err(Error::Invalid("history must be a regular file"));
     }
+    #[cfg(windows)]
+    crate::windows_security::check_private(path)
+        .map_err(|_| Error::Invalid("history must be private"))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
@@ -506,7 +509,7 @@ fn write_segment(
     if fs::symlink_metadata(&target).is_ok() {
         return Err(Error::Invalid("history segment exists"));
     }
-    fs::rename(&tmp.path, &target)?;
+    super::replace(&tmp.path, &target)?;
     #[cfg(unix)]
     sync(&File::open(&store.directory)?)?;
     Ok(target)
@@ -643,7 +646,7 @@ fn rotate(
     if fs::symlink_metadata(&sealed).is_ok() {
         return Err(Error::Invalid("history segment exists"));
     }
-    fs::rename(&active.path, &sealed)?;
+    super::replace(&active.path, &sealed)?;
     list.push(Segment {
         sequence: active.sequence,
         decisions: Some(decisions),

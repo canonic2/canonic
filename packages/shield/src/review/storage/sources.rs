@@ -88,7 +88,7 @@ pub(super) fn compact(store: &Store, value: &mut Value) -> Result<(), Error> {
                 file.write_all(&bytes)?;
                 sync(&file)?;
                 drop(file);
-                fs::rename(&temporary, &path)?;
+                super::replace(&temporary, &path)?;
                 #[cfg(unix)]
                 sync(&fs::File::open(&directory)?)?;
                 Ok(())

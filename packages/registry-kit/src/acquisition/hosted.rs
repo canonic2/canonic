@@ -77,7 +77,7 @@ impl Client {
         if let Some(roots) = self.roots.clone() {
             tls = tls.root_certs(roots);
         }
-        let config = ureq::Agent::config_builder()
+        let mut config = ureq::Agent::config_builder()
             .https_only(true)
             .proxy(None)
             .max_redirects(0)
@@ -88,8 +88,14 @@ impl Client {
             .max_idle_connections_per_host(0)
             .timeout_global(Some(self.timeout))
             .timeout_connect(Some(SETUP))
-            .tls_config(tls.build())
-            .build();
+            .tls_config(tls.build());
+        if self.roots.is_some() {
+            // The owned TLS fixture binds IPv4. Keep localhost's TLS name,
+            // but do not spend its request budget connecting to an unbound
+            // IPv6 address first (a refused connect can take seconds on Windows).
+            config = config.ip_family(ureq::config::IpFamily::Ipv4Only);
+        }
+        let config = config.build();
         let established = Arc::new(AtomicBool::new(false));
         let connector = TcpConnector::default()
             .chain(DeadlineConnector {

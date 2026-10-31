@@ -11,6 +11,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 mod confirmation;
+mod skills;
 
 /// A fixture project. The temporary root lives as long as this value.
 pub(crate) struct Project {
@@ -262,6 +263,55 @@ fn registered_host_tools_avoid_top_level_schema_unions() {
                     "{agent}: {tool}"
                 );
             }
+        }
+    }
+}
+
+#[test]
+fn legacy_skills_methods_are_refused_but_bundled_resources_remain_readable() {
+    for version in ["2025-06-18", "2025-11-25"] {
+        for agent in [None, Some("claude-code"), Some("codex")] {
+            let (server, project) = fixture(agent);
+            let before = project.revision();
+            let mut messages = initialize(&json!({}), "acme-client").to_vec();
+            messages[0]["params"]["protocolVersion"] = json!(version);
+            messages.extend([
+                json!({"jsonrpc":"2.0","id":2,"method":"skills/list","params":{}}),
+                json!({"jsonrpc":"2.0","id":3,"method":"skills/get","params":{"name":"policy-review"}}),
+                json!({"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"skill://shield/policy-review/SKILL.md"}}),
+                json!({"jsonrpc":"2.0","id":5,"method":"server/discover","params":{}}),
+                tool(json!(6), "shield_docs_list", &json!({"limit":1})),
+                tool(json!(7), "policy_show", &json!({"status":"pending"})),
+                tool(json!(8), "history_list", &json!({})),
+            ]);
+            let outputs = exchange(server, &messages);
+            let initialized = reply(&outputs, &json!(1));
+            assert_eq!(initialized["result"]["protocolVersion"], version);
+            assert_eq!(
+                initialized["result"]["capabilities"],
+                json!({"tools":{"listChanged":false},"resources":{}})
+            );
+            for id in [2, 3, 5] {
+                let refused = reply(&outputs, &json!(id));
+                assert_eq!(refused["error"]["code"], rpc::METHOD_NOT_FOUND, "{refused}");
+            }
+            assert!(
+                reply(&outputs, &json!(4))["result"]["contents"][0]["text"]
+                    .as_str()
+                    .unwrap()
+                    .contains("# Review Shield permissions")
+            );
+            let docs = reply(&outputs, &json!(6));
+            assert_eq!(docs["result"]["isError"], false, "{docs}");
+            let pending = reply(&outputs, &json!(7));
+            assert_eq!(
+                pending["result"]["structuredContent"]["data"]["proposals"],
+                json!([]),
+                "{pending}"
+            );
+            let history = reply(&outputs, &json!(8));
+            assert_eq!(history["result"]["isError"], false, "{history}");
+            assert_eq!(project.revision(), before);
         }
     }
 }

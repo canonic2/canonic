@@ -22,6 +22,12 @@ mod proposal_draft;
 mod review;
 pub mod runtime;
 pub mod shell;
+#[cfg(test)]
+mod test_support;
+#[cfg(windows)]
+mod windows_console;
+#[cfg(windows)]
+mod windows_security;
 
 /// Runs the selected CLI command.
 #[must_use]

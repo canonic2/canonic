@@ -26,6 +26,11 @@ rustls = { version = "0.23.46", default-features = false, features = ["ring", "s
 # Non-blocking opens, so a FIFO in place of a file cannot hang a read.
 libc = "0.2"
 
+[target.'cfg(windows)'.dependencies]
+atomicwrites = "0.4.4"
+windows-permissions = "0.2.4"
+winsafe = { version = "0.0.29", features = ["advapi"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 # Safe `fsync` for durable writes; std's sync_all issues F_FULLFSYNC there.
 rustix = { version = "1.1", features = ["fs"] }

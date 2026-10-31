@@ -52,6 +52,10 @@ fn check_fields(fields: &[&Value], roots: &[Root], subject: &str) -> Result<(), 
         visit(field, &mut |text| {
             if found.is_none() {
                 found = machine_path(&unescaped(text), roots);
+                #[cfg(windows)]
+                if let Some(native) = windows_machine_path(text, roots) {
+                    found = Some(native);
+                }
             }
         });
     }
@@ -88,6 +92,10 @@ fn visit<'a>(value: &'a Value, found: &mut impl FnMut(&'a str)) {
 /// at whitespace, quoting or pattern syntax, so arguments such as
 /// `--prefix=/srv/acme`, globs and regular expressions are all read.
 fn machine_path(text: &str, roots: &[Root]) -> Option<(String, Kind)> {
+    #[cfg(windows)]
+    if let Some(found) = windows_machine_path(text, roots) {
+        return Some(found);
+    }
     let bytes = text.as_bytes();
     let mut start = 0;
     while let Some(offset) = text[start..].find('/') {
@@ -100,15 +108,67 @@ fn machine_path(text: &str, roots: &[Root]) -> Option<(String, Kind)> {
             continue;
         }
         let literal = &text[begin..end];
-        let Some(path) = lexical(literal) else {
-            continue;
-        };
+        let path = lexical(literal);
         if let Some(root) = roots.iter().find(|root| {
             root.paths
                 .iter()
                 .any(|base| base.parent().is_some() && path.starts_with(base))
         }) {
             return Some((literal.to_owned(), root.kind));
+        }
+    }
+    None
+}
+
+#[cfg(windows)]
+fn windows_machine_path(text: &str, roots: &[Root]) -> Option<(String, Kind)> {
+    fn spelling(path: &Path) -> String {
+        let text = path
+            .to_string_lossy()
+            .replace('\\', "/")
+            .to_ascii_lowercase();
+        if let Some(unc) = text.strip_prefix("//?/unc/") {
+            format!("//{unc}")
+        } else {
+            text.strip_prefix("//?/").unwrap_or(&text).to_owned()
+        }
+    }
+    let bytes = text.as_bytes();
+    for (begin, _) in text.char_indices() {
+        let rest = &text[begin..];
+        let drive = rest.as_bytes().get(..3).is_some_and(|part| {
+            part[0].is_ascii_alphabetic() && part[1] == b':' && b"/\\".contains(&part[2])
+        });
+        if (!drive && !rest.starts_with(r"\\")) || (begin > 0 && continues_path(bytes[begin - 1])) {
+            continue;
+        }
+        // Try word boundaries too: native folder names may contain spaces.
+        for end in rest
+            .char_indices()
+            .filter_map(|(end, character)| {
+                (character.is_whitespace() || "\"'`,;=()|^$[]{}*+<>".contains(character))
+                    .then_some(end)
+            })
+            .chain(std::iter::once(rest.len()))
+        {
+            let literal = &rest[..end];
+            let path = lexical(literal);
+            if !path.is_absolute() {
+                continue;
+            }
+            let path = spelling(&path);
+            if let Some(root) = roots.iter().find(|root| {
+                root.paths.iter().any(|base| {
+                    let base = spelling(base);
+                    !base.ends_with('/')
+                        && (path == base
+                            || path
+                                .strip_prefix(&base)
+                                .is_some_and(|rest| rest.starts_with('/')))
+                })
+            }) {
+                return Some((literal.to_owned(), root.kind));
+            }
         }
     }
     None
@@ -138,26 +198,61 @@ fn continues_path(byte: u8) -> bool {
 
 /// The path with `.` and `..` components removed, without reading the
 /// filesystem; `..` at the filesystem root stays there, as it does on disk.
-pub(crate) fn lexical(literal: &str) -> Option<PathBuf> {
+pub(crate) fn lexical(literal: &str) -> PathBuf {
     let mut path = PathBuf::new();
     for component in Path::new(literal).components() {
         match component {
-            Component::RootDir => path.push("/"),
+            Component::RootDir => path.push(component.as_os_str()),
             Component::Normal(name) => path.push(name),
             Component::CurDir => {}
             Component::ParentDir => {
                 path.pop();
             }
-            Component::Prefix(_) => return None,
+            Component::Prefix(prefix) => path.push(prefix.as_os_str()),
         }
     }
-    Some(path)
+    path
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[cfg(windows)]
+    #[test]
+    fn native_lexical_paths_keep_their_drive_or_share() {
+        for (source, expected) in [
+            ("C:/srv/other/../acme", "C:/srv/acme"),
+            ("C:/../../acme", "C:/acme"),
+            (r"\\server\share\other\..\acme", r"\\server\share\acme"),
+        ] {
+            assert_eq!(lexical(source), Path::new(expected));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_machine_paths_detect_case_aliases_extended_paths_and_spaces() {
+        let roots = [Root {
+            kind: Kind::Project,
+            paths: vec![PathBuf::from(r"\\?\C:\Acme User\project")],
+        }];
+        for path in [
+            r"C:\Acme User\project",
+            "c:/acme user/project/src",
+            r"\\?\C:\Acme User\project\src",
+            r"--prefix=C:\Acme User\project",
+        ] {
+            assert!(check(&argv(&[path]), &roots).is_err(), "{path}");
+        }
+        assert!(check(&argv(&[r"C:\Acme User\project-other"]), &roots).is_ok());
+        let roots = [Root {
+            kind: Kind::Project,
+            paths: vec![PathBuf::from(r"\\?\UNC\server\share\project")],
+        }];
+        assert!(check(&argv(&[r"\\SERVER\share\project\src"]), &roots).is_err());
+    }
 
     fn roots() -> Vec<Root> {
         let root = |kind, paths: &[&str]| Root {

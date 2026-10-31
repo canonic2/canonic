@@ -7,6 +7,7 @@ mod budget;
 mod control;
 mod expansion;
 mod flow;
+mod powershell;
 mod provenance;
 mod redirection;
 mod state;
@@ -35,7 +36,7 @@ pub enum Dialect {
     Posix,
     /// Bash quoting for the bounded literal subset; history syntax is opaque.
     Bash,
-    /// No PowerShell parsing is currently implemented.
+    /// A bounded single native invocation; other PowerShell syntax is opaque.
     Powershell,
     /// No cmd.exe parsing is currently implemented.
     Cmd,
@@ -108,15 +109,16 @@ pub(crate) fn analyze_with_working_files(
         project: project.into(),
     };
     context.validate()?;
-    let tree = if matches!(dialect, Dialect::Posix | Dialect::Bash) {
-        structure::parse(source, dialect, checkpoint)?
-    } else {
-        Node::Opaque {
-            span: structure::Span {
-                start: 0,
-                end: source.len(),
-            },
-        }
+    let opaque = || Node::Opaque {
+        span: structure::Span {
+            start: 0,
+            end: source.len(),
+        },
+    };
+    let tree = match dialect {
+        Dialect::Posix | Dialect::Bash => structure::parse(source, dialect, checkpoint)?,
+        Dialect::Powershell => powershell::parse(source, checkpoint)?.unwrap_or_else(opaque),
+        Dialect::Cmd => opaque(),
     };
     // A missing in-place sed input is inert only when nothing else in the
     // request could create it, as a link to another file, before sed runs.

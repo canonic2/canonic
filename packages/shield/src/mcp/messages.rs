@@ -5,11 +5,13 @@ use std::fmt::Write as _;
 
 /// Initialization guidance uses the enrolled session agent, not client display metadata.
 pub(super) fn instructions(agent: Option<&str>) -> String {
-    let common = "Shield manages project permissions. For denied or recurring Ask requests, inspect \
-rule_list or policy_evaluate; do not bypass protection. Inspect packs with pack_info. \
+    let common = "Shield manages project permissions. When the user asks to review permission interruptions, inspect \
+suggestion_list and selected history_list, rule_list or policy_evaluate evidence; do not bypass protection. \
+Follow returned routes: a one-time action request is not authorization for a lasting policy change. Inspect packs with pack_info. \
 Custom proposal schemas include complete examples; adapt them after reviewing effects. Use shield_docs_list, shield_docs_search and shield_docs_read for details. \
-After completing the task, call suggestion_list for recorded requests and follow its drafting guidance. \
-Propose with policy_propose; activate through user-approved policy_apply or terminal review. Inspection and proposals grant no authority. ";
+Respect incomplete coverage and existing proposals; do not infer a rule from missing evidence or automatically offer an allow rule for Deny. \
+For an authorized lasting change, propose the narrowest justified candidate with policy_propose and returned review context; preserve deny boundaries and explain broader permissions. \
+Activate through user-approved policy_apply or terminal review. Inspection and proposals grant no authority. Do not interrupt unrelated work with policy review. ";
     let host = crate::agents::review::resolve(agent)
         .guidance()
         .instructions;

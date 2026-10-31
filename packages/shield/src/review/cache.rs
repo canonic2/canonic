@@ -106,6 +106,8 @@ impl Artifact {
             owner,
         )?;
         let path = self.path();
+        #[cfg(windows)]
+        crate::windows_security::check_private(&path).map_err(|_| unavailable())?;
         let metadata = fs::symlink_metadata(&path).map_err(|_| unavailable())?;
         if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() != self.length
         {
@@ -147,6 +149,13 @@ fn project_key(root: &str, project_id: &str) -> String {
     )
 }
 
+#[cfg_attr(
+    not(unix),
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "Unix ownership queries are fallible; cache callers use the same interface on every platform"
+    )
+)]
 fn cache_owner(root: &str) -> Result<Option<u32>, Error> {
     #[cfg(unix)]
     {
@@ -329,23 +338,31 @@ fn prepare_directory(directory: &Path, owner: Option<u32>) -> Result<(), Error> 
         fs::create_dir_all(parent)?;
         check_directory(parent, false, None)?;
     }
-    let mut builder = fs::DirBuilder::new();
+    let builder = fs::DirBuilder::new();
     #[cfg(unix)]
-    {
+    let builder = {
         use std::os::unix::fs::DirBuilderExt;
+        let mut builder = builder;
         builder.mode(0o700);
-    }
+        builder
+    };
     match builder.create(directory) {
         Ok(()) => {}
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
         Err(e) => return Err(e.into()),
     }
+    #[cfg(windows)]
+    crate::windows_security::make_private(directory)?;
     check_directory(directory, true, owner)
 }
 fn check_directory(directory: &Path, private: bool, owner: Option<u32>) -> Result<(), Error> {
     let metadata = fs::symlink_metadata(directory).map_err(|_| unavailable())?;
     if !metadata.is_dir() || metadata.file_type().is_symlink() {
         return Err(unavailable());
+    }
+    #[cfg(windows)]
+    if private {
+        crate::windows_security::check_private(directory).map_err(|_| unavailable())?;
     }
     #[cfg(unix)]
     {
@@ -398,7 +415,7 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), Error> {
         file.write_all(bytes)?;
         storage::sync(&file)?;
         drop(file);
-        fs::rename(&temporary, path)?;
+        super::storage::replace(&temporary, path)?;
         #[cfg(unix)]
         storage::sync(&fs::File::open(
             path.parent()

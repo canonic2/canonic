@@ -5,6 +5,7 @@
 //! are removed. While a prompt is active, INT/TERM/HUP cancel it and TSTP
 //! releases modes before stopping. Otherwise each signal runs its default
 //! action, so the process can still be interrupted, terminated and suspended.
+//! Windows delegates Ctrl-C/Ctrl-Break ownership to the shared console lease.
 use super::{Error, InlineSession};
 #[cfg(unix)]
 use std::sync::{
@@ -53,6 +54,8 @@ fn registration() -> Result<Arc<Registration>, Error> {
 pub(super) struct Signals {
     #[cfg(unix)]
     registration: Arc<Registration>,
+    #[cfg(windows)]
+    native: crate::windows_console::Signals,
 }
 impl Signals {
     pub(super) fn new() -> Result<Self, Error> {
@@ -65,18 +68,24 @@ impl Signals {
             registration.idle.store(false, Ordering::SeqCst);
             Ok(Self { registration })
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            Ok(Self {
+                native: crate::windows_console::Signals::new()?,
+            })
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             Ok(Self {})
         }
     }
     pub(super) fn check(&self, session: InlineSession) -> Result<InlineSession, Error> {
+        if self.cancelled() {
+            session.finish("Shield → cancelled")?;
+            return Err(Error::Cancelled);
+        }
         #[cfg(unix)]
         {
-            if self.registration.cancel.load(Ordering::SeqCst) {
-                session.finish("Shield → cancelled")?;
-                return Err(Error::Cancelled);
-            }
             if self.registration.suspend.swap(false, Ordering::SeqCst) {
                 let paused = session.pause()?;
                 loop {
@@ -105,7 +114,11 @@ impl Signals {
         {
             self.registration.cancel.load(Ordering::SeqCst)
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            self.native.cancelled()
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             false
         }

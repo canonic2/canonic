@@ -67,7 +67,9 @@ fn help_text_for_every_command() {
     ] {
         let mut command = cargo_bin_cmd!("shield");
         let output = command.args(args).assert().success();
-        insta::with_settings!({filters => vec![(r"(?m)[ \t]+$", "")]}, {
+        // Clap derives the executable suffix from argv[0] on Windows. Keep
+        // command/option help shared while normalizing only that usage name.
+        insta::with_settings!({filters => vec![(r"(?m)[ \t]+$", ""), (r"(?m)^Usage: shield\.exe\b", "Usage: shield")]}, {
             insta::assert_snapshot!(name, String::from_utf8_lossy(&output.get_output().stdout));
         });
     }

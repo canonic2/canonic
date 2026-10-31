@@ -323,6 +323,18 @@ impl Transport {
                 {
                     return Err(Error::Contract("invalid MCP stdio settings"));
                 }
+                #[cfg(windows)]
+                {
+                    let mut names = std::collections::BTreeSet::new();
+                    if env
+                        .keys()
+                        .any(|name| !names.insert(name.to_ascii_uppercase()))
+                    {
+                        return Err(Error::Contract(
+                            "Windows MCP environment names must be unique without regard to case",
+                        ));
+                    }
+                }
             }
             Self::Http { url } => {
                 let parsed =

@@ -1,0 +1,8 @@
+# Loaded only by `cargo build-windows`; ordinary development reuses its cache.
+# Compile Rust and native dependencies with the same CRT linkage. The released
+# executable must not require a separately installed Visual C++ runtime.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

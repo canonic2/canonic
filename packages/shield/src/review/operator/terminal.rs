@@ -74,7 +74,11 @@ impl Terminal {
         #[cfg(windows)]
         let (input_path, output_path) = ("CONIN$", "CONOUT$");
         let input = OpenOptions::new().read(true).open(input_path).ok()?;
-        let output = OpenOptions::new().write(true).open(output_path).ok()?;
+        let output = OpenOptions::new()
+            .read(cfg!(windows))
+            .write(true)
+            .open(output_path)
+            .ok()?;
         if !input.is_terminal() || !output.is_terminal() {
             return None;
         }

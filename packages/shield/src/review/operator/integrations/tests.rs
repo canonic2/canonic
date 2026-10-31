@@ -317,7 +317,7 @@ fn private_stdio_fixture() -> (assert_fs::TempDir, Context) {
 }
 
 fn fixture_git(root: &Path, args: &[&str]) {
-    let output = std::process::Command::new("/usr/bin/git")
+    let output = crate::test_support::git()
         .current_dir(root)
         .args(args)
         .output()

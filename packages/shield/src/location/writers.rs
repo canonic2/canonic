@@ -36,7 +36,7 @@ fn words<'a>(arguments: &'a [String], flags: &str, mode: bool) -> Words<'a> {
     let mut parsed = Words {
         flags: Vec::new(),
         operands: Vec::new(),
-        complete: cfg!(unix),
+        complete: cfg!(any(unix, windows)),
     };
     let mut options = true;
     let mut terminated = false;
@@ -81,7 +81,11 @@ fn tee(arguments: &[String], cwd: &Path) -> Targets {
         .iter()
         .map(|operand| {
             complete &= operand.as_str() != "-";
-            write(cwd.join(operand), false, true)
+            write(
+                super::join_operand(cwd, operand, &mut complete),
+                false,
+                true,
+            )
         })
         .collect();
     Targets { items, complete }
@@ -101,7 +105,7 @@ fn link(arguments: &[String], cwd: &Path) -> Targets {
     let (sources, destination) = match parsed.operands.as_slice() {
         [] => (&[][..], None),
         [source] => (std::slice::from_ref(source), None),
-        [sources @ .., last] => (sources, Some(cwd.join(last))),
+        [sources @ .., last] => (sources, Some(super::join_operand(cwd, last, &mut complete))),
     };
     let directory = match &destination {
         None => Some(cwd.to_path_buf()),
@@ -121,7 +125,7 @@ fn link(arguments: &[String], cwd: &Path) -> Targets {
             items.push(Target {
                 action: "read",
                 role: "source",
-                path: cwd.join(source),
+                path: super::join_operand(cwd, source, &mut complete),
                 recursive: false,
                 descendants: Descendants::All,
                 follow: true,
@@ -178,7 +182,11 @@ fn change(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
     let items = operands
         .map(|operand| {
             complete &= operand.as_str() != "-";
-            write(cwd.join(operand), recursive, follow)
+            write(
+                super::join_operand(cwd, operand, &mut complete),
+                recursive,
+                follow,
+            )
         })
         .collect();
     Targets { items, complete }
@@ -200,7 +208,12 @@ mod tests {
             .map(|t| {
                 (
                     t.action,
-                    t.path.strip_prefix(cwd).unwrap().display().to_string(),
+                    t.path
+                        .strip_prefix(cwd)
+                        .unwrap()
+                        .display()
+                        .to_string()
+                        .replace('\\', "/"),
                     t.recursive,
                 )
             })

@@ -52,6 +52,147 @@ fn error_code(response: &Value) -> &Value {
     &response["result"]["structuredContent"]["error"]["code"]
 }
 
+fn modern_apply(
+    id: i64,
+    args: &Value,
+    state: Option<&Value>,
+    action: Option<&str>,
+    form: bool,
+) -> Value {
+    let mut params = json!({"name":"policy_apply","arguments":args});
+    if let Some(state) = state {
+        params["requestState"] = state.clone();
+    }
+    if let Some(action) = action {
+        params["inputResponses"] = json!({"confirmation":{"action":action}});
+    }
+    super::skills::modern(
+        id,
+        "tools/call",
+        params,
+        if form {
+            json!({"elicitation":{"form":{}}})
+        } else {
+            json!({})
+        },
+    )
+}
+
+#[test]
+fn modern_confirmation_accept_decline_cancel_and_receipt_replay() {
+    for action in ["accept", "decline", "cancel"] {
+        let (transport, project, args) = prepared(Some("claude-code"), &capabilities(FORM));
+        let before = project.revision();
+        let interim = transport.request(&modern_apply(10, &args, None, None, true));
+        assert_eq!(
+            interim["result"]["resultType"], "input_required",
+            "{interim}"
+        );
+        assert!(interim["result"].get("ttlMs").is_none());
+        assert_eq!(project.revision(), before);
+        // Cancelling a completed interim RPC ID cannot revoke a separate retry.
+        transport.send(
+            &json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":10}}),
+        );
+        let state = &interim["result"]["requestState"];
+        let result = transport.request(&modern_apply(11, &args, Some(state), Some(action), true));
+        assert_eq!(result["result"]["resultType"], "complete", "{result}");
+        assert_eq!(project.revision() != before, action == "accept");
+        if action == "accept" {
+            assert_eq!(result["result"]["isError"], false, "{result}");
+            let receipt = transport.request(&modern_apply(12, &args, None, None, true));
+            assert_eq!(receipt["result"]["isError"], false, "{receipt}");
+            // The retained receipt is compact; commit also returns change detail.
+            for field in [
+                "activation_id",
+                "candidate_digest",
+                "policy_revision",
+                "previous_activation_id",
+                "committed",
+            ] {
+                assert_eq!(
+                    receipt["result"]["structuredContent"]["data"]["receipt"][field],
+                    result["result"]["structuredContent"]["data"]["receipt"][field]
+                );
+            }
+        } else {
+            assert_eq!(error_code(&result), "approval_declined");
+        }
+        let replay = transport.request(&modern_apply(13, &args, Some(state), Some("accept"), true));
+        assert_eq!(replay["error"]["code"], rpc::INVALID_PARAMS, "{replay}");
+    }
+}
+
+#[test]
+fn modern_confirmation_rejects_forgery_changed_arguments_and_lost_capability() {
+    for variant in ["forged", "arguments", "capability", "missing-response"] {
+        let (transport, project, args) = prepared(Some("claude-code"), &capabilities(FORM));
+        let before = project.revision();
+        let interim = transport.request(&modern_apply(10, &args, None, None, true));
+        let mut state = interim["result"]["requestState"].clone();
+        let mut retry_args = args.clone();
+        if variant == "forged" {
+            state = json!("forged");
+        }
+        if variant == "arguments" {
+            retry_args["candidate_digest"] = json!("different");
+        }
+        let response = transport.request(&modern_apply(
+            11,
+            &retry_args,
+            Some(&state),
+            (variant != "missing-response").then_some("accept"),
+            variant != "capability",
+        ));
+        assert!(response["error"].is_object(), "{variant}: {response}");
+        assert_eq!(project.revision(), before);
+    }
+}
+
+#[test]
+fn modern_confirmation_rechecks_policy_and_connection_ownership() {
+    let (transport, project, args) = prepared(Some("claude-code"), &capabilities(FORM));
+    let interim = transport.request(&modern_apply(10, &args, None, None, true));
+    let state = &interim["result"]["requestState"];
+    let (other_server, other_project) = fixture(Some("claude-code"));
+    let other = Transport::start(other_server);
+    let before_other = other_project.revision();
+    let foreign = other.request(&modern_apply(11, &args, Some(state), Some("accept"), true));
+    assert_eq!(foreign["error"]["code"], rpc::INVALID_PARAMS);
+    assert_eq!(other_project.revision(), before_other);
+    let other_args = propose(&transport, json!(12), &rule("acme-other", "other"));
+    commit_elsewhere(&project, &other_args);
+    let current = project.revision();
+    let expired_response =
+        transport.request(&modern_apply(13, &args, Some(state), Some("accept"), true));
+    assert_eq!(
+        error_code(&expired_response),
+        "stale_revision",
+        "{expired_response}"
+    );
+    assert_eq!(project.revision(), current);
+}
+
+#[test]
+fn modern_requests_preserve_registered_adapter_and_per_request_capabilities() {
+    for agent in [Some("claude-code"), Some("codex"), None] {
+        // Legacy form support must not bleed into the following modern request.
+        let (transport, project, args) = prepared(agent, &capabilities(FORM));
+        let before = project.revision();
+        let mut request = modern_apply(10, &args, None, None, false);
+        request["params"]["_meta"]["io.modelcontextprotocol/clientInfo"] =
+            json!({"name":"codex","version":"1"});
+        let result = transport.request(&request);
+        assert_eq!(result["result"]["resultType"], "complete", "{result}");
+        match agent {
+            Some("codex") => assert_eq!(result["result"]["isError"], false, "{result}"),
+            Some("claude-code") => assert_eq!(error_code(&result), "approval_unavailable"),
+            _ => assert_eq!(error_code(&result), "operator_review_required"),
+        }
+        assert_eq!(project.revision() != before, agent == Some("codex"));
+    }
+}
+
 #[test]
 fn host_answers_other_than_acceptance_leave_the_proposal_pending() {
     for result in [

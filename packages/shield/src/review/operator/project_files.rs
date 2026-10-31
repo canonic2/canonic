@@ -69,11 +69,14 @@ mod tests {
     fn capture_retains_each_file_as_written() {
         let root = assert_fs::TempDir::new().expect("fixture");
         let config = "# Acme policy.\nschema_version: 1\npacks: []\nrules: rules.yml\n";
-        let local = "# Personal roots.\nschema_version: 1\npacks: []\naccess_paths:\n  read:\n  - /srv/acme\n";
+        let local = format!(
+            "# Personal roots.\nschema_version: 1\npacks: []\naccess_paths:\n  read:\n  - {}\n",
+            crate::test_support::absolute("/srv/acme")
+        );
         let rules = "# Acme rules.\nschema_version: 1\nkind: custom\ncapabilities: [structured-rules-v1]\nrules: []\n";
         for (name, text) in [
             ("config.yml", config),
-            ("config.local.yml", local),
+            ("config.local.yml", local.as_str()),
             ("rules.yml", rules),
         ] {
             root.child(".shield")
@@ -88,7 +91,7 @@ mod tests {
         assert_eq!(bundle["rules"], rules);
         assert_eq!(
             configuration::layers::merged(&bundle).expect("merged")["local_access_paths"]["read"],
-            serde_json::json!(["/srv/acme"])
+            serde_json::json!([crate::test_support::absolute("/srv/acme")])
         );
     }
 }

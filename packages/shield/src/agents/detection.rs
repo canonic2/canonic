@@ -13,9 +13,12 @@ pub(crate) fn installed() -> Vec<&'static str> {
         .collect()
 }
 
-/// Check executable files on supported Unix setup hosts without launching them.
+/// Check native executable candidates without launching them.
 /// Missing or inaccessible candidates are ordinary discovery misses.
 pub(super) fn on_path(name: &str, search_path: &[PathBuf]) -> bool {
+    #[cfg(windows)]
+    return windows_on_path(name, search_path);
+    #[cfg(not(windows))]
     search_path.iter().any(|directory| {
         if !directory.is_absolute() {
             return false;
@@ -34,6 +37,45 @@ pub(super) fn on_path(name: &str, search_path: &[PathBuf]) -> bool {
             false
         }
     })
+}
+
+// Windows agent installers provide either an executable or an npm command shim.
+// PowerShell scripts alone are not ordinary executable PATH candidates.
+#[cfg(any(windows, test))]
+fn windows_on_path(name: &str, search_path: &[PathBuf]) -> bool {
+    search_path.iter().any(|directory| {
+        directory.is_absolute()
+            && ["exe", "com", "cmd", "bat"]
+                .iter()
+                .any(|extension| directory.join(format!("{name}.{extension}")).is_file())
+    })
+}
+
+#[cfg(test)]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn native_executables_and_command_shims_are_discovered_without_execution() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let paths = vec![root.path().to_owned()];
+        assert!(!windows_on_path("claude", &paths));
+        std::fs::write(root.path().join("claude.exe"), "not executable content").unwrap();
+        std::fs::write(root.path().join("codex.cmd"), "not executable content").unwrap();
+        assert!(windows_on_path("claude", &paths));
+        assert!(windows_on_path("codex", &paths));
+        assert!(!windows_on_path("acme", &paths));
+        assert!(!windows_on_path("claude", &[PathBuf::from(".")]));
+        assert!(!windows_on_path("codex", &[]));
+    }
+
+    #[test]
+    fn directories_and_powershell_only_installations_are_not_executables() {
+        let root = assert_fs::TempDir::new().unwrap();
+        std::fs::create_dir(root.path().join("claude.exe")).unwrap();
+        std::fs::write(root.path().join("claude.ps1"), "fixture").unwrap();
+        assert!(!windows_on_path("claude", &[root.path().to_owned()]));
+    }
 }
 
 #[cfg(all(test, unix))]

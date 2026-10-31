@@ -103,7 +103,11 @@ pub(super) fn collect(
     alone: bool,
 ) -> Option<Targets> {
     let parsed = parse(executable, arguments)?;
-    let mut complete = parsed.complete;
+    let mut complete = parsed.complete
+        && parsed
+            .files()
+            .iter()
+            .all(|(_, path)| super::native_operand(Path::new(path)));
     let missing = |operand: &str| {
         alone
             && fs::symlink_metadata(cwd.join(operand))
@@ -252,7 +256,7 @@ fn parse_reading(executable: &str, arguments: &[String]) -> Option<Parsed> {
         script: None,
         separate_suffix: None,
         alternative: None,
-        complete: cfg!(unix),
+        complete: cfg!(any(unix, windows)),
     };
     let mut options = true;
     let mut literal = false;
@@ -688,7 +692,7 @@ mod tests {
         // Alone, that input is reported, not edited; BSD's script write, edit
         // and backup remain.
         let targets = collect("sed", &request, root.path(), true).unwrap();
-        assert!(targets.complete);
+        assert_eq!(targets.complete, !cfg!(windows));
         let writes: Vec<_> = targets
             .items
             .iter()
@@ -700,7 +704,7 @@ mod tests {
             [
                 root.path().join("a.txt"),
                 root.path().join("a.txt1p"),
-                std::path::PathBuf::from("/tmp/x"),
+                root.path().ancestors().last().unwrap().join("tmp/x"),
             ]
         );
         // Any other unusable input, such as a dangling link, stays incomplete.

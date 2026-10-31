@@ -72,7 +72,7 @@ fn registrations_cannot_claim_another_sources_identity() {
     ));
     // A local source whose identity names another path is refused as well.
     let mut moved = serde_json::to_value(local("/srv/acme")).unwrap();
-    moved["location"] = serde_json::json!("/srv/other");
+    moved["location"] = serde_json::json!(local("/srv/other").location());
     let moved: Source = serde_json::from_value(moved).unwrap();
     assert!(!moved.has_derived_identity());
     assert!(matches!(
@@ -132,7 +132,10 @@ fn project_shadows_global_but_never_the_builtin() {
         Err(RegistrationError::Identity(_))
     ));
     let effective = Effective::merge(("main", &builtin()), &global, Some(&project)).unwrap();
-    assert_eq!(effective.get("acme").unwrap().location(), "/srv/project");
+    assert_eq!(
+        effective.get("acme").unwrap().location(),
+        local("/srv/project").location()
+    );
     assert_eq!(effective.scope("acme"), Some(Scope::Project));
     assert_eq!(effective.scope("team"), Some(Scope::Global));
     assert_eq!(effective.get("main").unwrap(), &builtin());

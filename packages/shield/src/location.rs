@@ -12,9 +12,35 @@ use std::{
 mod node;
 mod targets;
 mod text;
+#[cfg(windows)]
+pub(crate) mod windows;
 mod working_files;
 mod writers;
 pub(crate) use working_files::WorkingFiles;
+
+/// Compare protected entry names using the native filename interpretation.
+pub(crate) fn native_name(left: &std::ffi::OsStr, right: &std::ffi::OsStr) -> bool {
+    #[cfg(windows)]
+    {
+        let (Some(left), Some(right)) = (left.to_str(), right.to_str()) else {
+            return left == right;
+        };
+        // An alternate stream still belongs to the protected base file. Win32
+        // also accepts case aliases and trailing dots/spaces in ordinary paths.
+        let base = |text: &str| {
+            text.split(':')
+                .next()
+                .unwrap_or(text)
+                .trim_end_matches(['.', ' '])
+                .to_uppercase()
+        };
+        base(left) == base(right)
+    }
+    #[cfg(not(windows))]
+    {
+        left == right
+    }
+}
 
 /// The single source file read by a supported Node syntax check.
 pub(crate) fn node_check_file<'a>(executable: &str, arguments: &[&'a str]) -> Option<&'a str> {
@@ -61,8 +87,26 @@ pub(crate) fn text_read_only(executable: &str, arguments: &[&str]) -> bool {
     )
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 type EntryIdentity = Result<Option<(u64, u64)>, ()>;
+
+/// Rooted POSIX/MSYS paths and drive-relative Windows paths need a shell's
+/// mount/drive context. Do not turn them into a different native file.
+fn native_operand(path: &Path) -> bool {
+    !cfg!(windows)
+        || path.is_absolute()
+        || (!path.has_root()
+            && !matches!(
+                path.components().next(),
+                Some(std::path::Component::Prefix(_))
+            ))
+}
+
+fn join_operand(cwd: &Path, value: impl AsRef<Path>, complete: &mut bool) -> PathBuf {
+    let path = value.as_ref();
+    *complete &= native_operand(path);
+    cwd.join(path)
+}
 
 #[derive(Clone)]
 struct Target {
@@ -97,7 +141,7 @@ pub(crate) struct Observer {
     working_files: Option<WorkingFiles>,
     cache: RefCell<BTreeMap<(PathBuf, bool), Option<PathBuf>>>,
     directories: RefCell<BTreeMap<PathBuf, bool>>,
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     entries: RefCell<BTreeMap<PathBuf, EntryIdentity>>,
     targets: OnceCell<Targets>,
     observations: Cell<usize>,
@@ -216,7 +260,7 @@ impl Observer {
             working_files: None,
             cache: RefCell::new(BTreeMap::new()),
             directories: RefCell::new(BTreeMap::new()),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             entries: RefCell::new(BTreeMap::new()),
             targets: OnceCell::new(),
             observations: Cell::new(0),
@@ -425,30 +469,31 @@ impl Observer {
         Ok(None)
     }
     fn present(&self, path: &Path) -> Result<bool, ()> {
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             Ok(self.entry(path)?.is_some())
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = path;
             Err(())
         }
     }
     fn same_entry(&self, a: &Path, b: &Path) -> Result<bool, ()> {
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             let (a, b) = (self.entry(a)?, self.entry(b)?);
             Ok(a.is_some() && a == b)
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = (a, b);
             Ok(false)
         }
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn entry(&self, path: &Path) -> EntryIdentity {
+        #[cfg(unix)]
         use std::os::unix::fs::MetadataExt;
         if let Some(identity) = self.entries.borrow().get(path) {
             return *identity;
@@ -458,8 +503,13 @@ impl Observer {
         let identity = if self.observations.get() > 8192 {
             Err(())
         } else {
-            match fs::symlink_metadata(path) {
-                Ok(metadata) => Ok(Some((metadata.dev(), metadata.ino()))),
+            #[cfg(unix)]
+            let observed =
+                fs::symlink_metadata(path).map(|metadata| (metadata.dev(), metadata.ino()));
+            #[cfg(windows)]
+            let observed = windows::entry(path);
+            match observed {
+                Ok(identity) => Ok(Some(identity)),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
                 Err(_) => Err(()),
             }
@@ -720,7 +770,7 @@ fn resolve(
     }
 }
 
-#[cfg(all(test, unix))]
+#[cfg(all(test, any(unix, windows)))]
 mod tests {
     use super::*;
 

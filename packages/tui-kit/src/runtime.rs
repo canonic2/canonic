@@ -42,6 +42,8 @@ pub struct TerminalSession {
     keyboard: Option<KeyboardEnhancementFlags>,
     #[cfg(unix)]
     original: Option<rustix::termios::Termios>,
+    #[cfg(windows)]
+    original: Option<(u32, u32)>,
 }
 
 impl TerminalSession {
@@ -55,6 +57,8 @@ impl TerminalSession {
         let screen = self.screen;
         #[cfg(unix)]
         let original = self.original.clone();
+        #[cfg(windows)]
+        let original = self.original;
         if let Err(error) = self.close() {
             return (
                 Err(error),
@@ -69,7 +73,7 @@ impl TerminalSession {
         } else {
             Self::open_input()
         };
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         let terminal = terminal.map(|mut terminal| {
             terminal.original = original;
             terminal
@@ -112,12 +116,21 @@ impl TerminalSession {
             held: Some(()),
             #[cfg(unix)]
             keyboard: None,
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             original: None,
         };
         #[cfg(unix)]
         {
             session.original = Some(rustix::termios::tcgetattr(io::stdin())?);
+        }
+        #[cfg(windows)]
+        {
+            let input = winapi_util::console::mode(io::stdin())?;
+            let output = winapi_util::console::mode(io::stdout())?;
+            session.original = Some((input, output));
+            // Crossterm caches ANSI support for the process. Enable VT on each
+            // lease, including after a handoff restored a non-VT baseline.
+            winapi_util::console::set_mode(io::stdout(), output | 0x0004)?;
         }
         terminal::enable_raw_mode()?;
         session.raw = true;
@@ -203,6 +216,11 @@ impl TerminalSession {
                 )
                 .map_err(Into::into),
             );
+        }
+        #[cfg(windows)]
+        if let Some((input, output)) = self.original.take() {
+            record(winapi_util::console::set_mode(io::stdin(), input));
+            record(winapi_util::console::set_mode(io::stdout(), output));
         }
         if self.held.take().is_some() {
             ACTIVE.store(false, Ordering::Release);

@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeMap, ops::Range, slice};
 
+#[derive(Clone)]
 pub(super) struct Index(BTreeMap<String, Vec<usize>>);
 
 impl Index {

@@ -5,8 +5,9 @@
 #[serde(deny_unknown_fields)]
 struct ApprovalBinding {
     timeout_ms: u64,
-    resources: Resources,
+    resources: serde_json::Value,
 }
+#[cfg(not(windows))]
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Resources {
@@ -31,38 +32,52 @@ pub(crate) fn valid_approval_binding(
     let Ok(binding) = serde_json::from_value::<ApprovalBinding>(value.clone()) else {
         return false;
     };
-    let resources = binding.resources;
-    super::supported(request)
-        && (1..=3_600_000).contains(&binding.timeout_ms)
-        && (if request.executable == super::git::EXECUTABLE {
-            resources.model == "macos-clt-git-inspection-v1"
-                && resources.git.is_some()
-                && resources.library_contract == "OS Git libraries/shared cache"
-                && resources.environment == "cleared-git-inspection-v1"
-        } else {
-            resources.model == "macos-readonly-system-leaf-v1"
-                && resources.git.is_none()
-                && resources.library_contract == "OS libSystem/shared cache"
-                && resources.environment == "cleared-lc-all-c"
-        })
-        && resources.executable == request.executable
-        && resources.loader == "/usr/lib/dyld"
-        && [&resources.sha256, &resources.loader_sha256]
-            .iter()
-            .all(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
-        && resources.executable_identity.2 <= 16_777_216
-        && resources.loader_identity.2 <= 16_777_216
-        && resources.cwd_identity.1 != 0
-        && std::path::Path::new(&request.cwd).starts_with(&request.project)
-        && !std::path::Path::new(&request.cwd)
-            .starts_with(std::path::Path::new(&request.project).join(".shield"))
+    if !(1..=3_600_000).contains(&binding.timeout_ms)
+        || !std::path::Path::new(&request.cwd).starts_with(&request.project)
+        || super::protected_cwd(
+            std::path::Path::new(&request.cwd),
+            std::path::Path::new(&request.project),
+        )
+    {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        super::windows_binding::valid(request, &binding.resources)
+    }
+    #[cfg(not(windows))]
+    {
+        let Ok(resources) = serde_json::from_value::<Resources>(binding.resources) else {
+            return false;
+        };
+        super::supported(request)
+            && (if request.executable == super::git::EXECUTABLE {
+                resources.model == "macos-clt-git-inspection-v1"
+                    && resources.git.is_some()
+                    && resources.library_contract == "OS Git libraries/shared cache"
+                    && resources.environment == "cleared-git-inspection-v1"
+            } else {
+                resources.model == "macos-readonly-system-leaf-v1"
+                    && resources.git.is_none()
+                    && resources.library_contract == "OS libSystem/shared cache"
+                    && resources.environment == "cleared-lc-all-c"
+            })
+            && resources.executable == request.executable
+            && resources.loader == "/usr/lib/dyld"
+            && [&resources.sha256, &resources.loader_sha256]
+                .iter()
+                .all(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+            && resources.executable_identity.2 <= 16_777_216
+            && resources.loader_identity.2 <= 16_777_216
+            && resources.cwd_identity.1 != 0
+    }
 }
 
 pub(crate) fn verify_approval_binding(
     request: &crate::policy::Request,
     resource: &serde_json::Value,
 ) -> Result<(), crate::review::Error> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     {
         let timeout = resource["timeout_ms"]
             .as_u64()
@@ -71,14 +86,14 @@ pub(crate) fn verify_approval_binding(
             return Ok(());
         }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = (request, resource);
     Err(crate::review::Error::Invalid(
         "unsupported or changed native approval binding",
     ))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 pub(crate) fn capture(
     request: &crate::policy::Request,
     timeout: u64,

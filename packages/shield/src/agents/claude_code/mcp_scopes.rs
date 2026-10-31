@@ -30,8 +30,8 @@ pub(super) fn check(root: &Path, cwd: &Path, alias: &str) -> Result<(), Error> {
     let layers = mcp_scopes::project_layers(root, cwd)?;
     let path = match std::env::var_os("CLAUDE_CONFIG_DIR").filter(|value| !value.is_empty()) {
         Some(directory) => PathBuf::from(directory).join(".claude.json"),
-        None => std::env::var_os("HOME")
-            .map(|home| PathBuf::from(home).join(".claude.json"))
+        None => std::env::home_dir()
+            .map(|home| home.join(".claude.json"))
             .ok_or(Error::Invalid("cannot resolve Claude MCP scope"))?,
     };
     if !path.is_absolute() {

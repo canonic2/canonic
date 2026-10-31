@@ -1,5 +1,6 @@
 //! Real file bindings reject replacement and malformed normalized authority claims.
 use super::*;
+#[cfg(unix)]
 use assert_fs::prelude::*;
 
 #[test]
@@ -102,15 +103,28 @@ fn binding_refuses_inode_replacement_changes_and_parent_symlinks() {
 
 #[test]
 fn approval_read_arguments_admit_only_canonical_windows() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let project = root
+        .path()
+        .canonicalize()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
+    let path = Path::new(&project)
+        .join("a.txt")
+        .to_str()
+        .unwrap()
+        .to_owned();
     let mut request = policy::Request {
         executable: "shield:read-text".into(),
-        arguments: vec!["/acme/a.txt".into()],
-        cwd: "/acme".into(),
-        project: "/acme".into(),
+        arguments: vec![path.clone()],
+        cwd: project.clone(),
+        project,
     };
     assert!(crate::enforcement::read_text::valid_request(&request));
     for tail in [vec!["--limit", "1"], vec!["--offset", "2", "--limit", "3"]] {
-        request.arguments = std::iter::once("/acme/a.txt")
+        request.arguments = std::iter::once(path.as_str())
             .chain(tail)
             .map(str::to_owned)
             .collect();
@@ -123,7 +137,7 @@ fn approval_read_arguments_admit_only_canonical_windows() {
         vec!["--offset"],
         vec!["--limit", "1", "--offset", "2"],
     ] {
-        request.arguments = std::iter::once("/acme/a.txt")
+        request.arguments = std::iter::once(path.as_str())
             .chain(tail)
             .map(str::to_owned)
             .collect();

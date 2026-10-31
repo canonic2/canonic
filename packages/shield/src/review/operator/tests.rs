@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 #[test]
 fn pack_rebuild_preserves_operator_access_paths() {
-    let paths = json!({"read":["/acme/reference"],"write":["/acme/scratch"]});
+    let paths = json!({"read":[crate::test_support::absolute("/acme/reference")],"write":[crate::test_support::absolute("/acme/scratch")]});
     let candidate = json!(
         Bundle::capture(
             &json!({"schema_version":1,"packs":[],"access_paths":paths}).to_string(),

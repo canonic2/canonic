@@ -30,7 +30,7 @@ fn access_paths_are_strict_bounded_and_bound_to_the_lock() {
         assert!(Candidate::from_yaml(&invalid.to_string()).is_err());
     }
     let mut configured = config();
-    configured["access_paths"] = json!({"read":["/acme/reference"],"write":["/acme/scratch"]});
+    configured["access_paths"] = json!({"read":[crate::test_support::absolute("/acme/reference")],"write":[crate::test_support::absolute("/acme/scratch")]});
     let first = Candidate::from_yaml(&config().to_string())
         .unwrap()
         .capture(&[pack()], Some(RULES))
@@ -341,8 +341,8 @@ fn selection_bindings_resolve_the_captured_pack_and_change_its_revision() {
     let request = |executable: &str| crate::policy::Request {
         executable: executable.into(),
         arguments: vec![],
-        cwd: "/acme".into(),
-        project: "/acme".into(),
+        cwd: crate::test_support::absolute("/acme").into_owned(),
+        project: crate::test_support::absolute("/acme").into_owned(),
     };
     let mut config = config();
     config.as_object_mut().unwrap().remove("rules");
@@ -439,24 +439,41 @@ access_paths:
   - /acme/reference
 ";
 
+fn local_source() -> String {
+    LOCAL.replace(
+        "/acme/reference",
+        &crate::test_support::absolute("/acme/reference"),
+    )
+}
+
 fn layered() -> Value {
-    json!(Bundle::capture_layers(SHARED, Some(LOCAL), &[pack()], Some(RULES), None, &[]).unwrap())
+    json!(
+        Bundle::capture_layers(
+            SHARED,
+            Some(&local_source()),
+            &[pack()],
+            Some(RULES),
+            None,
+            &[]
+        )
+        .unwrap()
+    )
 }
 
 #[test]
 fn bundles_retain_each_layer_and_bind_both_to_the_lock() {
     let bundle = layered();
     assert_eq!(bundle["config"], SHARED);
-    assert_eq!(bundle["local_config"], LOCAL);
+    assert_eq!(bundle["local_config"], local_source());
     let merged = layers::merged(&bundle).unwrap();
     assert_eq!(
         merged["local_access_paths"]["read"],
-        json!(["/acme/reference"])
+        json!([crate::test_support::absolute("/acme/reference")])
     );
     assert_eq!(merged["packs"][0]["id"], "acme/test");
     Bundle::from_json(bundle.to_string().as_bytes()).unwrap();
     let mut altered = bundle.clone();
-    altered["local_config"] = json!(LOCAL.replace("/acme/reference", "/acme/other"));
+    altered["local_config"] = json!(local_source().replace("/acme/reference", "/acme/other"));
     assert!(Bundle::from_json(altered.to_string().as_bytes()).is_err());
     let mut dropped = bundle;
     dropped.as_object_mut().unwrap().remove("local_config");
@@ -470,12 +487,19 @@ fn revising_a_bundle_edits_only_the_layer_that_changed() {
     merged["local_access_paths"]["read"]
         .as_array_mut()
         .unwrap()
-        .push(json!("/acme/mine"));
+        .push(json!(crate::test_support::absolute("/acme/mine")));
     let revised =
         json!(Bundle::revise(&previous, &merged, &[pack()], Some(RULES), None, &[]).unwrap());
     assert_eq!(revised["config"], SHARED);
     assert_eq!(revised["rules"], RULES);
-    assert_eq!(revised["local_config"], format!("{LOCAL}  - /acme/mine\n"));
+    assert_eq!(
+        revised["local_config"],
+        format!(
+            "{}  - {}\n",
+            local_source(),
+            crate::test_support::absolute("/acme/mine")
+        )
+    );
     assert_eq!(layers::merged(&revised).unwrap(), merged);
 
     let mut merged = layers::merged(&previous).unwrap();
@@ -486,7 +510,7 @@ fn revising_a_bundle_edits_only_the_layer_that_changed() {
         revised["config"],
         SHARED.replace("profile: recommended", "profile: strict")
     );
-    assert_eq!(revised["local_config"], LOCAL);
+    assert_eq!(revised["local_config"], local_source());
     assert_ne!(revised["lock"], previous["lock"]);
 }
 
@@ -494,14 +518,20 @@ fn revising_a_bundle_edits_only_the_layer_that_changed() {
 fn revising_writes_new_layers_and_rules_as_yaml() {
     let previous = json!(Bundle::capture(SHARED, &[pack()], Some(RULES)).unwrap());
     let mut merged = layers::merged(&previous).unwrap();
-    merged["local_access_paths"] = json!({"read":["/acme/mine"]});
+    merged["local_access_paths"] = json!({"read":[crate::test_support::absolute("/acme/mine")]});
     let rules = json!({"schema_version":1,"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"],"rules":[{"id":"acme-read","decision":"allow","reason":"Acme read","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"exact","values":["read"]}}}]}).to_string();
     let revised =
         json!(Bundle::revise(&previous, &merged, &[pack()], Some(&rules), None, &[]).unwrap());
     assert_eq!(revised["config"], SHARED);
     let local = revised["local_config"].as_str().unwrap();
     assert!(local.starts_with("schema_version: 1\n"), "{local}");
-    assert!(local.contains("- /acme/mine\n"), "{local}");
+    assert!(
+        local.contains(&format!(
+            "- {}\n",
+            crate::test_support::absolute("/acme/mine")
+        )),
+        "{local}"
+    );
     let source = revised["rules"].as_str().unwrap();
     assert!(
         source.starts_with("schema_version: 1\nkind: custom\ncapabilities:\n- argument-rules-v1\n- structured-rules-v1\nrules:\n- id: acme-read\n"),

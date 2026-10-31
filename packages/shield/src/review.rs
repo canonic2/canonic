@@ -24,7 +24,7 @@ mod storage;
 mod tests;
 
 use crate::{configuration, policy};
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 pub(crate) use cli::context as cli_context;
 pub(crate) use model::{Context, EventInput};
 use serde_json::{Value, json};

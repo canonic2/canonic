@@ -83,6 +83,8 @@ impl Log {
             options.mode(0o600);
         }
         let file = options.open(&path)?;
+        #[cfg(windows)]
+        crate::windows_security::make_private(&path)?;
         Ok(Self {
             path: Some(path),
             started: Instant::now(),

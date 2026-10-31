@@ -12,7 +12,9 @@ mod suspend;
 
 fn open(height: u16) -> io::Result<InlineSession> {
     let term = std::env::var("TERM").unwrap_or_default();
-    if term.is_empty() || term == "dumb" {
+    // Windows consoles expose cursor operations through the native API and
+    // normally have no TERM. Lease acquisition verifies the actual console.
+    if (term.is_empty() && !cfg!(windows)) || term == "dumb" {
         return Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "interactive TUI requires a cursor-capable TERM",

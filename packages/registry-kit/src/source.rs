@@ -323,9 +323,14 @@ mod tests {
                 .unwrap()
                 .identity()
         );
-        let local = Source::local(Path::new("/srv/acme-registry")).unwrap();
+        let path = if cfg!(windows) {
+            "C:/srv/acme-registry"
+        } else {
+            "/srv/acme-registry"
+        };
+        let local = Source::local(Path::new(path)).unwrap();
         assert!(!local.is_signed());
-        assert_eq!(local.identity(), digest::sha256_hex(b"/srv/acme-registry"));
+        assert_eq!(local.identity(), digest::sha256_hex(path.as_bytes()));
         assert_eq!(
             Source::local(Path::new("relative")),
             Err(SourceError::LocalPath)

@@ -54,21 +54,39 @@ thiserror = "2.0"
 # Enforce the patched TLS provider floor for registry acquisition.
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 toml_edit = "0.25"
-miniz_oxide = { version = "0.9.1", default-features = false, features = ["with-alloc"] }
 
 [build-dependencies]
-miniz_oxide = { version = "0.9.1", default-features = false, features = ["with-alloc"] }
+canonic-mcp-kit = { version = "0.5.0", path = "../mcp-kit", features = ["docs-build"] }
 
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.3"
 rustix = { version = "1.1", features = ["process", "termios"] }
+
+[target.'cfg(windows)'.dependencies]
+atomicwrites = "0.4.4"
+ctrlc = "3.5.2"
+# UTF-16 encoded PowerShell launch commands keep project paths literal.
+base64 = "0.22.1"
+win32job = "2.0.3"
+# Suspend before assigning owned Jobs, then resume through a safe stable API.
+process-wrap = { version = "10.0.1", default-features = false, features = ["std", "job-object", "creation-flags"] }
+object = { version = "0.39.1", default-features = false, features = ["read_core", "pe", "std"] }
+# Safe handle-based file identity on stable Rust.
+winapi-util = "0.1.11"
+windows-permissions = "0.2.4"
+winsafe = { version = "0.0.29", features = ["advapi"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 nix = { version = "0.31", features = ["fs", "signal", "process"] }
 libproc = "0.14.11"
 
 [dev-dependencies]
+# Exercise the Windows PE contract on every development host.
+object = { version = "0.39.1", default-features = false, features = ["read_core", "pe", "std"] }
+base64 = "0.22.1"
 canonic-registry-kit = { version = "0.3.0", path = "../registry-kit", features = ["test-support"] }
+# Builds fixture documentation bundles for the bundled-docs integration tests.
+canonic-mcp-kit = { version = "0.5.0", path = "../mcp-kit", features = ["docs-build"] }
 assert_cmd = "2.2"
 assert_fs = "1.1"
 insta = { version = "1.49", features = ["filters"] }
@@ -76,6 +94,9 @@ predicates = "3.1"
 proptest = { version = "1.11", default-features = false, features = ["std"] }
 sha2 = "0.11"
 regex = "1.13.1"
+
+[target.'cfg(windows)'.dev-dependencies]
+portable-pty = "0.9.0"
 
 [lints.rust]
 unsafe_code = "forbid"

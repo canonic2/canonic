@@ -160,7 +160,12 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
         if name == "policy_propose" { let mut definitions = crate::policy::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
         let mutation=["policy_propose","policy_withdraw","policy_apply","review_defer"].contains(&name);
         json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply"].contains(&name)),"idempotentHint":true,"openWorldHint":(["pack_search","pack_info","policy_propose"].contains(&name))}})
-    }).collect::<Vec<_>>();
+    }).chain(super::documentation::tools().into_iter().map(|mut tool| {
+        // The shared definitions carry their own schemas and annotations;
+        // results arrive in Shield's envelope.
+        tool["outputSchema"] = output.clone();
+        tool
+    })).collect::<Vec<_>>();
     json!({"tools":tools})
 }
 /// One change, or 1–16 to approve together.
@@ -194,7 +199,7 @@ pub(super) fn proposal_examples() -> Value {
 }
 
 fn inventory() -> Vec<(&'static str, &'static str, Value)> {
-    let mut tools = vec![
+    vec![
         (
             "status",
             "Show policy status and protection coverage",
@@ -285,37 +290,6 @@ fn inventory() -> Vec<(&'static str, &'static str, Value)> {
             "policy_compare",
             "Compare two policy snapshots without authorizing execution",
             comparison(),
-        ),
-    ];
-    tools.extend(documentation());
-    tools
-}
-
-fn documentation() -> [(&'static str, &'static str, Value); 3] {
-    [
-        (
-            "shield_docs_list",
-            "List the documentation bundled with this Shield version",
-            object(
-                json!({"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}}),
-                &[],
-            ),
-        ),
-        (
-            "shield_docs_search",
-            "Search bundled documentation for literal text and return matching lines",
-            object(
-                json!({"query":string(),"path":string(),"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}}),
-                &["query"],
-            ),
-        ),
-        (
-            "shield_docs_read",
-            "Read a range of lines from a bundled documentation page",
-            object(
-                json!({"path":string(),"start_line":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":400}}),
-                &["path"],
-            ),
         ),
     ]
 }

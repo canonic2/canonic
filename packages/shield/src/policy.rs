@@ -223,6 +223,7 @@ fn mcp_defaults_message(integration: &str, variables: &[String], reason: &str) -
 }
 
 /// A validated permission pack. Loading it does not establish trust or activate it.
+#[derive(Clone)]
 pub struct Pack {
     document: PackDocument,
     digest: String,
@@ -233,6 +234,7 @@ pub struct Pack {
 }
 
 /// Validated custom rules for a local preview; declared ownership is not authenticated.
+#[derive(Clone)]
 pub struct CustomRules {
     document: CustomDocument,
     digest: String,

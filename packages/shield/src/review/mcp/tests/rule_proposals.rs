@@ -106,7 +106,7 @@ fn optional_script_flag_rule_covers_base_and_forwarded_flag_without_other_suffix
         );
         let child_query = json!({"input":{"kind":"argv","executable":"npm",
             "arguments":arguments,"original_input":{}},
-            "context":{"cwd":format!("{}/child", context.project_root),"environment":{}},
+            "context":{"cwd":Path::new(&context.project_root).join("child"),"environment":{}},
             "candidate_id":proposed["data"]["after_candidate_id"]});
         let child = invoke(&context, &connection, "policy_evaluate", child_query);
         assert_eq!(child["data"]["decision"], "ask", "{child}");

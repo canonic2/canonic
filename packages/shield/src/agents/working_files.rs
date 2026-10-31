@@ -7,15 +7,23 @@ pub(super) fn configuration(override_name: &str, default: &str) -> Option<PathBu
     std::env::var_os(override_name)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(default)))
+        .or_else(|| std::env::home_dir().map(|home| home.join(default)))
 }
 
 /// The native temporary folders, as the platform names them.
 fn temporary_candidates() -> Vec<PathBuf> {
-    let mut candidates = vec![std::env::temp_dir()];
     #[cfg(unix)]
-    candidates.extend([PathBuf::from("/tmp"), PathBuf::from("/var/tmp")]);
-    candidates
+    {
+        vec![
+            std::env::temp_dir(),
+            PathBuf::from("/tmp"),
+            PathBuf::from("/var/tmp"),
+        ]
+    }
+    #[cfg(not(unix))]
+    {
+        vec![std::env::temp_dir()]
+    }
 }
 
 /// The folders that differ between machines, from adapter scopes discovered
@@ -45,9 +53,7 @@ pub(super) fn machine_roots(scopes: &[WorkingFiles], project: &Path) -> Vec<Root
             temporary.push(candidate);
         }
     }
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .filter(|home| home.is_absolute());
+    let home = std::env::home_dir().filter(|home| home.is_absolute());
     let root = |kind, paths| Root {
         kind,
         paths: spellings(paths),
@@ -67,10 +73,7 @@ pub(super) fn machine_roots(scopes: &[WorkingFiles], project: &Path) -> Vec<Root
 }
 
 pub(super) fn temporary(config: Option<&Path>) -> WorkingFiles {
-    let mut scope = temporary_in(
-        temporary_candidates(),
-        std::env::var_os("HOME").as_deref().map(Path::new),
-    );
+    let mut scope = temporary_in(temporary_candidates(), std::env::home_dir().as_deref());
     scope.http_environment = std::env::vars_os().any(|(name, value)| {
         name.to_str().is_some_and(|name| {
             crate::http_client::environment_entry_changes_request(name, !value.is_empty())
@@ -96,8 +99,10 @@ fn temporary_in(candidates: Vec<PathBuf>, home: Option<&Path>) -> WorkingFiles {
         .filter_map(|path| path.canonicalize().ok())
         .filter(|path| path.parent().is_some() && path.is_dir())
         .filter(|path| {
-            home.as_ref()
-                .is_some_and(|home| !home.starts_with(path) && !path.starts_with(home))
+            home.as_ref().is_some_and(|home| {
+                !home.starts_with(path)
+                    && (!path.starts_with(home) || profile_temporary(path, home))
+            })
         })
         .collect();
     write.sort();
@@ -112,9 +117,42 @@ fn temporary_in(candidates: Vec<PathBuf>, home: Option<&Path>) -> WorkingFiles {
     }
 }
 
+fn profile_temporary(path: &Path, home: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        let native = home.join("AppData/Local/Temp");
+        path == native
+            && native
+                .canonicalize()
+                .is_ok_and(|resolved| resolved == native)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (path, home);
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn native_profile_temporary_is_narrow_and_excludes_other_home_folders() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let home = root.path().canonicalize().unwrap().join("home");
+        let temporary = home.join("AppData/Local/Temp");
+        let credentials = home.join(".ssh");
+        for directory in [&temporary, &credentials] {
+            std::fs::create_dir_all(directory).unwrap();
+        }
+        let scope = temporary_in(
+            vec![home.clone(), temporary.clone(), credentials],
+            Some(&home),
+        );
+        assert_eq!(scope.write, vec![temporary.canonicalize().unwrap()]);
+    }
 
     #[test]
     fn native_temporary_discovery_deduplicates_aliases_and_rejects_broad_overrides() {

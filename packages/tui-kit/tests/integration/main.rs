@@ -64,3 +64,5 @@ mod tree_browser;
 mod tree_gallery;
 #[cfg(feature = "gallery")]
 mod tree_terminal;
+#[cfg(windows)]
+mod windows_terminal;

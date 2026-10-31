@@ -100,8 +100,8 @@ fn request(args: &[&str]) -> Request {
     Request {
         executable: "acme".into(),
         arguments: args.iter().map(|s| (*s).into()).collect(),
-        cwd: "/acme".into(),
-        project: "/acme".into(),
+        cwd: crate::test_support::absolute("/acme").into_owned(),
+        project: crate::test_support::absolute("/acme").into_owned(),
     }
 }
 

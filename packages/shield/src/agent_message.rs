@@ -7,7 +7,11 @@ pub(crate) fn cache_repair(project: &str) -> Option<String> {
     }
     Some(format!(
         "shield cache prepare --project '{}'",
-        project.replace('\'', "'\\''")
+        if cfg!(windows) {
+            project.replace('\'', "''")
+        } else {
+            project.replace('\'', "'\\''")
+        }
     ))
 }
 

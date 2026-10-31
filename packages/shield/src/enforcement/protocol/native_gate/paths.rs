@@ -1,5 +1,6 @@
 //! Submitted path protection, with cwd evidence and explicit destructive operand roles.
 use super::{Path, Value};
+use crate::location::native_name;
 use std::path::{Component, PathBuf};
 
 use crate::review::{
@@ -74,13 +75,22 @@ pub(super) fn group(submitted: &str, cwd: &Path, guard: Guard<'_>) -> &'static s
         return "state";
     }
     let parts: Vec<_> = path.components().map(Component::as_os_str).collect();
-    let Some(index) = parts.iter().position(|part| *part == ".shield") else {
+    let Some(index) = parts
+        .iter()
+        .position(|part| native_name(part, std::ffi::OsStr::new(".shield")))
+    else {
         return "settings";
     };
     match parts.get(index + 1) {
-        Some(part) if *part == "review" || *part == "cache" => "state",
+        Some(part)
+            if ["review", "cache"]
+                .iter()
+                .any(|name| native_name(part, std::ffi::OsStr::new(name))) =>
+        {
+            "state"
+        }
         None => "folder",
-        Some(part) if *part == ".gitignore" => "ignore",
+        Some(part) if native_name(part, std::ffi::OsStr::new(".gitignore")) => "ignore",
         Some(_) => "policy",
     }
 }
@@ -183,7 +193,7 @@ pub(super) fn outside(operation: &Value, root: &Path, cwd: &Path) -> Option<Outs
             } else {
                 path.parent().map_or(path.clone(), Path::to_path_buf)
             };
-            let home = std::env::var_os("HOME").map(|home| resolve_existing(Path::new(&home)));
+            let home = std::env::home_dir().map(|home| resolve_existing(&home));
             let broad = folder.parent().is_none()
                 || root.starts_with(&folder)
                 || home.is_some_and(|home| home == folder);
@@ -210,12 +220,10 @@ pub(super) fn operator_cli(value: &Value, cwd: &Path) -> bool {
                     arguments
                         .windows(2)
                         .any(|pair| pair[0] == "mcp" && pair[1] == "serve")
-                }) || Path::new(executable)
-                    .file_name()
-                    .is_some_and(|n| n == "shield")
+                }) || Path::new(executable).file_name().is_some_and(operator_name)
                     || submitted_path(executable, cwd)
                         .canonicalize()
-                        .is_ok_and(|p| p.file_name().is_some_and(|n| n == "shield"))
+                        .is_ok_and(|p| p.file_name().is_some_and(operator_name))
             }) || fields
                 .iter()
                 .filter(|(key, _)| !["evaluation", "source_units"].contains(&key.as_str()))
@@ -223,6 +231,25 @@ pub(super) fn operator_cli(value: &Value, cwd: &Path) -> bool {
         }
         Value::Array(values) => values.iter().any(|v| operator_cli(v, cwd)),
         _ => false,
+    }
+}
+
+fn operator_name(name: &std::ffi::OsStr) -> bool {
+    #[cfg(windows)]
+    {
+        [
+            "shield",
+            "shield.exe",
+            "shield.com",
+            "shield.cmd",
+            "shield.bat",
+        ]
+        .iter()
+        .any(|expected| native_name(name, std::ffi::OsStr::new(expected)))
+    }
+    #[cfg(not(windows))]
+    {
+        name == "shield"
     }
 }
 
@@ -540,7 +567,10 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
     }
     let allowed = |change: Change| change == Change::Allow;
     let parts: Vec<_> = path.components().map(Component::as_os_str).collect();
-    let Some(index) = parts.iter().position(|p| *p == ".shield") else {
+    let Some(index) = parts
+        .iter()
+        .position(|p| native_name(p, std::ffi::OsStr::new(".shield")))
+    else {
         if configuration
             && access != Access::Write
             && guard.working_files.is_some_and(|scope| {
@@ -560,12 +590,22 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
         };
     };
     match parts.get(index + 1) {
-        Some(part) if *part == "review" || *part == "cache" => Protection::Blocked,
+        Some(part)
+            if ["review", "cache"]
+                .iter()
+                .any(|name| native_name(part, std::ffi::OsStr::new(name))) =>
+        {
+            Protection::Blocked
+        }
         // Naming the folder reaches its state unless Git and listings skip it.
         None if access == Access::Index && path.join(".gitignore").is_file() => Protection::None,
         None => Protection::Blocked,
         // The ignore file keeps review state and the cache out of Git.
-        Some(part) if access == Access::Write && *part == ".gitignore" => Protection::Blocked,
+        Some(part)
+            if access == Access::Write && native_name(part, std::ffi::OsStr::new(".gitignore")) =>
+        {
+            Protection::Blocked
+        }
         Some(_) if access == Access::Write && !allowed(guard.allow.shield_config_change) => {
             Protection::Blocked
         }
@@ -649,7 +689,12 @@ fn protected_path(path: &Path, cache: Option<&Path>) -> bool {
                 .components()
                 .map(Component::as_os_str)
                 .collect();
-            parts.windows(owned.len()).any(|window| window == owned)
+            parts.windows(owned.len()).any(|window| {
+                window
+                    .iter()
+                    .zip(&owned)
+                    .all(|(left, right)| native_name(left, right))
+            })
         })
 }
 
@@ -740,4 +785,67 @@ fn destructive(value: &Value, root: &Path, cwd: &Path, cwd_known: bool, guard: G
         };
         removal(&source, root, guard) || removal(&destination, root, guard)
     })
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn protected_state_and_settings_include_native_case_and_stream_aliases() {
+        let guard = Guard {
+            cache: None,
+            allow: PathAccess::default(),
+            working_files: None,
+        };
+        for path in [
+            r"C:\Acme\.SHIELD\ReVieW\state.json",
+            r"C:\Acme\.shield.\review\state.json:stream",
+            r"C:\Acme\.shield\CACHE\plan.bin",
+            r"C:\Acme\.CoDeX\CONFIG.TOML:stream",
+            r"C:\Acme\.CLAUDE\settings.json::$DATA",
+        ] {
+            assert!(
+                matches!(
+                    classify(Path::new(path), guard, Access::Write),
+                    Protection::Blocked
+                ),
+                "{path}"
+            );
+        }
+        assert!(matches!(
+            classify(Path::new(r"C:\Acme\notes.txt"), guard, Access::Write),
+            Protection::None
+        ));
+        assert_eq!(
+            group(
+                r"C:\Acme\.SHIELD\ReVieW\state.json",
+                Path::new(r"C:\Acme"),
+                guard
+            ),
+            "state"
+        );
+    }
+
+    #[test]
+    fn windows_operator_cli_includes_native_executables_and_shims() {
+        for executable in [
+            "shield",
+            "shield.exe",
+            r"C:\Tools\SHIELD.EXE",
+            r"C:\Tools\shield.cmd",
+        ] {
+            assert!(
+                operator_cli(
+                    &serde_json::json!({"request":{"executable":executable,"arguments":["policy","review"]}}),
+                    Path::new(r"C:\Acme")
+                ),
+                "{executable}"
+            );
+        }
+        assert!(!operator_cli(
+            &serde_json::json!({"request":{"executable":"shield-notes.exe","arguments":[]}}),
+            Path::new(r"C:\Acme")
+        ));
+    }
 }

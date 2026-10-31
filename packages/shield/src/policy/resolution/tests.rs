@@ -42,8 +42,8 @@ fn request(command: &[&str]) -> Request {
     Request {
         executable: command[0].into(),
         arguments: command[1..].iter().map(|a| (*a).into()).collect(),
-        cwd: "/acme/project".into(),
-        project: "/acme/project".into(),
+        cwd: crate::test_support::absolute("/acme/project").into_owned(),
+        project: crate::test_support::absolute("/acme/project").into_owned(),
     }
 }
 

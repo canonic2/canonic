@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::Path;
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(all(test, any(target_os = "macos", windows)))]
 mod tests;
 
 /// Native-run requests a project retains in every status.
@@ -213,7 +213,7 @@ pub(crate) fn inspect(context: &Context, id: Option<&str>) -> Result<Value, Erro
 
 /// Private native consumer only. Verification occurs before consumption; the
 /// store publishes consumption before invoking handoff, all under one writer lock.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 pub(crate) fn gate<T>(
     context: &Context,
     evidence: &EvaluatedRequest,
@@ -282,7 +282,7 @@ pub(crate) fn gate<T>(
     )
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn result(
     code: &str,
     allowed: bool,
@@ -293,7 +293,7 @@ fn result(
     json!({"code":code,"allowed":allowed,"approval":{"request_id":request,"status":status,"approval_id":approval}})
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn ask(
     state: &mut State,
     context: &Context,
@@ -309,7 +309,7 @@ fn ask(
     capture(state, context, origin, evidence, resource, time)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn consume(
     state: &mut State,
     context: &Context,
@@ -406,7 +406,7 @@ fn consume(
     ))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn capture(
     state: &mut State,
     context: &Context,

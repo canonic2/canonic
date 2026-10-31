@@ -13,8 +13,10 @@ make -C packages/shield install-local
 ```
 
 The installer puts `shield` in `~/.local/bin`; add that directory to your `PATH`.
-See [development](development.md) for build details. Native setup uses Unix
-command hooks and refuses Windows setup. macOS is the verified native platform.
+See [development](development.md) for build details. macOS and AMD64 Windows have
+native verification; ARM64 Windows is implemented but unverified. On Windows,
+follow the [portable installation instructions](development.md#portable-windows-packages)
+and read the [command coverage](development.md#supported-windows-commands-and-acceptance).
 
 Open a terminal in your project. Default setup downloads a signed baseline
 pack from Shield's main registry, so you need network access.

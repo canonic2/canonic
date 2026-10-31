@@ -272,15 +272,16 @@ fn failed_projection_writes_remove_their_temporary() {
     assert!(!temporary.exists());
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn projection_writes_remove_only_exited_writers_temporaries() {
     let (root, context) = fixture();
     let shield = root.path().join(".shield");
     let dead = review::storage::exited_pid();
+    let unverified = i32::from(!cfg!(windows));
     let exited = shield.join(format!("rules.shield-{dead}.tmp"));
     let kept = [
-        shield.join("rules.shield-1.tmp"),
+        shield.join(format!("rules.shield-{unverified}.tmp")),
         shield.join(format!("rules.{dead}.tmp")),
         shield.join(format!("rules.acme-{dead}.tmp")),
     ];
