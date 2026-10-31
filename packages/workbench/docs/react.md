@@ -233,6 +233,7 @@ it.
 | `styles: ['../styles/global.css']` in the definition | Loads global CSS, such as resets, tokens, and `@font-face` rules, that no component imports |
 | `url(...)` in CSS | Copies the file and rewrites the URL |
 | `import logo from './logo.svg'` | Copies the file; `logo` is its URL, for an `img` `src` |
+| `import sprite from './icons.svg?raw'` | Imports the file's text as a string, as Vite does, for example an SVG sprite to insert into the page |
 | `import copy from './copy.json'` | Imports the parsed JSON |
 
 A script can import images (`.svg`, `.png`, `.jpg`, `.jpeg`, `.gif`,
@@ -273,9 +274,12 @@ in `workbench.config.ts`.
   for `@acme/analytics` doesn't apply to `@acme/analytics/track`; add that
   specifier as well, or use `tsconfig.json` `paths` for a prefix.
 - **`process.env.NODE_ENV`** is `development` on the canvas and `production`
-  in exports. Any other `process.env` or `import.meta.env` value is undefined
-  in the browser and fails with `process is not defined` or
-  `Cannot read properties of undefined`. Set it with `define`.
+  in exports. Any other `process.env` value is undefined in the browser and
+  fails with `process is not defined`. Set it with `define`.
+- **`import.meta.env`** has Vite's built-in values: `MODE` (`development` or
+  `production`), `DEV`, `PROD`, `SSR` (`false`) and `BASE_URL` (`/`). Keys
+  from your `.env` files, such as `VITE_API_URL`, are `undefined` until you
+  set them with `define`.
 
 `workbench.config.ts` at the project root:
 
@@ -286,7 +290,7 @@ export default defineConfig({
   aliases: { '@acme/analytics': './src/preview/analytics-mock.ts' },
   define: {
     'process.env.API_URL': JSON.stringify('https://api.example.com'),
-    'import.meta.env': JSON.stringify({ VITE_API_URL: 'https://api.example.com' }),
+    'import.meta.env.VITE_API_URL': JSON.stringify('https://api.example.com'),
   },
 });
 ```
@@ -295,24 +299,39 @@ Each `define` value is code, so wrap strings in `JSON.stringify`. Relative
 alias paths start from the project root. Workbench doesn't read Vite, webpack,
 or Next.js configuration; repeat what your previews need here.
 
-## Use one copy of React in a monorepo
+## Use one copy of each package in a monorepo
 
-The adapter loads React from the definition's folder, and each component
-loads React from its own folder. When those resolve to two installations,
-hooks fail with an error such as
-`Cannot read properties of null (reading 'useState')`. List the packages in
-`dedupe` so every import of them resolves from the definition's folder:
+Workbench loads one copy of each package for all your previews, even when your
+apps and shared packages each install their own and nothing is installed at
+the project root. Two copies of a package with shared state break previews: a
+provider from one copy doesn't reach components that use the other, and hooks
+fail with errors such as `Cannot read properties of null (reading 'useState')`.
+
+Workbench picks the `node_modules` folder holding React that most of your
+preview definitions reach when looking upwards from their own folder, as Node
+does. For [React Native Web](react-native-web.md) previews, it's the folder
+holding `react-native-web`. Every import of React, including the adapter's
+own, resolves there. So does an import of any other package from code outside
+that folder, such as a shared library or a preview environment in a tooling
+folder, when the folder has the package. The package's `exports` still apply.
+
+- Packages inside that folder keep their own dependencies, including a
+  different version a package installs for itself.
+- A package the folder doesn't have loads from the importer's own
+  installation.
+- A library built for another version of a package than the folder's gets the
+  folder's version.
+
+To take a package from the installation at or above the project root instead,
+list it in `dedupe`:
 
 ```ts
 import { defineConfig } from '@canonic2/workbench';
 
 export default defineConfig({
-  dedupe: ['react', 'react-dom'],
+  dedupe: ['@acme/design-system'],
 });
 ```
-
-Add any other package that must have a single copy, such as a context-based
-design system.
 
 ## Document components with a docs page
 
@@ -387,7 +406,7 @@ A `*.workbench.ts` file can declare a Markdown page and its lenses with
 | Error | Cause and fix |
 | --- | --- |
 | `Module not found: Can't resolve 'react/jsx-runtime'`, or another `react` or `react-dom` import | React isn't installed where the definition and component can find it. Install `react` and `react-dom` in the project. |
-| `Cannot read properties of null (reading 'useState')`, or React's invalid hook call error | Two copies of React. Add them to [`dedupe`](#use-one-copy-of-react-in-a-monorepo). |
+| `Cannot read properties of null (reading 'useState')`, or React's invalid hook call error | Two copies of a package that holds React state, such as a design system, when the shared folder doesn't have it. Add it to [`dedupe`](#use-one-copy-of-each-package-in-a-monorepo). |
 | `The selected source export does not exist for <id> — <scenario>` | `source.export` doesn't match an export of the entry. A named export needs `export: 'Button'`. |
 | `DataCloneError: … could not be cloned` | An input holds a function or another value that can't be copied. See [Props, children, and callbacks](#props-children-and-callbacks). |
 | `process is not defined`, or `Cannot read properties of undefined (reading 'VITE_…')` | An environment variable isn't defined. Add it to [`define`](#imports-jsx-and-environment-variables). |

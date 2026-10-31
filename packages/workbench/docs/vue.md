@@ -396,10 +396,9 @@ your project.
   `workbench.config.ts` at the project root instead. Each entry matches one
   exact specifier and maps it to a package name or a project path, which is
   how you replace a module the preview can't run with a mock.
-- **`import.meta.env`.** It isn't defined, so `import.meta.env.VITE_API_URL`
-  fails the render with
-  `Cannot read properties of undefined (reading 'VITE_API_URL')`. Define each
-  value you use.
+- **`import.meta.env`.** It has Vite's built-in values: `MODE`, `DEV`,
+  `PROD`, `SSR` and `BASE_URL`. Your `.env` files aren't read, so a key such
+  as `import.meta.env.VITE_API_URL` is `undefined`. Define each one you use.
 - **`process.env.NODE_ENV`** is `development` on the canvas and `production` in
   exports.
 
@@ -495,7 +494,8 @@ can declare a Markdown page and its lenses with `defineDocs` instead; see
 
 The [command-line checker](workbench-previews.md#command-line-tools) compiles
 every preview, so it reports build errors. Errors that happen while rendering,
-such as an undefined `import.meta.env`, appear only in the preview's frame.
+such as a component that needs an `import.meta.env` key you haven't defined,
+appear only in the preview's frame.
 
 | Error | Cause and fix |
 | --- | --- |
@@ -505,7 +505,6 @@ such as an undefined `import.meta.env`, appear only in the preview's frame.
 | `Module parse failed` | A `<style>` block has a `lang` attribute, or a script imports a file type Workbench doesn't compile. See [Styles, fonts, and images](#styles-fonts-and-images). |
 | `Element is missing end tag.` and other template errors | The Vue compiler's message for invalid template syntax in the file. |
 | `DataCloneError: … could not be cloned` | `inputs`, `fixtures`, or `globals` hold a function or another value that can't be copied. Keep them to plain data. |
-| `Cannot read properties of undefined (reading 'VITE_…')` | The code reads `import.meta.env`. Add the value to `define`. |
 | Clicks don't appear under **Actions** | Add an environment with a `wrap` export, and declare the events with `defineEmits` or `emits`. See [Events and actions](#events-and-actions). |
 
 For problems that apply to every preview, such as a preview missing from the

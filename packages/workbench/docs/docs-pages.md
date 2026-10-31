@@ -143,7 +143,7 @@ component for `react` and `react-native-web`, a component for `vue`, and a
 function `(canvas, context)` that draws into `canvas` for `html`. With
 `astro`, each `.astro` file in a folder is an example: Workbench renders it
 in Node, as it renders [Astro previews](astro.md), and the docs load its
-client scripts and assets. An Astro lens takes a folder, since an `.astro`
+client scripts and assets. Astro examples take a folder, since an `.astro`
 file holds one component. Examples get
 the preview context: `context.scenario`, `context.signal`, `context.action(name,
 ...values)`, and `context.navigate(to)`. They have no inputs or controls.

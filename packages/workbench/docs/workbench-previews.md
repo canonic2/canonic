@@ -150,6 +150,7 @@ See [Customize lens labels](lenses.md#customize-lens-labels).
 | `artboards` | An explicit map of artboards shown together within this page. Each has an optional `label`, integer `width` and `height` from 1 to 8192, and optional `inputs`. See [Multiple artboards](#multiple-artboards). |
 | `links` | The addresses the source links or submits to, each mapped to the preview it opens. See [Links and navigation](preview-data.md#links-and-navigation). |
 | `requests` | Answers to the page's `fetch` and `XMLHttpRequest` calls. See [Request mocks](preview-data.md#request-mocks). |
+| `mocks` | Modules replaced in this preview only: a package name, or a path relative to the definition, mapped to the replacing file. See [Mock a module in one preview](react-native-web.md#mock-a-module-in-one-preview). |
 | `sizes` | The artboard sizes the preview supports: any of `fit`, `laptop`, `mobile`, and `resizable`. See [Sizes](pages-and-scenarios.md#sizes). |
 | `docs` | Text shown under **Documentation** in **Preview controls**. |
 | `fixtures`, `globals` | Data and settings that environments, hooks, and request handlers read from the context. See [Fixtures and globals](preview-data.md#fixtures-and-globals). |

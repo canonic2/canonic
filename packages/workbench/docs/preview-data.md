@@ -30,7 +30,7 @@ unchanged. The options combine freely, and each can change per scenario.
 | A context, store, or provider | A provider holding fixture data, or a seeded store | An [environment](#environments), reading [`fixtures`](#fixtures-and-globals) |
 | Its own `fetch` or XMLHttpRequest, or a client built on them, such as Apollo Client, axios, React Query, or SWR | Answers to those requests | [`requests`](#request-mocks) |
 | Browser storage, such as a saved session | Values written before it mounts | A [`setup` hook](#seed-storage-and-stores) |
-| A module that can't run in a preview, such as analytics or a native API | A stand-in module | [`aliases`](custom-adapters.md#aliases) in `workbench.config.ts` |
+| A module that can't run in a preview, such as analytics or a native API | A stand-in module | [`mocks`](custom-adapters.md#mocks) in `workbench.config.ts`, or a preview's own [`mocks`](react-native-web.md#mock-a-module-in-one-preview) |
 
 ## What you can set, and where
 
@@ -43,6 +43,7 @@ unchanged. The options combine freely, and each can change per scenario.
 | `environment` | Yes, and once for the project | No; read `context.scenario` | No | Providers, plugins, and setup around the component |
 | `setup`, `play`, `ready` | Yes | Yes, both run | No | Code before and after the component mounts |
 | `links` | Yes | No | No | Where the page's links and forms go |
+| `mocks` | Yes, and once for the project | No | No | Which file loads for a module the page imports |
 
 A scenario overrides a preview **key by key, one level deep**. If the preview has
 `inputs: { user: { name: 'Ada', role: 'admin' }, compact: false }` and a scenario

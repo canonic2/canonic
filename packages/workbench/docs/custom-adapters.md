@@ -287,6 +287,7 @@ export default defineConfig({
   rules: [],
   plugins: [],
   aliases: {},
+  mocks: {},
   dedupe: [],
   resolveExtensions: [],
   define: {},
@@ -300,6 +301,7 @@ export default defineConfig({
 | `rules` | list of Rspack module rules | Loader rules for every preview. |
 | `plugins` | list of compiler plugins | [Plugins](#rules-and-plugins) for every preview. |
 | `aliases` | map of import specifier to path or package | Redirects exact imports. |
+| `mocks` | map of module to path, or map of adapter name to such a map | Replaces a package or a project module for every importer, in every preview or in one adapter's previews. |
 | `dedupe` | list of package names | Packages resolved from the definition's folder. |
 | `resolveExtensions` | list of extensions | The extensions tried for imports without one. Replaces the default list. |
 | `define` | map of expression to code string | Constants replaced at build time. |
@@ -415,6 +417,30 @@ aliases: {
 - `tsconfig.json` `paths` also apply, without an alias.
 - Aliases also apply to [Astro frontmatter](astro.md).
 
+### mocks
+
+```ts
+mocks: {
+  'acme-analytics': './preview/analytics-mock.ts',
+  'react-native-web': {
+    './src/native/NativeAudio': './preview/native-audio-mock.ts',
+  },
+},
+```
+
+- A key that starts with `.` or `/` is a project module, relative to the
+  project root. It matches every relative or absolute import that points at
+  that file, from any folder, with or without its extension, and the file
+  doesn't need to exist. Any other key matches one exact package import.
+- A key whose value is a map is an adapter name: its mocks apply when that
+  adapter's previews build. React Native Web previews build on their own;
+  every other adapter shares one build, so a mock under one of them reaches
+  the others too.
+- The value is the replacing file, relative to the project root. Its own
+  imports of the module it replaces load the real module.
+- A preview can declare its own `mocks` too; see
+  [Mock a module in one preview](react-native-web.md#mock-a-module-in-one-preview).
+
 ### dedupe
 
 ```ts
@@ -450,7 +476,11 @@ define: {
 Each key is an identifier or property chain, and each value is the code that
 replaces it, so wrap strings in `JSON.stringify`. Workbench sets
 `process.env.NODE_ENV` to `"development"` on the canvas and `"production"` in
-`check`, `build`, and exports; your `define` can override it. Defines also
+`check`, `build`, and exports, and `import.meta.env` to Vite's built-in values
+(`MODE`, `DEV`, `PROD`, `SSR`, `BASE_URL`). The `react-native-web` adapter
+also sets `__DEV__`, `process.env.EXPO_OS` and an empty `process.env`
+([React Native Web](react-native-web.md#packages-that-need-extra-settings)).
+Your `define` overrides any of them. Defines also
 apply to Astro frontmatter, where they set
 [`import.meta.env` values](astro.md#environment-values).
 

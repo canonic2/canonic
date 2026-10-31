@@ -9,9 +9,9 @@ It shows the web rendering, which can differ from iOS and Android. To review
 the native app itself, stream it from the [iOS Simulator](ios-simulator.md) or
 an [app window](windows.md), such as an Android emulator.
 
-The adapter works like the [React adapter](react.md), with two differences:
-imports of `react-native` load `react-native-web`, and `.web.*` files are
-preferred. Inputs, callbacks, providers, styles, aliases, and `dedupe` work as
+The adapter works like the [React adapter](react.md), with three differences:
+imports of `react-native` load `react-native-web`, `.web.*` files are
+preferred, and packages load their `react-native` export. Inputs, callbacks, providers, styles, aliases, and `dedupe` work as
 described in that guide. The definition keys, scenarios, controls, and hooks are
 described in [TypeScript Workbench previews](workbench-previews.md).
 
@@ -166,14 +166,34 @@ list previews. Import only types from component files.
 
 ## How imports resolve
 
-- An import of exactly `react-native` loads `react-native-web`. Deep imports
-  such as `react-native/Libraries/...` aren't rewritten and fail with
-  `Module not found: Can't resolve`. Give each one an alias, or move the code into a
-  `.web.*` file.
+- An import of exactly `react-native` loads `react-native-web`, with inert
+  stand-ins for the native-only exports libraries import beside their web
+  code, so that code builds:
+
+  | Export | In a preview |
+  | --- | --- |
+  | `TurboModuleRegistry` | `get` returns `null`; `getEnforcing` returns an object whose methods do nothing |
+  | `codegenNativeComponent`, `requireNativeComponent` | Return `View` |
+  | `codegenNativeCommands` | Returns an object whose methods do nothing |
+  | `ActionSheetIOS` | Calls back with the cancel button's index |
+  | `ToastAndroid` | Shows nothing |
+  | `DrawerLayoutAndroid` | `View` |
+
+  To give a native module real behavior in previews,
+  [mock it](#replace-native-only-modules).
+- Deep imports such as `react-native/Libraries/...` aren't rewritten and fail
+  with `Module not found: Can't resolve`. Give each one an alias, or move the
+  code into a `.web.*` file.
 - For an import without an extension, Workbench tries `.web.tsx`, `.web.ts`,
   `.web.jsx`, and `.web.js` first, then `.tsx`, `.ts`, `.jsx`, `.js`, `.mjs`,
   `.cjs`, `.json`, `.vue`, and `.html`. Files ending in `.ios.*`,
-  `.android.*`, or `.native.*` are never chosen.
+  `.android.*`, or `.native.*` are never chosen. Packages' ES module builds
+  may leave out extensions too, as Metro allows.
+- A package whose `package.json` `exports` has a `react-native` condition
+  loads that entry, as it does in your app, instead of its browser or
+  `default` one. A package with separate React Native and web entries
+  therefore gives previews the same components as your app. If that entry
+  imports a native-only module, [replace it](#replace-native-only-modules).
 - Setting `resolveExtensions` in `workbench.config.ts` replaces the whole list,
   including the `.web.*` entries. Include them if you set it.
 - An alias for `react-native` in `workbench.config.ts` replaces the built-in
@@ -342,30 +362,82 @@ handling before adding preview-only padding to make it look correct.
 
 ## Replace native-only modules
 
-A module that needs native code can't run in the browser. Replace it in one of
-two ways:
+A module that needs native code can't run in the browser: a TurboModule, a
+native view, a package without web support, or a file that only exists as
+`.ios.ts` and `.android.ts`. Replace it in one of two ways:
 
 - **A `.web.*` file** next to your own module, as `haptics.web.ts` above. This
   also serves a web build of the app, if you have one.
-- **An alias** in `workbench.config.ts` that points the package at a mock. The
-  mock affects previews only:
+- **A mock**, which affects previews only. Declare it once for every preview in
+  `workbench.config.ts`, or for one preview in its definition.
 
-  ```ts
-  import { defineConfig } from '@canonic2/workbench';
+### Mock a module for every preview
 
-  export default defineConfig({
-    aliases: { 'react-native-haptic-feedback': './src/preview/haptics-mock.ts' },
-  });
-  ```
+`mocks` in `workbench.config.ts` maps a module to the file that replaces it.
+Nest the map under an adapter name so it applies only to that adapter's
+previews:
 
-  ```ts
-  // src/preview/haptics-mock.ts
-  export default { trigger(_type: string) {} };
-  ```
+```ts
+import { defineConfig } from '@canonic2/workbench';
 
-Aliases match whole import specifiers, and relative alias paths start from the
-project root. See
-[Imports, JSX, and environment variables](react.md#imports-jsx-and-environment-variables).
+export default defineConfig({
+  mocks: {
+    'react-native-web': {
+      // A package, by its exact import name.
+      '@shopify/react-native-skia': './src/preview/mocks/skia.tsx',
+      // A project module, by its path from the project root.
+      './libs/audio-player/src/NativeAudioPlayer': './src/preview/mocks/native-audio-player.ts',
+      // A module with only .ios.ts and .android.ts files: use the iOS one.
+      './src/settings/menu-items': './src/settings/menu-items.ios.ts',
+    },
+  },
+});
+```
+
+```ts
+// src/preview/mocks/native-audio-player.ts
+export default {
+  play() {},
+  pause() {},
+  addListener() { return { remove() {} }; },
+};
+```
+
+- **A package** matches its exact import name. `@shopify/react-native-skia/web`
+  is a different import and isn't replaced.
+- **A project module** starts with `./` and matches every import that points at
+  that file, from any folder and with or without its extension. The module
+  doesn't need to exist, so a module with only platform files can be mocked.
+- **The mock** exports the same names as the module it replaces. Its own
+  imports of that module still load the real one, so it can wrap it.
+- A mock at the top level of `mocks`, outside an adapter name, applies to every
+  adapter. Relative paths start from the project root.
+
+### Mock a module in one preview
+
+A preview's own `mocks` replace modules for that preview only, such as an audio
+player that reports it's paused. Paths are relative to the definition file:
+
+```ts
+// src/player/workbench/player.workbench.ts
+import { definePreview } from '@canonic2/workbench';
+
+export default definePreview({
+  id: 'player/paused',
+  title: 'Player/Paused',
+  adapter: 'react-native-web',
+  source: { entry: './player.preview.tsx' },
+  mocks: {
+    '@acme/audio-player': './audio-player.paused.ts',
+  },
+});
+```
+
+Other previews keep the real module, even when they open in the same frame
+afterwards. The real module still has to build, so a module that can't build in
+a browser needs a mock in `workbench.config.ts`, and a preview's mock then
+replaces that one. A preview's mocks don't apply to
+[exported previews](design-system-export.md), which show the real module.
 
 ## Layout and full-height screens
 
@@ -394,9 +466,22 @@ The other file types, and what needs a rule, are listed in
 Some React Native packages assume Metro, React Native's bundler. Settings in
 `workbench.config.ts` cover the common cases:
 
-- **`__DEV__`** fails with `__DEV__ is not defined`. Define it.
+- **`__DEV__` and `process.env`** need no setting. As Metro and Expo do,
+  `__DEV__` is `true` in previews and `false` in exported pages,
+  `process.env.EXPO_OS` is `'web'`, and other `process.env` keys, such as
+  `process.env.JEST_WORKER_ID`, are `undefined`. A `define` entry in
+  `workbench.config.ts` replaces any of them, or gives a key its value.
+- **Reanimated** needs no Babel plugin. Workbench gives your worklets what
+  Reanimated reads on the web: functions marked `'worklet'`, and the functions
+  you pass to `useAnimatedStyle`, `useAnimatedProps`, `useDerivedValue`,
+  `useAnimatedReaction`, animation callbacks, `runOnUI` and gesture
+  callbacks. Animated styles then update when the values they use change.
+- **TypeScript and JSX source** in a package, as Expo's packages publish,
+  needs no setting: Workbench compiles `.ts`, `.tsx`, `.mts`, `.cts` and
+  `.jsx` files in `node_modules` like your own, without
+  [hot updates](react.md) for their components.
 - **JSX in `.js` files** fails with `Module parse failed`. Workbench compiles
-  your own files but not the packages in `node_modules`, so add a rule that
+  `.js` files in `node_modules` as plain JavaScript, so add a rule that
   compiles that package's `.js` files as JSX.
 - **Flow type annotations** also fail with `Module parse failed`. They need a
   rule with a loader that strips Flow types, or an alias to a compiled build of
@@ -406,7 +491,6 @@ Some React Native packages assume Metro, React Native's bundler. Settings in
 import { defineConfig } from '@canonic2/workbench';
 
 export default defineConfig({
-  define: { __DEV__: 'true' },
   rules: [
     {
       // acme-native-lib publishes JSX in .js files.
@@ -491,11 +575,10 @@ padding and content-based height; they don't become full-screen frames.
 
 | Error | Cause and fix |
 | --- | --- |
-| `Cannot find module 'react-native' for matched aliased key 'react-native'` | `react-native-web` isn't installed where the definition can find it. Install it in the project. |
+| `Module not found: Can't resolve 'react-native-web'` | `react-native-web` isn't installed where the definition can find it. Install it in the project. |
 | `Module not found: Can't resolve 'react/jsx-runtime'`, or another `react` or `react-dom` import | React isn't installed where the definition can find it. Install `react` and `react-dom` in the project. |
 | `Module not found: Can't resolve '<native package>'` | A native-only module. [Replace it](#replace-native-only-modules) with a `.web.*` file or an alias. |
 | `Module not found: Can't resolve 'react-native/…'` | A deep import into `react-native`. [Alias it or move it into a `.web.*` file](#how-imports-resolve). |
-| `__DEV__ is not defined` | Add it to `define`. See [Packages that need extra settings](#packages-that-need-extra-settings). |
 | `Module parse failed` | A package publishes JSX or Flow types in `.js` files. Add a [rule](#packages-that-need-extra-settings). |
 | A full-screen view is only as tall as its content | Check that the root view and any environment wrappers grow with `flex: 1`. See [Layout and full-height screens](#layout-and-full-height-screens). |
 | Tabs, a header, or the app background are missing | The preview mounts the screen without its parent layout. Add a [screen environment](#preview-a-screen-inside-its-app-layout). |

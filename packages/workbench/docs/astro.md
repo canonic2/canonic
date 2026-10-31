@@ -432,9 +432,9 @@ caption: featured
   `mount(canvas, context)` is called after each example's HTML is in place.
 - **`window.workbench`** isn't set in a docs lens, so a script's
   `window.workbench?.action(...)` call does nothing there.
-- **A folder only.** An `.astro` file holds one component, so an Astro lens
-  takes a folder. A file fails the lens with `Astro examples are one component
-  per file: point the lens at a folder of .astro files.`
+- **A folder only.** An `.astro` file holds one component, so Astro examples
+  take a folder. A file fails the lens with `Astro examples are one component
+  per file: give the page's implementation a folder of .astro files.`
 
 ## Portable exports
 
@@ -445,7 +445,7 @@ since editing inputs needs a live render, and the preview's **Documentation**
 gains the note `Astro input edits require the live Workbench server. This export
 contains the authored scenarios.`
 
-Docs with an Astro lens export the same way: the viewer shows each
+Docs with Astro examples export the same way: the viewer shows each
 example as it was rendered, with its styles and scripts.
 
 ## Errors and fixes
