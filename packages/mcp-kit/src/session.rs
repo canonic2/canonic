@@ -4,7 +4,7 @@
 use crate::{
     json::{self, ParseError},
     rpc::{self, Message, RpcError},
-    schema::{self, ArgumentError},
+    schema::ArgumentError,
     tool::{Catalog, ToolCall},
 };
 use serde_json::{Value, json};
@@ -630,13 +630,13 @@ impl Session {
                 reply(RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found"))
             }
             "tools/list" if rpc::only(&params, &["_meta"]) => {
-                Inbound::Reply(rpc::success(id, self.catalog.listing()))
+                Inbound::Reply(rpc::success(id, self.catalog.legacy_listing()))
             }
             "tools/list" => reply(RpcError::new(
                 rpc::INVALID_PARAMS,
                 "Invalid tool listing parameters",
             )),
-            "tools/call" => self.tool_call(id, &params),
+            "tools/call" => self.tool_call(id, &params, false),
             "resources/list" | "resources/templates/list" | "resources/read" => {
                 self.resource_request(id, method, params)
             }
@@ -657,18 +657,22 @@ impl Session {
         }
     }
 
-    fn tool_call(&mut self, id: Value, params: &Value) -> Inbound {
+    fn tool_call(&mut self, id: Value, params: &Value, modern: bool) -> Inbound {
         let call = match ToolCall::from_params(params) {
             Ok(call) => call,
             Err(error) => return Inbound::Reply(rpc::failure(id, &error)),
         };
-        let Some(tool) = self.catalog.get(&call.name) else {
+        let Some(_) = self
+            .catalog
+            .result_schema(&call.name)
+            .filter(|output| modern || output.legacy_compatible())
+        else {
             return Inbound::Reply(rpc::failure(
                 id,
                 &RpcError::new(rpc::INVALID_PARAMS, "Unknown tool"),
             ));
         };
-        let validation = schema::validate(&tool.input_schema, &call.arguments);
+        let validation = self.catalog.validate_arguments(&call.name, &call.arguments);
         self.outstanding.insert(id.to_string());
         match validation {
             Ok(()) => Inbound::Tool { id, call },
@@ -772,6 +776,13 @@ impl Session {
             options,
             method,
             self.options.tasks.as_ref(),
+            (method == "tools/call")
+                .then(|| {
+                    params["name"]
+                        .as_str()
+                        .and_then(|name| self.catalog.result_schema(name))
+                })
+                .flatten(),
         ) {
             Ok(context) => context,
             Err(error) => return failure(error),
@@ -878,7 +889,7 @@ impl Session {
                 Inbound::Reply(rpc::success(id, self.catalog.listing()))
             }
             "ping" | "tools/list" => failure(crate::modern::invalid("Invalid parameters")),
-            "tools/call" => self.tool_call(id, &params),
+            "tools/call" => self.tool_call(id, &params, true),
             "resources/list" | "resources/templates/list" | "resources/read" => {
                 let event = self.resource_request(id, method, params);
                 match event {

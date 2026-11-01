@@ -39,13 +39,11 @@ let catalog = Catalog::new(vec![
 ])?;
 ```
 
-`Catalog::new` refuses invalid names, duplicates and schema keywords the
-library does not enforce, such as `pattern`. Arguments are validated against
-the schema before your code runs.
-
-A `$ref` may have annotation siblings such as `description`, but assertion
-siblings such as `maxLength` or `type` are refused. Put constraints in the
-referenced schema, or combine the reference and constraints with `allOf`.
+`Catalog::new` refuses invalid names, duplicates and invalid schemas, then
+prepares validators once. Arguments are validated before your code runs.
+The supported dialect is JSON Schema 2020-12, including `pattern` and `$ref`
+siblings. See [argument and result schemas](guides/schemas.md) for bundled
+references, output contracts and resource limits.
 
 ## Implement the handler
 

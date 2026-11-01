@@ -349,6 +349,9 @@ impl Status {
 }
 
 impl Snapshot {
+    pub(crate) fn completed_result(&self) -> Option<&Value> {
+        (self.status == Status::Completed).then(|| &self.payload["result"])
+    }
     /// Restores a consumer-persisted snapshot through the same shape and budget checks.
     /// This does not authenticate storage, validate access scope or recover execution.
     ///

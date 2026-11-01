@@ -34,6 +34,11 @@ mod sealed {
 pub trait CompletePayload: Serialize + sealed::Payload {
     /// Whether this payload is a domain object without reserved envelope fields.
     fn valid_payload(&self) -> bool;
+    /// Typed tool data, used when an admitted call carries an output contract.
+    #[doc(hidden)]
+    fn tool_result(&self) -> Option<&crate::ToolResult> {
+        None
+    }
 }
 
 impl CompletePayload for Value {
@@ -47,6 +52,9 @@ impl CompletePayload for Value {
 impl CompletePayload for crate::ToolResult {
     fn valid_payload(&self) -> bool {
         true
+    }
+    fn tool_result(&self) -> Option<&crate::ToolResult> {
+        Some(self)
     }
 }
 impl CompletePayload for crate::ReadResourceResult {
@@ -161,6 +169,7 @@ pub struct RequestContext {
     cache: Option<CachePolicy>,
     tasks: Option<crate::task::TaskOptions>,
     task_id: Option<String>,
+    result_schema: Option<crate::ResultSchema>,
 }
 
 impl RequestContext {
@@ -169,6 +178,7 @@ impl RequestContext {
         options: &ModernOptions,
         method: &str,
         tasks: Option<&crate::task::TaskOptions>,
+        result_schema: Option<crate::ResultSchema>,
     ) -> Result<Arc<Self>, RpcError> {
         let meta = &params["_meta"];
         let capabilities = meta[CAPABILITIES_KEY]
@@ -250,6 +260,7 @@ impl RequestContext {
             server,
             cache,
             tasks: tasks.cloned(),
+            result_schema,
             task_id: crate::task::method(method)
                 .then(|| params["taskId"].as_str().map(str::to_owned))
                 .flatten(),
@@ -281,6 +292,12 @@ impl RequestContext {
             Some("decline" | "cancel") => Ok(Some(Decision::Declined)),
             _ => Err(invalid("Invalid confirmation response")),
         }
+    }
+
+    /// Captured tool output contract, suitable for validation before task persistence.
+    #[must_use]
+    pub fn result_schema(&self) -> Option<&crate::ResultSchema> {
+        self.result_schema.as_ref()
     }
 
     /// Creates a bounded yes/no interim result using this call's capabilities.
@@ -469,6 +486,14 @@ impl RequestContext {
         };
         if let Some(snapshot) = snapshot {
             snapshot.require_input_capabilities(self)?;
+            if let Some(schema) = &self.result_schema {
+                schema.validate_snapshot(snapshot).map_err(|_| {
+                    RpcError::new(
+                        rpc::INTERNAL_ERROR,
+                        "Task result does not match its output schema",
+                    )
+                })?;
+            }
         }
         Ok(())
     }
@@ -497,6 +522,20 @@ impl RequestContext {
         }
         if crate::task::method(&self.method) || !result.valid_payload() {
             return Err(EncodeError::Invalid);
+        }
+        if let Some(schema) = &self.result_schema {
+            let result = result.tool_result().ok_or(EncodeError::Invalid)?;
+            schema
+                .validate_checked(result, true, check)
+                .map_err(|error| {
+                    if error.kind == crate::schema::ArgumentErrorKind::Interrupted {
+                        EncodeError::Interrupted
+                    } else if error.kind == crate::schema::ArgumentErrorKind::Limit {
+                        EncodeError::ValidationLimit
+                    } else {
+                        EncodeError::Invalid
+                    }
+                })?;
         }
         let cache = self.cache.map(|policy| {
             if self.request_state.is_some() || self.input_responses.is_some() {

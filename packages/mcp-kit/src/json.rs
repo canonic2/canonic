@@ -32,6 +32,9 @@ pub enum ParseError {
 /// Why a value could not be encoded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum EncodeError {
+    /// Result validation exceeded its resource budget before encoding.
+    #[error("result exceeds schema validation limits")]
+    ValidationLimit,
     /// The encoding would exceed the caller's limit.
     #[error("encoded value exceeds {limit} bytes")]
     TooLarge {

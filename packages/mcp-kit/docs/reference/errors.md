@@ -14,6 +14,10 @@
 | `-32602` | Resource not found | A modern read named an unknown or inaccessible URI | Check the address and authorization; use `Outcome::ResourceNotFound` for revision-aware replies |
 | `-32602` | Unknown tool, Invalid tool call parameters | A name outside the catalog or malformed parameters | Call `tools/list` |
 | `-32603` | Response exceeds output limit | A result larger than `Options::max_output_bytes` | Page or shorten the result |
+| `-32603` | Tool result does not match its output schema | Missing or invalid structured data, or incompatible legacy data | Fix the handler's result; validation cannot undo effects |
+| `-32603` | Tool result exceeds schema validation limits | Structured data exceeds validation bytes, depth or work limits | Reduce the data or its validation cost; effects may already have happened |
+| `-32603` | Tool call requires a typed tool result | A tool call returned a raw method success or resource outcome | Return `Outcome::Tool(ToolResult)` even without an output schema |
+| `-32603` | Cannot encode response | A modern typed result fails its captured contract | Fix the result's structured data or reduce validation work |
 | `-32603` | Request failed | The handler panicked | Fix the handler; the worker continues |
 | `-32603` | Request asked for confirmation twice | A continuation returned `Outcome::Confirm` | Ask once per request |
 | `-32000` | Server not initialized | A request before initialization completed | Initialize first |
@@ -31,6 +35,9 @@
 
 Arguments that do not match the input schema are not an error reply: the host
 receives a failed tool result naming the field.
+Schema resource refusals also dispatch no work. Catalog construction refuses
+invalid schemas, unsupported dialects, unresolved references and exceeded
+preparation limits; see [schemas](../guides/schemas.md).
 
 ## `ServeError`
 

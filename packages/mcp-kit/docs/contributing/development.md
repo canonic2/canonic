@@ -51,7 +51,9 @@ package's `target/` directory between runs.
 - `clippy.toml` allows `unwrap` in tests only.
 - `deny.toml` allows Apache-2.0, MIT and Unicode-3.0.
   A crate-scoped Zlib exception covers `foldhash`, used by the YAML parser's
-  hash tables.
+  hash tables. A crate-scoped MIT-0 exception covers `borrow-or-share`, used
+  by bundled schema reference resolution; its license permits reuse and
+  distribution without attribution.
 - `.config/nextest.toml` disables fail-fast and terminates hung tests.
 
 ## Tests

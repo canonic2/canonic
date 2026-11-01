@@ -60,6 +60,7 @@ fn context(method: &str, task_id: Option<&str>) -> Arc<RequestContext> {
         &ModernOptions::new(ServerInfo::new("acme", "1")),
         method,
         Some(&options()),
+        None,
     )
     .unwrap()
 }
@@ -541,6 +542,56 @@ fn tasks_terminal_identity_and_clock_rules_reject_stale_updates() {
 }
 
 #[test]
+fn schema_task_results_validate_before_persistence_and_after_restore() {
+    let catalog = Catalog::new(vec![
+        Tool::new(
+            "acme_output",
+            "Return checked output.",
+            json!({"type":"object"}),
+        )
+        .with_output_schema(json!({"type":"null"})),
+    ])
+    .unwrap();
+    let output = catalog.result_schema("acme_output").unwrap();
+    let valid = Snapshot::new(
+        metadata(),
+        State::Completed(ToolResult::structured(Value::Null, false)),
+    )
+    .unwrap();
+    output.validate_snapshot(&valid).unwrap();
+    let restored = Snapshot::restore(&json!(&valid)).unwrap();
+    output.validate_snapshot(&restored).unwrap();
+    assert_eq!(json!(&restored), json!(&valid));
+    let invalid = Snapshot::new(
+        metadata(),
+        State::Completed(ToolResult::structured(json!("wrong"), false)),
+    )
+    .unwrap();
+    assert!(output.validate_snapshot(&invalid).is_err());
+    let creation = RequestContext::parse(
+        &request(1, "tools/call", json!({}), capabilities())["params"],
+        &ModernOptions::new(ServerInfo::new("acme", "1")),
+        "tools/call",
+        Some(&options()),
+        Some(output.clone()),
+    )
+    .unwrap();
+    assert!(
+        creation
+            .encode_task(&json!(1), &TaskResult::Created(valid), 4096, &|| Ok(()))
+            .is_ok()
+    );
+    assert!(
+        creation
+            .encode_task(&json!(1), &TaskResult::Created(invalid), 4096, &|| Ok(()))
+            .is_err()
+    );
+    let no_result =
+        Snapshot::new(metadata(), State::Completed(ToolResult::success(vec![]))).unwrap();
+    assert!(output.validate_snapshot(&no_result).is_err());
+}
+
+#[test]
 fn tasks_audio_content_and_annotations_preserve_payloads_after_restore() {
     let hints = crate::ContentAnnotations::new(
         Some(vec![crate::Role::User]),
@@ -788,6 +839,7 @@ fn tasks_encoders_check_operation_identity_caps_and_output_budget() {
         &ModernOptions::new(ServerInfo::new("acme", "1")),
         "tools/call",
         Some(&options()),
+        None,
     )
     .unwrap();
     assert!(!missing.task_eligible());

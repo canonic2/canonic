@@ -3,6 +3,8 @@
 `stdio::serve` reads frames on a reader thread, handles the protocol on the
 calling thread and runs your requests on worker threads. This guide covers
 the choices you make.
+Tool calls must return `Outcome::Tool(ToolResult)`, including when no output
+schema is declared; raw `Outcome::Method` success replies are refused.
 
 ## Lanes
 

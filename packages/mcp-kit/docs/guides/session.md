@@ -63,9 +63,12 @@ for frame in frames {
   [stdio guide](stdio.md) describes the driver's
   choices if you want to match them.
 
-`rpc::encode_success` encodes a reply directly from a `ToolResult` within an
-output limit, and `json::encode_checked` stops encoding when your
-cancellation check fails.
+For legacy tool calls, capture `Catalog::result_schema(&call.name)` at admission
+and use `ResultSchema::encode_legacy` to validate and encode the result within
+an output limit. Modern calls capture their contract in `RequestContext`;
+use its typed `encode_success`. Both paths observe the supplied interruption
+check. Low-level `rpc::encode_success` only builds an envelope and cannot infer
+the producing tool's schema. See [schema validation](schemas.md).
 
 Optional [Tasks](tasks.md) adds typed management events and
 `RequestContext::encode_task`. Capture the request context before settling its

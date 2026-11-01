@@ -1,7 +1,7 @@
 //! Source shape definitions reused by agent proposal schemas. They use only
-//! keywords the MCP argument validator accepts. Annotation keywords and
-//! formats other than uuid are not enforced by that validator; admission adds
-//! semantic checks, including expiry timestamps, unique list members, rule
+//! keywords the MCP argument validator accepts. Known formats are enforced;
+//! annotations carry no constraints. Admission adds semantic checks, including
+//! expiry timestamps, unique list members, rule
 //! identifiers and method names.
 use serde_json::{Value, json};
 

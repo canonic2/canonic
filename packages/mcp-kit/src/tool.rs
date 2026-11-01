@@ -50,9 +50,9 @@ pub struct Tool {
     pub title: Option<String>,
     /// One short sentence on what the tool returns or changes.
     pub description: String,
-    /// An object schema for the arguments, using the [`schema`] subset.
+    /// An object schema for arguments, checked and prepared at catalog construction.
     pub input_schema: Value,
-    /// An optional object schema for `structuredContent`. It is published, not enforced.
+    /// An optional JSON Schema object enforced on structured tool results.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<Value>,
     /// Behavior hints.
@@ -108,7 +108,7 @@ pub enum CatalogError {
     /// Two tools share a name.
     #[error("tool name {0:?} is published twice")]
     Duplicate(String),
-    /// The input or output schema is not an object schema the validator supports.
+    /// The input or output is not a supported JSON Schema object.
     #[error("tool {tool:?} {field}: {problem}")]
     Schema {
         /// The tool's name.
@@ -124,6 +124,8 @@ pub enum CatalogError {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Catalog {
     tools: Vec<Tool>,
+    inputs: Vec<schema::PreparedSchema>,
+    outputs: Vec<ResultSchema>,
 }
 
 impl Catalog {
@@ -131,10 +133,12 @@ impl Catalog {
     ///
     /// # Errors
     ///
-    /// Returns the first invalid or repeated name, or a schema that is not an
-    /// object schema. Input schemas must also pass [`schema::check`].
+    /// Returns the first invalid/repeated name or unsupported schema. Both schemas
+    /// must be objects; input schemas must declare `type: "object"`.
     pub fn new(tools: Vec<Tool>) -> Result<Self, CatalogError> {
         let mut names = HashSet::new();
+        let mut inputs = Vec::new();
+        let mut outputs = Vec::new();
         for tool in &tools {
             if !valid_name(&tool.name) {
                 return Err(CatalogError::InvalidName(tool.name.clone()));
@@ -150,15 +154,37 @@ impl Catalog {
             if tool.input_schema["type"] != "object" {
                 return Err(schema_error("inputSchema", "must have type object".into()));
             }
-            schema::check(&tool.input_schema)
-                .map_err(|error| schema_error("inputSchema", error.to_string()))?;
-            if let Some(output) = &tool.output_schema
-                && output["type"] != "object"
-            {
-                return Err(schema_error("outputSchema", "must have type object".into()));
-            }
+            inputs.push(
+                schema::PreparedSchema::new(&tool.input_schema)
+                    .map_err(|error| schema_error("inputSchema", error.to_string()))?,
+            );
+            let output = tool
+                .output_schema
+                .as_ref()
+                .map(|output| {
+                    if !output.is_object() {
+                        return Err(schema_error(
+                            "outputSchema",
+                            "must be a JSON Schema object".into(),
+                        ));
+                    }
+                    schema::PreparedSchema::new(output)
+                        .map_err(|error| schema_error("outputSchema", error.to_string()))
+                })
+                .transpose()?;
+            outputs.push(ResultSchema {
+                schema: output,
+                legacy: tool
+                    .output_schema
+                    .as_ref()
+                    .is_none_or(|output| output["type"] == "object"),
+            });
         }
-        Ok(Self { tools })
+        Ok(Self {
+            tools,
+            inputs,
+            outputs,
+        })
     }
 
     /// Finds a tool by name.
@@ -177,6 +203,145 @@ impl Catalog {
     #[must_use]
     pub fn listing(&self) -> Value {
         json!({"tools": self.tools})
+    }
+
+    pub(crate) fn legacy_listing(&self) -> Value {
+        json!({"tools": self.tools.iter().zip(&self.outputs).filter(|(_, output)| output.legacy).map(|(tool, _)| tool).collect::<Vec<_>>()})
+    }
+
+    /// Captures an immutable output contract for ordinary calls and durable task settlement.
+    #[must_use]
+    pub fn result_schema(&self, name: &str) -> Option<ResultSchema> {
+        self.tools
+            .iter()
+            .position(|tool| tool.name == name)
+            .map(|index| self.outputs[index].clone())
+    }
+
+    pub(crate) fn validate_arguments(
+        &self,
+        name: &str,
+        value: &Value,
+    ) -> Result<(), schema::ArgumentError> {
+        let index = self
+            .tools
+            .iter()
+            .position(|tool| tool.name == name)
+            .expect("admitted catalog tool");
+        self.inputs[index].validate(value)
+    }
+}
+
+/// Prepared tool-result contract. Consumers retain it with a task's producer identity.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResultSchema {
+    schema: Option<schema::PreparedSchema>,
+    legacy: bool,
+}
+
+impl ResultSchema {
+    /// Whether this contract can be advertised to legacy clients.
+    #[must_use]
+    pub fn legacy_compatible(&self) -> bool {
+        self.legacy
+    }
+
+    /// Validates a modern tool result. Error results may omit structured content.
+    ///
+    /// # Errors
+    /// Returns a missing/mismatched structured result or resource-budget refusal.
+    pub fn validate(&self, result: &ToolResult) -> Result<(), schema::ArgumentError> {
+        self.validate_checked(result, true, &|| Ok(()))
+    }
+
+    /// Validates and encodes a legacy result, retaining object-shaped structured data.
+    ///
+    /// # Errors
+    /// Returns an invalid-result, interruption or bounded-encoding error.
+    pub fn encode_legacy(
+        &self,
+        id: &Value,
+        result: &ToolResult,
+        limit: usize,
+        check: &dyn Fn() -> Result<(), crate::Interrupted>,
+    ) -> Result<Vec<u8>, crate::json::EncodeError> {
+        self.validate_checked(result, false, check)
+            .map_err(|error| {
+                if error.kind == schema::ArgumentErrorKind::Interrupted {
+                    crate::json::EncodeError::Interrupted
+                } else if error.kind == schema::ArgumentErrorKind::Limit {
+                    crate::json::EncodeError::ValidationLimit
+                } else {
+                    crate::json::EncodeError::Invalid
+                }
+            })?;
+        rpc::encode_success(id, result, limit, check)
+    }
+
+    pub(crate) fn validate_checked(
+        &self,
+        result: &ToolResult,
+        modern: bool,
+        check: &dyn Fn() -> Result<(), crate::Interrupted>,
+    ) -> Result<(), schema::ArgumentError> {
+        if !modern
+            && (!self.legacy
+                || result
+                    .structured_content
+                    .as_ref()
+                    .is_some_and(|value| !value.is_object()))
+        {
+            return Err(schema::ArgumentError::new(
+                "structuredContent",
+                "structuredContent must be an object for legacy calls".into(),
+            ));
+        }
+        self.validate_fields(result.structured_content.as_ref(), result.is_error, check)
+    }
+
+    fn validate_fields(
+        &self,
+        value: Option<&Value>,
+        is_error: bool,
+        check: &dyn Fn() -> Result<(), crate::Interrupted>,
+    ) -> Result<(), schema::ArgumentError> {
+        check().map_err(|_| {
+            schema::ArgumentError::refusal(
+                "structuredContent",
+                schema::ArgumentErrorKind::Interrupted,
+            )
+        })?;
+        if let Some(schema) = &self.schema {
+            if let Some(value) = value {
+                schema.validate_checked(value, "structuredContent", check)?;
+            } else if !is_error {
+                return Err(schema::ArgumentError::new(
+                    "structuredContent",
+                    "structuredContent is required by the output schema".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Checks a completed task snapshot before persistence or after restore.
+    /// The consumer binds this contract to the task's producing tool; management
+    /// requests alone cannot identify that tool.
+    ///
+    /// # Errors
+    /// Returns missing/mismatched structured data or a validation-budget refusal.
+    pub fn validate_snapshot(
+        &self,
+        snapshot: &crate::task::Snapshot,
+    ) -> Result<(), schema::ArgumentError> {
+        if let Some(result) = snapshot.completed_result() {
+            self.validate_fields(
+                result.get("structuredContent"),
+                result["isError"] == true,
+                &|| Ok(()),
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -392,7 +557,11 @@ pub struct ToolResult {
     /// Content blocks in display order.
     pub content: Vec<Content>,
     /// Machine-readable data matching the tool's output schema, when it has one.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "structured_value",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub structured_content: Option<Value>,
     /// Whether the tool failed.
     #[serde(default)]
@@ -440,6 +609,12 @@ impl ToolResult {
 
 pub(crate) use crate::content::base64;
 
+fn structured_value<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Value>, D::Error> {
+    Value::deserialize(deserializer).map(Some)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -478,7 +653,7 @@ mod tests {
         let pattern = Tool::new(
             "acme",
             "Return Acme data.",
-            json!({"type":"object","properties":{"id":{"type":"string","pattern":"^a"}}}),
+            json!({"type":"object","properties":{"id":{"type":"string","pattern":"("}}}),
         );
         assert!(matches!(
             Catalog::new(vec![pattern]),
@@ -487,7 +662,7 @@ mod tests {
                 ..
             })
         ));
-        let output = tool("acme").with_output_schema(json!({"type":"array"}));
+        let output = tool("acme").with_output_schema(json!([]));
         assert!(matches!(
             Catalog::new(vec![output]),
             Err(CatalogError::Schema {
@@ -498,8 +673,8 @@ mod tests {
     }
 
     #[test]
-    fn catalog_refuses_reference_siblings_at_the_root_and_in_properties() {
-        for schema in [
+    fn schema_catalog_enforces_reference_siblings_at_root_and_in_properties() {
+        for (index, schema) in [
             json!({
                 "type": "object",
                 "$defs": {"id": {"type": "string"}},
@@ -510,16 +685,86 @@ mod tests {
                 "$defs": {"id": {"type": "string"}},
                 "properties": {"id": {"$ref": "#/$defs/id", "maxLength": 8}}
             }),
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let tool = Tool::new("acme_status", "Return Acme status.", schema);
-            assert!(matches!(
-                Catalog::new(vec![tool]),
-                Err(CatalogError::Schema {
-                    field: "inputSchema",
-                    ..
-                })
-            ));
+            let catalog = Catalog::new(vec![tool]).unwrap();
+            assert!(
+                catalog
+                    .validate_arguments("acme_status", &json!({"id":"acme-long"}))
+                    .is_err()
+            );
+            assert_eq!(
+                catalog
+                    .validate_arguments("acme_status", &json!({"id":"acme"}))
+                    .is_ok(),
+                index == 1
+            );
         }
+    }
+
+    #[test]
+    fn schema_result_contracts_validate_and_keep_explicit_null() {
+        let catalog = Catalog::new(vec![
+            Tool::new("acme_object", "Return object.", object()).with_output_schema(json!({"type":"object","properties":{"passed":{"type":"boolean"}},"required":["passed"],"additionalProperties":false})),
+            Tool::new("acme_array", "Return array.", object()).with_output_schema(json!({"type":"array","items":{"type":"integer"}})),
+            Tool::new("acme_null", "Return null.", object()).with_output_schema(json!({"type":"null"})),
+        ]).unwrap();
+        assert_eq!(
+            catalog.legacy_listing()["tools"].as_array().unwrap().len(),
+            1
+        );
+        let output = catalog.result_schema("acme_object").unwrap();
+        assert!(
+            output
+                .validate(&ToolResult::structured(json!({"passed":true}), false))
+                .is_ok()
+        );
+        for result in [
+            ToolResult::success(vec![]),
+            ToolResult::structured(json!({"passed":"yes"}), false),
+            ToolResult::structured(json!({"other":true}), false),
+        ] {
+            assert!(output.validate(&result).is_err());
+        }
+        assert!(
+            output
+                .validate(&ToolResult::error(vec![Content::text("Refused")]))
+                .is_ok()
+        );
+        assert!(
+            output
+                .validate(&ToolResult::structured(json!({"passed":"yes"}), true))
+                .is_err()
+        );
+        let array = catalog.result_schema("acme_array").unwrap();
+        let result = ToolResult::structured(json!([1, 2]), false);
+        assert!(array.validate(&result).is_ok());
+        assert_eq!(
+            array.encode_legacy(&json!(1), &result, 4096, &|| Ok(())),
+            Err(crate::json::EncodeError::Invalid)
+        );
+        let result = ToolResult::structured(Value::Null, false);
+        let restored: ToolResult = serde_json::from_value(json!(&result)).unwrap();
+        assert_eq!(restored.structured_content, Some(Value::Null));
+        assert!(
+            catalog
+                .result_schema("acme_null")
+                .unwrap()
+                .validate(&restored)
+                .is_ok()
+        );
+        assert_eq!(
+            output.encode_legacy(
+                &json!(1),
+                &ToolResult::structured(json!({"passed":true}), false),
+                4096,
+                &|| Err(crate::Interrupted)
+            ),
+            Err(crate::json::EncodeError::Interrupted)
+        );
     }
 
     #[test]

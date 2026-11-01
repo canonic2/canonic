@@ -33,7 +33,11 @@
 | Record frames for diagnostics | `stdio::Options::observer` |
 | Drive the protocol from another runtime | `Session`, `Inbound`, `SessionOptions` |
 | Encode modern replies in another runtime | `RequestContext::encode_success` for complete results; `RequestContext::encode_interim` for `InputRequiredResult` |
-| Validate JSON against a tool schema | `schema::validate`, `schema::check` |
+| Prepare reusable JSON Schema validation | `schema::PreparedSchema`, `schema::SchemaError`; see [schemas](../guides/schemas.md) |
+| Validate JSON once | `schema::validate`, `schema::check`, `schema::ArgumentErrorKind` |
+| Check a producing tool's result | `Catalog::result_schema`, `ResultSchema`, `Context::result_schema`, `RequestContext::result_schema` |
+| Check durable results before commit and after restore | `ResultSchema::validate_snapshot` |
+| Encode checked legacy tool results | `ResultSchema::encode_legacy` |
 | Parse or encode strictly within a limit | `json::parse`, `json::encode`, `json::encode_checked`, `json::measure` |
 | Build JSON-RPC frames | `rpc::success`, `rpc::failure`, `rpc::notification`, `rpc::request`, `rpc::encode_success` |
 | Cancel your own work | `Control` |

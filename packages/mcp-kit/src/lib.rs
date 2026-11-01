@@ -61,4 +61,6 @@ pub use session::{
     SUPPORTED_PROTOCOL_VERSIONS, ServerInfo, Session, SessionOptions,
 };
 pub use skill::{BundledRead, SkillCatalog, SkillDefinition, SkillError, SkillFile};
-pub use tool::{Annotations, Catalog, CatalogError, Content, Tool, ToolCall, ToolResult};
+pub use tool::{
+    Annotations, Catalog, CatalogError, Content, ResultSchema, Tool, ToolCall, ToolResult,
+};

@@ -140,8 +140,18 @@ fn interleaved_calls_retain_context_through_cancel_and_id_reuse() {
     );
     assert!(first.confirmation("Proceed?", "x").is_ok());
     assert!(session.finish(&json!(1)));
+    assert!(
+        second
+            .encode_success(&json!(2), &json!({"content":[]}), 4096, &|| Ok(()))
+            .is_err()
+    );
     let bytes = second
-        .encode_success(&json!(2), &json!({"content":[]}), 4096, &|| Ok(()))
+        .encode_success(
+            &json!(2),
+            &crate::ToolResult::success(vec![]),
+            4096,
+            &|| Ok(()),
+        )
         .unwrap();
     assert_eq!(
         crate::json::parse(&bytes, 4096).unwrap()["result"]["resultType"],
@@ -167,6 +177,7 @@ fn metadata_and_confirmation_bounds_are_enforced() {
         &params,
         &ModernOptions::new(ServerInfo::new("acme", "1")),
         "tools/call",
+        None,
         None,
     )
     .unwrap();
@@ -199,6 +210,7 @@ fn metadata_and_confirmation_bounds_are_enforced() {
             &params,
             &ModernOptions::new(ServerInfo::new("acme", "1")),
             "tools/list",
+            None,
             None,
         )
         .is_ok()

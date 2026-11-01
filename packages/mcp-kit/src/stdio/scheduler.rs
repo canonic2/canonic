@@ -29,6 +29,7 @@ use std::{
 /// What a queued or running request is, independent of its work.
 #[derive(Clone)]
 struct Meta {
+    result_schema: Option<crate::ResultSchema>,
     admitted: Instant,
     rich_rounds: u8,
     rich_deadline: Option<Instant>,
@@ -56,6 +57,7 @@ struct Job {
 }
 
 struct Assignment {
+    result_schema: Option<crate::ResultSchema>,
     request_context: Option<Arc<crate::RequestContext>>,
     sequence: u64,
     id: Option<Value>,
@@ -242,6 +244,10 @@ impl Scheduler {
         let timeout = admission.timeout.unwrap_or(self.timeout);
         lane.queue.push_back(Job {
             meta: Meta {
+                result_schema: match &request {
+                    Request::Tool(call) => session.catalog().result_schema(&call.name),
+                    _ => None,
+                },
                 admitted: Instant::now(),
                 rich_rounds: 0,
                 rich_deadline: None,
@@ -767,6 +773,7 @@ impl Scheduler {
                     dispatcher: self.dispatcher.clone(),
                 });
                 let assignment = Assignment {
+                    result_schema: job.meta.result_schema.clone(),
                     request_context: job.meta.request_context.clone(),
                     sequence,
                     id: job.meta.id.clone(),
@@ -847,6 +854,7 @@ fn work<H: Handler>(
 ) {
     while let Ok(assignment) = incoming.recv() {
         let context = Context {
+            result_schema: assignment.result_schema,
             protocol: assignment.request_context,
             id: assignment.id,
             control: assignment.control,
@@ -861,11 +869,40 @@ fn work<H: Handler>(
                 Work::Resume(resume, decision) => resume(decision, &context),
                 Work::ElicitResume(resume, answer) => resume(answer, &context),
             };
-            match outcome {
+            let outcome = match outcome {
                 Outcome::Confirm(confirm) if context.protocol.is_some() => {
                     (confirm.resume)(Decision::Unavailable, &context)
                 }
                 outcome => outcome,
+            };
+            match (&context.result_schema, outcome) {
+                (Some(schema), Outcome::Tool(result)) if context.protocol.is_none() => match schema
+                    .validate_checked(&result, false, &|| context.check())
+                {
+                    Ok(()) => Outcome::Tool(result),
+                    Err(error) if error.kind == crate::schema::ArgumentErrorKind::Interrupted => {
+                        Outcome::Done
+                    }
+                    Err(error) => Outcome::Method(Err(RpcError::new(
+                        rpc::INTERNAL_ERROR,
+                        if error.kind == crate::schema::ArgumentErrorKind::Limit {
+                            "Tool result exceeds schema validation limits"
+                        } else {
+                            "Tool result does not match its output schema"
+                        },
+                    ))),
+                },
+                (
+                    Some(_),
+                    Outcome::Method(Ok(_))
+                    | Outcome::Resource(_)
+                    | Outcome::ResourceWithCache(..)
+                    | Outcome::Bundled(_),
+                ) => Outcome::Method(Err(RpcError::new(
+                    rpc::INTERNAL_ERROR,
+                    "Tool call requires a typed tool result",
+                ))),
+                (_, outcome) => outcome,
             }
         }));
         let finish = settle(
@@ -1009,6 +1046,13 @@ fn encoded(
         |context| context.encode_success(id, result, limit, &|| Ok(())),
     );
     match encoded {
+        Err(EncodeError::ValidationLimit) => Finish::Reply(rpc::failure(
+            id.clone(),
+            &RpcError::new(
+                rpc::INTERNAL_ERROR,
+                "Tool result exceeds schema validation limits",
+            ),
+        )),
         Ok(bytes) => Finish::Bytes(bytes),
         Err(EncodeError::TooLarge { .. } | EncodeError::Interrupted) => {
             Finish::Reply(rpc::failure(

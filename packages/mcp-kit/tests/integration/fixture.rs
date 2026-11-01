@@ -182,7 +182,7 @@ impl Host {
     }
 
     pub(crate) fn start_with(
-        handler: Arc<Script>,
+        handler: Arc<impl Handler>,
         catalog: Arc<Catalog>,
         options: Options,
     ) -> Self {

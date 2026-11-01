@@ -11,6 +11,7 @@ mod modern;
 mod resource_content;
 mod resources;
 mod scheduling;
+mod schema;
 mod skills;
 #[cfg(unix)]
 mod tasks;

@@ -19,6 +19,13 @@ confidence-threshold = 0.9
 name = "foldhash"
 allow = ["Zlib"]
 
+# referencing -> fluent-uri uses borrow-or-share. Its reviewed 0.2.4 MIT-0
+# license permits unrestricted reuse/distribution without attribution, consistent
+# with this package's permissive dependency policy. Keep approval crate-scoped.
+[[licenses.exceptions]]
+name = "borrow-or-share"
+allow = ["MIT-0"]
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"

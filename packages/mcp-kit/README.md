@@ -10,7 +10,8 @@ with a ready-to-use stdio driver or a core you can drive from your own runtime.
 ## Highlights
 
 - **Validated tools.** Publish tool descriptions and argument schemas. Calls
-  are checked before your handler runs; results support text, images, audio,
+  are checked before your handler runs, and structured results are checked
+  against declared output schemas. Results support text, images, audio,
   resource links, embedded resources and structured data, with optional
   audience, priority and modification hints.
 - **Resources and templates.** Serve guides, reports and binary artifacts by
@@ -105,6 +106,7 @@ authority by itself.
 - [User confirmation](docs/guides/confirmation.md)
 - [Resources and templates](docs/guides/resources.md)
 - [Audio and content hints](docs/guides/audio.md)
+- [Argument and result schemas](docs/guides/schemas.md)
 - [Bundled skills](docs/guides/skills.md)
 - [Long-running tasks](docs/guides/tasks.md)
 - [Structured input and URL interactions](docs/guides/elicitation.md)

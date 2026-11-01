@@ -143,6 +143,12 @@ checks immutable identity, clock ordering, retention and terminal immutability.
 Commit with a compare-and-set or equivalent owner check: pure validation
 cannot prevent two concurrent writers from settling different outcomes.
 
+Retain the producing tool's identity, schema version and `ResultSchema` from
+the admitted context. Call `ResultSchema::validate_snapshot` before committing
+a completed result and after restoring it. Task management requests cannot
+infer the producing schema from a task ID. See the
+[checked snapshot example](schemas.md#other-runtimes-and-durable-tasks).
+
 The basic input kind is the existing yes/no form. Create a `Question`
 using the originating request context. Persist its meaning, authority scope,
 expiry and lifetime-unique key. `InputHistory` helps reject key reuse and

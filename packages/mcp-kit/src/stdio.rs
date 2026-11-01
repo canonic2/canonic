@@ -312,6 +312,7 @@ pub struct Context {
     id: Option<Value>,
     control: Arc<Control>,
     progress: Option<Progress>,
+    result_schema: Option<crate::ResultSchema>,
 }
 
 struct Progress {
@@ -322,6 +323,11 @@ struct Progress {
 }
 
 impl Context {
+    /// Captured tool output contract; retain it with the producer of durable tasks.
+    #[must_use]
+    pub fn result_schema(&self) -> Option<&crate::ResultSchema> {
+        self.result_schema.as_ref()
+    }
     /// This call's immutable modern metadata and retry inputs, or None for legacy work.
     #[must_use]
     pub fn request_context(&self) -> Option<&crate::RequestContext> {
@@ -566,17 +572,34 @@ impl<H: Handler, W: Write> Connection<H, W> {
             Inbound::InvalidArguments { id, call, error } => {
                 let result = self.handler.invalid_arguments(&call, &error);
                 let context = self.session.request_context(&id);
+                let encoded = context.map_or_else(
+                    || {
+                        self.session
+                            .catalog()
+                            .result_schema(&call.name)
+                            .expect("admitted catalog tool")
+                            .encode_legacy(&id, &result, self.output.limit, &|| Ok(()))
+                    },
+                    |context| context.encode_success(&id, &result, self.output.limit, &|| Ok(())),
+                );
                 self.session.finish(&id);
-                if let Some(context) = context {
-                    match context.encode_success(&id, &result, self.output.limit, &|| Ok(())) {
-                        Ok(bytes) => self.output.bytes(&bytes),
-                        Err(_) => self.output.value(&rpc::failure(
-                            id,
-                            &RpcError::new(rpc::INTERNAL_ERROR, "Response exceeds output limit"),
-                        )),
-                    }
-                } else {
-                    self.output.tool_result(&id, &result)
+                match encoded {
+                    Ok(bytes) => self.output.bytes(&bytes),
+                    Err(error) => self.output.value(&rpc::failure(
+                        id,
+                        &RpcError::new(
+                            rpc::INTERNAL_ERROR,
+                            match error {
+                                crate::json::EncodeError::Invalid => {
+                                    "Tool result does not match its output schema"
+                                }
+                                crate::json::EncodeError::ValidationLimit => {
+                                    "Tool result exceeds schema validation limits"
+                                }
+                                _ => "Response exceeds output limit",
+                            },
+                        ),
+                    )),
                 }
             }
             Inbound::Tool { id, call } => {
@@ -658,16 +681,6 @@ impl<W: Write> Output<W> {
             serde_json::to_vec(&fallback).unwrap_or_default()
         };
         self.bytes(&bytes)
-    }
-
-    fn tool_result(&mut self, id: &Value, result: &ToolResult) -> Result<(), ServeError> {
-        match rpc::encode_success(id, result, self.limit, &|| Ok(())) {
-            Ok(bytes) => self.bytes(&bytes),
-            Err(_) => self.value(&rpc::failure(
-                id.clone(),
-                &RpcError::new(rpc::INTERNAL_ERROR, "Response exceeds output limit"),
-            )),
-        }
     }
 
     fn bytes(&mut self, bytes: &[u8]) -> Result<(), ServeError> {
