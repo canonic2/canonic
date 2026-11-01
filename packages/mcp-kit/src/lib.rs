@@ -38,6 +38,7 @@ pub mod docs;
 pub mod elicitation;
 pub mod json;
 pub mod modern;
+pub mod prompt;
 pub mod resource;
 pub mod rpc;
 pub mod schema;
@@ -50,6 +51,9 @@ pub mod tool;
 pub use content::{AudioContent, ContentAnnotations, ContentError, Role};
 pub use control::{Control, Interrupted};
 pub use modern::{CachePolicy, CacheScope, InputRequiredResult, ModernOptions, RequestContext};
+pub use prompt::{
+    GetPromptResult, Prompt, PromptArgument, PromptCall, PromptCatalog, PromptError, PromptMessage,
+};
 pub use resource::{
     ReadResourceResult, Resource, ResourceCatalog, ResourceContents, ResourceError, ResourceLink,
     ResourceTemplate,

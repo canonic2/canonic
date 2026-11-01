@@ -86,7 +86,8 @@ and require no handshake. Return `Outcome::Method` for a request and
 `Outcome::Done` for a notification.
 
 Modern registration cannot enable protocol methods such as `ping`,
-`resources/subscribe`, Prompts or `subscriptions/listen`. Unavailable standard
+`resources/subscribe` or `subscriptions/listen`. Enable [Prompts](prompts.md)
+through its catalog rather than extension registration. Unavailable standard
 methods return `-32601`. Handshake-based clients retain `ping`. The driver
 validates modern protocol error codes and required data before publication;
 see [independent-runtime encoding](session.md) for the same boundary.

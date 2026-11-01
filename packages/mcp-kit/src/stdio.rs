@@ -81,6 +81,8 @@ pub trait Handler: Send + Sync + 'static {
 /// Work a [`Handler`] runs.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
+    /// A catalog prompt with validated string arguments.
+    Prompt(crate::PromptCall),
     /// A validated management operation; the consumer owns record access and effects.
     Task(crate::task::TaskRequest),
     /// Immutable library-owned resource bytes, exposed to admission only.
@@ -106,6 +108,8 @@ pub enum Request {
 
 /// What a request produced.
 pub enum Outcome {
+    /// Validated prompt messages.
+    Prompt(crate::GetPromptResult),
     /// Ask a rich legacy question. Modern callers use typed input-required rounds instead.
     Elicit(Elicit),
     /// Typed task creation, snapshot, acknowledgement or management failure.
@@ -548,6 +552,10 @@ impl<H: Handler, W: Write> Connection<H, W> {
 
     fn inbound(&mut self, inbound: Inbound) -> Result<(), ServeError> {
         match inbound {
+            Inbound::Prompt { id, call } => {
+                let token = call.progress_token.clone();
+                self.schedule(Some(id), Request::Prompt(call), true, token)
+            }
             Inbound::Task { id, request } => {
                 let read_only = matches!(request, crate::task::TaskRequest::Get { .. });
                 self.schedule(Some(id), Request::Task(request), read_only, None)

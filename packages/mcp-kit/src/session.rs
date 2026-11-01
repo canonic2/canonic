@@ -13,6 +13,7 @@ use std::{
     sync::Arc,
 };
 
+mod prompts;
 #[cfg(test)]
 mod tests;
 
@@ -38,6 +39,8 @@ pub struct SessionOptions {
     pub skills: Option<Arc<crate::SkillCatalog>>,
     /// Optional immutable resource catalog; `None` disables resource methods.
     pub resources: Option<Arc<crate::resource::ResourceCatalog>>,
+    /// Optional immutable prompt catalog; `None` disables prompt methods.
+    pub prompts: Option<Arc<crate::PromptCatalog>>,
     /// The longest accepted message, in bytes, excluding the line break.
     pub max_message_bytes: usize,
     /// Messages accepted before the connection ends; `None` for no limit.
@@ -55,6 +58,7 @@ impl Default for SessionOptions {
             tasks: None,
             skills: None,
             resources: None,
+            prompts: None,
             max_message_bytes: DEFAULT_MAX_MESSAGE_BYTES,
             max_messages: None,
             extension_methods: Vec::new(),
@@ -135,6 +139,13 @@ pub enum Decision {
 /// What a received message requires of the caller.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Inbound {
+    /// Render a validated prompt and finish its request ID normally.
+    Prompt {
+        /// Request ID.
+        id: Value,
+        /// Known prompt and checked string arguments.
+        call: crate::PromptCall,
+    },
     /// A response to a connection-bound rich question, validated against its issued definition.
     Elicitation {
         /// Server request ID, separate from the originating client RPC.
@@ -419,6 +430,9 @@ impl Session {
         if self.options.resources.is_some() {
             result["capabilities"]["resources"] = json!({});
         }
+        if self.options.prompts.is_some() {
+            result["capabilities"]["prompts"] = json!({"listChanged":false});
+        }
         self.phase = Phase::Negotiated;
         self.client = Some(client);
         rpc::success(id, result)
@@ -643,6 +657,7 @@ impl Session {
                 "Invalid tool listing parameters",
             )),
             "tools/call" => self.tool_call(id, &params, false),
+            _ if method.starts_with("prompts/") => self.prompt_request(id, method, &params),
             "resources/list" | "resources/templates/list" | "resources/read" => {
                 self.resource_request(id, method, params)
             }
@@ -855,6 +870,15 @@ impl Session {
         if crate::modern::unavailable_method(method) {
             return failure(RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found"));
         }
+        if method.starts_with("prompts/") {
+            if method == "prompts/get"
+                && let Some(object) = params.as_object_mut()
+            {
+                object.remove("inputResponses");
+                object.remove("requestState");
+            }
+            return self.prompt_request(id, method, &params);
+        }
         if method == "tools/call" || method == "resources/read" {
             if !rpc::only(
                 &params,
@@ -950,6 +974,9 @@ impl Session {
         let mut versions = SUPPORTED_PROTOCOL_VERSIONS.to_vec();
         versions.push(crate::modern::PROTOCOL_VERSION);
         let mut result = json!({"supportedVersions":versions,"capabilities":{"tools":{}}});
+        if self.options.prompts.is_some() {
+            result["capabilities"]["prompts"] = json!({});
+        }
         if self.options.resources.is_some() {
             result["capabilities"]["resources"] = json!({});
         }

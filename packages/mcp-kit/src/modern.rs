@@ -28,6 +28,7 @@ mod sealed {
     impl Payload for serde_json::Value {}
     impl Payload for crate::ToolResult {}
     impl Payload for crate::ReadResourceResult {}
+    impl Payload for crate::GetPromptResult {}
 }
 
 /// Supported domain payloads for modern complete-result encoding.
@@ -44,6 +45,20 @@ pub trait CompletePayload: Serialize + sealed::Payload {
     #[doc(hidden)]
     fn resource_result(&self) -> Option<&crate::ReadResourceResult> {
         None
+    }
+    /// Typed prompt messages for the prompt retrieval boundary.
+    #[doc(hidden)]
+    fn prompt_result(&self) -> Option<&crate::GetPromptResult> {
+        None
+    }
+}
+
+impl CompletePayload for crate::GetPromptResult {
+    fn valid_payload(&self) -> bool {
+        true
+    }
+    fn prompt_result(&self) -> Option<&crate::GetPromptResult> {
+        Some(self)
     }
 }
 
@@ -136,6 +151,8 @@ pub struct ModernOptions {
     pub discovery_cache: CachePolicy,
     /// Tool catalog cache hints.
     pub tools_cache: CachePolicy,
+    /// Prompt catalog freshness; retrieval results do not carry catalog cache hints.
+    pub prompts_cache: CachePolicy,
     /// Ordinary resource/template catalog cache hints.
     pub resources_cache: CachePolicy,
     /// Skill entries and bundled file cache hints.
@@ -152,6 +169,7 @@ impl ModernOptions {
             server,
             discovery_cache: CachePolicy::default(),
             tools_cache: CachePolicy::default(),
+            prompts_cache: CachePolicy::default(),
             resources_cache: CachePolicy::default(),
             skills_cache: CachePolicy::default(),
             reads_cache: CachePolicy::default(),
@@ -222,6 +240,7 @@ impl RequestContext {
         let cache = match method {
             "server/discover" => Some(options.discovery_cache),
             "tools/list" => Some(options.tools_cache),
+            "prompts/list" => Some(options.prompts_cache),
             "resources/list" | "resources/templates/list" => Some(options.resources_cache),
             "skills/list" | "skills/get" => Some(options.skills_cache),
             "resources/read" => Some(options.reads_cache),
@@ -509,6 +528,7 @@ impl RequestContext {
         }
         if (self.method == "tools/call" && result.tool_result().is_none())
             || (self.method == "resources/read" && result.resource_result().is_none())
+            || (self.method == "prompts/get" && result.prompt_result().is_none())
         {
             return Err(EncodeError::Invalid);
         }
@@ -609,7 +629,7 @@ impl RequestContext {
 }
 
 fn input_method(method: &str) -> bool {
-    ["tools/call", "resources/read"].contains(&method)
+    ["tools/call", "resources/read", "prompts/get"].contains(&method)
 }
 
 pub(crate) fn unavailable_method(method: &str) -> bool {
@@ -621,8 +641,6 @@ pub(crate) fn unavailable_method(method: &str) -> bool {
             "resources/subscribe",
             "resources/unsubscribe",
             "subscriptions/listen",
-            "prompts/list",
-            "prompts/get",
             "completion/complete",
             "elicitation/create",
             "sampling/createMessage",

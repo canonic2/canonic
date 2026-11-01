@@ -34,6 +34,7 @@
 | Drive the protocol from another runtime | `Session`, `Inbound`, `SessionOptions` |
 | Encode modern replies in another runtime | `RequestContext::encode_success` for complete results; `RequestContext::encode_interim` for `InputRequiredResult` |
 | Encode revision-checked modern errors | `RequestContext::encode_error`; low-level `rpc::encode_failure` only builds the bounded envelope |
+| Publish and render prompts | `Prompt`, `PromptArgument`, `PromptCatalog`, `PromptCall`, `PromptMessage`, `GetPromptResult`; `Request::Prompt` and `Outcome::Prompt` |
 | Prepare reusable JSON Schema validation | `schema::PreparedSchema`, `schema::SchemaError`; see [schemas](../guides/schemas.md) |
 | Validate JSON once | `schema::validate`, `schema::check`, `schema::ArgumentErrorKind` |
 | Check a producing tool's result | `Catalog::result_schema`, `ResultSchema`, `Context::result_schema`, `RequestContext::result_schema` |

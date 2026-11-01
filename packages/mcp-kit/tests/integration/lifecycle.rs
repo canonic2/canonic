@@ -19,6 +19,7 @@ fn echo() -> Script {
             Outcome::Method(Ok(json!({"method":method,"params":params})))
         }
         Request::Task(_) => panic!("Tasks are disabled in this fixture"),
+        Request::Prompt(_) => panic!("Prompts are disabled in this fixture"),
         Request::Resource(_) => panic!("bundled bytes must bypass consumer call"),
         Request::Notification { .. } => Outcome::Done,
     })
@@ -111,6 +112,7 @@ fn extension_methods_reply_and_notifications_run_without_replies() {
         }
         Request::Method { params, .. } => Outcome::Method(Ok(params)),
         Request::Task(_) => panic!("Tasks are disabled in this fixture"),
+        Request::Prompt(_) => panic!("Prompts are disabled in this fixture"),
         Request::Resource(_) => panic!("bundled bytes must bypass consumer call"),
         Request::Tool(_) => text(""),
     });

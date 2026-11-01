@@ -29,6 +29,7 @@ use std::{
 /// What a queued or running request is, independent of its work.
 #[derive(Clone)]
 struct Meta {
+    prompt: bool,
     result_schema: Option<crate::ResultSchema>,
     admitted: Instant,
     rich_rounds: u8,
@@ -57,6 +58,7 @@ struct Job {
 }
 
 struct Assignment {
+    prompt: bool,
     result_schema: Option<crate::ResultSchema>,
     request_context: Option<Arc<crate::RequestContext>>,
     sequence: u64,
@@ -244,6 +246,7 @@ impl Scheduler {
         let timeout = admission.timeout.unwrap_or(self.timeout);
         lane.queue.push_back(Job {
             meta: Meta {
+                prompt: matches!(&request, Request::Prompt(_)),
                 result_schema: match &request {
                     Request::Tool(call) => session.catalog().result_schema(&call.name),
                     _ => None,
@@ -773,6 +776,7 @@ impl Scheduler {
                     dispatcher: self.dispatcher.clone(),
                 });
                 let assignment = Assignment {
+                    prompt: job.meta.prompt,
                     result_schema: job.meta.result_schema.clone(),
                     request_context: job.meta.request_context.clone(),
                     sequence,
@@ -875,6 +879,7 @@ fn work<H: Handler>(
                 }
                 outcome => outcome,
             };
+            let outcome = prompt_outcome(assignment.prompt, outcome);
             match (&context.result_schema, outcome) {
                 (Some(schema), Outcome::Tool(result)) if context.protocol.is_none() => match schema
                     .validate_checked(&result, false, &|| context.check())
@@ -897,6 +902,7 @@ fn work<H: Handler>(
                     Outcome::Method(Ok(_))
                     | Outcome::Resource(_)
                     | Outcome::ResourceWithCache(..)
+                    | Outcome::Prompt(_)
                     | Outcome::Bundled(_),
                 ) => Outcome::Method(Err(RpcError::new(
                     rpc::INTERNAL_ERROR,
@@ -918,6 +924,27 @@ fn work<H: Handler>(
         }
         dispatcher.unpark();
     }
+}
+
+fn prompt_outcome(prompt: bool, outcome: Outcome) -> Outcome {
+    if prompt
+        && matches!(
+            &outcome,
+            Outcome::Method(Ok(_))
+                | Outcome::Tool(_)
+                | Outcome::Resource(_)
+                | Outcome::ResourceWithCache(..)
+                | Outcome::Bundled(_)
+                | Outcome::Task(Ok(_))
+                | Outcome::ResourceNotFound(_)
+        )
+    {
+        return Outcome::Method(Err(RpcError::new(
+            rpc::INTERNAL_ERROR,
+            "Prompt retrieval requires a typed prompt result",
+        )));
+    }
+    outcome
 }
 
 fn settle(
@@ -957,6 +984,13 @@ fn settle(
             None => internal("Tasks require modern protocol metadata"),
         },
         Ok(Outcome::Tool(result)) => encoded(id, &result, limit, context),
+        Ok(Outcome::Prompt(result)) => match context {
+            Some(context) => encoded(id, &result, limit, Some(context)),
+            None => match result.encode_legacy(id, limit, &|| Ok(())) {
+                Ok(bytes) => Finish::Bytes(bytes),
+                Err(_) => internal("Cannot encode prompt result for legacy request"),
+            },
+        },
         Ok(Outcome::Resource(result)) => encoded(id, &result, limit, context),
         Ok(Outcome::Bundled(read)) => encoded(id, read.result(), limit, context),
         Ok(Outcome::ResourceWithCache(result, policy)) => {
