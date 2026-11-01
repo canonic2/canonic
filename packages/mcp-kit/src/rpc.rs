@@ -30,13 +30,14 @@ pub const REQUEST_CANCELLED: i32 = -32800;
 pub const MAX_ID_BYTES: usize = 128;
 
 /// A JSON-RPC error object.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RpcError {
     /// One of the codes in this module, or a product-defined server error code.
     pub code: i32,
     /// A short description of the error.
     pub message: String,
     /// Optional structured details.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<Value>,
 }
 
@@ -219,6 +220,34 @@ pub fn encode_success(
             jsonrpc: "2.0",
             id,
             result,
+        },
+        limit,
+        check,
+    )
+}
+
+/// Encodes a borrowed error within a byte limit and caller checkpoint.
+/// This low-level envelope builder does not enforce revision-specific error allocation.
+///
+/// # Errors
+/// Returns the bounded encoder's overflow, interruption or serialization error.
+pub fn encode_failure(
+    id: &Value,
+    error: &RpcError,
+    limit: usize,
+    check: &dyn Fn() -> Result<(), Interrupted>,
+) -> Result<Vec<u8>, EncodeError> {
+    #[derive(Serialize)]
+    struct Envelope<'a> {
+        jsonrpc: &'static str,
+        id: &'a Value,
+        error: &'a RpcError,
+    }
+    json::encode_checked(
+        &Envelope {
+            jsonrpc: "2.0",
+            id,
+            error,
         },
         limit,
         check,

@@ -17,7 +17,9 @@
 | `-32603` | Tool result does not match its output schema | Missing or invalid structured data, or incompatible legacy data | Fix the handler's result; validation cannot undo effects |
 | `-32603` | Tool result exceeds schema validation limits | Structured data exceeds validation bytes, depth or work limits | Reduce the data or its validation cost; effects may already have happened |
 | `-32603` | Tool call requires a typed tool result | A tool call returned a raw method success or resource outcome | Return `Outcome::Tool(ToolResult)` even without an output schema |
-| `-32603` | Cannot encode response | A modern typed result fails its captured contract | Fix the result's structured data or reduce validation work |
+| `-32603` | Cannot encode response | A modern payload fails its operation's type or result contract | Return the matching typed tool/resource result and fix its data |
+| `-32603` | Invalid protocol error for modern request | An outcome uses a retired, unallocated or HTTP-only code, or omits required protocol error data | Use an application code outside the JSON-RPC reserved range, or supply the specified protocol data |
+| `-32603` | Cannot encode error response within its output limit | A modern error exceeds the response budget | Shorten the error message or data |
 | `-32603` | Request failed | The handler panicked | Fix the handler; the worker continues |
 | `-32603` | Request asked for confirmation twice | A continuation returned `Outcome::Confirm` | Ask once per request |
 | `-32000` | Server not initialized | A request before initialization completed | Initialize first |

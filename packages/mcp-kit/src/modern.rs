@@ -9,6 +9,7 @@ use crate::{
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
+mod errors;
 #[cfg(test)]
 mod tests;
 
@@ -39,6 +40,11 @@ pub trait CompletePayload: Serialize + sealed::Payload {
     fn tool_result(&self) -> Option<&crate::ToolResult> {
         None
     }
+    /// Typed resource data for the resource-read result boundary.
+    #[doc(hidden)]
+    fn resource_result(&self) -> Option<&crate::ReadResourceResult> {
+        None
+    }
 }
 
 impl CompletePayload for Value {
@@ -60,6 +66,9 @@ impl CompletePayload for crate::ToolResult {
 impl CompletePayload for crate::ReadResourceResult {
     fn valid_payload(&self) -> bool {
         true
+    }
+    fn resource_result(&self) -> Option<&crate::ReadResourceResult> {
+        Some(self)
     }
 }
 
@@ -181,36 +190,8 @@ impl RequestContext {
         result_schema: Option<crate::ResultSchema>,
     ) -> Result<Arc<Self>, RpcError> {
         let meta = &params["_meta"];
-        let capabilities = meta[CAPABILITIES_KEY]
-            .as_object()
-            .ok_or_else(|| invalid("Missing or invalid client capabilities"))?;
-        bounded(&Value::Object(capabilities.clone()), 65536, 32)?;
+        let capabilities = capabilities(&meta[CAPABILITIES_KEY])?;
         bounded(meta, 1024 * 1024, 32)?;
-        if let Some(extensions) = capabilities.get("extensions")
-            && !extensions
-                .as_object()
-                .is_some_and(|map| map.values().all(Value::is_object))
-        {
-            return Err(invalid("Invalid extension declarations"));
-        }
-        if let Some(declaration) = capabilities
-            .get("extensions")
-            .and_then(|extensions| extensions.get(crate::task::EXTENSION))
-            && !declaration
-                .as_object()
-                .is_some_and(serde_json::Map::is_empty)
-        {
-            return Err(invalid("Invalid Tasks extension declaration"));
-        }
-        if let Some(elicitation) = capabilities.get("elicitation")
-            && !elicitation.as_object().is_some_and(|map| {
-                map.iter().all(|(key, value)| {
-                    !["form", "url"].contains(&key.as_str()) || value.is_object()
-                })
-            })
-        {
-            return Err(invalid("Invalid elicitation capability"));
-        }
         let client_info = meta.get(CLIENT_KEY).cloned();
         if let Some(info) = &client_info
             && (!info.is_object()
@@ -310,6 +291,9 @@ impl RequestContext {
         message: &str,
         state: &str,
     ) -> Result<InputRequiredResult, RpcError> {
+        if !input_method(&self.method) {
+            return Err(invalid("Operation cannot request input"));
+        }
         self.require_form()?;
         if state.len() > 65536 {
             return Err(invalid("Invalid requestState"));
@@ -331,7 +315,7 @@ impl RequestContext {
         requests: crate::elicitation::Requests,
         state: Option<&str>,
     ) -> Result<InputRequiredResult, RpcError> {
-        if !["tools/call", "resources/read"].contains(&self.method.as_str()) {
+        if !input_method(&self.method) {
             return Err(invalid("Operation cannot request input"));
         }
         requests.require_capabilities(&self.capabilities)?;
@@ -523,6 +507,11 @@ impl RequestContext {
         if crate::task::method(&self.method) || !result.valid_payload() {
             return Err(EncodeError::Invalid);
         }
+        if (self.method == "tools/call" && result.tool_result().is_none())
+            || (self.method == "resources/read" && result.resource_result().is_none())
+        {
+            return Err(EncodeError::Invalid);
+        }
         if let Some(schema) = &self.result_schema {
             let result = result.tool_result().ok_or(EncodeError::Invalid)?;
             schema
@@ -586,7 +575,7 @@ impl RequestContext {
     }
 
     pub(crate) fn interim(&self, result: &InputRequiredResult) -> Result<Value, RpcError> {
-        if !["tools/call", "resources/read"].contains(&self.method.as_str()) {
+        if !input_method(&self.method) {
             return Err(invalid("Operation cannot request input"));
         }
         if let Some(requests) = &result.requests {
@@ -598,6 +587,57 @@ impl RequestContext {
         value["_meta"] = json!({SERVER_KEY:self.server});
         Ok(value)
     }
+}
+
+impl RequestContext {
+    /// Encodes a modern error, enforcing stdio error allocations and required data.
+    /// Invalid protocol codes/shapes become an internal error without their data.
+    /// The exact legacy resource-not-found helper is mapped only on resource reads.
+    ///
+    /// # Errors
+    /// Returns the bounded encoder's overflow, interruption or serialization error.
+    pub fn encode_error(
+        &self,
+        id: &Value,
+        error: &RpcError,
+        limit: usize,
+        check: &dyn Fn() -> Result<(), Interrupted>,
+    ) -> Result<Vec<u8>, EncodeError> {
+        check().map_err(|_| EncodeError::Interrupted)?;
+        rpc::encode_failure(id, &errors::normalize(&self.method, error), limit, check)
+    }
+}
+
+fn input_method(method: &str) -> bool {
+    ["tools/call", "resources/read"].contains(&method)
+}
+
+pub(crate) fn unavailable_method(method: &str) -> bool {
+    method.starts_with("notifications/")
+        || [
+            "initialize",
+            "ping",
+            "logging/setLevel",
+            "resources/subscribe",
+            "resources/unsubscribe",
+            "subscriptions/listen",
+            "prompts/list",
+            "prompts/get",
+            "completion/complete",
+            "elicitation/create",
+            "sampling/createMessage",
+            "roots/list",
+        ]
+        .contains(&method)
+}
+
+pub(crate) fn removed_notification(method: &str) -> bool {
+    [
+        "notifications/initialized",
+        "notifications/roots/list_changed",
+        "notifications/elicitation/complete",
+    ]
+    .contains(&method)
 }
 
 /// A typed interim result. Consumer workflow state remains consumer-owned.
@@ -628,6 +668,47 @@ fn validate_responses(value: &Value) -> Result<(), RpcError> {
         return Err(invalid("Invalid answer metadata"));
     }
     Ok(())
+}
+
+fn capabilities(value: &Value) -> Result<&serde_json::Map<String, Value>, RpcError> {
+    let map = value
+        .as_object()
+        .ok_or_else(|| invalid("Missing or invalid client capabilities"))?;
+    bounded(value, 65536, 32)?;
+    for field in ["extensions", "experimental"] {
+        if let Some(declarations) = map.get(field)
+            && !declarations
+                .as_object()
+                .is_some_and(|map| map.values().all(Value::is_object))
+        {
+            return Err(invalid(&format!("Invalid {field} declarations")));
+        }
+    }
+    if let Some(declaration) = map
+        .get("extensions")
+        .and_then(|extensions| extensions.get(crate::task::EXTENSION))
+        && !declaration
+            .as_object()
+            .is_some_and(serde_json::Map::is_empty)
+    {
+        return Err(invalid("Invalid Tasks extension declaration"));
+    }
+    for (field, members) in [
+        ("roots", &[][..]),
+        ("sampling", &["context", "tools"][..]),
+        ("elicitation", &["form", "url"][..]),
+    ] {
+        if let Some(capability) = map.get(field)
+            && !capability.as_object().is_some_and(|map| {
+                members
+                    .iter()
+                    .all(|member| map.get(*member).is_none_or(Value::is_object))
+            })
+        {
+            return Err(invalid(&format!("Invalid {field} capability")));
+        }
+    }
+    Ok(map)
 }
 
 pub(crate) fn confirmation_answer(response: &Value) -> Result<Decision, RpcError> {

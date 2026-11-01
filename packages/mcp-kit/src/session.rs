@@ -544,6 +544,12 @@ impl Session {
     }
 
     fn notification(&mut self, method: String, params: Value) -> Inbound {
+        if self.options.modern.is_some()
+            && params["_meta"][crate::modern::VERSION_KEY] == crate::modern::PROTOCOL_VERSION
+            && crate::modern::removed_notification(&method)
+        {
+            return Inbound::Ignored;
+        }
         match method.as_str() {
             "notifications/initialized" => {
                 if self.phase == Phase::Negotiated && rpc::only(&params, &["_meta"]) {
@@ -846,11 +852,8 @@ impl Session {
                 },
             };
         }
-        if method == "initialize" {
-            return failure(RpcError::new(
-                rpc::METHOD_NOT_FOUND,
-                "Modern requests do not initialize",
-            ));
+        if crate::modern::unavailable_method(method) {
+            return failure(RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found"));
         }
         if method == "tools/call" || method == "resources/read" {
             if !rpc::only(
@@ -884,11 +887,10 @@ impl Session {
             }
         }
         match method {
-            "ping" if rpc::only(&params, &["_meta"]) => Inbound::Reply(rpc::success(id, json!({}))),
             "tools/list" if rpc::only(&params, &["_meta"]) => {
                 Inbound::Reply(rpc::success(id, self.catalog.listing()))
             }
-            "ping" | "tools/list" => failure(crate::modern::invalid("Invalid parameters")),
+            "tools/list" => failure(crate::modern::invalid("Invalid parameters")),
             "tools/call" => self.tool_call(id, &params, true),
             "resources/list" | "resources/templates/list" | "resources/read" => {
                 let event = self.resource_request(id, method, params);

@@ -273,3 +273,300 @@ fn ordinary_confirmation_retries_validate_answer_metadata_before_dispatch() {
         assert_eq!(session.outstanding(), 0);
     }
 }
+
+#[test]
+fn modern_conformance_capabilities_validate_known_shapes_and_preserve_unknown_fields() {
+    let mut session = session();
+    for (capabilities, valid) in [
+        (json!({"roots":{}}), true),
+        (json!({"roots":false}), false),
+        (json!({"roots":null}), false),
+        (json!({"sampling":{"context":{},"tools":{}}}), true),
+        (json!({"sampling":{"tools":true}}), false),
+        (json!({"sampling":{"context":null}}), false),
+        (json!({"experimental":{"acme/feature":{}}}), true),
+        (json!({"experimental":{"acme/feature":true}}), false),
+        (json!({"experimental":[]}), false),
+        (json!({"extensions":{"acme/feature":{}}}), true),
+        (json!({"elicitation":{"url":[]}}), false),
+        (
+            json!({"acme/future":false,"sampling":{"acme/future":true}}),
+            true,
+        ),
+    ] {
+        let event = session.receive_value(request(
+            1,
+            "tools/call",
+            json!({"name":"acme_echo"}),
+            capabilities.clone(),
+        ));
+        if valid {
+            assert!(matches!(event, Inbound::Tool { .. }), "{capabilities}");
+            assert_eq!(
+                session.request_context(&json!(1)).unwrap().capabilities,
+                capabilities
+            );
+            assert!(session.finish(&json!(1)));
+        } else {
+            assert_eq!(
+                reply(event)["error"]["code"],
+                rpc::INVALID_PARAMS,
+                "{capabilities}"
+            );
+            assert_eq!(session.outstanding(), 0);
+        }
+    }
+}
+
+#[test]
+fn modern_conformance_removed_and_unavailable_methods_never_dispatch() {
+    let methods = [
+        "ping",
+        "initialize",
+        "logging/setLevel",
+        "resources/subscribe",
+        "resources/unsubscribe",
+        "subscriptions/listen",
+        "prompts/list",
+        "prompts/get",
+        "completion/complete",
+        "roots/list",
+        "sampling/createMessage",
+        "elicitation/create",
+    ];
+    let mut unavailable = Session::try_new(
+        Arc::new(Catalog::new(vec![]).unwrap()),
+        SessionOptions {
+            modern: Some(ModernOptions::new(ServerInfo::new("acme", "1"))),
+            extension_methods: methods.iter().map(|method| (*method).into()).collect(),
+            ..SessionOptions::default()
+        },
+    )
+    .unwrap();
+    for method in methods {
+        let response = reply(unavailable.receive_value(request(1, method, json!({}), json!({}))));
+        assert_eq!(response["error"]["code"], rpc::METHOD_NOT_FOUND, "{method}");
+        assert_eq!(unavailable.outstanding(), 0);
+        assert!(unavailable.request_context(&json!(1)).is_none());
+        assert!(!unavailable.ready());
+    }
+    for version in crate::SUPPORTED_PROTOCOL_VERSIONS {
+        let mut session = session();
+        assert!(
+            reply(session.receive_value(rpc::request(json!(1), "ping", json!({}))))["result"]
+                .is_object()
+        );
+        let Inbound::Initialize { id, .. } = session.receive_value(rpc::request(json!(2), "initialize", json!({"protocolVersion":version,"capabilities":{},"clientInfo":{"name":"acme-host","version":"1"}}))) else { panic!("legacy initialization") };
+        session.accept_initialize(id, &ServerInfo::new("acme", "1"));
+        session.receive_value(rpc::notification(
+            "notifications/initialized",
+            json!({"_meta":{VERSION_KEY:PROTOCOL_VERSION}}),
+        ));
+        assert!(!session.ready());
+        session.receive_value(rpc::notification("notifications/initialized", json!({})));
+        assert!(session.ready());
+        let mut params = json!({"_meta":{VERSION_KEY:version}});
+        assert_eq!(
+            reply(session.receive_value(rpc::request(json!(3), "ping", params.clone())))["result"],
+            json!({})
+        );
+        params["_meta"][VERSION_KEY] = json!(PROTOCOL_VERSION);
+        params["_meta"][CAPABILITIES_KEY] = json!({});
+        assert_eq!(
+            reply(session.receive_value(rpc::request(json!(4), "ping", params)))["error"]["code"],
+            rpc::METHOD_NOT_FOUND
+        );
+        assert!(session.ready());
+    }
+}
+
+#[test]
+fn modern_conformance_catalog_envelopes_and_resource_payloads_are_typed() {
+    let mut options = SessionOptions {
+        modern: Some(ModernOptions::new(ServerInfo::new("acme", "1"))),
+        resources: Some(Arc::new(
+            crate::ResourceCatalog::new(vec![], vec![]).unwrap(),
+        )),
+        skills: Some(Arc::new(crate::SkillCatalog::new(vec![]).unwrap())),
+        ..SessionOptions::default()
+    };
+    options.extension_methods.push("acme/inspect".into());
+    let mut session = Session::try_new(Arc::new(Catalog::new(vec![]).unwrap()), options).unwrap();
+    for (method, field) in [
+        ("server/discover", "supportedVersions"),
+        ("tools/list", "tools"),
+        ("resources/list", "resources"),
+        ("resources/templates/list", "resourceTemplates"),
+        ("skills/list", "skills"),
+    ] {
+        let result =
+            reply(session.receive_value(request(1, method, json!({}), json!({}))))["result"]
+                .clone();
+        assert_eq!(result["resultType"], "complete", "{method}");
+        assert_eq!(result["ttlMs"], 0);
+        assert_eq!(result["cacheScope"], "private");
+        assert_eq!(
+            result["_meta"][SERVER_KEY],
+            json!({"name":"acme","version":"1"})
+        );
+        assert!(result[field].is_array(), "{method}: {result}");
+        assert_eq!(session.outstanding(), 0);
+    }
+    let Inbound::Method { id, .. } = session.receive_value(request(
+        1,
+        "resources/read",
+        json!({"uri":"acme://report"}),
+        json!({"elicitation":{"form":{}}}),
+    )) else {
+        panic!("consumer read")
+    };
+    let context = session.request_context(&id).unwrap();
+    for invalid in [json!({"contents":[]}), json!({"content":[]})] {
+        assert_eq!(
+            context.encode_success(&id, &invalid, 4096, &|| Ok(())),
+            Err(EncodeError::Invalid)
+        );
+    }
+    assert_eq!(
+        context.encode_success(&id, &crate::ToolResult::success(vec![]), 4096, &|| Ok(())),
+        Err(EncodeError::Invalid)
+    );
+    let read = crate::ReadResourceResult::new(vec![
+        crate::ResourceContents::text("acme://report", None, "report").unwrap(),
+    ])
+    .unwrap();
+    let encoded = context
+        .encode_success(&id, &read, 4096, &|| Ok(()))
+        .unwrap();
+    let result = crate::json::parse(&encoded, 4096).unwrap();
+    assert_eq!(result["result"]["contents"][0]["text"], "report");
+    assert_eq!(result["result"]["cacheScope"], "private");
+    assert!(session.finish(&id));
+    assert!(session.request_context(&id).is_none());
+    session.receive_value(request(
+        1,
+        "acme/inspect",
+        json!({}),
+        json!({"elicitation":{"form":{}}}),
+    ));
+    assert!(
+        session
+            .request_context(&json!(1))
+            .unwrap()
+            .confirmation("Proceed?", "state")
+            .is_err()
+    );
+}
+
+#[test]
+fn modern_conformance_mrtr_retries_keep_mode_and_state_request_local() {
+    let mut session = session();
+    let questions = crate::elicitation::Requests::new(vec![(
+        "authorize".into(),
+        crate::elicitation::Request::url(
+            "Authorize Acme access?",
+            "https://example.com/authorize",
+            Some("legacy-only-id"),
+        )
+        .unwrap(),
+    )])
+    .unwrap();
+    session.receive_value(request(
+        1,
+        "tools/call",
+        json!({"name":"acme_echo"}),
+        json!({"elicitation":{"url":{}}}),
+    ));
+    let original = session.request_context(&json!(1)).unwrap();
+    let round = original
+        .elicitation(questions.clone(), Some("opaque-acme-state"))
+        .unwrap();
+    let bytes = original
+        .encode_interim(&json!(1), &round, 4096, &|| Ok(()))
+        .unwrap();
+    let value = crate::json::parse(&bytes, 4096).unwrap();
+    assert_eq!(value["result"]["resultType"], "input_required");
+    assert_eq!(value["result"]["requestState"], "opaque-acme-state");
+    assert!(
+        value["result"]["inputRequests"]["authorize"]["params"]
+            .get("elicitationId")
+            .is_none()
+    );
+    assert!(value["result"].get("ttlMs").is_none());
+    assert!(session.finish(&json!(1)));
+    let retry = json!({"name":"acme_echo","requestState":"opaque-acme-state","inputResponses":{"authorize":{"action":"accept"},"unrelated":{"opaque":true}}});
+    session.receive_value(request(
+        2,
+        "tools/call",
+        retry.clone(),
+        json!({"elicitation":{"url":{}}}),
+    ));
+    let context = session.request_context(&json!(2)).unwrap();
+    assert_eq!(context.request_state.as_deref(), Some("opaque-acme-state"));
+    assert_eq!(context.elicitation_answers(&questions).unwrap().len(), 1);
+    assert!(session.finish(&json!(2)));
+    session.receive_value(request(3, "tools/call", retry, json!({})));
+    let context = session.request_context(&json!(3)).unwrap();
+    assert_eq!(
+        context.elicitation_answers(&questions).unwrap_err().code,
+        -32021
+    );
+    assert!(original.elicitation(questions, None).is_ok());
+    assert!(session.finish(&json!(3)));
+    for method in ["server/discover", "tools/list"] {
+        assert_eq!(
+            reply(session.receive_value(request(
+                4,
+                method,
+                json!({"requestState":"not-a-retry"}),
+                json!({})
+            )))["error"]["code"],
+            rpc::INVALID_PARAMS
+        );
+        assert!(session.request_context(&json!(4)).is_none());
+    }
+}
+
+#[test]
+fn modern_conformance_removed_notifications_cannot_dispatch_legacy_handlers() {
+    let methods = [
+        "notifications/roots/list_changed",
+        "notifications/elicitation/complete",
+    ];
+    for enabled in [false, true] {
+        let mut session = Session::try_new(
+            Arc::new(Catalog::new(vec![]).unwrap()),
+            SessionOptions {
+                modern: enabled.then(|| ModernOptions::new(ServerInfo::new("acme", "1"))),
+                extension_notifications: methods.iter().map(|name| (*name).into()).collect(),
+                ..SessionOptions::default()
+            },
+        )
+        .unwrap();
+        let Inbound::Initialize { id, .. } = session.receive_value(rpc::request(json!(1), "initialize", json!({"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"acme-host","version":"1"}}))) else { panic!("legacy initialize") };
+        session.accept_initialize(id, &ServerInfo::new("acme", "1"));
+        session.receive_value(rpc::notification(
+            "notifications/initialized",
+            json!({"_meta":{VERSION_KEY:PROTOCOL_VERSION}}),
+        ));
+        assert_eq!(session.ready(), !enabled);
+        session.receive_value(rpc::notification("notifications/initialized", json!({})));
+        for method in methods {
+            let inbound = session.receive_value(rpc::notification(
+                method,
+                json!({"_meta":{VERSION_KEY:PROTOCOL_VERSION}}),
+            ));
+            if enabled {
+                assert!(matches!(inbound, Inbound::Ignored));
+            } else {
+                assert!(matches!(inbound, Inbound::Notification { .. }));
+            }
+            assert!(matches!(
+                session.receive_value(rpc::notification(method, json!({}))),
+                Inbound::Notification { .. }
+            ));
+            assert!(session.ready());
+            assert_eq!(session.outstanding(), 0);
+        }
+    }
+}

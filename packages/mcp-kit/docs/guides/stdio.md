@@ -80,9 +80,16 @@ Notifications exceeding `Options::max_output_bytes` are also dropped.
 ## Extension methods
 
 List product methods in `SessionOptions::extension_methods` (requests) and
-`extension_notifications`. They reach your handler as `Request::Method` and
-`Request::Notification` after initialization. Return `Outcome::Method` for a
-request and `Outcome::Done` for a notification.
+`extension_notifications`. Legacy requests and registered notifications reach
+your handler after initialization. Modern custom RPCs use per-request metadata
+and require no handshake. Return `Outcome::Method` for a request and
+`Outcome::Done` for a notification.
+
+Modern registration cannot enable protocol methods such as `ping`,
+`resources/subscribe`, Prompts or `subscriptions/listen`. Unavailable standard
+methods return `-32601`. Handshake-based clients retain `ping`. The driver
+validates modern protocol error codes and required data before publication;
+see [independent-runtime encoding](session.md) for the same boundary.
 
 Optional [Tasks](tasks.md) uses `Request::Task` and `Outcome::Task`; its methods
 are protocol-owned and must not be registered as product methods. Returning a

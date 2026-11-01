@@ -992,28 +992,13 @@ fn settle(
             }
             encoded(id, &value, limit, context)
         }
-        Ok(Outcome::Method(Err(mut error)))
-            if context.is_some_and(|context| context.method == "resources/read")
-                && error
-                    .data
-                    .as_ref()
-                    .and_then(|data| data["uri"].as_str())
-                    .is_some_and(|uri| {
-                        crate::resource::validate_uri(uri).is_ok()
-                            && error == crate::resource::not_found(uri)
-                    }) =>
-        {
-            error.code = rpc::INVALID_PARAMS;
-            Finish::Reply(rpc::failure(id.clone(), &error))
-        }
-        Ok(Outcome::Task(Err(error)) | Outcome::Method(Err(error)))
-            if context.is_some() && [rpc::RESOURCE_NOT_FOUND, -32042].contains(&error.code) =>
-        {
-            internal("Legacy-only error returned for a modern request")
-        }
-        Ok(Outcome::Task(Err(error)) | Outcome::Method(Err(error))) => {
-            Finish::Reply(rpc::failure(id.clone(), &error))
-        }
+        Ok(Outcome::Task(Err(error)) | Outcome::Method(Err(error))) => match context {
+            Some(context) => match context.encode_error(id, &error, limit, &|| Ok(())) {
+                Ok(bytes) => Finish::Bytes(bytes),
+                Err(_) => internal("Cannot encode error response within its output limit"),
+            },
+            None => Finish::Reply(rpc::failure(id.clone(), &error)),
+        },
         Ok(Outcome::Done) => internal("Request produced no reply"),
         Ok(Outcome::Elicit(_)) if context.is_some() || (resumed && !rich_resumed) => internal(
             "Use typed interim input for modern calls; confirmation cannot resume into rich input",

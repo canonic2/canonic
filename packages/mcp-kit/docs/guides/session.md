@@ -70,6 +70,20 @@ use its typed `encode_success`. Both paths observe the supplied interruption
 check. Low-level `rpc::encode_success` only builds an envelope and cannot infer
 the producing tool's schema. See [schema validation](schemas.md).
 
+For modern failures, use `RequestContext::encode_error` with the captured
+context. It enforces protocol error allocations and required error data within
+your output budget. Invalid reserved codes or malformed protocol error data
+produce `-32603` without the original data. Application codes belong outside
+the JSON-RPC reserved range `-32768..=-32000`; existing legacy server/deadline
+allocations retain their meanings. The exact legacy resource-not-found helper
+maps to `-32602` only for resource reads.
+
+Modern `resources/read` success requires a typed `ReadResourceResult`.
+Use `Outcome::Resource` in the shared driver or `encode_success` with that type
+in your runtime. Custom RPCs can use plain JSON objects; a raw object cannot
+stand in for a standard tool or resource result. Low-level `rpc::failure` and
+`rpc::encode_failure` only build envelopes and do not enforce revision policy.
+
 Optional [Tasks](tasks.md) adds typed management events and
 `RequestContext::encode_task`. Capture the request context before settling its
 ID. Persistent task lifetime belongs to the consumer, separately from the
