@@ -125,14 +125,14 @@ implementations:
 - `root` is where the implementation's code is, relative to `workbench.yaml` or
   absolute. It is optional, and only needed for [code pointers](#point-at-the-code).
 
-Gate is a private, unpublished CLI with no public distribution channel. If you
-already have access to it, the optional Gate integration lets you set
-`base: gate://demo/dev` for a Gate-managed service. Workbench
+Box is a private, unpublished CLI with no public distribution channel. If you
+already have access to it, the optional Box integration lets you set
+`base: box://demo/dev` for a Box-managed service. Workbench
 uses the `demo` service's published endpoint in the task containing this space,
-then appends `/dev` and the page path. Start the task with `gate run demo --detach` and
-refresh Workbench after a restart to pick up its current port. Gate owns the
+then appends `/dev` and the page path. Start the task with `box run demo --detach` and
+refresh Workbench after a restart to pick up its current port. Box owns the
 service, so omit a Workbench `start` command. See
-[Gate service configuration](configuration.md#implementations) for requirements.
+[Box service configuration](configuration.md#implementations) for requirements.
 
 If the service is stopped or unavailable, opening its lens shows the reason
 and recovery steps on the canvas. Other lenses remain usable, and the sidebar

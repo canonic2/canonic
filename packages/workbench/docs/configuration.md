@@ -369,7 +369,7 @@ implementations:
 | --- | --- | --- | --- |
 | `kind` | all | yes | `workbench`, `url`, `storybook`, `docs`, `ios-simulator`, or `window`. |
 | `label` | all | no | The lens's display label, independent of kind: for example **Live**, **Prod**, or **Design**. Defaults to the name in sentence case. Changing it preserves the implementation key and addresses. |
-| `base` | `url` | yes | The app's origin and optional base path, starting with `http://` or `https://`, or a Gate service such as `gate://demo/dev`. Page paths are appended to it. A trailing slash is removed. |
+| `base` | `url` | yes | The app's origin and optional base path, starting with `http://` or `https://`, or a Box service such as `box://demo/dev`. Page paths are appended to it. A trailing slash is removed. |
 | `url` | `storybook` | no | The origin of a Storybook you run, starting with `http://` or `https://`, or `auto` to [detect a running Storybook](storybook.md#detect-the-port-with-url-auto). Without it, Workbench [runs your project's Storybook itself](storybook.md#let-workbench-run-storybook) from `root`, the space's folder unless set, on a private local socket, in trusted workspaces. |
 | `device` | `ios-simulator` | no | `booted` (default) for every booted Simulator, or one exact device name or UDID. |
 | `adapter` | `docs` | yes | What renders the examples in a page's docs: `html`, `react`, `vue`, `astro`, `react-native-web`, or an adapter registered in `workbench.config.ts`. |
@@ -380,18 +380,18 @@ implementations:
 | `catalog` | `ios-simulator` | no | Import each booted device as a page. See [Catalogs](#catalogs). |
 | `start` | `url`, `storybook` with `url` | no | A command that starts the implementation in VS Code. See [Start commands](#start-commands). |
 
-Gate is a private, unpublished CLI. This optional integration is for users who
-already have access to it; Gate has no public distribution channel.
+Box is a private, unpublished CLI. This optional integration is for users who
+already have access to it; Box has no public distribution channel.
 
-For a service managed by Gate, use `base: gate://SERVICE/PATH`, for example
-`gate://demo/dev`. In a trusted workspace, Workbench runs `gate url list --json`
-from the space's root and uses that task's published direct endpoint. Gate must
+For a service managed by Box, use `base: box://SERVICE/PATH`, for example
+`box://demo/dev`. In a trusted workspace, Workbench runs `box url list --json`
+from the space's root and uses that task's published direct endpoint. Box must
 be on `PATH` or in `~/.local/bin`; its recipe service needs a `route`.
-Run `gate run demo --detach` from the task checkout, then refresh Workbench after a restart
-to discover its current port. Gate owns startup, so omit `start` on this lens.
+Run `box run demo --detach` from the task checkout, then refresh Workbench after a restart
+to discover its current port. Box owns startup, so omit `start` on this lens.
 Missing tasks, unready services and discovery failures appear as lens problems;
 Workbench never substitutes another task or a fixed port. This also works in
-the standalone server. A `gate://` base takes a lowercase service name with
+the standalone server. A `box://` base takes a lowercase service name with
 letters, digits or hyphens, followed by an optional path, without a query or fragment.
 
 A `workbench` implementation shows this space's
