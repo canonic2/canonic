@@ -127,6 +127,10 @@ fn proposal_text_preserves_present_null_selectors_and_full_structured_evidence()
             "Policy proposal saved; inactive. Ask the user to review and activate it with shield policy review in their terminal.",
         ),
         (
+            "pack_configure",
+            "Policy proposal saved; inactive. Ask the user to review and activate it with shield policy review in their terminal.",
+        ),
+        (
             "policy_withdraw",
             "Policy proposal withdrawn. Active policy is unchanged.",
         ),

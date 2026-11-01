@@ -40,7 +40,7 @@ For client implementation, see [transport details](#responses-and-transport-life
 | Category | Tools |
 | --- | --- |
 | Status | `status`, `doctor` |
-| Packs and registries | `pack_list`, `registry_list`, `pack_search`, `pack_info` |
+| Packs and registries | `pack_list`, `registry_list`, `pack_search`, `pack_info`, `pack_configure` |
 | Policy and rules | `policy_show`, `rule_list`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_apply`, `policy_withdraw`, `policy_receipt` |
 | Approvals and history | `request_list`, `history_list` |
 | Diagnostics | `policy_evaluate`, `policy_compare` |
@@ -205,6 +205,49 @@ Wait for the host approval and result. A successful application returns a receip
 declined or unavailable approval leaves the proposal inactive. A stale proposal
 needs fresh preparation. See the [review reference](#proposals-and-operator-review).
 
+## Choose installed pack settings
+
+When settings need your input, an agent can call the `pack_configure` tool to
+show a form and prepare an inactive proposal from your answers. First inspect
+the installed pack with `pack_list` and its `reference` selector to find its
+variable definitions. For an installed Acme pack declaring these variables,
+the tool arguments look like:
+
+```json
+{"reference":"acme/settings","variables":["manager","regions"],"layer":"project"}
+```
+
+`variables` selects 1–16 distinct declared names. `layer` is `project` by
+default; `local` writes personal configuration when the proposal is approved.
+An unknown variable returns `invalid_input`; inspect the installed selection
+with `pack_list` to find its declared names before retrying.
+Forms support text/path values, booleans, single choices and lists of choices.
+Free-text lists use the `policy_propose` change described below instead.
+Every selected field needs an explicit answer; omitted fields do not inherit
+defaults. Pack constraints and credential checks still apply to submitted values.
+Do not enter credentials.
+
+Multiple selections require MCP `2025-11-25` or modern `2026-07-28`.
+A connection negotiated as `2025-06-18` can collect compatible primitive fields,
+but a form containing a list of choices returns `input_unavailable` without
+preparing a proposal. In that case, collect the values in conversation and use
+the ordinary proposal route. Do not turn the list into one selected value.
+
+Submitting the form only saves a proposal. Review its scope, then let the agent
+copy the returned `apply_arguments` unchanged to `policy_apply` for separate
+final approval. Claude uses a separate confirmation form; Codex keeps its host
+tool approval. Declining or dismissing the settings form creates no proposal
+and ends the offer. A changed selection needs a new form and proposal.
+
+If the host cannot display the requested form, ask for the settings in the
+conversation and prepare a `policy_propose` change with `kind: "pack_configure"`,
+or use `shield pack configure` in your terminal. Never infer missing answers.
+A policy change while the form is open makes its answer stale; prepare a fresh
+settings review. Modern clients must support the form mode on each request and
+return the exact tool arguments, issued `requestState` and the `settings` input
+answer on retry. Pending modern forms expire after five minutes, allow at most
+eight rounds and are private to the connection. Replaying a consumed form refuses.
+
 ## Proposals and operator review
 
 `policy_propose` accepts one tagged `change` or a `changes` array of
@@ -223,7 +266,7 @@ Every change except `pack_update` and `pack_remove` accepts `layer: project`
 (default) or `local` for uncommitted local configuration. Rules use the project
 condition schema.
 
-`pack_configure` requires an installed `reference` and at least one of `set`,
+The `policy_propose` change with `kind: "pack_configure"` requires an installed `reference` and at least one of `set`,
 `unset`, `override`, or `clear_override`. Overrides map rule IDs to `off`,
 `allow`, `ask`, `deny`, or `{on_unmet}`.
 
@@ -570,7 +613,7 @@ Checkpoints do not interrupt native blocking I/O; clients also own process/I/O
 limits. Lost proposal replies can be recovered by resubmitting the same arguments.
 
 Keep stdin open until you have the replies you need. When it closes, queued
-`policy_propose`, `policy_withdraw` and `policy_apply`
+`policy_propose`, `pack_configure`, `policy_withdraw` and `policy_apply`
 calls are refused with `-32800` and never run, a pending confirmation is
 withdrawn, and read-only tools still finish.
 

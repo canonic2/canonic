@@ -3,6 +3,7 @@
 //! canonic-mcp-kit's stdio driver.
 
 mod confirmation;
+mod elicitation;
 mod frame_log;
 mod messages;
 mod response;
@@ -31,6 +32,7 @@ pub(crate) struct Server {
     review: RwLock<Arc<crate::review::Context>>,
     connection: Arc<crate::review::mcp::Connection>,
     confirmations: Mutex<confirmation::Confirmations>,
+    questions: Mutex<elicitation::Questions>,
 }
 
 impl Server {
@@ -53,6 +55,7 @@ impl Server {
             review: RwLock::new(Arc::new(context)),
             connection,
             confirmations: Mutex::new(confirmation::Confirmations::default()),
+            questions: Mutex::new(elicitation::Questions::default()),
         })
     }
 
@@ -118,7 +121,9 @@ impl stdio::Handler for Server {
             )));
         };
         let review = self.review_for_request(context);
-        if let Some(request) = context.request_context() {
+        if call.name != "pack_configure"
+            && let Some(request) = context.request_context()
+        {
             let retry = request.request_state.is_some() || request.input_responses.is_some();
             if retry {
                 let decision = self
@@ -157,6 +162,9 @@ impl stdio::Handler for Server {
                 true,
                 &|| Ok(()),
             ));
+        }
+        if call.name == "pack_configure" {
+            return elicitation::call(self, review, call, context);
         }
         // The resolved adapter declares the host confirmation mechanism.
         if call.name == "policy_apply"

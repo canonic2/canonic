@@ -699,6 +699,7 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
             "registry_list",
             "pack_search",
             "pack_info",
+            "pack_configure",
             "policy_show",
             "rule_list",
             "policy_propose",

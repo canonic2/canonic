@@ -120,6 +120,9 @@ const MAX_BATCH: usize = 16;
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Input {
+    /// Private workflow binding; never accepted from model-supplied JSON.
+    #[serde(skip)]
+    pub(super) expected_policy_revision: Option<String>,
     /// One change, or `changes` for several applied together.
     #[serde(
         default,
@@ -218,6 +221,13 @@ pub(super) fn propose(
     let store = Store::open(Path::new(&context.project_root))?;
     let (mut before, base_plan, base_snapshots) = store.read_for_comparison()?;
     before.check(context)?;
+    if input
+        .expected_policy_revision
+        .as_ref()
+        .is_some_and(|revision| revision != &before.policy_revision)
+    {
+        return Err(Error::StaleSnapshot);
+    }
     if before.candidates.len() != 1 {
         return Err(Error::Invalid(
             "operator workflow requires project-only policy",

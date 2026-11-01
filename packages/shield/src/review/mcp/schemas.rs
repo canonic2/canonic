@@ -158,8 +158,8 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
             }
         }
         if name == "policy_propose" { let mut definitions = crate::policy::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
-        let mutation=["policy_propose","policy_withdraw","policy_apply","review_defer"].contains(&name);
-        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply"].contains(&name)),"idempotentHint":true,"openWorldHint":(["pack_search","pack_info","policy_propose"].contains(&name))}})
+        let mutation=["policy_propose","pack_configure","policy_withdraw","policy_apply","review_defer"].contains(&name);
+        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply"].contains(&name)),"idempotentHint":name != "pack_configure","openWorldHint":(["pack_search","pack_info","policy_propose"].contains(&name))}})
     }).chain(super::documentation::tools().into_iter().map(|mut tool| {
         // The shared definitions carry their own schemas and annotations;
         // results arrive in Shield's envelope.
@@ -229,6 +229,7 @@ fn inventory() -> Vec<(&'static str, &'static str, Value)> {
             object(paging(json!({"query":string()})), &["query"]),
         ),
         pack_info(),
+        pack_configure(),
         (
             "policy_show",
             "Show active policy, or select a proposal by proposal_id to retrieve its status and apply_arguments",
@@ -292,6 +293,17 @@ fn inventory() -> Vec<(&'static str, &'static str, Value)> {
             comparison(),
         ),
     ]
+}
+
+fn pack_configure() -> (&'static str, &'static str, Value) {
+    (
+        "pack_configure",
+        "Ask the user for installed pack settings through an MCP form, then save an inactive proposal. Inspect pack_list first; select 1-16 variable names. Form answers never activate policy: copy returned apply_arguments unchanged to policy_apply for separate final approval. If forms are unavailable, ask the user in conversation and use policy_propose with pack_configure; never infer missing answers or retry cancellation.",
+        object(
+            json!({"reference":string(),"variables":{"type":"array","minItems":1,"maxItems":16,"items":id()},"layer":layer()}),
+            &["reference", "variables"],
+        ),
+    )
 }
 
 fn pack_info() -> (&'static str, &'static str, Value) {

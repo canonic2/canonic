@@ -64,7 +64,7 @@ pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String 
             if data["decision"] != "allow" && let Some(detail) = crate::agent_message::detail(&data["explanation"]) { format!("{prefix} {detail}") }
             else { format!("{prefix} This result does not authorize execution.") }
         },
-        "policy_propose" => {
+        "policy_propose" | "pack_configure" => {
             let guidance = data["next_action"].as_str().unwrap_or(crate::agents::review::resolve(agent).guidance().proposed);
             data["change_summary"].as_str().map_or_else(|| guidance.into(), |change| format!("Proposed: {change} {guidance}"))
         },
@@ -209,7 +209,7 @@ impl Serialize for Projection<'_> {
 
 pub(super) fn text_data<'a>(name: &str, value: &'a Value) -> TextData<'a> {
     TextData {
-        data: if ["policy_propose", "policy_withdraw"].contains(&name) {
+        data: if ["policy_propose", "pack_configure", "policy_withdraw"].contains(&name) {
             Projection::Selectors(&value["data"])
         } else {
             Projection::Complete(&value["data"])

@@ -3,6 +3,7 @@ mod apply;
 mod confirmation;
 mod diagnostics;
 mod documentation;
+mod elicitation;
 mod inspection;
 mod pack_info;
 mod schemas;
@@ -14,6 +15,12 @@ use super::{CapacityKind, Checkpoint, Context, Error, approvals, changes, histor
 use super::{packs, registries};
 use serde_json::{Value, json};
 use std::sync::Mutex;
+
+pub(crate) use elicitation::PackQuestion;
+
+pub(crate) fn question_error(context: &Context, error: &Error) -> Value {
+    failure(context, error)
+}
 
 /// Validate exact retained review bytes before showing a host confirmation.
 pub(crate) fn apply_confirmation(context: &Context, args: &Value) -> Result<Option<String>, Error> {
@@ -43,6 +50,18 @@ pub(crate) fn initialize_fixture(
     )
     .unwrap();
     super::open(root).unwrap()
+}
+
+#[cfg(test)]
+pub(crate) fn register_fixture(context: &Context, source: &std::path::Path) {
+    super::storage::Store::open(std::path::Path::new(&context.project_root))
+        .unwrap()
+        .update(context, &|| Ok(()), |state| {
+            state.operator["sources"]["fixture"] =
+                json!(canonic_registry_kit::source::Source::local(source).unwrap());
+            Ok(json!({}))
+        })
+        .unwrap();
 }
 
 /// An MCP refusal whose recovery differs from the shared review error's.
@@ -153,6 +172,10 @@ pub(crate) fn call_with_confirmation(
         }
         Ok(data)
     })();
+    result_envelope(context, name, result)
+}
+
+fn result_envelope(context: &Context, name: &str, result: Result<Value, Failure>) -> Value {
     match result {
         Ok(mut data) => {
             // Bundled public docs contain no runtime input. Redacting example
@@ -662,11 +685,20 @@ fn propose(
 ) -> Result<Value, Error> {
     let input: changes::Input = serde_json::from_value(args.clone())
         .map_err(|_| Error::Invalid("invalid proposal arguments"))?;
+    propose_input(context, views, &input, checkpoint)
+}
+
+fn propose_input(
+    context: &Context,
+    views: &mut views::Views,
+    input: &changes::Input,
+    checkpoint: Checkpoint<'_>,
+) -> Result<Value, Error> {
     let old = views.clone();
     let mut handles = None;
     let result = changes::propose(
         context,
-        &input,
+        input,
         checkpoint,
         &mut |base, base_meta, after, meta, plans| {
             let (base_plan, next_plan) =
@@ -679,7 +711,7 @@ fn propose(
         },
         &|proposal| {
             let mut data = apply::proposal_result(context, proposal);
-            skipped_pinned(&mut data, &input, &proposal.base_metadata);
+            skipped_pinned(&mut data, input, &proposal.base_metadata);
             data
         },
     );

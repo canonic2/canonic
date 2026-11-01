@@ -11,6 +11,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 mod confirmation;
+mod elicitation;
 mod skills;
 
 /// A fixture project. The temporary root lives as long as this value.
@@ -156,6 +157,10 @@ impl Write for Responses {
 
 impl Transport {
     pub(crate) fn start(server: Server) -> Self {
+        Self::with_options(server, test_options())
+    }
+
+    pub(crate) fn with_options(server: Server, options: stdio::Options) -> Self {
         let (input, incoming) = mpsc::sync_channel(8);
         let (outgoing, output) = mpsc::sync_channel(8);
         let serving = thread::spawn(move || {
@@ -169,7 +174,7 @@ impl Transport {
                     outgoing,
                     current: Vec::new(),
                 },
-                &test_options(),
+                &options,
             )
         });
         Self {
@@ -242,6 +247,7 @@ fn catalog_publishes_every_tool_and_marks_only_policy_changes_as_mutations() {
     assert_eq!(
         mutations,
         [
+            "pack_configure",
             "policy_propose",
             "review_defer",
             "policy_withdraw",
@@ -449,7 +455,7 @@ fn evaluation_is_connection_local_and_never_executes_input() {
                 .as_array()
                 .unwrap()
                 .len(),
-            21
+            22
         );
         let report = reply(&outputs, &json!("λ"));
         let envelope = &report["result"]["structuredContent"];

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "pack",
+  "id": "acme/settings",
+  "version": "1.0.0",
+  "description": "Acme settings acceptance fixture",
+  "license": "MIT",
+  "maintainers": ["Acme"],
+  "engines": {"shield": "*"},
+  "capabilities": ["structured-rules-v1", "argument-rules-v1", "variables-v1"],
+  "variables": {
+    "manager": {"type": "choice", "description": "Build manager", "values": ["make", "just"], "default": "make"},
+    "regions": {"type": "list", "description": "Allowed regions", "items": {"type": "choice", "values": ["east", "west", "north"]}, "min_items": 1, "max_items": 2},
+    "enabled": {"type": "boolean", "description": "Enable Acme checks", "default": false},
+    "label": {"type": "string", "description": "Project label", "max_length": 20}
+  },
+  "rules": [{"id": "inspect", "reason": "Inspect Acme metadata", "conditions": {"domain": "argv", "executable": "acme-settings", "arguments": {"kind": "exact", "values": ["inspect"]}}, "decision": {"loose": "allow", "recommended": "ask", "strict": "deny"}}]
+}
