@@ -102,6 +102,19 @@ fn initialization_negotiates_versions_and_gates_tools_until_initialized() {
 }
 
 #[test]
+fn tool_listing_requires_a_negotiated_client_even_in_a_ready_phase() {
+    let mut session = ready(SessionOptions::default(), &json!({}));
+    session.client = None;
+    assert_eq!(
+        session.receive_value(json!({"jsonrpc":"2.0","id":1,"method":"tools/list"})),
+        Inbound::Reply(rpc::failure(
+            json!(1),
+            &RpcError::new(rpc::SERVER_ERROR, "Server not initialized")
+        ))
+    );
+}
+
+#[test]
 fn accepting_initialization_again_preserves_a_ready_session() {
     let mut session = ready(SessionOptions::default(), &json!({}));
     let client = session.client().cloned();

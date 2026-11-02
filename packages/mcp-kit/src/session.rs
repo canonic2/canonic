@@ -663,13 +663,15 @@ impl Session {
             {
                 reply(RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found"))
             }
-            "tools/list" if rpc::only(&params, &["_meta"]) => {
-                Inbound::Reply(rpc::success(id, self.catalog.legacy_listing()))
+            "tools/list" => {
+                let Some(client) = &self.client else {
+                    return reply(RpcError::new(rpc::SERVER_ERROR, "Server not initialized"));
+                };
+                match self.catalog.list_page(&params, &client.protocol_version) {
+                    Ok(result) => Inbound::Reply(rpc::success(id, result)),
+                    Err(error) => reply(error),
+                }
             }
-            "tools/list" => reply(RpcError::new(
-                rpc::INVALID_PARAMS,
-                "Invalid tool listing parameters",
-            )),
             "tools/call" => self.tool_call(id, &params, false),
             _ if method.starts_with("completion/") => self.completion_request(id, method, &params),
             _ if method.starts_with("prompts/") => self.prompt_request(id, method, &params),
@@ -923,10 +925,13 @@ impl Session {
             }
         }
         match method {
-            "tools/list" if rpc::only(&params, &["_meta"]) => {
-                Inbound::Reply(rpc::success(id, self.catalog.listing()))
-            }
-            "tools/list" => failure(crate::modern::invalid("Invalid parameters")),
+            "tools/list" => match self
+                .catalog
+                .list_page(&params, crate::modern::PROTOCOL_VERSION)
+            {
+                Ok(result) => Inbound::Reply(rpc::success(id, result)),
+                Err(error) => failure(error),
+            },
             "tools/call" => self.tool_call(id, &params, true),
             "resources/list" | "resources/templates/list" | "resources/read" => {
                 let event = self.resource_request(id, method, params);

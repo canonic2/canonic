@@ -14,6 +14,8 @@ with a ready-to-use stdio driver or a core you can drive from your own runtime.
   against declared output schemas. Results support text, images, audio,
   resource links, embedded resources and structured data, with optional
   audience, priority and modification hints.
+- **Paged tool discovery.** Hosts list tools in publication order with opaque
+  cursors; legacy views include only compatible tools.
 - **Resources and templates.** Serve guides, reports and binary artifacts by
   URI, with paginated catalogs and parameterized addresses.
 - **Optional prompts.** Publish user-selected conversation starters with checked
@@ -107,6 +109,7 @@ authority by itself.
 
 - [Your first tool](docs/getting-started.md)
 - [Lanes, deadlines and cancellation](docs/guides/stdio.md)
+- [Tool catalog pagination](docs/guides/pagination.md)
 - [User confirmation](docs/guides/confirmation.md)
 - [Resources and templates](docs/guides/resources.md)
 - [Reusable prompts](docs/guides/prompts.md)

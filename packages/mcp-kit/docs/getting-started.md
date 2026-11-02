@@ -41,6 +41,8 @@ let catalog = Catalog::new(vec![
 
 `Catalog::new` refuses invalid names, duplicates and invalid schemas, then
 prepares validators once. Arguments are validated before your code runs.
+Hosts discover tools through paginated `tools/list` replies and follow
+`nextCursor` until it is absent; see [tool discovery](guides/pagination.md).
 The supported dialect is JSON Schema 2020-12, including `pattern` and `$ref`
 siblings. See [argument and result schemas](guides/schemas.md) for bundled
 references, output contracts and resource limits.

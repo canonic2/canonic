@@ -11,6 +11,7 @@ Start with the [quick start](getting-started.md).
 
 - [Quick start](getting-started.md) — dependency, a first tool and a stdio server.
 - [Serve over stdio](guides/stdio.md) — lanes, keys, deadlines, progress, extension methods and disconnection.
+- [List tools in pages](guides/pagination.md) — opaque cursors, revision-specific visibility and large catalog discovery.
 - [Ask the user to confirm](guides/confirmation.md) — form confirmation and its continuation.
 - [Publish resources and templates](guides/resources.md) — guides, reports and binary artifacts through validated URIs, tool-result links and embedded contents.
 - [Publish reusable prompts](guides/prompts.md) — optional catalogs, string arguments and typed conversation messages.

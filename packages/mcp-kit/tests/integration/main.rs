@@ -9,6 +9,7 @@ mod elicitation;
 mod fixture;
 mod lifecycle;
 mod modern;
+mod pagination;
 mod prompts;
 mod resource_content;
 mod resources;

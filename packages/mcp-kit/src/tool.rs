@@ -7,6 +7,8 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashSet;
+mod pagination;
+pub use pagination::{MAX_CURSOR_BYTES, PAGE_SIZE};
 
 /// The longest tool name, in bytes.
 pub const MAX_NAME_BYTES: usize = 128;
@@ -126,6 +128,7 @@ pub struct Catalog {
     tools: Vec<Tool>,
     inputs: Vec<schema::PreparedSchema>,
     outputs: Vec<ResultSchema>,
+    pages: pagination::Pages,
 }
 
 impl Catalog {
@@ -180,10 +183,12 @@ impl Catalog {
                     .is_none_or(|output| output["type"] == "object"),
             });
         }
+        let pages = pagination::Pages::new(&tools, &outputs);
         Ok(Self {
             tools,
             inputs,
             outputs,
+            pages,
         })
     }
 
@@ -199,14 +204,21 @@ impl Catalog {
         &self.tools
     }
 
-    /// The `tools/list` result.
+    /// The full modern-compatible catalog, without pagination or a wire envelope.
     #[must_use]
     pub fn listing(&self) -> Value {
         json!({"tools": self.tools})
     }
 
-    pub(crate) fn legacy_listing(&self) -> Value {
-        json!({"tools": self.tools.iter().zip(&self.outputs).filter(|(_, output)| output.legacy).map(|(tool, _)| tool).collect::<Vec<_>>()})
+    /// Returns one `tools/list` page for a supported revision, before envelope encoding.
+    /// Legacy views omit tools with incompatible output schemas. Cursors belong
+    /// to this catalog and revision; callers forward them unchanged.
+    ///
+    /// # Errors
+    /// Returns invalid parameters for unknown fields, unsupported revisions or
+    /// malformed, foreign or out-of-range cursors.
+    pub fn list_page(&self, params: &Value, protocol_version: &str) -> Result<Value, RpcError> {
+        self.pages.page(self, params, protocol_version)
     }
 
     /// Captures an immutable output contract for ordinary calls and durable task settlement.
@@ -713,7 +725,12 @@ mod tests {
             Tool::new("acme_null", "Return null.", object()).with_output_schema(json!({"type":"null"})),
         ]).unwrap();
         assert_eq!(
-            catalog.legacy_listing()["tools"].as_array().unwrap().len(),
+            catalog
+                .list_page(&json!({}), crate::LATEST_PROTOCOL_VERSION)
+                .unwrap()["tools"]
+                .as_array()
+                .unwrap()
+                .len(),
             1
         );
         let output = catalog.result_schema("acme_object").unwrap();

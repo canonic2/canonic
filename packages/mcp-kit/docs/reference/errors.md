@@ -13,6 +13,7 @@
 | `-32602` | Invalid resource parameters | An invalid URI, cursor, metadata or parameter shape | Use a concrete URI and pass the previous page's cursor unchanged to the same list method |
 | `-32602` | Resource not found | A modern read named an unknown or inaccessible URI | Check the address and authorization; use `Outcome::ResourceNotFound` for revision-aware replies |
 | `-32602` | Unknown tool, Invalid tool call parameters | A name outside the catalog or malformed parameters | Call `tools/list` |
+| `-32602` | Invalid tool listing parameters or cursor | Unsupported fields/revision or a malformed, foreign or out-of-range tool cursor | Restart listing without a cursor and forward each returned `nextCursor` unchanged |
 | `-32603` | Response exceeds output limit | A result larger than `Options::max_output_bytes` | Page or shorten the result |
 | `-32603` | Tool result does not match its output schema | Missing or invalid structured data, or incompatible legacy data | Fix the handler's result; validation cannot undo effects |
 | `-32603` | Tool result exceeds schema validation limits | Structured data exceeds validation bytes, depth or work limits | Reduce the data or its validation cost; effects may already have happened |
