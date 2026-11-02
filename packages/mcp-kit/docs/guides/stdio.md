@@ -119,7 +119,62 @@ follow mutation rules.
 ## Diagnostics
 
 `Options::observer` receives every frame in both directions. Use it to record
-bounded diagnostics; never write to stdout from it.
+bounded diagnostics; never write to stdout from it. It runs inline and must
+return quickly.
+
+For lifecycle timing without payload bytes, configure a bounded event channel:
+
+```rust
+use canonic_mcp_kit::stdio::{Options, observation_channel};
+
+let (observations, records) = observation_channel(1024).expect("valid observation capacity");
+let options = Options {
+    observations: Some(observations.clone()),
+    ..Options::default()
+};
+```
+
+Drain `records` from your own diagnostic worker while `serve` runs. The library
+starts no exporter and never waits for receiver capacity: full or closed
+receivers drop records. `observations.dropped()` reports cumulative loss across
+all producer clones; a nonzero count means the evidence is incomplete. Capacity
+must be within 1–4,096 records. Drop the options and all producer clones when
+your exporter needs to observe channel closure.
+
+Records identify a connection, input, lane, worker and execution assignment.
+Use `(connection, request)` to correlate work; protocol IDs can be reused while
+an old cancelled worker still runs. Legacy continuations retain their input
+identity and receive new assignments. Modern retries are independent inputs.
+Protocol IDs are omitted by default. `observations.with_rpc_ids(true)` enables
+bounded inbound string/integer IDs on that producer clone. Request IDs are
+client-selected; confirmation and elicitation answers can echo server-issued
+question IDs. Early records precede ID binding, so correlate them by internal
+identity rather than protocol ID alone.
+
+`ObservationKind::Frame::bytes` counts observed bytes without the trailing
+newline. For rejected input this is a lower bound on the complete frame size:
+the bounded reader stops at its limit rather than reading the rest of an
+oversized frame.
+
+`ObservationKind::Start`/`End` report inclusive intervals for decode/input
+validation, callbacks, lane queues, workers, handlers, result validation,
+encoding, host-input waits, output and cleanup. `Observation::parent` identifies
+nested intervals. Decode includes routing and prepared schema work; encoding
+can include result-schema validation. Worker intervals include completion
+collection, while `OutputQueue` also measures completion delivery and prepared
+frame queueing. Intervals can overlap; do not sum them into exclusive CPU time.
+Reader time includes external input waits. Host-input waits include form
+publication and are not measurements of human decision time alone.
+
+`Settled` records the protocol decision; `Released` records the last live owner
+leaving. A cancelled or expired worker can exit later, with its result recorded
+as `Discarded`. Frame kinds distinguish ordinary replies, forms, progress,
+subscription output and form cancellation. Subscription inputs remain live
+through their final result or cancellation. A failed write/flush records
+`PublicationFailed`; peer receipt is unknown. `ReaderDetached` means a blocked
+reader can outlive an early driver return. Disabled lifecycle accounting creates
+no diagnostic records, timestamps or history map. These records do not measure
+catalog construction or executable startup before `serve`.
 
 ## Errors that end the connection
 

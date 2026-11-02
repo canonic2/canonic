@@ -1,5 +1,7 @@
 //! Reads bounded newline-terminated frames on a dedicated thread.
 
+use super::observation::{FrameKind, ObservationKind, Stage, Trace};
+
 use std::{
     io::{self, BufRead, Read},
     sync::mpsc::SyncSender,
@@ -9,11 +11,11 @@ use std::{
 /// One reader event for the dispatcher.
 pub(super) enum Input {
     /// A complete frame, including its line break.
-    Frame(Vec<u8>),
+    Frame(Vec<u8>, Trace),
     /// The input ended or failed.
     End(io::Result<()>),
     /// A frame exceeded the limit or the input ended mid-frame.
-    Invalid,
+    Invalid(Trace),
 }
 
 /// Reads frames of at most `limit` bytes plus a line break until the input
@@ -23,7 +25,9 @@ pub(super) fn read(
     events: &SyncSender<Input>,
     dispatcher: &Thread,
     limit: usize,
+    trace: &Trace,
 ) {
+    let _reading = trace.span_with_parent(Stage::Reader, Stage::Connection);
     let emit = |event| {
         let sent = events.send(event).is_ok();
         dispatcher.unpark();
@@ -44,10 +48,21 @@ pub(super) fn read(
             return;
         }
         if frame.last() != Some(&b'\n') || frame.len() - 1 > limit {
-            emit(Input::Invalid);
+            let input = trace.input();
+            input.event(ObservationKind::Frame {
+                kind: FrameKind::Input,
+                bytes: frame.strip_suffix(b"\n").unwrap_or(&frame).len(),
+            });
+            emit(Input::Invalid(input));
             return;
         }
-        if !emit(Input::Frame(frame)) {
+        let input = trace.input();
+        input.event(ObservationKind::Frame {
+            kind: FrameKind::Input,
+            bytes: frame.len() - 1,
+        });
+        input.event(ObservationKind::Start(Stage::InputQueue));
+        if !emit(Input::Frame(frame, input)) {
             return;
         }
     }
@@ -65,15 +80,16 @@ mod tests {
             &sender,
             &thread::current(),
             limit,
+            &Trace::default(),
         );
         drop(sender);
         receiver
             .into_iter()
             .map(|event| match event {
-                Input::Frame(frame) => Ok(frame),
+                Input::Frame(frame, _) => Ok(frame),
                 Input::End(Ok(())) => Err("end"),
                 Input::End(Err(_)) => Err("error"),
-                Input::Invalid => Err("invalid"),
+                Input::Invalid(_) => Err("invalid"),
             })
             .collect()
     }

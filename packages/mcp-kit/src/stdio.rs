@@ -7,9 +7,15 @@
 //! [`Context`]; they never interrupt code that does not check it.
 
 mod changes;
+mod observation;
 mod reader;
 mod scheduler;
 pub use changes::{CHANGE_BUFFER, ChangeSender, SendChangeError};
+pub use observation::{
+    FrameKind, MAX_OBSERVATION_BUFFER, Observation, ObservationError, ObservationKind,
+    ObservationSender, Settlement, Stage, observation_channel,
+};
+use observation::{Span, Trace};
 
 use crate::{
     control::{Control, Interrupted},
@@ -21,6 +27,7 @@ use crate::{
 };
 use serde_json::{Value, json};
 use std::{
+    collections::HashMap,
     io::{self, BufRead, Write},
     sync::{Arc, mpsc},
     thread,
@@ -280,6 +287,8 @@ pub struct Options {
     pub max_output_bytes: usize,
     /// An optional frame observer.
     pub observer: Option<Observer>,
+    /// Optional bounded lifecycle records; full/closed receivers never delay serving.
+    pub observations: Option<ObservationSender>,
 }
 
 impl Default for Options {
@@ -294,6 +303,7 @@ impl Default for Options {
             disconnect_grace: DEFAULT_DISCONNECT_GRACE,
             max_output_bytes: DEFAULT_MAX_OUTPUT_BYTES,
             observer: None,
+            observations: None,
         }
     }
 }
@@ -431,20 +441,27 @@ pub fn serve<H: Handler>(
 ) -> Result<(), ServeError> {
     validate(options)?;
     let session = Session::try_new(catalog, options.session.clone())?;
+    let trace = Trace::connection(options.observations.as_ref());
+    let _connection = trace.span(Stage::Connection);
     let dispatcher = thread::current();
     let scheduler = scheduler::Scheduler::start(&handler, options, dispatcher.clone())?;
     let (frames, incoming) = mpsc::sync_channel(INPUT_BUFFER);
     let limit = options.session.max_message_bytes;
+    let reader_trace = trace.clone();
     let reading = thread::Builder::new()
         .name("mcp-input".into())
-        .spawn(move || reader::read(input, &frames, &dispatcher, limit))
+        .spawn(move || reader::read(input, &frames, &dispatcher, limit, &reader_trace))
         .map_err(ServeError::Spawn)?;
     let mut connection = Connection {
+        trace: trace.clone(),
+        streams: HashMap::new(),
         changes: None,
         session,
         scheduler,
         handler,
         output: Output {
+            trace: Trace::default(),
+            kind: FrameKind::Reply,
             writer: output,
             observer: options.observer.clone(),
             limit: options.max_output_bytes,
@@ -454,13 +471,22 @@ pub fn serve<H: Handler>(
     if options.session.subscriptions.is_some() {
         let (sender, receiver) = changes::channel(&options.session);
         connection.changes = Some(receiver);
+        let _callback = trace.span(Stage::Callback);
         connection.handler.connected(sender);
     }
     let result = connection.run(&incoming);
     drop(incoming);
-    connection.scheduler.shutdown();
+    {
+        let _drain = trace.span_with_parent(Stage::Drain, Stage::Connection);
+        connection.scheduler.shutdown();
+        for (_, stream) in connection.streams.drain() {
+            stream.event(ObservationKind::StreamClosed);
+        }
+    }
     if connection.eof || reading.is_finished() {
         let _ = reading.join();
+    } else {
+        trace.event(ObservationKind::ReaderDetached);
     }
     // A blocking read cannot be interrupted portably; after an early failure
     // the reader ends with its input or the process.
@@ -497,6 +523,8 @@ fn validate(options: &Options) -> Result<(), ServeError> {
 }
 
 struct Connection<H, W> {
+    trace: Trace,
+    streams: HashMap<String, Trace>,
     changes: Option<mpsc::Receiver<crate::Change>>,
     session: Session,
     scheduler: scheduler::Scheduler,
@@ -520,12 +548,43 @@ impl<H: Handler, W: Write> Connection<H, W> {
                 return input_error.map_or(Ok(()), |error| Err(ServeError::Input(error)));
             }
             match incoming.try_recv() {
-                Ok(reader::Input::Frame(frame)) => {
+                Ok(reader::Input::Frame(frame, trace)) => {
+                    trace.event(ObservationKind::End(Stage::InputQueue));
+                    self.output.trace = trace.clone();
                     self.output.observe(Direction::Input, &frame);
-                    let inbound = self.session.receive(&frame);
-                    self.inbound(inbound)?;
+                    let inbound = {
+                        let _decode = trace.span(Stage::Decode);
+                        self.session
+                            .receive_inspected(&frame, |value| trace.bind(value))
+                    };
+                    let settlement = match &inbound {
+                        Inbound::Ignored
+                        | Inbound::Cancel { .. }
+                        | Inbound::Confirmation { .. }
+                        | Inbound::Elicitation { .. } => Some(Settlement::NoReply),
+                        Inbound::Subscription { .. }
+                        | Inbound::Completion { .. }
+                        | Inbound::Prompt { .. }
+                        | Inbound::Task { .. }
+                        | Inbound::BundledResource { .. }
+                        | Inbound::Tool { .. }
+                        | Inbound::Method { .. }
+                        | Inbound::Notification { .. }
+                        | Inbound::Reply(_)
+                        | Inbound::Fatal { .. }
+                        | Inbound::Initialize { .. }
+                        | Inbound::InvalidArguments { .. } => None,
+                    };
+                    let result = self.inbound(inbound);
+                    if let Some(why) = settlement {
+                        trace.settle(why);
+                    }
+                    self.output.trace = Trace::default();
+                    result?;
                 }
-                Ok(reader::Input::Invalid) => {
+                Ok(reader::Input::Invalid(trace)) => {
+                    self.output.trace = trace.clone();
+                    trace.settle(Settlement::Refused);
                     self.output.value(&rpc::failure(
                         Value::Null,
                         &RpcError::new(rpc::PARSE_ERROR, "Invalid or oversized message frame"),
@@ -559,14 +618,20 @@ impl<H: Handler, W: Write> Connection<H, W> {
         progress_token: Option<Value>,
     ) -> Result<(), ServeError> {
         let context = id.as_ref().and_then(|id| self.session.request_context(id));
-        let admission = self.handler.admit_context(&request, context.as_deref());
+        let admission = {
+            let _callback = self.output.trace.span(Stage::Callback);
+            self.handler.admit_context(&request, context.as_deref())
+        };
         let outgoing = self.scheduler.admit(
             &mut self.session,
-            id,
-            request,
-            admission,
-            read_only,
-            progress_token,
+            scheduler::Submission {
+                trace: self.output.trace.clone(),
+                id,
+                request,
+                admission,
+                read_only,
+                progress_token,
+            },
         );
         self.output.send(outgoing)
     }
@@ -586,8 +651,12 @@ impl<H: Handler, W: Write> Connection<H, W> {
         call: &ToolCall,
         error: &ArgumentError,
     ) -> Result<(), ServeError> {
-        let result = self.handler.invalid_arguments(call, error);
+        let result = {
+            let _callback = self.output.trace.span(Stage::Callback);
+            self.handler.invalid_arguments(call, error)
+        };
         let context = self.session.request_context(&id);
+        let encoding = self.output.trace.span(Stage::Encode);
         let encoded = context.map_or_else(
             || {
                 self.session
@@ -598,42 +667,36 @@ impl<H: Handler, W: Write> Connection<H, W> {
             },
             |context| context.encode_success(&id, &result, self.output.limit, &|| Ok(())),
         );
+        drop(encoding);
         self.session.finish(&id);
+        self.output.trace.settle(Settlement::Reply);
         match encoded {
             Ok(bytes) => self.output.bytes(&bytes),
-            Err(error) => self.output.value(&rpc::failure(
-                id,
-                &RpcError::new(
-                    rpc::INTERNAL_ERROR,
-                    match error {
-                        crate::json::EncodeError::Invalid => {
-                            "Tool result does not match its output schema"
-                        }
-                        crate::json::EncodeError::ValidationLimit => {
-                            "Tool result exceeds schema validation limits"
-                        }
-                        _ => "Response exceeds output limit",
-                    },
-                ),
-            )),
+            Err(error) => {
+                self.output.trace.event(ObservationKind::EncodeFailed);
+                self.output.value(&rpc::failure(
+                    id,
+                    &RpcError::new(
+                        rpc::INTERNAL_ERROR,
+                        match error {
+                            crate::json::EncodeError::Invalid => {
+                                "Tool result does not match its output schema"
+                            }
+                            crate::json::EncodeError::ValidationLimit => {
+                                "Tool result exceeds schema validation limits"
+                            }
+                            _ => "Response exceeds output limit",
+                        },
+                    ),
+                ))
+            }
         }
     }
 
     fn inbound(&mut self, inbound: Inbound) -> Result<(), ServeError> {
         match inbound {
             Inbound::Subscription { id, acknowledged } => {
-                if let Ok(bytes) = json::encode(&acknowledged, self.output.limit) {
-                    self.output.bytes(&bytes)
-                } else {
-                    self.session.finish(&id);
-                    self.output.value(&rpc::failure(
-                        id,
-                        &RpcError::new(
-                            rpc::INTERNAL_ERROR,
-                            "Subscription acknowledgement exceeds output limit",
-                        ),
-                    ))
-                }
+                self.acknowledge_subscription(id, &acknowledged)
             }
             Inbound::Completion { id, request } => {
                 let token = request.progress_token.clone();
@@ -652,16 +715,25 @@ impl<H: Handler, W: Write> Connection<H, W> {
                 read,
                 progress_token,
             } => self.schedule(Some(id), Request::Resource(read), true, progress_token),
-            Inbound::Reply(reply) => self.output.value(&reply),
+            Inbound::Reply(reply) => {
+                self.output.trace.settle(Settlement::Reply);
+                self.output.value(&reply)
+            }
             Inbound::Fatal { reply, reason } => {
+                self.output.trace.settle(Settlement::Reply);
                 self.output.value(&reply)?;
                 Err(ServeError::Protocol(reason))
             }
             Inbound::Initialize { id, client } => {
-                let reply = match self.handler.initialize(&client) {
+                let initialized = {
+                    let _callback = self.output.trace.span(Stage::Callback);
+                    self.handler.initialize(&client)
+                };
+                let reply = match initialized {
                     Ok(info) => self.session.accept_initialize(id, &info),
                     Err(error) => self.session.reject_initialize(id, &error),
                 };
+                self.output.trace.settle(Settlement::Reply);
                 self.output.value(&reply)
             }
             Inbound::InvalidArguments { id, call, error } => {
@@ -692,15 +764,28 @@ impl<H: Handler, W: Write> Connection<H, W> {
                 self.schedule(None, Request::Notification { method, params }, false, None)
             }
             Inbound::Cancel { id } => {
-                let outgoing = self.scheduler.cancel(&mut self.session, &id);
+                if self.trace.enabled()
+                    && let Some(stream) = self.streams.remove(&id.to_string())
+                {
+                    self.output.trace.relate(&stream);
+                    stream.event(ObservationKind::StreamClosed);
+                    stream.settle(Settlement::Cancelled);
+                }
+                let outgoing = self
+                    .scheduler
+                    .cancel(&mut self.session, &id, &self.output.trace);
                 self.output.send(outgoing)
             }
             Inbound::Confirmation { id, decision } => {
-                let outgoing = self.scheduler.confirmed(&mut self.session, &id, decision);
+                let outgoing =
+                    self.scheduler
+                        .confirmed(&mut self.session, &id, decision, &self.output.trace);
                 self.output.send(outgoing)
             }
             Inbound::Elicitation { id, answer } => {
-                let outgoing = self.scheduler.elicited(&mut self.session, &id, answer);
+                let outgoing =
+                    self.scheduler
+                        .elicited(&mut self.session, &id, answer, &self.output.trace);
                 self.output.send(outgoing)
             }
             Inbound::Ignored => Ok(()),
@@ -709,6 +794,39 @@ impl<H: Handler, W: Write> Connection<H, W> {
 }
 
 impl<H: Handler, W: Write> Connection<H, W> {
+    fn acknowledge_subscription(
+        &mut self,
+        id: Value,
+        acknowledged: &Value,
+    ) -> Result<(), ServeError> {
+        let encoded = {
+            let _encode = self.output.trace.span(Stage::Encode);
+            json::encode(acknowledged, self.output.limit)
+        };
+        if let Ok(bytes) = encoded {
+            if self.output.trace.enabled() {
+                self.output.trace.event(ObservationKind::StreamOpened);
+                self.streams
+                    .insert(id.to_string(), self.output.trace.clone());
+            }
+            self.output.kind = FrameKind::Subscription;
+            let result = self.output.bytes(&bytes);
+            self.output.kind = FrameKind::Reply;
+            result
+        } else {
+            self.output.trace.event(ObservationKind::EncodeFailed);
+            self.output.trace.settle(Settlement::Refused);
+            self.session.finish(&id);
+            self.output.value(&rpc::failure(
+                id,
+                &RpcError::new(
+                    rpc::INTERNAL_ERROR,
+                    "Subscription acknowledgement exceeds output limit",
+                ),
+            ))
+        }
+    }
+
     fn publish_changes(&mut self) -> Result<(), ServeError> {
         for _ in 0..CHANGE_BUFFER {
             let Some(change) = self
@@ -730,14 +848,29 @@ impl<H: Handler, W: Write> Connection<H, W> {
             let id = frame
                 .get("id")
                 .unwrap_or(&frame["params"]["_meta"][crate::subscription::SUBSCRIPTION_KEY]);
-            if let Ok(bytes) = json::encode(&frame, self.output.limit) {
+            let trace = if self.trace.enabled() {
+                self.streams
+                    .get(&id.to_string())
+                    .cloned()
+                    .unwrap_or_default()
+            } else {
+                Trace::default()
+            };
+            let terminal = frame.get("id").is_some();
+            let encoded = {
+                let _encode = trace.span(Stage::Encode);
+                json::encode(&frame, self.output.limit)
+            };
+            if let Ok(bytes) = encoded {
                 // A prior oversized frame in this batch may already have ended this stream.
                 if frame.get("id").is_some() || self.session.request_context(id).is_some() {
-                    self.output.bytes(&bytes)?;
+                    self.output
+                        .send([Outgoing::Bytes(bytes).observed(&trace, FrameKind::Subscription)])?;
                 }
             } else {
+                trace.event(ObservationKind::EncodeFailed);
                 let _ = self.session.end_subscription(id);
-                self.output.value(&rpc::failure(
+                self.output.send([Outgoing::Value(rpc::failure(
                     id.clone(),
                     &RpcError::new(
                         rpc::INTERNAL_ERROR,
@@ -747,7 +880,13 @@ impl<H: Handler, W: Write> Connection<H, W> {
                             "Subscription notification exceeds output limit"
                         },
                     ),
-                ))?;
+                ))
+                .observed(&trace, FrameKind::Subscription)])?;
+            }
+            if (terminal || self.session.request_context(id).is_none()) && trace.enabled() {
+                self.streams.remove(&id.to_string());
+                trace.event(ObservationKind::StreamClosed);
+                trace.settle(Settlement::Reply);
             }
         }
         Ok(())
@@ -758,29 +897,54 @@ impl<H: Handler, W: Write> Connection<H, W> {
 enum Outgoing {
     Value(Value),
     Bytes(Vec<u8>),
+    Observed(Box<Self>, Span, FrameKind),
+}
+
+impl Outgoing {
+    fn observed(self, trace: &Trace, kind: FrameKind) -> Self {
+        if trace.enabled() {
+            Self::Observed(Box::new(self), trace.span(Stage::OutputQueue), kind)
+        } else {
+            self
+        }
+    }
 }
 
 struct Output<W> {
+    trace: Trace,
+    kind: FrameKind,
     writer: W,
     observer: Option<Observer>,
     limit: usize,
 }
 
 impl<W: Write> Output<W> {
-    fn send(&mut self, outgoing: Vec<Outgoing>) -> Result<(), ServeError> {
+    fn send(&mut self, outgoing: impl IntoIterator<Item = Outgoing>) -> Result<(), ServeError> {
         for frame in outgoing {
             match frame {
                 Outgoing::Value(value) => self.value(&value)?,
                 Outgoing::Bytes(bytes) => self.bytes(&bytes)?,
+                Outgoing::Observed(frame, queued, kind) => {
+                    let trace = queued.trace.clone();
+                    drop(queued);
+                    let previous = std::mem::replace(&mut self.trace, trace);
+                    let previous_kind = std::mem::replace(&mut self.kind, kind);
+                    let result = self.send([*frame]);
+                    self.trace = previous;
+                    self.kind = previous_kind;
+                    result?;
+                }
             }
         }
         Ok(())
     }
 
     fn value(&mut self, value: &Value) -> Result<(), ServeError> {
+        let encode = self.trace.span(Stage::Encode);
         let bytes = if let Ok(bytes) = json::encode(value, self.limit) {
             bytes
         } else {
+            self.trace.event(ObservationKind::EncodeFailed);
             // Only replies can be replaced with an error response. A request's
             // ID belongs to the server, and notifications have no reply ID.
             let Some(id) = value.get("id").filter(|_| value.get("method").is_none()) else {
@@ -791,21 +955,39 @@ impl<W: Write> Output<W> {
             // An ID is at most 128 bytes, so this reply fits any valid limit.
             serde_json::to_vec(&fallback).unwrap_or_default()
         };
+        drop(encode);
         self.bytes(&bytes)
     }
 
     fn bytes(&mut self, bytes: &[u8]) -> Result<(), ServeError> {
-        self.writer
+        self.trace.event(ObservationKind::Frame {
+            kind: self.kind,
+            bytes: bytes.len(),
+        });
+        let publication = if self.kind == FrameKind::Interaction {
+            self.trace
+                .span_with_parent(Stage::Publication, Stage::Interaction)
+        } else {
+            self.trace.span(Stage::Publication)
+        };
+        let result = self
+            .writer
             .write_all(bytes)
             .and_then(|()| self.writer.write_all(b"\n"))
             .and_then(|()| self.writer.flush())
-            .map_err(ServeError::Output)?;
+            .map_err(ServeError::Output);
+        if result.is_err() {
+            self.trace.event(ObservationKind::PublicationFailed);
+        }
+        drop(publication);
+        result?;
         self.observe(Direction::Output, bytes);
         Ok(())
     }
 
     fn observe(&self, direction: Direction, frame: &[u8]) {
         if let Some(observer) = &self.observer {
+            let _callback = self.trace.span(Stage::Callback);
             observer(direction, frame.strip_suffix(b"\n").unwrap_or(frame));
         }
     }

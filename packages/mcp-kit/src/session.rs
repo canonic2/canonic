@@ -430,6 +430,15 @@ impl Session {
 
     /// Processes one frame, with or without its trailing line break.
     pub fn receive(&mut self, frame: &[u8]) -> Inbound {
+        self.receive_inspected(frame, |_| {})
+    }
+
+    /// Lets the driver bind diagnostic identity without reparsing or bypassing ingress.
+    pub(crate) fn receive_inspected(
+        &mut self,
+        frame: &[u8],
+        inspect: impl FnOnce(&Value),
+    ) -> Inbound {
         self.received += 1;
         if self
             .options
@@ -446,7 +455,10 @@ impl Session {
         }
         let frame = frame.strip_suffix(b"\n").unwrap_or(frame);
         match json::parse(frame, self.options.max_message_bytes) {
-            Ok(value) => self.receive_value(value),
+            Ok(value) => {
+                inspect(&value);
+                self.receive_value(value)
+            }
             Err(ParseError::TooLarge { .. }) => Inbound::Fatal {
                 reply: rpc::failure(
                     Value::Null,

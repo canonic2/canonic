@@ -33,6 +33,8 @@
 | Ask on a modern request | `RequestContext::confirmation`, `Outcome::InputRequired`, consumer-owned state validation and `confirmation_decision` |
 | Change invalid-argument results | `Handler::invalid_arguments` |
 | Record frames for diagnostics | `stdio::Options::observer` |
+| Account for request lifetimes | `stdio::observation_channel`, `Options::observations`, `Observation`, `ObservationKind`, `FrameKind`, `Stage`, `Settlement`; see [stdio diagnostics](../guides/stdio.md#diagnostics) |
+| Configure lifecycle collection | `ObservationSender::with_rpc_ids`, `ObservationSender::dropped`, `ObservationError`, `MAX_OBSERVATION_BUFFER` |
 | Drive the protocol from another runtime | `Session`, `Inbound`, `SessionOptions` |
 | Encode modern replies in another runtime | `RequestContext::encode_success` for complete results; `RequestContext::encode_interim` for `InputRequiredResult` |
 | Encode revision-checked modern errors | `RequestContext::encode_error`; low-level `rpc::encode_failure` only builds the bounded envelope |

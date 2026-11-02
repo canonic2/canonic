@@ -4,6 +4,7 @@
 //! The dispatcher thread owns all scheduling state. Workers only run
 //! requests and send back an encoded reply or a confirmation step.
 
+use super::observation::{FrameKind, ObservationKind, Settlement, Span, Stage, Trace};
 use super::{
     Admission, Confirm, Context, Elicit, ElicitResume, ElicitationPolicy, Handler, Options,
     Outcome, Outgoing, PROGRESS_BUFFER, Progress, Request, Resume, ServeError,
@@ -29,6 +30,7 @@ use std::{
 /// What a queued or running request is, independent of its work.
 #[derive(Clone)]
 struct Meta {
+    trace: Trace,
     reply_kind: ReplyKind,
     result_schema: Option<crate::ResultSchema>,
     admitted: Instant,
@@ -50,6 +52,7 @@ enum Work {
 }
 
 struct Job {
+    queued: Span,
     meta: Meta,
     work: Work,
     control: Arc<Control>,
@@ -65,6 +68,7 @@ enum ReplyKind {
 }
 
 struct Assignment {
+    trace: Trace,
     reply_kind: ReplyKind,
     result_schema: Option<crate::ResultSchema>,
     request_context: Option<Arc<crate::RequestContext>>,
@@ -84,6 +88,7 @@ enum Finish {
 }
 
 struct Running {
+    execution: Span,
     meta: Meta,
     worker: usize,
     control: Arc<Control>,
@@ -93,6 +98,7 @@ struct Running {
 }
 
 struct Waiting {
+    interaction: Span,
     meta: Meta,
     resume: Continuation,
     elicitation: Value,
@@ -164,6 +170,16 @@ pub(super) struct Scheduler {
     disconnected: bool,
 }
 
+/// One submission binds work, protocol identity and diagnostic ownership.
+pub(super) struct Submission {
+    pub(super) trace: Trace,
+    pub(super) id: Option<Value>,
+    pub(super) request: Request,
+    pub(super) admission: Admission,
+    pub(super) read_only: bool,
+    pub(super) progress_token: Option<Value>,
+}
+
 impl Scheduler {
     pub(super) fn start<H: Handler>(
         handler: &Arc<H>,
@@ -220,16 +236,17 @@ impl Scheduler {
     }
 
     /// Queues a request, or refuses it when its lane is missing or full.
-    pub(super) fn admit(
-        &mut self,
-        session: &mut Session,
-        id: Option<Value>,
-        request: Request,
-        admission: Admission,
-        read_only: bool,
-        progress_token: Option<Value>,
-    ) -> Vec<Outgoing> {
+    pub(super) fn admit(&mut self, session: &mut Session, submission: Submission) -> Vec<Outgoing> {
+        let Submission {
+            mut trace,
+            id,
+            request,
+            admission,
+            read_only,
+            progress_token,
+        } = submission;
         let mut out = Vec::new();
+        trace.lane(admission.lane);
         let Some(lane) = self.lanes.get_mut(admission.lane) else {
             refuse(
                 session,
@@ -237,6 +254,7 @@ impl Scheduler {
                 rpc::INTERNAL_ERROR,
                 "Request lane is not configured",
                 &mut out,
+                &trace,
             );
             return out;
         };
@@ -247,12 +265,15 @@ impl Scheduler {
                 rpc::SERVER_ERROR,
                 "Server request capacity reached",
                 &mut out,
+                &trace,
             );
             return out;
         }
         let timeout = admission.timeout.unwrap_or(self.timeout);
         lane.queue.push_back(Job {
+            queued: trace.span(Stage::Queue),
             meta: Meta {
+                trace,
                 reply_kind: match &request {
                     Request::Prompt(_) => ReplyKind::Prompt,
                     Request::Completion(_) => ReplyKind::Completion,
@@ -286,12 +307,14 @@ impl Scheduler {
         // Progress first: a notification sent before its request finished
         // precedes the reply.
         while let Ok((sequence, notification)) = self.progress.try_recv() {
-            if self
-                .running
-                .get(&sequence)
-                .is_some_and(|running| !running.answered && running.control.check().is_ok())
+            if let Some(running) = self.running.get(&sequence)
+                && !running.answered
+                && running.control.check().is_ok()
             {
-                out.push(Outgoing::Value(notification));
+                out.push(
+                    Outgoing::Value(notification)
+                        .observed(&running.meta.trace, FrameKind::Progress),
+                );
             }
         }
         while let Ok((sequence, finish)) = self.finished.try_recv() {
@@ -303,7 +326,12 @@ impl Scheduler {
     }
 
     /// Stops a request the client cancelled. The session has already released its ID.
-    pub(super) fn cancel(&mut self, session: &mut Session, id: &Value) -> Vec<Outgoing> {
+    pub(super) fn cancel(
+        &mut self,
+        session: &mut Session,
+        id: &Value,
+        source: &Trace,
+    ) -> Vec<Outgoing> {
         let mut out = Vec::new();
         for lane in &mut self.lanes {
             if let Some(position) = lane
@@ -311,13 +339,18 @@ impl Scheduler {
                 .iter()
                 .position(|job| job.meta.id.as_ref() == Some(id))
                 && let Some(job) = lane.queue.remove(position)
-                && job.holds_key
             {
-                lane.release(job.meta.key.as_ref());
+                source.relate(&job.meta.trace);
+                job.meta.trace.settle(Settlement::Cancelled);
+                if job.holds_key {
+                    lane.release(job.meta.key.as_ref());
+                }
             }
         }
         for running in self.running.values_mut() {
             if running.meta.id.as_ref() == Some(id) && !running.answered {
+                source.relate(&running.meta.trace);
+                running.meta.trace.settle(Settlement::Cancelled);
                 running.answered = true;
                 running.control.cancel();
             }
@@ -327,9 +360,14 @@ impl Scheduler {
             .as_ref()
             .is_some_and(|waiting| waiting.meta.id.as_ref() == Some(id))
             && let Some(waiting) = self.take_waiting()
-            && let Some(notice) = session.cancel_confirmation(&waiting.elicitation)
         {
-            out.push(Outgoing::Value(notice));
+            source.relate(&waiting.meta.trace);
+            waiting.meta.trace.settle(Settlement::Cancelled);
+            if let Some(notice) = session.cancel_confirmation(&waiting.elicitation) {
+                out.push(
+                    Outgoing::Value(notice).observed(&waiting.meta.trace, FrameKind::Cancellation),
+                );
+            }
         }
         out
     }
@@ -340,6 +378,7 @@ impl Scheduler {
         session: &mut Session,
         elicitation: &Value,
         decision: Decision,
+        source: &Trace,
     ) -> Vec<Outgoing> {
         let mut out = Vec::new();
         if !self
@@ -348,6 +387,9 @@ impl Scheduler {
             .is_some_and(|waiting| &waiting.elicitation == elicitation)
         {
             return out;
+        }
+        if let Some(wait) = &self.waiting {
+            source.relate(&wait.meta.trace);
         }
         // An answer read after the deadline, even before the next deadline
         // sweep, does not resume; the session has already ended the form.
@@ -363,11 +405,13 @@ impl Scheduler {
                     rpc::DEADLINE_EXCEEDED,
                     "Confirmation deadline exceeded",
                     &mut out,
+                    &waiting.meta.trace,
                 );
             }
             return out;
         }
         if let Some(waiting) = self.waiting.take() {
+            drop(waiting.interaction);
             self.lanes[waiting.meta.lane].waiting -= 1;
             if let Continuation::Confirm(resume) = waiting.resume {
                 self.queue_resume(waiting.meta, resume, decision);
@@ -381,6 +425,7 @@ impl Scheduler {
         session: &mut Session,
         elicitation: &Value,
         answer: crate::elicitation::Answer,
+        source: &Trace,
     ) -> Vec<Outgoing> {
         let mut out = Vec::new();
         if !self
@@ -389,6 +434,9 @@ impl Scheduler {
             .is_some_and(|wait| &wait.elicitation == elicitation)
         {
             return out;
+        }
+        if let Some(wait) = &self.waiting {
+            source.relate(&wait.meta.trace);
         }
         if self
             .waiting
@@ -402,9 +450,11 @@ impl Scheduler {
                     rpc::DEADLINE_EXCEEDED,
                     "Elicitation deadline exceeded",
                     &mut out,
+                    &wait.meta.trace,
                 );
             }
         } else if let Some(wait) = self.waiting.take() {
+            drop(wait.interaction);
             self.lanes[wait.meta.lane].waiting -= 1;
             if let Continuation::Elicit(resume) = wait.resume {
                 self.queue_elicit_resume(wait.meta, resume, answer);
@@ -418,7 +468,12 @@ impl Scheduler {
         let mut out = Vec::new();
         self.disconnected = true;
         if let Some(notice) = session.close() {
-            out.push(Outgoing::Value(notice));
+            let trace = self
+                .waiting
+                .as_ref()
+                .map(|wait| wait.meta.trace.clone())
+                .unwrap_or_default();
+            out.push(Outgoing::Value(notice).observed(&trace, FrameKind::Cancellation));
         }
         if let Some(waiting) = self.take_waiting() {
             refuse(
@@ -427,6 +482,7 @@ impl Scheduler {
                 rpc::REQUEST_CANCELLED,
                 waiting.resume.closed_message(),
                 &mut out,
+                &waiting.meta.trace,
             );
         }
         for lane in &mut self.lanes {
@@ -447,6 +503,7 @@ impl Scheduler {
                     rpc::REQUEST_CANCELLED,
                     "Connection closed before dispatch",
                     &mut out,
+                    &job.meta.trace,
                 );
             }
             lane.queue = kept;
@@ -504,6 +561,16 @@ impl Scheduler {
                 let _ = thread.join();
             }
         }
+        while let Ok((sequence, _)) = self.finished.try_recv() {
+            if let Some(running) = self.running.get(&sequence) {
+                running
+                    .meta
+                    .trace
+                    .event(ObservationKind::End(Stage::OutputQueue));
+                running.meta.trace.event(ObservationKind::Discarded);
+            }
+        }
+        self.running.clear();
     }
 
     fn complete(
@@ -516,6 +583,11 @@ impl Scheduler {
         let Some(running) = self.running.remove(&sequence) else {
             return;
         };
+        drop(running.execution);
+        running
+            .meta
+            .trace
+            .event(ObservationKind::End(Stage::OutputQueue));
         // Work that returns after its deadline, even before the next deadline
         // sweep, is answered with the deadline error; its outcome is discarded.
         let expired = !running.answered && running.control.expired();
@@ -529,15 +601,18 @@ impl Scheduler {
             lane.release(running.meta.key.as_ref());
         }
         if running.answered {
+            running.meta.trace.event(ObservationKind::Discarded);
             return;
         }
         if expired {
+            running.meta.trace.event(ObservationKind::Discarded);
             refuse(
                 session,
                 running.meta.id.as_ref(),
                 rpc::DEADLINE_EXCEEDED,
                 "Request deadline exceeded",
                 out,
+                &running.meta.trace,
             );
             return;
         }
@@ -550,16 +625,23 @@ impl Scheduler {
         };
         match finish {
             Finish::Bytes(bytes) => {
+                running.meta.trace.settle(Settlement::Reply);
                 if deliver(session) {
-                    out.push(Outgoing::Bytes(bytes));
+                    out.push(
+                        Outgoing::Bytes(bytes).observed(&running.meta.trace, FrameKind::Reply),
+                    );
                 }
             }
             Finish::Reply(reply) => {
+                running.meta.trace.settle(Settlement::Reply);
                 if deliver(session) {
-                    out.push(Outgoing::Value(reply));
+                    out.push(
+                        Outgoing::Value(reply).observed(&running.meta.trace, FrameKind::Reply),
+                    );
                 }
             }
             Finish::Done => {
+                running.meta.trace.settle(Settlement::NoReply);
                 deliver(session);
             }
             Finish::Confirm(confirm) => {
@@ -585,20 +667,28 @@ impl Scheduler {
                 rpc::REQUEST_CANCELLED,
                 "Connection closed before confirmation",
                 out,
+                &meta.trace,
             );
             return;
         }
         match session.request_confirmation(&confirm.message) {
             Ok((elicitation, request)) => {
-                let Ok(bytes) = json::encode(&request, self.max_output_bytes) else {
+                let encoded = {
+                    let _encode = meta.trace.span(Stage::Encode);
+                    json::encode(&request, self.max_output_bytes)
+                };
+                let Ok(bytes) = encoded else {
+                    meta.trace.event(ObservationKind::EncodeFailed);
                     // The host never saw this form, so withdraw it locally only.
                     session.cancel_confirmation(&elicitation);
                     self.queue_resume(meta, confirm.resume, Decision::Unavailable);
                     return;
                 };
-                out.push(Outgoing::Bytes(bytes));
+                let interaction = meta.trace.span(Stage::Interaction);
+                out.push(Outgoing::Bytes(bytes).observed(&meta.trace, FrameKind::Interaction));
                 self.lanes[meta.lane].waiting += 1;
                 self.waiting = Some(Waiting {
+                    interaction,
                     meta,
                     resume: Continuation::Confirm(confirm.resume),
                     elicitation,
@@ -613,6 +703,7 @@ impl Scheduler {
         let control = resume_control(&meta);
         let holds_key = meta.key.is_some();
         self.lanes[meta.lane].queue.push_front(Job {
+            queued: meta.trace.span(Stage::Queue),
             meta,
             work: Work::Resume(resume, decision),
             control,
@@ -647,13 +738,18 @@ impl Scheduler {
             } else {
                 (rpc::INTERNAL_ERROR, "Elicitation round limit exceeded")
             };
-            refuse(session, meta.id.as_ref(), code, message, out);
+            refuse(session, meta.id.as_ref(), code, message, out, &meta.trace);
             return;
         }
         meta.rich_rounds += 1;
         match session.request_elicitation(step.question) {
             Ok((elicitation, request)) => {
-                let Ok(bytes) = json::encode(&request, self.max_output_bytes) else {
+                let encoded = {
+                    let _encode = meta.trace.span(Stage::Encode);
+                    json::encode(&request, self.max_output_bytes)
+                };
+                let Ok(bytes) = encoded else {
+                    meta.trace.event(ObservationKind::EncodeFailed);
                     session.cancel_confirmation(&elicitation);
                     self.queue_elicit_resume(
                         meta,
@@ -662,9 +758,11 @@ impl Scheduler {
                     );
                     return;
                 };
-                out.push(Outgoing::Bytes(bytes));
+                let interaction = meta.trace.span(Stage::Interaction);
+                out.push(Outgoing::Bytes(bytes).observed(&meta.trace, FrameKind::Interaction));
                 self.lanes[meta.lane].waiting += 1;
                 self.waiting = Some(Waiting {
+                    interaction,
                     meta,
                     resume: Continuation::Elicit(step.resume),
                     elicitation,
@@ -686,6 +784,7 @@ impl Scheduler {
         let control = resume_control(&meta);
         let holds_key = meta.key.is_some();
         self.lanes[meta.lane].queue.push_front(Job {
+            queued: meta.trace.span(Stage::Queue),
             meta,
             work: Work::ElicitResume(resume, answer),
             control,
@@ -720,6 +819,7 @@ impl Scheduler {
                     rpc::DEADLINE_EXCEEDED,
                     "Request deadline exceeded before dispatch",
                     out,
+                    &job.meta.trace,
                 );
             }
             lane.queue = kept;
@@ -735,6 +835,7 @@ impl Scheduler {
                     rpc::DEADLINE_EXCEEDED,
                     "Request deadline exceeded",
                     out,
+                    &running.meta.trace,
                 );
             }
             if running.grace.is_some_and(|grace| now >= grace) {
@@ -749,7 +850,9 @@ impl Scheduler {
             && let Some(waiting) = self.take_waiting()
         {
             if let Some(notice) = session.cancel_confirmation(&waiting.elicitation) {
-                out.push(Outgoing::Value(notice));
+                out.push(
+                    Outgoing::Value(notice).observed(&waiting.meta.trace, FrameKind::Cancellation),
+                );
             }
             refuse(
                 session,
@@ -757,6 +860,7 @@ impl Scheduler {
                 rpc::DEADLINE_EXCEEDED,
                 waiting.resume.deadline_message(),
                 out,
+                &waiting.meta.trace,
             );
         }
     }
@@ -775,11 +879,27 @@ impl Scheduler {
                 }) else {
                     break;
                 };
-                let Some(job) = lane.queue.remove(position) else {
+                let Some(mut job) = lane.queue.remove(position) else {
                     break;
                 };
-                self.sequence += 1;
-                let sequence = self.sequence;
+                drop(job.queued);
+                let Some(sequence) = self.sequence.checked_add(1) else {
+                    if job.holds_key {
+                        lane.release(job.meta.key.as_ref());
+                    }
+                    refuse(
+                        session,
+                        job.meta.id.as_ref(),
+                        rpc::INTERNAL_ERROR,
+                        "Request assignment limit reached",
+                        out,
+                        &job.meta.trace,
+                    );
+                    continue;
+                };
+                self.sequence = sequence;
+                job.meta.trace = job.meta.trace.assigned(sequence, worker);
+                let execution = job.meta.trace.span(Stage::Worker);
                 let progress = job.meta.progress_token.clone().map(|token| Progress {
                     token,
                     sequence,
@@ -787,6 +907,7 @@ impl Scheduler {
                     dispatcher: self.dispatcher.clone(),
                 });
                 let assignment = Assignment {
+                    trace: job.meta.trace.clone(),
                     reply_kind: job.meta.reply_kind,
                     result_schema: job.meta.result_schema.clone(),
                     request_context: job.meta.request_context.clone(),
@@ -812,6 +933,7 @@ impl Scheduler {
                         rpc::INTERNAL_ERROR,
                         "Request worker is unavailable",
                         out,
+                        &job.meta.trace,
                     );
                     continue;
                 }
@@ -824,6 +946,7 @@ impl Scheduler {
                 self.running.insert(
                     sequence,
                     Running {
+                        execution,
                         meta: job.meta,
                         worker,
                         control: job.control,
@@ -849,14 +972,20 @@ fn refuse(
     code: i32,
     message: &str,
     out: &mut Vec<Outgoing>,
+    trace: &Trace,
 ) {
+    trace.settle(match code {
+        rpc::DEADLINE_EXCEEDED => Settlement::Deadline,
+        rpc::REQUEST_CANCELLED => Settlement::Disconnected,
+        _ => Settlement::Refused,
+    });
     if let Some(id) = id
         && session.finish(id)
     {
-        out.push(Outgoing::Value(rpc::failure(
-            id.clone(),
-            &RpcError::new(code, message),
-        )));
+        out.push(
+            Outgoing::Value(rpc::failure(id.clone(), &RpcError::new(code, message)))
+                .observed(trace, FrameKind::Reply),
+        );
     }
 }
 
@@ -878,19 +1007,33 @@ fn work<H: Handler>(
         let rich_resumed = matches!(assignment.work, Work::ElicitResume(..));
         let resumed = rich_resumed || matches!(assignment.work, Work::Resume(..));
         let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
-            let outcome = match assignment.work {
-                Work::Call(Request::Resource(read)) => Outcome::Bundled(read),
-                Work::Call(request) => handler.call(request, &context),
-                Work::Resume(resume, decision) => resume(decision, &context),
-                Work::ElicitResume(resume, answer) => resume(answer, &context),
+            let outcome = {
+                let _handler = (!matches!(&assignment.work, Work::Call(Request::Resource(_))))
+                    .then(|| {
+                        assignment
+                            .trace
+                            .span_with_parent(Stage::Handler, Stage::Worker)
+                    });
+                match assignment.work {
+                    Work::Call(Request::Resource(read)) => Outcome::Bundled(read),
+                    Work::Call(request) => handler.call(request, &context),
+                    Work::Resume(resume, decision) => resume(decision, &context),
+                    Work::ElicitResume(resume, answer) => resume(answer, &context),
+                }
             };
             let outcome = checked_outcome(assignment.reply_kind, outcome);
             let outcome = match outcome {
                 Outcome::Confirm(confirm) if context.protocol.is_some() => {
+                    let _handler = assignment
+                        .trace
+                        .span_with_parent(Stage::Handler, Stage::Worker);
                     (confirm.resume)(Decision::Unavailable, &context)
                 }
                 outcome => outcome,
             };
+            let _validation = assignment
+                .trace
+                .span_with_parent(Stage::Validation, Stage::Worker);
             let outcome = checked_outcome(assignment.reply_kind, outcome);
             match (&context.result_schema, outcome) {
                 (Some(schema), Outcome::Tool(result)) if context.protocol.is_none() => match schema
@@ -924,6 +1067,12 @@ fn work<H: Handler>(
                 (_, outcome) => outcome,
             }
         }));
+        if outcome.is_err() {
+            assignment.trace.event(ObservationKind::Panicked);
+        }
+        let encoding = assignment
+            .trace
+            .span_with_parent(Stage::Encode, Stage::Worker);
         let finish = settle(
             context.id.as_ref(),
             outcome,
@@ -931,7 +1080,12 @@ fn work<H: Handler>(
             limit,
             context.protocol.as_deref(),
             rich_resumed,
+            &assignment.trace,
         );
+        drop(encoding);
+        assignment
+            .trace
+            .event(ObservationKind::Start(Stage::OutputQueue));
         if finished.send((assignment.sequence, finish)).is_err() {
             return;
         }
@@ -972,6 +1126,7 @@ fn settle(
     limit: usize,
     context: Option<&crate::RequestContext>,
     rich_resumed: bool,
+    trace: &Trace,
 ) -> Finish {
     // A notification's outcome, including a confirmation step, has no reply.
     let Some(id) = id else {
@@ -990,6 +1145,7 @@ fn settle(
                 context
                     .encode_task_payload(id, &result, limit, &|| Ok(()))
                     .map_err(|_| {
+                        trace.event(ObservationKind::EncodeFailed);
                         RpcError::new(
                             rpc::INTERNAL_ERROR,
                             "Cannot encode task response within its output limit",
@@ -1001,19 +1157,23 @@ fn settle(
             },
             None => internal("Tasks require modern protocol metadata"),
         },
-        Ok(Outcome::Tool(result)) => encoded(id, &result, limit, context),
-        Ok(Outcome::Completion(result)) => encoded(id, &result, limit, context),
+        Ok(Outcome::Tool(result)) => encoded(id, &result, limit, context, trace),
+        Ok(Outcome::Completion(result)) => encoded(id, &result, limit, context, trace),
         Ok(Outcome::Prompt(result)) => match context {
-            Some(context) => encoded(id, &result, limit, Some(context)),
-            None => match result.encode_legacy(id, limit, &|| Ok(())) {
-                Ok(bytes) => Finish::Bytes(bytes),
-                Err(_) => internal("Cannot encode prompt result for legacy request"),
-            },
+            Some(context) => encoded(id, &result, limit, Some(context), trace),
+            None => {
+                if let Ok(bytes) = result.encode_legacy(id, limit, &|| Ok(())) {
+                    Finish::Bytes(bytes)
+                } else {
+                    trace.event(ObservationKind::EncodeFailed);
+                    internal("Cannot encode prompt result for legacy request")
+                }
+            }
         },
-        Ok(Outcome::Resource(result)) => encoded(id, &result, limit, context),
-        Ok(Outcome::Bundled(read)) => encoded(id, read.result(), limit, context),
+        Ok(Outcome::Resource(result)) => encoded(id, &result, limit, context, trace),
+        Ok(Outcome::Bundled(read)) => encoded(id, read.result(), limit, context, trace),
         Ok(Outcome::ResourceWithCache(result, policy)) => {
-            encoded_with_cache(id, &result, limit, context, Some(policy))
+            encoded_with_cache(id, &result, limit, context, Some(policy), trace)
         }
         Ok(Outcome::ResourceNotFound(uri)) => {
             let code = if context.is_some() {
@@ -1029,7 +1189,7 @@ fn settle(
         }
         Ok(Outcome::InputRequired(result)) => match context {
             Some(context) => match context.interim(&result) {
-                Ok(value) => encoded(id, &value, limit, None),
+                Ok(value) => encoded(id, &value, limit, None, trace),
                 Err(error) => Finish::Reply(rpc::failure(id.clone(), &error)),
             },
             None => internal("Input-required results require modern protocol metadata"),
@@ -1042,13 +1202,17 @@ fn settle(
             {
                 return internal("Method result overrides protocol-owned fields");
             }
-            encoded(id, &value, limit, context)
+            encoded(id, &value, limit, context, trace)
         }
         Ok(Outcome::Task(Err(error)) | Outcome::Method(Err(error))) => match context {
-            Some(context) => match context.encode_error(id, &error, limit, &|| Ok(())) {
-                Ok(bytes) => Finish::Bytes(bytes),
-                Err(_) => internal("Cannot encode error response within its output limit"),
-            },
+            Some(context) => {
+                if let Ok(bytes) = context.encode_error(id, &error, limit, &|| Ok(())) {
+                    Finish::Bytes(bytes)
+                } else {
+                    trace.event(ObservationKind::EncodeFailed);
+                    internal("Cannot encode error response within its output limit")
+                }
+            }
             None => Finish::Reply(rpc::failure(id.clone(), &error)),
         },
         Ok(Outcome::Done) => internal("Request produced no reply"),
@@ -1077,8 +1241,9 @@ fn encoded(
     result: &(impl crate::modern::CompletePayload + ?Sized),
     limit: usize,
     context: Option<&crate::RequestContext>,
+    trace: &Trace,
 ) -> Finish {
-    encoded_with_cache(id, result, limit, context, None)
+    encoded_with_cache(id, result, limit, context, None, trace)
 }
 
 fn encoded_with_cache(
@@ -1087,11 +1252,15 @@ fn encoded_with_cache(
     limit: usize,
     context: Option<&crate::RequestContext>,
     cache: Option<crate::CachePolicy>,
+    trace: &Trace,
 ) -> Finish {
     let encoded = context.map_or_else(
         || rpc::encode_success(id, result, limit, &|| Ok(())),
         |context| context.encode_with_cache(id, result, cache, limit, &|| Ok(())),
     );
+    if encoded.is_err() {
+        trace.event(ObservationKind::EncodeFailed);
+    }
     match encoded {
         Err(EncodeError::ValidationLimit) => Finish::Reply(rpc::failure(
             id.clone(),

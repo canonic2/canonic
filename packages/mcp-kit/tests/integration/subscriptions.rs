@@ -75,6 +75,10 @@ fn listen(host: &Host, id: Value, filters: Value) -> Value {
 
 #[test]
 fn subscriptions_driver_delivers_while_busy_and_keeps_progress_on_its_rpc() {
+    use canonic_mcp_kit::stdio::{FrameKind, ObservationKind as Kind, Settlement};
+    let (observation, observed) = canonic_mcp_kit::stdio::observation_channel(4096).unwrap();
+    let mut options = options();
+    options.observations = Some(observation.clone().with_rpc_ids(true));
     let events = Events::new();
     let worker_events = events.clone();
     let latch = Latch::default();
@@ -86,7 +90,7 @@ fn subscriptions_driver_delivers_while_busy_and_keeps_progress_on_its_rpc() {
             assert!(context.progress(1.0, Some(1.0), Some("ready")));
             Outcome::Tool(ToolResult::success(vec![]))
         }),
-        options(),
+        options,
     );
     listen(
         &host,
@@ -122,11 +126,63 @@ fn subscriptions_driver_delivers_while_busy_and_keeps_progress_on_its_rpc() {
         changes.send(Change::ResourceUpdated("acme://report".into())),
         Err(SendChangeError::Closed(_))
     ));
+    let records: Vec<_> = observed.try_iter().collect();
+    assert_eq!(observation.dropped(), 0);
+    let stream: Vec<_> = records
+        .iter()
+        .filter(|record| record.rpc_id.as_deref() == Some(&json!("stream")))
+        .collect();
+    assert_eq!(
+        stream
+            .iter()
+            .filter(|record| record.kind == Kind::StreamOpened)
+            .count(),
+        1
+    );
+    assert_eq!(
+        stream
+            .iter()
+            .filter(|record| record.kind == Kind::StreamClosed)
+            .count(),
+        1
+    );
+    assert_eq!(
+        stream
+            .iter()
+            .filter(|record| record.kind == Kind::Settled(Settlement::Reply))
+            .count(),
+        1
+    );
+    assert_eq!(
+        stream
+            .iter()
+            .filter(|record| record.kind == Kind::Released)
+            .count(),
+        1
+    );
+    assert_eq!(
+        stream
+            .iter()
+            .filter(|record| matches!(
+                record.kind,
+                Kind::Frame {
+                    kind: FrameKind::Subscription,
+                    ..
+                }
+            ))
+            .count(),
+        3
+    );
 }
 
 #[test]
 fn subscriptions_driver_replaces_catalog_and_cancel_releases_id() {
-    let (host, changes) = start(Script::new(|_, _| panic!("no worker dispatch")), options());
+    use canonic_mcp_kit::stdio::{ObservationKind as Kind, Settlement};
+
+    let (observation, observed) = canonic_mcp_kit::stdio::observation_channel(4096).unwrap();
+    let mut options = options();
+    options.observations = Some(observation.clone().with_rpc_ids(true));
+    let (host, changes) = start(Script::new(|_, _| panic!("no worker dispatch")), options);
     listen(&host, json!(8), json!({"toolsListChanged":true}));
     changes
         .send(Change::Tools(Arc::new(Catalog::new(vec![]).unwrap())))
@@ -144,6 +200,51 @@ fn subscriptions_driver_replaces_catalog_and_cancel_releases_id() {
     result.unwrap();
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0]["id"], "8");
+    let records: Vec<_> = observed.try_iter().collect();
+    assert_eq!(observation.dropped(), 0);
+    let stream = records
+        .iter()
+        .find(|record| {
+            record.kind == Kind::StreamOpened && record.rpc_id.as_deref() == Some(&json!(8))
+        })
+        .unwrap()
+        .request;
+    let stream_records: Vec<_> = records
+        .iter()
+        .filter(|record| record.request == stream)
+        .collect();
+    for kind in [
+        Kind::StreamClosed,
+        Kind::Settled(Settlement::Cancelled),
+        Kind::Released,
+    ] {
+        assert_eq!(
+            stream_records
+                .iter()
+                .filter(|record| record.kind == kind)
+                .count(),
+            1
+        );
+    }
+    assert_eq!(
+        stream_records
+            .iter()
+            .filter(|record| matches!(record.kind, Kind::Settled(_)))
+            .count(),
+        1
+    );
+    let related: Vec<_> = records
+        .iter()
+        .filter(|record| record.kind == Kind::Related(stream))
+        .collect();
+    assert_eq!(related.len(), 1);
+    assert_ne!(related[0].request, stream);
+    assert!(
+        records
+            .iter()
+            .any(|record| record.request == related[0].request
+                && record.kind == Kind::Settled(Settlement::NoReply))
+    );
 }
 
 #[test]
