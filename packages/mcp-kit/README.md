@@ -16,6 +16,8 @@ with a ready-to-use stdio driver or a core you can drive from your own runtime.
   audience, priority and modification hints.
 - **Paged tool discovery.** Hosts list tools in publication order with opaque
   cursors; legacy views include only compatible tools.
+- **Optional change subscriptions.** Modern hosts select catalog and resource
+  updates, with bounded streams and a nonblocking consumer publication queue.
 - **Resources and templates.** Serve guides, reports and binary artifacts by
   URI, with paginated catalogs and parameterized addresses.
 - **Optional prompts.** Publish user-selected conversation starters with checked
@@ -110,6 +112,7 @@ authority by itself.
 - [Your first tool](docs/getting-started.md)
 - [Lanes, deadlines and cancellation](docs/guides/stdio.md)
 - [Tool catalog pagination](docs/guides/pagination.md)
+- [Subscriptions and change notifications](docs/guides/subscriptions.md)
 - [User confirmation](docs/guides/confirmation.md)
 - [Resources and templates](docs/guides/resources.md)
 - [Reusable prompts](docs/guides/prompts.md)

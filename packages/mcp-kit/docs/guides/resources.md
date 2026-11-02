@@ -155,8 +155,10 @@ construction, bounds and how hints differ from access and cache policy.
 
 `SessionOptions::resources` defaults to `None`: resource methods return `-32601`.
 `Some` enables the capability, including when the catalog is empty. Catalogs
-are immutable and list in insertion order. Subscriptions, change notifications
-and completion are not implemented. The default protocol versions are
+are immutable and list in insertion order. Optional modern
+[subscriptions](subscriptions.md) publish replacements and selected resource
+updates; [completion](completion.md) supplies template argument suggestions.
+The default protocol versions are
 `2025-06-18` and `2025-11-25`; these paths do not publish cache hints.
 Explicit [modern configuration](skills.md#protocols-context-and-caching) also
 supports `2026-07-28`, including per-request context and cache policies.

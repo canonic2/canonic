@@ -16,5 +16,6 @@ mod resources;
 mod scheduling;
 mod schema;
 mod skills;
+mod subscriptions;
 #[cfg(unix)]
 mod tasks;

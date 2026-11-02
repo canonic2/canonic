@@ -6,8 +6,10 @@
 //! admitted. Cancellation, deadlines and disconnection stop work through its
 //! [`Context`]; they never interrupt code that does not check it.
 
+mod changes;
 mod reader;
 mod scheduler;
+pub use changes::{CHANGE_BUFFER, ChangeSender, SendChangeError};
 
 use crate::{
     control::{Control, Interrupted},
@@ -44,6 +46,11 @@ pub const INPUT_BUFFER: usize = 8;
 /// dispatching thread, so they must return quickly. [`Handler::call`] runs
 /// on a worker thread.
 pub trait Handler: Send + Sync + 'static {
+    /// Receives this connection's producer when subscriptions are enabled.
+    /// Called once on the dispatching thread; retain the sender and return quickly.
+    fn connected(&self, changes: ChangeSender) {
+        let _ = changes;
+    }
     /// Accepts or refuses the client and returns the server identity.
     ///
     /// # Errors
@@ -294,7 +301,7 @@ impl Default for Options {
 /// Why [`serve`] ended other than at the end of input.
 #[derive(Debug, thiserror::Error)]
 pub enum ServeError {
-    /// Invalid modern identity or conflicting catalog ownership, before threads start.
+    /// Invalid protocol options or catalog composition, including a rejected change.
     #[error(transparent)]
     Configuration(#[from] crate::ConfigurationError),
     /// The options cannot run a server.
@@ -433,6 +440,7 @@ pub fn serve<H: Handler>(
         .spawn(move || reader::read(input, &frames, &dispatcher, limit))
         .map_err(ServeError::Spawn)?;
     let mut connection = Connection {
+        changes: None,
         session,
         scheduler,
         handler,
@@ -443,6 +451,11 @@ pub fn serve<H: Handler>(
         },
         eof: false,
     };
+    if options.session.subscriptions.is_some() {
+        let (sender, receiver) = changes::channel(&options.session);
+        connection.changes = Some(receiver);
+        connection.handler.connected(sender);
+    }
     let result = connection.run(&incoming);
     drop(incoming);
     connection.scheduler.shutdown();
@@ -484,6 +497,7 @@ fn validate(options: &Options) -> Result<(), ServeError> {
 }
 
 struct Connection<H, W> {
+    changes: Option<mpsc::Receiver<crate::Change>>,
     session: Session,
     scheduler: scheduler::Scheduler,
     handler: Arc<H>,
@@ -497,6 +511,11 @@ impl<H: Handler, W: Write> Connection<H, W> {
         loop {
             let outgoing = self.scheduler.settle(&mut self.session);
             self.output.send(outgoing)?;
+            if !self.eof {
+                let expired = self.session.expire_subscriptions(std::time::Instant::now());
+                self.subscription_frames(expired)?;
+                self.publish_changes()?;
+            }
             if self.eof && self.scheduler.idle() {
                 return input_error.map_or(Ok(()), |error| Err(ServeError::Input(error)));
             }
@@ -519,7 +538,11 @@ impl<H: Handler, W: Write> Connection<H, W> {
                 }
                 Err(mpsc::TryRecvError::Disconnected) if !self.eof => self.disconnect()?,
                 Err(mpsc::TryRecvError::Empty | mpsc::TryRecvError::Disconnected) => {
-                    match self.scheduler.next_wake() {
+                    match [self.scheduler.next_wake(), self.session.subscription_wait()]
+                        .into_iter()
+                        .flatten()
+                        .min()
+                    {
                         Some(wait) => thread::park_timeout(wait),
                         None => thread::park(),
                     }
@@ -550,6 +573,9 @@ impl<H: Handler, W: Write> Connection<H, W> {
 
     fn disconnect(&mut self) -> Result<(), ServeError> {
         self.eof = true;
+        self.changes.take();
+        let closed = self.session.end_subscriptions();
+        self.subscription_frames(closed)?;
         let outgoing = self.scheduler.disconnect(&mut self.session);
         self.output.send(outgoing)
     }
@@ -595,6 +621,20 @@ impl<H: Handler, W: Write> Connection<H, W> {
 
     fn inbound(&mut self, inbound: Inbound) -> Result<(), ServeError> {
         match inbound {
+            Inbound::Subscription { id, acknowledged } => {
+                if let Ok(bytes) = json::encode(&acknowledged, self.output.limit) {
+                    self.output.bytes(&bytes)
+                } else {
+                    self.session.finish(&id);
+                    self.output.value(&rpc::failure(
+                        id,
+                        &RpcError::new(
+                            rpc::INTERNAL_ERROR,
+                            "Subscription acknowledgement exceeds output limit",
+                        ),
+                    ))
+                }
+            }
             Inbound::Completion { id, request } => {
                 let token = request.progress_token.clone();
                 self.schedule(Some(id), Request::Completion(request), true, token)
@@ -665,6 +705,52 @@ impl<H: Handler, W: Write> Connection<H, W> {
             }
             Inbound::Ignored => Ok(()),
         }
+    }
+}
+
+impl<H: Handler, W: Write> Connection<H, W> {
+    fn publish_changes(&mut self) -> Result<(), ServeError> {
+        for _ in 0..CHANGE_BUFFER {
+            let Some(change) = self
+                .changes
+                .as_ref()
+                .and_then(|changes| changes.try_recv().ok())
+            else {
+                break;
+            };
+            let frames = self.session.publish(change)?;
+            self.subscription_frames(frames)?;
+        }
+        Ok(())
+    }
+
+    fn subscription_frames(&mut self, frames: Vec<Value>) -> Result<(), ServeError> {
+        for frame in frames {
+            // Results carry id; notifications carry the originating subscription in params.
+            let id = frame
+                .get("id")
+                .unwrap_or(&frame["params"]["_meta"][crate::subscription::SUBSCRIPTION_KEY]);
+            if let Ok(bytes) = json::encode(&frame, self.output.limit) {
+                // A prior oversized frame in this batch may already have ended this stream.
+                if frame.get("id").is_some() || self.session.request_context(id).is_some() {
+                    self.output.bytes(&bytes)?;
+                }
+            } else {
+                let _ = self.session.end_subscription(id);
+                self.output.value(&rpc::failure(
+                    id.clone(),
+                    &RpcError::new(
+                        rpc::INTERNAL_ERROR,
+                        if frame.get("id").is_some() {
+                            "Subscription result exceeds output limit"
+                        } else {
+                            "Subscription notification exceeds output limit"
+                        },
+                    ),
+                ))?;
+            }
+        }
+        Ok(())
     }
 }
 

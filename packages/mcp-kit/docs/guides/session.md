@@ -26,6 +26,7 @@ let mut session = Session::new(catalog, SessionOptions::default());
 for frame in frames {
     match session.receive(&frame) {
         Inbound::Reply(reply) => write(&reply),
+        Inbound::Subscription { acknowledged, .. } => write(&acknowledged),
         Inbound::Fatal { reply, .. } => { write(&reply); break; }
         Inbound::Initialize { id, client } => {
             write(&session.accept_initialize(id, &server_info(&client)));
@@ -59,6 +60,9 @@ for frame in frames {
   returned request and wait for `Inbound::Confirmation` with its ID. Use
   `cancel_confirmation` to withdraw it and send the returned notice.
 - Call `session.close()` when the input ends and send the notice it returns.
+- With [subscriptions](subscriptions.md), drive the nearest subscription
+  deadline and send expiry results; gracefully end streams before closing the
+  session. Their acknowledgement does not release the original RPC ID.
 - Deadlines, lanes, keys and end-of-input handling are yours. The
   [stdio guide](stdio.md) describes the driver's
   choices if you want to match them.

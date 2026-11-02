@@ -37,6 +37,7 @@
 | Publish and render prompts | `Prompt`, `PromptArgument`, `PromptCatalog`, `PromptCall`, `PromptMessage`, `GetPromptResult`; `Request::Prompt` and `Outcome::Prompt` |
 | Suggest prompt/template argument values | `SessionOptions::completions`, `CompleteRequest`, `CompletionReference`, `CompletionArgument`, `CompleteResult`; `Request::Completion` and `Outcome::Completion` |
 | Page tool discovery | `Catalog::list_page` with parameters and protocol revision; `Catalog::listing` and `Catalog::tools` provide the full catalog |
+| Publish modern changes | `SubscriptionOptions`, `Change`, `Handler::connected`, `ChangeSender`, `SendChangeError`; independent runtimes use `Session::publish`, stream expiry and graceful completion |
 | Prepare reusable JSON Schema validation | `schema::PreparedSchema`, `schema::SchemaError`; see [schemas](../guides/schemas.md) |
 | Validate JSON once | `schema::validate`, `schema::check`, `schema::ArgumentErrorKind` |
 | Check a producing tool's result | `Catalog::result_schema`, `ResultSchema`, `Context::result_schema`, `RequestContext::result_schema` |

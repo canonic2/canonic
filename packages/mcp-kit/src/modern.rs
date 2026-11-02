@@ -656,7 +656,6 @@ pub(crate) fn unavailable_method(method: &str) -> bool {
             "logging/setLevel",
             "resources/subscribe",
             "resources/unsubscribe",
-            "subscriptions/listen",
             "elicitation/create",
             "sampling/createMessage",
             "roots/list",

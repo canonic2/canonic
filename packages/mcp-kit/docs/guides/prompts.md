@@ -101,5 +101,5 @@ exceeds its output budget; data is refused rather than truncated. Use image
 builders with a valid image MIME type and base64 data. Prefer resource links
 for large modern artifacts, or bounded embedded content for legacy prompts.
 Enable [argument completion](completion.md) to suggest values while a host
-collects prompt arguments. Catalog changes, subscriptions, icons and arbitrary
-metadata are separate capabilities; this catalog publishes no change notifications.
+collects prompt arguments. Enable [subscriptions](subscriptions.md) to replace
+prepared catalogs and notify opted-in modern hosts.

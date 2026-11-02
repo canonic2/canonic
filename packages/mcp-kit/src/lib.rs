@@ -46,6 +46,7 @@ pub mod schema;
 mod session;
 pub mod skill;
 pub mod stdio;
+pub mod subscription;
 pub mod task;
 pub mod tool;
 
@@ -69,6 +70,7 @@ pub use session::{
     SUPPORTED_PROTOCOL_VERSIONS, ServerInfo, Session, SessionOptions,
 };
 pub use skill::{BundledRead, SkillCatalog, SkillDefinition, SkillError, SkillFile};
+pub use subscription::{Change, SubscriptionOptions};
 pub use tool::{
     Annotations, Catalog, CatalogError, Content, ResultSchema, Tool, ToolCall, ToolResult,
 };

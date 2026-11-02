@@ -15,6 +15,7 @@ use std::{
 
 mod completion;
 mod prompts;
+mod subscriptions;
 #[cfg(test)]
 mod tests;
 
@@ -32,6 +33,8 @@ pub const DEFAULT_MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 /// Connection limits and product extension methods.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionOptions {
+    /// Optional bounded modern change streams; requires modern opt-in.
+    pub subscriptions: Option<crate::SubscriptionOptions>,
     /// Explicit modern protocol opt-in; absent preserves legacy behavior.
     pub modern: Option<crate::ModernOptions>,
     /// Optional consumer task policy; requires modern opt-in. Allocates no store.
@@ -57,6 +60,7 @@ pub struct SessionOptions {
 impl Default for SessionOptions {
     fn default() -> Self {
         Self {
+            subscriptions: None,
             modern: None,
             tasks: None,
             skills: None,
@@ -143,6 +147,13 @@ pub enum Decision {
 /// What a received message requires of the caller.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Inbound {
+    /// Send this acknowledgement before delivering changes. The RPC remains open.
+    Subscription {
+        /// Original listen request ID.
+        id: Value,
+        /// First notification for this subscription.
+        acknowledged: Value,
+    },
     /// Supply suggestions for a catalog-checked target and finish its RPC normally.
     Completion {
         /// Request ID.
@@ -263,6 +274,7 @@ enum Phase {
 /// has cancelled that request.
 #[derive(Debug)]
 pub struct Session {
+    subscriptions: HashMap<String, subscriptions::Stream>,
     catalog: Arc<Catalog>,
     options: SessionOptions,
     phase: Phase,
@@ -277,7 +289,7 @@ pub struct Session {
     configuration_error: Option<ConfigurationError>,
 }
 
-/// Invalid protocol/catalog composition, refused before serving.
+/// Invalid protocol options or catalog composition.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("invalid MCP session configuration: {0}")]
 pub struct ConfigurationError(pub String);
@@ -293,6 +305,7 @@ impl Session {
     pub fn new(catalog: Arc<Catalog>, mut options: SessionOptions) -> Self {
         let configuration_error = configure(&mut options).err();
         Self {
+            subscriptions: HashMap::new(),
             catalog,
             options,
             phase: Phase::New,
@@ -460,6 +473,7 @@ impl Session {
 
     /// Releases an outstanding request ID. Returns whether to send its reply.
     pub fn finish(&mut self, id: &Value) -> bool {
+        self.subscriptions.remove(&id.to_string());
         self.contexts.remove(&id.to_string());
         self.outstanding.remove(&id.to_string())
     }
@@ -537,6 +551,11 @@ impl Session {
     /// Returns the cancellation notice for a pending confirmation.
     pub fn close(&mut self) -> Option<Value> {
         self.closed = true;
+        for id in self.subscriptions.keys().cloned().collect::<Vec<_>>() {
+            self.contexts.remove(&id);
+            self.outstanding.remove(&id);
+        }
+        self.subscriptions.clear();
         let pending = self.confirmation.clone()?;
         self.cancel_confirmation(&pending)
     }
@@ -657,7 +676,8 @@ impl Session {
                 )),
             },
             _ if !self.ready() => reply(RpcError::new(rpc::SERVER_ERROR, "Server not initialized")),
-            _ if method.starts_with("skills/")
+            _ if method.starts_with("subscriptions/")
+                || method.starts_with("skills/")
                 || method.starts_with("tasks/")
                 || ["resources/directory/read", "server/discover"].contains(&method) =>
             {
@@ -838,7 +858,11 @@ impl Session {
         } else {
             context
         };
-        let event = self.modern_request(id.clone(), method, params, &context);
+        let event = if method.starts_with("subscriptions/") {
+            self.listen(id.clone(), method, &params)
+        } else {
+            self.modern_request(id.clone(), method, params, &context)
+        };
         match event {
             Inbound::Reply(mut reply) => {
                 if reply.get("result").is_some() {
@@ -1000,6 +1024,16 @@ impl Session {
         if self.options.resources.is_some() {
             result["capabilities"]["resources"] = json!({});
         }
+        if let Some(policy) = &self.options.subscriptions {
+            result["capabilities"]["tools"]["listChanged"] = json!(true);
+            if self.options.prompts.is_some() {
+                result["capabilities"]["prompts"]["listChanged"] = json!(true);
+            }
+            if self.options.resources.is_some() {
+                result["capabilities"]["resources"] =
+                    json!({"listChanged":true,"subscribe":!policy.resource_uris.is_empty()});
+            }
+        }
         if self.options.skills.is_some() {
             result["capabilities"]["extensions"] = json!({crate::skill::EXTENSION:{}});
         }
@@ -1022,6 +1056,19 @@ impl Session {
 }
 
 fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
+    if let Some(policy) = &options.subscriptions {
+        if options.modern.is_none() {
+            return Err(ConfigurationError(
+                "subscriptions require modern protocol support".into(),
+            ));
+        }
+        policy.validate()?;
+        if !policy.resource_uris.is_empty() && options.resources.is_none() {
+            return Err(ConfigurationError(
+                "resource subscriptions require a resource catalog".into(),
+            ));
+        }
+    }
     if let Some(tasks) = &options.tasks {
         if options.modern.is_none() {
             return Err(ConfigurationError(

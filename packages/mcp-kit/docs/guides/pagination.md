@@ -80,5 +80,5 @@ unfiltered catalog payload, and `Catalog::tools()` returns the full slice.
 See [driving a session](session.md) for transport and ID ownership.
 
 [Resources](resources.md), [prompts](prompts.md) and [Skills](skills.md) have
-their own cursor contracts. Tool pagination does not add catalog change
-notifications; hosts must explicitly refresh when their workflow requires it.
+their own cursor contracts. Enable [subscriptions](subscriptions.md) to publish
+prepared catalog replacements and notify opted-in modern hosts to refresh.

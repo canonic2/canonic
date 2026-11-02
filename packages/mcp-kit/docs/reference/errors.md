@@ -15,6 +15,9 @@
 | `-32602` | Unknown tool, Invalid tool call parameters | A name outside the catalog or malformed parameters | Call `tools/list` |
 | `-32602` | Invalid tool listing parameters or cursor | Unsupported fields/revision or a malformed, foreign or out-of-range tool cursor | Restart listing without a cursor and forward each returned `nextCursor` unchanged |
 | `-32603` | Response exceeds output limit | A result larger than `Options::max_output_bytes` | Page or shorten the result |
+| `-32602` | Invalid subscription filter | Malformed, unknown or over-budget subscription parameters | Send only supported filters and bounded absolute resource URIs |
+| `-32000` | Subscription capacity exceeded | The connection already holds its configured number of streams | Cancel an unused stream or wait for expiry |
+| `-32603` | Subscription acknowledgement/notification/result exceeds output limit | A stream frame cannot fit the output budget | Reduce selected URIs or server metadata, or increase the frame budget; the affected stream ID is released |
 | `-32603` | Tool result does not match its output schema | Missing or invalid structured data, or incompatible legacy data | Fix the handler's result; validation cannot undo effects |
 | `-32603` | Tool result exceeds schema validation limits | Structured data exceeds validation bytes, depth or work limits | Reduce the data or its validation cost; effects may already have happened |
 | `-32603` | Tool call requires a typed tool result | A tool call returned a raw method success or resource outcome | Return `Outcome::Tool(ToolResult)` even without an output schema |
