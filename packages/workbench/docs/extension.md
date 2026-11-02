@@ -123,8 +123,8 @@ that compute their values, `workbench.config.ts`, JavaScript loaders from its
 the evaluator on the bundled runtime, so it doesn't need a separate Node
 installation.
 
-- The compiler builds every preview and docs example as soon as the server
-  has listed your pages, and stops with the server.
+- The compiler builds previews and docs examples when you open them, reuses
+  its compiled modules for later pages, and stops with the server.
 - The evaluator starts the first time a build needs it, and stops with the
   server. A space whose definitions are plain values and that has no
   `workbench.config.ts` never starts one.
