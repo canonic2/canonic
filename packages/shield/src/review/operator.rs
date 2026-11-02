@@ -27,7 +27,8 @@ pub(super) fn commit_proposal_fixture(context: &Context, id: &str) -> Result<Val
     crate::review::publication::commit(
         context,
         &before,
-        row.candidate.clone(),
+        super::storage::Store::open(Path::new(&context.project_root))?
+            .captured_candidate(&row.candidate)?,
         row.candidate_metadata.clone(),
         Some(id),
     )

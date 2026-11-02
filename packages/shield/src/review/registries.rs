@@ -136,7 +136,7 @@ pub(super) fn project(meta: &Value) -> Result<Registrations, Error> {
 /// Built-in, global and, with a project, its registrations in effect.
 pub(in crate::review) fn effective(context: Option<&Context>) -> Result<Effective, Error> {
     let project = context
-        .map(|context| state::load(context).map(|s| project(&state::metadata(&s))))
+        .map(|context| state::checkpoint(context).map(|s| project(&state::metadata(&s))))
         .transpose()?
         .transpose()?;
     merge(&global()?, project.as_ref())

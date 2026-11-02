@@ -133,19 +133,22 @@ pub(super) fn review_candidate(
     candidate: &Value,
     meta: &Value,
     tty: &mut Terminal,
-) -> Result<(), Error> {
+    base: &configuration::Evaluator,
+) -> Result<configuration::Evaluator, Error> {
     if projection_changed(context, before)? {
         return Err(Error::Invalid(
             "manual configuration changes are pending; review them through shield policy review",
         ));
     }
-    let mut view = publication::change_review(context, before, candidate, meta)?;
+    let (mut view, plan) =
+        publication::prepare_review(context, before, candidate, meta, Some(base))?;
     terminal_mcp_details(
         &mut view["changes"],
         &before.candidates["project"],
         candidate,
     )?;
-    tty.confirm(&view)
+    tty.confirm(&view)?;
+    Ok(plan)
 }
 
 /// Enrich only the ephemeral operator review, never proposals or receipts.

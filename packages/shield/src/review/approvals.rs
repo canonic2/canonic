@@ -66,13 +66,23 @@ pub(super) fn inspect(context: &Context, id: Option<&str>) -> Result<Value, Erro
     if let Some(request) = id {
         return request_view(context, request).map(|(_, v)| v);
     }
+    let state = super::project::checkpoint(context)?;
+    let time = super::clock::now_ms()?;
     let mut requests = Vec::new();
-    for (kind, value) in [
-        ("read", super::read_approval::inspect(context, None)?),
-        ("execution", super::run_approval::inspect(context, None)?),
+    for (kind, mut value) in [
+        (
+            "read",
+            super::read_approval::inspect_from(&state, None, time)?,
+        ),
+        (
+            "execution",
+            super::run_approval::inspect_from(&state, None, time)?,
+        ),
     ] {
-        for mut row in value["requests"].as_array().cloned().unwrap_or_default() {
-            let time = super::clock::best_effort_ms();
+        let Value::Array(rows) = value["requests"].take() else {
+            continue;
+        };
+        for mut row in rows {
             let expiry = if row["status"] == "approved" {
                 row["grant_expires_at_ms"].as_u64()
             } else {
@@ -104,9 +114,13 @@ pub(super) fn pending_count(state: &super::model::State, time: u64) -> usize {
 }
 
 pub(super) fn request_view(context: &Context, id: &str) -> Result<(bool, Value), Error> {
-    match super::read_approval::inspect(context, Some(id)) {
+    let state = super::project::checkpoint(context)?;
+    let time = super::clock::now_ms()?;
+    match super::read_approval::inspect_from(&state, Some(id), time) {
         Ok(value) => Ok((true, value)),
-        Err(Error::Missing) => super::run_approval::inspect(context, Some(id)).map(|v| (false, v)),
+        Err(Error::Missing) => {
+            super::run_approval::inspect_from(&state, Some(id), time).map(|v| (false, v))
+        }
         Err(error) => Err(error),
     }
 }

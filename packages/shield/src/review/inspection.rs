@@ -38,7 +38,7 @@ impl RuleRef {
 
 /// Lists or selects rules of the verified review state, for the operator CLI.
 pub(super) fn rules(context: &Context, selector: Option<&Value>) -> Result<Value, Error> {
-    let state = project::load(context)?;
+    let state = project::captured(context)?;
     captured_rules(
         context,
         &state.candidates["project"],

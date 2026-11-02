@@ -13,25 +13,47 @@ pub(super) fn metadata(state: &State) -> Value {
 }
 
 pub(super) fn load(context: &Context) -> Result<State, Error> {
-    let state = Store::open(Path::new(&context.project_root))?.read()?;
+    load_prepared(context).map(|(state, _)| state)
+}
+
+pub(super) fn load_prepared(
+    context: &Context,
+) -> Result<(State, crate::configuration::Evaluator), Error> {
+    let (state, evaluator) =
+        Store::open(Path::new(&context.project_root))?.read_current_evaluated()?;
     state.check(context)?;
     if state.candidates.len() != 1 {
         return Err(Error::Invalid(
             "operator workflow requires project-only policy",
         ));
     }
+    Ok((state, evaluator))
+}
+
+/// Enrollment and authority metadata; source inspection and preparation are explicit.
+pub(super) fn checkpoint(context: &Context) -> Result<State, Error> {
+    let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
+    state.check(context)?;
+    Ok(state)
+}
+
+pub(super) fn captured(context: &Context) -> Result<State, Error> {
+    let state = Store::open(Path::new(&context.project_root))?.read_current()?;
+    state.check(context)?;
     Ok(state)
 }
 
 pub(super) fn status(context: &Context) -> Result<Value, Error> {
     let state = Store::open(Path::new(&context.project_root))?.read_history()?;
     state.check(context)?;
-    let mut value = review::runtime::status(context)?;
-    if value["review"]["policy_revision"] != state.policy_revision {
-        return Err(Error::StaleSnapshot);
-    }
+    status_from(context, &state)
+}
+
+/// Render a checked history capture, also used by doctor's additional probes.
+pub(super) fn status_from(context: &Context, state: &State) -> Result<Value, Error> {
+    let mut value = review::runtime::status_from(state);
     value["policy_revision"] = json!(state.policy_revision);
-    value["installed_packs"] = crate::review::packs::summaries(&metadata(&state));
+    value["installed_packs"] = crate::review::packs::summaries(&metadata(state));
     value["pending_configuration"] = json!(
         state
             .proposals
@@ -42,16 +64,16 @@ pub(super) fn status(context: &Context) -> Result<Value, Error> {
     );
     value["history"] = json!({"enabled":state.history_enabled,"limit":state.history_limit,"available":state.history_available});
     value["pending_approvals"] = json!(super::approvals::pending_count(
-        &state,
+        state,
         super::clock::best_effort_ms()
     ));
-    value["coverage"] = integrations::status(context, &state);
-    value["path_access"] = path_access::load(&metadata(&state)).map_or_else(
+    value["coverage"] = integrations::status(context, state);
+    value["path_access"] = path_access::load(&metadata(state)).map_or_else(
         |error| json!({"error":error.to_string()}),
         |access| json!(access),
     );
     value["repair_needed"] =
-        json!(projection_changed(context, &state)? || value["coverage"]["repair_needed"] == true);
+        json!(projection_changed(context, state)? || value["coverage"]["repair_needed"] == true);
     value["repair_route"] = json!(if value["coverage"]["repair_needed"] == true {
         integration_route(&value["coverage"])
     } else {
@@ -92,14 +114,22 @@ pub(super) fn agent_setup_route(coverage: &Value) -> String {
 }
 
 pub(super) fn policy(context: &Context) -> Result<Value, Error> {
-    let mut value = review::inspect(context)?;
-    let pending = review::proposals(context, None, false)?;
+    let (state, evaluator) = load_prepared(context)?;
+    policy_prepared(context, &state, &evaluator)
+}
+
+pub(super) fn policy_prepared(
+    context: &Context,
+    state: &State,
+    evaluator: &crate::configuration::Evaluator,
+) -> Result<Value, Error> {
+    let mut value = review::inspect_prepared(context, state, evaluator)?;
     value["pending_configuration"] = json!(
-        pending["proposals"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|row| row["status"] == "pending")
+        state
+            .proposals
+            .iter()
+            .filter(|row| row.status == "pending")
+            .map(crate::review::model::Proposal::summary)
             .collect::<Vec<_>>()
     );
     Ok(value)

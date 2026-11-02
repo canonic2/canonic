@@ -8,6 +8,54 @@ use std::{
 };
 
 #[test]
+fn current_policy_cache_reuse_preserves_source_integrity_and_read_only_fallback() {
+    let (root, context) = enrolled();
+    let status = runtime::status(&context).unwrap();
+    runtime::publish_fixture(
+        &context,
+        status["review"]["policy_revision"].as_str().unwrap(),
+        status["review"]["candidate_digest"].as_str().unwrap(),
+        None,
+        &|| Ok(()),
+    )
+    .unwrap();
+    let status = runtime::status(&context).unwrap();
+    let cache = &status["compiled_cache"];
+    let path = std::path::PathBuf::from(cache["directory"].as_str().unwrap())
+        .join("compiled")
+        .join(cache["project_key"].as_str().unwrap())
+        .join(format!("{}.bin", cache["plan_key"].as_str().unwrap()));
+    let compiled = fs::read(&path).unwrap();
+    let store = Store::open(root.path()).unwrap();
+    let checkpoint = fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    fs::write(&path, b"invalid derived plan").unwrap();
+    let (_, evaluator) = store.read_current_evaluated().unwrap();
+    assert_eq!(
+        evaluator.revision(),
+        status["review"]["policy_revision"].as_str().unwrap()
+    );
+    assert_eq!(fs::read(&path).unwrap(), b"invalid derived plan");
+    assert_eq!(
+        fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        checkpoint
+    );
+    fs::write(&path, compiled).unwrap();
+    let state = store.read_checkpoint().unwrap();
+    let source = &state.candidates["project"];
+    fs::write(
+        root.path()
+            .join(".shield/review/sources")
+            .join(format!("{}.json", source["digest"].as_str().unwrap())),
+        b"changed source",
+    )
+    .unwrap();
+    assert!(
+        store.read_current_evaluated().is_err(),
+        "a valid compiled artifact must not hide changed source bytes"
+    );
+}
+
+#[test]
 fn updates_append_missing_local_state_ignores_to_an_existing_file() {
     let (root, context) = enrolled();
     let path = root.path().join(".shield/.gitignore");

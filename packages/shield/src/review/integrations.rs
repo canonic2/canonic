@@ -267,7 +267,7 @@ pub(in crate::review) fn apply(
 ) -> Result<(), Error> {
     privacy::validate(Path::new(&context.project_root), plan)?;
     let store = Store::open(Path::new(&context.project_root))?;
-    store.update(context, &|| Ok(()), |state| {
+    store.update_checkpoint(context, &|| Ok(()), |state| {
         let current = crate::review::project::metadata(state);
         if pending(&current)?.is_none()
             && plan
@@ -301,7 +301,7 @@ pub(in crate::review) fn apply(
         Ok(json!({}))
     })?;
     privacy::validate(Path::new(&context.project_root), plan)?;
-    store.update(context, &|| Ok(()), |state| {
+    store.update_checkpoint(context, &|| Ok(()), |state| {
         if state.operator["integration_pending"] != json!(plan) {
             return Err(Error::Invalid("integration repair plan changed"));
         }
@@ -397,15 +397,30 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                 .keys()
                 .any(|id| agents::find(id).is_some_and(|a| a.spec().prefix_rules_path.is_some()))
         });
+        // Prefixes and connections inspect the same checked activation. Only
+        // the prefix path keeps its existing derived-cache recovery behavior.
+        let snapshot = if prefixed {
+            review::runtime::consumer::load(context, &|| Ok(()))
+        } else {
+            review::runtime::consumer::load_cached(context, &|| Ok(()))
+        }
+        .ok();
         // Without a readable activation there is nothing to compare against.
         if let Some(prefixes) = if prefixed {
-            prefix_rules::active(root).ok()
+            snapshot
+                .as_ref()
+                .map(super::runtime::consumer::Snapshot::codex_prefixes)
         } else {
-            Some(Vec::new())
+            Some([].as_slice())
         } {
-            prefix_rules::diagnose(root, &meta, &prefixes, &mut diagnostics);
+            prefix_rules::diagnose(root, &meta, prefixes, &mut diagnostics);
         }
-        let connections = connections::diagnose(context, registered.as_ref(), &mut diagnostics);
+        let connections = connections::diagnose(
+            root,
+            snapshot.as_ref(),
+            registered.as_ref(),
+            &mut diagnostics,
+        );
         let healthy = diagnostics.is_empty();
         Ok::<_, Error>(json!({
             "mcp_connections":connections,

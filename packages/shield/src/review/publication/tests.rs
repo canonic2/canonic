@@ -30,6 +30,98 @@ fn changed(before: &State) -> Value {
 }
 
 #[test]
+fn operator_review_retains_its_plan_but_still_refuses_changed_files() {
+    use clap::Parser as _;
+    use std::sync::Arc;
+    for drift in [false, true] {
+        let (root, context) = fixture();
+        let logs = assert_fs::TempDir::new().unwrap();
+        let cli = crate::cli::Cli::parse_from([
+            "shield",
+            "--debug-log-dir",
+            logs.path().to_str().unwrap(),
+            "status",
+        ]);
+        let log = Arc::new(crate::diagnostics::Log::open(&cli));
+        let path = log.path().unwrap().to_owned();
+        let request = log
+            .request("cli_owner", "review_commit", None, None)
+            .unwrap();
+        let scope = request.enter();
+        let (before, base) = crate::review::project::load_prepared(&context).unwrap();
+        let candidate = changed(&before);
+        let (_, plan) = prepare_review(
+            &context,
+            &before,
+            &candidate,
+            &metadata(&before),
+            Some(&base),
+        )
+        .unwrap();
+        if drift {
+            fs::write(
+                root.path().join(".shield/rules.yml"),
+                "# Acme operator edit\n",
+            )
+            .unwrap();
+        }
+        let result = commit_prepared(
+            &context,
+            &before,
+            candidate,
+            metadata(&before),
+            None,
+            None,
+            &plan,
+        );
+        drop(scope);
+        request.finish(if result.is_ok() { "success" } else { "refused" });
+        if drift {
+            assert!(result.is_err());
+            assert_eq!(
+                fs::read_to_string(root.path().join(".shield/rules.yml")).unwrap(),
+                "# Acme operator edit\n"
+            );
+            assert_eq!(
+                Store::open(root.path())
+                    .unwrap()
+                    .read_checkpoint()
+                    .unwrap()
+                    .policy_revision,
+                before.policy_revision
+            );
+        } else {
+            assert_eq!(result.unwrap()["policy_revision"], plan.revision());
+            let state = Store::open(root.path()).unwrap().read().unwrap();
+            state.active.as_ref().unwrap().validate(&state).unwrap();
+        }
+        drop(request);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+        let records: Vec<Value> = loop {
+            let text = fs::read_to_string(&path).unwrap();
+            let records: Vec<Value> = text
+                .split_inclusive('\n')
+                .filter(|line| line.ends_with('\n'))
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
+            if records.iter().any(|r| r["event"] == "request_end") {
+                break records;
+            }
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        };
+        drop(log);
+        let end = records
+            .iter()
+            .find(|r| r["event"] == "request_end")
+            .unwrap();
+        // Inspecting the committed state above is verification, outside the
+        // measured review/commit work in the assertion below.
+        assert_eq!(end["fields"]["counts"]["policy.preparations"], 1, "{end}");
+    }
+}
+
+#[test]
 fn unchanged_projection_bytes_cannot_skip_path_validation() {
     let (root, context) = fixture();
     fs::write(root.path().join("escape.yml"), "unchanged").unwrap();
@@ -243,6 +335,10 @@ fn proposal_bytes_changed_after_review_cannot_be_committed() {
         .expect("proposal")
         .candidate
         .clone();
+    let candidate = Store::open(root.path())
+        .unwrap()
+        .captured_candidate(&candidate)
+        .unwrap();
     Store::open(root.path())
         .expect("store")
         .update(&context, &|| Ok(()), |current| {

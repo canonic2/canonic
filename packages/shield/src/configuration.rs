@@ -376,6 +376,19 @@ impl Candidate {
         local_rules: Option<&str>,
         disabled: &[String],
     ) -> Result<Snapshot, Error> {
+        self.capture_reusing(packs, rules, local_rules, disabled, None)
+    }
+
+    fn capture_reusing(
+        &self,
+        packs: &[String],
+        rules: Option<&str>,
+        local_rules: Option<&str>,
+        disabled: &[String],
+        previous: Option<&Snapshot>,
+    ) -> Result<Snapshot, Error> {
+        let _trace = crate::diagnostics::trace::span("policy.capture_sources");
+        crate::diagnostics::trace::count("policy.source_captures", 1);
         if packs.len() != self.packs.len()
             || rules.is_some() != self.rules.is_some()
             || local_rules.is_some() != self.local_rules.is_some()
@@ -394,12 +407,14 @@ impl Candidate {
         let mut locked = Vec::new();
         let mut captured = Vec::new();
         for (selection, bytes) in self.packs.iter().zip(packs) {
-            let mut pack = Pack::from_yaml_bound(bytes, &selection.binding(), false)
+            let entry = selection.locked(bytes);
+            let previous = previous
+                .and_then(|snapshot| snapshot.packs.iter().find(|pack| pack.id() == entry.id));
+            let mut pack = Pack::from_yaml_reusing(bytes, &selection.binding(), false, previous)
                 .map_err(|error| error.in_selection(&selection.id))?;
             if selection.id != pack.id() || selection.version != pack.version() {
                 return Err(Error::ArtifactMismatch);
             }
-            let entry = selection.locked(bytes);
             pack.bind_identity(&entry.id);
             locked.push(entry);
             captured.push(pack);

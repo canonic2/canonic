@@ -21,11 +21,37 @@ pub(super) enum HostConfirmation {
     Elicitation,
     ToolPermission,
 }
-/// Source whose integrity apply just verified, with its optional immutable plan.
+/// Reviewed plan and optional verified durable source reference. CLI candidates
+/// retain their source during publication; MCP references were verified at apply.
 #[derive(Clone, Copy)]
 pub(in crate::review) struct Prepared<'a> {
-    pub(in crate::review) source: &'a Value,
+    pub(in crate::review) source: Option<&'a Value>,
     pub(in crate::review) evaluator: Option<&'a configuration::Evaluator>,
+}
+
+/// Publish the exact candidate whose plan survived the operator's review.
+pub(super) fn commit_prepared(
+    context: &Context,
+    before: &State,
+    candidate: Value,
+    meta: Value,
+    proposal: Option<&str>,
+    manual_fingerprint: Option<&str>,
+    evaluator: &configuration::Evaluator,
+) -> Result<Value, Error> {
+    commit_confirmed(
+        context,
+        before,
+        candidate,
+        meta,
+        proposal,
+        manual_fingerprint,
+        "operator-cli",
+        Some(Prepared {
+            source: None,
+            evaluator: Some(evaluator),
+        }),
+    )
 }
 impl HostConfirmation {
     pub(super) fn mechanism(self) -> &'static str {
@@ -54,7 +80,7 @@ pub(super) fn initialize(
     if let Err(error) = initialization {
         // Recovery only confirms a commit that already happened; when no state
         // was written, the initialization failure is the cause to report.
-        let Ok(recovered) = Store::open(project).and_then(|store| store.read()) else {
+        let Ok(recovered) = Store::open(project).and_then(|store| store.read_current()) else {
             return Err(error);
         };
         if recovered.operator != *meta
@@ -67,6 +93,7 @@ pub(super) fn initialize(
     Ok(())
 }
 
+#[cfg(test)]
 pub(super) fn commit(
     context: &Context,
     before: &State,
@@ -77,6 +104,7 @@ pub(super) fn commit(
     commit_reviewed(context, before, candidate, meta, proposal, None)
 }
 
+#[cfg(test)]
 pub(super) fn commit_reviewed(
     context: &Context,
     before: &State,
@@ -159,7 +187,9 @@ fn commit_confirmed(
     meta["projection_file_hashes"] = json!(file_hashes(&files));
     let expected = publication_identity(before);
     let store = Store::open(Path::new(&context.project_root))?;
-    let source = prepared.map_or(&candidates["project"], |prepared| prepared.source);
+    let source = prepared
+        .and_then(|prepared| prepared.source)
+        .unwrap_or(&candidates["project"]);
     let sources = BTreeMap::from([("project".into(), source.clone())]);
     let compiled =
         review::cache::build_candidate(context, &sources, evaluator.revision(), &meta, evaluator)?;
@@ -187,7 +217,7 @@ fn commit_confirmed(
             mark_applied(
                 row,
                 &state.policy_revision,
-                prepared.map(|_| source),
+                prepared.and_then(|prepared| prepared.source),
                 &candidate_identity,
                 &candidate_digest,
                 mechanism,
@@ -279,7 +309,7 @@ fn recover_activation(
     metadata: &Value,
     revision: &str,
 ) -> Result<Value, Error> {
-    let recovered = store.read()?;
+    let recovered = store.read_current()?;
     if attempted_activation.is_none_or(|id| {
         recovered
             .active
@@ -410,29 +440,38 @@ fn publication_identity(state: &State) -> String {
 }
 
 /// What a candidate changes against the active policy, with its permission comparison.
+#[cfg(test)]
 pub(super) fn change_review(
     context: &Context,
     before: &State,
     candidate: &Value,
     meta: &Value,
 ) -> Result<Value, Error> {
+    prepare_review(context, before, candidate, meta, None).map(|(view, _)| view)
+}
+
+pub(super) fn prepare_review(
+    context: &Context,
+    before: &State,
+    candidate: &Value,
+    meta: &Value,
+    base: Option<&configuration::Evaluator>,
+) -> Result<(Value, configuration::Evaluator), Error> {
+    if base.is_some_and(|plan| plan.revision() != before.policy_revision) {
+        return Err(Error::StaleSnapshot);
+    }
     let mut candidates = BTreeMap::new();
     candidates.insert("project".into(), candidate.clone());
-    let mut comparison = json!(configuration::compare_policy(
-        &review::snapshots(&before.candidates)?,
-        &review::snapshots(&candidates)?,
-    )?);
-    if let Some(prefixes) = review::codex_prefix_changes(&before.candidates, &candidates)? {
-        comparison["codex_prefixes"] = prefixes;
-    }
+    let (mut comparison, plan) = review::compare_prepared(&before.candidates, &candidates, base)?;
     if let Some(lines) = review::formatting_changes(&before.candidates["project"], candidate) {
         comparison["formatting"] = lines;
     }
-    Ok(
+    Ok((
         json!({"operation":"change policy","project_id":context.project_id,
         "changes":super::changes::diff::between(&before.operator, &before.candidates["project"], meta, candidate),
         "packs":crate::review::packs::summaries(meta),"candidate":candidate,"comparison":comparison}),
-    )
+        plan,
+    ))
 }
 
 pub(super) fn reconcile(context: &Context, expected: &State) -> Result<Value, Error> {

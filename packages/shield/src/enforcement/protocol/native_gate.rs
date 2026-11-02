@@ -28,22 +28,54 @@ pub(super) fn resolve(
         allow,
         working_files: native.working_files,
     };
-    // No native resource protection can be inferred from an opaque grammar.
-    // A standing Ask fallback must not allow that grammar to edit protected
-    // state without a verified footprint.
-    let shell = &value["_shell_analysis"];
-    if shell["dialect"] == "cmd"
-        || (shell["dialect"] == "powershell" && shell["coverage"] != "single-literal-invocation")
-    {
-        block(value, "unsupported-shell");
-        return Ok(());
+    let result = gate(root, native, value, owner, cwd, guard);
+    // A refused request records whether it touches state no approval may open,
+    // so in-session approval is offered only for the groups a person can open.
+    if result.is_ok() && value["disposition"] != "allowed" {
+        value["fixed_protection"] = json!(fixed(value, owner, cwd, guard));
+        value["deny_rules"] = deny_rules(value);
     }
-    let file_access = if value["_file_access"] == "read" {
+    result
+}
+
+/// The IDs of the applied rules that denied the request, which a person
+/// overriding the denial is shown.
+fn deny_rules(value: &Value) -> Value {
+    let evaluation = &value["_observation"]["evaluation"];
+    let explanation = evaluation
+        .get("explanation")
+        .unwrap_or(&evaluation["evaluation"]);
+    let mut rules: Vec<&str> = Vec::new();
+    for found in explanation["matches"].as_array().into_iter().flatten() {
+        if found["decision"] == "deny"
+            && found["applied"].as_bool().unwrap_or(true)
+            && let Some(id) = found["rule_id"].as_str()
+            && !rules.contains(&id)
+        {
+            rules.push(id);
+        }
+    }
+    json!(rules)
+}
+
+/// Opaque shell grammar has no verified footprint, so it may reach any path.
+fn opaque_shell(value: &Value) -> bool {
+    let shell = &value["_shell_analysis"];
+    shell["dialect"] == "cmd"
+        || (shell["dialect"] == "powershell" && shell["coverage"] != "single-literal-invocation")
+}
+
+fn file_access(value: &Value) -> paths::Access {
+    if value["_file_access"] == "read" {
         paths::Access::Read
     } else {
         paths::Access::Write
-    };
-    let (protection, path) = [
+    }
+}
+
+/// The strictest protection the request's shell, file and search footprints reach.
+fn footprint(value: &Value, owner: &Path, cwd: &Path, guard: paths::Guard<'_>) -> paths::Finding {
+    [
         paths::protection(
             &value["_shell_analysis"],
             owner,
@@ -51,7 +83,13 @@ pub(super) fn resolve(
             guard,
             paths::Access::Write,
         ),
-        paths::protection(&value["_file_targets"], owner, cwd, guard, file_access),
+        paths::protection(
+            &value["_file_targets"],
+            owner,
+            cwd,
+            guard,
+            file_access(value),
+        ),
         match (
             value["_file_targets"][0].as_str(),
             value.get("_file_search"),
@@ -62,7 +100,45 @@ pub(super) fn resolve(
     ]
     .into_iter()
     .max_by_key(|finding| finding.0)
-    .expect("three findings");
+    .expect("three findings")
+}
+
+/// Whether the request still reaches protected state with every operator-openable
+/// group open: review state, caches, the `.shield` folder or its ignore file, a
+/// working-folder root, the operator CLI, or a footprint Shield cannot verify.
+fn fixed(value: &Value, owner: &Path, cwd: &Path, guard: paths::Guard<'_>) -> bool {
+    use crate::review::path_access::{Change, PathAccess, Read};
+    let open = paths::Guard {
+        allow: PathAccess {
+            agent_settings_read: Read::Allow,
+            agent_settings_change: Change::Allow,
+            shield_config_change: Change::Allow,
+        },
+        ..guard
+    };
+    opaque_shell(value)
+        || paths::operator_cli(&value["_shell_analysis"], cwd)
+        || protected_removal(value, cwd, owner, open)
+        || footprint(value, owner, cwd, open).0 >= paths::Protection::Unverified
+}
+
+fn gate(
+    root: &Path,
+    native: NativeContext<'_>,
+    value: &mut Value,
+    owner: &Path,
+    cwd: &Path,
+    guard: paths::Guard<'_>,
+) -> Result<(), &'static str> {
+    let allow = guard.allow;
+    // No native resource protection can be inferred from an opaque grammar.
+    // A standing Ask fallback must not allow that grammar to edit protected
+    // state without a verified footprint.
+    if opaque_shell(value) {
+        block(value, "unsupported-shell");
+        return Ok(());
+    }
+    let (protection, path) = footprint(value, owner, cwd, guard);
     // The operator CLI and a separately launched MCP server can activate policy;
     // agents use the registered MCP connection instead of starting either here.
     let blocked = if paths::operator_cli(&value["_shell_analysis"], cwd) {

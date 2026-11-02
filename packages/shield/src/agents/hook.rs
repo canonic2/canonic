@@ -6,6 +6,8 @@ use crate::{cli::NativeHook, enforcement::protocol};
 use serde_json::{Value, json};
 use std::{io::Read, path::Path, process::ExitCode};
 
+mod approval;
+pub(super) use approval::OFFER;
 #[cfg(test)]
 mod tests;
 
@@ -185,10 +187,7 @@ fn handle(
     log.event("hook_stage", json!({"stage":"project_open_ready"}));
     log.event("hook_stage", json!({"stage":"registration_ready"}));
     if let Some(name) = request.tool.strip_prefix("mcp__shield__")
-        && crate::review::mcp::tools_for(Some(adapter.spec().id))["tools"]
-            .as_array()?
-            .iter()
-            .any(|t| t["name"] == name)
+        && crate::review::mcp::is_tool(name)
     {
         return Some(shield_tool_reply(adapter, request, name, log));
     }
@@ -221,6 +220,7 @@ fn handle(
         invocation_id()
     };
     let mut strictest: Option<Reply> = None;
+    let mut refusals = Vec::new();
     let mut unmodeled = false;
     for (index, operation) in operations.into_iter().enumerate() {
         if request.event.post()
@@ -235,7 +235,7 @@ fn handle(
         } else {
             format!("{local_id}:{index}")
         };
-        let reply = decide(
+        let (reply, refusal) = decide(
             adapter,
             request,
             &context,
@@ -244,6 +244,9 @@ fn handle(
             prepared.take(),
             log,
         )?;
+        if reply.decision != Decision::Allow {
+            refusals.push(refusal);
+        }
         if strictest
             .as_ref()
             .is_none_or(|r| reply.decision > r.decision)
@@ -261,7 +264,23 @@ fn handle(
         };
         Some(adapter.completion(request.event_name, note.as_deref()))
     } else {
-        strictest.map(|r| adapter.reply(request.event, &r))
+        let mut reply = strictest?;
+        if blocks(adapter, request.event, &reply)
+            && let Some(allowed) =
+                approval::in_session(root, adapter, request, &refusals, &mut reply)
+        {
+            return Some(adapter.reply(request.event, &allowed));
+        }
+        Some(adapter.reply(request.event, &reply))
+    }
+}
+
+/// Whether the host stops the request rather than asking the user itself.
+fn blocks(adapter: &dyn AgentAdapter, event: Event, reply: &Reply) -> bool {
+    match reply.decision {
+        Decision::Allow => false,
+        Decision::Deny => true,
+        Decision::Ask => adapter.approval(event) == protocol::NativeApproval::Fallback,
     }
 }
 
@@ -372,7 +391,7 @@ fn decide(
     mut operation: Value,
     prepared: Option<protocol::Prepared>,
     log: &crate::diagnostics::Log,
-) -> Option<Reply> {
+) -> Option<(Reply, Value)> {
     let root = Path::new(&context.project_root);
     let decided = operation.clone();
     if request.event.post() {
@@ -397,12 +416,21 @@ fn decide(
     );
     log.event("hook_evaluation",json!({"exit":exit,"decision":receipt["decision"],"disposition":receipt["disposition"],"code":receipt["code"],"ask_fallback":receipt["ask_fallback"],"policy_revision":receipt["identity"]["policy_revision"],"history_status":receipt["history"]["status"]}));
     if request.event.post() {
-        return (exit == 0 && receipt["history"]["status"] != "failed").then(|| Reply {
-            decision: Decision::Allow,
-            reason: String::new(),
-            agent_context: None,
+        return (exit == 0 && receipt["history"]["status"] != "failed").then(|| {
+            let reply = Reply {
+                decision: Decision::Allow,
+                reason: String::new(),
+                agent_context: None,
+            };
+            (reply, Value::Null)
         });
     }
+    // What in-session approval needs from a refusal; failures carry none of it.
+    let refusal = if exit == 0 {
+        approval::refusal(&receipt)
+    } else {
+        Value::Null
+    };
     if exit != 0 {
         let code = receipt["code"].as_str().unwrap_or("protection-failure");
         let mut reply = feedback::deny(code);
@@ -416,7 +444,7 @@ fn decide(
                 "Shield: compiled policy is unavailable. Ask the user to run `{route}` in their terminal, then retry."
             ));
         }
-        return Some(reply);
+        return Some((reply, refusal));
     }
     feedback::respond(
         root,
@@ -426,4 +454,5 @@ fn decide(
         &decided,
         request.session,
     )
+    .map(|reply| (reply, refusal))
 }

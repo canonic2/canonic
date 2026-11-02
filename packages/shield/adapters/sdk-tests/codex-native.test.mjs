@@ -214,12 +214,15 @@ console.log('{}');\n`);
     if (mode === 'protected-symlink') {
       assert.match(toolOutputs, /Access to `ordinary\.txt` is restricted because it protects the agent's security settings/);
       assert.match(delivered, /treated as an edit to `ordinary\.txt`, which can disable agent protection/);
+      // Agent settings can be allowed once in the session.
+      assert.match(delivered, /call request_approve with request_id hook-request-/);
     } else {
       assert.match(toolOutputs, /This request reaches protected files or directories/);
       assert.match(delivered, /Never read or change \.shield\/review/);
+      // Review state never opens, even once.
+      assert.doesNotMatch(delivered, /request_approve/);
     }
-    assert.match(delivered, /shield protection set/);
-    assert.doesNotMatch(toolOutputs, /Shield: protected path\.|treated as an edit|Never read or change|shield protection set/);
+    assert.doesNotMatch(toolOutputs, /Shield: protected path\.|treated as an edit|Never read or change|request_approve/);
   } else if (['deny', 'policy-deny', 'exact-deny', 'required-option', 'permission-ask', 'permission-deny'].includes(mode)) {
     await assert.rejects(access(marker));
     const deniedReason = mode === 'permission-deny' ? /Shield: blocked\. The active policy does not allow this request/ : mode.startsWith('permission-') ? /approval|approv|reject/i : mode === 'deny' ? /Codex cannot request approval here/

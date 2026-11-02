@@ -1,9 +1,8 @@
 //! Shared project inspection, owner-qualified rule lookup and non-activating proposal transitions.
 use super::{
-    Checkpoint, Context, Error, FAILED_PROPOSAL, FOREIGN_WITHDRAWAL, Failure, required, text,
-    views::Views,
+    Checkpoint, Context, Error, FAILED_PROPOSAL, FOREIGN_WITHDRAWAL, Failure, text, views::Views,
 };
-use crate::review::{project, storage::Store};
+use crate::review::storage::Store;
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -34,8 +33,27 @@ pub(super) fn rules(
 }
 pub(super) fn policy(context: &Context, views: &mut Views, args: &Value) -> Result<Value, Error> {
     if let Some(id) = text(args, "proposal_id")? {
-        let mut value = crate::review::proposals(context, Some(id), false)?;
-        proposal_handles(context, views, &mut value)?;
+        let store = Store::open(Path::new(&context.project_root))?;
+        let mut state = store.read_checkpoint()?;
+        state.check(context)?;
+        let row = state
+            .proposals
+            .iter_mut()
+            .find(|row| row.id == id)
+            .ok_or(Error::Missing)?;
+        store.hydrate_proposal(row)?;
+        let mut value = row.public(false);
+        super::apply::present_proposal(context, row, &mut value);
+        value["before_candidate_id"] =
+            json!(views.retain(&row.base_candidate, &row.base_metadata)?);
+        value["after_candidate_id"] = json!(views.retain(&row.candidate, &row.candidate_metadata)?);
+        value["authorization_events"] = json!(
+            state
+                .authorization_events
+                .iter()
+                .filter(|event| event["links"]["proposal_id"] == id)
+                .collect::<Vec<_>>()
+        );
         return Ok(value);
     }
     let status = text(args, "status")?.unwrap_or("pending");
@@ -51,11 +69,20 @@ pub(super) fn policy(context: &Context, views: &mut Views, args: &Value) -> Resu
     {
         return Err(Error::Invalid("invalid proposal status"));
     }
-    let mut value = project::policy(context)?;
-    let mut proposals = crate::review::proposals(context, None, false)?;
-    let rows = proposals["proposals"]
-        .as_array_mut()
-        .ok_or(Error::Invalid("proposals missing"))?;
+    let state = crate::review::project::captured(context)?;
+    let active_id = views.active(context)?;
+    let captured = views.get(&active_id)?;
+    if crate::review::storage::sources::candidate_identity(&state.candidates["project"])
+        != crate::review::storage::sources::candidate_identity(&captured.candidate)
+    {
+        return Err(Error::StaleSnapshot);
+    }
+    let mut value = crate::review::inspect_prepared(context, &state, captured.evaluator()?)?;
+    let mut rows: Vec<_> = state
+        .proposals
+        .iter()
+        .map(crate::review::model::Proposal::summary)
+        .collect();
     let agent = text(args, "agent")?;
     let session = text(args, "session_id")?;
     rows.retain(|p| {
@@ -68,22 +95,8 @@ pub(super) fn policy(context: &Context, views: &mut Views, args: &Value) -> Resu
         .ok_or(Error::Invalid("invalid policy view"))?
         .remove("pending_configuration");
     value["proposals"] = json!(rows);
-    let active_id = views.active(context)?;
-    if value["policy_revision"] != views.get(&active_id)?.revision()? {
-        return Err(Error::StaleSnapshot);
-    }
     value["active_candidate_id"] = json!(active_id);
     views.page("policy_show", args, value, "proposals")
-}
-pub(super) fn proposal_handles(
-    context: &Context,
-    views: &mut Views,
-    value: &mut Value,
-) -> Result<(), Error> {
-    let (before, after) = views.proposal(context, required(value, "proposal_id")?)?;
-    value["before_candidate_id"] = json!(before);
-    value["after_candidate_id"] = json!(after);
-    Ok(())
 }
 pub(super) fn transition(
     context: &Context,
@@ -92,11 +105,7 @@ pub(super) fn transition(
     checkpoint: Checkpoint<'_>,
 ) -> Result<Value, Failure> {
     let store = Store::open(Path::new(&context.project_root))?;
-    let state = if name == "policy_receipt" {
-        store.read_checkpoint()?
-    } else {
-        store.read()?
-    };
+    let mut state = store.read_checkpoint()?;
     state.check(context)?;
     let row = state
         .proposals
@@ -131,7 +140,15 @@ pub(super) fn transition(
         return Err(Failure::Refused(&FOREIGN_WITHDRAWAL));
     }
     match row.status.as_str() {
-        "withdrawn" => return Ok(row.public(false)),
+        "withdrawn" => {
+            let row = state
+                .proposals
+                .iter_mut()
+                .find(|p| p.id == id)
+                .ok_or(Error::Missing)?;
+            store.hydrate_proposal(row)?;
+            return Ok(row.public(false));
+        }
         "stale" => return Err(Error::StaleSnapshot.into()),
         _ => {}
     }

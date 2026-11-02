@@ -135,9 +135,17 @@ fn default_temporary_access_fixture() {
             "{value}"
         );
     }
-    assert_eq!(
-        fs::read(root.join(".shield/review/state.json")).unwrap(),
+    // Refusals store requests for in-session approval; nothing else changes.
+    let without_requests = |bytes: &[u8]| {
+        let mut state: Value = serde_json::from_slice(bytes).unwrap();
+        let fields = state.as_object_mut().unwrap();
+        fields.remove("hook_requests");
+        fields.remove("sequence");
         state
+    };
+    assert_eq!(
+        without_requests(&fs::read(root.join(".shield/review/state.json")).unwrap()),
+        without_requests(&state)
     );
     assert!(!temp.path().join("new-unowned-name").exists());
 }

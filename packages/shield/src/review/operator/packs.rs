@@ -26,7 +26,7 @@ pub(super) fn add(
 ) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
     tty.progress(&format!("Resolving {reference} and its dependencies…"))?;
-    let before = crate::review::project::load(context)?;
+    let (before, base) = crate::review::project::load_prepared(context)?;
     let edits = setup::Edits {
         set,
         local,
@@ -62,7 +62,7 @@ pub(super) fn add(
         )?;
         match settled {
             Step::Done((candidate, meta)) => {
-                return finish(context, &before, candidate, meta, &mut tty);
+                return finish(context, &before, candidate, meta, &mut tty, &base);
             }
             Step::Back if asked => {}
             Step::Back => return Err(Error::Cancelled),
@@ -79,7 +79,7 @@ pub(super) fn configure(
     json_mode: bool,
 ) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
-    let before = crate::review::project::load(context)?;
+    let (before, base) = crate::review::project::load_prepared(context)?;
     let project = crate::review::project::root(context);
     let (candidate, meta) = prepare_configure(&before, reference, |artifact, settings| {
         if !edits.is_empty() {
@@ -114,7 +114,7 @@ pub(super) fn configure(
             }
         }
     })?;
-    finish(context, &before, candidate, meta, &mut tty)
+    finish(context, &before, candidate, meta, &mut tty, &base)
 }
 
 /// [`settle`] for a command whose first step is pack setup, such as update or
@@ -235,9 +235,9 @@ pub(super) fn settle(
 
 pub(super) fn remove(context: &Context, reference: &str, json_mode: bool) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
-    let before = crate::review::project::load(context)?;
+    let (before, base) = crate::review::project::load_prepared(context)?;
     let (candidate, meta) = prepare_remove(&before, reference)?;
-    finish(context, &before, candidate, meta, &mut tty)
+    finish(context, &before, candidate, meta, &mut tty, &base)
 }
 pub(super) fn update(
     context: &Context,
@@ -245,7 +245,7 @@ pub(super) fn update(
     json_mode: bool,
 ) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
-    let before = crate::review::project::load(context)?;
+    let (before, base) = crate::review::project::load_prepared(context)?;
     let skipped = crate::review::packs::update_skipped(&before.operator, reference)?;
     tty.progress(&super::presentation::update_progress(&skipped))?;
     let (candidate, meta) = prepare_update(context, &before, reference)?;
@@ -257,7 +257,7 @@ pub(super) fn update(
         meta,
         &setup::Edits::default(),
     )?;
-    let mut result = finish(context, &before, candidate, meta, &mut tty)?;
+    let mut result = finish(context, &before, candidate, meta, &mut tty, &base)?;
     result["skipped_pinned"] = json!(skipped);
     Ok(result)
 }
@@ -267,6 +267,7 @@ fn finish(
     candidate: Value,
     meta: Value,
     tty: &mut Terminal,
+    base: &crate::configuration::Evaluator,
 ) -> Result<Value, Error> {
     if candidate == before.candidates["project"] && meta == crate::review::project::metadata(before)
     {
@@ -274,6 +275,6 @@ fn finish(
             json!({"committed":false,"unchanged":true,"policy_revision":before.policy_revision}),
         );
     }
-    state::review_candidate(context, before, &candidate, &meta, tty)?;
-    crate::review::publication::commit(context, before, candidate, meta, None)
+    let plan = state::review_candidate(context, before, &candidate, &meta, tty, base)?;
+    crate::review::publication::commit_prepared(context, before, candidate, meta, None, None, &plan)
 }

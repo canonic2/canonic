@@ -82,12 +82,21 @@ pub(super) struct Store {
 
 impl Store {
     pub(super) fn collect(&mut self, value: &Value, domain: &str) -> Result<(), Error> {
+        self.collect_reusing(value, domain, None)
+    }
+
+    pub(super) fn collect_reusing(
+        &mut self,
+        value: &Value,
+        domain: &str,
+        previous: Option<&Self>,
+    ) -> Result<(), Error> {
         match value {
             Value::Object(fields) => {
                 if fields.len() == 1 {
                     for kind in ["regex", "glob"] {
                         if let Some(source) = fields.get(kind).and_then(Value::as_str) {
-                            self.insert(kind, source)?;
+                            self.insert(kind, source, previous)?;
                             return Ok(());
                         }
                     }
@@ -95,18 +104,18 @@ impl Store {
                 for (key, value) in fields {
                     if key == "environment" {
                         for selector in selectors::environment_selectors(value) {
-                            self.collect(selector, domain)?;
+                            self.collect_reusing(selector, domain, previous)?;
                         }
                     } else if !(["exact", "input", "context"].contains(&key.as_str())
                         || domain == "mcp" && key == "arguments")
                     {
-                        self.collect(value, domain)?;
+                        self.collect_reusing(value, domain, previous)?;
                     }
                 }
             }
             Value::Array(items) => {
                 for item in items {
-                    self.collect(item, domain)?;
+                    self.collect_reusing(item, domain, previous)?;
                 }
             }
             _ => {}
@@ -114,11 +123,31 @@ impl Store {
         Ok(())
     }
 
-    fn insert(&mut self, kind: &str, source: &str) -> Result<(), Error> {
+    fn insert(&mut self, kind: &str, source: &str, previous: Option<&Self>) -> Result<(), Error> {
         let key = format!("{kind}:{source}");
         if self.programs.contains_key(&key) {
             return Ok(());
         }
+        if let Some(previous) = previous
+            && let (Some(image), Some(program)) =
+                (previous.images.get(&key), previous.programs.get(&key))
+        {
+            // Exact dialect/source keys identify immutable matcher programs.
+            // Account only for patterns used by this new store, with the same
+            // image/NFA bounds as compilation; do not retain unused entries.
+            self.bytes = self
+                .bytes
+                .checked_add(image.len().max(program.get_nfa().memory_usage()))
+                .ok_or(Error::Limit)?;
+            if image.len() > MAX_PATTERN_BYTES || self.bytes > MAX_PREPARED_BYTES {
+                return Err(Error::Limit);
+            }
+            self.images.insert(key.clone(), image.clone());
+            self.programs.insert(key, program.clone());
+            crate::diagnostics::trace::count("pattern.reused", 1);
+            return Ok(());
+        }
+        crate::diagnostics::trace::count("pattern.compiled", 1);
         selectors::literal(source, false)?;
         let (expression, utf8) = if kind == "glob" {
             let glob = globset::GlobBuilder::new(source)
@@ -161,6 +190,48 @@ impl Store {
         self.programs
             .insert(key, PikeVM::new_from_nfa(nfa).map_err(|_| Error::Syntax)?);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod reuse_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn reused_patterns_keep_dialects_bounds_and_changed_pattern_admission() {
+        let mut previous = Store::default();
+        previous
+            .collect(&json!([{"glob":"acme-*"}, {"regex":"acme-.*"}]), "argv")
+            .unwrap();
+        let mut next = Store::default();
+        next.collect_reusing(
+            &json!([{"glob":"acme-*"}, {"regex":"acme-*"}]),
+            "argv",
+            Some(&previous),
+        )
+        .unwrap();
+        assert_eq!(next.images.len(), 2);
+        assert!(!next.images.contains_key("regex:acme-.*"));
+        assert!(next.matches("glob:acme-*", "acme-check").unwrap());
+        assert!(!next.matches("regex:acme-*", "acme-check").unwrap());
+        assert!(next.matches("regex:acme-*", "acme---").unwrap());
+        assert!(
+            next.collect_reusing(&json!({"regex":"("}), "argv", Some(&previous))
+                .is_err()
+        );
+        assert!(
+            next.collect_reusing(&json!({"glob":"["}), "argv", Some(&previous))
+                .is_err()
+        );
+        let mut limited = Store {
+            bytes: MAX_PREPARED_BYTES,
+            ..Store::default()
+        };
+        assert!(matches!(
+            limited.collect_reusing(&json!({"glob":"acme-*"}), "argv", Some(&previous)),
+            Err(Error::Limit)
+        ));
     }
 }
 
@@ -439,7 +510,7 @@ mod tests {
             let key = r"regex:(?:\p{L}|[0-9_]){0,60}";
             let (store, vm) = PREPARED.get_or_init(|| {
                 let mut store = Store::default();
-                store.insert("regex", r"(?:\p{L}|[0-9_]){0,60}").unwrap();
+                store.insert("regex", r"(?:\p{L}|[0-9_]){0,60}", None).unwrap();
                 let vm = load(&store.images[key]).unwrap();
                 (store, vm)
             });

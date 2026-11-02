@@ -21,8 +21,8 @@ fn raw_deny(code: &str) -> Reply {
         "unsupported-operation" => "Shield: unsupported tool; blocked. Continue without it, or explain to the user why it is needed.".to_owned(),
         "unsupported-shell" => "Shield: blocked this shell dialect because its file effects cannot be verified. Use supported file tools or ask the user to run the command.".to_owned(),
         "operator-cli" => "Shield: inspect with the status or rule_list tools; propose changes with policy_propose and copy the returned apply_arguments object unchanged into policy_apply for approval.".to_owned(),
-        "protected-access" => format!("{PROTECTED_ACCESS} Never read or change .shield/review or the cache. Propose policy changes with policy_propose; direct policy/settings edits require the user's shield protection set choice. Do not bypass protection."),
-        "sensitive-read" => "Shield: settings may contain credentials; this callback cannot request read approval. Continue without them unless essential; then ask the user to inspect them in a terminal.".to_owned(),
+        "protected-access" => format!("{PROTECTED_ACCESS} Never read or change .shield/review or the cache. Propose policy changes with policy_propose. Do not bypass protection."),
+        "sensitive-read" => "Shield: settings may contain credentials; this callback cannot request read approval. Continue without them unless essential.".to_owned(),
         "search-footprint-unavailable" => "Shield: the files this search reaches could not be verified. Search a narrower path with fewer entries. In a shell rg, --no-ignore without glob filters keeps hidden files out.".to_owned(),
         "protected-search" => "Shield: this search could read protected files. Search a narrower path that excludes .shield and agent settings. In a shell rg, --files lists names only, and --no-ignore without glob filters keeps a content search to visible files.".to_owned(),
         "invalid-host-input" | "invalid-host-event" | "invalid-input" => "Shield: invalid request. Correct the tool input before retrying.".to_owned(),
@@ -88,10 +88,10 @@ fn protected_access(path: &str, group: Option<&str>) -> String {
             "{PROTECTED_ACCESS} This request is treated as a change to {path}, which keeps review state out of Git. Continue without changing it."
         ),
         Some("policy") => format!(
-            "{PROTECTED_ACCESS} This command counts as a change to {path}, a policy file Shield protects. Propose policy changes with policy_propose, or ask the user to allow direct edits with `shield protection set`."
+            "{PROTECTED_ACCESS} This command counts as a change to {path}, a policy file Shield protects. Propose policy changes with policy_propose."
         ),
         _ => format!(
-            "{PROTECTED_ACCESS} This request is treated as an edit to {path}, which can disable agent protection. Ask the user to edit it or permit edits with `shield protection set`."
+            "{PROTECTED_ACCESS} This request is treated as an edit to {path}, which can disable agent protection."
         ),
     }
 }

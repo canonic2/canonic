@@ -35,6 +35,20 @@ pub(crate) fn redact(value: &mut Value) -> bool {
             changed
         }
         Value::String(text) => {
+            // Most strings contain no credentials. Scan borrowed words before
+            // allocating the rewritten projection, preserving safe whitespace.
+            let mut next_secret = false;
+            let contains_secret = text.split_whitespace().any(|word| {
+                if next_secret {
+                    return true;
+                }
+                next_secret = word.starts_with("--") && sensitive_key(word.trim_start_matches('-'));
+                word.split_once('=')
+                    .is_some_and(|(key, _)| sensitive_key(key.trim_start_matches('-')))
+            });
+            if !contains_secret {
+                return false;
+            }
             let mut changed = false;
             let mut next_secret = false;
             let words: Vec<_> = text
@@ -111,6 +125,36 @@ pub(crate) fn now() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_redaction_preserves_safe_whitespace_and_existing_secret_projection() {
+        for (source, expected, changed) in [
+            ("  safe\twords\n", "  safe\twords\n", false),
+            ("--token", "--token", false),
+            ("--token   hidden", "--token [REDACTED]", true),
+            ("safe\u{2003}words", "safe\u{2003}words", false),
+            (
+                "safe\u{2003}--api-key=hidden",
+                "safe --api-key=[REDACTED]",
+                true,
+            ),
+            ("--token --secret value", "--token [REDACTED] value", true),
+            (
+                "authorization=hidden safe",
+                "authorization=[REDACTED] safe",
+                true,
+            ),
+            (
+                "--token=hidden --verbose",
+                "--token=[REDACTED] --verbose",
+                true,
+            ),
+        ] {
+            let mut value = json!(source);
+            assert_eq!(redact(&mut value), changed, "{source}");
+            assert_eq!(value, expected);
+        }
+    }
 
     #[test]
     fn credential_names_require_exact_or_separated_suffixes() {

@@ -344,14 +344,14 @@ fn catalog_ambiguity(alias: &str, ids: &[PackId]) -> Error {
     )
 }
 pub(super) fn list(context: &Context) -> Result<Value, Error> {
-    let current = state::load(context)?;
+    let current = state::checkpoint(context)?;
     let mut value = summaries(&state::metadata(&current));
     value["policy_revision"] = json!(current.policy_revision);
     Ok(value)
 }
 
 pub(super) fn show(context: &Context, reference: &str) -> Result<Value, Error> {
-    let current = state::load(context)?;
+    let current = state::captured(context)?;
     let meta = state::metadata(&current);
     let rows = meta["installed"]
         .as_array()

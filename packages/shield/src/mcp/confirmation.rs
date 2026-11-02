@@ -7,6 +7,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Tools whose call waits for the person's answer to Shield's form.
+pub(super) const CONFIRMED_TOOLS: &[&str] = &["policy_apply", "request_approve"];
+
 #[derive(Default)]
 pub(super) struct Confirmations {
     pending: BTreeMap<String, Pending>,
@@ -64,7 +67,7 @@ impl Confirmations {
         // capability. Connection destruction revokes every remaining token.
         let pending = self.pending.remove(token).ok_or_else(invalid)?;
         if pending.expires <= Instant::now()
-            || call.name != "policy_apply"
+            || !CONFIRMED_TOOLS.contains(&call.name.as_str())
             || pending.arguments != call.arguments
         {
             return Err(invalid());

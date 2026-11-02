@@ -74,7 +74,10 @@ fn late_updates_do_not_evict_newer_commands_or_resurrect_pruned_entries() {
             Ok(json!({}))
         })
         .expect("observations");
-    let state = crate::review::project::load(&context).expect("state");
+    let state = Store::open(root.path())
+        .expect("store")
+        .read_history()
+        .expect("history");
     let decisions: Vec<_> = state
         .events
         .iter()

@@ -132,6 +132,27 @@ choice is kept with the project's review state; agents cannot
 change it. `status` lists any group you have opened. An invalid saved choice
 blocks every native request until you run `protection set` again.
 
+### Allowing one blocked request
+
+You don't need to change these settings to let an agent do one blocked thing.
+When Shield blocks a change to agent settings or policy files, a credentials
+read the agent cannot ask about, a policy Deny, a Codex request that needs
+approval, or a Codex tool Shield cannot check, the agent can ask you in the
+same conversation. It calls Shield's `request_approve` tool, and your agent
+shows Shield's form with the exact action, the folder, why Shield blocked it
+and what allowing it can do. If you accept, the agent repeats the identical
+request once within five minutes; anything else is still blocked, and your
+policy and protection settings do not change. If you decline, the agent
+continues without it.
+
+Codex shows the form only when its approval policy allows prompts. If the
+agent reports that it could not ask you, choose an approval policy that allows
+prompts with `/permissions` in the same Codex session; the agent then asks
+again.
+
+Review state, caches, the `.shield` folder and its ignore file are never
+offered, even once, and neither is a request that also touches them.
+
 ## Custom rules and proposed changes
 
 Custom rules express project-specific permissions. For a worked example, see

@@ -21,7 +21,7 @@ pub(super) fn mutate(
     json_mode: bool,
 ) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
-    let before = crate::review::project::load(context)?;
+    let (before, base) = crate::review::project::load_prepared(context)?;
     let candidate = &before.candidates["project"];
     let mut document = rules(candidate, context)?;
     let rows = document["rules"]
@@ -77,8 +77,8 @@ pub(super) fn mutate(
         &bytes,
         Some(&document.to_string()),
     )?;
-    state::review_candidate(context, &before, &next, &meta, &mut tty)?;
-    crate::review::publication::commit(context, &before, next, meta, None)
+    let plan = state::review_candidate(context, &before, &next, &meta, &mut tty, &base)?;
+    crate::review::publication::commit_prepared(context, &before, next, meta, None, None, &plan)
 }
 
 fn guided_rule(id: &str, existing: Option<&Value>, tty: &mut Terminal) -> Result<Value, Error> {
@@ -256,8 +256,8 @@ fn edit_conditions(existing: &Value, tty: &mut Terminal) -> Result<Value, Error>
 }
 pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
-    let before = crate::review::project::load(context)?;
-    let value = review::project::policy(context)?;
+    let (before, base) = crate::review::project::load_prepared(context)?;
+    let value = review::project::policy_prepared(context, &before, &base)?;
     let mut shown = value.clone();
     shown["operation"] = json!("inspect policy");
     tty.display(&shown)?;
@@ -322,7 +322,7 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
             "inspect" | "" => {
                 Ok(json!({"inspected":true,"policy_revision":value["policy_revision"]}))
             }
-            "manual" => manual(context, &before, &mut tty),
+            "manual" => manual(context, &before, &mut tty, &base),
             "repair" => {
                 tty.confirm(&json!({"operation":"restore project files from active policy","policy_revision":before.policy_revision,"manual_edits":"preserved; conflicts require manual review"}))?;
                 let mut receipt = crate::review::publication::reconcile(context, &before)?;
@@ -350,7 +350,7 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
 /// Each pending proposal in turn, oldest first. Accepting activates it at once,
 /// so later proposals made against the older policy show as stale.
 fn review_proposals(context: &Context, tty: &mut Terminal) -> Result<Value, Error> {
-    let ids: Vec<String> = crate::review::project::load(context)?
+    let ids: Vec<String> = crate::review::project::checkpoint(context)?
         .proposals
         .iter()
         .filter(|p| p.status == "pending")
@@ -358,20 +358,28 @@ fn review_proposals(context: &Context, tty: &mut Terminal) -> Result<Value, Erro
         .collect();
     let mut reviewed = Vec::new();
     for (index, id) in ids.iter().enumerate() {
-        let before = crate::review::project::load(context)?;
+        let (mut before, base) = crate::review::project::load_prepared(context)?;
         let Some(proposal) = before
             .proposals
-            .iter()
+            .iter_mut()
             .find(|p| &p.id == id && p.status == "pending")
         else {
             continue;
         };
+        crate::review::storage::Store::open(std::path::Path::new(&context.project_root))?
+            .hydrate_proposal(proposal)?;
         let stale = proposal.policy_revision != before.policy_revision;
-        let mut change = crate::review::publication::change_review(
+        let proposal = before
+            .proposals
+            .iter()
+            .find(|p| &p.id == id)
+            .ok_or(Error::Missing)?;
+        let (mut change, plan) = crate::review::publication::prepare_review(
             context,
             &before,
             &proposal.candidate,
             &proposal.candidate_metadata,
+            Some(&base),
         )?;
         state::terminal_mcp_details(
             &mut change["changes"],
@@ -385,12 +393,14 @@ fn review_proposals(context: &Context, tty: &mut Terminal) -> Result<Value, Erro
         let card = super::presentation::card(&row, &change, requested.as_ref(), stale);
         let choice = tty.decide(&card, ids.len() - index - 1)?;
         let result = match choice.as_str() {
-            "accept" if !stale => crate::review::publication::commit(
+            "accept" if !stale => crate::review::publication::commit_prepared(
                 context,
                 &before,
                 proposal.candidate.clone(),
                 proposal.candidate_metadata.clone(),
                 Some(id),
+                None,
+                &plan,
             )?,
             "reject" => review::transition(context, id, "reject", None, &|| Ok(()))?,
             _ => json!({"proposal_id":id,"status":"pending"}),
@@ -511,6 +521,7 @@ fn manual(
     context: &Context,
     before: &crate::review::model::State,
     tty: &mut Terminal,
+    base: &crate::configuration::Evaluator,
 ) -> Result<Value, Error> {
     let fingerprint =
         crate::review::publication::projections::projection_fingerprint(context, before)?;
@@ -589,13 +600,7 @@ fn manual(
         &disabled_bytes,
     )?);
     let candidates = std::collections::BTreeMap::from([("project".into(), candidate.clone())]);
-    let mut comparison = json!(crate::configuration::compare_policy(
-        &review::snapshots(&before.candidates)?,
-        &review::snapshots(&candidates)?,
-    )?);
-    if let Some(prefixes) = review::codex_prefix_changes(&before.candidates, &candidates)? {
-        comparison["codex_prefixes"] = prefixes;
-    }
+    let (comparison, plan) = review::compare_prepared(&before.candidates, &candidates, Some(base))?;
     let mut view = json!({"operation":"adopt manual project edits",
         "changes":crate::review::changes::diff::between(&before.operator, &before.candidates["project"], &meta, &candidate),
         "candidate":candidate,"comparison":comparison,"packs":meta["installed"]});
@@ -605,21 +610,20 @@ fn manual(
         &candidate,
     )?;
     tty.confirm(&view)?;
-    crate::review::publication::commit_reviewed(
+    crate::review::publication::commit_prepared(
         context,
         before,
         candidate,
         meta,
         None,
         Some(&fingerprint),
+        &plan,
     )
 }
 
 /// A project file named by a configuration path, refusing paths that leave .shield.
 fn contained(directory: &std::path::Path, path: &str) -> Result<String, Error> {
-    crate::configuration::Candidate::from_yaml(
-        &json!({"schema_version":1,"packs":[],"rules":path}).to_string(),
-    )?;
+    crate::configuration::portable_path(path)?;
     let resolved = directory.join(path).canonicalize()?;
     if !resolved.starts_with(directory.canonicalize()?) {
         return Err(Error::Invalid("manual artifact escapes project"));

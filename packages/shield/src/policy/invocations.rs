@@ -428,7 +428,7 @@ pub(super) fn matching<'a>(
     budget: &'a mut Budget,
     identity: (usize, usize),
 ) -> Result<impl Iterator<Item = Result<Rule, Error>> + 'a, Error> {
-    let bytes = serde_json::to_vec(rule).map_err(|_| Error::Syntax)?.len();
+    let bytes = crate::json::encoded_len(rule).map_err(|_| Error::Syntax)?;
     let name = rule
         .invocation
         .as_ref()

@@ -5,6 +5,7 @@ mod changes;
 pub(crate) mod cli;
 mod clock;
 mod history;
+pub(crate) mod hook_approval;
 mod inspection;
 pub(crate) mod integrations;
 pub(crate) mod mcp;
@@ -228,26 +229,26 @@ fn snapshots(
     )])
 }
 
-/// Codex prefixes a candidate adds or removes against the current policy, or
-/// None when they are unchanged. A new prefix lets Codex run matching commands
-/// outside its sandbox without asking, so every review shows these.
-pub(crate) fn codex_prefix_changes(
+/// Compare captured sources and retain the next plan for publication. Prefix
+/// changes use those same plans, including an already validated base when supplied.
+pub(in crate::review) fn compare_prepared(
     before: &BTreeMap<String, Value>,
     after: &BTreeMap<String, Value>,
-) -> Result<Option<Value>, Error> {
-    let prefixes = |candidates| -> Result<std::collections::BTreeSet<_>, Error> {
-        let evaluator = configuration::Evaluator::new(snapshots(candidates)?)?;
-        Ok(evaluator.codex_prefixes().iter().cloned().collect())
+    prepared_base: Option<&configuration::Evaluator>,
+) -> Result<(Value, configuration::Evaluator), Error> {
+    let before = snapshots(before)?;
+    let after = snapshots(after)?;
+    let mut comparison = json!(configuration::compare_policy(&before, &after)?);
+    let owned_base;
+    let base_plan = if let Some(plan) = prepared_base {
+        plan
+    } else {
+        owned_base = configuration::Evaluator::new(before)?;
+        &owned_base
     };
-    // A current policy that no longer prepares has no prefixes to keep.
-    let old = prefixes(before).unwrap_or_default();
-    let new = prefixes(after)?;
-    let added: Vec<_> = new.difference(&old).collect();
-    let removed: Vec<_> = old.difference(&new).collect();
-    Ok(
-        (!added.is_empty() || !removed.is_empty())
-            .then(|| json!({"added":added,"removed":removed})),
-    )
+    let next_plan = configuration::Evaluator::new(after)?;
+    changes::compare_prefixes(base_plan, &next_plan, &mut comparison);
+    Ok((comparison, next_plan))
 }
 
 /// Review lines for project files a change rewrites in full or whose comments
@@ -269,12 +270,6 @@ pub(crate) fn formatting_changes(before: &Value, after: &Value) -> Option<Value>
     })
     .collect();
     (!lines.is_empty()).then(|| json!(lines))
-}
-
-fn project_bundle(candidates: &BTreeMap<String, Value>) -> Result<configuration::Bundle, Error> {
-    Ok(configuration::Bundle::from_json(&project_bundle_bytes(
-        candidates,
-    )?)?)
 }
 
 fn project_bundle_bytes(candidates: &BTreeMap<String, Value>) -> Result<Vec<u8>, Error> {
@@ -308,13 +303,30 @@ pub(crate) fn compiled_cache_root(project: &Path) -> Result<Option<std::path::Pa
     Ok(state.active.map(|active| active.compiled.directory))
 }
 
+#[cfg(test)]
 pub(crate) fn inspect(context: &Context) -> Result<Value, Error> {
-    let state = Store::open(Path::new(&context.project_root))?.read()?;
+    let (state, evaluator) =
+        Store::open(Path::new(&context.project_root))?.read_current_evaluated()?;
     state.check(context)?;
-    let bundle = project_bundle(&state.candidates)?;
-    let evaluator =
-        configuration::Evaluator::new(vec![(policy::Scope::Project, bundle.snapshot()?)])?;
-    let rules = match bundle.rules_source() {
+    inspect_prepared(context, &state, &evaluator)
+}
+
+pub(in crate::review) fn inspect_prepared(
+    context: &Context,
+    state: &model::State,
+    evaluator: &configuration::Evaluator,
+) -> Result<Value, Error> {
+    if evaluator.revision() != state.policy_revision {
+        return Err(Error::StaleSnapshot);
+    }
+    // The caller verified this source and its exact evaluator. Reconstructing
+    // a Bundle here would validate every pack again just to retrieve rule text.
+    let candidate = state
+        .candidates
+        .get("project")
+        .filter(|_| state.candidates.len() == 1)
+        .ok_or(Error::Invalid("project candidate is required"))?;
+    let rules = match candidate["rules"].as_str() {
         Some(source) => inspection::project_rules(source, &context.project_root)?,
         None => {
             json!({"schema_version":1,"rules":[],"kind":"custom","capabilities":["structured-rules-v1"]})
@@ -327,13 +339,10 @@ pub(crate) fn inspect(context: &Context) -> Result<Value, Error> {
     Ok(value)
 }
 
+#[cfg(test)]
 pub(crate) fn proposals(context: &Context, id: Option<&str>, reveal: bool) -> Result<Value, Error> {
     let store = Store::open(Path::new(&context.project_root))?;
-    let mut state = if reveal {
-        store.read_unprepared()?
-    } else {
-        store.read_checkpoint()?
-    };
+    let mut state = store.read_checkpoint()?;
     state.check(context)?;
     if let Some(id) = id {
         let proposal = state
@@ -344,8 +353,7 @@ pub(crate) fn proposals(context: &Context, id: Option<&str>, reveal: bool) -> Re
         // The checkpoint keeps candidates as retained-source references. The
         // approval arguments bind and describe the captured candidate itself,
         // exactly as the proposal reply and apply do.
-        proposal.candidate = store.captured_candidate(&proposal.candidate)?;
-        proposal.base_candidate = store.captured_candidate(&proposal.base_candidate)?;
+        store.hydrate_proposal(proposal)?;
         let mut result = proposal.public(reveal);
         result["authorization_events"] = json!(
             state
@@ -378,8 +386,9 @@ pub(crate) fn transition(
     if action == "reject" && context.surface != "cli" {
         return Err(Error::ApprovalRequired);
     }
-    store.update(context, checkpoint, |state| {
+    store.update_checkpoint(context, checkpoint, |state| {
         let index = state.proposals.iter().position(|p| p.id == id).ok_or(Error::Missing)?;
+        store.hydrate_proposal(&mut state.proposals[index])?;
         let proposal = &state.proposals[index];
         if action == "withdraw" && context.surface == "mcp" {
             if proposal.retry_owner != context.retry_owner() { return Err(Error::ApprovalRequired); }

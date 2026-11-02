@@ -26,7 +26,7 @@ static SPEC: AgentSpec = AgentSpec {
     prefix_rules_path: Some(".codex/rules/shield.rules"),
     approval_notes: false,
     needs_ask_fallback: true,
-    approval_action: "Codex cannot prompt here. Submit a revised request, or propose a narrow rule with policy_propose for the user to review with shield policy review.",
+    approval_action: "Codex cannot prompt here. Submit a revised request; for a recurring need, propose a narrow rule with policy_propose.",
 };
 impl AgentAdapter for Codex {
     fn check_mcp_scopes(&self, root: &Path, cwd: &Path, alias: &str) -> Result<(), Error> {
@@ -118,9 +118,15 @@ impl AgentAdapter for Codex {
                 value["hookSpecificOutput"]["additionalContext"] = json!(context);
             }
             if r.decision == Decision::Ask {
-                value["hookSpecificOutput"]["permissionDecisionReason"] = json!(
-                    "Shield: approval required. Codex cannot request approval here. A policy change requires your approval."
-                );
+                // Offered only when the hook added the in-session approval route.
+                let offer = if r.reason.ends_with(super::hook::OFFER) {
+                    super::hook::OFFER
+                } else {
+                    ""
+                };
+                value["hookSpecificOutput"]["permissionDecisionReason"] = json!(format!(
+                    "Shield: approval required. Codex cannot request approval here.{offer}"
+                ));
                 let context = r
                     .agent_context
                     .as_deref()

@@ -4,7 +4,7 @@ use crate::{diagnostics, mcp};
 use clap::Parser as _;
 use std::{fs, sync::Arc, time::Instant};
 
-fn pack_fixture() -> Bundle {
+pub(super) fn pack_fixture() -> Bundle {
     let mut selections = Vec::new();
     let mut packs = Vec::new();
     if let Some(project) = std::env::var_os("SHIELD_APPLY_PROFILE_PROJECT") {

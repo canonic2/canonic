@@ -201,8 +201,14 @@ impl Plan {
             bytes.extend(key);
             bytes.extend(row);
         }
-        Self::load(bytes)
+        // These postings and matcher images were encoded above from validated
+        // typed owners. Keep structural/metadata admission without decoding and
+        // validating every just-encoded rule and matcher a second time.
+        let result = Self::load_authenticated(bytes)?;
+        result.validate_rows(false)?;
+        Ok(result)
     }
+    #[cfg(test)]
     pub(crate) fn load(bytes: Vec<u8>) -> Result<Self, Error> {
         Self::load_inner(bytes, true)
     }
@@ -273,24 +279,35 @@ impl Plan {
             directory_options,
         };
         if full {
-            let mut expected = body;
-            let mut previous: &[u8] = &[];
-            for position in 0..count {
-                let entry = result.entry(position)?;
-                let key = &result.bytes[entry.start..entry.key_end];
-                if entry.start != expected
-                    || key < previous
-                    || std::str::from_utf8(&key[1..]).is_err()
-                {
-                    return Err(Error::Contract("invalid compiled posting order"));
-                }
-                let row = &result.bytes[entry.key_end..entry.end];
+            result.validate_rows(true)?;
+        }
+        Ok(result)
+    }
+
+    /// Constructed images still check every encoded boundary, owner and order.
+    /// Only untrusted images need to decode and validate the source records again.
+    fn validate_rows(&self, full: bool) -> Result<(), Error> {
+        crate::diagnostics::trace::count("policy.layout_checks", self.count as u64);
+        if full {
+            crate::diagnostics::trace::count("policy.posting_validations", self.count as u64);
+        }
+        let mut expected = self.table + self.count * ENTRY;
+        let mut previous: &[u8] = &[];
+        for position in 0..self.count {
+            let entry = self.entry(position)?;
+            let key = &self.bytes[entry.start..entry.key_end];
+            if entry.start != expected || key < previous || std::str::from_utf8(&key[1..]).is_err()
+            {
+                return Err(Error::Contract("invalid compiled posting order"));
+            }
+            if full {
+                let row = &self.bytes[entry.key_end..entry.end];
                 if entry.owner == PATTERN_OWNER {
                     patterns::load(row)?;
                 } else {
                     let rule: Rule = serde_json::from_slice(row).map_err(|_| Error::Syntax)?;
-                    rule.validate_for(entry.owner < result.metadata.packs.len())?;
-                    if let Some(pack) = result.metadata.packs.get(entry.owner) {
+                    rule.validate_for(entry.owner < self.metadata.packs.len())?;
+                    if let Some(pack) = self.metadata.packs.get(entry.owner) {
                         super::invocations::binding(&pack.document, &rule)?;
                     }
                     // Shared-body keys also carry dispatch bindings, so each
@@ -299,14 +316,14 @@ impl Plan {
                         return Err(Error::Contract("unsound compiled scope key"));
                     }
                 }
-                expected = entry.end;
-                previous = key;
             }
-            if expected != result.bytes.len() {
-                return Err(Error::Contract("trailing compiled data"));
-            }
+            expected = entry.end;
+            previous = key;
         }
-        Ok(result)
+        if expected != self.bytes.len() {
+            return Err(Error::Contract("trailing compiled data"));
+        }
+        Ok(())
     }
     pub(crate) fn bytes(&self) -> &[u8] {
         &self.bytes

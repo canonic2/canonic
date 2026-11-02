@@ -253,7 +253,8 @@ fn catalog_publishes_every_tool_and_marks_only_policy_changes_as_mutations() {
             "policy_propose",
             "review_defer",
             "policy_withdraw",
-            "policy_apply"
+            "policy_apply",
+            "request_approve"
         ]
     );
 }
@@ -457,7 +458,7 @@ fn evaluation_is_connection_local_and_never_executes_input() {
                 .as_array()
                 .unwrap()
                 .len(),
-            23
+            24
         );
         let report = reply(&outputs, &json!("λ"));
         let envelope = &report["result"]["structuredContent"];

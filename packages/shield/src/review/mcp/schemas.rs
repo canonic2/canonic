@@ -141,7 +141,8 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
             "error",
         ],
     );
-    let tools=inventory().into_iter().map(|(name,description,mut schema)|{
+    let tools=inventory().into_iter().map(|(name,description,schema)|{
+        let mut schema = schema();
         if name == "policy_apply" {
             if let Some(agent) = agent {
                 schema = crate::agents::review::resolve(Some(agent)).apply_schema().unwrap_or(schema);
@@ -158,7 +159,7 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
             }
         }
         if name == "policy_propose" { let mut definitions = crate::policy::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
-        let mutation=["policy_propose","pack_configure","pack_add","policy_withdraw","policy_apply","review_defer"].contains(&name);
+        let mutation=["policy_propose","pack_configure","pack_add","policy_withdraw","policy_apply","review_defer","request_approve"].contains(&name);
         json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","policy_propose"].contains(&name))}})
     }).chain(super::documentation::tools().into_iter().map(|mut tool| {
         // The shared definitions carry their own schemas and annotations;
@@ -169,19 +170,30 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
     json!({"tools":tools})
 }
 /// One change, or 1–16 to approve together.
-fn policy_propose() -> (&'static str, &'static str, Value) {
-    let mut schema = object(
-        json!({"change":change(),"changes":{"type":"array","minItems":1,"maxItems":16,"items":change()},"idempotency_key":id(),"agent_reason":string(),"source_entry_id":id(),"review_ids":{"type":"array","maxItems":16,"items":{"type":"string","minLength":64,"maxLength":64}},"supersedes_proposal_id":id()}),
-        &[],
-    );
-    schema["if"] = json!({"required":["change"]});
-    schema["then"] = json!({"not":{"required":["changes"]}});
-    schema["else"] = json!({"required":["changes"]});
-    schema["examples"] = proposal_examples();
+fn policy_propose() -> Definition {
     (
         "policy_propose",
         "Draft policy changes for policy_apply approval; does not activate them. Adapt complete inputSchema examples after reviewing effects. After a deadline, inspect pending policy_show proposals, then retry identical arguments on this connection if needed. Report unresolved failures. Never retry user cancellation.",
-        schema,
+        || {
+            let mut schema = object(
+                json!({"change":change(),"changes":{"type":"array","minItems":1,"maxItems":16,"items":change()},"idempotency_key":id(),"agent_reason":string(),"source_entry_id":id(),"review_ids":{"type":"array","maxItems":16,"items":{"type":"string","minLength":64,"maxLength":64}},"supersedes_proposal_id":id()}),
+                &[],
+            );
+            schema["if"] = json!({"required":["change"]});
+            schema["then"] = json!({"not":{"required":["changes"]}});
+            schema["else"] = json!({"required":["changes"]});
+            schema["examples"] = proposal_examples();
+            schema
+        },
+    )
+}
+
+/// In-session approval of one refused request; the person answers Shield's form.
+fn request_approve() -> Definition {
+    (
+        "request_approve",
+        "Ask the user, in Shield's confirmation form, to allow one request Shield refused; on approval, repeat the identical call once",
+        || object(json!({"request_id":id()}), &["request_id"]),
     )
 }
 
@@ -198,52 +210,58 @@ pub(super) fn proposal_examples() -> Value {
     ])
 }
 
-fn inventory() -> Vec<(&'static str, &'static str, Value)> {
+type Definition = (&'static str, &'static str, fn() -> Value);
+
+pub(super) fn metadata() -> impl Iterator<Item = (&'static str, &'static str)> {
+    inventory()
+        .into_iter()
+        .map(|(name, description, _)| (name, description))
+}
+
+fn inventory() -> Vec<Definition> {
     vec![
         (
             "status",
             "Show policy status and protection coverage",
-            object(json!({}), &[]),
+            || object(json!({}), &[]),
         ),
-        (
-            "doctor",
-            "Diagnose setup and coverage problems",
-            object(json!({}), &[]),
-        ),
-        (
-            "pack_list",
-            "List installed packs, or show one",
-            selectable("reference", json!({}), string()),
-        ),
+        ("doctor", "Diagnose setup and coverage problems", || {
+            object(json!({}), &[])
+        }),
+        ("pack_list", "List installed packs, or show one", || {
+            selectable("reference", json!({}), string())
+        }),
         (
             "registry_list",
             "List the project's effective pack registries, or with scope user the user's own",
-            object(
-                json!({"scope":{"enum":["project","user"],"default":"project"}}),
-                &[],
-            ),
+            || {
+                object(
+                    json!({"scope":{"enum":["project","user"],"default":"project"}}),
+                    &[],
+                )
+            },
         ),
-        (
-            "pack_search",
-            "Search registries for packs",
-            object(paging(json!({"query":string()})), &["query"]),
-        ),
+        ("pack_search", "Search registries for packs", || {
+            object(paging(json!({"query":string()})), &["query"])
+        }),
         pack_info(),
         pack_add(),
         pack_configure(),
         (
             "policy_show",
             "Show active policy, or select a proposal by proposal_id to retrieve its status and apply_arguments",
-            selectable(
-                "proposal_id",
-                json!({"agent":string(),"session_id":string(),"status":{"enum":["pending","applied","rejected","withdrawn","stale","failed"]}}),
-                id(),
-            ),
+            || {
+                selectable(
+                    "proposal_id",
+                    json!({"agent":string(),"session_id":string(),"status":{"enum":["pending","applied","rejected","withdrawn","stale","failed"]}}),
+                    id(),
+                )
+            },
         ),
         (
             "rule_list",
             "List rules, or show one by rule_ref; candidate_id selects a retained snapshot",
-            rules_selection(),
+            rules_selection,
         ),
         policy_propose(),
         suggestions_tool(),
@@ -251,83 +269,96 @@ fn inventory() -> Vec<(&'static str, &'static str, Value)> {
         (
             "policy_withdraw",
             "Withdraw your own pending proposal",
-            object(json!({"proposal_id":id()}), &["proposal_id"]),
+            || object(json!({"proposal_id":id()}), &["proposal_id"]),
         ),
         (
             "policy_apply",
             "Activate a proposal after per-call user approval; copy the returned apply_arguments object unchanged, without reconstructing or summarizing its fields",
-            object(
-                json!({"proposal_id":id(),"candidate_digest":string(),"changes":{"type":"array","maxItems":4096,"items":{"type":"object"}},"review":object(json!({"packs":{"type":"object"},"comparison":{"type":"object"}}), &["packs", "comparison"])}),
-                &["proposal_id", "candidate_digest", "changes", "review"],
-            ),
+            || {
+                object(
+                    json!({"proposal_id":id(),"candidate_digest":string(),"changes":{"type":"array","maxItems":4096,"items":{"type":"object"}},"review":object(json!({"packs":{"type":"object"},"comparison":{"type":"object"}}), &["packs", "comparison"])}),
+                    &["proposal_id", "candidate_digest", "changes", "review"],
+                )
+            },
         ),
         (
             "policy_receipt",
             "Show the receipt of a proposal the user applied",
-            object(json!({"proposal_id":id()}), &["proposal_id"]),
+            || object(json!({"proposal_id":id()}), &["proposal_id"]),
         ),
         (
             "request_list",
             "List or show pending action requests; only the user can grant them",
-            selectable("request_id", json!({}), id()),
+            || selectable("request_id", json!({}), id()),
         ),
+        request_approve(),
         (
             "history_list",
             "List or show past requests and their decisions",
-            selectable(
-                "entry_id",
-                json!({"denied":{"type":"boolean"},"approved":{"type":"boolean"},"agent":string()}),
-                id(),
-            ),
+            || {
+                selectable(
+                    "entry_id",
+                    json!({"denied":{"type":"boolean"},"approved":{"type":"boolean"},"agent":string()}),
+                    id(),
+                )
+            },
         ),
         (
             "policy_evaluate",
             "Preview the decision for a command or file request without running it",
-            object(
-                json!({"input":input(),"context":context(),"candidate_id":id()}),
-                &["input", "context"],
-            ),
+            || {
+                object(
+                    json!({"input":input(),"context":context(),"candidate_id":id()}),
+                    &["input", "context"],
+                )
+            },
         ),
         (
             "policy_compare",
             "Compare two policy snapshots without authorizing execution",
-            comparison(),
+            comparison,
         ),
     ]
 }
 
-fn pack_add() -> (&'static str, &'static str, Value) {
+fn pack_add() -> Definition {
     (
         "pack_add",
         "Prepare a guided installation of a verified registry pack and its dependencies. Ask required settings through a host form, then save an inactive proposal from the captured artifacts. Profile defaults to recommended for a new selection; layer defaults to project. Review and copy apply_arguments unchanged to policy_apply for separate final approval. Decline or dismissal ends the offer; never invent answers. Use shield pack add in the user's terminal if forms are unsupported.",
-        object(
-            json!({"reference":string(),"profile":{"enum":["loose","recommended","strict"]},"layer":layer()}),
-            &["reference"],
-        ),
+        || {
+            object(
+                json!({"reference":string(),"profile":{"enum":["loose","recommended","strict"]},"layer":layer()}),
+                &["reference"],
+            )
+        },
     )
 }
 
-fn pack_configure() -> (&'static str, &'static str, Value) {
+fn pack_configure() -> Definition {
     (
         "pack_configure",
         "Ask the user for installed pack settings through an MCP form, then save an inactive proposal. Inspect pack_list first; select 1-16 variable names. Form answers never activate policy: copy returned apply_arguments unchanged to policy_apply for separate final approval. If forms are unavailable, ask the user in conversation and use policy_propose with pack_configure; never infer missing answers or retry cancellation.",
-        object(
-            json!({"reference":string(),"variables":{"type":"array","minItems":1,"maxItems":16,"items":id()},"layer":layer()}),
-            &["reference", "variables"],
-        ),
+        || {
+            object(
+                json!({"reference":string(),"variables":{"type":"array","minItems":1,"maxItems":16,"items":id()},"layer":layer()}),
+                &["reference", "variables"],
+            )
+        },
     )
 }
 
-fn pack_info() -> (&'static str, &'static str, Value) {
+fn pack_info() -> Definition {
     (
         "pack_info",
         "Inspect pack permissions, profiles, settings or rules without installing it",
-        object(
-            paging(
-                json!({"reference":string(),"view":{"enum":["summary","rules","settings"],"default":"summary"},"query":{"type":"string","minLength":1,"maxLength":4096,"description":"Filter rule IDs and reasons in the rules view."},"rule_id":id()}),
-            ),
-            &["reference"],
-        ),
+        || {
+            object(
+                paging(
+                    json!({"reference":string(),"view":{"enum":["summary","rules","settings"],"default":"summary"},"query":{"type":"string","minLength":1,"maxLength":4096,"description":"Filter rule IDs and reasons in the rules view."},"rule_id":id()}),
+                ),
+                &["reference"],
+            )
+        },
     )
 }
 
@@ -342,23 +373,59 @@ fn comparison() -> Value {
     schema
 }
 
-fn suggestions_tool() -> (&'static str, &'static str, Value) {
+fn suggestions_tool() -> Definition {
     (
         "suggestion_list",
         "Review recorded Ask requests, recurrence, coverage and next actions. Listing grants no permission.",
-        object(
-            json!({"session_id":id(),"cursor":id(),"limit":{"type":"integer","minimum":1,"maximum":100}}),
-            &[],
-        ),
+        || {
+            object(
+                json!({"session_id":id(),"cursor":id(),"limit":{"type":"integer","minimum":1,"maximum":100}}),
+                &[],
+            )
+        },
     )
 }
-fn defer_tool() -> (&'static str, &'static str, Value) {
+fn defer_tool() -> Definition {
     (
         "review_defer",
         "Defer unchanged reviews for this session. This records an advisory choice only; active policy and approvals are unchanged.",
-        object(
-            json!({"session_id":id(),"review_ids":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"string","minLength":64,"maxLength":64}}}),
-            &["session_id", "review_ids"],
-        ),
+        || {
+            object(
+                json!({"session_id":id(),"review_ids":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"string","minLength":64,"maxLength":64}}}),
+                &["session_id", "review_ids"],
+            )
+        },
     )
+}
+
+#[cfg(test)]
+mod metadata_tests {
+    #[test]
+    fn metadata_and_recognition_match_every_negotiated_catalog() {
+        let summaries = crate::review::mcp::tool_summaries();
+        for agent in std::iter::once(None).chain(
+            crate::agents::ADAPTERS
+                .iter()
+                .map(|adapter| Some(adapter.spec().id)),
+        ) {
+            let catalog = crate::review::mcp::tools_for(agent);
+            let listed: Vec<_> = catalog["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|tool| {
+                    let name = tool["name"].as_str().unwrap();
+                    assert!(crate::review::mcp::is_tool(name), "{name}");
+                    (
+                        name.to_owned(),
+                        tool["description"].as_str().unwrap().to_owned(),
+                    )
+                })
+                .collect();
+            assert_eq!(summaries, listed);
+        }
+        for unknown in ["unknown", "policy_apply_extra", "shield_docs_unknown"] {
+            assert!(!crate::review::mcp::is_tool(unknown));
+        }
+    }
 }

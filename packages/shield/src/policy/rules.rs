@@ -241,7 +241,7 @@ impl Rule {
         if self.when.is_some() {
             return Err(Error::Contract("when is resolved from pack variables"));
         }
-        if serde_json::to_vec(self).map_err(|_| Error::Syntax)?.len() > 2 * 1024 * 1024 {
+        if crate::json::encoded_len(self).map_err(|_| Error::Syntax)? > 2 * 1024 * 1024 {
             return Err(Error::Limit);
         }
         self.decision.validate(pack, false)?;

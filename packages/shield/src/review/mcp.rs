@@ -85,6 +85,13 @@ const FAILED_PROPOSAL: Refusal = Refusal {
     route: Some("shield policy review"),
 };
 
+/// `request_approve` reached without the person's answer: the host showed no form.
+const REQUEST_CONFIRMATION: Refusal = Refusal {
+    code: "operator_review_required",
+    message: "The user must accept Shield's confirmation form for this request, and this host did not show it. Ask the user to enable confirmation prompts for this session, then call request_approve again with the same request_id",
+    route: None,
+};
+
 /// A shared review error, or an MCP refusal with its own recovery.
 enum Failure {
     Review(Error),
@@ -157,7 +164,7 @@ pub(crate) fn call_with_confirmation(
             .lock()
             .map_err(|_| Error::Invalid("connection state invalid"))?;
         let mut data = dispatch(context, &mut views, name, args, checkpoint, confirmed)?;
-        if name != "policy_propose" {
+        if !matches!(name, "policy_propose" | "policy_show") {
             apply::present(context, &mut data)?;
         }
         if [
@@ -296,7 +303,7 @@ fn bound_policy_result(data: &mut Value) -> Result<(), Error> {
         "authorization_events",
         "project_rules",
     ] {
-        if data.to_string().len() <= 1024 * 1024 {
+        if crate::json::fits(data, 1024 * 1024) {
             return Ok(());
         }
         if data
@@ -313,7 +320,7 @@ fn bound_policy_result(data: &mut Value) -> Result<(), Error> {
             data["truncated"] = json!(true);
         }
     }
-    if data.to_string().len() > 1024 * 1024 {
+    if !crate::json::fits(data, 1024 * 1024) {
         return Err(crate::policy::Error::Limit.into());
     }
     Ok(())
@@ -519,6 +526,12 @@ fn dispatch(
                 error => error.into(),
             })?;
             Ok(json!({"status":"deferred","policy_changed":false,"review_ids":args["review_ids"]}))
+        }
+        "request_approve" => {
+            super::hook_approval::approve(context, args, confirmed).map_err(|error| match error {
+                Error::ApprovalRequired => Failure::Refused(&REQUEST_CONFIRMATION),
+                error => error.into(),
+            })
         }
         _ => Ok(review_tool(
             context, views, name, args, checkpoint, confirmed,
@@ -811,21 +824,24 @@ pub(crate) fn tools() -> Value {
 }
 
 pub(crate) fn tools_for(agent: Option<&str>) -> Value {
+    crate::diagnostics::trace::count("mcp.schema_builds", 1);
     schemas::tools(agent)
+}
+
+pub(crate) fn is_tool(name: &str) -> bool {
+    schemas::metadata().any(|(known, _)| known == name) || documentation::handles(name)
 }
 
 /// Each tool's name and description, for the setup permissions page.
 pub(crate) fn tool_summaries() -> Vec<(String, String)> {
-    tools_for(None)["tools"]
-        .as_array()
-        .expect("static tool inventory")
-        .iter()
-        .map(|tool| {
+    schemas::metadata()
+        .map(|(name, description)| (name.to_owned(), description.to_owned()))
+        .chain(documentation::tools().iter().map(|tool| {
             (
                 tool["name"].as_str().unwrap_or_default().to_owned(),
                 tool["description"].as_str().unwrap_or_default().to_owned(),
             )
-        })
+        }))
         .collect()
 }
 

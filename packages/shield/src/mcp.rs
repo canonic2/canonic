@@ -144,6 +144,27 @@ impl Server {
         }))
     }
 
+    /// In-session approval always asks the person with Shield's form, whatever
+    /// the host's tool approval does with this call. A request that cannot be
+    /// approved reports why without asking.
+    fn confirm_request(
+        &self,
+        review: Arc<crate::review::Context>,
+        call: ToolCall,
+        context: &stdio::Context,
+    ) -> Outcome {
+        match crate::review::hook_approval::confirmation(&review, &call.arguments) {
+            Ok(message) => self.confirm_apply(review, call, context, message),
+            Err(_) => Outcome::Tool(reply(
+                &review,
+                &self.connection,
+                &call,
+                context,
+                Answer::None,
+            )),
+        }
+    }
+
     fn request_trace(
         &self,
         request: &Request,
@@ -254,6 +275,9 @@ impl stdio::Handler for Server {
             if ["pack_configure", "pack_add"].contains(&call.name.as_str()) {
                 return elicitation::call(self, review, call, context);
             }
+            if call.name == "request_approve" {
+                return self.confirm_request(review, call, context);
+            }
             // The resolved adapter declares the host confirmation mechanism.
             if call.name == "policy_apply"
                 && crate::agents::review::resolve(review.agent.as_deref()).confirmation()
@@ -325,9 +349,12 @@ fn reply(
     if let Answer::Failed(code) = answer
         && value["error"]["code"] == "operator_review_required"
     {
-        value["error"] = serde_json::json!({"code":code,"message":match code {
-            "approval_declined" => messages::APPROVAL_DECLINED,
-            _ => messages::approval_unavailable(review.agent.as_deref()),
+        let request = call.name == "request_approve";
+        value["error"] = serde_json::json!({"code":code,"message":match (code, request) {
+            ("approval_declined", true) => messages::REQUEST_DECLINED,
+            ("approval_declined", false) => messages::APPROVAL_DECLINED,
+            (_, true) => messages::request_unavailable(review.agent.as_deref()),
+            (_, false) => messages::approval_unavailable(review.agent.as_deref()),
         },"operator_route":null});
     }
     let failed = !value["error"].is_null();

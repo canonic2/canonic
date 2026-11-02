@@ -207,6 +207,7 @@ fn capacity(proposals: &[Proposal]) -> Result<(), Error> {
 }
 
 type PreparedPair = (configuration::Evaluator, configuration::Evaluator);
+type CandidateChange = (Value, Value, Option<configuration::Snapshot>);
 /// An installation candidate whose exact artifacts were captured before user input.
 pub(super) struct Prepared {
     pub(super) binding: String,
@@ -224,6 +225,10 @@ pub(super) fn prepared_binding(state: &super::model::State) -> String {
 type Reservation<'a> =
     &'a mut dyn FnMut(&Value, &Value, &Value, &Value, Option<PreparedPair>) -> Result<(), Error>;
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keep ordered capture, reservation and writer-locked revalidation together with their request-owned spans"
+)]
 pub(super) fn propose(
     context: &Context,
     input: &Input,
@@ -231,12 +236,13 @@ pub(super) fn propose(
     reserve: Reservation<'_>,
     present: &dyn Fn(&Proposal) -> Value,
 ) -> Result<Value, Error> {
+    let _trace = crate::diagnostics::trace::span("proposal.prepare");
     validate_input(input)?;
     let changes = input.changes()?;
     let signature = policy::fingerprint(json!(input).to_string().as_bytes());
     let retry_key = input.retry_key();
     let store = Store::open(Path::new(&context.project_root))?;
-    let (mut before, base_plan, base_snapshots) = store.read_for_comparison()?;
+    let mut before = store.read_checkpoint()?;
     before.check(context)?;
     if input
         .expected_policy_revision
@@ -252,12 +258,13 @@ pub(super) fn propose(
     }
     if let Some(row) = before
         .proposals
-        .iter()
+        .iter_mut()
         .find(|p| p.retry_owner == context.retry_owner() && p.retry_key == retry_key)
     {
         if row.signature != signature {
             return Err(Error::Invalid("idempotency key reused with changed input"));
         }
+        store.hydrate_proposal(row)?;
         reserve(
             &row.base_candidate,
             &row.base_metadata,
@@ -269,33 +276,53 @@ pub(super) fn propose(
     }
     capacity(&before.proposals)?;
     checkpoint()?;
-    let (candidate, meta) = if let Some(prepared) = &input.prepared {
+    let (mut before, base_plan, base_snapshots) = store.read_for_comparison(before)?;
+    let (candidate, meta, captured) = if let Some(prepared) = &input.prepared {
         if prepared.binding != prepared_binding(&before) {
             return Err(Error::StaleSnapshot);
         }
-        (prepared.candidate.clone(), prepared.metadata.clone())
+        (prepared.candidate.clone(), prepared.metadata.clone(), None)
     } else {
-        prepare_all(context, &mut before, &changes, checkpoint)?
+        let _trace = crate::diagnostics::trace::span("proposal.changes");
+        prepare_all(
+            context,
+            &mut before,
+            &changes,
+            checkpoint,
+            base_snapshots.first().map(|(_, snapshot)| snapshot),
+        )?
     };
     let mut after = BTreeMap::new();
     after.insert("project".into(), candidate.clone());
-    let next_snapshots = snapshots(&after)?;
-    let mut comparison = json!(configuration::compare_policy(
-        &base_snapshots,
-        &next_snapshots
-    )?);
+    let next_snapshots = {
+        let _trace = crate::diagnostics::trace::span("proposal.capture_next");
+        match captured {
+            Some(snapshot) => vec![(policy::Scope::Project, snapshot)],
+            None => snapshots(&after)?,
+        }
+    };
+    let mut comparison = {
+        let _trace = crate::diagnostics::trace::span("proposal.compare");
+        json!(configuration::compare_policy(
+            &base_snapshots,
+            &next_snapshots
+        )?)
+    };
     let next_plan = configuration::Evaluator::new(next_snapshots)?;
     compare_prefixes(&base_plan, &next_plan, &mut comparison);
     if let Some(lines) = super::formatting_changes(&before.candidates["project"], &candidate) {
         comparison["formatting"] = lines;
     }
-    reserve(
-        &before.candidates["project"],
-        &before.operator,
-        &candidate,
-        &meta,
-        Some((base_plan, next_plan)),
-    )?;
+    {
+        let _trace = crate::diagnostics::trace::span("proposal.reserve");
+        reserve(
+            &before.candidates["project"],
+            &before.operator,
+            &candidate,
+            &meta,
+            Some((base_plan, next_plan)),
+        )?;
+    }
     checkpoint()?;
     // The complete base was validated above. Under the writer lock, bind to
     // those exact source bytes and metadata instead of hydrating every retained
@@ -329,14 +356,17 @@ pub(super) fn propose(
         let mut event = event;
         event["links"]["review_ids"] = json!(input.review_ids);
         let row = Proposal { id, created_at:event["recorded_at"].as_str().ok_or(Error::Invalid("timestamp unavailable"))?.into(), status:"pending".into(), provenance:context.provenance(), links:event["links"].clone(), reasons:event["reasons"].clone(), policy_revision:state.policy_revision.clone(),target_scope:"project".into(),operation:kind,rule_id,candidate,base_candidate:before.candidates["project"].clone(),base_metadata:before.operator.clone(),candidate_metadata:meta,receipt:Value::Null,comparison,operator:None,retry_key:retry_key.clone(),retry_owner:context.retry_owner(),signature };
-        let result = present(&row);
+        let result = {
+            let _trace = crate::diagnostics::trace::span("proposal.present");
+            present(&row)
+        };
         state.proposals.push(row);
         state.record(event);
         Ok(result)
     })
 }
 
-fn compare_prefixes(
+pub(super) fn compare_prefixes(
     before: &configuration::Evaluator,
     after: &configuration::Evaluator,
     comparison: &mut Value,
@@ -356,7 +386,8 @@ fn prepare_all(
     state: &mut super::model::State,
     changes: &[&Change],
     checkpoint: Checkpoint<'_>,
-) -> Result<(Value, Value), Error> {
+    patterns: Option<&configuration::Snapshot>,
+) -> Result<CandidateChange, Error> {
     // Each step reads the state the previous one produced; the loaded
     // candidate and pack state are restored afterwards, whatever the outcome.
     let candidate = state.candidates.get("project").cloned();
@@ -365,10 +396,14 @@ fn prepare_all(
         let mut prepared = None;
         for change in changes {
             checkpoint()?;
-            let (candidate, meta) = prepare(context, state, change)?;
+            let previous = prepared
+                .as_ref()
+                .and_then(|(_, _, snapshot): &CandidateChange| snapshot.as_ref())
+                .or(patterns);
+            let (candidate, meta, snapshot) = prepare(context, state, change, previous)?;
             state.candidates.insert("project".into(), candidate.clone());
             state.operator = meta.clone();
-            prepared = Some((candidate, meta));
+            prepared = Some((candidate, meta, snapshot));
         }
         prepared.ok_or(Error::Invalid("proposal has no changes"))
     };
@@ -384,7 +419,8 @@ fn prepare(
     context: &Context,
     before: &super::model::State,
     change: &Change,
-) -> Result<(Value, Value), Error> {
+    patterns: Option<&configuration::Snapshot>,
+) -> Result<CandidateChange, Error> {
     if matches!(
         change,
         Change::PackAdd { .. }
@@ -392,7 +428,8 @@ fn prepare(
             | Change::PackRemove { .. }
             | Change::PackConfigure { .. }
     ) {
-        return super::packs::prepare_change(context, before, change);
+        return super::packs::prepare_change(context, before, change)
+            .map(|(candidate, metadata)| (candidate, metadata, None));
     }
     if let Change::AccessPathAdd {
         access,
@@ -406,9 +443,16 @@ fn prepare(
     } = change
     {
         let add = matches!(change, Change::AccessPathAdd { .. });
-        return access_path(before, add, *access, path, *layer == Some(Layer::Local));
+        return access_path(
+            before,
+            add,
+            *access,
+            path,
+            *layer == Some(Layer::Local),
+            patterns,
+        );
     }
-    custom_rule(context, before, change)
+    custom_rule(context, before, change, patterns)
 }
 
 /// A candidate with one custom rule added, edited or removed in its layer.
@@ -416,7 +460,8 @@ fn custom_rule(
     context: &Context,
     before: &super::model::State,
     change: &Change,
-) -> Result<(Value, Value), Error> {
+    patterns: Option<&configuration::Snapshot>,
+) -> Result<CandidateChange, Error> {
     let candidate = &before.candidates["project"];
     let local = matches!(
         change,
@@ -482,13 +527,14 @@ fn custom_rule(
     // Re-capture so the lock's custom-rule digest follows the new bytes.
     let mut config = configuration::layers::merged(candidate)?;
     let source = document.to_string();
-    let bundle = if local {
+    let (bundle, snapshot) = if local {
         config["local_rules"] = json!("rules.local.yml");
         recapture(
             candidate,
             &config,
             candidate["rules"].as_str(),
             Some(&source),
+            patterns,
         )?
     } else {
         config["rules"] = json!("rules.yml");
@@ -497,9 +543,10 @@ fn custom_rule(
             &config,
             Some(&source),
             candidate["local_rules"].as_str(),
+            patterns,
         )?
     };
-    Ok((json!(bundle), before.operator.clone()))
+    Ok((json!(bundle), before.operator.clone(), Some(snapshot)))
 }
 
 /// Refuses a new rule, or an edit of its `existing` version that changes what
@@ -529,7 +576,8 @@ fn recapture(
     config: &Value,
     rules: Option<&str>,
     local_rules: Option<&str>,
-) -> Result<configuration::Bundle, Error> {
+    patterns: Option<&configuration::Snapshot>,
+) -> Result<(configuration::Bundle, configuration::Snapshot), Error> {
     let artifacts = |field: &str| -> Result<Vec<String>, Error> {
         if candidate[field].is_null() {
             return Ok(Vec::new());
@@ -537,13 +585,14 @@ fn recapture(
         serde_json::from_value(candidate[field].clone())
             .map_err(|_| Error::Invalid("pack artifacts missing"))
     };
-    Ok(configuration::Bundle::revise(
+    Ok(configuration::Bundle::revise_prepared(
         candidate,
         config,
         &artifacts("packs")?,
         rules,
         local_rules,
         &artifacts("disabled")?,
+        patterns,
     )?)
 }
 
@@ -555,7 +604,8 @@ fn access_path(
     access: Access,
     path: &str,
     local: bool,
-) -> Result<(Value, Value), Error> {
+    patterns: Option<&configuration::Snapshot>,
+) -> Result<CandidateChange, Error> {
     let candidate = &before.candidates["project"];
     let mut config = configuration::layers::merged(candidate)?;
     let key = match access {
@@ -581,13 +631,14 @@ fn access_path(
         (true, Some(_)) => return Err(Error::Invalid("access path already present")),
         (false, None) => return Err(Error::Missing),
     }
-    let bundle = recapture(
+    let (bundle, snapshot) = recapture(
         candidate,
         &config,
         candidate["rules"].as_str(),
         candidate["local_rules"].as_str(),
+        patterns,
     )?;
-    Ok((json!(bundle), before.operator.clone()))
+    Ok((json!(bundle), before.operator.clone(), Some(snapshot)))
 }
 
 fn validate_input(input: &Input) -> Result<(), Error> {

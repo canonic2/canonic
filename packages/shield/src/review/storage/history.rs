@@ -788,7 +788,7 @@ pub(in crate::review) fn cleanup(store: &Store, state: &State) {
     }
 }
 pub(in crate::review) fn bound_event(mut event: Value) -> Value {
-    if event.to_string().len() <= 8192 {
+    if crate::json::fits(&event, 8192) {
         return event;
     }
     // Per-command analysis duplicates the decisive explanation. Discard it
@@ -803,7 +803,7 @@ pub(in crate::review) fn bound_event(mut event: Value) -> Value {
         missing.push(json!("shell_analysis"));
         event["details"]["missing"] = json!(missing);
         event["truncated"] = json!(true);
-        if event.to_string().len() <= 8192 {
+        if crate::json::fits(&event, 8192) {
             return event;
         }
     }
@@ -838,7 +838,7 @@ pub(in crate::review) fn bound_event(mut event: Value) -> Value {
     let mut guidance = Vec::new();
     let mut bytes = 2;
     for item in explanation["guidance"].as_array().into_iter().flatten() {
-        let length = item.to_string().len() + 1;
+        let length = crate::json::encoded_len(item).expect("guidance JSON serializes") + 1;
         if guidance.len() < 16 && bytes + length <= 4096 {
             guidance.push(item.clone());
             bytes += length;
@@ -847,20 +847,20 @@ pub(in crate::review) fn bound_event(mut event: Value) -> Value {
     let omitted_guidance = guidance.len() < explanation["guidance"].as_array().map_or(0, Vec::len);
     event["details"]["evaluation"] = json!({"decision":decision,"revision":revision,"reason":reason,"matches":matches,"guidance":guidance});
     event["details"]["missing"] = json!(["full_evaluation"]);
-    if event.to_string().len() > 8192 {
+    if !crate::json::fits(&event, 8192) {
         event["details"]["request"] = Value::Null;
         event["details"]["missing"] = json!(["full_evaluation", "complete_request"]);
     }
-    if event.to_string().len() > 8192 {
+    if !crate::json::fits(&event, 8192) {
         for key in ["command", "operation"] {
-            if event["details"][key].to_string().len() > 2048 {
+            if !crate::json::fits(&event["details"][key], 2048) {
                 event["details"][key] = Value::Null;
             }
         }
         event["details"]["missing"] =
             json!(["full_evaluation", "complete_request", "complete_input"]);
     }
-    if event.to_string().len() > 8192 {
+    if !crate::json::fits(&event, 8192) {
         let d = &event["details"];
         event["details"] = json!({"evaluation":d["evaluation"],"decision":d["decision"],"policy_revision":d["policy_revision"],"disposition":d["disposition"],"ask_fallback":d["ask_fallback"],"host_decision":d["host_decision"],"status":d["status"],"exit_code":d["exit_code"],"missing":["detail_fields"]});
     }
@@ -868,7 +868,7 @@ pub(in crate::review) fn bound_event(mut event: Value) -> Value {
     if omitted_guidance && let Some(missing) = event["details"]["missing"].as_array_mut() {
         missing.push(json!("guidance"));
     }
-    if event.to_string().len() > 8192 {
+    if !crate::json::fits(&event, 8192) {
         // The final text reduction must never alter retained exact requests.
         event["details"]["evaluation"]["guidance"] = json!([]);
         // Attribution fields can themselves exceed the entry budget. Never silently

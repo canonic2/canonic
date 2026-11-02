@@ -173,6 +173,7 @@ impl Store {
             active: None,
             read_requests: vec![],
             run_requests: vec![],
+            hook_requests: vec![],
             proposals: vec![],
             dismissed_reviews: vec![],
             events: vec![],
@@ -214,11 +215,13 @@ impl Store {
             json!({"schema_version":1,"project_id":project_id,"project_root":store.root,"policy_revision":revision,"mode":"local-review","enforcement":"not-installed"}),
         )
     }
+    #[cfg(test)]
     pub(crate) fn read(&self) -> Result<State, Error> {
         self.read_evaluated().map(|(state, _)| state)
     }
 
     /// Keep the validated active plan for workflows that also need its prefixes.
+    #[cfg(test)]
     pub(in crate::review) fn read_evaluated(
         &self,
     ) -> Result<(State, crate::configuration::Evaluator), Error> {
@@ -230,12 +233,104 @@ impl Store {
 
     /// A proposal compares the same validated source it used to prepare the
     /// base plan. Retain that capture instead of parsing every pack twice.
-    pub(in crate::review) fn read_for_comparison(&self) -> Result<ComparisonCapture, Error> {
-        let state = self.read_unprepared()?;
+    pub(in crate::review) fn read_for_comparison(
+        &self,
+        state: State,
+    ) -> Result<ComparisonCapture, Error> {
+        let _trace = crate::diagnostics::trace::span("proposal.capture_base");
+        let state = self.hydrate_current(state)?;
         let snapshots = super::snapshots(&state.candidates)?;
-        let evaluator = crate::configuration::Evaluator::new(snapshots.clone())?;
+        let evaluator = match Self::cached_evaluator(&state) {
+            Some(evaluator) => evaluator,
+            None => crate::configuration::Evaluator::new(snapshots.clone())?,
+        };
         Self::validate_evaluated(&state, &evaluator)?;
         Ok((state, evaluator, snapshots))
+    }
+
+    /// Verify the current/active source only. Proposals remain references and
+    /// optional history stays with history readers. This does not prepare policy.
+    pub(in crate::review) fn read_current(&self) -> Result<State, Error> {
+        self.hydrate_current(self.read_checkpoint()?)
+    }
+
+    fn hydrate_current(&self, mut state: State) -> Result<State, Error> {
+        let same = state
+            .active
+            .as_ref()
+            .is_some_and(|active| active.candidates == state.candidates);
+        for candidate in state.candidates.values_mut() {
+            *candidate = self.captured_candidate(candidate)?;
+        }
+        if let Some(active) = &mut state.active {
+            if same {
+                active.candidates = state.candidates.clone();
+            } else {
+                for candidate in active.candidates.values_mut() {
+                    *candidate = self.captured_candidate(candidate)?;
+                }
+            }
+        }
+        Ok(state)
+    }
+
+    pub(in crate::review) fn read_current_evaluated(
+        &self,
+    ) -> Result<(State, crate::configuration::Evaluator), Error> {
+        let state = self.read_current()?;
+        let evaluator = match Self::cached_evaluator(&state) {
+            Some(evaluator) => evaluator,
+            None => crate::configuration::Evaluator::new(super::snapshots(&state.candidates)?)?,
+        };
+        Self::validate_evaluated(&state, &evaluator)?;
+        Ok((state, evaluator))
+    }
+
+    /// Doctor explicitly checks source preparation even when a valid compiled
+    /// artifact exists; ordinary consumers reuse that authenticated artifact.
+    pub(in crate::review) fn prepare_current(&self) -> Result<State, Error> {
+        let state = self.read_current()?;
+        let evaluator = crate::configuration::Evaluator::new(super::snapshots(&state.candidates)?)?;
+        Self::validate_evaluated(&state, &evaluator)?;
+        Ok(state)
+    }
+
+    /// Reuse immutable content only after the caller verified current source.
+    pub(in crate::review) fn cached_evaluator(
+        state: &State,
+    ) -> Option<crate::configuration::Evaluator> {
+        let evaluator = state
+            .active
+            .as_ref()
+            .filter(|active| {
+                active.candidates == state.candidates
+                    || sources::map_digest(&active.candidates)
+                        == sources::map_digest(&state.candidates)
+            })
+            .and_then(|active| {
+                active
+                    .compiled
+                    .load(&state.project_root, &state.project_id)
+                    .ok()
+            });
+        crate::diagnostics::trace::count(
+            if evaluator.is_some() {
+                "policy.plan_hits"
+            } else {
+                "policy.plan_misses"
+            },
+            1,
+        );
+        evaluator
+    }
+
+    pub(in crate::review) fn hydrate_proposal(
+        &self,
+        proposal: &mut super::model::Proposal,
+    ) -> Result<(), Error> {
+        proposal.candidate = self.captured_candidate(&proposal.candidate)?;
+        proposal.base_candidate = self.captured_candidate(&proposal.base_candidate)?;
+        Ok(())
     }
 
     fn validate_evaluated(
@@ -253,9 +348,9 @@ impl Store {
         Ok(())
     }
 
-    // Diagnostic handles prepare their own immutable active candidate and check its
-    // revision. This path checks storage identity and bindings without rebuilding
-    // unrelated review policies. It must not be used as mutation authorization.
+    // Full fixture inspection; production readers select current source, one
+    // proposal or history explicitly instead of hydrating every retained object.
+    #[cfg(test)]
     pub(in crate::review) fn read_unprepared(&self) -> Result<State, Error> {
         let _trace = crate::diagnostics::trace::span("state.hydrate_all");
         let state = self.read_history()?;
@@ -314,6 +409,7 @@ impl Store {
         }
         super::read_approval::validate(&state)?;
         super::run_approval::validate(&state)?;
+        super::hook_approval::validate(&state)?;
         Ok(state)
     }
     /// Captures the history view under the lock, then verifies, correlates and
@@ -370,13 +466,14 @@ impl Store {
         }
         Err(Error::Locked)
     }
+    #[cfg(test)]
     pub(crate) fn update(
         &self,
         context: &Context,
         checkpoint: Checkpoint<'_>,
         operation: impl FnOnce(&mut State) -> Result<Value, Error>,
     ) -> Result<Value, Error> {
-        self.update_inner(context, checkpoint, operation, true)
+        self.update_inner(context, checkpoint, operation, Self::read)
     }
     pub(in crate::review) fn update_checkpoint(
         &self,
@@ -384,21 +481,17 @@ impl Store {
         checkpoint: Checkpoint<'_>,
         operation: impl FnOnce(&mut State) -> Result<Value, Error>,
     ) -> Result<Value, Error> {
-        self.update_inner(context, checkpoint, operation, false)
+        self.update_inner(context, checkpoint, operation, Self::read_checkpoint)
     }
     fn update_inner(
         &self,
         context: &Context,
         checkpoint: Checkpoint<'_>,
         operation: impl FnOnce(&mut State) -> Result<Value, Error>,
-        full: bool,
+        read: fn(&Self) -> Result<State, Error>,
     ) -> Result<Value, Error> {
         let lock = self.lock(checkpoint)?;
-        let mut state = if full {
-            self.read()?
-        } else {
-            self.read_checkpoint()?
-        };
+        let mut state = read(self)?;
         state.check(context)?;
         state.compact_authorization();
         checkpoint()?;
@@ -490,7 +583,7 @@ impl Store {
     ) -> Result<T, Error> {
         let lock = self.lock(checkpoint)?;
         let state = if full {
-            self.read()?
+            self.read_current_evaluated()?.0
         } else {
             self.read_checkpoint()?
         };

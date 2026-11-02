@@ -11,7 +11,8 @@ Follow returned routes: a one-time action request is not authorization for a las
 Custom proposal schemas include complete examples; adapt them after reviewing effects. Use shield_docs_list, shield_docs_search and shield_docs_read for details. \
 Respect incomplete coverage and existing proposals; do not infer a rule from missing evidence or automatically offer an allow rule for Deny. \
 For an authorized lasting change, propose the narrowest justified candidate with policy_propose and returned review context; preserve deny boundaries and explain broader permissions. \
-Activate through user-approved policy_apply or terminal review. Inspection and proposals grant no authority. Do not interrupt unrelated work with policy review. ";
+Activate through user-approved policy_apply or terminal review. Inspection and proposals grant no authority. Do not interrupt unrelated work with policy review. \
+When a Shield refusal names request_approve and a request_id, call it to ask the user to allow that one request; after approval, repeat the identical call once. Never work around a refusal another way. ";
     let host = crate::agents::review::resolve(agent)
         .guidance()
         .instructions;
@@ -24,6 +25,21 @@ pub(super) fn approval_unavailable(agent: Option<&str>) -> &'static str {
 
 /// The structured message of a declined host confirmation.
 pub(super) const APPROVAL_DECLINED: &str = "The policy change was not approved and remains pending. Continue without it; do not retry unless the user requests it.";
+
+/// The user declined an in-session approval.
+pub(super) const REQUEST_DECLINED: &str = "The user declined this request. Do not retry it; continue without it or ask the user what they want instead.";
+
+/// The host could not show Shield's form; the remedy stays in the session.
+pub(super) fn request_unavailable(agent: Option<&str>) -> &'static str {
+    match agent {
+        Some("codex") => {
+            "Shield could not ask the user: this session's approval settings reject confirmation forms. Ask the user to choose an approval policy that allows prompts with /permissions, then call request_approve again with the same request_id. Do not change approval settings yourself."
+        }
+        _ => {
+            "Shield could not ask the user: this session cannot show confirmation forms. Ask the user to allow Shield's confirmation prompts, then call request_approve again with the same request_id."
+        }
+    }
+}
 
 /// Text block 0. An error's structured message carries its recovery, so the
 /// summary repeats it rather than keeping a second copy of the guidance.
@@ -69,6 +85,7 @@ pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String 
             data["change_summary"].as_str().map_or_else(|| guidance.into(), |change| format!("Proposed: {change} {guidance}"))
         },
         "policy_apply" => "Policy change active after host confirmation. Retry the original request only if still needed.".into(),
+        "request_approve" => "The user approved this request once. Repeat the identical call now; any change to it needs a new approval.".into(),
         "suggestion_list" => {
             let rows = data["requests"].as_array();
             let eligible = rows.into_iter().flatten().filter(|row| row["eligible_for_offer"] == true).count();

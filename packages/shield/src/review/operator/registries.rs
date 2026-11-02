@@ -23,7 +23,9 @@ pub(super) fn mutate(
     let mut tty = Terminal::required(json_mode)?;
     let global = global()?;
     let meta = context
-        .map(|c| crate::review::project::load(c).map(|s| crate::review::project::metadata(&s)))
+        .map(|c| {
+            crate::review::project::checkpoint(c).map(|s| crate::review::project::metadata(&s))
+        })
         .transpose()?;
     let before = meta.as_ref().map_or_else(|| Ok(global.clone()), project)?;
     let mut after = before.clone();
@@ -75,15 +77,19 @@ pub(super) fn mutate(
     changed["sources"] = json!(after.sources);
     changed["default"] = json!(after.default);
     tty.confirm(&review)?;
-    Store::open(Path::new(&context.project_root))?.update(context, &|| Ok(()), |current| {
-        if crate::review::project::metadata(current) != before_meta {
-            return Err(Error::Invalid(
-                "registry configuration changed; review again",
-            ));
-        }
-        current.operator = changed.clone();
-        let mut receipt = receipt.clone();
-        receipt["registries"] = changed["sources"].clone();
-        Ok(receipt)
-    })
+    Store::open(Path::new(&context.project_root))?.update_checkpoint(
+        context,
+        &|| Ok(()),
+        |current| {
+            if crate::review::project::metadata(current) != before_meta {
+                return Err(Error::Invalid(
+                    "registry configuration changed; review again",
+                ));
+            }
+            current.operator = changed.clone();
+            let mut receipt = receipt.clone();
+            receipt["registries"] = changed["sources"].clone();
+            Ok(receipt)
+        },
+    )
 }

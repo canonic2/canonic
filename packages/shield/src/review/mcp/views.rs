@@ -69,6 +69,7 @@ struct Cursor {
     data: Arc<Value>,
     field: String,
     offset: usize,
+    bytes: usize,
 }
 #[derive(Clone)]
 pub(super) struct Views {
@@ -110,10 +111,10 @@ impl Views {
         metadata: &Value,
         prepared: Option<configuration::Evaluator>,
     ) -> Result<String, Error> {
+        let _trace = crate::diagnostics::trace::span("handle.retain");
         if candidate.is_null() {
             return Err(Error::CandidateUnavailable);
         }
-        let bytes = json!([candidate, metadata]).to_string();
         let key = identity(candidate, metadata);
         if let Some(id) = self.identities.get(&key) {
             let captured = self.handles.get(id).ok_or(Error::CandidateUnavailable)?;
@@ -138,7 +139,10 @@ impl Views {
             }
             return Ok(id.clone());
         }
-        if self.handles.len() >= 256 || self.bytes.saturating_add(bytes.len()) > HANDLE_BYTES {
+        crate::diagnostics::trace::count("handle.admission_encodings", 1);
+        let bytes = crate::json::encoded_len(&[candidate, metadata])
+            .map_err(|_| Error::Invalid("candidate encoding"))?;
+        if self.handles.len() >= 256 || self.bytes.saturating_add(bytes) > HANDLE_BYTES {
             return Err(Error::Overloaded);
         }
         let evaluator = if let Some(prepared) = prepared {
@@ -149,7 +153,7 @@ impl Views {
                 candidate.clone(),
             )]))?)?
         };
-        let length = bytes.len().saturating_add(evaluator.compiled_bytes().len());
+        let length = bytes.saturating_add(evaluator.compiled_bytes().len());
         if self.bytes.saturating_add(length) > HANDLE_BYTES {
             return Err(Error::Overloaded);
         }
@@ -233,27 +237,13 @@ impl Views {
         if self.approvals.contains_key(&binding) || self.approvals.len() >= 256 {
             return;
         }
-        let length = arguments.to_string().len();
+        let Ok(length) = crate::json::encoded_len(&arguments) else {
+            return;
+        };
         if self.approval_bytes.saturating_add(length) <= 8 * 1024 * 1024 {
             self.approval_bytes += length;
             self.approvals.insert(binding, Arc::new(arguments));
         }
-    }
-    pub(super) fn proposal(
-        &mut self,
-        context: &Context,
-        id: &str,
-    ) -> Result<(String, String), Error> {
-        let state = Store::open(Path::new(&context.project_root))?.read()?;
-        state.check(context)?;
-        let row = state
-            .proposals
-            .iter()
-            .find(|p| p.id == id)
-            .ok_or(Error::Missing)?;
-        let before = self.retain(&row.base_candidate, &row.base_metadata)?;
-        let after = self.retain(&row.candidate, &row.candidate_metadata)?;
-        Ok((before, after))
     }
     pub(super) fn page(
         &mut self,
@@ -269,14 +259,18 @@ impl Views {
             return Ok(data);
         }
         let limit = limit(args)?;
-        let size = data.to_string().len();
         let retains = data[field]
             .as_array()
             .is_some_and(|rows| rows.len() > limit);
+        let size = if retains {
+            crate::json::encoded_len(&data).map_err(|_| Error::Overloaded)?
+        } else {
+            0
+        };
         if retains && self.cursor_bytes.saturating_add(size) > 64 * 1024 * 1024 {
             return Err(Error::Overloaded);
         }
-        let result = self.slice(query(name, args), Arc::new(data), field, 0, limit)?;
+        let result = self.slice(query(name, args), Arc::new(data), field, 0, limit, size)?;
         if retains {
             self.cursor_bytes += size;
         }
@@ -297,6 +291,7 @@ impl Views {
             &cursor.field,
             cursor.offset,
             limit(args)?,
+            cursor.bytes,
         )
     }
     fn slice(
@@ -306,16 +301,26 @@ impl Views {
         field: &str,
         offset: usize,
         limit: usize,
+        bytes: usize,
     ) -> Result<Value, Error> {
         let rows = data[field].as_array().ok_or(Error::CursorUnavailable)?;
         let end = offset.saturating_add(limit).min(rows.len());
-        let mut page = data.as_ref().clone();
+        // Copy the envelope and selected rows, never the complete retained list.
+        let mut page = Value::Object(
+            data.as_object()
+                .ok_or(Error::CursorUnavailable)?
+                .iter()
+                .filter(|(name, _)| name.as_str() != field)
+                .map(|(name, value)| (name.clone(), value.clone()))
+                .collect(),
+        );
+        crate::diagnostics::trace::count("cursor.rows_copied", (end - offset) as u64);
         page[field] = json!(&rows[offset..end]);
-        if page.to_string().len() > 1024 * 1024 {
+        if !crate::json::fits(&page, 1024 * 1024) {
             return Err(crate::policy::Error::Limit.into());
         }
         let next = if end < rows.len() {
-            if self.cursors.len() >= 256 || data.to_string().len() > 64 * 1024 * 1024 {
+            if self.cursors.len() >= 256 || bytes > 64 * 1024 * 1024 {
                 return Err(Error::Overloaded);
             }
             let id = self.id("cursor");
@@ -326,6 +331,7 @@ impl Views {
                     data,
                     field: field.into(),
                     offset: end,
+                    bytes,
                 },
             );
             Some(id)
@@ -365,4 +371,39 @@ fn limit(args: &Value) -> Result<usize, Error> {
         .filter(|v| (1..=100).contains(v))
         .ok_or(Error::Invalid("invalid page limit"))?;
     usize::try_from(limit).map_err(|_| Error::Invalid("invalid page limit"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pages_preserve_envelopes_and_cursor_binding_for_large_retained_lists() {
+        let mut views = Views::new("acme-pages".into());
+        let rows: Vec<_> = (0..1000)
+            .map(|id| json!({"id":id,"detail":"é\\\"".repeat(1000)}))
+            .collect();
+        let first = views
+            .page(
+                "acme",
+                &json!({"limit":2}),
+                json!({"rows":rows,"metadata":{"complete":true}}),
+                "rows",
+            )
+            .unwrap();
+        assert_eq!(first["rows"].as_array().unwrap().len(), 2);
+        assert_eq!(first["rows"][0]["id"], 0);
+        assert_eq!(first["metadata"], json!({"complete":true}));
+        let args = json!({"limit":2,"cursor":first["next_cursor"]});
+        assert!(matches!(
+            views.resume("different", &args),
+            Err(Error::CursorUnavailable)
+        ));
+        let second = views.resume("acme", &args).unwrap();
+        assert_eq!(second["rows"][0]["id"], 2);
+        assert_eq!(second["metadata"], first["metadata"]);
+        assert!(crate::json::fits(&second, 1024 * 1024));
+        let oversized = json!({"rows":[{"detail":"x".repeat(1024 * 1024)}]});
+        assert!(views.page("acme", &json!({}), oversized, "rows").is_err());
+    }
 }

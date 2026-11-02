@@ -169,7 +169,7 @@ impl Log {
             return;
         }
         let hook = &value["hookSpecificOutput"];
-        self.event("hook_output", json!({"bytes":value.to_string().len(),"host_event":label(&hook["hookEventName"]),"permission_decision":label(&hook["permissionDecision"]),"decision_behavior":label(&hook["decision"]["behavior"]),"has_context":hook.get("additionalContext").is_some(),"has_system_message":value.get("systemMessage").is_some(),"has_updated_input":hook.get("updatedInput").is_some()}));
+        self.event("hook_output", json!({"bytes":crate::json::encoded_len(value).expect("hook JSON serializes"),"host_event":label(&hook["hookEventName"]),"permission_decision":label(&hook["permissionDecision"]),"decision_behavior":label(&hook["decision"]["behavior"]),"has_context":hook.get("additionalContext").is_some(),"has_system_message":value.get("systemMessage").is_some(),"has_updated_input":hook.get("updatedInput").is_some()}));
     }
 
     #[cfg(test)]
@@ -210,11 +210,9 @@ impl Log {
 fn tool_names() -> &'static [String] {
     static NAMES: OnceLock<Vec<String>> = OnceLock::new();
     NAMES.get_or_init(|| {
-        crate::review::mcp::tools_for(None)["tools"]
-            .as_array()
+        crate::review::mcp::tool_summaries()
             .into_iter()
-            .flatten()
-            .filter_map(|tool| tool["name"].as_str().map(str::to_owned))
+            .map(|(name, _)| name)
             .collect()
     })
 }

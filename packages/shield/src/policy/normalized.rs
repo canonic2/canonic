@@ -63,7 +63,7 @@ impl Input {
         let value = json!(self);
         // Normalized fields and the complete vendor input can retain the same
         // source twice; their envelope bound must preserve the source capacity.
-        if value.to_string().len() > 262_144
+        if !crate::json::fits(&value, 262_144)
             || !value["original_input"].is_object()
             || crate::json::contains_nul(&value)
         {

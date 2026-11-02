@@ -9,6 +9,7 @@ mod pack_identity;
 mod pack_info;
 mod rule_proposals;
 mod suggestion_workflow;
+mod sweep_cost;
 use super::*;
 use crate::{
     configuration::Bundle,
@@ -723,6 +724,7 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
             "policy_apply",
             "policy_receipt",
             "request_list",
+            "request_approve",
             "history_list",
             "policy_evaluate",
             "policy_compare",

@@ -41,7 +41,7 @@ pub(super) fn apply(
         &id,
         mechanism,
         crate::review::publication::Prepared {
-            source: &source,
+            source: Some(&source),
             evaluator: prepared
                 .as_ref()
                 .map(|capture| capture.evaluator())
@@ -99,8 +99,12 @@ fn validate_with_views(
     let evaluator = if let Some(capture) = &prepared {
         capture.evaluator()?
     } else {
-        owned =
-            crate::configuration::Evaluator::new(crate::review::snapshots(&before.candidates)?)?;
+        owned = match crate::review::storage::Store::cached_evaluator(&before) {
+            Some(evaluator) => evaluator,
+            None => {
+                crate::configuration::Evaluator::new(crate::review::snapshots(&before.candidates)?)?
+            }
+        };
         &owned
     };
     if evaluator.revision() != before.policy_revision {
@@ -213,6 +217,15 @@ fn present_arguments(adapter: &dyn ReviewAdapter, proposal: &Proposal, canonical
     };
     crate::review::model::redact(&mut value);
     value
+}
+
+pub(super) fn present_proposal(context: &Context, proposal: &Proposal, data: &mut Value) {
+    let canonical = data["apply_arguments"].take();
+    data["apply_arguments"] = present_arguments(
+        crate::agents::review::resolve(context.agent.as_deref()),
+        proposal,
+        &canonical,
+    );
 }
 
 /// Build the response from the exact row already prepared by the workflow.

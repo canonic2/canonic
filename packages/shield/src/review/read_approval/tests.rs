@@ -60,6 +60,31 @@ fn pending(context: &Context, evidence: &EvaluatedRequest, resource: &str) -> St
 }
 
 #[test]
+fn authorization_recovers_a_corrupt_plan_before_the_grant_transaction() {
+    let (_root, context, evidence, resource) = fixture();
+    let id = pending(&context, &evidence, &resource);
+    let status = review::runtime::status(&context).unwrap();
+    let cache = &status["compiled_cache"];
+    let path = std::path::PathBuf::from(cache["directory"].as_str().unwrap())
+        .join("compiled")
+        .join(cache["project_key"].as_str().unwrap())
+        .join(format!("{}.bin", cache["plan_key"].as_str().unwrap()));
+    std::fs::write(path, b"corrupt derived plan").unwrap();
+    assert_eq!(
+        authorize(&context, &id, 300, None, false).unwrap()["status"],
+        "approved"
+    );
+    assert_eq!(
+        review::runtime::status(&context).unwrap()["active"]["activation_id"],
+        status["active"]["activation_id"]
+    );
+    Project::open(Path::new(&context.project_root))
+        .unwrap()
+        .snapshot()
+        .unwrap();
+}
+
+#[test]
 fn status_counts_only_unexpired_requests_awaiting_a_decision() {
     let (_root, context, evidence, resource) = fixture();
     assert_eq!(
@@ -78,6 +103,11 @@ fn status_counts_only_unexpired_requests_awaiting_a_decision() {
     let expiry = state.read_requests[0].pending_expires_at_ms;
     assert_eq!(review::approvals::pending_count(&state, expiry - 1), 1);
     assert_eq!(review::approvals::pending_count(&state, expiry), 0);
+    assert!(inspect_from(&state, Some(&id), expiry - 1).is_ok());
+    assert!(matches!(
+        inspect_from(&state, Some(&id), expiry),
+        Err(Error::Missing)
+    ));
     authorize(&context, &id, 3600, None, false).unwrap();
     assert_eq!(
         review::project::status(&context).unwrap()["pending_approvals"],

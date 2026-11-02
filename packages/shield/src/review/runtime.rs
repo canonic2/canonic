@@ -5,7 +5,9 @@ use super::{Context, Error, model::State, snapshots, storage::Store};
 use crate::{configuration, policy};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, path::Path};
+use std::collections::BTreeMap;
+#[cfg(test)]
+use std::path::Path;
 
 pub(crate) mod consumer;
 
@@ -35,9 +37,17 @@ impl Active {
         &self.activation_id
     }
     pub(super) fn matches(&self, identity: &consumer::SnapshotIdentity) -> bool {
-        self.activation_id == identity.activation_id()
-            && self.policy_revision == identity.policy_revision()
-            && self.candidate_digest == identity.candidate_digest()
+        self.matches_parts(
+            identity.activation_id(),
+            identity.policy_revision(),
+            identity.candidate_digest(),
+        )
+    }
+    /// The same identity check for a receipt's recorded identity fields.
+    pub(super) fn matches_parts(&self, activation: &str, revision: &str, digest: &str) -> bool {
+        self.activation_id == activation
+            && self.policy_revision == revision
+            && self.candidate_digest == digest
     }
     fn binding(&self, state: &State) -> String {
         policy::fingerprint(
@@ -120,18 +130,21 @@ impl Active {
     }
 }
 
+#[cfg(test)]
 pub(super) fn status(context: &Context) -> Result<Value, Error> {
     let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
     state.check(context)?;
-    Ok(
-        json!({"schema_version":1,"mode":"local-runtime","enforcement":"not-installed",
+    Ok(status_from(&state))
+}
+
+pub(super) fn status_from(state: &State) -> Value {
+    json!({"schema_version":1,"mode":"local-runtime","enforcement":"not-installed",
         "project_id":state.project_id,"project_root":state.project_root,
         "review":{"policy_revision":state.policy_revision,"candidate_digest":digest(&state.candidates)},
         "active":state.active.as_ref().map(Active::metadata),
-        "compiled_cache":state.active.as_ref().map(|a| a.compiled.diagnostics(&context.project_root, &a.candidate_digest, &a.policy_revision)),
+        "compiled_cache":state.active.as_ref().map(|a| a.compiled.diagnostics(&state.project_root, &a.candidate_digest, &a.policy_revision)),
         "authorization":state.active.as_ref().and_then(|active| state.authorization_events.iter().find(|event| event["links"]["activation_id"] == active.activation_id)),
-        "pending_change":state.active.as_ref().is_none_or(|a| a.candidate_digest != digest(&state.candidates))}),
-    )
+        "pending_change":state.active.as_ref().is_none_or(|a| a.candidate_digest != digest(&state.candidates))})
 }
 
 /// Publish the already validated confirmed candidate inside its writer transaction.

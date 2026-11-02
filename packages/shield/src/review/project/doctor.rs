@@ -8,16 +8,25 @@ use std::path::{Path, PathBuf};
 
 /// The status report with a `checks` list of the problems found.
 pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
-    let current =
-        crate::review::storage::Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
+    let store = crate::review::storage::Store::open(Path::new(&context.project_root))?;
+    // History inspection already validates the authority checkpoint. If it
+    // fails, retain the compact-only recovery report when authority is readable.
+    let (current, history_error) = match store.read_history() {
+        Ok(current) => (current, None),
+        Err(error) => (store.read_checkpoint()?, Some(error)),
+    };
     current.check(context)?;
     let meta = state::metadata(&current);
     let mut checks = Vec::new();
-    let mut value = match state::status(context) {
+    let complete = match history_error {
+        Some(error) => Err(error),
+        None => state::status_from(context, &current),
+    };
+    let mut value = match complete {
         Ok(value) => value,
         Err(error) => {
             checks.push(json!({"check":"status","detail":format!("the complete status report is unavailable: {error}"),"repair":"shield policy review"}));
-            let mut partial = crate::review::runtime::status(context)?;
+            let mut partial = crate::review::runtime::status_from(&current);
             partial["policy_revision"] = partial["review"]["policy_revision"].clone();
             partial["missing"] = json!(["complete_status"]);
             partial["repair_needed"] = json!(true);
@@ -29,7 +38,9 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
         checks.push(json!({"check":check,"detail":detail,"repair":repair}));
     };
 
-    if let Err(error) = state::load(context) {
+    if let Err(error) = crate::review::storage::Store::open(Path::new(&context.project_root))
+        .and_then(|store| store.prepare_current())
+    {
         problem(
             "policy_source",
             format!("the retained policy source cannot be prepared: {error}"),
@@ -38,18 +49,12 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
     }
 
     // The active policy must load as hooks load it, compiled plan included.
-    if let Err(error) = crate::runtime::Project::open(Path::new(&context.project_root))
-        .and_then(|project| project.snapshot())
+    if let Err(error) = crate::review::runtime::consumer::load(context, &|| Ok(()))
+        .map_err(crate::runtime::Error::from)
     {
         // Without an activation there is nothing for the cache to rebuild from,
         // and preparing the cache repairs only an unavailable compiled plan.
-        let repair = if value["active"].is_null() {
-            "shield init".into()
-        } else if matches!(error, crate::runtime::Error::CacheUnavailable) {
-            crate::review::cache::repair_route(&context.project_root)
-        } else {
-            "shield policy review".into()
-        };
+        let repair = policy_route(context, &value["active"], &error);
         problem(
             "policy",
             format!("the active policy cannot be loaded: {error}"),
@@ -70,7 +75,7 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
             "shield registry list",
         );
     }
-    match registries::effective(Some(context)) {
+    match registries::effective_from_metadata(&meta) {
         Ok(effective) => {
             for row in meta["installed"].as_array().into_iter().flatten() {
                 let identity = row["source_identity"].as_str().unwrap_or_default();
@@ -113,6 +118,17 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
 
     value["checks"] = json!(checks);
     Ok(value)
+}
+
+/// Cache preparation repairs an unavailable plan; other policy failures need review.
+fn policy_route(context: &Context, active: &Value, error: &crate::runtime::Error) -> String {
+    if active.is_null() {
+        "shield init".into()
+    } else if matches!(error, crate::runtime::Error::CacheUnavailable) {
+        crate::review::cache::repair_route(&context.project_root)
+    } else {
+        "shield policy review".into()
+    }
 }
 
 /// The binary the project's agent integrations run, when any are registered.

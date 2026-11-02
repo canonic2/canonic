@@ -19,7 +19,7 @@ pub(in crate::review) fn map_digest(
     {
         return digest.to_owned();
     }
-    crate::policy::fingerprint(json!(candidates).to_string().as_bytes())
+    crate::json::fingerprint(candidates).expect("candidate JSON serializes")
 }
 
 pub(super) fn checkpoint(
@@ -60,7 +60,8 @@ pub(super) fn compact(store: &Store, value: &mut Value) -> Result<(), Error> {
         }
         let digest = crate::policy::fingerprint(&bytes);
         let candidate_digest =
-            crate::policy::fingerprint(json!({"project":value}).to_string().as_bytes());
+            crate::json::fingerprint(&std::collections::BTreeMap::from([("project", &*value)]))
+                .map_err(|_| Error::Invalid("source encoding"))?;
         let directory = store.directory.join("sources");
         super::private_directory(&directory)?;
         let path = directory.join(format!("{digest}.json"));
@@ -128,7 +129,9 @@ pub(in crate::review) fn candidate_identity(value: &Value) -> String {
     if value["kind"] == KIND && check(value).is_ok() {
         return value["digest"].as_str().unwrap_or_default().to_owned();
     }
-    crate::policy::fingerprint(value.to_string().as_bytes())
+    let _trace = crate::diagnostics::trace::span("source.identity");
+    crate::diagnostics::trace::count("source.identity_encodings", 1);
+    crate::json::fingerprint(value).expect("candidate JSON serializes")
 }
 
 fn check(value: &Value) -> Result<(), Error> {
@@ -182,7 +185,10 @@ pub(super) fn hydrate(store: &Store, value: &mut Value) -> Result<(), Error> {
         let candidate: Value = serde_json::from_slice(&bytes)
             .map_err(|_| Error::Invalid("corrupt retained source"))?;
         if candidate["kind"] != "candidate-bundle"
-            || crate::policy::fingerprint(json!({"project":candidate}).to_string().as_bytes())
+            || crate::json::fingerprint(&std::collections::BTreeMap::from([(
+                "project", &candidate,
+            )]))
+            .map_err(|_| Error::Invalid("source encoding"))?
                 != value["candidate_digest"]
         {
             return Err(Error::Invalid("retained candidate binding differs"));

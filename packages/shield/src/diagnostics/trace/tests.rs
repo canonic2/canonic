@@ -11,6 +11,15 @@ fn make_log(root: &assert_fs::TempDir) -> Arc<crate::diagnostics::Log> {
     Arc::new(crate::diagnostics::Log::open(&cli))
 }
 
+/// Record assertions require writer completion, not the best-effort exit drain.
+fn drain(log: Arc<crate::diagnostics::Log>) {
+    let mut log = Arc::into_inner(log).expect("test owns the log");
+    let recorder = Arc::get_mut(log.traces.get_mut().expect("trace was started"))
+        .expect("all request links were released");
+    recorder.sender.take();
+    recorder.worker.take().unwrap().join().unwrap();
+}
+
 #[test]
 fn request_links_cross_threads_and_keep_nested_work_and_other_requests_separate() {
     let root = assert_fs::TempDir::new().unwrap();
@@ -45,7 +54,7 @@ fn request_links_cross_threads_and_keep_nested_work_and_other_requests_separate(
         first.finish("success");
         second.finish("refused");
     }
-    drop(log);
+    drain(log);
     let records: Vec<Value> = std::fs::read_to_string(path)
         .unwrap()
         .lines()
@@ -86,7 +95,7 @@ fn disabled_tracing_has_no_request_or_attached_work_and_unfinished_requests_are_
     let log = make_log(&root);
     let path = log.path().unwrap().to_owned();
     drop(log.request("mcp", "status", None, None));
-    drop(log);
+    drain(log);
     let text = std::fs::read_to_string(path).unwrap();
     assert!(text.contains("request_incomplete"));
 }
@@ -104,7 +113,7 @@ fn bounded_spans_report_loss_and_a_stalled_sink_cannot_block_the_request() {
         }
         request.finish("success");
     }
-    drop(log);
+    drain(log);
     let text = std::fs::read_to_string(path).unwrap();
     let records: Vec<Value> = text
         .lines()
@@ -135,9 +144,17 @@ fn bounded_spans_report_loss_and_a_stalled_sink_cannot_block_the_request() {
     assert!(request.0.recorder.dropped.load(Ordering::Relaxed) > 0);
     request.finish("success");
     drop(request);
+    // Keep ownership for cleanup without preventing Recorder's real Drop.
+    let mut log = Arc::into_inner(log).expect("test owns the log");
+    let worker = Arc::get_mut(log.traces.get_mut().unwrap())
+        .unwrap()
+        .worker
+        .take()
+        .unwrap();
     drop(log);
     assert!(started.elapsed() < Duration::from_secs(1));
     drop(held);
+    worker.join().unwrap();
 }
 
 #[test]
@@ -154,7 +171,7 @@ fn approval_wait_keeps_its_interval_across_a_worker_continuation() {
     })
     .join()
     .unwrap();
-    drop(log);
+    drain(log);
     let records: Vec<Value> = std::fs::read_to_string(path)
         .unwrap()
         .lines()

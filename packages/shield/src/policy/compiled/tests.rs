@@ -126,6 +126,14 @@ fn persisted_postings_preserve_complete_reference_evidence_and_unknown_context()
                 );
                 assert_eq!(
                     json!(
+                        plan.evaluate(&request, &|| Ok(()), known_cwd, known_arguments)
+                            .unwrap()
+                    ),
+                    json!(expected),
+                    "freshly compiled plan must retain full source evidence"
+                );
+                assert_eq!(
+                    json!(
                         authenticated
                             .evaluate(&request, &|| Ok(()), known_cwd, known_arguments)
                             .unwrap()
@@ -276,6 +284,12 @@ fn truncated_overflowed_reordered_and_trailing_images_are_refused() {
     }
     let mut bytes = original.to_vec();
     bytes.push(0);
+    assert!(
+        Plan::load_authenticated(bytes.clone())
+            .unwrap()
+            .validate_rows(false)
+            .is_err()
+    );
     assert!(Plan::load(bytes).is_err());
     let table = HEADER + read_number(original, 8).unwrap();
     let mut bytes = original.to_vec();
@@ -283,6 +297,12 @@ fn truncated_overflowed_reordered_and_trailing_images_are_refused() {
     let second = bytes[table + ENTRY..table + 2 * ENTRY].to_vec();
     bytes[table..table + ENTRY].copy_from_slice(&second);
     bytes[table + ENTRY..table + 2 * ENTRY].copy_from_slice(&first);
+    assert!(
+        Plan::load_authenticated(bytes.clone())
+            .unwrap()
+            .validate_rows(false)
+            .is_err()
+    );
     assert!(Plan::load(bytes).is_err());
 }
 

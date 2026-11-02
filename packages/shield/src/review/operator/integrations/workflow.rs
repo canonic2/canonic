@@ -177,7 +177,7 @@ pub(super) fn review(
     selected: Option<IntegrationChoice>,
     json_mode: bool,
 ) -> Result<Value, Error> {
-    let meta = crate::review::project::metadata(&crate::review::project::load(context)?);
+    let meta = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
     let root = Path::new(&context.project_root);
     let resumable = pending(&meta)?.is_some();
     let selected = match selected {
@@ -437,7 +437,7 @@ pub(super) fn setup(
     json_mode: bool,
 ) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
-    let meta = crate::review::project::metadata(&crate::review::project::load(context)?);
+    let meta = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
     let root = Path::new(&context.project_root);
     let resumable = pending(&meta)?.is_some();
     // Escape on the permissions returns to the agent page when it was shown.
@@ -469,7 +469,7 @@ fn finish(
         && let Err(error) = apply(context, meta, plan)
     {
         if pending(&crate::review::project::metadata(
-            &crate::review::project::load(context)?,
+            &crate::review::project::checkpoint(context)?,
         ))?
         .is_none()
         {
@@ -501,7 +501,7 @@ fn sync_prefix_rules(context: &Context) -> Result<(), Error> {
     };
     super::prefix_rules::sync(
         root,
-        &crate::review::project::metadata(&crate::review::project::load(context)?),
+        &crate::review::project::metadata(&crate::review::project::checkpoint(context)?),
         &prefixes,
     )
 }

@@ -588,7 +588,9 @@ fn uncertain_search_footprints_explain_narrowing_and_sensitive_reads_explain_con
     fs::write(root.path().join(".mcp.json"), "{}").unwrap();
     let result = call(root.path(), "codex", "rg --no-config Acme .mcp.json");
     assert_eq!(result["hookSpecificOutput"]["permissionDecision"], "deny");
-    assert!(reason(&result).contains("terminal"), "{result}");
+    // Codex cannot prompt; the user can allow this read once in the session.
+    assert!(reason(&result).contains("call request_approve"), "{result}");
+    assert!(!reason(&result).contains("terminal"), "{result}");
     assert!(!reason(&result).contains("policy_propose"), "{result}");
 }
 

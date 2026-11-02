@@ -161,11 +161,8 @@ pub(super) fn mcp(binary: &Path, root: &Path, approved: &[String]) -> String {
     ]));
     table["default_tools_approval_mode"] = value("prompt");
     let mut approvals = Table::new();
-    for tool in crate::review::mcp::tools_for(Some("codex"))["tools"]
-        .as_array()
-        .expect("static tool inventory")
-    {
-        let name = tool["name"].as_str().expect("static tool name");
+    for (name, _) in crate::review::mcp::tool_summaries() {
+        let name = name.as_str();
         let mut entry = Table::new();
         let marked = approved.iter().any(|tool| tool == name);
         entry["approval_mode"] = value(if marked && name != ALWAYS_PROMPT {
@@ -276,11 +273,8 @@ pub(super) fn diagnose(bytes: Option<&str>, d: &mut Vec<&'static str>) -> Result
         d.push("Shield MCP mutations need default approval prompts in Codex");
     }
     let server = doc.get("mcp_servers").and_then(|s| s.get("shield"));
-    for tool in crate::review::mcp::tools_for(Some("codex"))["tools"]
-        .as_array()
-        .expect("static tool inventory")
-    {
-        let name = tool["name"].as_str().expect("static tool name");
+    for (name, _) in crate::review::mcp::tool_summaries() {
+        let name = name.as_str();
         // Which tools are approved is the operator's choice, except apply; each needs a mode.
         let mode = server
             .and_then(|s| s.get("tools"))

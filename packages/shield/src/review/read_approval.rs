@@ -192,10 +192,8 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
     Ok(())
 }
 
-pub(crate) fn inspect(context: &Context, id: Option<&str>) -> Result<Value, Error> {
-    let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
-    state.check(context)?;
-    let time = now()?;
+/// Project an already checked authority snapshot at one inspection timestamp.
+pub(super) fn inspect_from(state: &State, id: Option<&str>, time: u64) -> Result<Value, Error> {
     let mut value = match id {
         Some(id) => json!(
             state
@@ -478,14 +476,22 @@ fn authorize_with_clock(
     if !(1..=3600).contains(&ttl) || reason.is_some_and(|r| r.len() > 4096) {
         return Err(Error::Invalid("invalid grant lifetime or reason"));
     }
-    Store::open(Path::new(&context.project_root))?.update(context, &||Ok(()), |state| {
+    // Recover derived data before taking the writer lock; recovery owns a writer
+    // transaction itself. The grant below still binds to the current activation.
+    let snapshot = if revoke {
+        None
+    } else {
+        Some(super::runtime::consumer::load(context, &|| Ok(()))?)
+    };
+    Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &||Ok(()), |state| {
         let index = state.read_requests.iter().position(|r|r.request_id == id).ok_or(Error::Missing)?;
         let row = &state.read_requests[index];
         if row.status == "consumed" || row.status == "revoked" { return Err(Error::Invalid("request is terminal")); }
         if revoke { return Ok(revoke_request(state, context, index, reason)); }
         let time = clock()?;
         if time < row.created_at_ms || (row.grant.is_none() && time >= row.pending_expires_at_ms) { return Err(Error::Invalid("pending request expired")); }
-        let snapshot = super::runtime::consumer::load(context, &||Ok(()))?;
+        let snapshot = snapshot.as_ref().ok_or(Error::StaleSnapshot)?;
+        if state.active.as_ref().is_none_or(|active| !active.matches(snapshot.identity())) { return Err(Error::StaleSnapshot); }
         let evidence = snapshot.evaluate_resource(row.request.clone(), row.resource.clone()).map_err(|_|Error::Invalid("request cannot be evaluated"))?;
         if !row.matches(&evidence, &row.resource_digest, &row.origin) || evidence.evaluation().decision != Decision::Ask {
             return Err(Error::StaleSnapshot);

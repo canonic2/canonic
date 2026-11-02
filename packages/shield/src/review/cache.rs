@@ -84,6 +84,7 @@ impl Artifact {
             .join(format!("{}.bin", self.plan_key))
     }
     pub(super) fn load(&self, root: &str, project_id: &str) -> Result<Evaluator, Error> {
+        let _trace = crate::diagnostics::trace::span("cache.load");
         if !self.directory.is_absolute()
             || self.project_key != project_key(root, project_id)
             || [&self.project_key, &self.plan_key]

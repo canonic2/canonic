@@ -515,14 +515,32 @@ impl Pack {
     /// # Errors
     /// Returns an error for invalid packs, bindings or overrides, and resource limits.
     pub fn from_yaml_bound(input: &str, binding: &Binding, required: bool) -> Result<Self, Error> {
-        let mut document: PackDocument = parse(input)?;
-        document.validate()?;
+        Self::from_yaml_reusing(input, binding, required, None)
+    }
+
+    /// Reuse only exact matcher programs; all source/binding validation still runs.
+    pub(crate) fn from_yaml_reusing(
+        input: &str,
+        binding: &Binding,
+        required: bool,
+        previous: Option<&Self>,
+    ) -> Result<Self, Error> {
+        let _trace = crate::diagnostics::trace::span("pack.prepare");
+        let mut document: PackDocument = {
+            let _trace = crate::diagnostics::trace::span("pack.decode");
+            parse(input)?
+        };
+        {
+            let _trace = crate::diagnostics::trace::span("pack.validate_source");
+            document.validate()?;
+        }
         if document.variables.values().any(|d| d.setup.is_some()) {
             variables::validate_order(&document.variables, &variables::order::read(input)?)?;
         }
         let mut digest = fingerprint(input.as_bytes());
         let mut entries = Vec::new();
         if resolution::dynamic(&document) || !binding.is_empty() {
+            let _trace = crate::diagnostics::trace::span("pack.resolve");
             let resolved;
             (resolved, entries) = resolution::resolve(document, binding)?;
             if required && let Some(unset) = entries.iter().find(|e| e.kind == "variable") {
@@ -544,7 +562,15 @@ impl Pack {
                 .preconditions
                 .iter()
                 .any(rules::Precondition::semantic);
-        let patterns = model::prepare_patterns(&document.rules, &document.preconditions)?.into();
+        let patterns = {
+            let _trace = crate::diagnostics::trace::span("pack.patterns");
+            model::prepare_patterns_reusing(
+                &document.rules,
+                &document.preconditions,
+                previous.map(|pack| pack.patterns.as_ref()),
+            )?
+            .into()
+        };
         Ok(Self {
             document,
             digest,

@@ -16,7 +16,7 @@ fn word<T: Serialize>(value: T) -> String {
 /// Guided change, confirmed in the operator terminal and refused in JSON mode.
 pub(super) fn configure(context: &Context, json_mode: bool) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
-    let meta = crate::review::project::metadata(&crate::review::project::load(context)?);
+    let meta = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
     // An invalid record blocks agents; the operator replaces it from the defaults.
     let invalid = load(&meta).is_err();
     let before = load(&meta).unwrap_or_default();
@@ -37,15 +37,19 @@ pub(super) fn configure(context: &Context, json_mode: bool) -> Result<Value, Err
     tty.confirm(
         &json!({"operation":"change protected file access","before":before,"after":after}),
     )?;
-    Store::open(Path::new(&context.project_root))?.update(context, &|| Ok(()), |state| {
-        if state.operator.get("path_access") != meta.get("path_access") {
-            return Err(Error::Invalid(
-                "protected file access changed during confirmation; review again",
-            ));
-        }
-        state.operator["path_access"] = json!(after);
-        Ok(json!({}))
-    })?;
+    Store::open(Path::new(&context.project_root))?.update_checkpoint(
+        context,
+        &|| Ok(()),
+        |state| {
+            if state.operator.get("path_access") != meta.get("path_access") {
+                return Err(Error::Invalid(
+                    "protected file access changed during confirmation; review again",
+                ));
+            }
+            state.operator["path_access"] = json!(after);
+            Ok(json!({}))
+        },
+    )?;
     Ok(receipt(after, true))
 }
 

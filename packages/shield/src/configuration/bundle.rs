@@ -68,7 +68,35 @@ impl Bundle {
         local_rules: Option<&str>,
         disabled: &[String],
     ) -> Result<Self, Error> {
+        Self::capture_prepared(
+            config,
+            local_config,
+            packs,
+            rules,
+            local_rules,
+            disabled,
+            None,
+        )
+        .map(|(bundle, _)| bundle)
+    }
+
+    fn capture_prepared(
+        config: &str,
+        local_config: Option<&str>,
+        packs: &[String],
+        rules: Option<&str>,
+        local_rules: Option<&str>,
+        disabled: &[String],
+        previous: Option<&Snapshot>,
+    ) -> Result<(Self, Snapshot), Error> {
         let merged = layers::merge(config, local_config)?;
+        let snapshot = Candidate::from_yaml(&merged)?.capture_reusing(
+            packs,
+            rules,
+            local_rules,
+            disabled,
+            previous,
+        )?;
         let bundle = Self {
             schema_version: 1,
             kind: "candidate-bundle".into(),
@@ -79,13 +107,10 @@ impl Bundle {
             rules: rules.map(str::to_owned),
             local_rules: local_rules.map(str::to_owned),
             disabled: disabled.to_vec(),
-            lock: Candidate::from_yaml(&merged)?
-                .capture_layers(packs, rules, local_rules, disabled)?
-                .lock
-                .document,
+            lock: snapshot.lock.document.clone(),
         };
         bundle.content_limit()?;
-        Ok(bundle)
+        Ok((bundle, snapshot))
     }
 
     /// Capture a changed candidate whose files are `previous`'s sources edited
@@ -104,6 +129,20 @@ impl Bundle {
         local_rules: Option<&str>,
         disabled: &[String],
     ) -> Result<Self, Error> {
+        Self::revise_prepared(previous, merged, packs, rules, local_rules, disabled, None)
+            .map(|(bundle, _)| bundle)
+    }
+
+    /// Keep the validated snapshot captured from these exact edited sources.
+    pub(crate) fn revise_prepared(
+        previous: &Value,
+        merged: &Value,
+        packs: &[String],
+        rules: Option<&str>,
+        local_rules: Option<&str>,
+        disabled: &[String],
+        patterns: Option<&Snapshot>,
+    ) -> Result<(Self, Snapshot), Error> {
         let (shared, local) = layers::split(
             &merged.to_string(),
             (
@@ -113,13 +152,14 @@ impl Bundle {
         )?;
         let config = edited(previous, "config", Some(&shared))?
             .ok_or(Error::Contract("candidate configuration missing"))?;
-        Self::capture_layers(
+        Self::capture_prepared(
             &config,
             edited(previous, "local_config", local.as_deref())?.as_deref(),
             packs,
             edited(previous, "rules", rules)?.as_deref(),
             edited(previous, "local_rules", local_rules)?.as_deref(),
             disabled,
+            patterns,
         )
     }
 

@@ -58,7 +58,7 @@ pub(super) fn collect(
                 {
                     let mut safe = expected.clone();
                     crate::evidence::redact(&mut safe);
-                    if safe.to_string().len() <= 512 {
+                    if crate::json::fits(&safe, 512) {
                         row["expected"] = safe;
                     }
                 }

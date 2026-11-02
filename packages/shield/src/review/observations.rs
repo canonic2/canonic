@@ -66,7 +66,7 @@ fn receipt(event: &Value, request: &Value) -> Value {
 pub(crate) fn decision(context: &Context, mut details: Value) -> Result<Value, Error> {
     // Large selected-pack metadata is diagnostic evidence, not request history.
     // Keep the decision, request, matched rules and source identity when omitting it.
-    if details.to_string().len() > 4096 {
+    if !crate::json::fits(&details, 4096) {
         if let Some(evaluation) = details["evaluation"].as_object_mut() {
             evaluation.remove("effective");
             if let Some(explanation) = evaluation
@@ -148,11 +148,10 @@ pub(crate) fn execution_completion(
     })
 }
 
-/// Stored state for advisory reply text on the hook path. Storage identity and
-/// bindings are checked; policy is not re-prepared, since these readers grant
-/// nothing and the decision already came from the authenticated plan.
+/// History for advisory request context. Storage identity and bindings are
+/// checked; this reads no policy source and grants no authority.
 fn advisory(root: &Path) -> Option<State> {
-    Store::open(root).ok()?.read_unprepared().ok()
+    Store::open(root).ok()?.read_history().ok()
 }
 
 /// Newest-first retained events for hook reply text, from the checkpoint and the

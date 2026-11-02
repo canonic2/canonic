@@ -146,8 +146,13 @@ pub(crate) struct Proposal {
 }
 impl Proposal {
     pub(crate) fn apply_arguments(&self) -> Value {
+        self.arguments_with_digest(
+            &crate::json::fingerprint(&self.candidate).expect("candidate JSON serializes"),
+        )
+    }
+    fn arguments_with_digest(&self, digest: &str) -> Value {
         let mut arguments = json!({"proposal_id":self.id,
-            "candidate_digest":crate::policy::fingerprint(self.candidate.to_string().as_bytes()),
+            "candidate_digest":digest,
             "changes":crate::review::changes::diff::between(&self.base_metadata, &self.base_candidate, &self.candidate_metadata, &self.candidate),
             "review":approval::summary(self)});
         // Returned and validated arguments share the public projection; the
@@ -156,21 +161,30 @@ impl Proposal {
         arguments
     }
     pub(crate) fn summary(&self) -> Value {
-        let mut value = self.public(false);
-        if let Some(object) = value.as_object_mut() {
-            object.remove("rules");
-            object.remove("comparison");
-            object.remove("apply_arguments");
-        }
+        let mut value = self.metadata_view();
+        let changed = redact(&mut value);
+        value["redacted"] = json!(changed);
         value
     }
-    pub(crate) fn public(&self, reveal: bool) -> Value {
-        let mut value = json!({"schema_version":1,"proposal_id":self.id,"created_at":self.created_at,
+    fn metadata_view(&self) -> Value {
+        json!({"schema_version":1,"proposal_id":self.id,"created_at":self.created_at,
             "status":self.status,"provenance":self.provenance,"links":self.links,"reasons":self.reasons,
             "policy_revision":self.policy_revision,"target_scope":self.target_scope,"operation":self.operation,
-            "rule_id":self.rule_id,"comparison":self.comparison,"operator":self.operator,
-            "candidate_digest":crate::policy::fingerprint(self.candidate.to_string().as_bytes())});
-        value["apply_arguments"] = self.apply_arguments();
+            "rule_id":self.rule_id,"operator":self.operator,
+            "candidate_digest":super::storage::sources::candidate_identity(&self.candidate)})
+    }
+    pub(crate) fn public(&self, reveal: bool) -> Value {
+        let mut value = self.metadata_view();
+        value["comparison"] = self.comparison.clone();
+        value["apply_arguments"] = if self.candidate["kind"] == "candidate-bundle" {
+            self.arguments_with_digest(
+                value["candidate_digest"]
+                    .as_str()
+                    .expect("candidate digest"),
+            )
+        } else {
+            self.apply_arguments()
+        };
         if reveal {
             value["candidate"] = self.candidate.clone();
         } else if let Some(source) = self.candidate["rules"].as_str() {
@@ -218,6 +232,9 @@ pub(crate) struct State {
     pub(crate) active: Option<super::runtime::Active>,
     pub(crate) read_requests: Vec<super::read_approval::ReadRequest>,
     pub(crate) run_requests: Vec<super::run_approval::RunRequest>,
+    /// Refused native requests awaiting, or holding, in-session approval.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) hook_requests: Vec<super::hook_approval::HookRequest>,
     pub(crate) proposals: Vec<Proposal>,
     /// Advisory session review suppression, never execution authorization.
     #[serde(default)]
@@ -261,6 +278,7 @@ impl State {
                 .any(|id| id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()))
             || self.read_requests.len() > 128
             || self.run_requests.len() > 128
+            || self.hook_requests.len() > 128
             || self.events.len() > 40000
             || !(1..=10000).contains(&self.history_limit)
         {
@@ -313,6 +331,8 @@ impl State {
                 "run_grant_issued",
                 "run_grant_consumed",
                 "run_grant_revoked",
+                "hook_grant_issued",
+                "hook_grant_consumed",
             ]
             .contains(&kind)
         }) {
@@ -352,11 +372,13 @@ impl State {
     pub(crate) fn compact_authorization_at(&mut self, time: u64) {
         self.read_requests.retain(|r| r.live_id(time).is_some());
         self.run_requests.retain(|r| r.live_id(time).is_some());
+        self.hook_requests.retain(|r| r.live_id(time).is_some());
         let ids: std::collections::BTreeSet<_> = self
             .read_requests
             .iter()
             .filter_map(|r| r.live_id(time))
             .chain(self.run_requests.iter().filter_map(|r| r.live_id(time)))
+            .chain(self.hook_requests.iter().filter_map(|r| r.live_id(time)))
             .collect();
         self.authorization_events.retain(|event| {
             event["links"]["request_id"]

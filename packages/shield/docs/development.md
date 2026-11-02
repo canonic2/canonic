@@ -458,6 +458,24 @@ the input or approval wait. Host permission obtained before Shield receives an
 MCP call is outside this measurement. The handler boundary also excludes MCP
 scheduler queueing, schema validation and final wire encoding; round-trip tests
 measure transport overhead separately. Modern form retries have separate traces.
+Proposal spans distinguish base capture, edits, next capture, comparison, plan
+preparation, handle reservation and presentation. `policy.source_captures` counts
+source validation independently of compiled-plan preparation, so re-parsing packs
+cannot hide behind a zero preparation count.
+Pack spans distinguish decoding, source validation, resolution and matcher
+preparation. `pattern.compiled` and `pattern.reused` count newly built and exact
+reused matcher programs. Rule/access-path proposal edits borrow matchers from the
+preceding captured snapshot, while validating source and accounting the new
+store's pattern bytes normally. Fresh compiled plans check their encoded layout
+and retain source validation from typed construction, avoiding duplicate decoding
+and semantic validation of just-encoded records. Untrusted full-image admission
+remains covered separately by compiled-policy tests.
+`handle.retain` and `source.identity` spans expose handle admission and canonical
+candidate hashing. `handle.admission_encodings` counts new-handle size measurements;
+cached handles skip them. `source.identity_encodings` counts candidate-identity
+encodings, and `cursor.rows_copied` counts rows projected into a page. Shared JSON
+size checks count encoded UTF-8 bytes without retaining an output string; source
+hashing uses bounded scratch space and preserves existing compact-JSON digests.
 
 Run the focused development regression with
 `make -C packages/shield test-focus FILTER=apply_request_trace_explains_work CARGO_FLAGS='--success-output immediate'`.
@@ -468,6 +486,21 @@ pack artifacts into the temporary fixture. It does not copy settings, custom
 rules, history or identity and does not write to the source project. This is a
 local regression/profile fixture, not a cold-start or cross-platform latency
 acceptance campaign.
+
+`make -C packages/shield test-focus FILTER=ordinary_request_sweep CARGO_FLAGS='--release --success-output immediate'`
+compares fresh and aged stores through retained MCP requests and the CLI inspection
+owners. Optional `APPLY_PROFILE_PROJECT` selects immutable pack artifacts using
+the read-only fixture described above. The test asserts source/preparation/history
+work limits, including source capture counts, independent of unrelated retained proposals.
+It prints inclusive stage timings as well as round trips. CLI-owner timings exclude
+process startup and output; they are not full CLI latency measurements.
+
+Production state readers select authority metadata, current source, one proposal
+or optional history explicitly. Current policy readers may reuse its authenticated
+compiled plan after checking source integrity; doctor forces source preparation
+as a separate check. Full-source/history fixture readers are unavailable to
+production code. CLI policy changes retain prepared evidence across review and
+commit, with fresh authority and file checks at publication.
 
 ## Adapter and host checks
 

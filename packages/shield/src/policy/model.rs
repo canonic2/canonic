@@ -425,12 +425,20 @@ pub(super) fn prepare_patterns(
     rules: &[Rule],
     preconditions: &[Precondition],
 ) -> Result<patterns::Store, Error> {
+    prepare_patterns_reusing(rules, preconditions, None)
+}
+
+pub(super) fn prepare_patterns_reusing(
+    rules: &[Rule],
+    preconditions: &[Precondition],
+    previous: Option<&patterns::Store>,
+) -> Result<patterns::Store, Error> {
     let mut store = patterns::Store::default();
     for precondition in preconditions {
         let domain = precondition.domain();
-        store.collect(&precondition.conditions, domain)?;
+        store.collect_reusing(&precondition.conditions, domain, previous)?;
         for alternative in &precondition.requires_any {
-            store.collect(alternative, domain)?;
+            store.collect_reusing(alternative, domain, previous)?;
         }
     }
     for rule in rules {
@@ -438,9 +446,9 @@ pub(super) fn prepare_patterns(
         if domain == "exact_request" {
             continue;
         }
-        store.collect(&rule.conditions, domain)?;
+        store.collect_reusing(&rule.conditions, domain, previous)?;
         if let Some(requirements) = &rule.requirements {
-            store.collect(requirements, domain)?;
+            store.collect_reusing(requirements, domain, previous)?;
         }
     }
     Ok(store)

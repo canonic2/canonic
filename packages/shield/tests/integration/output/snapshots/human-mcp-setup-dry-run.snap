@@ -8,7 +8,7 @@ Agent integrations
   Claude Code unchanged · hooks PostToolUse, PostToolUseFailure, PreToolUse · MCP server shield
   Codex       added · hooks PermissionRequest, PostToolUse, PreToolUse · MCP server shield · Ask fallback allows requests
   Hooks and MCP run [SHIELD] for this project.
-  22 of 23 Shield MCP tools run without asking; ask each time: policy_apply.
+  23 of 24 Shield MCP tools run without asking; ask each time: policy_apply.
   Policy activation still requires your confirmation.
   Agents can read and write system temporary folders. Session files use each agent's supported mappings.
 

@@ -136,19 +136,26 @@ fn retain_decision(entry: &mut Value, details: &Value) {
 }
 
 fn bound_entry(row: &mut Value) {
-    let observations = row["observations"].as_array().cloned().unwrap_or_default();
+    let observations = row["observations"].as_array();
     let missing: std::collections::BTreeSet<_> = observations
-        .iter()
+        .into_iter()
+        .flatten()
         .flat_map(|e| e["details"]["missing"].as_array().into_iter().flatten())
         .filter_map(Value::as_str)
         .map(str::to_owned)
         .collect();
-    row["truncated"] =
-        json!(!missing.is_empty() || observations.iter().any(|e| e["truncated"] == true));
+    let truncated = !missing.is_empty()
+        || observations
+            .into_iter()
+            .flatten()
+            .any(|e| e["truncated"] == true);
+    row["truncated"] = json!(truncated);
     row["missing"] = json!(missing);
-    if row.to_string().len() <= 8192 {
+    if crate::json::fits(row, 8192) {
         return;
     }
+    let observations = row["observations"].take();
+    let observations = observations.as_array().map_or(&[][..], Vec::as_slice);
     row["observations"] = json!(
         observations
             .first()
@@ -157,20 +164,20 @@ fn bound_entry(row: &mut Value) {
             .collect::<Vec<_>>()
     );
     mark_missing(row, "intermediate_observations");
-    if row.to_string().len() > 8192 {
+    if !crate::json::fits(row, 8192) {
         row["observations"] = json!([]);
         mark_missing(row, "observation_details");
     }
-    if row.to_string().len() > 8192 {
+    if !crate::json::fits(row, 8192) {
         row["evaluation"] = json!({"decision":row["evaluation"]["decision"],"revision":row["evaluation"]["revision"]});
         mark_missing(row, "full_evaluation");
     }
-    if row.to_string().len() > 8192 {
+    if !crate::json::fits(row, 8192) {
         row["request"] = Value::Null;
         row["command"] = Value::Null;
         mark_missing(row, "complete_input");
     }
-    if row.to_string().len() > 8192 {
+    if !crate::json::fits(row, 8192) {
         if row["outcome"].is_object() {
             row["outcome"] = json!({"status":row["outcome"]["status"],"exit_code":row["outcome"]["exit_code"],"evidence":row["outcome"]["evidence"]});
         }

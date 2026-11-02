@@ -76,6 +76,16 @@ fn shown_requests_carry_their_creation_time_and_policy_basis_without_operands() 
     let id = pending(&context, &evidence, &resource);
     let (read, shown) = review::approvals::request_view(&context, &id).unwrap();
     assert!(!read);
+    let state = Store::open(Path::new(&context.project_root))
+        .unwrap()
+        .read_checkpoint()
+        .unwrap();
+    let expiry = state.run_requests[0].pending_expires_at_ms;
+    assert!(inspect_from(&state, Some(&id), expiry - 1).is_ok());
+    assert!(matches!(
+        inspect_from(&state, Some(&id), expiry),
+        Err(Error::Missing)
+    ));
     assert!(shown["created_at_ms"].as_u64().is_some(), "{shown}");
     let policy = &shown["policy"];
     assert_eq!(policy["decision"], "ask", "{shown}");
@@ -94,6 +104,31 @@ fn shown_requests_carry_their_creation_time_and_policy_basis_without_operands() 
     assert_eq!(listed["requests"][0]["policy"], *policy, "{listed}");
     // The summary is review context: the stored binding still validates.
     authorize(&operator(&context), &id, 300, None, false).unwrap();
+}
+
+#[test]
+fn authorization_recovers_a_corrupt_plan_before_the_grant_transaction() {
+    let (_root, context, evidence, resource) = fixture();
+    let id = pending(&context, &evidence, &resource);
+    let status = review::runtime::status(&context).unwrap();
+    let cache = &status["compiled_cache"];
+    let path = std::path::PathBuf::from(cache["directory"].as_str().unwrap())
+        .join("compiled")
+        .join(cache["project_key"].as_str().unwrap())
+        .join(format!("{}.bin", cache["plan_key"].as_str().unwrap()));
+    std::fs::write(path, b"corrupt derived plan").unwrap();
+    assert_eq!(
+        authorize(&operator(&context), &id, 300, None, false).unwrap()["status"],
+        "approved"
+    );
+    assert_eq!(
+        review::runtime::status(&context).unwrap()["active"]["activation_id"],
+        status["active"]["activation_id"]
+    );
+    Project::open(Path::new(&context.project_root))
+        .unwrap()
+        .snapshot()
+        .unwrap();
 }
 
 #[test]

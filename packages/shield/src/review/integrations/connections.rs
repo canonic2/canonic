@@ -1,5 +1,5 @@
 //! Active project connection diagnostics, separate from native hook ownership.
-use super::{Context, Path, Registration, Value, json, review, verify_mcp_connection};
+use super::{Path, Registration, Value, json, review, verify_mcp_connection};
 use crate::mcp_connections::{Connection, Transport, launcher::Binding};
 
 pub(super) fn projected(
@@ -39,7 +39,7 @@ pub(crate) fn mcp_projection(
         return Ok(connection.transport.clone());
     }
     crate::mcp_connections::launcher::private_state(root)?;
-    let state = review::project::load(&review::open(root)?)?;
+    let state = review::project::checkpoint(&review::open(root)?)?;
     if super::pending(&state.operator)?.is_some() {
         return Err(super::Error::Invalid("private MCP setup requires repair"));
     }
@@ -57,7 +57,7 @@ pub(crate) fn resolve_mcp_token(
         return Err(super::Error::Invalid("invalid private MCP token"));
     }
     crate::mcp_connections::launcher::private_state(root)?;
-    let state = review::project::load(&review::open(root)?)?;
+    let state = review::project::checkpoint(&review::open(root)?)?;
     if super::pending(&state.operator)?.is_some() {
         return Err(super::Error::Invalid("private MCP setup requires repair"));
     }
@@ -77,13 +77,13 @@ pub(crate) fn resolve_mcp_token(
 }
 
 pub(super) fn diagnose(
-    context: &Context,
+    root: &Path,
+    snapshot: Option<&review::runtime::consumer::Snapshot>,
     registered: Option<&Registration>,
     diagnostics: &mut Vec<&'static str>,
 ) -> Vec<Value> {
-    let root = Path::new(&context.project_root);
     let mut rows = Vec::new();
-    if let Ok(snapshot) = review::runtime::consumer::load_cached(context, &|| Ok(())) {
+    if let Some(snapshot) = snapshot {
         if let Some(registration) = registered {
             for (agent, owned) in &registration.connections {
                 for alias in owned["entries"]

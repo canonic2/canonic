@@ -1,6 +1,7 @@
 //! Exercises strict candidate contracts and exact lock binding through the public API.
 
 use super::*;
+use crate::policy::Scope;
 use serde_json::{Value, json};
 
 fn config() -> Value {
@@ -488,8 +489,14 @@ fn revising_a_bundle_edits_only_the_layer_that_changed() {
         .as_array_mut()
         .unwrap()
         .push(json!(crate::test_support::absolute("/acme/mine")));
-    let revised =
-        json!(Bundle::revise(&previous, &merged, &[pack()], Some(RULES), None, &[]).unwrap());
+    let (revised, captured) =
+        Bundle::revise_prepared(&previous, &merged, &[pack()], Some(RULES), None, &[], None)
+            .unwrap();
+    let prepared = Evaluator::new(vec![(Scope::Project, captured)]).unwrap();
+    let decoded = Evaluator::new(vec![(Scope::Project, revised.snapshot().unwrap())]).unwrap();
+    assert_eq!(prepared.revision(), decoded.revision());
+    assert_eq!(prepared.compiled_bytes(), decoded.compiled_bytes());
+    let revised = json!(revised);
     assert_eq!(revised["config"], SHARED);
     assert_eq!(revised["rules"], RULES);
     assert_eq!(

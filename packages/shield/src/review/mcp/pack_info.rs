@@ -285,7 +285,7 @@ fn summary(data: &Value, reference: &str) -> Result<Value, Error> {
 
 fn bound_summary(result: &mut Value) -> Result<(), Error> {
     // Never replace a large summary with an unbounded full document.
-    if result.to_string().len() > SUMMARY_BYTES {
+    if !crate::json::fits(&result, SUMMARY_BYTES) {
         for profile in PROFILES {
             result["profiles"][profile]
                 .as_object_mut()
@@ -296,7 +296,7 @@ fn bound_summary(result: &mut Value) -> Result<(), Error> {
             .ok_or(Error::Invalid("invalid summary"))?
             .push(json!("profile_examples"));
         result["truncated"] = json!(true);
-        if result.to_string().len() <= SUMMARY_BYTES {
+        if crate::json::fits(&result, SUMMARY_BYTES) {
             return Ok(());
         }
         for field in [
@@ -316,7 +316,7 @@ fn bound_summary(result: &mut Value) -> Result<(), Error> {
                 missing.push(json!(field));
             }
             result["truncated"] = json!(true);
-            if result.to_string().len() <= SUMMARY_BYTES {
+            if crate::json::fits(&result, SUMMARY_BYTES) {
                 return Ok(());
             }
         }

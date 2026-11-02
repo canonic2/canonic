@@ -84,6 +84,79 @@ fn node_pack() -> String {
 }
 
 #[test]
+fn reused_matchers_do_not_reuse_variable_bindings_or_overrides() {
+    let source = document(
+        &[
+            "structured-rules-v1",
+            "argument-rules-v1",
+            "variables-v1",
+            "glob-v1",
+        ],
+        json!({"tool":{"type":"string","description":"Tool name"}}),
+        json!([
+            rule(
+                "inspect",
+                json!({"var":"tool"}),
+                json!({"kind":"prefix","values":["inspect"]}),
+                "allow"
+            ),
+            rule(
+                "family",
+                json!({"glob":"acme-*"}),
+                json!({"kind":"any"}),
+                "ask"
+            )
+        ]),
+        Value::Null,
+    );
+    let first = Pack::from_yaml_bound(&source, &bound(json!({"tool":"acme-old"})), false).unwrap();
+    let mut binding = bound(json!({"tool":"acme-new"}));
+    binding
+        .overrides
+        .insert("inspect".into(), Override::Decision(Decision::Deny));
+    let reused = Pack::from_yaml_reusing(&source, &binding, false, Some(&first)).unwrap();
+    let fresh = Pack::from_yaml_bound(&source, &binding, false).unwrap();
+    for command in [
+        ["acme-old", "inspect"],
+        ["acme-new", "inspect"],
+        ["acme-other", "inspect"],
+    ] {
+        assert_eq!(
+            json!(
+                evaluate(
+                    std::slice::from_ref(&reused),
+                    None,
+                    Profile::Recommended,
+                    &request(&command)
+                )
+                .unwrap()
+            ),
+            json!(
+                evaluate(
+                    std::slice::from_ref(&fresh),
+                    None,
+                    Profile::Recommended,
+                    &request(&command)
+                )
+                .unwrap()
+            ),
+        );
+    }
+    assert_eq!(decide(&first, &["acme-old", "inspect"]), Decision::Allow);
+    assert_eq!(decide(&reused, &["acme-old", "inspect"]), Decision::Ask);
+    assert_eq!(decide(&reused, &["acme-new", "inspect"]), Decision::Deny);
+    assert!(
+        Pack::from_yaml_reusing(
+            &source,
+            &bound(json!({"unknown":"acme"})),
+            false,
+            Some(&first)
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn unset_variables_leave_their_entries_inactive_and_packs_unchanged() {
     let pack = Pack::from_yaml(&node_pack()).unwrap();
     for command in [["npm", "install"], ["pnpm", "install"], ["yarn", "install"]] {
