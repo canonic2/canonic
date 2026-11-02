@@ -385,12 +385,12 @@ already have access to it; Box has no public distribution channel.
 
 For a service managed by Box, use `base: box://SERVICE/PATH`, for example
 `box://demo/dev`. In a trusted workspace, Workbench runs `box url list --json`
-from the space's root and uses that task's published direct endpoint. Box must
+from the space's root and uses that workspace's published direct endpoint. Box must
 be on `PATH` or in `~/.local/bin`; its recipe service needs a `route`.
-Run `box run demo --detach` from the task checkout, then refresh Workbench after a restart
+Run `box run demo --detach` from the workspace checkout, then refresh Workbench after a restart
 to discover its current port. Box owns startup, so omit `start` on this lens.
-Missing tasks, unready services and discovery failures appear as lens problems;
-Workbench never substitutes another task or a fixed port. This also works in
+Missing workspaces, unready services and discovery failures appear as lens problems;
+Workbench never substitutes another workspace or a fixed port. This also works in
 the standalone server. A `box://` base takes a lowercase service name with
 letters, digits or hyphens, followed by an optional path, without a query or fragment.
 
