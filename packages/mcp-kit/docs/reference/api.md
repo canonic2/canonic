@@ -14,6 +14,8 @@
 | Validate persisted task state | `task::Metadata`, `task::Snapshot`, `task::State`, `task::Timestamp`, `task::InputHistory` |
 | Encode task replies in another runtime | `RequestContext::encode_task` |
 | Inspect per-request metadata and retries | `Context::request_context`, `Session::request_context`, `RequestContext` |
+| Publish custom metadata and icons | `Metadata`, `MetadataError`, `Icon`, `IconTheme`; see [metadata](../guides/metadata.md) |
+| Inspect trace propagation | `RequestContext::metadata`, `RequestContext::trace_context`, `TraceContext` |
 | Set cache freshness and scope | `CachePolicy`, `CacheScope`, `ModernOptions` |
 | Publish resources and templates | `Resource`, `ResourceTemplate`, `ResourceCatalog::new`, `SessionOptions::resources` |
 | Return resource contents | `ResourceContents`, `ReadResourceResult`, `stdio::Outcome::Resource` |

@@ -35,6 +35,105 @@ fn reply(event: Inbound) -> Value {
 }
 
 #[test]
+fn metadata_requests_share_prepared_identity_and_allow_empty_result_metadata() {
+    let mut session = session();
+    let mut contexts = vec![];
+    for id in [1, 2] {
+        assert!(matches!(
+            session.receive_value(request(
+                id,
+                "tools/call",
+                json!({"name":"acme_echo"}),
+                json!({})
+            )),
+            Inbound::Tool { .. }
+        ));
+        contexts.push(session.request_context(&json!(id)).unwrap());
+    }
+    assert!(Arc::ptr_eq(&contexts[0].server, &contexts[1].server));
+    let context = RequestContext::parse(
+        &json!({"_meta":{CAPABILITIES_KEY:{}}}),
+        &ModernOptions::new(ServerInfo::new("acme", "1")),
+        "acme/custom",
+        None,
+        None,
+    )
+    .unwrap();
+    let bytes = context
+        .encode_success(&json!(1), &json!({"_meta":{},"value":true}), 4096, &|| {
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(
+        crate::json::parse(&bytes, 4096).unwrap()["result"]["value"],
+        true
+    );
+}
+
+#[test]
+fn metadata_client_display_fields_are_checked_without_dropping_unknown_fields() {
+    let options = ModernOptions::new(ServerInfo::new("acme", "1"));
+    let valid = json!({"name":"host","version":"1","description":"A host",
+        "websiteUrl":"https://example.com","icons":[{"src":"https://example.com/i"}],"custom":{"opaque":null}});
+    let params = json!({"_meta":{CAPABILITIES_KEY:{},CLIENT_KEY:valid}});
+    let context = RequestContext::parse(&params, &options, "acme/custom", None, None).unwrap();
+    assert_eq!(context.client_info.as_ref().unwrap(), &valid);
+    for (field, value) in [
+        ("description", json!(true)),
+        ("websiteUrl", json!("file:///example")),
+        ("icons", json!([{"src":"javascript:bad"}])),
+        ("title", json!("x".repeat(16385))),
+    ] {
+        let mut params = params.clone();
+        params["_meta"][CLIENT_KEY][field] = value;
+        assert!(RequestContext::parse(&params, &options, "acme/custom", None, None).is_err());
+    }
+}
+
+#[test]
+fn metadata_each_typed_domain_result_uses_the_merged_envelope() {
+    fn check(method: &str, result: &impl CompletePayload) {
+        let context = RequestContext::parse(
+            &json!({"_meta":{CAPABILITIES_KEY:{}}}),
+            &ModernOptions::new(ServerInfo::new("acme", "1")),
+            method,
+            None,
+            None,
+        )
+        .unwrap();
+        let bytes = context
+            .encode_success(&json!(1), result, 4096, &|| Ok(()))
+            .unwrap();
+        let value = crate::json::parse(&bytes, 4096).unwrap();
+        assert_eq!(value["result"]["_meta"]["com.acme/answer"], "yes");
+        assert_eq!(value["result"]["_meta"][SERVER_KEY]["name"], "acme");
+    }
+    let metadata = crate::Metadata::new(json!({"com.acme/answer":"yes"})).unwrap();
+    check(
+        "prompts/get",
+        &crate::GetPromptResult::new(None, vec![])
+            .unwrap()
+            .with_metadata(metadata.clone())
+            .unwrap(),
+    );
+    check(
+        "resources/read",
+        &crate::ReadResourceResult::new(vec![
+            crate::ResourceContents::text("acme://report", None, "Report").unwrap(),
+        ])
+        .unwrap()
+        .with_metadata(metadata.clone()),
+    );
+    check(
+        "completion/complete",
+        &crate::CompleteResult::new(vec![], None, None)
+            .unwrap()
+            .with_metadata(metadata)
+            .unwrap(),
+    );
+}
+
+#[test]
 fn discovery_is_optional_and_never_changes_legacy_readiness() {
     let mut session = session();
     let result = reply(session.receive_value(request(1, "server/discover", json!({}), json!({}))));

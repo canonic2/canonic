@@ -38,6 +38,7 @@ pub mod control;
 pub mod docs;
 pub mod elicitation;
 pub mod json;
+pub mod metadata;
 pub mod modern;
 pub mod prompt;
 pub mod resource;
@@ -55,6 +56,7 @@ pub use completion::{
 };
 pub use content::{AudioContent, ContentAnnotations, ContentError, Role};
 pub use control::{Control, Interrupted};
+pub use metadata::{Icon, IconTheme, Metadata, MetadataError, TraceContext};
 pub use modern::{CachePolicy, CacheScope, InputRequiredResult, ModernOptions, RequestContext};
 pub use prompt::{
     GetPromptResult, Prompt, PromptArgument, PromptCall, PromptCatalog, PromptError, PromptMessage,

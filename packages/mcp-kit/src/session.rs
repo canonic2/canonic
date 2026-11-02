@@ -76,15 +76,27 @@ impl Default for SessionOptions {
 }
 
 /// The server identity returned from initialization.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerInfo {
+    /// Optional implementation description.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Optional absolute HTTP/HTTPS website address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub website_url: Option<String>,
+    /// Optional validated display icons.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub icons: Vec<crate::Icon>,
     /// A stable server name.
     pub name: String,
     /// The server version.
     pub version: String,
     /// A display title.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// A few sentences on when and how to use the server.
+    #[serde(skip)]
     pub instructions: Option<String>,
 }
 
@@ -93,6 +105,9 @@ impl ServerInfo {
     #[must_use]
     pub fn new(name: impl Into<String>, version: impl Into<String>) -> Self {
         Self {
+            description: None,
+            website_url: None,
+            icons: vec![],
             name: name.into(),
             version: version.into(),
             title: None,
@@ -113,12 +128,51 @@ impl ServerInfo {
         self.instructions = Some(instructions.into());
         self
     }
+    pub(crate) fn identity(&self) -> Value {
+        // Only strings and validated icon descriptors are serialized.
+        serde_json::to_value(self).expect("server identity serialization is infallible")
+    }
+
+    fn validate(&self) -> Result<(), crate::MetadataError> {
+        use crate::MetadataError;
+        if [&self.name, &self.version]
+            .iter()
+            .any(|s| s.is_empty() || s.len() > MAX_CLIENT_FIELD_BYTES || s.contains('\0'))
+        {
+            return Err(MetadataError::Field("implementation identity"));
+        }
+        if [
+            &self.title,
+            &self.description,
+            &self.website_url,
+            &self.instructions,
+        ]
+        .into_iter()
+        .flatten()
+        .any(|s| s.len() > 16384 || s.contains('\0'))
+        {
+            return Err(MetadataError::Field("implementation display"));
+        }
+        if self
+            .website_url
+            .as_deref()
+            .is_some_and(|url| !crate::metadata::website_url(url))
+        {
+            return Err(MetadataError::Field("websiteUrl"));
+        }
+        crate::metadata::validate_icons(&self.icons)?;
+        json::measure(self, 128 * 1024, &|| Ok(()))
+            .map_err(|_| MetadataError::Limit("implementation"))?;
+        Ok(())
+    }
 }
 
 /// What the client declared during initialization. It is self-reported and
 /// identifies no user.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Client {
+    /// Complete validated self-reported identity, including unknown fields.
+    pub info: Value,
     /// `clientInfo.name`.
     pub name: String,
     /// `clientInfo.version`.
@@ -274,6 +328,7 @@ enum Phase {
 /// has cancelled that request.
 #[derive(Debug)]
 pub struct Session {
+    identity: Arc<Value>,
     subscriptions: HashMap<String, subscriptions::Stream>,
     catalog: Arc<Catalog>,
     options: SessionOptions,
@@ -304,7 +359,14 @@ impl Session {
     #[must_use]
     pub fn new(catalog: Arc<Catalog>, mut options: SessionOptions) -> Self {
         let configuration_error = configure(&mut options).err();
+        let identity = Arc::new(
+            options
+                .modern
+                .as_ref()
+                .map_or(Value::Null, |options| options.server.identity()),
+        );
         Self {
+            identity,
             subscriptions: HashMap::new(),
             catalog,
             options,
@@ -439,10 +501,13 @@ impl Session {
                 );
             }
         };
-        let mut server = json!({"name": info.name, "version": info.version});
-        if let Some(title) = &info.title {
-            server["title"] = json!(title);
+        if info.validate().is_err() {
+            return self.reject_initialize(
+                id,
+                &RpcError::new(rpc::INTERNAL_ERROR, "Invalid server identity"),
+            );
         }
+        let server = info.identity();
         let mut result = json!({
             "protocolVersion": client.protocol_version,
             "capabilities": {"tools": {"listChanged": false}},
@@ -829,7 +894,20 @@ impl Session {
                     .with_data(json!({"requested":version,"supported":supported})),
             );
         };
-        let context = match crate::RequestContext::parse(
+        let cache_override = if method == "resources/list" && self.options.skills.is_some() {
+            Some(options.resources_cache.merged(options.skills_cache))
+        } else if method == "resources/read"
+            && self
+                .options
+                .skills
+                .as_ref()
+                .is_some_and(|skills| skills.owns(params["uri"].as_str().unwrap_or_default()))
+        {
+            Some(options.skills_cache)
+        } else {
+            None
+        };
+        let context = match crate::RequestContext::parse_prepared(
             &params,
             options,
             method,
@@ -841,22 +919,11 @@ impl Session {
                         .and_then(|name| self.catalog.result_schema(name))
                 })
                 .flatten(),
+            self.identity.clone(),
+            cache_override,
         ) {
             Ok(context) => context,
             Err(error) => return failure(error),
-        };
-        let context = if method == "resources/list" && self.options.skills.is_some() {
-            context.with_cache(options.resources_cache.merged(options.skills_cache))
-        } else if method == "resources/read"
-            && self
-                .options
-                .skills
-                .as_ref()
-                .is_some_and(|skills| skills.owns(params["uri"].as_str().unwrap_or_default()))
-        {
-            context.with_cache(options.skills_cache)
-        } else {
-            context
         };
         let event = if method.starts_with("subscriptions/") {
             self.listen(id.clone(), method, &params)
@@ -1093,28 +1160,11 @@ fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
             "Tasks methods and identifier are reserved".into(),
         ));
     }
-    if let Some(modern) = &options.modern {
-        let info = json!({"name":modern.server.name,"version":modern.server.version,"title":modern.server.title});
-        if json::measure(&info, 16384, &|| Ok(())).is_err()
-            || modern
-                .server
-                .instructions
-                .as_ref()
-                .is_some_and(|text| text.len() > 16384)
-        {
-            return Err(ConfigurationError(
-                "modern server metadata exceeds its budget".into(),
-            ));
-        }
-    }
     if let Some(modern) = &options.modern
-        && (modern.server.name.is_empty()
-            || modern.server.version.is_empty()
-            || modern.server.name.len() > MAX_CLIENT_FIELD_BYTES
-            || modern.server.version.len() > MAX_CLIENT_FIELD_BYTES)
+        && modern.server.validate().is_err()
     {
         return Err(ConfigurationError(
-            "modern server identity is invalid".into(),
+            "modern server metadata is invalid or exceeds its budget".into(),
         ));
     }
     if let Some(skills) = &options.skills {
@@ -1148,6 +1198,7 @@ fn client(params: &Value) -> Result<Client, RpcError> {
         .ok_or_else(invalid)?;
     let capabilities = &params["capabilities"];
     let info = &params["clientInfo"];
+    crate::metadata::implementation(info).map_err(|_| invalid())?;
     let (Some(name), Some(version)) = (info["name"].as_str(), info["version"].as_str()) else {
         return Err(invalid());
     };
@@ -1171,6 +1222,7 @@ fn client(params: &Value) -> Result<Client, RpcError> {
             elicitation.is_empty() || elicitation.get("form").is_some_and(Value::is_object)
         });
     Ok(Client {
+        info: info.clone(),
         name: name.to_owned(),
         version: version.to_owned(),
         protocol_version: protocol_version.to_owned(),

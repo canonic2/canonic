@@ -1013,8 +1013,7 @@ fn settle(
         Ok(Outcome::Resource(result)) => encoded(id, &result, limit, context),
         Ok(Outcome::Bundled(read)) => encoded(id, read.result(), limit, context),
         Ok(Outcome::ResourceWithCache(result, policy)) => {
-            let selected = context.map(|context| context.with_cache(policy));
-            encoded(id, &result, limit, selected.as_deref())
+            encoded_with_cache(id, &result, limit, context, Some(policy))
         }
         Ok(Outcome::ResourceNotFound(uri)) => {
             let code = if context.is_some() {
@@ -1037,7 +1036,7 @@ fn settle(
         },
         Ok(Outcome::Method(Ok(value))) => {
             if context.is_some()
-                && ["resultType", "_meta", "ttlMs", "cacheScope"]
+                && ["resultType", "ttlMs", "cacheScope"]
                     .iter()
                     .any(|key| value.get(*key).is_some())
             {
@@ -1079,9 +1078,19 @@ fn encoded(
     limit: usize,
     context: Option<&crate::RequestContext>,
 ) -> Finish {
+    encoded_with_cache(id, result, limit, context, None)
+}
+
+fn encoded_with_cache(
+    id: &Value,
+    result: &(impl crate::modern::CompletePayload + ?Sized),
+    limit: usize,
+    context: Option<&crate::RequestContext>,
+    cache: Option<crate::CachePolicy>,
+) -> Finish {
     let encoded = context.map_or_else(
         || rpc::encode_success(id, result, limit, &|| Ok(())),
-        |context| context.encode_success(id, result, limit, &|| Ok(())),
+        |context| context.encode_with_cache(id, result, cache, limit, &|| Ok(())),
     );
     match encoded {
         Err(EncodeError::ValidationLimit) => Finish::Reply(rpc::failure(

@@ -220,6 +220,7 @@ fn prompts_results_preserve_content_and_check_legacy_and_encoding_bounds() {
             data: "bad".into(),
             mime_type: "image/png".into(),
             annotations: None,
+            meta: None,
         },
         Content::image(&[1], "text/plain"),
         Content::image(&[1], "image/png/extra"),

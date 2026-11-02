@@ -9,6 +9,7 @@ use crate::{
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
+mod envelope;
 mod errors;
 #[cfg(test)]
 mod tests;
@@ -35,6 +36,14 @@ mod sealed {
 /// Supported domain payloads for modern complete-result encoding.
 /// Custom method payloads use a JSON object without protocol-owned fields.
 pub trait CompletePayload: Serialize + sealed::Payload {
+    /// Serializes domain fields directly, excluding top-level metadata.
+    #[doc(hidden)]
+    fn write_fields<M: serde::ser::SerializeMap>(&self, map: &mut M) -> Result<(), M::Error>;
+    /// Custom metadata merged with the protocol envelope without duplicate keys.
+    #[doc(hidden)]
+    fn metadata_map(&self) -> Option<&serde_json::Map<String, Value>> {
+        None
+    }
     /// Whether this payload is a domain object without reserved envelope fields.
     fn valid_payload(&self) -> bool;
     /// Typed tool data, used when an admitted call carries an output contract.
@@ -60,6 +69,12 @@ pub trait CompletePayload: Serialize + sealed::Payload {
 }
 
 impl CompletePayload for crate::CompleteResult {
+    fn write_fields<M: serde::ser::SerializeMap>(&self, map: &mut M) -> Result<(), M::Error> {
+        map.serialize_entry("completion", &self.completion)
+    }
+    fn metadata_map(&self) -> Option<&serde_json::Map<String, Value>> {
+        self.meta.as_ref().map(crate::Metadata::as_map)
+    }
     fn valid_payload(&self) -> bool {
         true
     }
@@ -69,6 +84,15 @@ impl CompletePayload for crate::CompleteResult {
 }
 
 impl CompletePayload for crate::GetPromptResult {
+    fn write_fields<M: serde::ser::SerializeMap>(&self, map: &mut M) -> Result<(), M::Error> {
+        if let Some(description) = &self.description {
+            map.serialize_entry("description", description)?;
+        }
+        map.serialize_entry("messages", &self.messages)
+    }
+    fn metadata_map(&self) -> Option<&serde_json::Map<String, Value>> {
+        self.meta.as_ref().map(crate::Metadata::as_map)
+    }
     fn valid_payload(&self) -> bool {
         true
     }
@@ -78,14 +102,40 @@ impl CompletePayload for crate::GetPromptResult {
 }
 
 impl CompletePayload for Value {
+    fn write_fields<M: serde::ser::SerializeMap>(&self, map: &mut M) -> Result<(), M::Error> {
+        if let Some(fields) = self.as_object() {
+            for (key, value) in fields {
+                if key != "_meta" {
+                    map.serialize_entry(key, value)?;
+                }
+            }
+        }
+        Ok(())
+    }
+    fn metadata_map(&self) -> Option<&serde_json::Map<String, Value>> {
+        self.get("_meta").and_then(Value::as_object)
+    }
     fn valid_payload(&self) -> bool {
         self.is_object()
-            && ["resultType", "_meta", "ttlMs", "cacheScope"]
+            && self.get("_meta").is_none_or(|meta| {
+                crate::Metadata::validate(meta, crate::metadata::MAX_METADATA_BYTES, 16).is_ok()
+            })
+            && ["resultType", "ttlMs", "cacheScope"]
                 .iter()
                 .all(|key| self.get(*key).is_none())
     }
 }
 impl CompletePayload for crate::ToolResult {
+    fn write_fields<M: serde::ser::SerializeMap>(&self, map: &mut M) -> Result<(), M::Error> {
+        map.serialize_entry("content", &self.content)?;
+        if let Some(value) = &self.structured_content {
+            map.serialize_entry("structuredContent", value)?;
+        }
+        map.serialize_entry("isError", &self.is_error)
+    }
+    fn metadata_map(&self) -> Option<&serde_json::Map<String, Value>> {
+        self.meta.as_ref().map(crate::Metadata::as_map)
+    }
     fn valid_payload(&self) -> bool {
         true
     }
@@ -94,6 +144,12 @@ impl CompletePayload for crate::ToolResult {
     }
 }
 impl CompletePayload for crate::ReadResourceResult {
+    fn write_fields<M: serde::ser::SerializeMap>(&self, map: &mut M) -> Result<(), M::Error> {
+        map.serialize_entry("contents", &self.contents)
+    }
+    fn metadata_map(&self) -> Option<&serde_json::Map<String, Value>> {
+        self.meta.as_ref().map(crate::Metadata::as_map)
+    }
     fn valid_payload(&self) -> bool {
         true
     }
@@ -195,6 +251,8 @@ impl ModernOptions {
 /// Immutable context captured for one admitted modern request.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RequestContext {
+    metadata: crate::Metadata,
+    trace: crate::TraceContext,
     /// The admitted operation, used to validate interim-result eligibility.
     pub method: String,
     /// This request's protocol revision.
@@ -207,7 +265,7 @@ pub struct RequestContext {
     pub request_state: Option<String>,
     /// Structurally validated input responses, if supplied.
     pub input_responses: Option<Value>,
-    server: Value,
+    server: Arc<Value>,
     cache: Option<CachePolicy>,
     tasks: Option<crate::task::TaskOptions>,
     task_id: Option<String>,
@@ -215,6 +273,7 @@ pub struct RequestContext {
 }
 
 impl RequestContext {
+    #[cfg(test)]
     pub(crate) fn parse(
         params: &Value,
         options: &ModernOptions,
@@ -222,17 +281,34 @@ impl RequestContext {
         tasks: Option<&crate::task::TaskOptions>,
         result_schema: Option<crate::ResultSchema>,
     ) -> Result<Arc<Self>, RpcError> {
+        Self::parse_prepared(
+            params,
+            options,
+            method,
+            tasks,
+            result_schema,
+            Arc::new(options.server.identity()),
+            None,
+        )
+    }
+
+    pub(crate) fn parse_prepared(
+        params: &Value,
+        options: &ModernOptions,
+        method: &str,
+        tasks: Option<&crate::task::TaskOptions>,
+        result_schema: Option<crate::ResultSchema>,
+        server: Arc<Value>,
+        cache_override: Option<CachePolicy>,
+    ) -> Result<Arc<Self>, RpcError> {
         let meta = &params["_meta"];
         let capabilities = capabilities(&meta[CAPABILITIES_KEY])?;
-        bounded(meta, 1024 * 1024, 32)?;
+        let metadata =
+            crate::Metadata::request(meta).map_err(|error| invalid(&error.to_string()))?;
+        let trace = crate::TraceContext::from_metadata(metadata.clone());
         let client_info = meta.get(CLIENT_KEY).cloned();
         if let Some(info) = &client_info
-            && (!info.is_object()
-                || ["name", "version"].iter().any(|field| {
-                    info[field]
-                        .as_str()
-                        .is_none_or(|s| s.len() > crate::MAX_CLIENT_FIELD_BYTES)
-                }))
+            && crate::metadata::implementation(info).is_err()
         {
             return Err(invalid("Invalid client identity"));
         }
@@ -261,11 +337,9 @@ impl RequestContext {
             "resources/read" => Some(options.reads_cache),
             _ => None,
         };
-        let mut server = json!({"name":options.server.name,"version":options.server.version});
-        if let Some(title) = &options.server.title {
-            server["title"] = json!(title);
-        }
         Ok(Arc::new(Self {
+            metadata,
+            trace,
             method: method.into(),
             protocol_version: PROTOCOL_VERSION.into(),
             capabilities: Value::Object(capabilities.clone()),
@@ -273,7 +347,7 @@ impl RequestContext {
             request_state,
             input_responses,
             server,
-            cache,
+            cache: cache.map(|cache| cache_override.unwrap_or(cache)),
             tasks: tasks.cloned(),
             result_schema,
             task_id: crate::task::method(method)
@@ -391,12 +465,15 @@ impl RequestContext {
             .with_data(json!({"requiredCapabilities":{"elicitation":{"form":{}}}})))
     }
 
-    pub(crate) fn with_cache(&self, cache: CachePolicy) -> Arc<Self> {
-        let mut context = self.clone();
-        if context.cache.is_some() {
-            context.cache = Some(cache);
-        }
-        Arc::new(context)
+    /// Complete immutable request metadata; extension values grant no authority.
+    #[must_use]
+    pub fn metadata(&self) -> &crate::Metadata {
+        &self.metadata
+    }
+    /// Validated propagation context belonging only to this request.
+    #[must_use]
+    pub fn trace_context(&self) -> &crate::TraceContext {
+        &self.trace
     }
 
     /// Whether this tool call may return a task. Check before reserving or launching work.
@@ -475,7 +552,7 @@ impl RequestContext {
                 json!({"resultType":"complete"})
             }
         };
-        value["_meta"] = json!({SERVER_KEY:self.server});
+        value["_meta"] = json!({SERVER_KEY:self.server.as_ref()});
         rpc::encode_success(id, &value, limit, check)
     }
 
@@ -527,17 +604,17 @@ impl RequestContext {
         limit: usize,
         check: &dyn Fn() -> Result<(), Interrupted>,
     ) -> Result<Vec<u8>, EncodeError> {
-        #[derive(Serialize)]
-        struct ResultEnvelope<'a, T: ?Sized> {
-            #[serde(rename = "resultType")]
-            kind: &'static str,
-            #[serde(flatten)]
-            result: &'a T,
-            #[serde(rename = "_meta")]
-            meta: Value,
-            #[serde(flatten)]
-            cache: Option<CachePolicy>,
-        }
+        self.encode_with_cache(id, result, None, limit, check)
+    }
+
+    pub(crate) fn encode_with_cache(
+        &self,
+        id: &Value,
+        result: &(impl CompletePayload + ?Sized),
+        cache: Option<CachePolicy>,
+        limit: usize,
+        check: &dyn Fn() -> Result<(), Interrupted>,
+    ) -> Result<Vec<u8>, EncodeError> {
         if crate::task::method(&self.method) || !result.valid_payload() {
             return Err(EncodeError::Invalid);
         }
@@ -562,24 +639,7 @@ impl RequestContext {
                     }
                 })?;
         }
-        let cache = self.cache.map(|policy| {
-            if self.request_state.is_some() || self.input_responses.is_some() {
-                CachePolicy::default()
-            } else {
-                policy
-            }
-        });
-        rpc::encode_success(
-            id,
-            &ResultEnvelope {
-                kind: "complete",
-                result,
-                meta: json!({SERVER_KEY:self.server}),
-                cache,
-            },
-            limit,
-            check,
-        )
+        envelope::encode(self, id, result, cache, limit, check)
     }
 
     /// Encodes an input-required reply with this request's server identity.
@@ -602,7 +662,10 @@ impl RequestContext {
 
     pub(crate) fn complete_value(&self, mut result: Value) -> Value {
         result["resultType"] = json!("complete");
-        result["_meta"] = json!({SERVER_KEY:self.server});
+        if !result["_meta"].is_object() {
+            result["_meta"] = json!({});
+        }
+        result["_meta"][SERVER_KEY] = self.server.as_ref().clone();
         if let Some(cache) = self.cache {
             result["ttlMs"] = json!(cache.ttl_ms);
             result["cacheScope"] = json!(cache.cache_scope);
@@ -620,7 +683,7 @@ impl RequestContext {
             self.require_form()?;
         }
         let mut value = result.value.clone();
-        value["_meta"] = json!({SERVER_KEY:self.server});
+        value["_meta"] = json!({SERVER_KEY:self.server.as_ref()});
         Ok(value)
     }
 }

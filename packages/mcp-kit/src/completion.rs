@@ -185,12 +185,14 @@ pub enum CompletionError {
 /// Validated immutable completion result, preserving consumer relevance order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CompleteResult {
-    completion: Suggestions,
+    pub(crate) completion: Suggestions,
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub(crate) meta: Option<crate::Metadata>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Suggestions {
+pub(crate) struct Suggestions {
     values: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     total: Option<u64>,
@@ -222,6 +224,7 @@ impl CompleteResult {
             }
         }
         let result = Self {
+            meta: None,
             completion: Suggestions {
                 values,
                 total,
@@ -244,6 +247,16 @@ impl CompleteResult {
         check: &dyn Fn() -> Result<(), crate::Interrupted>,
     ) -> Result<Vec<u8>, json::EncodeError> {
         rpc::encode_success(id, self, limit, check)
+    }
+    /// Attaches custom metadata within the complete result byte budget.
+    ///
+    /// # Errors
+    /// Returns a limit error for an excessive combined payload.
+    pub fn with_metadata(mut self, meta: crate::Metadata) -> Result<Self, CompletionError> {
+        self.meta = Some(meta);
+        json::measure(&self, MAX_BYTES, &|| Ok(()))
+            .map_err(|_| CompletionError::Limit("result bytes"))?;
+        Ok(self)
     }
 }
 

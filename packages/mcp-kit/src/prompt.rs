@@ -68,6 +68,12 @@ impl PromptArgument {
 /// A discoverable prompt definition; rendering belongs to the consumer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Prompt {
+    /// Optional extension metadata.
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<crate::Metadata>,
+    /// Optional validated display icons.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub icons: Vec<crate::Icon>,
     /// Unique prompt identity.
     pub name: String,
     /// Optional display title.
@@ -85,6 +91,8 @@ impl Prompt {
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self {
+            meta: None,
+            icons: vec![],
             name: name.into(),
             title: None,
             description: None,
@@ -119,6 +127,8 @@ impl PromptCatalog {
         let mut names = HashMap::new();
         let mut arguments = Vec::with_capacity(prompts.len());
         for (index, prompt) in prompts.iter().enumerate() {
+            crate::metadata::validate_icons(&prompt.icons)
+                .map_err(|_| PromptError::Field("icons"))?;
             metadata(
                 &prompt.name,
                 prompt.title.as_deref(),
@@ -268,9 +278,11 @@ pub struct PromptMessage {
 /// Validated immutable prompt messages; encoding does not revalidate content.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GetPromptResult {
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub(crate) meta: Option<crate::Metadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
-    messages: Vec<PromptMessage>,
+    pub(crate) description: Option<String>,
+    pub(crate) messages: Vec<PromptMessage>,
     #[serde(skip)]
     legacy_compatible: bool,
 }
@@ -313,6 +325,7 @@ impl GetPromptResult {
             .iter()
             .all(|m| !matches!(m.content, Content::ResourceLink { .. }));
         let result = Self {
+            meta: None,
             description,
             messages,
             legacy_compatible,
@@ -335,6 +348,16 @@ impl GetPromptResult {
             return Err(json::EncodeError::Invalid);
         }
         rpc::encode_success(id, self, limit, check)
+    }
+    /// Attaches custom metadata while preserving the prompt result byte budget.
+    ///
+    /// # Errors
+    /// Returns a result limit error if the combined payload is too large.
+    pub fn with_metadata(mut self, meta: crate::Metadata) -> Result<Self, PromptError> {
+        self.meta = Some(meta);
+        json::measure(&self, MAX_BYTES, &|| Ok(()))
+            .map_err(|_| PromptError::Limit("result bytes"))?;
+        Ok(self)
     }
 }
 

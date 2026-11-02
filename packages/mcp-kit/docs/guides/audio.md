@@ -96,10 +96,10 @@ Other runtimes use the same `ToolResult` through `rpc::encode_success` for legac
 calls or the admitted request context's `encode_success` for modern calls.
 Keep your output limit and cancellation checkpoint, and send only when
 `Session::finish` returns true; see [Drive the session yourself](session.md).
-Prompt methods are not implemented yet; this guide describes tool results and
-resource discovery.
+Prompt messages use the same content variants; see [prompts](prompts.md).
 
 The `Content::Text`, `Image`, `Audio` and `Resource` variants carry an optional
-`annotations` field; their builders initialize it to `None`. `Resource` and
-`ResourceTemplate` struct literals must also set `annotations`; their `new`
-constructors use `None`.
+`annotations` and `meta` fields; their builders initialize both to `None`.
+`Resource` and `ResourceTemplate` struct literals also set `annotations`, `meta`
+and `icons`; their `new` constructors use `None`, `None` and an empty vector.
+See [metadata](metadata.md) for extension values and icons.

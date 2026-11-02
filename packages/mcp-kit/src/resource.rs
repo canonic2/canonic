@@ -39,6 +39,17 @@ pub enum ResourceError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Resource {
+    /// Optional extension metadata.
+    #[serde(
+        default,
+        rename = "_meta",
+        deserialize_with = "crate::metadata::optional",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub meta: Option<crate::Metadata>,
+    /// Optional display icons.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub icons: Vec<crate::Icon>,
     /// Exact concrete URI.
     pub uri: String,
     /// Display name.
@@ -71,6 +82,9 @@ pub struct Resource {
 pub struct ResourceLink(Resource);
 
 impl ResourceLink {
+    pub(crate) fn set_metadata(&mut self, metadata: crate::Metadata) {
+        self.0.meta = Some(metadata);
+    }
     pub(crate) fn set_annotations(&mut self, annotations: crate::ContentAnnotations) {
         self.0.annotations = Some(annotations);
     }
@@ -79,6 +93,8 @@ impl ResourceLink {
     /// # Errors
     /// Returns [`ResourceError`] for invalid URI or metadata.
     pub fn new(resource: Resource) -> Result<Self, ResourceError> {
+        crate::metadata::validate_icons(&resource.icons)
+            .map_err(|_| ResourceError::Field("icons"))?;
         validate_uri(&resource.uri)?;
         metadata(
             &resource.name,
@@ -108,6 +124,8 @@ impl Resource {
     pub fn new(uri: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             uri: uri.into(),
+            meta: None,
+            icons: vec![],
             name: name.into(),
             title: None,
             description: None,
@@ -122,6 +140,12 @@ impl Resource {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceTemplate {
+    /// Optional extension metadata.
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<crate::Metadata>,
+    /// Optional display icons.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub icons: Vec<crate::Icon>,
     /// URI template, including variable expressions.
     pub uri_template: String,
     /// Display name.
@@ -146,6 +170,8 @@ impl ResourceTemplate {
     pub fn new(uri_template: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             uri_template: uri_template.into(),
+            meta: None,
+            icons: vec![],
             name: name.into(),
             title: None,
             description: None,
@@ -183,6 +209,8 @@ impl ResourceCatalog {
         }
         let mut seen = HashSet::new();
         for resource in &resources {
+            crate::metadata::validate_icons(&resource.icons)
+                .map_err(|_| ResourceError::Field("icons"))?;
             validate_uri(&resource.uri)?;
             metadata(
                 &resource.name,
@@ -196,6 +224,8 @@ impl ResourceCatalog {
         }
         let mut template_arguments = HashMap::new();
         for template in &templates {
+            crate::metadata::validate_icons(&template.icons)
+                .map_err(|_| ResourceError::Field("icons"))?;
             let parsed = validate_template(&template.uri_template)?;
             metadata(
                 &template.name,
@@ -354,6 +384,8 @@ pub fn not_found(uri: &str) -> RpcError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceContents {
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    meta: Option<crate::Metadata>,
     uri: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     mime_type: Option<String>,
@@ -413,6 +445,7 @@ impl ResourceContents {
         }
         Ok(Self {
             uri,
+            meta: None,
             mime_type,
             data: data(),
             raw_bytes,
@@ -436,7 +469,12 @@ impl<'de> Deserialize<'de> for ResourceContents {
             .remove("mimeType")
             .map(|value| string(Some(value), "mimeType"))
             .transpose()?;
-        match (fields.remove("text"), fields.remove("blob")) {
+        let meta = fields
+            .remove("_meta")
+            .map(serde_json::from_value::<crate::Metadata>)
+            .transpose()
+            .map_err(de::Error::custom)?;
+        let mut result = match (fields.remove("text"), fields.remove("blob")) {
             (Some(text), None) => {
                 Self::text(uri, mime_type, string(Some(text), "text")?).map_err(de::Error::custom)
             }
@@ -449,7 +487,9 @@ impl<'de> Deserialize<'de> for ResourceContents {
             _ => Err(de::Error::custom(
                 "resource requires exactly one of text or blob",
             )),
-        }
+        }?;
+        result.meta = meta;
+        Ok(result)
     }
 }
 
@@ -463,7 +503,9 @@ fn base64_size(blob: &str) -> Result<usize, ResourceError> {
 /// A validated resource read result, serializable without an intermediate JSON tree.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ReadResourceResult {
-    contents: Vec<ResourceContents>,
+    pub(crate) contents: Vec<ResourceContents>,
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub(crate) meta: Option<crate::Metadata>,
 }
 
 impl ReadResourceResult {
@@ -483,7 +525,30 @@ impl ReadResourceResult {
         {
             return Err(ResourceError::Limit("content bytes"));
         }
-        Ok(Self { contents })
+        Ok(Self {
+            contents,
+            meta: None,
+        })
+    }
+    /// Attaches bounded custom metadata; the encoder enforces the whole frame budget.
+    #[must_use]
+    pub fn with_metadata(mut self, meta: crate::Metadata) -> Self {
+        self.meta = Some(meta);
+        self
+    }
+}
+
+impl ResourceContents {
+    /// Attaches immutable metadata to these contents.
+    #[must_use]
+    pub fn with_metadata(mut self, meta: crate::Metadata) -> Self {
+        self.meta = Some(meta);
+        self
+    }
+    /// Metadata retained with these resource bytes.
+    #[must_use]
+    pub fn metadata(&self) -> Option<&crate::Metadata> {
+        self.meta.as_ref()
     }
 }
 

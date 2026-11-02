@@ -45,6 +45,12 @@ impl Annotations {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Tool {
+    /// Optional extension metadata.
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<crate::Metadata>,
+    /// Optional validated display icons.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub icons: Vec<crate::Icon>,
     /// The name callers use; see [`Catalog::new`] for the allowed characters.
     pub name: String,
     /// A display title.
@@ -72,6 +78,8 @@ impl Tool {
     ) -> Self {
         Self {
             name: name.into(),
+            meta: None,
+            icons: vec![],
             title: None,
             description: description.into(),
             input_schema,
@@ -143,6 +151,11 @@ impl Catalog {
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
         for tool in &tools {
+            crate::metadata::validate_icons(&tool.icons).map_err(|error| CatalogError::Schema {
+                tool: tool.name.clone(),
+                field: "icons",
+                problem: error.to_string(),
+            })?;
             if !valid_name(&tool.name) {
                 return Err(CatalogError::InvalidName(tool.name.clone()));
             }
@@ -421,6 +434,14 @@ pub enum Content {
     Text {
         /// The text.
         text: String,
+        /// Optional extension metadata.
+        #[serde(
+            default,
+            rename = "_meta",
+            deserialize_with = "crate::metadata::optional",
+            skip_serializing_if = "Option::is_none"
+        )]
+        meta: Option<crate::Metadata>,
         /// Optional audience, priority and modification hints.
         #[serde(
             default,
@@ -436,6 +457,14 @@ pub enum Content {
         /// The image's media type, such as `image/png`.
         #[serde(rename = "mimeType")]
         mime_type: String,
+        /// Optional extension metadata.
+        #[serde(
+            default,
+            rename = "_meta",
+            deserialize_with = "crate::metadata::optional",
+            skip_serializing_if = "Option::is_none"
+        )]
+        meta: Option<crate::Metadata>,
         /// Optional audience, priority and modification hints.
         #[serde(
             default,
@@ -449,6 +478,14 @@ pub enum Content {
         /// Validated base64 data and MIME metadata.
         #[serde(flatten)]
         audio: crate::AudioContent,
+        /// Optional extension metadata.
+        #[serde(
+            default,
+            rename = "_meta",
+            deserialize_with = "crate::metadata::optional",
+            skip_serializing_if = "Option::is_none"
+        )]
+        meta: Option<crate::Metadata>,
         /// Optional audience, priority and modification hints.
         #[serde(
             default,
@@ -468,6 +505,14 @@ pub enum Content {
     Resource {
         /// Validated contents; construction performs no I/O.
         resource: crate::resource::ResourceContents,
+        /// Optional extension metadata.
+        #[serde(
+            default,
+            rename = "_meta",
+            deserialize_with = "crate::metadata::optional",
+            skip_serializing_if = "Option::is_none"
+        )]
+        meta: Option<crate::Metadata>,
         /// Hints on the enclosing block, rather than nested resource contents.
         #[serde(
             default,
@@ -479,6 +524,29 @@ pub enum Content {
 }
 
 impl Content {
+    /// Attaches immutable extension metadata to this content block.
+    #[must_use]
+    pub fn with_metadata(mut self, metadata: crate::Metadata) -> Self {
+        match &mut self {
+            Self::Text { meta, .. }
+            | Self::Image { meta, .. }
+            | Self::Audio { meta, .. }
+            | Self::Resource { meta, .. } => *meta = Some(metadata),
+            Self::ResourceLink { link } => link.set_metadata(metadata),
+        }
+        self
+    }
+    /// Extension metadata on this block, distinct from embedded resource metadata.
+    #[must_use]
+    pub fn metadata(&self) -> Option<&crate::Metadata> {
+        match self {
+            Self::Text { meta, .. }
+            | Self::Image { meta, .. }
+            | Self::Audio { meta, .. }
+            | Self::Resource { meta, .. } => meta.as_ref(),
+            Self::ResourceLink { link } => link.resource().meta.as_ref(),
+        }
+    }
     /// An audio block from bounded raw bytes, without decoding its container.
     ///
     /// # Errors
@@ -486,6 +554,7 @@ impl Content {
     pub fn audio(bytes: &[u8], mime_type: impl Into<String>) -> Result<Self, crate::ContentError> {
         Ok(Self::Audio {
             audio: crate::AudioContent::new(bytes, mime_type)?,
+            meta: None,
             annotations: None,
         })
     }
@@ -532,6 +601,7 @@ impl Content {
     pub fn resource(resource: crate::resource::ResourceContents) -> Self {
         Self::Resource {
             resource,
+            meta: None,
             annotations: None,
         }
     }
@@ -541,6 +611,7 @@ impl Content {
     pub fn text(text: impl Into<String>) -> Self {
         Self::Text {
             text: text.into(),
+            meta: None,
             annotations: None,
         }
     }
@@ -551,6 +622,7 @@ impl Content {
         Self::Image {
             data: base64(bytes),
             mime_type: mime_type.into(),
+            meta: None,
             annotations: None,
         }
     }
@@ -566,6 +638,14 @@ impl Content {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolResult {
+    /// Optional result metadata, distinct from structured tool data.
+    #[serde(
+        default,
+        rename = "_meta",
+        deserialize_with = "crate::metadata::optional",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub meta: Option<crate::Metadata>,
     /// Content blocks in display order.
     pub content: Vec<Content>,
     /// Machine-readable data matching the tool's output schema, when it has one.
@@ -585,6 +665,7 @@ impl ToolResult {
     #[must_use]
     pub fn success(content: Vec<Content>) -> Self {
         Self {
+            meta: None,
             content,
             structured_content: None,
             is_error: false,
@@ -595,6 +676,7 @@ impl ToolResult {
     #[must_use]
     pub fn error(content: Vec<Content>) -> Self {
         Self {
+            meta: None,
             content,
             structured_content: None,
             is_error: true,
@@ -605,6 +687,7 @@ impl ToolResult {
     #[must_use]
     pub fn structured(value: Value, is_error: bool) -> Self {
         Self {
+            meta: None,
             content: vec![Content::text(value.to_string())],
             structured_content: Some(value),
             is_error,
@@ -615,6 +698,12 @@ impl ToolResult {
     #[must_use]
     pub fn with_content(mut self, content: Content) -> Self {
         self.content.push(content);
+        self
+    }
+    /// Attaches immutable custom result metadata; modern encoders refuse owned protocol keys.
+    #[must_use]
+    pub fn with_metadata(mut self, meta: crate::Metadata) -> Self {
+        self.meta = Some(meta);
         self
     }
 }

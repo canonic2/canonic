@@ -18,6 +18,9 @@ with a ready-to-use stdio driver or a core you can drive from your own runtime.
   cursors; legacy views include only compatible tools.
 - **Optional change subscriptions.** Modern hosts select catalog and resource
   updates, with bounded streams and a nonblocking consumer publication queue.
+- **Metadata and trace context.** Publish custom JSON, icons and display details;
+  inspect validated request-local trace and baggage strings in your own runtime.
+  See the [metadata guide](docs/guides/metadata.md).
 - **Resources and templates.** Serve guides, reports and binary artifacts by
   URI, with paginated catalogs and parameterized addresses.
 - **Optional prompts.** Publish user-selected conversation starters with checked

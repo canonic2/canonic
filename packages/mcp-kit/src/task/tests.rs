@@ -377,7 +377,14 @@ fn tasks_snapshots_restore_and_refuse_contradictions() {
     let states = vec![
         State::Working,
         State::InputRequired(Question::new(&ctx, "approval-1", "Continue?").unwrap()),
-        State::Completed(ToolResult::error(vec![Content::text("Build refused.")])),
+        State::Completed(
+            ToolResult::error(vec![Content::text("Build refused.").with_metadata(
+                crate::Metadata::new(json!({"com.acme/content":null})).unwrap(),
+            )])
+            .with_metadata(
+                crate::Metadata::new(json!({"com.acme/result":{"saved":true}})).unwrap(),
+            ),
+        ),
         State::Failed(RpcError::new(-32603, "Worker lost.")),
         State::Cancelled,
     ];

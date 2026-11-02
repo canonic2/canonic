@@ -8,6 +8,7 @@ mod docs;
 mod elicitation;
 mod fixture;
 mod lifecycle;
+mod metadata;
 mod modern;
 mod pagination;
 mod prompts;
