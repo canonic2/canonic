@@ -271,6 +271,8 @@ impl Evaluator {
     /// # Errors
     /// Rejects invalid composition or missing retained selected artifacts.
     pub fn new(inputs: Vec<(Scope, Snapshot)>) -> Result<Self, Error> {
+        let _trace = crate::diagnostics::trace::span("policy.prepare");
+        crate::diagnostics::trace::count("policy.preparations", 1);
         let [(scope, snapshot)]: [(Scope, Snapshot); 1] = inputs
             .try_into()
             .map_err(|_| Error::Contract("exactly one project candidate required"))?;

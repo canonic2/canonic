@@ -104,11 +104,12 @@ fn unique_pack_offers_deliver_shared_instructions_only_in_agent_context() {
     let instruction = claude.pack_offer_instruction().unwrap();
     let assert_offer = |text: &str| {
         assert_eq!(text.matches(instruction).count(), 1);
-        assert!(text.contains("policy_propose"), "{text}");
+        assert!(text.contains("Call pack_add with arguments"), "{text}");
+        assert!(!text.contains("Call policy_propose with change"), "{text}");
         assert!(text.contains("policy_apply"), "{text}");
-        assert!(text.contains("source_entry_id request-acme"), "{text}");
+        assert!(text.contains("Observed request request-acme"), "{text}");
         assert!(
-            text.contains(&json!({"kind":"pack_add","reference":"main/canonic/node"}).to_string()),
+            text.contains(&json!({"reference":"main/canonic/node"}).to_string()),
             "{text}"
         );
     };
@@ -180,6 +181,8 @@ fn installed_missing_and_ambiguous_metadata_do_not_produce_a_unique_install_offe
     let value = call(root, "codex", "node --version");
     let text = reason(&value);
     assert!(text.contains("Several available packs"), "{text}");
+    assert!(text.contains("Call pack_add with arguments"), "{text}");
+    assert!(!text.contains("Call policy_propose with change"), "{text}");
     assert!(text.find("main/acme/node").unwrap() < text.find("main/zeta/runtime").unwrap());
     assert!(!text.contains(r#""reference":"main/acme/node""#), "{text}");
     assert!(!value.to_string().contains("Briefly offer this rule pack"));
@@ -275,22 +278,21 @@ fn proposed_pack_keeps_the_enrolled_registry_and_publisher_identity() {
     let value = call(root, "claude", "npm install express@5");
     let text = advice(&value, "claude");
     assert!(text.contains("tools/acme/runtime"), "{text}");
-    let start = text.find("with change ").unwrap() + "with change ".len();
-    let end = start + text[start..].find(" and source_entry_id").unwrap();
-    let change: Value = serde_json::from_str(&text[start..end]).unwrap();
-    assert_eq!(
-        change,
-        json!({"kind":"pack_add","reference":"tools/acme/runtime"})
-    );
+    let start = text.find("with arguments ").unwrap() + "with arguments ".len();
+    let end = start + text[start..].find(" to collect").unwrap();
+    let arguments: Value = serde_json::from_str(&text[start..end]).unwrap();
+    assert_eq!(arguments, json!({"reference":"tools/acme/runtime"}));
     let mut mcp = context.clone();
     mcp.surface = "mcp".into();
     mcp.agent = Some("claude-code".into());
     mcp.connection_id = Some("acme".into());
-    let proposal = review::mcp::call(
+    let question = review::mcp::PackQuestion::prepare(&mcp, "pack_add", &arguments).unwrap();
+    assert!(!question.needs_input);
+    let proposal = question.propose(
         &mcp,
         &review::mcp::Connection::new("acme".into()),
-        "policy_propose",
-        &json!({"change":change,"agent_reason":"Review Node policy for this project"}),
+        &json!({}),
+        "acme-pack-offer",
         &|| Ok(()),
     );
     assert!(proposal["data"]["proposal_id"].is_string(), "{proposal}");

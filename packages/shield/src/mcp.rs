@@ -6,6 +6,7 @@ mod confirmation;
 mod elicitation;
 mod frame_log;
 mod messages;
+mod prompts;
 mod response;
 mod skills;
 #[cfg(test)]
@@ -33,6 +34,7 @@ pub(crate) struct Server {
     connection: Arc<crate::review::mcp::Connection>,
     confirmations: Mutex<confirmation::Confirmations>,
     questions: Mutex<elicitation::Questions>,
+    log: Option<Arc<crate::diagnostics::Log>>,
 }
 
 impl Server {
@@ -56,6 +58,7 @@ impl Server {
             connection,
             confirmations: Mutex::new(confirmation::Confirmations::default()),
             questions: Mutex::new(elicitation::Questions::default()),
+            log: None,
         })
     }
 
@@ -64,6 +67,11 @@ impl Server {
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
+    }
+
+    pub(crate) fn with_log(mut self, log: Arc<crate::diagnostics::Log>) -> Self {
+        self.log = Some(log);
+        self
     }
 
     fn review_for_request(&self, context: &stdio::Context) -> Arc<crate::review::Context> {
@@ -83,6 +91,76 @@ impl Server {
             .and_then(|info| info["version"].as_str())
             .map(str::to_owned);
         Arc::new(review)
+    }
+
+    fn confirm_apply(
+        &self,
+        review: Arc<crate::review::Context>,
+        call: ToolCall,
+        context: &stdio::Context,
+        message: String,
+    ) -> Outcome {
+        if let Some(request) = context.request_context() {
+            let interim = self
+                .confirmations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .begin(request, &call, &message);
+            return match interim {
+                Ok(result) => Outcome::InputRequired(result),
+                Err(_) => Outcome::Tool(reply(
+                    &review,
+                    &self.connection,
+                    &call,
+                    context,
+                    Answer::Failed("approval_unavailable"),
+                )),
+            };
+        }
+        let connection = self.connection.clone();
+        let trace = crate::diagnostics::trace::current();
+        let waiting = trace
+            .as_ref()
+            .map(|trace| trace.wait("approval.wait", "approval.wait_us"));
+        Outcome::Confirm(Confirm::new(message, move |decision, context| {
+            let _scope = trace
+                .as_ref()
+                .map(crate::diagnostics::trace::Request::enter);
+            drop(waiting);
+            let answer = match decision {
+                Decision::Accepted => Answer::Accepted,
+                Decision::Declined => Answer::Failed("approval_declined"),
+                Decision::Unavailable => Answer::Failed("approval_unavailable"),
+            };
+            let result = reply(&review, &connection, &call, context, answer);
+            if let Some(trace) = &trace {
+                trace.finish(if result.is_error {
+                    "refused"
+                } else {
+                    "success"
+                });
+            }
+            Outcome::Tool(result)
+        }))
+    }
+
+    fn request_trace(
+        &self,
+        request: &Request,
+        context: &stdio::Context,
+    ) -> Option<crate::diagnostics::trace::Request> {
+        let log = self.log.as_ref()?;
+        log.path()?;
+        let operation = match request {
+            Request::Tool(call) => crate::diagnostics::trace::operation(&call.name),
+            _ => "protocol",
+        };
+        log.request(
+            "mcp",
+            operation,
+            context.request_id(),
+            self.review().connection_id.as_deref(),
+        )
     }
 }
 
@@ -109,104 +187,103 @@ impl stdio::Handler for Server {
     }
 
     fn call(&self, request: Request, context: &stdio::Context) -> Outcome {
-        if let Request::Method { method, params } = &request
-            && method == "resources/read"
-        {
-            return Outcome::ResourceNotFound(params["uri"].as_str().unwrap_or_default().into());
-        }
-        let Request::Tool(call) = request else {
-            return Outcome::Method(Err(RpcError::new(
-                rpc::METHOD_NOT_FOUND,
-                "Method not found",
-            )));
-        };
-        let review = self.review_for_request(context);
-        if call.name != "pack_configure"
-            && let Some(request) = context.request_context()
-        {
-            let retry = request.request_state.is_some() || request.input_responses.is_some();
-            if retry {
-                let decision = self
-                    .confirmations
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .resume(request, &call);
-                return match decision {
-                    Ok(decision) => Outcome::Tool(reply(
-                        &review,
-                        &self.connection,
-                        &call,
-                        context,
-                        if decision == Decision::Accepted {
-                            Answer::Accepted
-                        } else {
-                            Answer::Failed("approval_declined")
-                        },
-                    )),
-                    Err(error) => Outcome::Method(Err(error)),
-                };
+        let trace = self.request_trace(&request, context);
+        let _trace_scope = trace
+            .as_ref()
+            .map(crate::diagnostics::trace::Request::enter);
+        let outcome = (|| {
+            if let Request::Prompt(call) = &request {
+                return prompts::render(call);
             }
-        }
-        // NULs are refused before dispatch or confirmation, so no tool stores one.
-        if crate::json::contains_nul(&call.arguments) {
-            let value = crate::review::mcp::invalid_arguments(
+            if let Request::Method { method, params } = &request
+                && method == "resources/read"
+            {
+                return Outcome::ResourceNotFound(
+                    params["uri"].as_str().unwrap_or_default().into(),
+                );
+            }
+            let Request::Tool(call) = request else {
+                return Outcome::Method(Err(RpcError::new(
+                    rpc::METHOD_NOT_FOUND,
+                    "Method not found",
+                )));
+            };
+            let review = self.review_for_request(context);
+            if !["pack_configure", "pack_add"].contains(&call.name.as_str())
+                && let Some(request) = context.request_context()
+            {
+                let retry = request.request_state.is_some() || request.input_responses.is_some();
+                if retry {
+                    let decision = self
+                        .confirmations
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .resume(request, &call);
+                    return match decision {
+                        Ok(decision) => Outcome::Tool(reply(
+                            &review,
+                            &self.connection,
+                            &call,
+                            context,
+                            if decision == Decision::Accepted {
+                                Answer::Accepted
+                            } else {
+                                Answer::Failed("approval_declined")
+                            },
+                        )),
+                        Err(error) => Outcome::Method(Err(error)),
+                    };
+                }
+            }
+            // NULs are refused before dispatch or confirmation, so no tool stores one.
+            if crate::json::contains_nul(&call.arguments) {
+                let value = crate::review::mcp::invalid_arguments(
+                    &review,
+                    &call.name,
+                    "",
+                    "argument names and strings must not contain NUL characters",
+                );
+                return Outcome::Tool(response::tool_result(
+                    &call.name,
+                    review.agent.as_deref(),
+                    value,
+                    true,
+                    &|| Ok(()),
+                ));
+            }
+            if ["pack_configure", "pack_add"].contains(&call.name.as_str()) {
+                return elicitation::call(self, review, call, context);
+            }
+            // The resolved adapter declares the host confirmation mechanism.
+            if call.name == "policy_apply"
+                && crate::agents::review::resolve(review.agent.as_deref()).confirmation()
+                    == crate::agents::review::Confirmation::Form
+                && let Ok(Some(message)) =
+                    crate::review::mcp::apply_confirmation(&review, &call.arguments)
+            {
+                return self.confirm_apply(review, call, context, message);
+            }
+            Outcome::Tool(reply(
                 &review,
-                &call.name,
-                "",
-                "argument names and strings must not contain NUL characters",
-            );
-            return Outcome::Tool(response::tool_result(
-                &call.name,
-                review.agent.as_deref(),
-                value,
-                true,
-                &|| Ok(()),
-            ));
-        }
-        if call.name == "pack_configure" {
-            return elicitation::call(self, review, call, context);
-        }
-        // The resolved adapter declares the host confirmation mechanism.
-        if call.name == "policy_apply"
-            && crate::agents::review::resolve(review.agent.as_deref()).confirmation()
-                == crate::agents::review::Confirmation::Form
-            && let Ok(Some(message)) =
-                crate::review::mcp::apply_confirmation(&review, &call.arguments)
-        {
-            if let Some(request) = context.request_context() {
-                let interim = self
-                    .confirmations
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .begin(request, &call, &message);
-                return match interim {
-                    Ok(result) => Outcome::InputRequired(result),
-                    Err(_) => Outcome::Tool(reply(
-                        &review,
-                        &self.connection,
-                        &call,
-                        context,
-                        Answer::Failed("approval_unavailable"),
-                    )),
-                };
+                &self.connection,
+                &call,
+                context,
+                Answer::None,
+            ))
+        })();
+        if let Some(trace) = &trace {
+            match &outcome {
+                Outcome::Confirm(_) | Outcome::Elicit(_) => {}
+                Outcome::Tool(result) => trace.finish(if result.is_error {
+                    "refused"
+                } else {
+                    "success"
+                }),
+                Outcome::InputRequired(_) => trace.finish("input_required"),
+                _ => trace.finish("protocol_result"),
             }
-            let connection = self.connection.clone();
-            return Outcome::Confirm(Confirm::new(message, move |decision, context| {
-                let answer = match decision {
-                    Decision::Accepted => Answer::Accepted,
-                    Decision::Declined => Answer::Failed("approval_declined"),
-                    Decision::Unavailable => Answer::Failed("approval_unavailable"),
-                };
-                Outcome::Tool(reply(&review, &connection, &call, context, answer))
-            }));
         }
-        Outcome::Tool(reply(
-            &review,
-            &self.connection,
-            &call,
-            context,
-            Answer::None,
-        ))
+        outcome
     }
 
     fn invalid_arguments(&self, call: &ToolCall, error: &ArgumentError) -> ToolResult {
@@ -334,6 +411,7 @@ fn bundled_options(options: &stdio::Options) -> Result<stdio::Options, ServeErro
     let mut options = options.clone();
     options.lanes.push(stdio::Lane::new("bundled-skills", 1, 8));
     options.session.skills = Some(Arc::new(skills::catalog().map_err(ServeError::Skills)?));
+    options.session.prompts = Some(Arc::new(prompts::catalog().map_err(ServeError::Prompts)?));
     options.session.modern = Some(canonic_mcp_kit::ModernOptions::new(ServerInfo::new(
         "shield",
         env!("CARGO_PKG_VERSION"),
@@ -353,6 +431,9 @@ pub(crate) fn serve_static(
             Ok(ServerInfo::new("shield", env!("CARGO_PKG_VERSION")))
         }
         fn call(&self, request: Request, _: &stdio::Context) -> Outcome {
+            if let Request::Prompt(call) = &request {
+                return prompts::render(call);
+            }
             if let Request::Method { method, params } = request
                 && method == "resources/read"
             {
@@ -374,6 +455,8 @@ pub(crate) fn serve_static(
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ServeError {
+    #[error("Cannot start Shield MCP server: invalid prompt catalog")]
+    Prompts(#[source] canonic_mcp_kit::PromptError),
     #[error("Cannot start Shield MCP server: invalid skill catalog")]
     Skills(#[source] canonic_mcp_kit::SkillError),
     #[error("Cannot start Shield MCP server: invalid tool catalog")]

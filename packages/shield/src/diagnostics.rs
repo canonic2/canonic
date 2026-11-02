@@ -6,16 +6,18 @@ use std::{
     fs::{File, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
+pub(crate) mod trace;
 
 const LIMIT: u64 = 8 * 1024 * 1024;
 
 pub(crate) struct Log {
     path: Option<PathBuf>,
     started: Instant,
-    writer: Mutex<Option<(File, u64)>>,
+    writer: Arc<Mutex<Option<(File, u64)>>>,
+    traces: OnceLock<Arc<trace::Recorder>>,
 }
 
 impl Log {
@@ -23,7 +25,8 @@ impl Log {
         Self {
             path: None,
             started: Instant::now(),
-            writer: Mutex::new(None),
+            writer: Arc::new(Mutex::new(None)),
+            traces: OnceLock::new(),
         }
     }
 
@@ -88,12 +91,27 @@ impl Log {
         Ok(Self {
             path: Some(path),
             started: Instant::now(),
-            writer: Mutex::new(Some((file, 0))),
+            writer: Arc::new(Mutex::new(Some((file, 0)))),
+            traces: OnceLock::new(),
         })
     }
 
     pub(crate) fn path(&self) -> Option<&Path> {
         self.path.as_deref()
+    }
+
+    pub(crate) fn request(
+        self: &Arc<Self>,
+        surface: &'static str,
+        operation: &'static str,
+        id: Option<&Value>,
+        connection: Option<&str>,
+    ) -> Option<trace::Request> {
+        self.path.as_ref()?;
+        let recorder = self
+            .traces
+            .get_or_init(|| Arc::new(trace::Recorder::new(self.writer.clone(), self.started)));
+        Some(recorder.request(surface, operation, id, connection))
     }
 
     #[cfg(test)]
@@ -154,7 +172,15 @@ impl Log {
         self.event("hook_output", json!({"bytes":value.to_string().len(),"host_event":label(&hook["hookEventName"]),"permission_decision":label(&hook["permissionDecision"]),"decision_behavior":label(&hook["decision"]["behavior"]),"has_context":hook.get("additionalContext").is_some(),"has_system_message":value.get("systemMessage").is_some(),"has_updated_input":hook.get("updatedInput").is_some()}));
     }
 
+    #[cfg(test)]
     pub(crate) fn mcp_frame(&self, direction: &str, bytes: &[u8]) {
+        if self.path.is_none() {
+            return;
+        }
+        self.mcp_frame_at(direction, bytes, Instant::now());
+    }
+
+    pub(crate) fn mcp_frame_at(&self, direction: &str, bytes: &[u8], observed: Instant) {
         if self.path.is_none() {
             return;
         }
@@ -174,7 +200,10 @@ impl Log {
         let tool = frame
             .and_then(|v| v["params"]["name"].as_str())
             .filter(|s| tool_names().iter().any(|name| name == *s));
-        self.event(direction, json!({"bytes":bytes.len(),"valid_json":frame.is_some(),"method":method,"tool":tool,"id":frame.and_then(|v|label(&v["id"]).map(Value::String).or_else(||v["id"].as_i64().map(|id|json!(id)))),"error_code":frame.and_then(|v|v["error"]["code"].as_i64()),"tool_error":frame.and_then(|v|v["result"]["isError"].as_bool())}));
+        let observed_us =
+            u64::try_from(observed.saturating_duration_since(self.started).as_micros())
+                .unwrap_or(u64::MAX);
+        self.event(direction, json!({"observed_us":observed_us,"bytes":bytes.len(),"valid_json":frame.is_some(),"method":method,"tool":tool,"id":frame.and_then(|v|label(&v["id"]).map(Value::String).or_else(||v["id"].as_i64().map(|id|json!(id)))),"error_code":frame.and_then(|v|v["error"]["code"].as_i64()),"tool_error":frame.and_then(|v|v["result"]["isError"].as_bool())}));
     }
 }
 

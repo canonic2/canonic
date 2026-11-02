@@ -2,6 +2,7 @@
 pub(super) mod bootstrap;
 mod closure;
 mod connections;
+pub(super) mod installation;
 pub(super) mod settings;
 use super::{project as state, registries};
 use crate::review::inspection::Settings;
@@ -445,10 +446,13 @@ pub(super) fn info(context: &Context, query: &str) -> Result<Value, Error> {
 }
 pub(super) fn rebuild(
     candidate: &Value,
-    rows: &[Value],
+    rows: &mut [Value],
     bytes: &[String],
     rules: Option<&str>,
 ) -> Result<Value, Error> {
+    if rows.len() != bytes.len() {
+        return Err(policy::Error::ArtifactMismatch.into());
+    }
     let previous = crate::configuration::layers::merged(candidate)?;
     let mut selections = Vec::new();
     for (index, row) in rows.iter().enumerate() {
@@ -510,14 +514,50 @@ pub(super) fn rebuild(
     if rules.is_some() {
         config["rules"] = json!("rules.yml");
     }
-    Ok(json!(Bundle::revise(
+    // Splitting preserves the existing local file's order and merging puts
+    // shared selections first. Apply that exact permutation to both artifacts
+    // and installed metadata before capturing any candidate.
+    let order = rebuild_order(candidate, &config, rows)?;
+    if order.len() != rows.len() {
+        return Err(policy::Error::ArtifactMismatch.into());
+    }
+    let ordered_bytes: Vec<_> = order.iter().map(|&index| bytes[index].clone()).collect();
+    let rebuilt = json!(Bundle::revise(
         candidate,
         &config,
-        bytes,
+        &ordered_bytes,
         rules,
         candidate["local_rules"].as_str(),
         &retained,
-    )?))
+    )?);
+    let ordered_rows: Vec<_> = order.iter().map(|&index| rows[index].clone()).collect();
+    rows.clone_from_slice(&ordered_rows);
+    Ok(rebuilt)
+}
+
+/// The file-layer round trip owns selection order, including retained local order.
+fn rebuild_order(candidate: &Value, config: &Value, rows: &[Value]) -> Result<Vec<usize>, Error> {
+    let (shared, local) = crate::configuration::layers::split(
+        &config.to_string(),
+        (
+            candidate["config"].as_str(),
+            candidate["local_config"].as_str(),
+        ),
+    )?;
+    let merged: Value = policy::parse(&crate::configuration::layers::merge(
+        &shared,
+        local.as_deref(),
+    )?)?;
+    merged["packs"]
+        .as_array()
+        .ok_or(Error::Invalid("configuration packs missing"))?
+        .iter()
+        .map(|selection| {
+            rows.iter()
+                .position(|row| same_selection(selection, row))
+                .ok_or_else(|| policy::Error::ArtifactMismatch.into())
+        })
+        .collect()
 }
 
 fn same_selection(entry: &Value, row: &Value) -> bool {

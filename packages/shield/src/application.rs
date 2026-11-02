@@ -33,7 +33,8 @@ impl Error {
             Self::Encoding => "encoding",
             Self::Policy(policy::Error::Syntax) => "invalid-document",
             Self::Policy(
-                policy::Error::Contract(_)
+                policy::Error::ArtifactMismatch
+                | policy::Error::Contract(_)
                 | policy::Error::DirectoryOptionConflict(_)
                 | policy::Error::McpDefaults { .. }
                 | policy::Error::Binding { .. },

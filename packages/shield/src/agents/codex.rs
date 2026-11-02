@@ -197,6 +197,7 @@ impl AgentAdapter for Codex {
 const SESSION_TOOLS: &[&str] = &[
     "close_agent",
     "current_time",
+    "clocksleep",
     "followup_task",
     "get_context_remaining",
     "interrupt_agent",

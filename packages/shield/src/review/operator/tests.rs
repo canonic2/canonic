@@ -17,7 +17,7 @@ fn pack_rebuild_preserves_operator_access_paths() {
         )
         .unwrap()
     );
-    let next = crate::review::packs::rebuild(&candidate, &[], &[], None).unwrap();
+    let next = crate::review::packs::rebuild(&candidate, &mut [], &[], None).unwrap();
     let config = crate::configuration::layers::merged(&next).unwrap();
     assert_eq!(config["access_paths"], paths);
 }

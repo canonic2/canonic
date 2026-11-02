@@ -54,6 +54,11 @@ fn native_hook_logs_oversized_input_and_response_without_changing_protocol() {
         response["hookSpecificOutput"]["hookEventName"]
     );
     assert_eq!(records.last().unwrap()["event"], "run_end");
+    assert!(
+        !records
+            .iter()
+            .any(|record| record["event"] == "request_start")
+    );
     assert!(!text.contains("private-result"));
     let disabled_logs = root.path().join("disabled");
     let disabled = cargo_bin_cmd!("shield")

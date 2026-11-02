@@ -407,9 +407,11 @@ and ordinary agent feedback remain clean.
 MCP frame logging uses a separate worker with an eight-frame queue. The
 dispatcher submits frames without waiting for parsing or file writes; a full
 queue drops diagnostic frames. Tool names are cached once per process. The
-logging worker drains accepted frames and is joined when its observer is dropped,
-so slow storage can delay shutdown but does not block live ping or cancellation
-dispatch. Frame sizes remain bounded by the MCP input and output limits.
+logging worker drains accepted frames with a 5 ms shutdown allowance. An unfinished
+drain or dropped frames produce a diagnostic stderr warning. Slow storage does
+not block live ping or cancellation dispatch. Frame sizes remain bounded by the
+MCP input and output limits. Frame records include `observed_us`, captured when
+the observer receives the frame, before worker parsing or file writes.
 
 Both builds accept `--debug-log-dir DIRECTORY` to enable logging into another
 directory and `--no-debug-log` to disable it. `SHIELD_DEBUG_LOG_DIR` also selects
@@ -435,6 +437,37 @@ Pair input/output records by PID and MCP messages by request ID to inspect timin
 These logs are diagnostic evidence, separate from request history and execution
 attestation. `RUST_BACKTRACE=1` enables panic backtraces on stderr; debug symbols
 also support native debuggers.
+
+Request trace records add monotonic microsecond offsets, a wall-clock anchor,
+connection/request/trace IDs and fixed stage names. `request_span` durations are
+inclusive of child spans; do not sum nested durations into a request total.
+`request_end` reports work counters, outcome and total handler duration. Counters
+initialized to zero name instrumented work; absent counters have no reported
+observation and must not be interpreted as zero.
+`request_incomplete` means a request link was dropped without completion, not that
+its mutation rolled back. Request records use a bounded nonblocking queue; loss
+appears as `dropped_records`, `dropped_spans` or a diagnostic stderr warning.
+Request-writer shutdown waits at most 5 ms before reporting an unfinished drain.
+Internal callbacks retain their fixed hook-stage records and do not start the
+asynchronous command-request tracer.
+
+The apply trace covers validation, source hydration, policy preparation, cache
+construction, writer-lock wait, publication, projection checks/repair and durable
+sync operations. Legacy form continuations retain their request link and measure
+the input or approval wait. Host permission obtained before Shield receives an
+MCP call is outside this measurement. The handler boundary also excludes MCP
+scheduler queueing, schema validation and final wire encoding; round-trip tests
+measure transport overhead separately. Modern form retries have separate traces.
+
+Run the focused development regression with
+`make -C packages/shield test-focus FILTER=apply_request_trace_explains_work CARGO_FLAGS='--success-output immediate'`.
+It creates an isolated project, proposes and applies three batches through real
+stdio, and prints timings and work counts. Optional
+`APPLY_PROFILE_PROJECT=/path/to/enrolled-project` reads that project's immutable
+pack artifacts into the temporary fixture. It does not copy settings, custom
+rules, history or identity and does not write to the source project. This is a
+local regression/profile fixture, not a cold-start or cross-platform latency
+acceptance campaign.
 
 ## Adapter and host checks
 

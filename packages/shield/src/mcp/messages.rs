@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 pub(super) fn instructions(agent: Option<&str>) -> String {
     let common = "Shield manages project permissions. When the user asks to review permission interruptions, inspect \
 suggestion_list and selected history_list, rule_list or policy_evaluate evidence; do not bypass protection. \
-Follow returned routes: a one-time action request is not authorization for a lasting policy change. Inspect packs with pack_info. \
+Follow returned routes: a one-time action request is not authorization for a lasting policy change. Inspect packs with pack_info; use pack_add to collect required settings and prepare an installation. \
 Custom proposal schemas include complete examples; adapt them after reviewing effects. Use shield_docs_list, shield_docs_search and shield_docs_read for details. \
 Respect incomplete coverage and existing proposals; do not infer a rule from missing evidence or automatically offer an allow rule for Deny. \
 For an authorized lasting change, propose the narrowest justified candidate with policy_propose and returned review context; preserve deny boundaries and explain broader permissions. \
@@ -58,13 +58,13 @@ pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String 
     }
     let data = &value["data"];
     match name {
-        "pack_info" => format!("{} Inspection only; nothing is installed. Use view=rules or rule_id for details; policy_propose prepares an installation for approval.", pack_lead(data)),
+        "pack_info" => format!("{} Inspection only; nothing is installed. Use view=rules or rule_id for details; pack_add collects required settings and prepares an installation for approval.", pack_lead(data)),
         "policy_evaluate" => {
             let prefix = format!("Policy preview: {}.", data["decision"].as_str().unwrap_or("unknown"));
             if data["decision"] != "allow" && let Some(detail) = crate::agent_message::detail(&data["explanation"]) { format!("{prefix} {detail}") }
             else { format!("{prefix} This result does not authorize execution.") }
         },
-        "policy_propose" | "pack_configure" => {
+        "policy_propose" | "pack_configure" | "pack_add" => {
             let guidance = data["next_action"].as_str().unwrap_or(crate::agents::review::resolve(agent).guidance().proposed);
             data["change_summary"].as_str().map_or_else(|| guidance.into(), |change| format!("Proposed: {change} {guidance}"))
         },
@@ -209,7 +209,14 @@ impl Serialize for Projection<'_> {
 
 pub(super) fn text_data<'a>(name: &str, value: &'a Value) -> TextData<'a> {
     TextData {
-        data: if ["policy_propose", "pack_configure", "policy_withdraw"].contains(&name) {
+        data: if [
+            "policy_propose",
+            "pack_configure",
+            "pack_add",
+            "policy_withdraw",
+        ]
+        .contains(&name)
+        {
             Projection::Selectors(&value["data"])
         } else {
             Projection::Complete(&value["data"])
@@ -222,6 +229,18 @@ pub(super) fn text_data<'a>(name: &str, value: &'a Value) -> TextData<'a> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn candidate_artifact_failure_preserves_recovery_without_argument_retry() {
+        let message = "Shield could not build a consistent pack candidate. Continue without this proposal and report the failure";
+        let text = super::summary(
+            "policy_propose",
+            None,
+            &serde_json::json!({"error":{"code":"candidate_error","message":message,"operator_route":null}}),
+        );
+        assert_eq!(text, format!("{message}."));
+        assert!(!text.contains("Correct the arguments"));
+    }
+
     use super::*;
     use serde_json::json;
 
@@ -268,6 +287,8 @@ mod tests {
             let text = summary("pack_info", None, &json!({"data":data,"error":null}));
             assert!(text.starts_with(lead), "{text}");
             assert!(text.contains("nothing is installed"));
+            assert!(text.contains("pack_add collects required settings"));
+            assert!(!text.contains("policy_propose"));
         }
         let proposed = summary(
             "policy_propose",

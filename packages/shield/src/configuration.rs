@@ -387,9 +387,7 @@ impl Candidate {
         for (selection, bytes) in self.disabled.iter().zip(disabled) {
             let pack = Pack::from_yaml(bytes)?;
             if selection.id != pack.id() || selection.version != pack.version() {
-                return Err(Error::Contract(
-                    "candidate pack identity or version mismatch",
-                ));
+                return Err(Error::ArtifactMismatch);
             }
             retained.push(selection.locked(bytes));
         }
@@ -399,9 +397,7 @@ impl Candidate {
             let mut pack = Pack::from_yaml_bound(bytes, &selection.binding(), false)
                 .map_err(|error| error.in_selection(&selection.id))?;
             if selection.id != pack.id() || selection.version != pack.version() {
-                return Err(Error::Contract(
-                    "candidate pack identity or version mismatch",
-                ));
+                return Err(Error::ArtifactMismatch);
             }
             let entry = selection.locked(bytes);
             pack.bind_identity(&entry.id);
@@ -522,7 +518,7 @@ fn identifier(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
 }
 
-fn portable_path(path: &str) -> Result<(), Error> {
+pub(crate) fn portable_path(path: &str) -> Result<(), Error> {
     if path.len() > 4096 {
         return Err(Error::Limit);
     }

@@ -79,7 +79,7 @@ impl Server {
             "protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"Acme","version":"1"}}}));
         assert_eq!(
             self.receive()["result"]["capabilities"],
-            json!({"tools":{"listChanged":false},"resources":{}})
+            json!({"tools":{"listChanged":false},"resources":{},"prompts":{"listChanged":false}})
         );
         self.send(&json!({"jsonrpc":"2.0","method":"notifications/initialized"}));
     }

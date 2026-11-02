@@ -1067,7 +1067,7 @@ fn permission_request_uses_current_policy_and_never_the_ask_fallback() {
             "deny"
         );
         assert_eq!(
-            permission(root.path(), "Bash", json!({"command":"git acme-unmatched"})),
+            permission(root.path(), "Bash", json!({"command":"git fetch"})),
             json!({})
         );
     }
@@ -1351,6 +1351,7 @@ fn native_session_tools_leave_the_decision_to_the_host() {
     for name in [
         "close_agent",
         "current_time",
+        "clocksleep",
         "followup_task",
         "get_context_remaining",
         "interrupt_agent",
@@ -1752,7 +1753,7 @@ fn agents_use_mcp_tools_instead_of_the_operator_cli() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
     for agent in ["claude", "codex"] {
-        let value = call(root, agent, "shield --help");
+        let value = call(root, agent, "shield protection set");
         assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
         assert!(reason(&value).contains("policy_propose"), "{value}");
         assert!(
@@ -1765,6 +1766,66 @@ fn agents_use_mcp_tools_instead_of_the_operator_cli() {
         let value = call(root, agent, "git reset --hard");
         assert!(reason(&value).contains("policy_propose"), "{value}");
     }
+}
+
+#[test]
+fn operator_cli_help_only_requests_follow_policy_without_opening_actions() {
+    let root = argv_fixture("shield", "allow");
+    for agent in ["claude", "codex"] {
+        for source in [
+            "shield --help",
+            "shield protection --help",
+            "shield protection set -h",
+            "shield mcp serve --help",
+        ] {
+            assert_permitted(&call(root.path(), agent, source), agent);
+        }
+        for source in [
+            "shield protection set",
+            "shield protection set -- --help",
+            "shield protection set --allow --help",
+            "shield --help > .mcp.json",
+            "shield --help; shield protection set",
+        ] {
+            let value = call(root.path(), agent, source);
+            assert_eq!(
+                value["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{source}: {value}"
+            );
+        }
+    }
+    let root = argv_fixture("shield", "deny");
+    assert_eq!(
+        call(root.path(), "codex", "shield protection --help")["hookSpecificOutput"]["permissionDecision"],
+        "deny"
+    );
+}
+
+#[test]
+fn native_session_clock_sleep_does_not_open_unknown_or_mcp_tools() {
+    let (root, _) = fixture();
+    assert_eq!(
+        tool(
+            root.path(),
+            "codex",
+            "clocksleep",
+            &json!({"duration_ms":1})
+        ),
+        json!({})
+    );
+    for name in ["clocksleep_extra", "otherclocksleep"] {
+        let value = tool(root.path(), "codex", name, &json!({"duration_ms":1}));
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{name}: {value}"
+        );
+    }
+    let host = json!({"hook_event_name":"PreToolUse","tool_name":"mcp__clock__sleep","tool_use_id":"acme-tool","session_id":"acme-session","cwd":root.path(),"tool_input":{"duration_ms":1}});
+    let request = crate::agents::find("codex")
+        .unwrap()
+        .request(&host)
+        .unwrap();
+    assert_eq!(request.operation.unwrap()["kind"], "mcp");
 }
 
 #[test]
@@ -1953,7 +2014,7 @@ fn native_policy_allow_ask_and_deny_reach_the_host_without_executing_source() {
                 false,
             ),
             (
-                "git -c alias.status='!touch side-effect' status",
+                "git -c color.ui=never status",
                 "deny",
                 "approval-required",
                 false,
@@ -3438,14 +3499,10 @@ fn a_command_a_registry_pack_covers_proposes_that_pack() {
     review::observations::retain_release(&context, "main", "canonic/git@0.4.1");
     for source in ["git push", "git add acme.txt"] {
         let text = reason(&call(root, "codex", source)).to_owned();
-        let start = text.find("with change ").unwrap() + "with change ".len();
-        let end = start + text[start..].find(" and source_entry_id").unwrap();
-        let change: Value = serde_json::from_str(&text[start..end]).unwrap();
-        assert_eq!(
-            change,
-            json!({"kind":"pack_add","reference":"main/canonic/git"}),
-            "{text}"
-        );
+        let start = text.find("with arguments ").unwrap() + "with arguments ".len();
+        let end = start + text[start..].find(" to collect").unwrap();
+        let arguments: Value = serde_json::from_str(&text[start..end]).unwrap();
+        assert_eq!(arguments, json!({"reference":"main/canonic/git"}), "{text}");
         assert!(text.contains("pack_info"), "{text}");
     }
     // Other commands get drafting guidance instead of a command rule payload.
@@ -3599,14 +3656,18 @@ fn codex_prefix_covered_asks_block_even_under_the_allow_fallback() {
         AskFallback::Allow,
     );
     assert_permitted(&call(root.path(), "codex", "git log"), "codex");
-    // Policy asks about an undeclared option; Codex would run it unsandboxed.
-    let covered = call(root.path(), "codex", "git log --debug");
+    // A known metadata option isolates policy Ask from unknown-output protection;
+    // it is undeclared by this policy, and Codex would run it unsandboxed.
+    let covered = call(root.path(), "codex", "git log --oneline");
     assert_eq!(
         covered["hookSpecificOutput"]["permissionDecision"], "deny",
         "{covered}"
     );
     // Codex skips its sandbox when every part of a chain matches a prefix.
-    for chain in ["git log && git log --debug", "git log --debug | git log"] {
+    for chain in [
+        "git log && git log --oneline",
+        "git log --oneline | git log",
+    ] {
         let covered = call(root.path(), "codex", chain);
         assert_eq!(
             covered["hookSpecificOutput"]["permissionDecision"], "deny",
@@ -3617,9 +3678,9 @@ fn codex_prefix_covered_asks_block_even_under_the_allow_fallback() {
     // an uncovered part, a wrapper or an embedded script keeps Codex's sandbox.
     for sandboxed in [
         "git status",
-        "git log --debug && git status",
-        "nice git log --debug",
-        "bash -c 'git log --debug'",
+        "git log --oneline && git status",
+        "nice git log --oneline",
+        "bash -c 'git log --oneline'",
     ] {
         let reply = call(root.path(), "codex", sandboxed);
         if cfg!(windows) && sandboxed != "git status" {
@@ -3658,4 +3719,240 @@ fn codex_prefix_covered_asks_block_even_under_the_allow_fallback() {
     let codex = crate::agents::find("codex").unwrap();
     std::fs::write(&path, codex.prefix_rules(&prefixes).unwrap()).unwrap();
     assert_permitted(&call(root.path(), "codex", "git status"), "codex");
+}
+
+fn settings_fixture(executable: &str) -> assert_fs::TempDir {
+    let root = argv_fixture(executable, "allow");
+    fs::create_dir_all(root.path().join("src")).unwrap();
+    fs::create_dir_all(root.path().join(".codex")).unwrap();
+    fs::write(root.path().join("src/main.rs"), "fn main() {}").unwrap();
+    fs::write(root.path().join(".mcp.json"), "{}").unwrap();
+    fs::write(root.path().join(".codex/hooks.json"), "{}").unwrap();
+    root
+}
+
+#[test]
+fn command_output_cannot_print_agent_settings_while_names_and_metadata_can() {
+    // Policy allows each program, so only the settings check can block.
+    for (executable, cases) in [
+        (
+            "git",
+            &[
+                // Revision paths, unscoped patches and searches print settings.
+                ("git show HEAD:.mcp.json", true),
+                ("git -C src show HEAD:.mcp.json", true),
+                ("git -C src cat-file -p HEAD:.mcp.json", true),
+                ("git show :.mcp.json", true),
+                ("git show :0:.codex/hooks.json", true),
+                ("git cat-file -p HEAD:.mcp.json", true),
+                ("git cat-file blob HEAD:.mcp.json", true),
+                ("git cat-file -p 1a2b3c4d", true),
+                ("git show", true),
+                ("git show --stat 1a2b3c4d", true),
+                ("git log -p", true),
+                ("git log -U3", true),
+                ("git log -p --author src", true),
+                ("git --no-pager log --patch -- .", true),
+                ("git diff", true),
+                ("git diff HEAD", true),
+                ("git diff .", true),
+                ("git diff -- '*.json'", true),
+                ("git diff .mcp.json", true),
+                ("git -c color.ui=never diff", true),
+                ("git status -v", true),
+                ("git status -sv", true),
+                ("git grep token", true),
+                ("git stash show -p", true),
+                ("git stash list -p", true),
+                ("git archive HEAD", true),
+                ("git ls-files -s .mcp.json", true),
+                // Names, metadata and output scoped away from settings do not.
+                (
+                    "git ls-files -v .codex/config.toml .codex/hooks.json .mcp.json",
+                    false,
+                ),
+                ("git status --short", false),
+                ("git status .mcp.json", false),
+                ("git check-ignore -v .mcp.json", false),
+                ("git log --oneline", false),
+                ("git diff --stat", false),
+                ("git diff --name-only", false),
+                ("git diff src", false),
+                ("git diff -- src", false),
+                ("git log -p -- src", false),
+                ("git show HEAD:src/main.rs", false),
+                ("git show --stat HEAD", false),
+                ("git grep token -- src", false),
+                ("git cat-file -t HEAD:.mcp.json", false),
+            ][..],
+        ),
+        (
+            "grep",
+            &[
+                ("grep -r token .", true),
+                ("grep -R token", true),
+                ("grep -rn token .codex", true),
+                ("grep -r -e token src .codex", true),
+                ("grep -rn token src", false),
+                ("grep token src/main.rs", false),
+            ][..],
+        ),
+        (
+            "ls",
+            &[
+                ("ls -la .mcp.json .codex", false),
+                ("ls .shield/review", true),
+            ][..],
+        ),
+        ("find", &[("find .codex -name '*.json'", false)][..]),
+    ] {
+        let root = settings_fixture(executable);
+        for (source, blocked) in cases {
+            let value = call(root.path(), "codex", source);
+            let denied = value["hookSpecificOutput"]["permissionDecision"] == "deny";
+            assert_eq!(denied, *blocked, "{source}: {value}");
+            if !blocked {
+                assert_permitted(&value, "codex");
+            }
+        }
+    }
+}
+
+#[test]
+fn settings_reached_only_through_output_ask_claude_and_tell_codex_to_narrow() {
+    let root = settings_fixture("git");
+    let value = call(root.path(), "claude", "git diff");
+    assert_eq!(
+        value["hookSpecificOutput"]["permissionDecision"], "ask",
+        "{value}"
+    );
+    let value = call(root.path(), "codex", "git diff");
+    assert!(reason(&value).contains("can print `"), "{value}");
+    assert!(reason(&value).contains("Limit it to paths"), "{value}");
+    // A named settings path keeps the protected-path explanation.
+    let value = call(root.path(), "codex", "git show HEAD:.mcp.json");
+    assert!(
+        reason(&value).contains("blocked by a protected path"),
+        "{value}"
+    );
+}
+
+#[test]
+fn unknown_git_subcommands_and_execution_overrides_keep_settings_protected() {
+    let root = settings_fixture("git");
+    for source in [
+        "git -c 'alias.peek=show HEAD:.mcp.json' peek",
+        "git lg",
+        "git -calias.peek=show peek",
+        "git -c core.pager=acme-pager status",
+        "git -c diff.external=acme-diff diff -- src",
+        "git --config-env=core.pager=ACME_PAGER status",
+    ] {
+        let value = call(root.path(), "codex", source);
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{source}: {value}"
+        );
+    }
+    for source in [
+        "git status --short",
+        "git -c color.ui=never status",
+        "git --version",
+        "git fetch origin",
+        "git branch --list",
+    ] {
+        assert_permitted(&call(root.path(), "codex", source), "codex");
+    }
+}
+
+#[test]
+fn object_id_listings_check_unscoped_and_named_settings_but_allow_safe_paths() {
+    let root = settings_fixture("git");
+    for source in [
+        "git ls-files --stage",
+        "git ls-files -s",
+        "git ls-files --unmerged",
+        "git ls-files --resolve-undo",
+        "git ls-files --format='%(objectname)'",
+        "git ls-files --format '%(objectname)'",
+        "git status --porcelain=v2",
+        "git status --porcelain=2",
+        "git status --porcelain=v2 .mcp.json",
+    ] {
+        let value = call(root.path(), "codex", source);
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{source}: {value}"
+        );
+    }
+    for source in [
+        "git ls-files",
+        "git ls-files --stage -- src",
+        "git ls-files --unmerged -- src",
+        "git ls-files --resolve-undo -- src",
+        "git ls-files --format='%(objectname)' -- src",
+        "git ls-files --format '%(objectname)' -- src",
+        "git -C src ls-files --stage",
+        "git status --porcelain",
+        "git status --porcelain=v1",
+        "git status --porcelain=v2 -- src",
+    ] {
+        assert_permitted(&call(root.path(), "codex", source), "codex");
+    }
+}
+
+#[test]
+fn git_option_values_do_not_hide_changed_settings_outside_an_existing_folder() {
+    let root = settings_fixture("git");
+    fs::write(root.path().join(".mcp.json"), "{\"key\":\"acme-before\"}\n").unwrap();
+    for arguments in [
+        &["init", "-q"][..],
+        &["add", "--", ".mcp.json", "src/main.rs"][..],
+    ] {
+        let output = crate::test_support::git()
+            .current_dir(root.path())
+            .args(arguments)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+    }
+    fs::write(root.path().join(".mcp.json"), "{\"key\":\"acme-after\"}\n").unwrap();
+    let output = crate::test_support::git()
+        .current_dir(root.path())
+        .args(["diff", "--ignore-matching-lines", "src"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("acme-after")
+    );
+    for source in [
+        "git diff --ignore-matching-lines src",
+        "git diff --ignore-matching-lines=src",
+        "git diff -I src",
+        "git diff -Isrc",
+        "git diff --ignore-matching-lines --stat",
+        "git diff --future-option src",
+        "git diff --future-option -- src",
+        "git diff --future-option=src -- src",
+    ] {
+        let value = call(root.path(), "codex", source);
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{source}: {value}"
+        );
+    }
+    for source in [
+        "git diff --ignore-matching-lines src -- src",
+        "git diff --ignore-matching-lines=src -- src",
+        "git diff --ignore-matching-lines --stat -- src",
+        "git diff --ignore-matching-lines -- src",
+        "git diff -I src src",
+        "git diff -w src",
+        "git diff src",
+    ] {
+        assert_permitted(&call(root.path(), "codex", source), "codex");
+    }
 }

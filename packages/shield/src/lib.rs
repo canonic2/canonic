@@ -35,6 +35,12 @@ pub fn run(cli: &cli::Cli) -> std::process::ExitCode {
     // Shared so the MCP server's frame observer can outlive one borrow.
     let log = std::sync::Arc::new(diagnostics::Log::open(cli));
     let serve = cli.command.mcp_serve();
+    // Internal callbacks already record fixed hook stages. They must not start
+    // an asynchronous request writer whose shutdown can delay or warn on hooks.
+    let trace = (serve.is_none() && !matches!(cli.command, cli::PublicCommand::Internal(_)))
+        .then(|| log.request("command", "command", None, None))
+        .flatten();
+    let _trace_scope = trace.as_ref().map(diagnostics::trace::Request::enter);
     if !matches!(cli.command, cli::PublicCommand::Internal(_))
         && serve.is_none()
         && let Some(path) = log.path()
@@ -50,6 +56,13 @@ pub fn run(cli: &cli::Cli) -> std::process::ExitCode {
         "run_end",
         serde_json::json!({"success":exit == std::process::ExitCode::SUCCESS}),
     );
+    if let Some(trace) = &trace {
+        trace.finish(if exit == std::process::ExitCode::SUCCESS {
+            "success"
+        } else {
+            "failure"
+        });
+    }
     exit
 }
 

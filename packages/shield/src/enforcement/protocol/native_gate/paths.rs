@@ -7,6 +7,7 @@ use crate::review::{
     integrations::protected_files,
     path_access::{Change, PathAccess, Read},
 };
+mod git;
 
 /// The compiled cache location and the operator's protected path access.
 #[derive(Clone, Copy)]
@@ -37,15 +38,15 @@ pub(super) enum Access {
     Read,
     /// Lists or records paths; may name the .shield folder itself.
     Index,
+    /// Prints names and metadata only, never contents, so agent settings may
+    /// be named; review state and the cache stay closed.
+    Metadata,
     Write,
 }
 
 /// Read-only commands whose only effect on named paths is reading them.
 const READERS: &str =
     "cat head tail wc grep egrep fgrep rg stat file diff cmp jq shasum sha256sum md5";
-/// Git subcommands that read the working tree and change only the repository.
-const GIT_RECORDS: &str =
-    "add status diff log show blame commit ls-files check-ignore grep shortlog";
 const FIND_ACTIONS: &str = "-exec -execdir -ok -okdir -delete -fprint -fprint0 -fprintf -fls";
 
 /// The strictest protection found, with the submitted path that caused it when
@@ -133,26 +134,118 @@ fn access(request: &Value) -> Access {
             Access::Read
         }
         _ if listed(READERS, leaf) => Access::Read,
-        "ls" => Access::Index,
-        "find" if !arguments.iter().any(|a| listed(FIND_ACTIONS, a)) => Access::Index,
-        "git"
-            if arguments
-                .get(
-                    if arguments.first() == Some(&"-C")
-                        && arguments.get(1).is_some_and(|p| Path::new(p).is_absolute())
-                    {
-                        2
-                    } else {
-                        0
-                    },
-                )
-                .is_some_and(|sub| listed(GIT_RECORDS, sub))
-                && !arguments.iter().any(|a| a.starts_with("--output")) =>
-        {
-            Access::Index
-        }
+        "ls" => Access::Metadata,
+        "find" if !arguments.iter().any(|a| listed(FIND_ACTIONS, a)) => Access::Metadata,
+        "git" => git::access(&arguments),
         _ => Access::Write,
     }
+}
+
+/// What a command prints beyond the paths it names: a Git invocation's
+/// revision paths, patches and searches, or a recursive grep's walk, checked
+/// like a shell rg content search of the same folders.
+fn output_protection(
+    request: &Value,
+    root: &Path,
+    cwd: &Path,
+    cwd_known: bool,
+    guard: Guard<'_>,
+) -> Finding {
+    let Some(executable) = request["executable"].as_str() else {
+        return (Protection::None, None);
+    };
+    let arguments: Vec<&str> = request["arguments"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let leaf = Path::new(executable)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(executable);
+    match leaf {
+        "git" => git::content(&arguments, root, cwd, cwd_known, guard),
+        "grep" | "egrep" | "fgrep" => match recursive_grep(&arguments, cwd) {
+            Some(search) => {
+                let mut finding = search_protection(&search, root, cwd, cwd_known, guard, false);
+                if finding.0 == Protection::Blocked {
+                    finding.0 = Protection::SearchBlocked;
+                }
+                finding
+            }
+            None => (Protection::None, None),
+        },
+        _ => (Protection::None, None),
+    }
+}
+
+/// A recursive grep as the rg content search that reads every existing entry
+/// below the same folders; grep honours no ignore files. Missing folders hold
+/// nothing to read. None when the grep is not recursive.
+fn recursive_grep(arguments: &[&str], cwd: &Path) -> Option<Value> {
+    const VALUED_SHORT: &str = "efmABCdD";
+    const VALUED_LONG: &str = "--regexp --file --max-count --after-context --before-context \
+        --context --include --exclude --exclude-dir --exclude-from --label --binary-files \
+        --devices --directories --group-separator";
+    let listed = |list: &str, word: &str| list.split_whitespace().any(|item| item == word);
+    let mut recursive = false;
+    let mut pattern_given = false;
+    let mut operands = Vec::new();
+    let mut options = true;
+    let mut words = arguments.iter();
+    while let Some(&word) = words.next() {
+        if !options || word == "-" || !word.starts_with('-') {
+            operands.push(word);
+        } else if word == "--" {
+            options = false;
+        } else if let Some(long) = word.strip_prefix("--") {
+            let (name, value) = long
+                .split_once('=')
+                .map_or((long, None), |(name, value)| (name, Some(value)));
+            let value = if value.is_none() && listed(VALUED_LONG, word) {
+                words.next().copied()
+            } else {
+                value
+            };
+            recursive |= ["recursive", "dereference-recursive"].contains(&name)
+                || (name == "directories" && value == Some("recurse"));
+            pattern_given |= ["regexp", "file"].contains(&name);
+        } else {
+            for (index, flag) in word.char_indices().skip(1) {
+                recursive |= flag == 'r' || flag == 'R';
+                if VALUED_SHORT.contains(flag) {
+                    let attached = &word[index + flag.len_utf8()..];
+                    let value = if attached.is_empty() {
+                        words.next().copied()
+                    } else {
+                        Some(attached)
+                    };
+                    pattern_given |= flag == 'e' || flag == 'f';
+                    recursive |= flag == 'd' && value == Some("recurse");
+                    break;
+                }
+            }
+        }
+    }
+    if !recursive {
+        return None;
+    }
+    let paths: Vec<&str> = operands
+        .into_iter()
+        .skip(usize::from(!pattern_given))
+        .collect();
+    let paths = if paths.is_empty() { vec!["."] } else { paths };
+    let existing: Vec<&str> = paths
+        .into_iter()
+        .filter(|path| submitted_path(path, cwd).symlink_metadata().is_ok())
+        .collect();
+    if existing.is_empty() {
+        return None;
+    }
+    let mut search = vec!["-g", "*", "--", "shield-pattern"];
+    search.extend(existing);
+    Some(serde_json::json!({"executable":"rg","arguments":search}))
 }
 
 /// An outside-location refusal: the first argument of the refused operation
@@ -216,14 +309,18 @@ pub(super) fn operator_cli(value: &Value, cwd: &Path) -> bool {
                 .and_then(Value::as_str)
                 .map_or(cwd, Path::new);
             value["executable"].as_str().is_some_and(|executable| {
+                let shield = Path::new(executable).file_name().is_some_and(operator_name)
+                    || submitted_path(executable, cwd)
+                        .canonicalize()
+                        .is_ok_and(|p| p.file_name().is_some_and(operator_name));
+                if shield && help_only(&value["arguments"]) {
+                    return false;
+                }
                 value["arguments"].as_array().is_some_and(|arguments| {
                     arguments
                         .windows(2)
                         .any(|pair| pair[0] == "mcp" && pair[1] == "serve")
-                }) || Path::new(executable).file_name().is_some_and(operator_name)
-                    || submitted_path(executable, cwd)
-                        .canonicalize()
-                        .is_ok_and(|p| p.file_name().is_some_and(operator_name))
+                }) || shield
             }) || fields
                 .iter()
                 .filter(|(key, _)| !["evaluation", "source_units"].contains(&key.as_str()))
@@ -232,6 +329,25 @@ pub(super) fn operator_cli(value: &Value, cwd: &Path) -> bool {
         Value::Array(values) => values.iter().any(|v| operator_cli(v, cwd)),
         _ => false,
     }
+}
+
+/// A trailing help flag after plain words cannot select an operator action.
+/// Other options, path syntax and `--` are excluded; ordinary policy and path guards
+/// still decide the command and any redirections or neighboring operations.
+fn help_only(arguments: &Value) -> bool {
+    let Some(arguments) = arguments.as_array() else {
+        return false;
+    };
+    let Some((last, commands)) = arguments.split_last() else {
+        return false;
+    };
+    (last == "--help" || last == "-h")
+        && commands.iter().all(|word| {
+            word.as_str().is_some_and(|word| {
+                word.starts_with(|c: char| c.is_ascii_lowercase())
+                    && word.bytes().all(|c| c.is_ascii_lowercase() || c == b'-')
+            })
+        })
 }
 
 fn operator_name(name: &std::ffi::OsStr) -> bool {
@@ -308,8 +424,9 @@ fn inspect(
                 search.0 = Protection::SearchBlocked;
             }
             let named = named_files(&value["request"], cwd, guard);
+            let output = output_protection(&value["request"], root, cwd, cwd_known, guard);
             strictest(
-                [named, search].into_iter().chain(
+                [named, search, output].into_iter().chain(
                     fields
                         .iter()
                         .filter(|(key, _)| {
@@ -585,6 +702,7 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
         return match access {
             Access::Write if allowed(guard.allow.agent_settings_change) => Protection::None,
             Access::Write => Protection::Blocked,
+            Access::Metadata => Protection::None,
             _ if guard.allow.agent_settings_read == Read::Allow => Protection::None,
             _ => Protection::Sensitive,
         };
@@ -598,7 +716,11 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
             Protection::Blocked
         }
         // Naming the folder reaches its state unless Git and listings skip it.
-        None if access == Access::Index && path.join(".gitignore").is_file() => Protection::None,
+        None if matches!(access, Access::Index | Access::Metadata)
+            && path.join(".gitignore").is_file() =>
+        {
+            Protection::None
+        }
         None => Protection::Blocked,
         // The ignore file keeps review state and the cache out of Git.
         Some(part)

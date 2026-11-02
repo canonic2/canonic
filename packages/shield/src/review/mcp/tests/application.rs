@@ -1,6 +1,59 @@
 //! The host-approved tool applies exact proposals through the shared atomic commit.
 use super::*;
 
+#[test]
+fn prepared_apply_verifies_source_bytes_and_reconnect_can_prepare_its_own_plan() {
+    let (root, mut context, connection) = fixture();
+    context.agent = Some("codex".into());
+    let args = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"rule_add","rule":rule("acme-source", "allow")}),
+    );
+    let store = Store::open(root.path()).unwrap();
+    let state = store.read_checkpoint().unwrap();
+    let source = &state.proposals[0].candidate;
+    let path = root
+        .path()
+        .join(".shield/review/sources")
+        .join(format!("{}.json", source["digest"].as_str().unwrap()));
+    let original = std::fs::read(&path).unwrap();
+    let mut changed = original.clone();
+    changed[0] ^= 1;
+    std::fs::write(&path, changed).unwrap();
+    let refused = invoke(&context, &connection, "policy_apply", args.clone());
+    assert!(!refused["error"].is_null(), "{refused}");
+    assert_eq!(
+        store.read_checkpoint().unwrap().policy_revision,
+        state.policy_revision
+    );
+    std::fs::write(&path, original).unwrap();
+    store
+        .update_checkpoint(&context, &|| Ok(()), |current| {
+            current.proposals[0].comparison["formatting"] =
+                json!(["Acme review text changed after approval."]);
+            Ok(Value::Null)
+        })
+        .unwrap();
+    let refused = invoke(&context, &connection, "policy_apply", args.clone());
+    assert!(
+        !refused["error"].is_null(),
+        "cached presentation accepted a changed review: {refused}"
+    );
+    store
+        .update_checkpoint(&context, &|| Ok(()), |current| {
+            current.proposals[0].comparison = state.proposals[0].comparison.clone();
+            Ok(Value::Null)
+        })
+        .unwrap();
+    let reconnected = Connection::new("reconnected".into());
+    context.connection_id = Some("reconnected".into());
+    apply(&context, &reconnected, &args);
+    apply(&context, &reconnected, &args);
+    let after = store.read().unwrap();
+    after.active.as_ref().unwrap().validate(&after).unwrap();
+}
+
 /// The Codex confirmation as one text: its change line, then any details.
 pub(super) fn readable(args: &Value) -> String {
     format!(

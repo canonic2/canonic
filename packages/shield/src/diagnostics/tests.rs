@@ -98,7 +98,8 @@ fn failed_writes_disable_logging_and_preserve_existing_bytes() {
     let log = Log {
         path: Some(path.clone()),
         started: Instant::now(),
-        writer: Mutex::new(Some((File::open(&path).unwrap(), 0))),
+        writer: Arc::new(Mutex::new(Some((File::open(&path).unwrap(), 0)))),
+        traces: OnceLock::new(),
     };
     log.event("cannot_write", json!({}));
     assert!(log.writer.lock().unwrap().is_none());
@@ -137,11 +138,26 @@ fn real_mcp_dispatch_logs_request_and_response_without_retaining_results() {
     .unwrap();
     assert_eq!(response["id"], 33);
     assert_eq!(response["result"]["isError"], false);
-    let text = std::fs::read_to_string(log.path().unwrap()).unwrap();
-    let records: Vec<Value> = text
-        .lines()
-        .map(|line| serde_json::from_str(line).unwrap())
-        .collect();
+    let deadline = Instant::now() + std::time::Duration::from_secs(1);
+    let (text, records) = loop {
+        let text = std::fs::read_to_string(log.path().unwrap()).unwrap();
+        let records: Vec<Value> = text
+            .lines()
+            .filter_map(|line| serde_json::from_str(line).ok())
+            .collect();
+        if ["mcp_input", "mcp_output"].iter().all(|event| {
+            records
+                .iter()
+                .any(|record| record["event"] == *event && record["fields"]["id"] == 33)
+        }) {
+            break (text, records);
+        }
+        assert!(
+            Instant::now() < deadline,
+            "frame metadata was not delivered while the process remained alive"
+        );
+        std::thread::yield_now();
+    };
     assert!(records.iter().any(|record| record["event"] == "mcp_input"
         && record["fields"]["id"] == 33
         && record["fields"]["tool"] == "status"));

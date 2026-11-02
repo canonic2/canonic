@@ -1362,7 +1362,7 @@ fn codex_prefix_rules_follow_the_active_policy_and_the_agent() {
                 "conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"prefix","values":["logs"]}}}]})
         .to_string();
         let candidate =
-            crate::review::packs::rebuild(&state.candidates["project"], &[], &[], Some(&rules))
+            crate::review::packs::rebuild(&state.candidates["project"], &mut [], &[], Some(&rules))
                 .unwrap();
         crate::review::publication::commit(
             &context,
@@ -1446,7 +1446,8 @@ fn reviews_list_the_codex_prefixes_a_change_adds_or_removes() {
             "rules":[{"id":"logs","decision":decision,"agents":{"codex":{"prefixes":[["acme","logs"]]}},
                 "conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"prefix","values":["logs"]}}}]})
         .to_string();
-        crate::review::packs::rebuild(&state.candidates["project"], &[], &[], Some(&rules)).unwrap()
+        crate::review::packs::rebuild(&state.candidates["project"], &mut [], &[], Some(&rules))
+            .unwrap()
     };
     let review = |state: &crate::review::model::State, candidate: &Value| {
         super::super::presentation::review(

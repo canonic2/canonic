@@ -120,6 +120,9 @@ const MAX_BATCH: usize = 16;
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Input {
+    /// Captured application workflow data; never deserialized from tool arguments.
+    #[serde(skip)]
+    pub(super) prepared: Option<Prepared>,
     /// Private workflow binding; never accepted from model-supplied JSON.
     #[serde(skip)]
     pub(super) expected_policy_revision: Option<String>,
@@ -204,6 +207,20 @@ fn capacity(proposals: &[Proposal]) -> Result<(), Error> {
 }
 
 type PreparedPair = (configuration::Evaluator, configuration::Evaluator);
+/// An installation candidate whose exact artifacts were captured before user input.
+pub(super) struct Prepared {
+    pub(super) binding: String,
+    pub(super) candidate: Value,
+    pub(super) metadata: Value,
+}
+
+pub(super) fn prepared_binding(state: &super::model::State) -> String {
+    policy::fingerprint(
+        json!({"candidates":super::storage::sources::map_digest(&state.candidates),"metadata":state.operator})
+            .to_string()
+            .as_bytes(),
+    )
+}
 type Reservation<'a> =
     &'a mut dyn FnMut(&Value, &Value, &Value, &Value, Option<PreparedPair>) -> Result<(), Error>;
 
@@ -252,7 +269,14 @@ pub(super) fn propose(
     }
     capacity(&before.proposals)?;
     checkpoint()?;
-    let (candidate, meta) = prepare_all(context, &mut before, &changes, checkpoint)?;
+    let (candidate, meta) = if let Some(prepared) = &input.prepared {
+        if prepared.binding != prepared_binding(&before) {
+            return Err(Error::StaleSnapshot);
+        }
+        (prepared.candidate.clone(), prepared.metadata.clone())
+    } else {
+        prepare_all(context, &mut before, &changes, checkpoint)?
+    };
     let mut after = BTreeMap::new();
     after.insert("project".into(), candidate.clone());
     let next_snapshots = snapshots(&after)?;
@@ -261,12 +285,7 @@ pub(super) fn propose(
         &next_snapshots
     )?);
     let next_plan = configuration::Evaluator::new(next_snapshots)?;
-    let old: std::collections::BTreeSet<_> = base_plan.codex_prefixes().iter().collect();
-    let new: std::collections::BTreeSet<_> = next_plan.codex_prefixes().iter().collect();
-    if old != new {
-        let prefixes = json!({"added":new.difference(&old).collect::<Vec<_>>(),"removed":old.difference(&new).collect::<Vec<_>>()});
-        comparison["codex_prefixes"] = prefixes;
-    }
+    compare_prefixes(&base_plan, &next_plan, &mut comparison);
     if let Some(lines) = super::formatting_changes(&before.candidates["project"], &candidate) {
         comparison["formatting"] = lines;
     }
@@ -315,6 +334,18 @@ pub(super) fn propose(
         state.record(event);
         Ok(result)
     })
+}
+
+fn compare_prefixes(
+    before: &configuration::Evaluator,
+    after: &configuration::Evaluator,
+    comparison: &mut Value,
+) {
+    let old: std::collections::BTreeSet<_> = before.codex_prefixes().iter().collect();
+    let new: std::collections::BTreeSet<_> = after.codex_prefixes().iter().collect();
+    if old != new {
+        comparison["codex_prefixes"] = json!({"added":new.difference(&old).collect::<Vec<_>>(),"removed":old.difference(&new).collect::<Vec<_>>()});
+    }
 }
 
 /// The candidate after every change in order, each prepared against the
@@ -578,4 +609,27 @@ fn validate_input(input: &Input) -> Result<(), Error> {
         return Err(Error::Invalid("invalid proposal fields"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod prepared_binding_tests {
+    use super::*;
+
+    #[test]
+    fn prepared_binding_matches_retained_and_hydrated_sources_but_rejects_drift() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let bundle =
+            configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
+        super::super::mcp::initialize_fixture(root.path(), &bundle);
+        let store = Store::open(root.path()).unwrap();
+        let mut compact = store.read_checkpoint().unwrap();
+        let mut hydrated = store.read().unwrap();
+        let binding = prepared_binding(&hydrated);
+        assert_eq!(binding, prepared_binding(&compact));
+        compact.operator["default"] = json!("other");
+        assert_ne!(binding, prepared_binding(&compact));
+        hydrated.candidates.get_mut("project").unwrap()["config"] =
+            json!("schema_version: 1\npacks: []\n\n");
+        assert_ne!(binding, prepared_binding(&hydrated));
+    }
 }

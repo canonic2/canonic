@@ -122,6 +122,9 @@ pub enum Profile {
 /// Invalid policy/request input or cooperative interruption. Messages omit document snippets.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Candidate selections and their supplied pack artifacts do not agree.
+    #[error("candidate pack identity or version mismatch")]
+    ArtifactMismatch,
     /// Cooperative caller interruption; no completed decision is available.
     #[error("evaluation interrupted")]
     Interrupted,

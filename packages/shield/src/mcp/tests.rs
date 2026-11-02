@@ -12,6 +12,7 @@ use std::{
 };
 mod confirmation;
 mod elicitation;
+mod prompts;
 mod skills;
 
 /// A fixture project. The temporary root lives as long as this value.
@@ -247,6 +248,7 @@ fn catalog_publishes_every_tool_and_marks_only_policy_changes_as_mutations() {
     assert_eq!(
         mutations,
         [
+            "pack_add",
             "pack_configure",
             "policy_propose",
             "review_defer",
@@ -295,7 +297,7 @@ fn legacy_skills_methods_are_refused_but_bundled_resources_remain_readable() {
             assert_eq!(initialized["result"]["protocolVersion"], version);
             assert_eq!(
                 initialized["result"]["capabilities"],
-                json!({"tools":{"listChanged":false},"resources":{}})
+                json!({"tools":{"listChanged":false},"resources":{},"prompts":{"listChanged":false}})
             );
             for id in [2, 3, 5] {
                 let refused = reply(&outputs, &json!(id));
@@ -455,7 +457,7 @@ fn evaluation_is_connection_local_and_never_executes_input() {
                 .as_array()
                 .unwrap()
                 .len(),
-            22
+            23
         );
         let report = reply(&outputs, &json!("λ"));
         let envelope = &report["result"]["structuredContent"];

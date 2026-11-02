@@ -148,6 +148,7 @@ fn check(value: &Value) -> Result<(), Error> {
 }
 
 pub(super) fn hydrate(store: &Store, value: &mut Value) -> Result<(), Error> {
+    let _trace = crate::diagnostics::trace::span("source.hydrate");
     if value["kind"] == KIND {
         check(value)?;
         let digest = value["digest"]
@@ -176,6 +177,8 @@ pub(super) fn hydrate(store: &Store, value: &mut Value) -> Result<(), Error> {
         if crate::policy::fingerprint(&bytes) != digest {
             return Err(Error::Invalid("retained source digest differs"));
         }
+        crate::diagnostics::trace::count("source.hydrated", 1);
+        crate::diagnostics::trace::count("source.read_bytes", bytes.len() as u64);
         let candidate: Value = serde_json::from_slice(&bytes)
             .map_err(|_| Error::Invalid("corrupt retained source"))?;
         if candidate["kind"] != "candidate-bundle"

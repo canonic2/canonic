@@ -109,9 +109,26 @@ scope; they do not permit configuration writes.
 | Changing agent settings | Block | Allow; the agent can then remove Shield's hooks or the host confirmation that MCP policy changes rely on |
 | Changing `.shield` policy files | Block | Allow; edits still apply only after `shield policy review` |
 
+Reading agent settings includes commands whose output can print them without
+naming them, such as `git show HEAD:.mcp.json`, an unscoped `git diff` or
+`git log -p`, `git grep`, and `grep -r` over a folder that holds them. Add a
+pathspec that leaves settings out, as in `git diff -- src`, to keep such a
+command out of this group. Listing names and metadata, as `ls`, `find`,
+`git ls-files` and `git status` do, is not reading; `git ls-files --stage`,
+`git status --porcelain=v2` and `git status -v` are, because they print object IDs
+or changes. The same footprint check applies when those commands omit paths.
+Unknown Git subcommands can be aliases or external commands, so their output
+conservatively reaches repository settings. Explicit `-c` or `--config-env`
+overrides of `alias.*`, `core.pager` or `diff.external` use that same footprint.
+Git option values do not narrow this footprint: in
+`git diff --ignore-matching-lines src`, `src` is a regular expression, so the
+diff can include settings outside that folder. Unknown option arity also keeps
+the complete footprint rather than guessing which words are paths.
+
 `.shield/review/`, compiled caches, the `.shield` folder itself and
 `.shield/.gitignore` stay protected whatever you choose, and agents still cannot
-run `shield`. The choice is kept with the project's review state; agents cannot
+run Shield operator actions. Help-only requests follow ordinary policy. The
+choice is kept with the project's review state; agents cannot
 change it. `status` lists any group you have opened. An invalid saved choice
 blocks every native request until you run `protection set` again.
 

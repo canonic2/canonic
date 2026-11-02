@@ -325,6 +325,8 @@ fn response(
             && let Some(path) = receipt["protected_path"].as_str()
         {
             value.reason = protected_access(path, receipt["protected_group"].as_str());
+        } else if let Some(reason) = printed_settings(receipt, operation) {
+            value.reason = reason;
         } else if let Some(reason) =
             Some(value.reason.as_str()).and_then(|reason| reason.strip_prefix("Shield: "))
             && !path.is_empty()
@@ -398,6 +400,21 @@ fn response(
     } else {
         "Shield active project policy permits this request."
     }))
+}
+
+/// A settings read the command reaches only through its output, as an unscoped
+/// patch or recursive search does, asks the agent to narrow the command.
+fn printed_settings(receipt: &Value, operation: &Value) -> Option<String> {
+    if receipt["code"] != "sensitive-read" {
+        return None;
+    }
+    let path = receipt["protected_path"].as_str()?;
+    let name = Path::new(path).file_name()?.to_str()?;
+    (!operation["source"].as_str()?.contains(name)).then(|| {
+        format!(
+            "Shield: this command can print `{path}`, which may hold credentials. Limit it to paths that leave agent settings out; otherwise continue without them."
+        )
+    })
 }
 
 fn existing_prompt(adapter: &dyn AgentAdapter, event: Event, receipt: &Value) -> Option<Reply> {

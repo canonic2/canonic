@@ -213,6 +213,7 @@ pub(super) fn build(state: &State, directory: Option<&Path>) -> Result<Artifact,
             operator: &state.operator,
         },
         directory,
+        None,
     )
 }
 pub(super) fn build_candidate(
@@ -220,6 +221,7 @@ pub(super) fn build_candidate(
     candidates: &std::collections::BTreeMap<String, Value>,
     revision: &str,
     operator: &Value,
+    evaluator: &Evaluator,
 ) -> Result<Artifact, Error> {
     build_source(
         Source {
@@ -230,6 +232,7 @@ pub(super) fn build_candidate(
             operator,
         },
         None,
+        Some(evaluator),
     )
 }
 #[derive(Clone, Copy)]
@@ -240,7 +243,12 @@ struct Source<'a> {
     policy_revision: &'a str,
     operator: &'a Value,
 }
-fn build_source(state: Source<'_>, directory: Option<&Path>) -> Result<Artifact, Error> {
+fn build_source(
+    state: Source<'_>,
+    directory: Option<&Path>,
+    prepared: Option<&Evaluator>,
+) -> Result<Artifact, Error> {
+    let _trace = crate::diagnostics::trace::span("cache.build");
     let explicit = directory.is_some() || state.operator["compiled_cache_root"].is_string();
     let directory = directory
         .map(Path::to_path_buf)
@@ -264,7 +272,13 @@ fn build_source(state: Source<'_>, directory: Option<&Path>) -> Result<Artifact,
     let project_key = project_key(state.project_root, state.project_id);
     let candidate_digest = super::storage::sources::map_digest(state.candidates);
     let plan_key = plan_key(&candidate_digest, state.policy_revision);
-    let evaluator = Evaluator::new(snapshots(state.candidates)?)?;
+    let built_evaluator;
+    let evaluator = if let Some(evaluator) = prepared {
+        evaluator
+    } else {
+        built_evaluator = Evaluator::new(snapshots(state.candidates)?)?;
+        &built_evaluator
+    };
     if evaluator.revision() != state.policy_revision {
         return Err(Error::StaleSnapshot);
     }

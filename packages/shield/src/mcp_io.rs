@@ -39,7 +39,8 @@ pub(crate) fn run(
         eprintln!("Cannot start Shield MCP server: enrolled project required");
         return ExitCode::FAILURE;
     };
-    let Ok(server) = mcp::Server::for_review(context) else {
+    let Ok(server) = mcp::Server::for_review(context).map(|server| server.with_log(log.clone()))
+    else {
         eprintln!("Cannot start Shield project review server");
         return ExitCode::FAILURE;
     };

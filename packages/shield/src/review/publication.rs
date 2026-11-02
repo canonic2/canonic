@@ -21,6 +21,12 @@ pub(super) enum HostConfirmation {
     Elicitation,
     ToolPermission,
 }
+/// Source whose integrity apply just verified, with its optional immutable plan.
+#[derive(Clone, Copy)]
+pub(in crate::review) struct Prepared<'a> {
+    pub(in crate::review) source: &'a Value,
+    pub(in crate::review) evaluator: Option<&'a configuration::Evaluator>,
+}
 impl HostConfirmation {
     pub(super) fn mechanism(self) -> &'static str {
         match self {
@@ -87,6 +93,7 @@ pub(super) fn commit_reviewed(
         proposal,
         manual_fingerprint,
         "operator-cli",
+        None,
     )
 }
 
@@ -97,6 +104,7 @@ pub(in crate::review) fn commit_mcp(
     meta: Value,
     proposal: &str,
     confirmation: HostConfirmation,
+    prepared: Prepared<'_>,
 ) -> Result<Value, Error> {
     commit_confirmed(
         context,
@@ -106,9 +114,14 @@ pub(in crate::review) fn commit_mcp(
         Some(proposal),
         None,
         confirmation.mechanism(),
+        Some(prepared),
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Publication keeps the reviewed base, approval provenance and verified source/plan explicit"
+)]
 fn commit_confirmed(
     context: &Context,
     before: &State,
@@ -117,7 +130,9 @@ fn commit_confirmed(
     proposal: Option<&str>,
     manual_fingerprint: Option<&str>,
     mechanism: &str,
+    prepared: Option<Prepared<'_>>,
 ) -> Result<Value, Error> {
+    let _trace = crate::diagnostics::trace::span("publication");
     if let Some(id) = proposal {
         validate_proposal_base(before, id)?;
     }
@@ -129,7 +144,13 @@ fn commit_confirmed(
     );
     let mut candidates = BTreeMap::new();
     candidates.insert("project".into(), candidate);
-    let evaluator = configuration::Evaluator::new(review::snapshots(&candidates)?)?;
+    let owned;
+    let evaluator = if let Some(evaluator) = prepared.and_then(|prepared| prepared.evaluator) {
+        evaluator
+    } else {
+        owned = configuration::Evaluator::new(review::snapshots(&candidates)?)?;
+        &owned
+    };
     if mechanism != "operator-cli" {
         validate_mcp_change(before, &candidates["project"])?;
     }
@@ -138,40 +159,43 @@ fn commit_confirmed(
     meta["projection_file_hashes"] = json!(file_hashes(&files));
     let expected = publication_identity(before);
     let store = Store::open(Path::new(&context.project_root))?;
+    let source = prepared.map_or(&candidates["project"], |prepared| prepared.source);
+    let sources = BTreeMap::from([("project".into(), source.clone())]);
     let compiled =
-        review::cache::build_candidate(context, &candidates, evaluator.revision(), &meta)?;
-    let candidates = store.retain_candidates(&candidates)?;
-    let candidate_identity = review::storage::sources::candidate_identity(&candidates["project"]);
+        review::cache::build_candidate(context, &sources, evaluator.revision(), &meta, evaluator)?;
+    let candidate_identity = review::storage::sources::candidate_identity(source);
+    let candidate_digest = review::storage::sources::map_digest(&sources);
+    // A selected proposal already owns a durable, verified source object. Publish
+    // that exact reference under the lock instead of serializing and retaining it again.
+    let retained = if proposal.is_none() {
+        Some(store.retain_candidates(&candidates)?)
+    } else {
+        None
+    };
     let mut attempted_activation = None;
     let result = store.update_checkpoint(context, &|| Ok(()), |state| {
-        if manual_fingerprint.map_or_else(
-            || projection_changed(context, before),
-            |fingerprint| Ok(projection_fingerprint(context, before)? != fingerprint),
-        )? {
-            return Err(Error::Invalid(
-                "project files changed during confirmation; review again",
-            ));
-        }
+        verify_confirmation_files(context, before, manual_fingerprint)?;
         if expected != publication_identity(state) {
             return Err(Error::Invalid("project changed; review again"));
         }
-        if let Some(id) = proposal {
+        let candidates = if let Some(id) = proposal {
             let row = state
                 .proposals
                 .iter_mut()
                 .find(|p| p.id == id)
                 .ok_or(Error::Missing)?;
-            if row.status != "pending"
-                || row.policy_revision != state.policy_revision
-                || review::storage::sources::candidate_identity(&row.candidate)
-                    != candidate_identity
-            {
-                return Err(Error::Invalid("proposal changed or is stale"));
-            }
-            row.status = "applied".into();
-            row.operator =
-                Some(json!({"operator_id":null,"display_name":null,"mechanism":mechanism}));
-        }
+            mark_applied(
+                row,
+                &state.policy_revision,
+                prepared.map(|_| source),
+                &candidate_identity,
+                &candidate_digest,
+                mechanism,
+            )?;
+            BTreeMap::from([("project".into(), row.candidate.clone())])
+        } else {
+            retained.ok_or(Error::CandidateUnavailable)?
+        };
         if metadata(before)["projection"] != meta["projection"] {
             meta["projection_previous"] = projection_hashes(context, &files)?;
         }
@@ -194,25 +218,79 @@ fn commit_confirmed(
     });
     let receipt = match result {
         Ok(value) => value,
-        Err(error) => {
-            let recovered = store.read()?;
-            if attempted_activation.as_deref().is_none_or(|id| {
-                recovered
-                    .active
-                    .as_ref()
-                    .is_none_or(|a| a.activation_id() != id)
-            }) || recovered.operator != meta
-                || recovered.policy_revision != evaluator.revision()
-            {
-                return Err(error);
-            }
-            json!({"committed":true,"policy_revision":recovered.policy_revision,"repair_needed":true})
-        }
+        Err(error) => recover_activation(
+            error,
+            &store,
+            attempted_activation.as_deref(),
+            &meta,
+            evaluator.revision(),
+        )?,
     };
     let mut receipt = receipt;
-    repair_after_commit(context, &store, &evaluator, &files, &meta, &mut receipt);
+    repair_after_commit(context, &store, evaluator, &files, &meta, &mut receipt);
     receipt["changes"] = changes;
     Ok(receipt)
+}
+
+fn verify_confirmation_files(
+    context: &Context,
+    before: &State,
+    manual_fingerprint: Option<&str>,
+) -> Result<(), Error> {
+    if manual_fingerprint.map_or_else(
+        || projection_changed(context, before),
+        |fingerprint| Ok(projection_fingerprint(context, before)? != fingerprint),
+    )? {
+        return Err(Error::Invalid(
+            "project files changed during confirmation; review again",
+        ));
+    }
+    Ok(())
+}
+
+fn mark_applied(
+    row: &mut super::model::Proposal,
+    revision: &str,
+    source: Option<&Value>,
+    candidate_identity: &str,
+    candidate_digest: &str,
+    mechanism: &str,
+) -> Result<(), Error> {
+    if row.status != "pending"
+        || row.policy_revision != revision
+        || source.is_some_and(|source| row.candidate != *source)
+        || review::storage::sources::candidate_identity(&row.candidate) != candidate_identity
+        || review::storage::sources::map_digest(&BTreeMap::from([(
+            "project".into(),
+            row.candidate.clone(),
+        )])) != candidate_digest
+    {
+        return Err(Error::Invalid("proposal changed or is stale"));
+    }
+    row.status = "applied".into();
+    row.operator = Some(json!({"operator_id":null,"display_name":null,"mechanism":mechanism}));
+    Ok(())
+}
+
+fn recover_activation(
+    error: Error,
+    store: &Store,
+    attempted_activation: Option<&str>,
+    metadata: &Value,
+    revision: &str,
+) -> Result<Value, Error> {
+    let recovered = store.read()?;
+    if attempted_activation.is_none_or(|id| {
+        recovered
+            .active
+            .as_ref()
+            .is_none_or(|active| active.activation_id() != id)
+    }) || recovered.operator != *metadata
+        || recovered.policy_revision != revision
+    {
+        return Err(error);
+    }
+    Ok(json!({"committed":true,"policy_revision":recovered.policy_revision,"repair_needed":true}))
 }
 
 /// Host confirmation cannot activate connection or resolved-setting changes.
@@ -266,8 +344,9 @@ fn repair_after_commit(
     meta: &Value,
     receipt: &mut Value,
 ) {
+    let _trace = crate::diagnostics::trace::span("publication.repair");
     let mut prefix_error = None;
-    let repair = store.inspect_locked(context, &|| Ok(()), |current| {
+    let repair = store.inspect_checkpoint(context, &|| Ok(()), |current| {
         if current.policy_revision != evaluator.revision()
             || metadata(current)["projection"] != meta["projection"]
         {

@@ -88,7 +88,7 @@ these include tool loading, task lists and stopping tasks, questions, plan mode,
 scheduling, subagents, workflows, agent listing, skills, and MCP resource listing.
 Invoked tools are checked normally, except in remotely running subagents or
 workflows. Codex passes through plans, questions, permission requests, tool search,
-timing, subagents, and MCP resource listing.
+timing (including the host's `clocksleep` tool), subagents, and MCP resource listing.
 
 Unsupported tools ask in Claude and block in Codex. Examples include MCP resource
 reads; Claude also asks for session messages, worktrees, LSP, and
@@ -111,7 +111,10 @@ but cannot edit them or read `.shield/review/`. Reading agent settings or
 private review state and cache files. Change configurable protection with
 [`shield protection set`](project-review.md#protected-files).
 
-Agents cannot run Shield's operator CLI. They inspect policy through MCP,
+Agents can request command help, such as `shield protection --help`, under
+ordinary command policy. Help requests consist of plain lowercase words followed
+by `--help` or `-h`, without other options or paths. Operator actions remain
+blocked through agent shell tools. Agents inspect policy through MCP,
 prepare proposals, and submit `policy_apply` with the returned
 `apply_arguments`. You can also review proposals with `shield policy review`.
 A proposal changes no permissions until accepted.
@@ -197,8 +200,9 @@ Codex permitted requests return brief model context without an explicit Allow
 response or argument rewrite; Ask fallback retains the original policy decision.
 Exact shell rules match the complete supplied vendor input and available context.
 Protected-path checks resolve existing symlink targets, including ancestors of new files.
-Agent shell tools cannot launch Shield's operator CLI or its literal
-`mcp serve` startup sequence under another executable name. Use the registered
+Agent shell tools cannot run Shield's operator actions or launch its literal
+`mcp serve` startup sequence under another executable name. Help-only requests
+follow ordinary policy and protected-path checks. Use the registered
 Shield MCP tools to propose changes and request approval.
 Allow permits the command; Deny blocks it. Unmatched requests ask. When the only
 explanation for an Ask is source Shield cannot inspect, such as `$(…)`, `eval` or

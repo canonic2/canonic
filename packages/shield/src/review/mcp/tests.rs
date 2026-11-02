@@ -1,5 +1,6 @@
 //! Behavioral checks for the canonical project tool surface and authority separation.
 mod application;
+mod apply_cost;
 mod cross_source;
 mod documentation;
 mod file_editing;
@@ -17,6 +18,18 @@ use std::{collections::BTreeMap, path::Path};
 
 fn fixture() -> (assert_fs::TempDir, Context, Connection) {
     fixture_with(&Bundle::capture(r#"{"schema_version":1,"packs":[]}"#, &[], None).unwrap())
+}
+
+#[test]
+fn candidate_artifact_failure_does_not_blame_tool_arguments() {
+    let (_root, context, _connection) = fixture();
+    let response = failure(&context, &crate::policy::Error::ArtifactMismatch.into());
+    assert_eq!(response["error"]["code"], "candidate_error");
+    let message = response["error"]["message"].as_str().unwrap();
+    assert!(message.contains("No change was activated"));
+    assert!(message.contains("Continue without this proposal"));
+    assert!(!message.contains("Invalid input"));
+    assert!(response["error"]["operator_route"].is_null());
 }
 
 #[test]
@@ -699,6 +712,7 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
             "registry_list",
             "pack_search",
             "pack_info",
+            "pack_add",
             "pack_configure",
             "policy_show",
             "rule_list",

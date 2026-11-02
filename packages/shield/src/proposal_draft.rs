@@ -163,17 +163,20 @@ pub(crate) fn arguments(change: &Value, entry: Option<&str>) -> Value {
 
 /// The sentence an agent reads: what to call, with what, and what the user does.
 pub(crate) fn offer(arguments: &Value) -> String {
+    if arguments["change"]["kind"] == "pack_add" {
+        let input = json!({"reference":arguments["change"]["reference"]});
+        let observed = arguments["source_entry_id"]
+            .as_str()
+            .map_or_else(String::new, |entry| format!(" Observed request {entry}."));
+        return format!(
+            "Call pack_add with arguments {input} to collect required settings and prepare an inactive installation proposal. Review its Allow/Ask/Deny scope; use pack_info for requested detail. Copy the returned apply_arguments object unchanged into policy_apply for user approval.{observed}"
+        );
+    }
     let entry = arguments["source_entry_id"]
         .as_str()
         .map_or_else(String::new, |entry| format!(" and source_entry_id {entry}"));
-    let is_pack = arguments["change"]["kind"] == "pack_add";
-    let check = if is_pack {
-        " Review the proposal's Allow/Ask/Deny scope; use pack_info for requested detail."
-    } else {
-        ""
-    };
     format!(
-        "Call policy_propose with change {}{entry}; add agent_reason.{check} Copy the returned apply_arguments object unchanged into policy_apply for user approval.",
+        "Call policy_propose with change {}{entry}; add agent_reason. Copy the returned apply_arguments object unchanged into policy_apply for user approval.",
         arguments["change"]
     )
 }

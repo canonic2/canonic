@@ -18,6 +18,7 @@ pub(in crate::review) fn projections(
     candidate: &Value,
     meta: &Value,
 ) -> Result<BTreeMap<String, String>, Error> {
+    let _trace = crate::diagnostics::trace::span("projection.generate");
     let config = configuration::layers::merged(candidate)?;
     let shared = candidate["config"]
         .as_str()
@@ -102,6 +103,7 @@ pub(in crate::review) fn projection_changed(
     context: &Context,
     state: &State,
 ) -> Result<bool, Error> {
+    let _trace = crate::diagnostics::trace::span("projection.check");
     if let Some(expected) = state.operator["projection_file_hashes"].as_object() {
         // A local file created by hand is an edit too.
         for name in ["config.local.yml", "rules.local.yml"] {
@@ -167,16 +169,10 @@ pub(in crate::review) fn materialize(
 ) -> Result<(), Error> {
     let directory = root(context).join(".shield");
     for (name, bytes) in files {
-        crate::configuration::Candidate::from_yaml(
-            &json!({"schema_version":1,"packs":[],"rules":name}).to_string(),
-        )?;
+        crate::configuration::portable_path(name)?;
         let path = directory.join(name);
         let parent = path.parent().ok_or(Error::Invalid("projection parent"))?;
-        for ancestor in parent.ancestors().take_while(|p| p.starts_with(&directory)) {
-            if fs::symlink_metadata(ancestor).is_ok_and(|m| m.file_type().is_symlink()) {
-                return Err(Error::Invalid("projection parent cannot be a link"));
-            }
-        }
+        check_parent(&directory, parent)?;
         fs::create_dir_all(parent)?;
         if !parent
             .canonicalize()?
@@ -192,6 +188,16 @@ pub(in crate::review) fn materialize(
         review::storage::remove_dead_temporaries(parent, temporary_writer);
         let temp = path.with_extension(format!("shield-{}.tmp", std::process::id()));
         replace(&temp, &path, bytes.as_bytes())?;
+        crate::diagnostics::trace::count("projection.files_written", 1);
+    }
+    Ok(())
+}
+
+fn check_parent(directory: &Path, parent: &Path) -> Result<(), Error> {
+    for ancestor in parent.ancestors().take_while(|p| p.starts_with(directory)) {
+        if fs::symlink_metadata(ancestor).is_ok_and(|m| m.file_type().is_symlink()) {
+            return Err(Error::Invalid("projection parent cannot be a link"));
+        }
     }
     Ok(())
 }
@@ -226,8 +232,14 @@ pub(in crate::review) fn projection_hashes(
     files: &BTreeMap<String, String>,
 ) -> Result<Value, Error> {
     let mut hashes = serde_json::Map::new();
+    let directory = root(context).join(".shield");
     for name in files.keys() {
-        let path = root(context).join(".shield").join(name);
+        crate::configuration::portable_path(name)?;
+        let path = directory.join(name);
+        check_parent(
+            &directory,
+            path.parent().ok_or(Error::Invalid("projection parent"))?,
+        )?;
         let hash = match fs::symlink_metadata(&path) {
             Ok(m) if m.is_file() && !m.file_type().is_symlink() => json!(policy::fingerprint(
                 crate::application::read(&path)
@@ -248,8 +260,13 @@ pub(in crate::review) fn repair_projections(
     files: &BTreeMap<String, String>,
     meta: &Value,
 ) -> Result<(), Error> {
+    let _trace = crate::diagnostics::trace::span("projection.repair");
     let actual = projection_hashes(context, files)?;
+    let mut changed = BTreeMap::new();
     for (name, bytes) in files {
+        if actual[name] == policy::fingerprint(bytes.as_bytes()) {
+            continue;
+        }
         if !actual[name].is_null()
             && actual[name] != policy::fingerprint(bytes.as_bytes())
             && actual[name] != meta["projection_previous"][name]
@@ -258,6 +275,7 @@ pub(in crate::review) fn repair_projections(
                 "manual projections differ; review changes through shield policy review",
             ));
         }
+        changed.insert(name.clone(), bytes.clone());
     }
-    materialize(context, files)
+    materialize(context, &changed)
 }

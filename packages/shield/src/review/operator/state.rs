@@ -70,7 +70,7 @@ pub(super) fn initialize(
     let candidate = crate::review::packs::rebuild(
         &candidate,
         meta["installed"]
-            .as_array()
+            .as_array_mut()
             .ok_or(Error::Invalid("installed missing"))?,
         &bytes,
         None,

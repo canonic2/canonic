@@ -257,6 +257,7 @@ impl Store {
     // revision. This path checks storage identity and bindings without rebuilding
     // unrelated review policies. It must not be used as mutation authorization.
     pub(in crate::review) fn read_unprepared(&self) -> Result<State, Error> {
+        let _trace = crate::diagnostics::trace::span("state.hydrate_all");
         let state = self.read_history()?;
         let mut value =
             serde_json::to_value(state).map_err(|_| Error::Invalid("state encoding"))?;
@@ -279,6 +280,7 @@ impl Store {
 
     // Current enrollment, authorization and source identities, without preparing policy.
     pub(in crate::review) fn read_checkpoint(&self) -> Result<State, Error> {
+        let _trace = crate::diagnostics::trace::span("state.checkpoint");
         let file = self.directory.join("state.json");
         #[cfg(windows)]
         crate::windows_security::check_private(&file)?;
@@ -293,6 +295,7 @@ impl Store {
         if bytes.len() > MAX_STATE {
             return Err(crate::policy::Error::Limit.into());
         }
+        crate::diagnostics::trace::count("state.read_bytes", bytes.len() as u64);
         let state: State = serde_json::from_slice(&bytes)
             .map_err(|_| Error::Invalid("corrupt review state; preserve it for recovery"))?;
         if state.project_id.len() != 64
@@ -316,6 +319,7 @@ impl Store {
     /// Captures the history view under the lock, then verifies, correlates and
     /// retains it after releasing the lock.
     pub(in crate::review) fn read_history(&self) -> Result<State, Error> {
+        let _trace = crate::diagnostics::trace::span("history.read");
         let (mut state, view) = {
             let _guard = history::lock(self)?;
             let state = self.read_checkpoint()?;
@@ -345,6 +349,7 @@ impl Store {
         Ok(result)
     }
     fn lock(&self, checkpoint: Checkpoint<'_>) -> Result<Lock, Error> {
+        let _trace = crate::diagnostics::trace::span("authority.lock_wait");
         let path = self.directory.join("state.lock");
         for _ in 0..20 {
             checkpoint()?;
@@ -516,6 +521,7 @@ impl Store {
         Ok((decision, result))
     }
     fn write(&self, state: &State) -> Result<(), Error> {
+        let _trace = crate::diagnostics::trace::span("state.write");
         let history_guard = match history::lock(self) {
             Ok(guard) => Some(guard),
             Err(error) if state.history_control => return Err(error),
@@ -604,6 +610,8 @@ fn private_directory(path: &Path) -> Result<(), Error> {
 /// which also empties the drive's write cache and serializes behind every
 /// other process's flush. Other platforms use `File::sync_all`.
 pub(in crate::review) fn sync(file: &fs::File) -> std::io::Result<()> {
+    let _trace = crate::diagnostics::trace::span("storage.sync");
+    crate::diagnostics::trace::count("storage.sync_calls", 1);
     #[cfg(target_os = "macos")]
     {
         nix::unistd::fsync(file).map_err(std::io::Error::from)

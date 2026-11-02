@@ -89,7 +89,7 @@ pub(super) fn prepare(
     catalog: Option<Catalog>,
 ) -> Result<(Value, Value), Error> {
     let rows = meta["installed"]
-        .as_array()
+        .as_array_mut()
         .ok_or(Error::Invalid("installed packs missing"))?;
     if rows.len() != bytes.len() || target >= rows.len() {
         return Err(Error::Invalid(
@@ -308,7 +308,7 @@ fn render(
     }
     let candidate = rebuild(
         &before.candidates["project"],
-        &chosen_rows,
+        &mut chosen_rows,
         &chosen_bytes,
         None,
     )?;

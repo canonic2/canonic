@@ -422,6 +422,10 @@ fn invalid_input_message(error: &Error) -> String {
 /// show the model only the structured result.
 fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
     Some(match error {
+        Error::Policy(crate::policy::Error::ArtifactMismatch) => (
+            "candidate_error",
+            "Shield could not build a consistent pack candidate. No change was activated. Continue without this proposal and report the failure; changing tool arguments is not a recovery for this error",
+        ),
         Error::McpSetupRequired => (
             "mcp_setup_required",
             "Connection settings changed. Review the complete candidate with shield policy review in an operator terminal, then run shield mcp setup; policy_apply cannot activate this change",
@@ -547,7 +551,7 @@ fn review_tool(
     }
 
     match name {
-        "policy_apply" => apply::apply(context, args, checkpoint, confirmed),
+        "policy_apply" => apply::apply(context, args, checkpoint, confirmed, views),
         "policy_propose" => propose(context, views, args, checkpoint),
         "policy_evaluate" => diagnostics::evaluate(context, views, args, checkpoint),
         "policy_compare" => diagnostics::compare(context, views, args, checkpoint),
@@ -696,6 +700,7 @@ fn propose_input(
 ) -> Result<Value, Error> {
     let old = views.clone();
     let mut handles = None;
+    let presentation = std::cell::RefCell::new(None);
     let result = changes::propose(
         context,
         input,
@@ -711,6 +716,10 @@ fn propose_input(
         },
         &|proposal| {
             let mut data = apply::proposal_result(context, proposal);
+            presentation.replace(Some((
+                apply::argument_binding(context, proposal),
+                data["apply_arguments"].clone(),
+            )));
             skipped_pinned(&mut data, input, &proposal.base_metadata);
             data
         },
@@ -726,6 +735,9 @@ fn propose_input(
     // persistence. Reopening the store here rehydrates every proposal
     // and pack after the write, risking a deadline without its receipt.
     let (before, after) = handles.ok_or(Error::CandidateUnavailable)?;
+    if let Some((binding, arguments)) = presentation.into_inner() {
+        views.remember_approval(binding, arguments);
+    }
     data["before_candidate_id"] = json!(before);
     data["after_candidate_id"] = json!(after);
     Ok(data)

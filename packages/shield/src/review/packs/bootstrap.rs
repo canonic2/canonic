@@ -213,7 +213,8 @@ mod tests {
             crate::configuration::Bundle::capture(r#"{"schema_version":1,"packs":[]}"#, &[], None)
                 .unwrap()
         );
-        let candidate = super::super::rebuild(&empty, &initial.rows, &initial.bytes, None).unwrap();
+        let candidate =
+            super::super::rebuild(&empty, &mut initial.rows.clone(), &initial.bytes, None).unwrap();
         let candidates = BTreeMap::from([("project".into(), candidate)]);
         let evaluator =
             crate::configuration::Evaluator::new(crate::review::snapshots(&candidates).unwrap())

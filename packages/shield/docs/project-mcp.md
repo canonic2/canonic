@@ -40,7 +40,7 @@ For client implementation, see [transport details](#responses-and-transport-life
 | Category | Tools |
 | --- | --- |
 | Status | `status`, `doctor` |
-| Packs and registries | `pack_list`, `registry_list`, `pack_search`, `pack_info`, `pack_configure` |
+| Packs and registries | `pack_list`, `registry_list`, `pack_search`, `pack_info`, `pack_add`, `pack_configure` |
 | Policy and rules | `policy_show`, `rule_list`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_apply`, `policy_withdraw`, `policy_receipt` |
 | Approvals and history | `request_list`, `history_list` |
 | Diagnostics | `policy_evaluate`, `policy_compare` |
@@ -185,25 +185,64 @@ approval. Declining leaves the active policy unchanged.
 
 ### Example: propose a pack installation
 
-After searching and inspecting a pack, call `policy_propose` with the
+After searching and inspecting a pack, call `pack_add` with the
 following shape. Replace `PACK_REFERENCE` with the exact reference you reviewed:
 
 ```json
 {
-  "change": {
-    "kind": "pack_add",
-    "reference": "PACK_REFERENCE",
-    "profile": "recommended"
-  },
-  "reason": "Use the reviewed Recommended permissions for this project's tool."
+  "reference": "PACK_REFERENCE",
+  "profile": "recommended"
 }
 ```
 
-The response includes the proposal ID and `apply_arguments`; policy is unchanged.
+Answer any required settings form. The response includes the proposal ID and
+`apply_arguments`; policy is unchanged.
 Explain the scope, then copy `apply_arguments` unchanged into `policy_apply`.
 Wait for the host approval and result. A successful application returns a receipt;
 declined or unavailable approval leaves the proposal inactive. A stale proposal
 needs fresh preparation. See the [review reference](#proposals-and-operator-review).
+
+## Install a pack with guided settings
+
+Ask the agent to inspect the registry pack with `pack_info`, then call `pack_add`:
+
+```json
+{"reference":"acme/settings","profile":"recommended","layer":"project"}
+```
+
+For a new pack, omitted `profile` selects `recommended`; omitted `layer` selects
+`project`. Use `local` for a personal installation. Existing selections keep their
+profile unless one is supplied explicitly.
+
+Shield resolves and verifies the pack and its dependencies, then asks for required
+settings that have neither a value nor a declared default. Fields identify their
+pack and variable; field keys such as `setting_0` are private to that form. Answer
+every field explicitly. Optional settings can be changed later with
+`pack_configure`. If no required input is missing, Shield prepares the proposal
+without opening a settings form.
+
+The form retains the exact acquired releases. A registry change while it is open
+does not substitute another release. A changed project policy or review context
+requires a new `pack_add` call and fresh answers. Submission saves an inactive
+proposal; review its pack versions, profiles, values and scope, then copy its
+`apply_arguments` unchanged to `policy_apply` for separate final approval.
+Decline, dismissal and unavailable forms create no proposal. If any `pack_add`
+reply is lost, inspect `policy_show` before retrying, including when no settings
+form opened. A fresh call can create another proposal; do not reconstruct private
+form answers.
+
+Guided installation supports the same field types and protocol compatibility as
+the settings forms below, with at most 16 missing required values and 4 MiB of
+retained candidate source per interaction. Unsupported forms, free-text lists or
+larger installations use `shield pack add` in the user's terminal.
+
+Hosts supporting MCP prompts can also discover `install_pack` through
+`prompts/list` and retrieve it with `prompts/get`. Its string arguments are
+`reference` (required), `profile` and `layer`. It supplies a conversation starter
+for this workflow. Its tools require an enrolled-project MCP connection; a
+discovery-only connection can retrieve the prompt but cannot install a pack.
+Retrieving it performs no acquisition, proposal creation or approval; the
+`pack_add` tool remains available without prompts.
 
 ## Choose installed pack settings
 
@@ -610,10 +649,13 @@ to finish while the policy evaluator is busy.
 Policy apply uses that budget for preparation, a separate five-minute form wait,
 then a fresh ordinary budget for queued revalidation, commit and encoding.
 Checkpoints do not interrupt native blocking I/O; clients also own process/I/O
-limits. Lost proposal replies can be recovered by resubmitting the same arguments.
+limits. Lost `policy_propose` replies can be recovered by resubmitting the same
+arguments. For any lost `pack_add` or `pack_configure` reply, inspect `policy_show`
+before retrying, even if no form opened. Consumed form state cannot be replayed
+and private answers must not be reconstructed.
 
 Keep stdin open until you have the replies you need. When it closes, queued
-`policy_propose`, `pack_configure`, `policy_withdraw` and `policy_apply`
+`policy_propose`, `pack_add`, `pack_configure`, `policy_withdraw` and `policy_apply`
 calls are refused with `-32800` and never run, a pending confirmation is
 withdrawn, and read-only tools still finish.
 

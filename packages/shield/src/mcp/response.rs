@@ -33,6 +33,7 @@ pub(super) fn tool_result(
         Ok(Err(_)) | Err(_) => return interrupted(name, agent),
     };
     ToolResult {
+        meta: None,
         content: vec![
             Content::text(messages::summary(name, agent, &value)),
             Content::text(text),
@@ -44,6 +45,7 @@ pub(super) fn tool_result(
 
 fn oversized(value: Value, failed: bool) -> ToolResult {
     ToolResult {
+        meta: None,
         content: Vec::new(),
         structured_content: Some(value),
         is_error: failed,

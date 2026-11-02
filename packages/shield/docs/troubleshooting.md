@@ -11,9 +11,17 @@ reported recovery command, or find your symptom below.
 | An unexpected Allow or Deny | [Inspect the request and matching rule](#the-request-was-allowed-or-blocked-unexpectedly) |
 | A YAML edit has no effect | [Review and activate the edit](#i-edited-a-rule-but-behavior-did-not-change) |
 | An old proposal cannot be applied | [Stale proposals](#a-proposal-is-stale) |
+| A pack proposal reports `candidate_error` | [Inconsistent pack candidate](#a-pack-proposal-reports-candidate_error) |
 | Status reports repair or cache failure | [Policy files](#policy-files-need-repair) or [compiled cache](#the-compiled-policy-cache-cannot-load) |
 | Initialization fails while downloading | [Baseline acquisition](#initialization-cannot-download-the-baseline) |
 | A change cannot obtain confirmation | [Terminal confirmation](#terminal-confirmation-is-unavailable) |
+
+## A pack proposal reports `candidate_error`
+
+Shield could not align a candidate's selected packs with its artifact bytes.
+The proposal did not activate. Continue the task without that proposal and report
+the error. Changing valid tool arguments or deleting project state is not a
+recovery for this failure.
 
 ## The agent does not seem to use Shield
 

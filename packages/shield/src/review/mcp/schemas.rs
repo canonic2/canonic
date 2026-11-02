@@ -158,8 +158,8 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
             }
         }
         if name == "policy_propose" { let mut definitions = crate::policy::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
-        let mutation=["policy_propose","pack_configure","policy_withdraw","policy_apply","review_defer"].contains(&name);
-        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply"].contains(&name)),"idempotentHint":name != "pack_configure","openWorldHint":(["pack_search","pack_info","policy_propose"].contains(&name))}})
+        let mutation=["policy_propose","pack_configure","pack_add","policy_withdraw","policy_apply","review_defer"].contains(&name);
+        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","policy_propose"].contains(&name))}})
     }).chain(super::documentation::tools().into_iter().map(|mut tool| {
         // The shared definitions carry their own schemas and annotations;
         // results arrive in Shield's envelope.
@@ -229,6 +229,7 @@ fn inventory() -> Vec<(&'static str, &'static str, Value)> {
             object(paging(json!({"query":string()})), &["query"]),
         ),
         pack_info(),
+        pack_add(),
         pack_configure(),
         (
             "policy_show",
@@ -293,6 +294,17 @@ fn inventory() -> Vec<(&'static str, &'static str, Value)> {
             comparison(),
         ),
     ]
+}
+
+fn pack_add() -> (&'static str, &'static str, Value) {
+    (
+        "pack_add",
+        "Prepare a guided installation of a verified registry pack and its dependencies. Ask required settings through a host form, then save an inactive proposal from the captured artifacts. Profile defaults to recommended for a new selection; layer defaults to project. Review and copy apply_arguments unchanged to policy_apply for separate final approval. Decline or dismissal ends the offer; never invent answers. Use shield pack add in the user's terminal if forms are unsupported.",
+        object(
+            json!({"reference":string(),"profile":{"enum":["loose","recommended","strict"]},"layer":layer()}),
+            &["reference"],
+        ),
+    )
 }
 
 fn pack_configure() -> (&'static str, &'static str, Value) {

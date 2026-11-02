@@ -66,13 +66,13 @@ pub(super) fn mutate(
             .map_or(&[][..], Vec::as_slice),
     )?;
     crate::policy::CustomRules::from_yaml(&document.to_string())?;
-    let meta = crate::review::project::metadata(&before);
+    let mut meta = crate::review::project::metadata(&before);
     let bytes: Vec<String> = serde_json::from_value(candidate["packs"].clone())
         .map_err(|_| Error::Invalid("pack bytes missing"))?;
     let next = packs::rebuild(
         candidate,
         meta["installed"]
-            .as_array()
+            .as_array_mut()
             .ok_or(Error::Invalid("installed packs missing"))?,
         &bytes,
         Some(&document.to_string()),

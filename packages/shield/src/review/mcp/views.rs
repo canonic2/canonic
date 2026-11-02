@@ -79,6 +79,8 @@ pub(super) struct Views {
     handles: BTreeMap<String, Arc<Captured>>,
     identities: BTreeMap<String, String>,
     cursors: BTreeMap<String, Cursor>,
+    approvals: BTreeMap<String, Arc<Value>>,
+    approval_bytes: usize,
 }
 impl Views {
     pub(super) fn new(seed: String) -> Self {
@@ -90,6 +92,8 @@ impl Views {
             handles: BTreeMap::new(),
             identities: BTreeMap::new(),
             cursors: BTreeMap::new(),
+            approvals: BTreeMap::new(),
+            approval_bytes: 0,
         }
     }
     fn id(&mut self, kind: &str) -> String {
@@ -112,6 +116,26 @@ impl Views {
         let bytes = json!([candidate, metadata]).to_string();
         let key = identity(candidate, metadata);
         if let Some(id) = self.identities.get(&key) {
+            let captured = self.handles.get(id).ok_or(Error::CandidateUnavailable)?;
+            if captured.evaluator.get().is_none()
+                && let Some(prepared) = prepared
+            {
+                // An active handle may have reserved bytes but not loaded its plan.
+                // Keep the plan review just prepared instead of discarding it.
+                let reserved = captured
+                    .cached
+                    .as_ref()
+                    .map(|cached| usize::try_from(cached.artifact.byte_len()))
+                    .transpose()
+                    .map_err(|_| Error::Overloaded)?
+                    .unwrap_or(0);
+                let extra = prepared.compiled_bytes().len().saturating_sub(reserved);
+                if self.bytes.saturating_add(extra) > HANDLE_BYTES {
+                    return Err(Error::Overloaded);
+                }
+                self.bytes += extra;
+                let _ = captured.evaluator.set(prepared);
+            }
             return Ok(id.clone());
         }
         if self.handles.len() >= 256 || self.bytes.saturating_add(bytes.len()) > HANDLE_BYTES {
@@ -192,6 +216,28 @@ impl Views {
             .get(id)
             .cloned()
             .ok_or(Error::CandidateUnavailable)
+    }
+    /// Reuse only a plan already prepared for these exact immutable bytes and metadata.
+    /// The caller must still validate current authority and the retained source.
+    pub(super) fn prepared(&self, candidate: &Value, metadata: &Value) -> Option<Arc<Captured>> {
+        let id = self.identities.get(&identity(candidate, metadata))?;
+        let captured = self.handles.get(id)?;
+        captured.evaluator.get()?;
+        Some(captured.clone())
+    }
+    pub(super) fn approval(&self, binding: &str) -> Option<&Value> {
+        self.approvals.get(binding).map(AsRef::as_ref)
+    }
+    /// Presentation is disposable: reaching its bound falls back to regeneration.
+    pub(super) fn remember_approval(&mut self, binding: String, arguments: Value) {
+        if self.approvals.contains_key(&binding) || self.approvals.len() >= 256 {
+            return;
+        }
+        let length = arguments.to_string().len();
+        if self.approval_bytes.saturating_add(length) <= 8 * 1024 * 1024 {
+            self.approval_bytes += length;
+            self.approvals.insert(binding, Arc::new(arguments));
+        }
     }
     pub(super) fn proposal(
         &mut self,

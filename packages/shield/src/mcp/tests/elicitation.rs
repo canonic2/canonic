@@ -1,5 +1,6 @@
 //! Pack forms through the shipping driver: answers prepare, final approval activates.
 use super::*;
+mod installation;
 
 fn prepared(agent: &str, capabilities: &Value) -> (Transport, Project) {
     prepared_with_options(agent, capabilities, test_options(), VERSION)

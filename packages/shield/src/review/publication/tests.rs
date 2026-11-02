@@ -26,7 +26,30 @@ fn fixture() -> (assert_fs::TempDir, Context) {
 }
 
 fn changed(before: &State) -> Value {
-    crate::review::packs::rebuild(&before.candidates["project"], &[], &[], Some(r#"{"schema_version":1,"rules":[{"id":"read","decision":"deny","reason":"Acme fixture","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}}}],"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"]}"#)).expect("changed candidate")
+    crate::review::packs::rebuild(&before.candidates["project"], &mut [], &[], Some(r#"{"schema_version":1,"rules":[{"id":"read","decision":"deny","reason":"Acme fixture","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}}}],"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"]}"#)).expect("changed candidate")
+}
+
+#[test]
+fn unchanged_projection_bytes_cannot_skip_path_validation() {
+    let (root, context) = fixture();
+    fs::write(root.path().join("escape.yml"), "unchanged").unwrap();
+    let files = BTreeMap::from([("../escape.yml".into(), "unchanged".into())]);
+    assert!(repair_projections(&context, &files, &json!({})).is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn unchanged_projection_bytes_cannot_skip_symlinked_parent_checks() {
+    let (root, context) = fixture();
+    let outside = assert_fs::TempDir::new().unwrap();
+    fs::write(outside.path().join("pack.yml"), "unchanged").unwrap();
+    std::os::unix::fs::symlink(outside.path(), root.path().join(".shield/cache")).unwrap();
+    let files = BTreeMap::from([("cache/pack.yml".into(), "unchanged".into())]);
+    assert!(repair_projections(&context, &files, &json!({})).is_err());
+    assert_eq!(
+        fs::read_to_string(outside.path().join("pack.yml")).unwrap(),
+        "unchanged"
+    );
 }
 
 #[test]
@@ -85,6 +108,7 @@ fn mcp_connections_host_confirmation_cannot_activate_connection_changes() {
         None,
         None,
         "host-tool-permission",
+        None,
     )
     .unwrap_err();
     assert!(error.to_string().contains("terminal"));
@@ -98,7 +122,7 @@ fn mcp_connections_host_confirmation_cannot_activate_connection_changes() {
 fn mcp_connections_project_only_survive_permission_rebuild_without_null_associations() {
     let config=json!({"schema_version":1,"packs":[],"mcp":{"cloud":{"transport":{"type":"http","url":"https://cloud.example.com/mcp"},"agents":{"codex":"cloud"}}}}).to_string();
     let candidate = json!(configuration::Bundle::capture(&config, &[], None).unwrap());
-    let rebuilt = review::packs::rebuild(&candidate, &[], &[], None).unwrap();
+    let rebuilt = review::packs::rebuild(&candidate, &mut [], &[], None).unwrap();
     assert_eq!(
         configuration::layers::merged(&rebuilt).unwrap()["mcp"],
         configuration::layers::merged(&candidate).unwrap()["mcp"]
@@ -139,15 +163,16 @@ fn mcp_connections_variable_driven_settings_need_terminal_review_and_rebuild_kee
         None,
         None,
         "host-tool-permission",
+        None,
     )
     .unwrap_err();
     assert!(error.to_string().contains("defaults changed"), "{error}");
-    let rows = vec![
+    let mut rows = vec![
         json!({"id":"acme/cloud","source_identity":"acme-registry","version":"1.0.0","profile":"recommended","digest":policy::fingerprint(pack.as_bytes())}),
     ];
     let rebuilt = review::packs::rebuild(
         &before.candidates["project"],
-        &rows,
+        &mut rows,
         std::slice::from_ref(&pack),
         None,
     )
@@ -156,7 +181,8 @@ fn mcp_connections_variable_driven_settings_need_terminal_review_and_rebuild_kee
         configuration::layers::merged(&rebuilt).unwrap()["mcp"],
         configuration::layers::merged(&before.candidates["project"]).unwrap()["mcp"]
     );
-    let removed = review::packs::rebuild(&before.candidates["project"], &[], &[], None).unwrap();
+    let removed =
+        review::packs::rebuild(&before.candidates["project"], &mut [], &[], None).unwrap();
     let image = configuration::Evaluator::new(
         review::snapshots(&BTreeMap::from([("project".into(), removed)])).unwrap(),
     )

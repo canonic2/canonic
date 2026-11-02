@@ -29,6 +29,9 @@ deps: ## Audit dependency advisories, licenses and sources
 
 # Development keeps Cargo's incremental artifacts in the existing target directory.
 TEST_TARGET ?= --lib
+# The apply-cost regression may clone only immutable pack artifacts from this
+# optional enrolled project into its test-owned fixture; the source is read-only.
+APPLY_PROFILE_PROJECT ?=
 .PHONY: dev test-focus
 
 dev: ## Build incrementally without release optimization or installation
@@ -37,7 +40,7 @@ dev: ## Build incrementally without release optimization or installation
 test-focus: ## Run matching library tests; FILTER is required, TEST_TARGET selects other targets
 	$(if $(strip $(FILTER)),,$(error Set FILTER to a test name or module; optionally set TEST_TARGET='--test integration'))
 	$(if $(filter -%,$(FILTER)),$(error FILTER must be a test-name substring, not a flag))
-	"$(CARGO)" nextest run --locked $(TEST_TARGET) $(CARGO_FLAGS) "$(FILTER)"
+	$(if $(strip $(APPLY_PROFILE_PROJECT)),SHIELD_APPLY_PROFILE_PROJECT="$(APPLY_PROFILE_PROJECT)") "$(CARGO)" nextest run --locked $(TEST_TARGET) $(CARGO_FLAGS) "$(FILTER)"
 PREFIX ?= $(HOME)/.local
 
 .DEFAULT_GOAL := help

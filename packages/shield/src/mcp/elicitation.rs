@@ -21,6 +21,7 @@ pub(super) struct Questions {
 }
 
 struct Pending {
+    tool: String,
     arguments: Value,
     plan: PackQuestion,
     requests: Requests,
@@ -47,11 +48,12 @@ pub(super) fn call(
     {
         return modern_resume(server, &review, &call, context, request);
     }
-    let plan = match PackQuestion::prepare(&review, &call.arguments) {
+    let plan = match PackQuestion::prepare(&review, &call.name, &call.arguments) {
         Ok(plan) => plan,
         Err(error) => {
             return output(
                 &review,
+                &call.name,
                 crate::review::mcp::question_error(&review, &error),
                 context,
             );
@@ -61,6 +63,18 @@ pub(super) fn call(
         Ok(token) => token,
         Err(error) => return Outcome::Method(Err(error)),
     };
+    if !plan.needs_input {
+        return output(
+            &review,
+            plan.tool,
+            plan.propose(&review, &server.connection, &json!({}), &token, &|| {
+                context
+                    .check()
+                    .map_err(|_| crate::policy::Error::Interrupted)
+            }),
+            context,
+        );
+    }
     if let Some(request) = context.request_context() {
         let requests = match Requests::new(vec![("settings".into(), plan.question.clone())]) {
             Ok(requests) => requests,
@@ -86,6 +100,7 @@ pub(super) fn call(
         questions.pending.insert(
             token,
             Pending {
+                tool: call.name,
                 arguments: call.arguments,
                 plan,
                 requests,
@@ -96,9 +111,27 @@ pub(super) fn call(
         return Outcome::InputRequired(result);
     }
     let connection = server.connection.clone();
+    let trace = crate::diagnostics::trace::current();
+    let waiting = trace
+        .as_ref()
+        .map(|trace| trace.wait("input.wait", "input.wait_us"));
     Outcome::Elicit(Elicit::new(
         plan.question.clone(),
-        move |answer, context| finish(&review, &connection, &plan, &token, answer, context),
+        move |answer, context| {
+            drop(waiting);
+            let _scope = trace
+                .as_ref()
+                .map(crate::diagnostics::trace::Request::enter);
+            let outcome = finish(&review, &connection, &plan, &token, answer, context);
+            if let Some(trace) = &trace {
+                trace.finish(match &outcome {
+                    Outcome::Tool(result) if result.is_error => "refused",
+                    Outcome::Tool(_) => "success",
+                    _ => "input_completed",
+                });
+            }
+            outcome
+        },
     ))
 }
 
@@ -126,6 +159,7 @@ fn modern_resume(
         return invalid();
     };
     if pending.expires <= Instant::now()
+        || pending.tool != call.name
         || pending.arguments != call.arguments
         || pending.rounds >= 8
     {
@@ -195,19 +229,19 @@ fn finish(
                 ),
                 Answer::Unavailable => (
                     "input_unavailable",
-                    "MCP pack form unavailable. Ask the user for settings in conversation and use policy_propose, or use shield pack configure in their terminal. Never infer missing answers.",
+                    "MCP pack form unavailable. Use shield pack add or shield pack configure in the user's terminal, or collect explicit values for ordinary policy_propose changes. Never infer missing answers.",
                 ),
             };
             json!({"schema_version":1,"project_id":review.project_id,"policy_revision":null,"data":null,"missing":[],"truncated":false,"redacted":false,"error":{"code":code,"message":message,"operator_route":null}})
         }
     };
-    output(review, value, context)
+    output(review, plan.tool, value, context)
 }
 
-fn output(review: &Review, value: Value, context: &Context) -> Outcome {
+fn output(review: &Review, name: &str, value: Value, context: &Context) -> Outcome {
     let failed = !value["error"].is_null();
     Outcome::Tool(response::tool_result(
-        "pack_configure",
+        name,
         review.agent.as_deref(),
         value,
         failed,
