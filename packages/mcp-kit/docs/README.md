@@ -14,6 +14,7 @@ Start with the [quick start](getting-started.md).
 - [Ask the user to confirm](guides/confirmation.md) — form confirmation and its continuation.
 - [Publish resources and templates](guides/resources.md) — guides, reports and binary artifacts through validated URIs, tool-result links and embedded contents.
 - [Publish reusable prompts](guides/prompts.md) — optional catalogs, string arguments and typed conversation messages.
+- [Suggest argument values](guides/completion.md) — optional contextual choices for prompt arguments and resource-template variables.
 - [Return audio and content hints](guides/audio.md) — inline recordings, audience, priority and modification hints, and task persistence.
 - [Validate arguments and results](guides/schemas.md) — prepared JSON Schema 2020-12, bundled references, resource limits and output contracts.
 - [Publish bundled skills](guides/skills.md) — offline workflows, verified manifests, modern request context and legacy resource fallback.

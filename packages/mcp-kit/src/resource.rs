@@ -7,7 +7,7 @@ use crate::{
 use iri_string::{template::UriTemplateStr, types::UriStr};
 use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::{Value, json};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// Maximum combined resource and template count.
 pub const MAX_ENTRIES: usize = 1024;
@@ -160,9 +160,13 @@ impl ResourceTemplate {
 pub struct ResourceCatalog {
     resources: Vec<Resource>,
     templates: Vec<ResourceTemplate>,
+    template_arguments: HashMap<String, HashSet<String>>,
 }
 
 impl ResourceCatalog {
+    pub(crate) fn argument_names(&self, uri: &str) -> Option<&HashSet<String>> {
+        self.template_arguments.get(uri)
+    }
     pub(crate) fn definitions(&self) -> (Vec<Resource>, Vec<ResourceTemplate>) {
         (self.resources.clone(), self.templates.clone())
     }
@@ -190,16 +194,25 @@ impl ResourceCatalog {
                 return Err(ResourceError::Duplicate(resource.uri.clone()));
             }
         }
-        let mut seen = HashSet::new();
+        let mut template_arguments = HashMap::new();
         for template in &templates {
-            validate_template(&template.uri_template)?;
+            let parsed = validate_template(&template.uri_template)?;
             metadata(
                 &template.name,
                 template.title.as_deref(),
                 template.description.as_deref(),
                 template.mime_type.as_deref(),
             )?;
-            if !seen.insert(&template.uri_template) {
+            if template_arguments
+                .insert(
+                    template.uri_template.clone(),
+                    parsed
+                        .variables()
+                        .map(|name| name.as_str().to_owned())
+                        .collect(),
+                )
+                .is_some()
+            {
                 return Err(ResourceError::Duplicate(template.uri_template.clone()));
             }
         }
@@ -208,6 +221,7 @@ impl ResourceCatalog {
         Ok(Self {
             resources,
             templates,
+            template_arguments,
         })
     }
 
@@ -263,10 +277,11 @@ pub fn validate_uri(uri: &str) -> Result<(), ResourceError> {
     Ok(())
 }
 
-fn validate_template(template: &str) -> Result<(), ResourceError> {
-    if template.len() > MAX_URI_BYTES || UriTemplateStr::new(template).is_err() {
+fn validate_template(template: &str) -> Result<&UriTemplateStr, ResourceError> {
+    if template.len() > MAX_URI_BYTES {
         return Err(ResourceError::Field("uriTemplate"));
     }
+    let parsed = UriTemplateStr::new(template).map_err(|_| ResourceError::Field("uriTemplate"))?;
     // iri-string 0.7.14 permits zero-prefixed and five-digit prefix lengths.
     // RFC 6570 section 2.4.1 requires a nonzero first digit and at most four.
     for expression in template.split('{').skip(1) {
@@ -279,7 +294,7 @@ fn validate_template(template: &str) -> Result<(), ResourceError> {
             }
         }
     }
-    Ok(())
+    Ok(parsed)
 }
 
 fn field(value: &str, limit: usize, name: &'static str) -> Result<(), ResourceError> {

@@ -1,5 +1,6 @@
 //! Drives the stdio server through in-memory pipes, as a host would.
 
+mod completion;
 mod confirmation;
 mod disconnection;
 #[cfg(feature = "docs-build")]

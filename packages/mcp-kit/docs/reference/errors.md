@@ -20,6 +20,8 @@
 | `-32602` | Unknown prompt / Missing required prompt argument / Unknown prompt argument | Retrieval failed catalog validation | Use a listed name and supply only its declared string arguments |
 | `-32602` | Invalid prompt cursor | A list cursor is malformed or belongs to another catalog | Restart listing and forward the returned cursor unchanged |
 | `-32603` | Prompt retrieval requires a typed prompt result | A renderer or continuation returned a raw or wrong-domain success | Return `Outcome::Prompt(GetPromptResult)` |
+| `-32602` | Unknown completion target / Unknown or excessive completion argument / Unknown completion context argument | Completion references unpublished targets or fields, or exceeds an input budget | Use a published prompt/template and its declared string fields |
+| `-32603` | Completion requires a typed complete result | A provider returned raw data, another result type or an input step | Return `Outcome::Completion(CompleteResult)` or an RPC failure |
 | `-32603` | Cannot encode prompt result for legacy request | Resource links are incompatible or the result exceeds its frame budget | Use legacy-supported content and reduce the result size |
 | `-32603` | Cannot encode response | A modern payload fails its operation's type or result contract | Return the matching typed tool/resource result and fix its data |
 | `-32603` | Invalid protocol error for modern request | An outcome uses a retired, unallocated or HTTP-only code, or omits required protocol error data | Use an application code outside the JSON-RPC reserved range, or supply the specified protocol data |

@@ -32,6 +32,7 @@
 //! # Ok::<(), canonic_mcp_kit::CatalogError>(())
 //! ```
 
+pub mod completion;
 pub mod content;
 pub mod control;
 pub mod docs;
@@ -48,6 +49,9 @@ pub mod stdio;
 pub mod task;
 pub mod tool;
 
+pub use completion::{
+    CompleteRequest, CompleteResult, CompletionArgument, CompletionError, CompletionReference,
+};
 pub use content::{AudioContent, ContentAnnotations, ContentError, Role};
 pub use control::{Control, Interrupted};
 pub use modern::{CachePolicy, CacheScope, InputRequiredResult, ModernOptions, RequestContext};

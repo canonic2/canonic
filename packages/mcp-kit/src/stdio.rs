@@ -81,6 +81,8 @@ pub trait Handler: Send + Sync + 'static {
 /// Work a [`Handler`] runs.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
+    /// A catalog-checked argument completion request.
+    Completion(crate::CompleteRequest),
     /// A catalog prompt with validated string arguments.
     Prompt(crate::PromptCall),
     /// A validated management operation; the consumer owns record access and effects.
@@ -108,6 +110,8 @@ pub enum Request {
 
 /// What a request produced.
 pub enum Outcome {
+    /// Validated ordered suggestions.
+    Completion(crate::CompleteResult),
     /// Validated prompt messages.
     Prompt(crate::GetPromptResult),
     /// Ask a rich legacy question. Modern callers use typed input-required rounds instead.
@@ -550,8 +554,51 @@ impl<H: Handler, W: Write> Connection<H, W> {
         self.output.send(outgoing)
     }
 
+    fn invalid_arguments(
+        &mut self,
+        id: Value,
+        call: &ToolCall,
+        error: &ArgumentError,
+    ) -> Result<(), ServeError> {
+        let result = self.handler.invalid_arguments(call, error);
+        let context = self.session.request_context(&id);
+        let encoded = context.map_or_else(
+            || {
+                self.session
+                    .catalog()
+                    .result_schema(&call.name)
+                    .expect("admitted catalog tool")
+                    .encode_legacy(&id, &result, self.output.limit, &|| Ok(()))
+            },
+            |context| context.encode_success(&id, &result, self.output.limit, &|| Ok(())),
+        );
+        self.session.finish(&id);
+        match encoded {
+            Ok(bytes) => self.output.bytes(&bytes),
+            Err(error) => self.output.value(&rpc::failure(
+                id,
+                &RpcError::new(
+                    rpc::INTERNAL_ERROR,
+                    match error {
+                        crate::json::EncodeError::Invalid => {
+                            "Tool result does not match its output schema"
+                        }
+                        crate::json::EncodeError::ValidationLimit => {
+                            "Tool result exceeds schema validation limits"
+                        }
+                        _ => "Response exceeds output limit",
+                    },
+                ),
+            )),
+        }
+    }
+
     fn inbound(&mut self, inbound: Inbound) -> Result<(), ServeError> {
         match inbound {
+            Inbound::Completion { id, request } => {
+                let token = request.progress_token.clone();
+                self.schedule(Some(id), Request::Completion(request), true, token)
+            }
             Inbound::Prompt { id, call } => {
                 let token = call.progress_token.clone();
                 self.schedule(Some(id), Request::Prompt(call), true, token)
@@ -578,37 +625,7 @@ impl<H: Handler, W: Write> Connection<H, W> {
                 self.output.value(&reply)
             }
             Inbound::InvalidArguments { id, call, error } => {
-                let result = self.handler.invalid_arguments(&call, &error);
-                let context = self.session.request_context(&id);
-                let encoded = context.map_or_else(
-                    || {
-                        self.session
-                            .catalog()
-                            .result_schema(&call.name)
-                            .expect("admitted catalog tool")
-                            .encode_legacy(&id, &result, self.output.limit, &|| Ok(()))
-                    },
-                    |context| context.encode_success(&id, &result, self.output.limit, &|| Ok(())),
-                );
-                self.session.finish(&id);
-                match encoded {
-                    Ok(bytes) => self.output.bytes(&bytes),
-                    Err(error) => self.output.value(&rpc::failure(
-                        id,
-                        &RpcError::new(
-                            rpc::INTERNAL_ERROR,
-                            match error {
-                                crate::json::EncodeError::Invalid => {
-                                    "Tool result does not match its output schema"
-                                }
-                                crate::json::EncodeError::ValidationLimit => {
-                                    "Tool result exceeds schema validation limits"
-                                }
-                                _ => "Response exceeds output limit",
-                            },
-                        ),
-                    )),
-                }
+                self.invalid_arguments(id, &call, &error)
             }
             Inbound::Tool { id, call } => {
                 let read_only = self

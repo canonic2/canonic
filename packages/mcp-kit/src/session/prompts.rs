@@ -7,6 +7,21 @@ use crate::{
 use serde_json::Value;
 
 impl Session {
+    pub(super) fn modern_prompt_request(
+        &mut self,
+        id: Value,
+        method: &str,
+        mut params: Value,
+    ) -> Inbound {
+        if method == "prompts/get"
+            && let Some(object) = params.as_object_mut()
+        {
+            object.remove("inputResponses");
+            object.remove("requestState");
+        }
+        self.prompt_request(id, method, &params)
+    }
+
     pub(super) fn prompt_request(&mut self, id: Value, method: &str, params: &Value) -> Inbound {
         let failure = |error| Inbound::Reply(rpc::failure(id.clone(), &error));
         let Some(catalog) = &self.options.prompts else {

@@ -29,6 +29,7 @@ mod sealed {
     impl Payload for crate::ToolResult {}
     impl Payload for crate::ReadResourceResult {}
     impl Payload for crate::GetPromptResult {}
+    impl Payload for crate::CompleteResult {}
 }
 
 /// Supported domain payloads for modern complete-result encoding.
@@ -50,6 +51,20 @@ pub trait CompletePayload: Serialize + sealed::Payload {
     #[doc(hidden)]
     fn prompt_result(&self) -> Option<&crate::GetPromptResult> {
         None
+    }
+    /// Typed suggestions for the completion response boundary.
+    #[doc(hidden)]
+    fn completion_result(&self) -> Option<&crate::CompleteResult> {
+        None
+    }
+}
+
+impl CompletePayload for crate::CompleteResult {
+    fn valid_payload(&self) -> bool {
+        true
+    }
+    fn completion_result(&self) -> Option<&crate::CompleteResult> {
+        Some(self)
     }
 }
 
@@ -529,6 +544,7 @@ impl RequestContext {
         if (self.method == "tools/call" && result.tool_result().is_none())
             || (self.method == "resources/read" && result.resource_result().is_none())
             || (self.method == "prompts/get" && result.prompt_result().is_none())
+            || (self.method == "completion/complete" && result.completion_result().is_none())
         {
             return Err(EncodeError::Invalid);
         }
@@ -641,7 +657,6 @@ pub(crate) fn unavailable_method(method: &str) -> bool {
             "resources/subscribe",
             "resources/unsubscribe",
             "subscriptions/listen",
-            "completion/complete",
             "elicitation/create",
             "sampling/createMessage",
             "roots/list",

@@ -103,6 +103,10 @@ pub struct PromptCatalog {
 }
 
 impl PromptCatalog {
+    pub(crate) fn argument_names(&self, name: &str) -> Option<&HashSet<String>> {
+        self.names.get(name).map(|index| &self.arguments[*index])
+    }
+
     /// Validates definitions, uniqueness and budgets once.
     ///
     /// # Errors

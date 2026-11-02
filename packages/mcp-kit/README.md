@@ -18,6 +18,8 @@ with a ready-to-use stdio driver or a core you can drive from your own runtime.
   URI, with paginated catalogs and parameterized addresses.
 - **Optional prompts.** Publish user-selected conversation starters with checked
   string arguments, paginated discovery and typed messages.
+- **Optional completion.** Suggest prompt arguments and resource-template
+  variables using validated references and contextual string inputs.
 - **Bundled skills.** Publish workflows alongside their tools, with parsed
   metadata, complete file manifests and SHA-256 digests. Files are prepared
   once and served from memory.
@@ -108,6 +110,7 @@ authority by itself.
 - [User confirmation](docs/guides/confirmation.md)
 - [Resources and templates](docs/guides/resources.md)
 - [Reusable prompts](docs/guides/prompts.md)
+- [Argument completion](docs/guides/completion.md)
 - [Audio and content hints](docs/guides/audio.md)
 - [Argument and result schemas](docs/guides/schemas.md)
 - [Bundled skills](docs/guides/skills.md)

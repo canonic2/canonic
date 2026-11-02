@@ -29,7 +29,7 @@ use std::{
 /// What a queued or running request is, independent of its work.
 #[derive(Clone)]
 struct Meta {
-    prompt: bool,
+    reply_kind: ReplyKind,
     result_schema: Option<crate::ResultSchema>,
     admitted: Instant,
     rich_rounds: u8,
@@ -57,8 +57,15 @@ struct Job {
     holds_key: bool,
 }
 
+#[derive(Clone, Copy)]
+enum ReplyKind {
+    Ordinary,
+    Prompt,
+    Completion,
+}
+
 struct Assignment {
-    prompt: bool,
+    reply_kind: ReplyKind,
     result_schema: Option<crate::ResultSchema>,
     request_context: Option<Arc<crate::RequestContext>>,
     sequence: u64,
@@ -246,7 +253,11 @@ impl Scheduler {
         let timeout = admission.timeout.unwrap_or(self.timeout);
         lane.queue.push_back(Job {
             meta: Meta {
-                prompt: matches!(&request, Request::Prompt(_)),
+                reply_kind: match &request {
+                    Request::Prompt(_) => ReplyKind::Prompt,
+                    Request::Completion(_) => ReplyKind::Completion,
+                    _ => ReplyKind::Ordinary,
+                },
                 result_schema: match &request {
                     Request::Tool(call) => session.catalog().result_schema(&call.name),
                     _ => None,
@@ -776,7 +787,7 @@ impl Scheduler {
                     dispatcher: self.dispatcher.clone(),
                 });
                 let assignment = Assignment {
-                    prompt: job.meta.prompt,
+                    reply_kind: job.meta.reply_kind,
                     result_schema: job.meta.result_schema.clone(),
                     request_context: job.meta.request_context.clone(),
                     sequence,
@@ -873,13 +884,14 @@ fn work<H: Handler>(
                 Work::Resume(resume, decision) => resume(decision, &context),
                 Work::ElicitResume(resume, answer) => resume(answer, &context),
             };
+            let outcome = checked_outcome(assignment.reply_kind, outcome);
             let outcome = match outcome {
                 Outcome::Confirm(confirm) if context.protocol.is_some() => {
                     (confirm.resume)(Decision::Unavailable, &context)
                 }
                 outcome => outcome,
             };
-            let outcome = prompt_outcome(assignment.prompt, outcome);
+            let outcome = checked_outcome(assignment.reply_kind, outcome);
             match (&context.result_schema, outcome) {
                 (Some(schema), Outcome::Tool(result)) if context.protocol.is_none() => match schema
                     .validate_checked(&result, false, &|| context.check())
@@ -903,6 +915,7 @@ fn work<H: Handler>(
                     | Outcome::Resource(_)
                     | Outcome::ResourceWithCache(..)
                     | Outcome::Prompt(_)
+                    | Outcome::Completion(_)
                     | Outcome::Bundled(_),
                 ) => Outcome::Method(Err(RpcError::new(
                     rpc::INTERNAL_ERROR,
@@ -926,25 +939,30 @@ fn work<H: Handler>(
     }
 }
 
-fn prompt_outcome(prompt: bool, outcome: Outcome) -> Outcome {
-    if prompt
-        && matches!(
-            &outcome,
-            Outcome::Method(Ok(_))
-                | Outcome::Tool(_)
-                | Outcome::Resource(_)
-                | Outcome::ResourceWithCache(..)
-                | Outcome::Bundled(_)
-                | Outcome::Task(Ok(_))
-                | Outcome::ResourceNotFound(_)
-        )
-    {
-        return Outcome::Method(Err(RpcError::new(
-            rpc::INTERNAL_ERROR,
-            "Prompt retrieval requires a typed prompt result",
-        )));
+fn checked_outcome(kind: ReplyKind, outcome: Outcome) -> Outcome {
+    let valid = matches!(
+        (&kind, &outcome),
+        (_, Outcome::Method(Err(_)) | Outcome::Task(Err(_)))
+            | (ReplyKind::Ordinary, _)
+            | (
+                ReplyKind::Prompt,
+                Outcome::Prompt(_)
+                    | Outcome::Confirm(_)
+                    | Outcome::Elicit(_)
+                    | Outcome::InputRequired(_),
+            )
+            | (ReplyKind::Completion, Outcome::Completion(_))
+    );
+    if valid {
+        return outcome;
     }
-    outcome
+    Outcome::Method(Err(RpcError::new(
+        rpc::INTERNAL_ERROR,
+        match kind {
+            ReplyKind::Completion => "Completion requires a typed complete result",
+            _ => "Prompt retrieval requires a typed prompt result",
+        },
+    )))
 }
 
 fn settle(
@@ -984,6 +1002,7 @@ fn settle(
             None => internal("Tasks require modern protocol metadata"),
         },
         Ok(Outcome::Tool(result)) => encoded(id, &result, limit, context),
+        Ok(Outcome::Completion(result)) => encoded(id, &result, limit, context),
         Ok(Outcome::Prompt(result)) => match context {
             Some(context) => encoded(id, &result, limit, Some(context)),
             None => match result.encode_legacy(id, limit, &|| Ok(())) {

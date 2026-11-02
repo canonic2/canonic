@@ -100,5 +100,6 @@ The transport's frame/output limits also apply. Reduce content if a result
 exceeds its output budget; data is refused rather than truncated. Use image
 builders with a valid image MIME type and base64 data. Prefer resource links
 for large modern artifacts, or bounded embedded content for legacy prompts.
-Completion, catalog changes, subscriptions, icons and arbitrary metadata are
-separate capabilities; this catalog publishes no change notifications.
+Enable [argument completion](completion.md) to suggest values while a host
+collects prompt arguments. Catalog changes, subscriptions, icons and arbitrary
+metadata are separate capabilities; this catalog publishes no change notifications.
