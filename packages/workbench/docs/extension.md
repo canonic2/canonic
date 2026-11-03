@@ -98,12 +98,18 @@ stays running until the extension stops, so screenshots are fast:
 - On macOS it runs as a background agent, with no Dock icon or window.
 - On first activation the runtime is unpacked into the extension's storage.
   Later activations reuse it, and runtimes from older versions are removed.
-  The first launch after a runtime update can take longer while it is unpacked;
-  page listing also waits when a definition needs that runtime to evaluate.
-  Capture and page evaluation share the preparation work.
+  The first launch after a runtime update can take longer while it is unpacked.
 - If it crashes, it restarts and restores the latest view, waiting longer
   between attempts while it keeps failing. If a page hangs it, the helper is
   replaced, and the page is loaded again the next time the canvas asks for it.
+
+Your project's code (computed definitions, `workbench.config.ts`, Astro and
+Vue pages) runs on the Node 24 the extension ships, so you don't need Node
+installed. The first time project code runs, Workbench unpacks that Node into
+`~/.canonic-workbench/runtime/`, which every Workbench version on the machine
+shares; set `CANONIC_WORKBENCH_HOME` to use another folder. That first run
+takes a few seconds longer. A copy that no running Workbench uses and none
+has used for a week is removed the next time Workbench unpacks one.
 
 Screenshots need this helper. It runs on macOS 13 or later, Windows, and Linux
 with a display. Elsewhere, or if it can't be unpacked or started, the camera
