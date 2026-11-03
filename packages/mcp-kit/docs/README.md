@@ -11,6 +11,7 @@ Start with the [quick start](getting-started.md).
 
 - [Quick start](getting-started.md) — dependency, a first tool and a stdio server.
 - [Serve over stdio](guides/stdio.md) — lanes, keys, deadlines, progress, extension methods and disconnection.
+- [Serve over Streamable HTTP](guides/http.md) — the `http-server` driver, request headers, `x-mcp-header` arguments, SSE, cancellation and your own HTTP server.
 - [List tools in pages](guides/pagination.md) — opaque cursors, revision-specific visibility and large catalog discovery.
 - [Notify hosts about changes](guides/subscriptions.md) — opt-in modern streams, filters, catalog replacement and resource updates.
 - [Publish metadata and inspect trace context](guides/metadata.md) — custom JSON, implementation details, icons and request-local propagation strings.

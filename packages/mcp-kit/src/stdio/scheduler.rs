@@ -1,5 +1,5 @@
 //! Lane queues, worker threads, deadlines, cancellation, confirmation waits
-//! and disconnection for one connection.
+//! and disconnection for one driver: a stdio connection or the HTTP server.
 //!
 //! The dispatcher thread owns all scheduling state. Workers only run
 //! requests and send back an encoded reply or a confirmation step.
@@ -155,7 +155,7 @@ struct Worker {
     thread: Option<JoinHandle<()>>,
 }
 
-pub(super) struct Scheduler {
+pub(crate) struct Scheduler {
     elicitation_policy: ElicitationPolicy,
     lanes: Vec<LaneState>,
     workers: Vec<Worker>,
@@ -174,17 +174,17 @@ pub(super) struct Scheduler {
 }
 
 /// One submission binds work, protocol identity and diagnostic ownership.
-pub(super) struct Submission {
-    pub(super) trace: Trace,
-    pub(super) id: Option<Value>,
-    pub(super) request: Request,
-    pub(super) admission: Admission,
-    pub(super) read_only: bool,
-    pub(super) progress_token: Option<Value>,
+pub(crate) struct Submission {
+    pub(crate) trace: Trace,
+    pub(crate) id: Option<Value>,
+    pub(crate) request: Request,
+    pub(crate) admission: Admission,
+    pub(crate) read_only: bool,
+    pub(crate) progress_token: Option<Value>,
 }
 
 impl Scheduler {
-    pub(super) fn start<H: Handler>(
+    pub(crate) fn start<H: Handler>(
         handler: &Arc<H>,
         options: &Options,
         dispatcher: Thread,
@@ -239,7 +239,7 @@ impl Scheduler {
     }
 
     /// Queues a request, or refuses it when its lane is missing or full.
-    pub(super) fn admit(&mut self, session: &mut Session, submission: Submission) -> Vec<Outgoing> {
+    pub(crate) fn admit(&mut self, session: &mut Session, submission: Submission) -> Vec<Outgoing> {
         let Submission {
             mut trace,
             id,
@@ -305,7 +305,7 @@ impl Scheduler {
     }
 
     /// Collects finished work and progress, expires deadlines and dispatches queued work.
-    pub(super) fn settle(&mut self, session: &mut Session) -> Vec<Outgoing> {
+    pub(crate) fn settle(&mut self, session: &mut Session) -> Vec<Outgoing> {
         let mut out = Vec::new();
         // Progress first, but cap the batch even if workers refill the channel.
         // Otherwise both the dispatcher turn and its outgoing Vec can grow
@@ -322,10 +322,12 @@ impl Scheduler {
                 && !running.answered
                 && running.control.check().is_ok()
             {
-                out.push(
-                    Outgoing::Value(notification)
-                        .observed(&running.meta.trace, FrameKind::Progress),
-                );
+                let frame = Outgoing::Value(notification)
+                    .observed(&running.meta.trace, FrameKind::Progress);
+                out.push(match &running.meta.id {
+                    Some(id) => Outgoing::Routed(id.clone(), Box::new(frame)),
+                    None => frame,
+                });
             }
         }
         while let Ok((sequence, finish)) = self.finished.try_recv() {
@@ -337,7 +339,7 @@ impl Scheduler {
     }
 
     /// Stops a request the client cancelled. The session has already released its ID.
-    pub(super) fn cancel(
+    pub(crate) fn cancel(
         &mut self,
         session: &mut Session,
         id: &Value,
@@ -384,7 +386,7 @@ impl Scheduler {
     }
 
     /// Continues the request whose confirmation `elicitation` was answered.
-    pub(super) fn confirmed(
+    pub(crate) fn confirmed(
         &mut self,
         session: &mut Session,
         elicitation: &Value,
@@ -431,7 +433,7 @@ impl Scheduler {
         out
     }
 
-    pub(super) fn elicited(
+    pub(crate) fn elicited(
         &mut self,
         session: &mut Session,
         elicitation: &Value,
@@ -475,7 +477,7 @@ impl Scheduler {
     }
 
     /// Applies the end-of-input rules.
-    pub(super) fn disconnect(&mut self, session: &mut Session) -> Vec<Outgoing> {
+    pub(crate) fn disconnect(&mut self, session: &mut Session) -> Vec<Outgoing> {
         let mut out = Vec::new();
         self.disconnected = true;
         if let Some(notice) = session.close() {
@@ -529,14 +531,14 @@ impl Scheduler {
     }
 
     /// Whether no request is queued, running or awaiting confirmation.
-    pub(super) fn idle(&self) -> bool {
+    pub(crate) fn idle(&self) -> bool {
         self.running.is_empty()
             && self.waiting.is_none()
             && self.lanes.iter().all(|lane| lane.queue.is_empty())
     }
 
     /// How long the dispatcher may sleep before a deadline needs attention.
-    pub(super) fn next_wake(&self) -> Option<Duration> {
+    pub(crate) fn next_wake(&self) -> Option<Duration> {
         let queued = self
             .lanes
             .iter()
@@ -556,7 +558,7 @@ impl Scheduler {
     }
 
     /// Cancels all work and joins the workers.
-    pub(super) fn shutdown(&mut self) {
+    pub(crate) fn shutdown(&mut self) {
         for running in self.running.values() {
             running.control.cancel();
         }

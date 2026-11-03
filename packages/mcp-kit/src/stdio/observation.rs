@@ -231,7 +231,7 @@ struct Live {
 
 /// State follows live work rather than a completed-request registry.
 #[derive(Clone, Default)]
-pub(super) struct Trace {
+pub(crate) struct Trace {
     live: Option<Arc<Live>>,
     assignment: Option<u64>,
     lane: Option<usize>,
@@ -370,7 +370,7 @@ impl Drop for Live {
     }
 }
 
-pub(super) struct Span {
+pub(crate) struct Span {
     pub(super) trace: Trace,
     stage: Stage,
 }

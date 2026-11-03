@@ -443,3 +443,34 @@ fn extension_methods_and_notifications_route_only_when_listed_and_ready() {
         i64::from(rpc::METHOD_NOT_FOUND)
     );
 }
+
+#[test]
+fn modern_extension_notifications_route_without_initialization() {
+    let options = SessionOptions {
+        modern: Some(crate::ModernOptions::new(ServerInfo::new("acme", "1"))),
+        extension_notifications: vec!["notifications/acme/task_end".into()],
+        ..SessionOptions::default()
+    };
+    let mut session = Session::try_new(catalog(), options).unwrap();
+    let params = json!({"_meta":{crate::modern::VERSION_KEY:crate::modern::PROTOCOL_VERSION}});
+    assert_eq!(
+        session.receive_value(rpc::notification(
+            "notifications/acme/task_end",
+            params.clone()
+        )),
+        Inbound::Notification {
+            method: "notifications/acme/task_end".into(),
+            params: params.clone(),
+        }
+    );
+    for (method, params) in [
+        ("notifications/acme/task_end", json!({})),
+        ("notifications/acme/other", params),
+    ] {
+        assert_eq!(
+            session.receive_value(rpc::notification(method, params)),
+            Inbound::Ignored,
+            "{method}: untagged or unlisted notifications still need a listed method and readiness"
+        );
+    }
+}

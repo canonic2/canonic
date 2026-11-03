@@ -1,6 +1,6 @@
 [package]
 name = "canonic-mcp-kit"
-version = "0.13.1"
+version = "0.14.0"
 edition = "2024"
 rust-version = "1.99"
 publish = false
@@ -22,6 +22,9 @@ yaml-rust2 = { version = "0.13", default-features = false }
 # The documentation bundle builder, for consumers' build scripts. It reads files,
 # so ordinary runtime builds leave it out.
 docs-build = []
+# The blocking Streamable HTTP driver over std::net. It opens sockets and
+# starts threads, so consumers that only use the exchange leave it out.
+http-server = []
 
 [dev-dependencies]
 # Only the consumer example/fixtures generate IDs or persist task records.
@@ -29,6 +32,10 @@ getrandom = "0.4.3"
 
 [target.'cfg(unix)'.dev-dependencies]
 rustix = { version = "1.1.5", features = ["fs"] }
+
+[[example]]
+name = "http"
+required-features = ["http-server"]
 
 [[test]]
 name = "integration"

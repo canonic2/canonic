@@ -40,14 +40,7 @@ pub(crate) fn decoded_size(data: &str, limit: usize) -> Result<usize, BinaryErro
     }
     let mut last = 0;
     for byte in data.bytes().take(data.len() - padding) {
-        last = match byte {
-            b'A'..=b'Z' => byte - b'A',
-            b'a'..=b'z' => byte - b'a' + 26,
-            b'0'..=b'9' => byte - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            _ => return Err(BinaryError::Invalid),
-        };
+        last = sextet(byte).ok_or(BinaryError::Invalid)?;
     }
     if (padding == 1 && last & 3 != 0) || (padding == 2 && last & 15 != 0) {
         return Err(BinaryError::Invalid);
@@ -57,4 +50,32 @@ pub(crate) fn decoded_size(data: &str, limit: usize) -> Result<usize, BinaryErro
         return Err(BinaryError::TooLarge);
     }
     Ok(raw_bytes)
+}
+
+/// Decodes canonical padded standard base64 of at most `limit` decoded bytes.
+pub(crate) fn decode(data: &str, limit: usize) -> Result<Vec<u8>, BinaryError> {
+    let mut bytes = Vec::with_capacity(decoded_size(data, limit)?);
+    let mut buffer = 0_u32;
+    let mut bits = 0;
+    for byte in data.bytes().take_while(|byte| *byte != b'=') {
+        buffer = (buffer << 6) | u32::from(sextet(byte).ok_or(BinaryError::Invalid)?);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            bytes.push(u8::try_from(buffer >> bits).map_err(|_| BinaryError::Invalid)?);
+            buffer &= (1 << bits) - 1;
+        }
+    }
+    Ok(bytes)
+}
+
+fn sextet(byte: u8) -> Option<u8> {
+    match byte {
+        b'A'..=b'Z' => Some(byte - b'A'),
+        b'a'..=b'z' => Some(byte - b'a' + 26),
+        b'0'..=b'9' => Some(byte - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
 }

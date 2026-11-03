@@ -4,7 +4,7 @@ mod binary;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use binary::{BinaryError, base64, decoded_size};
+pub(crate) use binary::{BinaryError, base64, decode as decode_base64, decoded_size};
 use serde::{Deserialize, Deserializer, Serialize, de, de::DeserializeOwned};
 use serde_json::{Map, Number, Value};
 

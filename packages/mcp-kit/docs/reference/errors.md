@@ -44,20 +44,30 @@
 | `-32603` | Task outcome does not match its request | The consumer returned the wrong typed outcome or record | Fix the adapter; preserve any already committed task |
 | `-32022` | Unsupported protocol version | The requested version is unsupported or modern support is disabled | Select a supported version from the reply |
 | `-32800` | Connection closed before dispatch or confirmation | The host disconnected | None; queued work and confirmation continuations did not run |
+| `-32800` | Server is shutting down | An HTTP request arrived after `Shutdown::shutdown` | Retry against a running server |
+| `-32020` | Header mismatch: … | An HTTP `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name` or `Mcp-Param-*` header is missing, repeated, malformed or differs from the body | Send each header once with the body's exact value; encode non-ASCII values as `=?base64?…?=` |
+| `-32000` | Origin is not allowed | An HTTP request carried an `Origin` outside `HttpOptions::allowed_origins` | Add the exact browser origin, or call from a non-browser client |
+
+Over HTTP, a reply's status follows its code: `-32020`, `-32021`, `-32022`,
+`-32600` and `-32700` are `400`, `-32601` is `404`, and every other code is
+`200`. See [HTTP](../guides/http.md#statuses-and-refusals) for refusals that have
+no JSON-RPC body.
 
 Arguments that do not match the input schema are not an error reply: the host
 receives a failed tool result naming the field.
 Schema resource refusals also dispatch no work. Catalog construction refuses
-invalid schemas, unsupported dialects, unresolved references and exceeded
-preparation limits; see [schemas](../guides/schemas.md).
+invalid schemas, unsupported dialects, unresolved references, exceeded
+preparation limits and invalid `x-mcp-header` annotations; see
+[schemas](../guides/schemas.md) and [HTTP](../guides/http.md#mirror-arguments-into-headers).
 
 ## `ServeError`
 
 | Variant | Cause |
 | --- | --- |
-| `Options` | No lanes, a lane without workers, capacity below workers, or limits too small |
+| `Options` | No lanes, a lane without workers, capacity below workers, or limits too small; over HTTP, also missing modern options, a session message limit, or HTTP connection and time limits out of range |
+| `Endpoint` | An invalid HTTP endpoint path, allowed origin or body limit |
 | `Configuration` | Invalid modern identity, Skills or Tasks without modern opt-in, invalid task policy/reserved method registration, or conflicting resource namespace ownership |
 | `Spawn` | A reader or worker thread could not start |
-| `Input` | Reading stdin failed; admitted work settled first |
+| `Input` | Reading stdin failed, admitted work settled first; over HTTP, the listener has no local address |
 | `Output` | Writing stdout failed |
 | `Protocol` | One of the connection-ending replies above |

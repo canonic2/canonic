@@ -22,6 +22,9 @@
 | Return tool artifacts | `Content::resource_link`, `ResourceLink`, `Content::resource`, `ResourceContents`; see [artifact results](../guides/resources.md#return-artifacts-from-tools) |
 | Refuse an unknown resource | `Outcome::ResourceNotFound` for revision-aware replies; `resource::not_found` emits a legacy error |
 | Run a stdio server | `stdio::serve`, `stdio::Handler`, `stdio::Options` |
+| Run a Streamable HTTP server | `http::serve`, `http::HttpOptions`, `http::Shutdown` (feature `http-server`); see [HTTP](../guides/http.md) |
+| Serve HTTP from your own server | `http::Endpoint`, `http::EndpointOptions`, `http::RequestHead`, `http::Exchange`, `http::Admitted::check_parameters`, `http::Response`, `http::sse_event`, `http::status_for` |
+| Mirror tool arguments into HTTP headers | `x-mcp-header` on an input schema property; `tool::MAX_PARAMETER_HEADERS` |
 | Choose where a request runs | `Handler::admit` returning `stdio::Admission`; `stdio::Lane` |
 | Return a result | `stdio::Outcome::Tool` with `ToolResult` and `Content` |
 | Return audio | `Content::audio`, `AudioContent`, `ContentError`; see [audio results](../guides/audio.md) |

@@ -670,10 +670,10 @@ impl Session {
     }
 
     fn notification(&mut self, method: String, params: Value) -> Inbound {
-        if self.options.modern.is_some()
-            && params["_meta"][crate::modern::VERSION_KEY] == crate::modern::PROTOCOL_VERSION
-            && crate::modern::removed_notification(&method)
-        {
+        // A modern notification carries its revision and needs no handshake.
+        let modern = self.options.modern.is_some()
+            && params["_meta"][crate::modern::VERSION_KEY] == crate::modern::PROTOCOL_VERSION;
+        if modern && crate::modern::removed_notification(&method) {
             return Inbound::Ignored;
         }
         match method.as_str() {
@@ -695,7 +695,9 @@ impl Session {
                     Inbound::Ignored
                 }
             }
-            _ if self.ready() && self.options.extension_notifications.contains(&method) => {
+            _ if (self.ready() || modern)
+                && self.options.extension_notifications.contains(&method) =>
+            {
                 Inbound::Notification { method, params }
             }
             _ => Inbound::Ignored,

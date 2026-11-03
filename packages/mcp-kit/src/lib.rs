@@ -5,7 +5,10 @@
 //! no threads, so any runtime can drive it. The [`stdio`] driver runs a
 //! [`stdio::Handler`] over newline-delimited JSON-RPC with bounded lanes,
 //! deadlines, cancellation, progress, host confirmation and disconnection
-//! rules. The `docs-build` feature adds the only file-reading part: a
+//! rules. The [`http`] exchange checks Streamable HTTP requests for protocol
+//! revision `2026-07-28` and encodes their responses, without sockets or
+//! threads; the `http-server` feature adds a blocking `std::net` driver for the
+//! same handler. The `docs-build` feature adds the only file-reading part: a
 //! build-script helper that bundles a server's guides for [`docs`].
 //!
 //! A product supplies its tool [`Catalog`], server identity and tool
@@ -37,6 +40,7 @@ pub mod content;
 pub mod control;
 pub mod docs;
 pub mod elicitation;
+pub mod http;
 pub mod json;
 pub mod metadata;
 pub mod modern;

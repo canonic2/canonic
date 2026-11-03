@@ -55,7 +55,7 @@ impl ChangeSender {
     }
 }
 
-pub(super) fn channel(options: &crate::SessionOptions) -> (ChangeSender, mpsc::Receiver<Change>) {
+pub(crate) fn channel(options: &crate::SessionOptions) -> (ChangeSender, mpsc::Receiver<Change>) {
     let (sender, receiver) = mpsc::sync_channel(CHANGE_BUFFER);
     (
         ChangeSender {

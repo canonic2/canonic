@@ -25,6 +25,12 @@ pub const DEADLINE_EXCEEDED: i32 = -32001;
 pub const RESOURCE_NOT_FOUND: i32 = -32002;
 /// The request was cancelled because the connection closed.
 pub const REQUEST_CANCELLED: i32 = -32800;
+/// HTTP request headers are missing, malformed or differ from the body.
+pub const HEADER_MISMATCH: i32 = -32020;
+/// The request needs a client capability it did not declare.
+pub const MISSING_CLIENT_CAPABILITY: i32 = -32021;
+/// The request names a protocol revision the server does not serve.
+pub const UNSUPPORTED_PROTOCOL_VERSION: i32 = -32022;
 
 /// The longest accepted string request ID, in bytes.
 pub const MAX_ID_BYTES: usize = 128;

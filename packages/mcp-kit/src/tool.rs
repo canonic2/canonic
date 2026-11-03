@@ -7,7 +7,10 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
+mod headers;
 mod pagination;
+pub use headers::MAX_PARAMETER_HEADERS;
+pub(crate) use headers::{Kind as ParameterKind, ParameterHeader};
 pub use pagination::{MAX_CURSOR_BYTES, PAGE_SIZE};
 
 /// The longest tool name, in bytes.
@@ -136,6 +139,7 @@ pub struct Catalog {
     tools: Vec<Tool>,
     names: HashMap<String, usize>,
     inputs: Vec<schema::PreparedSchema>,
+    headers: Vec<Vec<ParameterHeader>>,
     outputs: Vec<ResultSchema>,
     pages: pagination::Pages,
 }
@@ -146,10 +150,14 @@ impl Catalog {
     /// # Errors
     ///
     /// Returns the first invalid/repeated name or unsupported schema. Both schemas
-    /// must be objects; input schemas must declare `type: "object"`.
+    /// must be objects; input schemas must declare `type: "object"`. Each
+    /// `x-mcp-header` annotation must be a nonempty HTTP token, unique ignoring
+    /// case, on a `string`, `integer` or `boolean` property reached only through
+    /// `properties`, with at most [`MAX_PARAMETER_HEADERS`] per tool.
     pub fn new(tools: Vec<Tool>) -> Result<Self, CatalogError> {
         let mut names = HashMap::new();
         let mut inputs = Vec::new();
+        let mut headers = Vec::new();
         let mut outputs = Vec::new();
         for (index, tool) in tools.iter().enumerate() {
             crate::metadata::validate_icons(&tool.icons).map_err(|error| CatalogError::Schema {
@@ -174,6 +182,10 @@ impl Catalog {
             inputs.push(
                 schema::PreparedSchema::new(&tool.input_schema)
                     .map_err(|error| schema_error("inputSchema", error.to_string()))?,
+            );
+            headers.push(
+                headers::prepare(&tool.input_schema)
+                    .map_err(|problem| schema_error("inputSchema", problem))?,
             );
             let output = tool
                 .output_schema
@@ -202,9 +214,17 @@ impl Catalog {
             tools,
             names,
             inputs,
+            headers,
             outputs,
             pages,
         })
+    }
+
+    /// The prepared `x-mcp-header` annotations of a tool.
+    pub(crate) fn parameter_headers(&self, name: &str) -> Option<&[ParameterHeader]> {
+        self.names
+            .get(name)
+            .map(|index| self.headers[*index].as_slice())
     }
 
     /// Finds a tool by name.
@@ -768,6 +788,77 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn catalog_prepares_parameter_headers_and_refuses_invalid_annotations() {
+        let tool = |properties: Value| {
+            Tool::new(
+                "acme_deploy",
+                "Deploy an Acme service.",
+                json!({"type":"object","properties":properties}),
+            )
+        };
+        let catalog = Catalog::new(vec![tool(json!({
+            "region": {"type":"string","x-mcp-header":"Region"},
+            "target": {"type":"object","properties":{
+                "replicas": {"type":["integer"],"x-mcp-header":"Replicas"},
+                "dry": {"type":"boolean","x-mcp-header":"Dry-Run"}
+            }},
+            "note": {"type":"string","default":{"x-mcp-header":"Ignored"}}
+        }))])
+        .unwrap();
+        let headers = catalog.parameter_headers("acme_deploy").unwrap();
+        let prepared: Vec<_> = headers
+            .iter()
+            .map(|header| (header.key.as_str(), header.path.join("."), header.kind))
+            .collect();
+        assert_eq!(
+            prepared,
+            [
+                ("region", "region".to_owned(), ParameterKind::String),
+                ("dry-run", "target.dry".to_owned(), ParameterKind::Boolean),
+                (
+                    "replicas",
+                    "target.replicas".to_owned(),
+                    ParameterKind::Integer
+                ),
+            ]
+        );
+        let too_many: serde_json::Map<String, Value> = (0..=MAX_PARAMETER_HEADERS)
+            .map(|index| {
+                (
+                    format!("p{index}"),
+                    json!({"type":"string","x-mcp-header":format!("P{index}")}),
+                )
+            })
+            .collect();
+        for properties in [
+            json!({"a":{"type":"string","x-mcp-header":""}}),
+            json!({"a":{"type":"string","x-mcp-header":"Acme Region"}}),
+            json!({"a":{"type":"string","x-mcp-header":7}}),
+            json!({"a":{"type":"number","x-mcp-header":"A"}}),
+            json!({"a":{"type":["string","null"],"x-mcp-header":"A"}}),
+            json!({"a":{"x-mcp-header":"A"}}),
+            json!({"a":{"type":"string","x-mcp-header":"A"},"b":{"type":"string","x-mcp-header":"a"}}),
+            json!({"a":{"type":"array","items":{"type":"string","x-mcp-header":"A"}}}),
+            json!({"a":{"anyOf":[{"type":"string","x-mcp-header":"A"}]}}),
+            Value::Object(too_many),
+        ] {
+            assert!(
+                matches!(
+                    Catalog::new(vec![tool(properties.clone())]),
+                    Err(CatalogError::Schema { ref tool, field: "inputSchema", .. }) if tool == "acme_deploy"
+                ),
+                "{properties}"
+            );
+        }
+        let root = Tool::new(
+            "acme_deploy",
+            "Deploy an Acme service.",
+            json!({"type":"object","x-mcp-header":"Root"}),
+        );
+        assert!(Catalog::new(vec![root]).is_err());
     }
 
     #[test]

@@ -9,13 +9,15 @@
 mod changes;
 mod observation;
 mod reader;
-mod scheduler;
+pub(crate) mod scheduler;
+#[cfg(feature = "http-server")]
+pub(crate) use changes::channel as change_channel;
 pub use changes::{CHANGE_BUFFER, ChangeSender, SendChangeError};
 pub use observation::{
     FrameKind, MAX_OBSERVATION_BUFFER, Observation, ObservationError, ObservationKind,
     ObservationSender, Settlement, Stage, observation_channel,
 };
-use observation::{Span, Trace};
+pub(crate) use observation::{Span, Trace};
 
 use crate::{
     control::{Control, Interrupted},
@@ -317,6 +319,9 @@ pub enum ServeError {
     /// The options cannot run a server.
     #[error("invalid MCP server options: {0}")]
     Options(&'static str),
+    /// The HTTP endpoint path, origins or body limit are invalid.
+    #[error(transparent)]
+    Endpoint(#[from] crate::http::EndpointError),
     /// A reader or worker thread could not start.
     #[error("cannot start an MCP server thread")]
     Spawn(#[source] io::Error),
@@ -493,7 +498,86 @@ pub fn serve<H: Handler>(
     result
 }
 
-fn validate(options: &Options) -> Result<(), ServeError> {
+/// Inbound work for the scheduler: its ID, request, read-only rule and progress token.
+pub(crate) struct Scheduled {
+    pub(crate) id: Option<Value>,
+    pub(crate) request: Request,
+    pub(crate) read_only: bool,
+    pub(crate) progress_token: Option<Value>,
+}
+
+/// The scheduled work for `inbound`, or `inbound` back when it is not scheduled.
+pub(crate) fn scheduled(session: &Session, inbound: Inbound) -> Result<Scheduled, Box<Inbound>> {
+    let work = |id, request, read_only, progress_token| Scheduled {
+        id,
+        request,
+        read_only,
+        progress_token,
+    };
+    Ok(match inbound {
+        Inbound::Completion { id, request } => {
+            let token = request.progress_token.clone();
+            work(Some(id), Request::Completion(request), true, token)
+        }
+        Inbound::Prompt { id, call } => {
+            let token = call.progress_token.clone();
+            work(Some(id), Request::Prompt(call), true, token)
+        }
+        Inbound::Task { id, request } => {
+            let read_only = matches!(request, crate::task::TaskRequest::Get { .. });
+            work(Some(id), Request::Task(request), read_only, None)
+        }
+        Inbound::BundledResource {
+            id,
+            read,
+            progress_token,
+        } => work(Some(id), Request::Resource(read), true, progress_token),
+        Inbound::Tool { id, call } => {
+            let read_only = session
+                .catalog()
+                .get(&call.name)
+                .is_some_and(crate::tool::Tool::read_only);
+            let token = call.progress_token.clone();
+            work(Some(id), Request::Tool(call), read_only, token)
+        }
+        Inbound::Method { id, method, params } => {
+            let read_only = method == "resources/read";
+            let token = read_only
+                .then(|| params["_meta"].get("progressToken").cloned())
+                .flatten();
+            work(
+                Some(id),
+                Request::Method { method, params },
+                read_only,
+                token,
+            )
+        }
+        Inbound::Notification { method, params } => {
+            work(None, Request::Notification { method, params }, false, None)
+        }
+        other => return Err(Box::new(other)),
+    })
+}
+
+/// Encodes `value` within `limit`. An oversized reply becomes an internal
+/// error for its ID; an oversized request or notification is dropped (`None`).
+pub(crate) fn encode_frame(value: &Value, limit: usize) -> Result<Vec<u8>, Option<Vec<u8>>> {
+    if let Ok(bytes) = json::encode(value, limit) {
+        return Ok(bytes);
+    }
+    // Only replies can be replaced with an error response. A request's
+    // ID belongs to the server, and notifications have no reply ID.
+    let Some(id) = value.get("id").filter(|_| value.get("method").is_none()) else {
+        return Err(None);
+    };
+    let error = RpcError::new(rpc::INTERNAL_ERROR, "Response exceeds output limit");
+    // An ID is at most 128 bytes, so this reply fits any valid limit.
+    Err(Some(
+        serde_json::to_vec(&rpc::failure(id.clone(), &error)).unwrap_or_default(),
+    ))
+}
+
+pub(crate) fn validate(options: &Options) -> Result<(), ServeError> {
     if !(1..=64).contains(&options.elicitation.max_rounds)
         || options.elicitation.timeout.is_zero()
         || options.elicitation.timeout > crate::control::MAX_TIMEOUT
@@ -610,13 +694,13 @@ impl<H: Handler, W: Write> Connection<H, W> {
         }
     }
 
-    fn schedule(
-        &mut self,
-        id: Option<Value>,
-        request: Request,
-        read_only: bool,
-        progress_token: Option<Value>,
-    ) -> Result<(), ServeError> {
+    fn schedule(&mut self, work: Scheduled) -> Result<(), ServeError> {
+        let Scheduled {
+            id,
+            request,
+            read_only,
+            progress_token,
+        } = work;
         let context = id.as_ref().and_then(|id| self.session.request_context(id));
         let admission = {
             let _callback = self.output.trace.span(Stage::Callback);
@@ -694,27 +778,14 @@ impl<H: Handler, W: Write> Connection<H, W> {
     }
 
     fn inbound(&mut self, inbound: Inbound) -> Result<(), ServeError> {
+        let inbound = match scheduled(&self.session, inbound) {
+            Ok(work) => return self.schedule(work),
+            Err(inbound) => *inbound,
+        };
         match inbound {
             Inbound::Subscription { id, acknowledged } => {
                 self.acknowledge_subscription(id, &acknowledged)
             }
-            Inbound::Completion { id, request } => {
-                let token = request.progress_token.clone();
-                self.schedule(Some(id), Request::Completion(request), true, token)
-            }
-            Inbound::Prompt { id, call } => {
-                let token = call.progress_token.clone();
-                self.schedule(Some(id), Request::Prompt(call), true, token)
-            }
-            Inbound::Task { id, request } => {
-                let read_only = matches!(request, crate::task::TaskRequest::Get { .. });
-                self.schedule(Some(id), Request::Task(request), read_only, None)
-            }
-            Inbound::BundledResource {
-                id,
-                read,
-                progress_token,
-            } => self.schedule(Some(id), Request::Resource(read), true, progress_token),
             Inbound::Reply(reply) => {
                 self.output.trace.settle(Settlement::Reply);
                 self.output.value(&reply)
@@ -738,30 +809,6 @@ impl<H: Handler, W: Write> Connection<H, W> {
             }
             Inbound::InvalidArguments { id, call, error } => {
                 self.invalid_arguments(id, &call, &error)
-            }
-            Inbound::Tool { id, call } => {
-                let read_only = self
-                    .session
-                    .catalog()
-                    .get(&call.name)
-                    .is_some_and(crate::tool::Tool::read_only);
-                let token = call.progress_token.clone();
-                self.schedule(Some(id), Request::Tool(call), read_only, token)
-            }
-            Inbound::Method { id, method, params } => {
-                let read_only = method == "resources/read";
-                let token = read_only
-                    .then(|| params["_meta"].get("progressToken").cloned())
-                    .flatten();
-                self.schedule(
-                    Some(id),
-                    Request::Method { method, params },
-                    read_only,
-                    token,
-                )
-            }
-            Inbound::Notification { method, params } => {
-                self.schedule(None, Request::Notification { method, params }, false, None)
             }
             Inbound::Cancel { id } => {
                 if self.trace.enabled()
@@ -788,7 +835,14 @@ impl<H: Handler, W: Write> Connection<H, W> {
                         .elicited(&mut self.session, &id, answer, &self.output.trace);
                 self.output.send(outgoing)
             }
-            Inbound::Ignored => Ok(()),
+            Inbound::Ignored
+            | Inbound::Completion { .. }
+            | Inbound::Prompt { .. }
+            | Inbound::Task { .. }
+            | Inbound::BundledResource { .. }
+            | Inbound::Tool { .. }
+            | Inbound::Method { .. }
+            | Inbound::Notification { .. } => Ok(()),
         }
     }
 }
@@ -894,10 +948,12 @@ impl<H: Handler, W: Write> Connection<H, W> {
 }
 
 /// A frame for the output, already encoded or still a value.
-enum Outgoing {
+pub(crate) enum Outgoing {
     Value(Value),
     Bytes(Vec<u8>),
     Observed(Box<Self>, Span, FrameKind),
+    /// A frame without its own ID, such as progress, for this request ID.
+    Routed(Value, Box<Self>),
 }
 
 impl Outgoing {
@@ -934,6 +990,7 @@ impl<W: Write> Output<W> {
                     self.kind = previous_kind;
                     result?;
                 }
+                Outgoing::Routed(_, frame) => self.send([*frame])?,
             }
         }
         Ok(())
@@ -941,19 +998,15 @@ impl<W: Write> Output<W> {
 
     fn value(&mut self, value: &Value) -> Result<(), ServeError> {
         let encode = self.trace.span(Stage::Encode);
-        let bytes = if let Ok(bytes) = json::encode(value, self.limit) {
-            bytes
-        } else {
-            self.trace.event(ObservationKind::EncodeFailed);
-            // Only replies can be replaced with an error response. A request's
-            // ID belongs to the server, and notifications have no reply ID.
-            let Some(id) = value.get("id").filter(|_| value.get("method").is_none()) else {
-                return Ok(());
-            };
-            let error = RpcError::new(rpc::INTERNAL_ERROR, "Response exceeds output limit");
-            let fallback = rpc::failure(id.clone(), &error);
-            // An ID is at most 128 bytes, so this reply fits any valid limit.
-            serde_json::to_vec(&fallback).unwrap_or_default()
+        let bytes = match encode_frame(value, self.limit) {
+            Ok(bytes) => bytes,
+            Err(fallback) => {
+                self.trace.event(ObservationKind::EncodeFailed);
+                let Some(bytes) = fallback else {
+                    return Ok(());
+                };
+                bytes
+            }
         };
         drop(encode);
         self.bytes(&bytes)

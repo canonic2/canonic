@@ -90,8 +90,8 @@ does not guarantee delivery before the request ends.
 
 List product methods in `SessionOptions::extension_methods` (requests) and
 `extension_notifications`. Legacy requests and registered notifications reach
-your handler after initialization. Modern custom RPCs use per-request metadata
-and require no handshake. Return `Outcome::Method` for a request and
+your handler after initialization. Modern custom RPCs and notifications use
+per-request metadata and require no handshake. Return `Outcome::Method` for a request and
 `Outcome::Done` for a notification.
 
 Modern registration cannot enable protocol methods such as `ping`,

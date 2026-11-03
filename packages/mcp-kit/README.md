@@ -5,7 +5,8 @@ Model Context Protocol servers in Rust.
 `canonic-mcp-kit` lets a Rust program expose tools, resources and bundled workflows
 to an MCP host. Your program supplies the content and decides what tools may
 do. The library handles protocol messages, validation and request lifetimes,
-with a ready-to-use stdio driver or a core you can drive from your own runtime.
+with ready-to-use stdio and Streamable HTTP drivers or a core you can drive
+from your own runtime.
 
 ## Highlights
 
@@ -32,6 +33,9 @@ with a ready-to-use stdio driver or a core you can drive from your own runtime.
   once and served from memory.
 - **Managed stdio requests.** Worker lanes, per-key ordering, queue limits,
   deadlines, cancellation and progress keep request handling bounded.
+- **Streamable HTTP.** Serve the same handler to modern hosts over HTTP POST,
+  with header checks, `x-mcp-header` arguments, JSON or SSE replies and
+  cancellation when a client disconnects. Bind loopback; it authenticates no one.
 - **User confirmation.** Ask a yes/no question through the host, using legacy
   continuations or modern input-required replies and retries.
 - **Richer user input.** Collect fields and single/multiple selections, or ask
@@ -100,10 +104,12 @@ including discovery, per-request client context and cache hints. Skills
 discovery uses the modern path; legacy clients can read the bundled files as
 ordinary resources.
 
-The shared transport is newline-delimited JSON-RPC over stdio. For an
+The shared transports are newline-delimited JSON-RPC over stdio and, with the
+`http-server` feature, Streamable HTTP for `2026-07-28` only. For an
 asynchronous runtime or another transport, drive the core directly and own
-its scheduling and connection lifetime. See
-[driving the session](docs/guides/session.md).
+its scheduling and connection lifetime; the `http` exchange checks HTTP
+requests for your own server. See [driving the session](docs/guides/session.md)
+and [serving over HTTP](docs/guides/http.md).
 
 Your program owns tool authority, resource access and continuation-state
 validation. Hosts own skill activation, approval and presentation. Reading a
@@ -114,6 +120,7 @@ authority by itself.
 
 - [Your first tool](docs/getting-started.md)
 - [Lanes, deadlines and cancellation](docs/guides/stdio.md)
+- [Streamable HTTP](docs/guides/http.md)
 - [Tool catalog pagination](docs/guides/pagination.md)
 - [Subscriptions and change notifications](docs/guides/subscriptions.md)
 - [User confirmation](docs/guides/confirmation.md)
