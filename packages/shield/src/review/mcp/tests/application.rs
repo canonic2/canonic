@@ -574,7 +574,7 @@ fn host_application_refuses_after_a_hand_edit_and_keeps_the_edit() {
     assert!(
         result["error"]["message"]
             .as_str()
-            .is_some_and(|m| m.contains("project files changed during confirmation; review again")),
+            .is_some_and(|m| m.contains("would overwrite unreviewed edits to .shield files")),
         "{result}"
     );
     assert_eq!(std::fs::read_to_string(&rules).unwrap(), edited);
@@ -586,6 +586,98 @@ fn host_application_refuses_after_a_hand_edit_and_keeps_the_edit() {
             .policy_revision,
         revision
     );
+}
+
+#[test]
+fn host_application_of_a_change_to_other_files_keeps_the_hand_edit_pending() {
+    let (root, mut context, connection) = fixture();
+    context.agent = Some("codex".into());
+    let first = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"rule_add","rule":rule("read", "allow")}),
+    );
+    apply(&context, &connection, &first);
+    let rules = root.path().join(".shield/rules.yml");
+    let edited = format!(
+        "{}# Acme hand edit\n",
+        std::fs::read_to_string(&rules).unwrap()
+    );
+    std::fs::write(&rules, &edited).unwrap();
+    // A folder change rewrites only the configuration, not the edited rules.
+    let reference = assert_fs::TempDir::new().unwrap();
+    let path = reference.path().canonicalize().unwrap();
+    let args = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"access_path_add","access":"read","path":path}),
+    );
+    let result = apply(&context, &connection, &args);
+    assert_eq!(std::fs::read_to_string(&rules).unwrap(), edited);
+    let config = std::fs::read_to_string(root.path().join(".shield/config.yml")).unwrap();
+    assert!(config.contains(path.to_str().unwrap()), "{config}");
+    // The edit stays visible for the operator's review, and a repair or a
+    // later change to the same file cannot overwrite it.
+    assert_eq!(result["data"]["receipt"]["repair_needed"], true, "{result}");
+    let state = Store::open(root.path()).unwrap().read().unwrap();
+    crate::review::publication::reconcile(&context, &state).unwrap_err();
+    assert_eq!(std::fs::read_to_string(&rules).unwrap(), edited);
+    let next = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"rule_add","rule":rule("write", "deny")}),
+    );
+    let refused = call_with_confirmation(
+        &context,
+        &connection,
+        "policy_apply",
+        &next,
+        &|| Ok(()),
+        true,
+    );
+    assert!(
+        refused["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("would overwrite unreviewed edits to .shield files")),
+        "{refused}"
+    );
+    assert_eq!(std::fs::read_to_string(&rules).unwrap(), edited);
+}
+
+#[test]
+fn host_application_preserves_a_deleted_projection_through_later_repair() {
+    let (root, mut context, connection) = fixture();
+    context.agent = Some("codex".into());
+    let first = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"rule_add","rule":rule("read", "allow")}),
+    );
+    apply(&context, &connection, &first);
+    let rules = root.path().join(".shield/rules.yml");
+    let original = std::fs::read(&rules).unwrap();
+    std::fs::remove_file(&rules).unwrap();
+    let reference = assert_fs::TempDir::new().unwrap();
+    let path = reference.path().canonicalize().unwrap();
+    let args = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"access_path_add","access":"read","path":path}),
+    );
+    let result = apply(&context, &connection, &args);
+    assert_eq!(result["data"]["receipt"]["repair_needed"], true, "{result}");
+    assert!(!rules.exists());
+    let config = std::fs::read_to_string(root.path().join(".shield/config.yml")).unwrap();
+    assert!(config.contains(path.to_str().unwrap()), "{config}");
+    // Reload durable state: repair must remember that this absence was kept,
+    // rather than treating it as output lost during an interrupted write.
+    let state = Store::open(root.path()).unwrap().read().unwrap();
+    crate::review::publication::reconcile(&context, &state).unwrap_err();
+    assert!(!rules.exists());
+    // Restoring the committed bytes resolves the pending edit.
+    std::fs::write(&rules, original).unwrap();
+    let repaired = crate::review::publication::reconcile(&context, &state).unwrap();
+    assert_eq!(repaired["repair_needed"], false, "{repaired}");
 }
 
 #[test]

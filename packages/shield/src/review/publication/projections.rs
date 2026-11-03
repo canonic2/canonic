@@ -9,7 +9,12 @@ use crate::{
     },
 };
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, fs, io::Write, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    io::Write,
+    path::Path,
+};
 
 /// The editable .shield files of a candidate: the shared configuration, rules
 /// and lock, the local layer's files when it has content, and pack artifacts.
@@ -99,33 +104,47 @@ pub(in crate::review) fn digest(files: &BTreeMap<String, String>) -> String {
     policy::fingerprint(json!(files).to_string().as_bytes())
 }
 
+/// The project files whose contents differ from what Shield last wrote: edits
+/// the operator has not reviewed yet. `None` when the state predates per-file
+/// hashes, so only the combined projection digest can detect drift.
+pub(in crate::review) fn edited_projections(
+    context: &Context,
+    state: &State,
+) -> Result<Option<BTreeSet<String>>, Error> {
+    let Some(expected) = state.operator["projection_file_hashes"].as_object() else {
+        return Ok(None);
+    };
+    let directory = root(context).join(".shield");
+    let mut edited = BTreeSet::new();
+    // A local file created by hand is an edit too.
+    for name in ["config.local.yml", "rules.local.yml"] {
+        if !expected.contains_key(name) && directory.join(name).exists() {
+            edited.insert(name.to_owned());
+        }
+    }
+    for (name, hash) in expected {
+        let path = directory.join(name);
+        if !path.is_file()
+            || fs::symlink_metadata(&path)?.file_type().is_symlink()
+            || json!(policy::fingerprint(
+                crate::application::read(&path)
+                    .map_err(|_| Error::Invalid("project projection unreadable"))?
+                    .as_bytes()
+            )) != *hash
+        {
+            edited.insert(name.clone());
+        }
+    }
+    Ok(Some(edited))
+}
+
 pub(in crate::review) fn projection_changed(
     context: &Context,
     state: &State,
 ) -> Result<bool, Error> {
     let _trace = crate::diagnostics::trace::span("projection.check");
-    if let Some(expected) = state.operator["projection_file_hashes"].as_object() {
-        // A local file created by hand is an edit too.
-        for name in ["config.local.yml", "rules.local.yml"] {
-            if !expected.contains_key(name) && root(context).join(".shield").join(name).exists() {
-                return Ok(true);
-            }
-        }
-        for (name, hash) in expected {
-            let path = root(context).join(".shield").join(name);
-            if !path.is_file() || fs::symlink_metadata(&path)?.file_type().is_symlink() {
-                return Ok(true);
-            }
-            if json!(policy::fingerprint(
-                crate::application::read(&path)
-                    .map_err(|_| Error::Invalid("project projection unreadable"))?
-                    .as_bytes()
-            )) != *hash
-            {
-                return Ok(true);
-            }
-        }
-        return Ok(false);
+    if let Some(edited) = edited_projections(context, state)? {
+        return Ok(!edited.is_empty());
     }
     let expected = metadata(state)["projection"].as_str().map(str::to_owned);
     let Some(expected) = expected else {
@@ -267,9 +286,12 @@ pub(in crate::review) fn repair_projections(
         if actual[name] == policy::fingerprint(bytes.as_bytes()) {
             continue;
         }
-        if !actual[name].is_null()
-            && actual[name] != policy::fingerprint(bytes.as_bytes())
-            && actual[name] != meta["projection_previous"][name]
+        if meta["projection_preserved"]
+            .as_array()
+            .is_some_and(|names| names.iter().any(|preserved| preserved == name))
+            || (!actual[name].is_null()
+                && actual[name] != policy::fingerprint(bytes.as_bytes())
+                && actual[name] != meta["projection_previous"][name])
         {
             return Err(Error::Invalid(
                 "manual projections differ; review changes through shield policy review",

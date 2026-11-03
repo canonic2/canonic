@@ -84,6 +84,9 @@ Check the host action too: Codex's Allow fallback can let a policy Ask proceed.
 
 If the message asks for a rewrite, submit the supported literal form it names.
 If it identifies an unsupported tool, a policy change cannot add that support.
+Native Claude and Codex hooks defer unmodeled internal tools to host permissions;
+the separate [read-only SDK adapter](claude-read-only.md) denies tools outside its
+supported reads.
 If policy returns Deny, ordinary approval cannot override it. Review a narrower
 request or an appropriate policy change instead. See
 [policy decisions](policy-decisions.md) for precedence and Ask handling.

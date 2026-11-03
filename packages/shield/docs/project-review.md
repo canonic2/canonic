@@ -78,8 +78,9 @@ being overwritten.
 
 New Codex setups let valid Ask requests proceed by default, including unmatched
 requests and Strict-profile Asks. Existing Block or Allow choices are preserved;
-there is no Block picker or flag. Deny, protected files, and unsupported tools
-still block. Codex's own sandbox and approvals also apply.
+there is no Block picker or flag. Deny, protected files, and invalid mapped requests
+still block. Unmodeled internal tools defer to Codex permissions. Codex's own
+sandbox and approvals also apply.
 
 Status and doctor report the effective Ask fallback. Missing authorization or
 an interrupted setup can report Block; finish the plan with `shield mcp setup`.
@@ -244,8 +245,11 @@ Rules with `{root: read}` use the project plus additional read and write roots;
 `{root: write}` uses the project plus additional write roots. Write access includes
 read access. At most 64 additional native absolute directories are accepted;
 duplicates within each list, traversal components, NULs, null lists and unknown
-fields refuse. Roots must be observable existing directories when evaluated.
-An unavailable configured root makes its location predicate unknown.
+fields refuse. A configured root that does not exist when evaluated contains
+nothing, so it leaves the union and the remaining roots still decide. Exclusions
+retain missing roots, protecting entries created through a containing root.
+A root that exists but is not a directory, or cannot be inspected, makes its
+location predicate unknown, and requests that depend on it are blocked.
 
 Native Claude/Codex integrations also include system temporary roots automatically
 in these unions; no `access_paths` entry is needed for ordinary temporary files.

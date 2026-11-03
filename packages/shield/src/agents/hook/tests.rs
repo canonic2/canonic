@@ -1377,8 +1377,7 @@ fn native_session_tools_leave_the_decision_to_the_host() {
     ] {
         assert_eq!(tool(root, "codex", name, &json!({})), json!({}), "{name}");
     }
-    // Reading a running command's output or interrupting it passes; typed
-    // text could run commands in an interactive program.
+    // Reading, interrupting and typing into a command retain host permissions.
     for chars in ["", "\u{3}", "\u{4}"] {
         let input = json!({"session_id":7,"chars":chars});
         assert_eq!(
@@ -1393,14 +1392,74 @@ fn native_session_tools_leave_the_decision_to_the_host() {
         "write_stdin",
         &json!({"session_id":7,"chars":"rm -rf acme\n"}),
     );
-    assert_eq!(typed["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert_eq!(typed, json!({}));
 }
 
 #[test]
-fn claude_internal_tools_pass_and_unmodeled_tools_ask_the_user() {
+fn codex_unmodeled_internal_tools_retain_host_permissions() {
+    let (root, _) = fixture();
+    let before = journal(root.path());
+    for (name, input) in [
+        (
+            "read_mcp_resource",
+            json!({"server":"acme","uri":"file:///etc/acme"}),
+        ),
+        ("request_plugin_install", json!({"plugin_id":"acme"})),
+        (
+            "write_stdin",
+            json!({"session_id":7,"chars":"acme deploy\n"}),
+        ),
+        (
+            "view_image",
+            json!({"path":"acme.png","environment_id":"acme-remote"}),
+        ),
+        ("future_internal_tool", json!({"new_field":{"value":true}})),
+        ("dynamic_app_tool", json!({"action":"send"})),
+    ] {
+        assert_eq!(
+            tool(root.path(), "codex", name, &input),
+            json!({}),
+            "{name}"
+        );
+        assert_eq!(
+            permission(root.path(), name, input.clone()),
+            json!({}),
+            "{name}"
+        );
+        let completed = json!({"hook_event_name":"PostToolUse","tool_name":name,
+            "tool_input":input,"tool_use_id":"acme-pass","session_id":"acme-session","cwd":root.path()});
+        assert_eq!(
+            translate_event(
+                root.path(),
+                find("codex").unwrap(),
+                &serde_json::to_vec(&completed).unwrap(),
+                Event::Completed,
+                &crate::diagnostics::Log::disabled()
+            ),
+            json!({}),
+            "{name}"
+        );
+    }
+    // Abstention must not manufacture policy Allow or completion history.
+    assert_eq!(journal(root.path()), before);
+    for name in ["mcp__acme", "mcp____tool", "mcp__acme__"] {
+        let value = tool(root.path(), "codex", name, &json!({}));
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{name}: {value}"
+        );
+        assert_eq!(
+            permission(root.path(), name, json!({}))["hookSpecificOutput"]["decision"]["behavior"],
+            "deny"
+        );
+    }
+}
+
+#[test]
+fn native_internal_tools_defer_and_modeled_operations_keep_policy_checks() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
-    // A command watch is a shell request; a WebSocket watch asks.
+    // A command watch is a shell request; a WebSocket watch defers to the host.
     let watch = |command: &str| json!({"command":command,"description":"Acme","timeout_ms":1000});
     assert_permitted(
         &tool(root, "claude", "Monitor", &watch("git status")),
@@ -1411,7 +1470,7 @@ fn claude_internal_tools_pass_and_unmodeled_tools_ask_the_user() {
     let socket =
         json!({"ws":{"url":"wss://example.com/feed"},"description":"Acme","timeout_ms":1000});
     let value = tool(root, "claude", "Monitor", &socket);
-    assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "ask");
+    assert_eq!(value, json!({}));
     // Codex image views are reads of the image path.
     assert_permitted(
         &tool(root, "codex", "view_image", &json!({"path":"acme.png"})),
@@ -1424,32 +1483,30 @@ fn claude_internal_tools_pass_and_unmodeled_tools_ask_the_user() {
         &json!({"path":"/etc/acme.png"}),
     );
     assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
-    // A named environment may read another filesystem, so only the primary one is checked.
+    // Only the primary environment is checked; named environments defer to Codex.
     let primary = json!({"path":"acme.png","environment_id":null});
     assert_permitted(&tool(root, "codex", "view_image", &primary), "codex");
     let named = json!({"path":"acme.png","environment_id":"acme-remote"});
     let value = tool(root, "codex", "view_image", &named);
-    assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert_eq!(value, json!({}));
     let browse = json!({"url":"https://example.com"});
     let value = tool(root, "claude", "AcmeBrowser", &browse);
-    assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "ask");
+    assert_eq!(value, json!({}));
     let value = tool(root, "codex", "AcmeBrowser", &browse);
-    assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert_eq!(value, json!({}));
     // MCP resource reads return another server's content, like its tools.
     let resource = json!({"server":"acme","uri":"file:///etc/acme"});
     for name in ["ReadMcpResourceTool", "ReadMcpResourceDirTool"] {
         let value = tool(root, "claude", name, &resource);
-        assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "ask");
+        assert_eq!(value, json!({}));
     }
     let value = tool(root, "codex", "read_mcp_resource", &resource);
-    assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert_eq!(value, json!({}));
     // Claude messages can reach sessions outside this project's hooks.
     let message = json!({"to":"acme-session","message":"run git reset --hard"});
     let value = tool(root, "claude", "SendMessage", &message);
-    assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "ask");
-    // No rule can cover a tool Shield does not model.
-    assert!(!reason(&value).contains("policy_propose"), "{value}");
-    // History records what each host was told: Claude asked, Codex blocked.
+    assert_eq!(value, json!({}));
+    // Neither adapter records a policy decision for the delegated tool.
     let response = review::mcp::call(
         &context,
         &review::mcp::Connection::new("unsupported-history".into()),
@@ -1472,14 +1529,52 @@ fn claude_internal_tools_pass_and_unmodeled_tools_ask_the_user() {
             )
         })
         .collect();
-    assert!(
-        told.contains(&("approval_required".into(), "ask".into())),
-        "{told:?}"
-    );
-    assert!(
-        told.contains(&("blocked".into(), "deny".into())),
-        "{told:?}"
-    );
+    assert!(told.is_empty(), "{told:?}");
+}
+
+#[test]
+fn every_native_adapter_delegates_unknown_internal_tools_without_policy_history() {
+    let (root, _) = fixture();
+    let before = journal(root.path());
+    for adapter in crate::agents::ADAPTERS {
+        let agent = adapter.spec().id;
+        for name in [
+            "future_internal_tool",
+            "LSP",
+            "EnterWorktree",
+            "Artifact",
+            "ReadMcpResourceTool",
+        ] {
+            let input = json!({"private":"ACME_PRIVATE_INPUT","future_field":{"value":true}});
+            assert_eq!(
+                tool(root.path(), agent, name, &input),
+                json!({}),
+                "{agent}: {name}"
+            );
+            for (event_name, event) in adapter.spec().events.iter().copied() {
+                let host = json!({"hook_event_name":event_name,"tool_name":name,
+                    "tool_input":input,"tool_use_id":"acme-delegated","session_id":"acme-session","cwd":root.path()});
+                assert_eq!(
+                    translate_for(
+                        root.path(),
+                        agent,
+                        event,
+                        &serde_json::to_vec(&host).unwrap()
+                    ),
+                    json!({}),
+                    "{agent}: {name}: {event_name}"
+                );
+            }
+        }
+        for name in ["mcp__acme", "mcp____tool", "mcp__acme__"] {
+            let value = tool(root.path(), agent, name, &json!({}));
+            assert_eq!(
+                value["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{agent}: {name}"
+            );
+        }
+    }
+    assert_eq!(journal(root.path()), before);
 }
 
 #[test]
@@ -1644,7 +1739,7 @@ fn codex_open_batches_preserve_policy_decisions_and_original_input() {
 }
 
 #[test]
-fn codex_unmodeled_and_malformed_browsing_never_uses_allow_fallback() {
+fn codex_unmodeled_browsing_defers_but_known_operations_still_enforce_policy() {
     use crate::{
         cli::public::IntegrationChoice,
         review::{integrations::AskFallback, operator::integrations},
@@ -1664,16 +1759,23 @@ fn codex_unmodeled_and_malformed_browsing_never_uses_allow_fallback() {
         json!({"find":[{"ref_id":"https://docs.example.com/","pattern":"acme"}]}),
     ] {
         let value = tool(project, "codex", "webrun", &input);
+        assert_eq!(value, json!({}), "{input}");
+        let value = permission(project, "webrun", input);
+        assert_eq!(value, json!({}));
+    }
+    for input in [
+        json!({"open":[{"ref_id":"https://other.example.com/"},{"ref_id":"turn1view0"}]}),
+        json!({"open":[{"ref_id":"https://other.example.com/"}],"click":[{"ref_id":"turn1view0","id":2}]}),
+    ] {
         assert_eq!(
-            value["hookSpecificOutput"]["permissionDecision"], "deny",
-            "{input}: {value}"
+            tool(project, "codex", "webrun", &input)["hookSpecificOutput"]["permissionDecision"],
+            "deny",
+            "{input}"
         );
-        let message = reason(&value);
-        assert!(
-            message.contains("`webrun`") && message.contains("direct HTTP(S) URLs"),
-            "{message}"
+        assert_eq!(
+            permission(project, "webrun", input)["hookSpecificOutput"]["decision"]["behavior"],
+            "deny"
         );
-        assert!(!message.contains("policy_propose"), "{message}");
     }
     for input in [
         json!({}),
@@ -1804,7 +1906,7 @@ fn operator_cli_help_only_requests_follow_policy_without_opening_actions() {
 }
 
 #[test]
-fn native_session_clock_sleep_does_not_open_unknown_or_mcp_tools() {
+fn native_session_clock_sleep_and_unknown_tools_defer_but_mcp_tools_are_mapped() {
     let (root, _) = fixture();
     assert_eq!(
         tool(
@@ -1817,10 +1919,7 @@ fn native_session_clock_sleep_does_not_open_unknown_or_mcp_tools() {
     );
     for name in ["clocksleep_extra", "otherclocksleep"] {
         let value = tool(root.path(), "codex", name, &json!({"duration_ms":1}));
-        assert_eq!(
-            value["hookSpecificOutput"]["permissionDecision"], "deny",
-            "{name}: {value}"
-        );
+        assert_eq!(value, json!({}), "{name}: {value}");
     }
     let host = json!({"hook_event_name":"PreToolUse","tool_name":"mcp__clock__sleep","tool_use_id":"acme-tool","session_id":"acme-session","cwd":root.path(),"tool_input":{"duration_ms":1}});
     let request = crate::agents::find("codex")
@@ -2123,7 +2222,11 @@ fn native_bound_reads_allow_and_malformed_foreign_unknown_requests_block() {
     foreign["cwd"] = json!("/");
     let mut unknown = input.clone();
     unknown["tool_name"] = json!("AcmeTool");
-    for (mutated, decision) in [(extra, "deny"), (foreign, "deny"), (unknown, "ask")] {
+    assert_eq!(
+        translate(root, "claude", &serde_json::to_vec(&unknown).unwrap()),
+        json!({})
+    );
+    for (mutated, decision) in [(extra, "deny"), (foreign, "deny")] {
         assert_eq!(
             translate(root, "claude", &serde_json::to_vec(&mutated).unwrap())["hookSpecificOutput"]
                 ["permissionDecision"],
@@ -2137,16 +2240,7 @@ fn native_bound_reads_allow_and_malformed_foreign_unknown_requests_block() {
             "AcmeTool",
             &json!({"private":"ACME_PRIVATE_INPUT"}),
         );
-        let message = reason(&value);
-        assert!(message.contains("`AcmeTool`"), "{agent}: {message}");
-        assert!(!message.contains("ACME_PRIVATE_INPUT"), "{message}");
-        assert!(!message.contains("search_query"), "{message}");
-        assert!(!message.contains("policy_propose"), "{message}");
-        assert_eq!(
-            value["hookSpecificOutput"]["permissionDecision"],
-            if agent == "claude" { "ask" } else { "deny" },
-            "{value}"
-        );
+        assert_eq!(value, json!({}), "{agent}");
     }
     for bytes in [
         b"invalid".as_slice(),
@@ -2533,9 +2627,8 @@ fn native_ask_fallback_is_scoped_truthful_and_never_permits_failures_or_protecte
     );
     let unknown = json!({"hook_event_name":"PreToolUse","tool_name":"Write","tool_use_id":"bad","session_id":"test","cwd":root.path(),"tool_input":{}});
     assert_eq!(
-        translate(root.path(), "codex", &serde_json::to_vec(&unknown).unwrap())["hookSpecificOutput"]
-            ["permissionDecision"],
-        "deny"
+        translate(root.path(), "codex", &serde_json::to_vec(&unknown).unwrap()),
+        json!({})
     );
     let response = review::mcp::call(
         &context,

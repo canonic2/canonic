@@ -90,17 +90,29 @@ Invoked tools are checked normally, except in remotely running subagents or
 workflows. Codex passes through plans, questions, permission requests, tool search,
 timing (including the host's `clocksleep` tool), subagents, and MCP resource listing.
 
-Unsupported tools ask in Claude and block in Codex. Examples include MCP resource
-reads; Claude also asks for session messages, worktrees, LSP, and
-artifacts. Tool messages name supported alternatives where available. A rule
-cannot add support for an unmodeled tool.
+In every native agent integration, unmodeled internal tools defer to the agent's
+own permissions. Claude examples include MCP resource reads, session messages,
+worktrees, LSP, artifacts and WebSocket watches. Codex examples include
+`read_mcp_resource`, plugin installation and interactive terminal input. This
+also covers app tools without an MCP mapping and future internal tools.
+Shield returns no decision, including at a permission prompt; it does not approve
+the tool or record a policy Allow. Named `view_image` environments and unmodeled browsing actions also defer
+to Codex. Searches and direct HTTP(S) opens in a mixed browsing call still receive
+Shield policy checks. Recognized shell, file and MCP requests remain checked;
+malformed requests for those mappings still block. Encoded `mcp__server__tool`
+calls retain connection and policy checks rather than the internal-tool fallback.
+Shield does not analyze commands typed through `write_stdin` into a running
+interpreter, or actions requested through Claude's `SendMessage`. A Deny rule for
+a shell command does not enforce those delegated actions.
 
 ### Web requests
 
 Codex `webrun` supports `search_query` and `open` with direct HTTP(S) URLs,
-including mixed batches of up to 16 operations. Every operation must pass.
-An optional `lineno` only positions the view. Opaque result references, clicks,
-and other actions block the entire call. Submit a direct URL when available.
+including mixed batches of up to 16 modeled operations. Every modeled operation
+must pass. An optional `lineno` only positions the view. Opaque result references,
+clicks, screenshots, find and other unmodeled actions defer to Codex permissions.
+If a mixed call's modeled operations may proceed, Shield returns no decision
+for the call, including at a permission prompt; modeled refusals still apply.
 The hook sees the initial URL, not later redirect destinations.
 
 ### Protected files and policy changes
@@ -215,7 +227,7 @@ literal, separate commands; the rewritten request then gets its actual decision.
 Codex PreToolUse cannot request native approval. Setup preserves a saved fallback
 or defaults a new choice to **allow** for every profile, including Strict. The
 final review shows it without a separate picker. Allow includes unmatched
-commands and explicit Ask rules; Deny, unsupported tools and protection failures
+commands and explicit Ask rules; Deny, invalid requests and protection failures
 still block, and so does an Ask on a command a Shield prefix rule covers, which
 Codex would run outside its sandbox without asking. Repeating `shield mcp setup --agent codex`
 preserves a saved Block or Allow choice. History retains

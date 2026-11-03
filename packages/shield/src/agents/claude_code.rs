@@ -106,6 +106,17 @@ impl AgentAdapter for ClaudeCode {
         if SESSION_TOOLS.contains(&tool) {
             return Some(r);
         }
+        if tool.starts_with("mcp__") {
+            host["tool_input"].as_object()?;
+            if tool
+                .strip_prefix("mcp__shield__")
+                .is_some_and(crate::review::mcp::is_tool)
+            {
+                return Some(r);
+            }
+            r.operation = Some(super::mcp_operation(tool, &host["tool_input"])?);
+            return Some(r);
+        }
         r.operation = Some(operation(host)?);
         Some(r)
     }
@@ -213,11 +224,9 @@ impl AgentAdapter for ClaudeCode {
 }
 /// Native tools that act only within the Claude Code session: planning, task
 /// lists, scheduling, questions, subagents, agent listing, background task
-/// control and MCP resource listing. Resource reads return another server's
-/// content, so they are unsupported like that server's tools. `SendMessage`
-/// can reach other sessions that this project's hooks do not check, so it is
-/// unsupported too. A local subagent's or scheduled prompt's own tool calls
-/// reach the hook separately.
+/// control and MCP resource listing. Other unmodeled internal tools also retain
+/// host permissions through shared native dispatch. A local subagent's or
+/// scheduled prompt's own tool calls reach the hook separately.
 const SESSION_TOOLS: &[&str] = &[
     "Agent",
     "AskUserQuestion",
@@ -250,17 +259,15 @@ const SESSION_TOOLS: &[&str] = &[
 fn operation(host: &Value) -> Option<Value> {
     let tool = text(&host["tool_name"], 128)?;
     let input = host["tool_input"].as_object()?;
-    if let Some(operation) = super::mcp_operation(tool, &host["tool_input"]) {
-        return Some(operation);
-    }
     match tool {
-        // A command watch runs its command like Bash; a WebSocket watch is unsupported.
-        "Monitor"
-            if input.contains_key("command")
-                && input
-                    .keys()
-                    .all(|k| ["command", "description", "timeout_ms"].contains(&k.as_str())) =>
-        {
+        // A command watch runs its command like Bash; other watches defer.
+        "Monitor" if input.contains_key("command") => {
+            if input
+                .keys()
+                .any(|k| !["command", "description", "timeout_ms"].contains(&k.as_str()))
+            {
+                return None;
+            }
             let source = text(&input["command"], 65_536)?;
             Some(json!({"kind":"shell","source":source,"dialect":"bash"}))
         }

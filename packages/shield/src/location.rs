@@ -247,7 +247,7 @@ impl Observer {
         };
         Self::new(&input, project.to_str()?, cwd.to_str()?, None)
             .with_access_paths(paths)
-            .reference(&serde_json::json!({"root":"read"}), true)
+            .reference(&serde_json::json!({"root":"read"}), true, false)
     }
 
     pub(crate) fn new(input: &Input, project: &str, cwd: &str, executable: Option<&str>) -> Self {
@@ -293,7 +293,12 @@ impl Observer {
         self.cache.borrow_mut().insert(key, value.clone());
         value
     }
-    fn reference(&self, reference: &Value, follow: bool) -> Option<Vec<PathBuf>> {
+    fn reference(
+        &self,
+        reference: &Value,
+        follow: bool,
+        include_missing: bool,
+    ) -> Option<Vec<PathBuf>> {
         let suffix = reference["path"].as_str().unwrap_or(".");
         let mut paths = match reference["root"].as_str()? {
             "absolute" => vec![PathBuf::from(reference["path"].as_str()?)],
@@ -318,21 +323,27 @@ impl Observer {
                         .filter(|_| reference["root"] == "read"),
                 );
                 for path in additional {
-                    let Some(base) = self
-                        .observed(Path::new(path), true)
-                        .filter(|p| self.directory(p))
-                    else {
-                        self.unverified.set(true);
-                        return None;
-                    };
-                    roots.push(base.join(suffix));
+                    // Missing roots grant no containment, but their exclusions
+                    // still protect future entries reached through another root.
+                    // Other observation failures keep the whole union unknown.
+                    let base = self.observed(Path::new(path), true)?;
+                    match self.present(&base) {
+                        Ok(false) if include_missing => roots.push(base.join(suffix)),
+                        Ok(false) => {}
+                        Ok(true) if self.directory(&base) => roots.push(base.join(suffix)),
+                        _ => {
+                            self.unverified.set(true);
+                            return None;
+                        }
+                    }
                 }
                 roots
             }
             _ => return None,
         };
-        // Verify all configured roots before testing their union. An unavailable
-        // root cannot prove the complement or silently weaken an exclusion.
+        // Verify all configured roots before testing their union. An existing
+        // root that cannot be observed cannot prove the complement or silently
+        // weaken an exclusion.
         for path in &mut paths {
             *path = self.observed(path, follow)?;
         }
@@ -364,7 +375,7 @@ impl Observer {
             self.unverified.set(true);
             return Some("evidence_unavailable");
         };
-        let Some(expected) = self.reference(reference, true) else {
+        let Some(expected) = self.reference(reference, true, false) else {
             return Some("evidence_unavailable");
         };
         if !fs::metadata(&path).is_ok_and(|m| m.is_file()) {
@@ -411,7 +422,7 @@ impl Observer {
             .iter()
             .find_map(|key| predicate.get(*key).map(|v| (*key, v)))
             .ok_or(Error::Syntax)?;
-        let Some(roots) = self.reference(reference, kind != "exact" || target.follow) else {
+        let Some(roots) = self.reference(reference, kind != "exact" || target.follow, false) else {
             return Ok(Some("evidence_unavailable"));
         };
         let inside = roots.iter().any(|root| path.starts_with(root));
@@ -425,7 +436,7 @@ impl Observer {
             return Ok(Some("location_outside"));
         }
         for reference in predicate["exclude"].as_array().into_iter().flatten() {
-            let Some(exclusions) = self.reference(reference, target.follow) else {
+            let Some(exclusions) = self.reference(reference, target.follow, true) else {
                 return Ok(Some("evidence_unavailable"));
             };
             for excluded in exclusions {

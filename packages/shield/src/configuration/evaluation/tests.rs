@@ -77,8 +77,13 @@ fn approved_root_evaluator(dir: &assert_fs::TempDir) -> Evaluator {
         std::fs::write(dir.path().join(name).join("item"), "Acme").unwrap();
         std::fs::create_dir(dir.path().join(name).join(".git")).unwrap();
     }
-    let reference = dir.path().join("reference").canonicalize().unwrap();
-    let scratch = dir.path().join("scratch").canonicalize().unwrap();
+    root_evaluator(
+        &dir.path().join("reference").canonicalize().unwrap(),
+        &dir.path().join("scratch").canonicalize().unwrap(),
+    )
+}
+
+fn root_evaluator(reference: &std::path::Path, scratch: &std::path::Path) -> Evaluator {
     let rows = vec![
         json!({"id":"read","decision":"allow","conditions":{"domain":"argv","executable":{"one_of":["cat","head","tail","wc","ls"]},"arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"read"}}}},"on_unmet":{"decision":"deny"}}),
         json!({"id":"remove","decision":"allow","conditions":{"domain":"argv","executable":"rm","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"remove","all":{"within":{"root":"write"},"exclude":[{"root":"write","path":".git"}],"match":{"regex":".+"}}}},"on_unmet":{"decision":"deny"}}),
@@ -186,11 +191,173 @@ fn approved_roots_bind_reads_removals_exclusions_and_compiled_requests() {
             );
         }
     }
-    std::fs::remove_dir_all(&scratch).unwrap();
-    request.executable = "rm".into();
-    request.arguments = vec!["item".into()];
-    assert_eq!(cached.evaluate(&request).unwrap().decision, Decision::Deny);
     assert!(project.join("item").exists());
+    assert!(reference.join("item").exists());
+}
+
+#[test]
+fn missing_approved_roots_leave_other_roots_deciding() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let evaluator = approved_root_evaluator(&dir);
+    let project = dir.path().join("project").canonicalize().unwrap();
+    let reference = dir.path().join("reference").canonicalize().unwrap();
+    let scratch = dir.path().join("scratch").canonicalize().unwrap();
+    let cached =
+        Evaluator::from_authenticated_compiled(evaluator.compiled_bytes().to_vec()).unwrap();
+    let mut request = Request {
+        executable: "rm".into(),
+        arguments: vec![],
+        cwd: project.to_str().unwrap().into(),
+        project: project.to_str().unwrap().into(),
+    };
+    // A configured root that no longer exists holds nothing: the other roots
+    // keep deciding, and targets under the missing root stay outside them.
+    std::fs::remove_dir_all(&scratch).unwrap();
+    for (exe, args, decision) in [
+        ("rm", vec!["item".to_owned()], Decision::Allow),
+        (
+            "rm",
+            vec![scratch.join("item").to_str().unwrap().into()],
+            Decision::Deny,
+        ),
+        ("cat", vec!["item".to_owned()], Decision::Allow),
+        (
+            "cat",
+            vec![reference.join("item").to_str().unwrap().into()],
+            Decision::Allow,
+        ),
+        (
+            "cat",
+            vec![scratch.join("item").to_str().unwrap().into()],
+            Decision::Deny,
+        ),
+    ] {
+        request.executable = exe.into();
+        request.arguments = args;
+        for engine in [&evaluator, &cached] {
+            let result = engine.evaluate(&request).unwrap();
+            assert_eq!(result.decision, decision, "{} {:?}", exe, request.arguments);
+        }
+    }
+    assert!(project.join("item").exists());
+    assert!(reference.join("item").exists());
+}
+
+#[test]
+fn missing_nested_write_roots_keep_exclusions_for_future_entries() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let project = dir.path().canonicalize().unwrap();
+    let nested = project.join("vendor/acme");
+    let rows = vec![json!({
+        "id":"write", "decision":"allow",
+        "conditions":{"domain":"file","action":"write"},
+        "requirements":{"destination":{"within":{"root":"write"},
+            "exclude":[{"root":"write","path":".git"}]}},
+        "on_unmet":{"decision":"deny"}
+    })];
+    let document = crate::policy::rules::document(&rows).unwrap().to_string();
+    let config = json!({"schema_version":1,"packs":[],"rules":"rules.yml",
+        "access_paths":{"write":[nested]}})
+    .to_string();
+    let evaluator = Evaluator::new(vec![(
+        Scope::Project,
+        Candidate::from_yaml(&config)
+            .unwrap()
+            .capture(&[], Some(&document))
+            .unwrap(),
+    )])
+    .unwrap();
+    let cached =
+        Evaluator::from_authenticated_compiled(evaluator.compiled_bytes().to_vec()).unwrap();
+    let request = Request {
+        executable: "file".into(),
+        arguments: vec![],
+        cwd: project.to_str().unwrap().into(),
+        project: project.to_str().unwrap().into(),
+    };
+    let context = policy::normalized::Context {
+        working_files: None,
+        cwd: request.cwd.clone(),
+        environment: None,
+    };
+    // The containing project grants writes even before the nested root exists;
+    // exclusions must protect the nested root both before and after creation.
+    for present in [false, true] {
+        if present {
+            std::fs::create_dir_all(&nested).unwrap();
+        }
+        for (path, decision) in [
+            ("vendor/acme/.git/hooks/x", Decision::Deny),
+            ("vendor/acme/item", Decision::Allow),
+            (".git/hooks/x", Decision::Deny),
+        ] {
+            let input = policy::normalized::Input::File {
+                action: "write".into(),
+                sources: vec![],
+                destination: Some(project.join(path).to_str().unwrap().into()),
+                recursive: false,
+                original_input: json!({}),
+            };
+            for engine in [&evaluator, &cached] {
+                assert_eq!(
+                    engine
+                        .evaluate_resource(&request, &input, &context, &|| Ok(()))
+                        .unwrap()
+                        .decision,
+                    decision,
+                    "{path}, root present: {present}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn configured_roots_that_exist_but_cannot_be_observed_keep_location_unknown() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = assert_fs::TempDir::new().unwrap();
+    let evaluator = approved_root_evaluator(&dir);
+    let project = dir.path().join("project").canonicalize().unwrap();
+    let reference = dir.path().join("reference").canonicalize().unwrap();
+    let scratch = dir.path().join("scratch").canonicalize().unwrap();
+    let request = Request {
+        executable: "cat".into(),
+        arguments: vec!["item".into()],
+        cwd: project.to_str().unwrap().into(),
+        project: project.to_str().unwrap().into(),
+    };
+    let decide = |evaluator: &Evaluator| evaluator.evaluate(&request).map(|r| r.decision);
+    assert_eq!(decide(&evaluator).unwrap(), Decision::Allow);
+    // A file where a directory is configured is not an empty root.
+    std::fs::remove_dir_all(&scratch).unwrap();
+    std::fs::write(&scratch, "Acme").unwrap();
+    assert_eq!(decide(&evaluator).unwrap(), Decision::Deny);
+    std::fs::remove_file(&scratch).unwrap();
+    std::fs::create_dir(&scratch).unwrap();
+    assert_eq!(decide(&evaluator).unwrap(), Decision::Allow);
+    // A root whose parent cannot be searched may exist; its contents are unknown.
+    let locked = dir.path().join("locked");
+    std::fs::create_dir_all(locked.join("reference")).unwrap();
+    let locked = locked.canonicalize().unwrap();
+    let evaluator = root_evaluator(&locked.join("reference"), &scratch);
+    assert_eq!(decide(&evaluator).unwrap(), Decision::Allow);
+    let original = std::fs::metadata(&locked).unwrap().permissions();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let access = std::fs::symlink_metadata(locked.join("reference"));
+    let decision = decide(&evaluator);
+    std::fs::set_permissions(&locked, original).unwrap();
+    match access {
+        Err(error) => {
+            assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+            assert_eq!(decision.unwrap(), Decision::Deny);
+        }
+        Ok(_) => {
+            eprintln!(
+                "host can traverse mode-000 directories; permission-denial case inapplicable"
+            );
+        }
+    }
     assert!(reference.join("item").exists());
 }
 

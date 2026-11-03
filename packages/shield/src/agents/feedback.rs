@@ -117,9 +117,7 @@ fn unsupported(adapter: &dyn AgentAdapter, event: Event, operation: &Value) -> R
             ),
         };
     }
-    let help = tool.and_then(|tool| adapter.unsupported_help(tool)).unwrap_or(
-        "Policy changes cannot add tool support. Continue without it, or tell the user what you needed it for.",
-    );
+    let help = "Policy changes cannot add tool support. Continue without it, or tell the user what you needed it for.";
     Reply {
         decision: Decision::Deny,
         agent_context: None,

@@ -26,9 +26,10 @@ bypass protected administration checks.
 | Deny | Policy rejects the request. | Change the request or review an appropriate policy change; ordinary approval cannot override Deny. |
 
 Invalid policy, unavailable required state, and protection failures block rather
-than becoming an unmatched Ask. Unsupported tools also have their own host
-handling: Claude can ask for tool permission, while Codex blocks unsupported
-tools. A broader rule cannot add support for a tool Shield cannot model.
+than becoming an unmatched Ask. Unmodeled internal tools in native Claude and
+Codex integrations defer to the host's permissions without a Shield decision.
+The separate [read-only SDK integration](claude-read-only.md) denies tools outside
+its supported reads. A broader rule cannot add tool support.
 
 ## How rules combine
 
@@ -87,8 +88,9 @@ choice. With Allow, valid unmatched requests and explicit Ask rules can proceed.
 The policy result remains Ask, and history does not record that as individual
 operator approval. Codex's own sandbox and approvals still apply.
 
-Some requests still block: protection failures, unsupported tools, requests
+Some requests still block: protection failures, invalid mapped requests, requests
 requiring a rewrite, and Asks fully covered by Shield's Codex prefix rules.
+Unmodeled Codex internal tools retain host permissions without a Shield decision.
 Automatic Ask allowance is also suspended while a confirmed setup needs repair.
 See [native interception](claude-project.md) for the exact boundaries.
 

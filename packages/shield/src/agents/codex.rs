@@ -70,11 +70,6 @@ impl AgentAdapter for Codex {
             NativeApproval::Fallback
         }
     }
-    fn unsupported_help(&self, tool: &str) -> Option<&'static str> {
-        (tool == "webrun").then_some(
-            "Use search_query or open with direct HTTP(S) URLs; batches are supported. Result handles and other actions are unsupported. Use a direct URL when available; policy still applies.",
-        )
-    }
     fn request<'a>(&self, host: &'a Value) -> Option<Request<'a>> {
         let mut r = envelope(host, self)?;
         let tool = text(&host["tool_name"], 128)?;
@@ -95,6 +90,20 @@ impl AgentAdapter for Codex {
             r.cwd = text(w, 4096)?;
             Path::new(r.cwd).is_absolute().then_some(())?;
         }
+        // Encoded MCP calls always require a valid mapping. An invalid MCP
+        // namespace must not become an unknown internal tool and bypass policy.
+        if tool.starts_with("mcp__") {
+            host["tool_input"].as_object()?;
+            if tool
+                .strip_prefix("mcp__shield__")
+                .is_some_and(crate::review::mcp::is_tool)
+            {
+                return Some(r);
+            }
+            r.operation = Some(super::mcp_operation(tool, &host["tool_input"])?);
+            return Some(r);
+        }
+        // Shared native dispatch leaves unmodeled internal tools to the host.
         r.operation = Some(operation(host)?);
         Some(r)
     }
@@ -197,8 +206,8 @@ impl AgentAdapter for Codex {
 }
 /// Native local function tools that act only within the Codex session:
 /// planning, questions and permission requests the user answers, tool search,
-/// timing and context, subagents and MCP resource listing. Resource reads
-/// return another server's content, so they block like that server's tools.
+/// timing and context, subagents and MCP resource listing. Other unmodeled
+/// internal tools also defer to the host through the operation mapping below.
 /// A subagent's own tool calls reach the hook separately.
 const SESSION_TOOLS: &[&str] = &[
     "close_agent",
@@ -228,7 +237,7 @@ const SESSION_TOOLS: &[&str] = &[
 
 /// Input to an already running command that only reads its output (none) or
 /// interrupts or ends it (Ctrl-C, Ctrl-D). Typed text could run commands in an
-/// interactive program, so any other input stays unsupported.
+/// interactive program, so other input retains the host's permission prompt.
 fn signal_only(host: &Value) -> bool {
     host["tool_input"]["chars"]
         .as_str()
@@ -238,9 +247,6 @@ fn signal_only(host: &Value) -> bool {
 fn operation(host: &Value) -> Option<Value> {
     let tool = text(&host["tool_name"], 128)?;
     let input = host["tool_input"].as_object()?;
-    if let Some(operation) = super::mcp_operation(tool, &host["tool_input"]) {
-        return Some(operation);
-    }
     match tool {
         // Codex reads the image file itself, so the read is decided by its path.
         "view_image" => {

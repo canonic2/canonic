@@ -194,7 +194,14 @@ fn handle(
     if request.operation.is_none() && request.harmless && request.event == Event::Permission {
         return Some(allow(adapter, request.event, String::new()));
     }
-    let Some(operation) = &request.operation else {
+    // Internal tools outside Shield's mappings belong to the host's permission
+    // system. Apply this uniformly to every native adapter, including future ones.
+    // Encoded MCP requests retain connection classification and never use this
+    // fallback, even if their adapter cannot map them.
+    let operation = request.operation.as_ref().filter(|operation| {
+        operation["kind"] != "unsupported" || request.tool.starts_with("mcp__")
+    });
+    let Some(operation) = operation else {
         log.event(
             "hook_internal_bypass",
             json!({"tool_name":request.tool,"post":request.event.post()}),
@@ -221,7 +228,7 @@ fn handle(
     };
     let mut strictest: Option<Reply> = None;
     let mut refusals = Vec::new();
-    let mut unmodeled = false;
+    let mut unmodeled = operation["unmodeled"] == true;
     for (index, operation) in operations.into_iter().enumerate() {
         if request.event.post()
             && !["read-text", "shell", "file", "web", "mcp"]
@@ -269,7 +276,12 @@ fn handle(
             && let Some(allowed) =
                 approval::in_session(root, adapter, request, &refusals, &mut reply)
         {
-            return Some(adapter.reply(request.event, &allowed));
+            reply = allowed;
+        }
+        if unmodeled && reply.decision == Decision::Allow {
+            // A reply covers the whole call; leave unmodeled actions under
+            // host permissions even when every modeled operation may proceed.
+            return Some(json!({}));
         }
         Some(adapter.reply(request.event, &reply))
     }

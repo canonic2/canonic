@@ -7,11 +7,14 @@ use crate::{
     review::{self, Context, Error, model::State, storage::Store},
 };
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+};
 pub(super) mod projections;
 use projections::{
-    digest, file_hashes, projection_changed, projection_fingerprint, projection_hashes,
-    projections, repair_projections,
+    digest, edited_projections, file_hashes, projection_changed, projection_fingerprint,
+    projection_hashes, projections, repair_projections,
 };
 
 /// Host confirmation provenance supplied only after the interface validates its approval path.
@@ -203,8 +206,9 @@ fn commit_confirmed(
         None
     };
     let mut attempted_activation = None;
+    let mut preserved = BTreeSet::new();
     let result = store.update_checkpoint(context, &|| Ok(()), |state| {
-        verify_confirmation_files(context, before, manual_fingerprint)?;
+        preserved = verify_confirmation_files(context, before, manual_fingerprint, &files)?;
         if expected != publication_identity(state) {
             return Err(Error::Invalid("project changed; review again"));
         }
@@ -226,9 +230,7 @@ fn commit_confirmed(
         } else {
             retained.ok_or(Error::CandidateUnavailable)?
         };
-        if metadata(before)["projection"] != meta["projection"] {
-            meta["projection_previous"] = projection_hashes(context, &files)?;
-        }
+        prepare_projection_repair(context, before, &files, &mut meta, &preserved)?;
         keep_path_access(&mut meta, &state.operator);
         state.candidates = candidates;
         state.policy_revision = evaluator.revision().into();
@@ -257,25 +259,81 @@ fn commit_confirmed(
         )?,
     };
     let mut receipt = receipt;
-    repair_after_commit(context, &store, evaluator, &files, &meta, &mut receipt);
+    let mut written = files;
+    written.retain(|name, _| !preserved.contains(name));
+    repair_after_commit(context, &store, evaluator, &written, &meta, &mut receipt);
     receipt["changes"] = changes;
     Ok(receipt)
 }
 
+/// Retain repair evidence without treating preserved edits as generated output.
+fn prepare_projection_repair(
+    context: &Context,
+    before: &State,
+    files: &BTreeMap<String, String>,
+    meta: &mut Value,
+    preserved: &BTreeSet<String>,
+) -> Result<(), Error> {
+    if metadata(before)["projection"] != meta["projection"] {
+        meta["projection_previous"] = projection_hashes(context, files)?;
+    }
+    // A later repair may replace only what Shield wrote, never a kept edit.
+    if let Some(previous) = meta["projection_previous"].as_object_mut() {
+        for name in preserved {
+            previous.insert(
+                name.clone(),
+                before.operator["projection_file_hashes"][name].clone(),
+            );
+        }
+    }
+    // Missing output is ordinarily recoverable after an interrupted write.
+    // Remember kept edits so repair can distinguish a preserved deletion.
+    if preserved.is_empty() {
+        if let Some(meta) = meta.as_object_mut() {
+            meta.remove("projection_preserved");
+        }
+    } else {
+        meta["projection_preserved"] = json!(preserved);
+    }
+    Ok(())
+}
+
+/// Refuse a commit that would overwrite project files edited by hand, and
+/// return the edited files it leaves unchanged. Those stay on disk, pending the
+/// operator's review, because a proposal is built from retained policy and
+/// never from them. A manual review binds the exact files it showed.
 fn verify_confirmation_files(
     context: &Context,
     before: &State,
     manual_fingerprint: Option<&str>,
-) -> Result<(), Error> {
-    if manual_fingerprint.map_or_else(
-        || projection_changed(context, before),
-        |fingerprint| Ok(projection_fingerprint(context, before)? != fingerprint),
-    )? {
+    files: &BTreeMap<String, String>,
+) -> Result<BTreeSet<String>, Error> {
+    const CHANGED: Error =
+        Error::Invalid("project files changed during confirmation; review again");
+    if let Some(fingerprint) = manual_fingerprint {
+        if projection_fingerprint(context, before)? != fingerprint {
+            return Err(CHANGED);
+        }
+        return Ok(BTreeSet::new());
+    }
+    let Some(edited) = edited_projections(context, before)? else {
+        if projection_changed(context, before)? {
+            return Err(CHANGED);
+        }
+        return Ok(BTreeSet::new());
+    };
+    let recorded = &before.operator["projection_file_hashes"];
+    if edited.iter().any(|name| {
+        files
+            .get(name)
+            .map(|bytes| json!(policy::fingerprint(bytes.as_bytes())))
+            != recorded.get(name).cloned()
+    }) {
         return Err(Error::Invalid(
-            "project files changed during confirmation; review again",
+            "this change would overwrite unreviewed edits to .shield files; ask the user to review them with shield policy review, then propose the change again",
         ));
     }
-    Ok(())
+    Ok(edited)
 }
 
 fn mark_applied(

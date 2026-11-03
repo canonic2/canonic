@@ -20,26 +20,24 @@ struct Open {
 
 pub(super) fn operation(input: &Value) -> Option<Value> {
     let unsupported = || json!({"kind":"unsupported","name":"webrun"});
-    if input
-        .as_object()?
-        .keys()
-        .any(|k| !["search_query", "open", "response_length"].contains(&k.as_str()))
-    {
-        return Some(unsupported());
-    }
+    let input_object = input.as_object()?;
     if let Some(length) = input.get("response_length") {
         ["short", "medium", "long"]
             .contains(&length.as_str()?)
             .then_some(())?;
     }
     let mut operations = Vec::new();
-    let mut unmodeled = false;
+    let mut unmodeled = input_object
+        .keys()
+        .any(|key| !["search_query", "open", "response_length"].contains(&key.as_str()));
+    let mut count = 0;
     for action in ["search_query", "open"] {
         let Some(items) = input.get(action) else {
             continue;
         };
         let items = items.as_array()?;
-        if items.is_empty() || operations.len() + items.len() > 16 {
+        count += items.len();
+        if items.is_empty() || count > 16 {
             return None;
         }
         for item in items {
@@ -73,21 +71,26 @@ pub(super) fn operation(input: &Value) -> Option<Value> {
                     let url = url::Url::parse(target).ok()?;
                     url.host_str()?;
                 } else {
+                    // Result handles and other schemes belong to the host.
+                    // Keep evaluating direct URLs elsewhere in this call.
                     unmodeled = true;
+                    continue;
                 }
                 json!({"kind":"web","action":"fetch","query":null,"url":target})
             };
             operations.push(operation);
         }
     }
-    if operations.is_empty() {
+    if input_object.is_empty()
+        || (count == 0 && input_object.keys().all(|key| key == "response_length"))
+    {
         return None;
     }
-    // Coverage must be complete before any part reaches evaluation. Never drop
-    // an opaque reference or unsupported action from an otherwise allowed batch.
-    Some(if unmodeled {
+    // Keep partial coverage explicit so a modeled Allow cannot approve the
+    // host's permission prompt for unmodeled actions in the same call.
+    Some(if operations.is_empty() {
         unsupported()
     } else {
-        json!({"kind":"batch","operations":operations})
+        json!({"kind":"batch","operations":operations,"unmodeled":unmodeled})
     })
 }

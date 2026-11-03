@@ -185,6 +185,9 @@ pub(crate) trait AgentAdapter: Sync {
         review::resolve(None)
     }
     fn spec(&self) -> &'static AgentSpec;
+    /// Normalize modeled operations and reject malformed mapped input. Shared
+    /// native dispatch delegates unmodeled internal tools to host permissions;
+    /// encoded MCP calls must retain their connection mapping and validation.
     fn request<'a>(&self, host: &'a Value) -> Option<Request<'a>>;
     fn working_files(&self, host: &Value, project: &Path) -> crate::location::WorkingFiles;
     fn working_file_categories(&self) -> &'static [&'static str] {
@@ -197,10 +200,6 @@ pub(crate) trait AgentAdapter: Sync {
         Some(
             "Briefly offer this rule pack once per conversation, after the task and before your final reply, even if the command already ran. The apply prompt is the installation question; do not first ask in text or with a question tool. Wait before the next proposal. Declining or cancelling leaves the pack uninstalled; do not retry.",
         )
-    }
-    /// Supported request forms to mention when this vendor tool is unmodeled.
-    fn unsupported_help(&self, _tool: &str) -> Option<&'static str> {
-        None
     }
     fn reply(&self, event: Event, reply: &Reply) -> Value;
     fn completion(&self, event: &str, note: Option<&str>) -> Value;

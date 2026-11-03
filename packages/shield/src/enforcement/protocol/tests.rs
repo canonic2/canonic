@@ -63,6 +63,29 @@ fn external_text_reads_and_approval_checks_bind_the_confirmed_root_identity() {
 }
 
 #[test]
+#[cfg(any(unix, windows))]
+fn text_binding_allows_a_missing_read_root_but_refuses_its_appearance() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let parent = dir.path().canonicalize().unwrap();
+    let project = parent.join("project");
+    fs::create_dir(&project).unwrap();
+    let path = project.join("notes.txt");
+    fs::write(&path, "Acme text").unwrap();
+    let read = parent.join("reference");
+    let paths = crate::configuration::AccessPaths {
+        read: vec![read.to_str().unwrap().into()],
+        write: vec![],
+    };
+    let binding = Binding::open_scoped(&project, &project, path.to_str().unwrap(), &paths).unwrap();
+    binding.verify().unwrap();
+    fs::create_dir(&read).unwrap();
+    assert!(binding.verify().is_err());
+    let refreshed =
+        Binding::open_scoped(&project, &project, path.to_str().unwrap(), &paths).unwrap();
+    refreshed.verify().unwrap();
+}
+
+#[test]
 #[cfg(unix)]
 fn binding_refuses_inode_replacement_changes_and_parent_symlinks() {
     let root = assert_fs::TempDir::new().unwrap();
