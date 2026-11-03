@@ -350,6 +350,79 @@ fn codex_applies_after_its_own_tool_permission_without_a_form() {
 }
 
 #[test]
+fn request_approve_asks_once_for_a_group_and_the_schema_refuses_both_forms() {
+    use crate::review::hook_approval::{Identity, Key, Outcome, Summary, refused};
+    let (server, project) = fixture(Some("codex"));
+    let root = std::path::Path::new(&project.review.project_root);
+    let active = crate::review::runtime::status(&project.review).unwrap()["active"].clone();
+    let identity = Identity {
+        activation_id: active["activation_id"].as_str().unwrap(),
+        policy_revision: active["policy_revision"].as_str().unwrap(),
+        candidate_digest: active["candidate_digest"].as_str().unwrap(),
+    };
+    let summary = Summary {
+        action: "Run this command:\ngit branch -D acme/task".into(),
+        reason: "the active policy denies it".into(),
+        overrides_deny: true,
+        deny_rules: vec!["acme-branch-delete".into()],
+        settings_change: false,
+    };
+    let ids: Vec<String> = ["acme-first", "acme-second"]
+        .iter()
+        .map(|input| {
+            let key = Key {
+                agent: "codex",
+                session: "acme-session",
+                cwd: "/workspace/acme",
+                tool: "Bash",
+                input_digest: crate::policy::fingerprint(input.as_bytes()),
+            };
+            match refused(root, &key, &identity, &summary).unwrap() {
+                Outcome::Pending(id, _) => id,
+                Outcome::Allowed => panic!("expected a pending request"),
+            }
+        })
+        .collect();
+
+    let transport = Transport::start(server);
+    for message in initialize(&capabilities(FORM), "codex") {
+        transport.send(&message);
+    }
+    assert!(transport.receive()["result"].is_object());
+
+    // The published schema refuses both argument forms before dispatch.
+    let both = transport.call(
+        json!(2),
+        "request_approve",
+        &json!({"request_id":ids[0],"request_ids":ids}),
+    );
+    assert_eq!(error_code(&both), "invalid_input", "{both}");
+    let text = both["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        text.starts_with("Tool arguments do not match the input schema: "),
+        "{text}"
+    );
+
+    let form = transport.call(json!(3), "request_approve", &json!({"request_ids":ids}));
+    assert_eq!(form["method"], "elicitation/create", "{form}");
+    let message = form["params"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("Accepting creates 2 separate one-time permissions. 2 of them override rules that deny them."),
+        "{message}"
+    );
+    let response = transport.request(&answer(&form, &json!({"action":"accept"})));
+    assert_eq!(response["id"], 3, "{response}");
+    assert_eq!(response["result"]["isError"], false, "{response}");
+    let grants = &response["result"]["structuredContent"]["data"]["grants"];
+    assert_eq!(grants.as_array().map(Vec::len), Some(2), "{response}");
+    let summary = response["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        summary.starts_with("The user approved these 2 requests once each."),
+        "{summary}"
+    );
+}
+
+#[test]
 fn inspection_runs_while_a_form_is_open_and_a_second_form_is_unavailable() {
     let (transport, project, args) = prepared(Some("claude-code"), &capabilities(FORM));
     let before = project.revision();

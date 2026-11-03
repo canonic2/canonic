@@ -131,7 +131,7 @@ impl Active {
 }
 
 #[cfg(test)]
-pub(super) fn status(context: &Context) -> Result<Value, Error> {
+pub(crate) fn status(context: &Context) -> Result<Value, Error> {
     let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
     state.check(context)?;
     Ok(status_from(&state))

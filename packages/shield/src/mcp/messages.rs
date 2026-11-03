@@ -12,7 +12,7 @@ Custom proposal schemas include complete examples; adapt them after reviewing ef
 Respect incomplete coverage and existing proposals; do not infer a rule from missing evidence or automatically offer an allow rule for Deny. \
 For an authorized lasting change, propose the narrowest justified candidate with policy_propose and returned review context; preserve deny boundaries and explain broader permissions. \
 Activate through user-approved policy_apply or terminal review. Inspection and proposals grant no authority. Do not interrupt unrelated work with policy review. \
-When a Shield refusal names request_approve and a request_id, call it to ask the user to allow that one request; after approval, repeat the identical call once. Never work around a refusal another way. ";
+When a Shield refusal names request_approve and a request_id, call it to ask the user to allow that request, or pass several from this session as request_ids to ask once; after approval, repeat each identical call once. Never work around a refusal another way. ";
     let host = crate::agents::review::resolve(agent)
         .guidance()
         .instructions;
@@ -33,10 +33,10 @@ pub(super) const REQUEST_DECLINED: &str = "The user declined this request. Do no
 pub(super) fn request_unavailable(agent: Option<&str>) -> &'static str {
     match agent {
         Some("codex") => {
-            "Shield could not ask the user: this session's approval settings reject confirmation forms. Ask the user to choose an approval policy that allows prompts with /permissions, then call request_approve again with the same request_id. Do not change approval settings yourself."
+            "Shield could not ask the user: this session's approval settings reject confirmation forms. Ask the user to choose an approval policy that allows prompts with /permissions, then call request_approve again with the same arguments. Do not change approval settings yourself."
         }
         _ => {
-            "Shield could not ask the user: this session cannot show confirmation forms. Ask the user to allow Shield's confirmation prompts, then call request_approve again with the same request_id."
+            "Shield could not ask the user: this session cannot show confirmation forms. Ask the user to allow Shield's confirmation prompts, then call request_approve again with the same arguments."
         }
     }
 }
@@ -85,7 +85,10 @@ pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String 
             data["change_summary"].as_str().map_or_else(|| guidance.into(), |change| format!("Proposed: {change} {guidance}"))
         },
         "policy_apply" => "Policy change active after host confirmation. Retry the original request only if still needed.".into(),
-        "request_approve" => "The user approved this request once. Repeat the identical call now; any change to it needs a new approval.".into(),
+        "request_approve" => match data["grants"].as_array() {
+            Some(grants) => format!("The user approved these {} requests once each. Repeat each identical call now, in any order; any change to one needs a new approval.", grants.len()),
+            None => "The user approved this request once. Repeat the identical call now; any change to it needs a new approval.".into(),
+        },
         "suggestion_list" => {
             let rows = data["requests"].as_array();
             let eligible = rows.into_iter().flatten().filter(|row| row["eligible_for_offer"] == true).count();

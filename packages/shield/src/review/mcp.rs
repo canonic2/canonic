@@ -88,7 +88,7 @@ const FAILED_PROPOSAL: Refusal = Refusal {
 /// `request_approve` reached without the person's answer: the host showed no form.
 const REQUEST_CONFIRMATION: Refusal = Refusal {
     code: "operator_review_required",
-    message: "The user must accept Shield's confirmation form for this request, and this host did not show it. Ask the user to enable confirmation prompts for this session, then call request_approve again with the same request_id",
+    message: "The user must accept Shield's confirmation form for this request, and this host did not show it. Ask the user to enable confirmation prompts for this session, then call request_approve again with the same arguments",
     route: None,
 };
 
@@ -369,6 +369,8 @@ fn error_fields(error: &Error) -> (&'static str, String) {
             "ambiguous_reference",
             format!("Ambiguous reference: {error}"),
         ),
+        // Its recovery is in the message; it names no submitted text.
+        Error::Grouped { .. } => ("invalid_input", format!("Shield: {error}")),
         _ => ("invalid_input", invalid_input_message(error)),
     }
 }

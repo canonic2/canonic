@@ -23,6 +23,8 @@ const FOLLOWUP_MS: u64 = 60_000;
 const ID_KIND: &str = "hook-request";
 /// Longest form Shield shows, within the host confirmation's message limit.
 const MAX_FORM: usize = 12_000;
+/// Most requests one confirmation may cover.
+const MAX_GROUP: usize = 8;
 
 /// What identifies one exact native request across its refusal and retry.
 pub(crate) struct Key<'a> {
@@ -93,8 +95,10 @@ struct Grant {
 pub(crate) enum Outcome {
     /// A live grant for this exact request was consumed; allow it once.
     Allowed,
-    /// The refusal is stored; the agent asks the person with this ID.
-    Pending(String),
+    /// The refusal is stored; the agent asks the person with this ID. The flag
+    /// says whether the same session holds other pending requests it could
+    /// group with this one.
+    Pending(String, bool),
 }
 
 fn hash(value: &Value) -> String {
@@ -154,13 +158,17 @@ impl HookRequest {
     }
     /// The active generation and protection choice are those it was refused under.
     fn current(&self, state: &State) -> Result<bool, Error> {
-        Ok(state.active.as_ref().is_some_and(|active| {
+        Ok(self.current_with(state, &access(state)?))
+    }
+    /// [`Self::current`] with the protection choice already loaded.
+    fn current_with(&self, state: &State, access: &Value) -> bool {
+        state.active.as_ref().is_some_and(|active| {
             active.matches_parts(
                 &self.activation_id,
                 &self.policy_revision,
                 &self.candidate_digest,
             )
-        }) && self.path_access == access(state)?)
+        }) && &self.path_access == access
     }
 }
 
@@ -277,10 +285,17 @@ pub(crate) fn refused(
     let context = super::open(root)?;
     let store = Store::open(root)?;
     let found = store.inspect_checkpoint(&context, &|| Ok(()), |state| {
-        lookup(state, key, identity, now()?)
+        let time = now()?;
+        Ok(match lookup(state, key, identity, time)? {
+            Some(Found::Pending(id)) => {
+                let others = others_pending(state, key, &id, time)?;
+                Some(Outcome::Pending(id, others))
+            }
+            _ => None,
+        })
     })?;
-    if let Some(Found::Pending(id)) = found {
-        return Ok(Outcome::Pending(id));
+    if let Some(outcome) = found {
+        return Ok(outcome);
     }
     let value = store.update_checkpoint(&context, &|| Ok(()), |state| {
         let time = now()?;
@@ -290,7 +305,10 @@ pub(crate) fn refused(
                 consume(state, &context, index, time);
                 return Ok(json!({"allowed":true}));
             }
-            Some(Found::Pending(id)) => return Ok(json!({"request_id":id})),
+            Some(Found::Pending(id)) => {
+                let others = others_pending(state, key, &id, time)?;
+                return Ok(json!({"request_id":id,"others":others}));
+            }
             None => {}
         }
         let access = access(state)?;
@@ -328,12 +346,28 @@ pub(crate) fn refused(
         row.binding = row.binding();
         let id = row.request_id.clone();
         state.hook_requests.push(row);
-        Ok(json!({"request_id":id}))
+        let others = others_pending(state, key, &id, time)?;
+        Ok(json!({"request_id":id,"others":others}))
     })?;
     Ok(match value["request_id"].as_str() {
-        Some(id) => Outcome::Pending(id.to_owned()),
+        Some(id) => Outcome::Pending(id.to_owned(), value["others"] == true),
         None => Outcome::Allowed,
     })
+}
+
+/// Whether the session holds another pending request that could still be
+/// approved with `id`. Shield cannot tell which ones serve the same task, so
+/// the hint names none.
+fn others_pending(state: &State, key: &Key<'_>, id: &str, time: u64) -> Result<bool, Error> {
+    let access = access(state)?;
+    Ok(state.hook_requests.iter().any(|row| {
+        row.request_id != id
+            && row.status == "pending"
+            && time < row.pending_expires_at_ms
+            && row.agent == key.agent
+            && row.session_id == key.session
+            && row.current_with(state, &access)
+    }))
 }
 
 fn consume(state: &mut State, context: &Context, index: usize, time: u64) {
@@ -390,54 +424,164 @@ fn agent_matches(context: &Context, row: &HookRequest) -> bool {
     context.agent.as_deref() == Some(row.agent.as_str())
 }
 
-/// The pending request an MCP call selects, if it can still be approved.
+/// The request IDs a call names, and whether it names a group. Exactly one of
+/// `request_id` or `request_ids` (1–8 distinct IDs) is accepted.
+fn requested(args: &Value) -> Result<(Vec<&str>, bool), Error> {
+    let fields = args
+        .as_object()
+        .ok_or(Error::Invalid("arguments must be an object"))?;
+    let list = match (fields.get("request_id"), fields.get("request_ids")) {
+        (Some(Value::String(id)), None) if fields.len() == 1 => {
+            return Ok((vec![id.as_str()], false));
+        }
+        (None, Some(Value::Array(list))) if fields.len() == 1 => list,
+        _ => {
+            return Err(Error::Invalid(
+                "request_approve takes either request_id or request_ids, not both",
+            ));
+        }
+    };
+    if list.is_empty() || list.len() > MAX_GROUP {
+        return Err(Error::Invalid("request_ids holds 1 to 8 request IDs"));
+    }
+    let mut ids = Vec::with_capacity(list.len());
+    for id in list {
+        let id = id
+            .as_str()
+            .ok_or(Error::Invalid("request_ids holds request ID strings"))?;
+        if ids.contains(&id) {
+            return Err(Error::Invalid("request_ids must not repeat a request ID"));
+        }
+        ids.push(id);
+    }
+    Ok((ids, true))
+}
+
+/// Why a stored request cannot be approved now.
+struct Unapprovable {
+    /// The whole recovery when the call names only this request.
+    single: &'static str,
+    /// The reason and recovery a group refusal gives for it.
+    reason: &'static str,
+    recovery: &'static str,
+}
+
+/// Leave the request out of the next group.
+const WITHOUT_IT: &str = "Call request_approve again without it";
+/// Get a fresh request for the same operation.
+const RENEW_IT: &str =
+    "Repeat its call to get a new request_id, then call request_approve with that ID";
+
+fn unapprovable(
+    row: &HookRequest,
+    state: &State,
+    time: u64,
+) -> Result<Option<Unapprovable>, Error> {
+    Ok(if row.status != "pending" {
+        Some(Unapprovable {
+            single: "this request was already answered; repeat the identical call once if it was approved, otherwise continue without it",
+            reason: "it was already answered",
+            recovery: "If it was approved, repeat its call once; either way, call request_approve again without it",
+        })
+    } else if time >= row.pending_expires_at_ms {
+        Some(Unapprovable {
+            single: "this request expired; repeat the call to get a new request_id",
+            reason: "it has expired",
+            recovery: RENEW_IT,
+        })
+    } else if !row.current(state)? {
+        Some(Unapprovable {
+            single: "policy or protection settings changed since this request; repeat the call to get a new request_id",
+            reason: "policy or protection settings changed since it was refused",
+            recovery: RENEW_IT,
+        })
+    } else {
+        None
+    })
+}
+
+/// The pending requests an MCP call selects, in submitted order, if every one
+/// can still be approved, and whether the call used `request_ids`. A group of
+/// several refuses whole and names the request at fault; a list of one gets
+/// the single request's refusals.
 fn selected<'a>(
     state: &'a State,
     context: &Context,
     args: &Value,
-) -> Result<&'a HookRequest, Error> {
+) -> Result<(Vec<&'a HookRequest>, bool), Error> {
     if context.surface != "mcp" {
         return Err(Error::ApprovalRequired);
     }
-    let fields = args
-        .as_object()
-        .ok_or(Error::Invalid("arguments must be an object"))?;
-    if fields.len() != 1 {
-        return Err(Error::Invalid("request_approve takes only request_id"));
-    }
-    let id = args["request_id"]
-        .as_str()
-        .ok_or(Error::Invalid("request_id is required"))?;
+    let (ids, list) = requested(args)?;
+    let group = ids.len() > 1;
     let time = now()?;
-    let row = state
-        .hook_requests
-        .iter()
-        .find(|row| row.request_id == id && agent_matches(context, row))
-        .ok_or(Error::Missing)?;
-    if row.status != "pending" {
-        return Err(Error::Invalid(
-            "this request was already answered; repeat the identical call once if it was approved, otherwise continue without it",
-        ));
+    let refuse = |request: String, reason, recovery| Error::Grouped {
+        request,
+        reason,
+        recovery,
+    };
+    let mut rows: Vec<&HookRequest> = Vec::with_capacity(ids.len());
+    for (position, id) in ids.iter().enumerate() {
+        let Some(row) = state
+            .hook_requests
+            .iter()
+            .find(|row| row.request_id == *id && agent_matches(context, row))
+        else {
+            // An unknown ID is the agent's text; name its position instead.
+            return Err(if group {
+                refuse(
+                    format!("request_ids[{position}]"),
+                    "no such request is pending",
+                    WITHOUT_IT,
+                )
+            } else {
+                Error::Missing
+            });
+        };
+        if let Some(found) = unapprovable(row, state, time)? {
+            return Err(if group {
+                refuse(row.request_id.clone(), found.reason, found.recovery)
+            } else {
+                Error::Invalid(found.single)
+            });
+        }
+        if rows
+            .first()
+            .is_some_and(|first| first.session_id != row.session_id)
+        {
+            return Err(refuse(
+                row.request_id.clone(),
+                "it was refused in another session",
+                WITHOUT_IT,
+            ));
+        }
+        rows.push(row);
     }
-    if time >= row.pending_expires_at_ms {
-        return Err(Error::Invalid(
-            "this request expired; repeat the call to get a new request_id",
-        ));
-    }
-    if !row.current(state)? {
-        return Err(Error::Invalid(
-            "policy or protection settings changed since this request; repeat the call to get a new request_id",
-        ));
-    }
-    Ok(row)
+    Ok((rows, list))
 }
 
-/// The plain-language question for the person, after validating the request.
+/// The form for the selected requests; a group too long to show whole is refused.
+fn question(rows: &[&HookRequest]) -> Result<String, Error> {
+    if let [row] = rows {
+        // A single request was only stored if its form fits.
+        return Ok(message(&row.summary, &row.cwd));
+    }
+    let text = group_message(rows);
+    if text.len() <= MAX_FORM {
+        Ok(text)
+    } else {
+        Err(Error::Invalid(
+            "these requests are too long to show together; approve them in smaller groups",
+        ))
+    }
+}
+
+/// The plain-language question for the person, after validating the requests.
 pub(crate) fn confirmation(context: &Context, args: &Value) -> Result<String, Error> {
     let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
     state.check(context)?;
-    let row = selected(&state, context, args)?;
-    Ok(message(&row.summary, &row.cwd))
+    let (rows, _) = selected(&state, context, args)?;
+    question(&rows)
 }
 
 /// Whether the form can show this request whole; a longer one is not offered.
@@ -448,10 +592,64 @@ pub(crate) fn fits(summary: &Summary, cwd: &str) -> bool {
 /// Shield's own lines come first; the agent's request follows as an indented
 /// block with control characters escaped, so it cannot pose as Shield's lines.
 fn message(summary: &Summary, cwd: &str) -> String {
-    let mut text = format!(
-        "Allow the agent to do this once?\n\nShield blocked it because {}.",
-        summary.reason.trim_end_matches('.')
+    let mut text = String::from("Allow the agent to do this once?\n\n");
+    describe(&mut text, summary, cwd);
+    text.push_str(
+        "\nThis allows only this exact request, once, within five minutes. It does not change your policy.",
     );
+    text
+}
+
+/// One form for a group: the counts first, so a deny override or settings
+/// change cannot hide among routine rows, then each request in order.
+fn group_message(rows: &[&HookRequest]) -> String {
+    let count = |test: fn(&Summary) -> bool| rows.iter().filter(|r| test(&r.summary)).count();
+    let total = rows.len();
+    let mut text = format!(
+        "Allow the agent to do these {total} requests, each once?\n\nAccepting creates {total} separate one-time permissions."
+    );
+    of_them(
+        &mut text,
+        count(|s| s.overrides_deny),
+        "overrides a rule that denies it.",
+        "override rules that deny them.",
+    );
+    of_them(
+        &mut text,
+        count(|s| s.settings_change),
+        "changes agent settings.",
+        "change agent settings.",
+    );
+    for (n, row) in rows.iter().enumerate() {
+        text.push_str("\n\nRequest ");
+        text.push_str(&(n + 1).to_string());
+        text.push_str(" of ");
+        text.push_str(&total.to_string());
+        text.push('\n');
+        describe(&mut text, &row.summary, &row.cwd);
+    }
+    text.push_str(
+        "\nThis allows only these exact requests, each once, within five minutes. It does not change your policy.",
+    );
+    text
+}
+
+/// A count sentence of the group form, left out when nothing matches.
+fn of_them(text: &mut String, count: usize, one: &str, several: &str) {
+    if count == 0 {
+        return;
+    }
+    text.push(' ');
+    text.push_str(&count.to_string());
+    text.push_str(" of them ");
+    text.push_str(if count == 1 { one } else { several });
+}
+
+/// One request's reason, consequences, folder and exact text.
+fn describe(text: &mut String, summary: &Summary, cwd: &str) {
+    text.push_str("Shield blocked it because ");
+    text.push_str(summary.reason.trim_end_matches('.'));
+    text.push('.');
     if summary.overrides_deny {
         match summary.deny_rules.as_slice() {
             [] => text.push_str("\nAllowing it overrides a rule that denies it."),
@@ -475,10 +673,6 @@ fn message(summary: &Summary, cwd: &str) -> String {
         text.push_str(&one_line(line));
         text.push('\n');
     }
-    text.push_str(
-        "\nThis allows only this exact request, once, within five minutes. It does not change your policy.",
-    );
-    text
 }
 
 /// Escapes characters that break or rewrite a displayed line.
@@ -494,7 +688,9 @@ pub(crate) fn one_line(text: &str) -> String {
     shown
 }
 
-/// Issue the one-time grant after the person accepted the form.
+/// Issue the one-time grants after the person accepted the form. Every
+/// selected request is revalidated in this writer transaction; if any fails,
+/// none is issued.
 pub(crate) fn approve(context: &Context, args: &Value, confirmed: bool) -> Result<Value, Error> {
     if !confirmed {
         // A request that cannot be approved reports why; a valid one still
@@ -503,38 +699,62 @@ pub(crate) fn approve(context: &Context, args: &Value, confirmed: bool) -> Resul
         return Err(Error::ApprovalRequired);
     }
     Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
-        let id = selected(state, context, args)?.request_id.clone();
+        let (rows, list) = selected(state, context, args)?;
+        question(&rows)?;
+        let ids: Vec<String> = rows.iter().map(|row| row.request_id.clone()).collect();
         let time = now()?;
+        // One approval links every grant it issued.
         let approval = state.id("hook-approval");
-        let index = state
-            .hook_requests
-            .iter()
-            .position(|row| row.request_id == id)
-            .ok_or(Error::Missing)?;
-        let row = &mut state.hook_requests[index];
-        let mut grant = Grant {
-            approval_id: approval.clone(),
-            issued_at_ms: time,
-            expires_at_ms: time + GRANT_MS,
-            binding: String::new(),
-            consumed_at_ms: None,
-            followup_used: false,
-        };
-        grant.binding = row.grant_binding(&grant);
-        let details = json!({"binding":grant.binding,"request_binding":row.binding,"expires_at_ms":grant.expires_at_ms});
-        row.grant = Some(grant);
-        row.status = "approved".into();
-        let mut event = state.event(
-            "hook_grant_issued",
-            context,
-            json!({"request_id":id,"approval_id":approval}),
-            json!({}),
-            details,
-        );
-        event["operator"] =
-            json!({"operator_id":null,"display_name":null,"mechanism":"host-elicitation"});
-        state.record(event);
-        Ok(json!({"request_id":id,"status":"approved","expires_at_ms":time + GRANT_MS,
-            "next_action":"Repeat the identical tool call once now. Any change to it needs a new approval."}))
+        let mut grants = Vec::with_capacity(ids.len());
+        for id in &ids {
+            issue(state, context, id, &approval, time)?;
+            grants.push(json!({"request_id":id,"status":"approved","expires_at_ms":time + GRANT_MS}));
+        }
+        // A `request_ids` call gets its list back, even for one ID.
+        Ok(if list {
+            json!({"status":"approved","approval_id":approval,"grants":grants,
+                "next_action":"Repeat each approved tool call once now, identically and in any order. Any change to one needs a new approval."})
+        } else {
+            json!({"request_id":ids[0],"status":"approved","expires_at_ms":time + GRANT_MS,
+                "next_action":"Repeat the identical tool call once now. Any change to it needs a new approval."})
+        })
     })
+}
+
+fn issue(
+    state: &mut State,
+    context: &Context,
+    id: &str,
+    approval: &str,
+    time: u64,
+) -> Result<(), Error> {
+    let index = state
+        .hook_requests
+        .iter()
+        .position(|row| row.request_id == id)
+        .ok_or(Error::Missing)?;
+    let row = &mut state.hook_requests[index];
+    let mut grant = Grant {
+        approval_id: approval.to_owned(),
+        issued_at_ms: time,
+        expires_at_ms: time + GRANT_MS,
+        binding: String::new(),
+        consumed_at_ms: None,
+        followup_used: false,
+    };
+    grant.binding = row.grant_binding(&grant);
+    let details = json!({"binding":grant.binding,"request_binding":row.binding,"expires_at_ms":grant.expires_at_ms});
+    row.grant = Some(grant);
+    row.status = "approved".into();
+    let mut event = state.event(
+        "hook_grant_issued",
+        context,
+        json!({"request_id":id,"approval_id":approval}),
+        json!({}),
+        details,
+    );
+    event["operator"] =
+        json!({"operator_id":null,"display_name":null,"mechanism":"host-elicitation"});
+    state.record(event);
+    Ok(())
 }

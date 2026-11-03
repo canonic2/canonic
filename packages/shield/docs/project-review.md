@@ -146,6 +146,15 @@ request once within five minutes; anything else is still blocked, and your
 policy and protection settings do not change. If you decline, the agent
 continues without it.
 
+When one task needs several blocked requests, such as deleting the same branch
+in two repositories, the agent can ask about up to eight of them in one form.
+The form starts by saying how many one-time permissions accepting creates and
+how many override a deny or change agent settings, then shows each request in
+full. Accepting allows each listed request once; the agent repeats each one
+identically within five minutes, in any order. If any request in the group can
+no longer be allowed, for example because it expired or your policy changed
+while the form was open, nothing is allowed.
+
 Codex shows the form only when its approval policy allows prompts. If the
 agent reports that it could not ask you, choose an approval policy that allows
 prompts with `/permissions` in the same Codex session; the agent then asks

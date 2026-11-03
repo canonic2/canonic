@@ -72,8 +72,8 @@ pub(super) fn in_session(
             };
             match hook_approval::refused(root, &key, &identity, &summary) {
                 Ok(Outcome::Allowed) => Some(allowed()),
-                Ok(Outcome::Pending(id)) => {
-                    route(reply, &id);
+                Ok(Outcome::Pending(id, others)) => {
+                    route(reply, &id, others);
                     None
                 }
                 Err(_) => {
@@ -110,13 +110,21 @@ fn append(text: &mut Option<String>, addition: &str) {
     });
 }
 
-fn route(reply: &mut Reply, id: &str) {
+fn route(reply: &mut Reply, id: &str, others: bool) {
     append(
         &mut reply.agent_context,
         &format!(
             "To do exactly this anyway, call request_approve with request_id {id}; Shield asks the user. After it returns approved, repeat this exact call once. Do not reach the same effect another way, and do not ask in chat instead: only Shield's form grants permission."
         ),
     );
+    // Shield cannot tell which pending requests serve the same task, so the
+    // hint names no other ID; the agent chooses the group.
+    if others {
+        append(
+            &mut reply.agent_context,
+            "Other pending requests from this session for the same task can go in the same call as request_ids.",
+        );
+    }
     if reply.decision != Decision::Allow {
         reply.reason.push_str(OFFER);
     }

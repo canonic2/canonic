@@ -145,6 +145,12 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
         }
         Error::UnsupportedReleases(pack) => unsupported_releases(pack),
         Error::NotPortable(_) => not_portable(),
+        // Only the agent's MCP group approval refuses this way.
+        Error::Grouped { reason, .. } => Report::new(
+            "The requests cannot be approved together",
+            reason,
+            &["Nothing was approved."],
+        ),
         Error::Dependency(error) => dependency(error),
         Error::Policy(error) => policy(error),
         Error::Io(error) => io_report(error),

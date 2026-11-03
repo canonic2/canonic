@@ -63,6 +63,17 @@ pub(crate) enum Error {
     /// the portable form.
     #[error("{0}")]
     NotPortable(String),
+    /// One request of an in-session approval group cannot be approved, so
+    /// none is. `request` is a Shield-issued ID or the position of an unknown
+    /// one; `recovery` is the next step for that reason.
+    #[error(
+        "request {request} cannot be approved together with the others: {reason}. Nothing was approved. {recovery}"
+    )]
+    Grouped {
+        request: String,
+        reason: &'static str,
+        recovery: &'static str,
+    },
     #[error("review state is locked; retry after the owning writer finishes")]
     Locked,
     #[error("review object was not found")]
@@ -157,6 +168,7 @@ impl Error {
             | Self::Invalid(_)
             | Self::Ambiguous { .. }
             | Self::NotPortable(_)
+            | Self::Grouped { .. }
             | Self::UnsupportedReleases(_)
             | Self::RequiredPack { .. } => "invalid-review",
             Self::Locked => "review-locked",

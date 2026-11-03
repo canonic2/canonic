@@ -41,7 +41,9 @@ impl From<Error> for RuntimeError {
             Error::Cancelled => Self::Policy(crate::policy::Error::Interrupted),
             Error::Io(error) => Self::Io(error),
             Error::Policy(error) => Self::Policy(error),
-            Error::Invalid(reason) | Error::Ambiguous { reason, .. } => Self::Invalid(reason),
+            Error::Invalid(reason)
+            | Error::Ambiguous { reason, .. }
+            | Error::Grouped { reason, .. } => Self::Invalid(reason),
             Error::NotPortable(_) => Self::Invalid("rule names a folder on this machine"),
             Error::Dependency(_) => Self::Invalid("dependency closure is invalid"),
             Error::RequiredPack { .. } => Self::Invalid("pack is required by another selection"),

@@ -188,12 +188,22 @@ fn policy_propose() -> Definition {
     )
 }
 
-/// In-session approval of one refused request; the person answers Shield's form.
+/// In-session approval of one refused request, or up to eight from one
+/// session in one form; the person answers Shield's form.
 fn request_approve() -> Definition {
     (
         "request_approve",
-        "Ask the user, in Shield's confirmation form, to allow one request Shield refused; on approval, repeat the identical call once",
-        || object(json!({"request_id":id()}), &["request_id"]),
+        "Ask the user, in one Shield confirmation form, to allow one or more requests Shield refused in this session; on approval, repeat each identical call once",
+        || {
+            let mut schema = object(
+                json!({"request_id":id(),"request_ids":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":id()}}),
+                &[],
+            );
+            schema["if"] = json!({"required":["request_id"]});
+            schema["then"] = json!({"not":{"required":["request_ids"]}});
+            schema["else"] = json!({"required":["request_ids"]});
+            schema
+        },
     )
 }
 
