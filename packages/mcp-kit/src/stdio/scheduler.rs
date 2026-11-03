@@ -27,6 +27,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(test)]
+mod tests;
+
 /// What a queued or running request is, independent of its work.
 #[derive(Clone)]
 struct Meta {
@@ -304,9 +307,17 @@ impl Scheduler {
     /// Collects finished work and progress, expires deadlines and dispatches queued work.
     pub(super) fn settle(&mut self, session: &mut Session) -> Vec<Outgoing> {
         let mut out = Vec::new();
-        // Progress first: a notification sent before its request finished
-        // precedes the reply.
-        while let Ok((sequence, notification)) = self.progress.try_recv() {
+        // Progress first, but cap the batch even if workers refill the channel.
+        // Otherwise both the dispatcher turn and its outgoing Vec can grow
+        // without bound before input, cancellation or deadlines are handled.
+        // Progress left behind needs no extra wake-up. The channel holds at most
+        // one drain's worth, so any item left after a full drain was enqueued
+        // during it; Context::progress unparks after every enqueue, leaving a
+        // token that makes the next park return immediately.
+        for _ in 0..PROGRESS_BUFFER {
+            let Ok((sequence, notification)) = self.progress.try_recv() else {
+                break;
+            };
             if let Some(running) = self.running.get(&sequence)
                 && !running.answered
                 && running.control.check().is_ok()

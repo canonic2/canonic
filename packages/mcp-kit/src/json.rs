@@ -121,8 +121,19 @@ pub fn measure(
 }
 
 fn write(value: &(impl Serialize + ?Sized), output: &mut Bounded<'_>) -> Result<(), EncodeError> {
-    serde_json::to_writer(&mut *output, value)
-        .map_err(|_| output.failure.unwrap_or(EncodeError::Invalid))
+    let result = serde_json::to_writer(&mut *output, value)
+        .map_err(|_| output.failure.unwrap_or(EncodeError::Invalid));
+    #[cfg(test)]
+    crate::test_work::record(|counts| {
+        if output.keep {
+            counts.encodings += 1;
+            counts.encoded_bytes += output.length;
+        } else {
+            counts.measurements += 1;
+            counts.measured_bytes += output.length;
+        }
+    });
+    result
 }
 
 struct Bounded<'a> {

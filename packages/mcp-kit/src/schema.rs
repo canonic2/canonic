@@ -118,6 +118,8 @@ impl PreparedSchema {
     /// Refuses malformed schemas, unsupported dialects, unavailable references,
     /// non-descending cycles, excessive reference expansion and size/depth limits.
     pub fn new(schema: &Value) -> Result<Self, SchemaError> {
+        #[cfg(test)]
+        crate::test_work::record(|counts| counts.preparations += 1);
         let (registry, plan) = bounds::prepare(schema)?;
         let validator = jsonschema::options()
             .with_draft(jsonschema::Draft::Draft202012)

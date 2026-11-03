@@ -197,7 +197,7 @@ impl Plan {
                 .saturating_add(node.cost)
                 .saturating_add(value.immediate());
             if node.comparison > 0 || node.unique {
-                let bytes = value.bytes();
+                let bytes = value.bytes(check)?;
                 work = work.saturating_add(bytes.saturating_mul(node.comparison));
                 if node.unique
                     && let Instance::Value(Value::Array(items)) = value
@@ -304,10 +304,53 @@ impl Instance<'_> {
             Self::Value(_) => 1,
         }
     }
-    fn bytes(self) -> usize {
+    fn bytes(
+        self,
+        check: &dyn Fn() -> Result<(), Interrupted>,
+    ) -> Result<usize, ArgumentErrorKind> {
         match self {
-            Self::Name(name) => name.len() + 2,
-            Self::Value(value) => serde_json::to_vec(value).map_or(MAX_WORK, |bytes| bytes.len()),
+            Self::Name(name) => Ok(name.len() + 2),
+            // The raw instance was already admitted. Measure with the same encoder,
+            // without retaining a second serialized copy for every comparison visit.
+            Self::Value(value) => crate::json::measure(value, super::MAX_VALUE_BYTES, check)
+                .map_err(|error| match error {
+                    crate::json::EncodeError::Interrupted => ArgumentErrorKind::Interrupted,
+                    _ => ArgumentErrorKind::Limit,
+                }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::cell::Cell;
+
+    #[test]
+    fn comparison_measurement_preserves_encoded_sizes_and_interrupts_during_writes() {
+        for value in [
+            Value::Null,
+            json!({"\"\\\n\u{0000}":[true,false,-1,1.25,u64::MAX,"é🦀"]}),
+            json!("a".repeat(256 * 1024)),
+        ] {
+            assert_eq!(
+                Instance::Value(&value).bytes(&|| Ok(())).unwrap(),
+                serde_json::to_vec(&value).unwrap().len()
+            );
+        }
+        let calls = Cell::new(0);
+        let value = json!(["acme", "\n".repeat(1024)]);
+        assert_eq!(
+            Instance::Value(&value).bytes(&|| {
+                calls.set(calls.get() + 1);
+                if calls.get() > 8 {
+                    Err(Interrupted)
+                } else {
+                    Ok(())
+                }
+            }),
+            Err(ArgumentErrorKind::Interrupted)
+        );
     }
 }

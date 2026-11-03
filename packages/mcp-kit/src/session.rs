@@ -15,6 +15,8 @@ use std::{
 
 mod completion;
 mod prompts;
+#[cfg(test)]
+mod scaling;
 mod subscriptions;
 #[cfg(test)]
 mod tests;

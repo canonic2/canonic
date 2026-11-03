@@ -6,7 +6,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::HashSet;
+use std::collections::HashMap;
 mod pagination;
 pub use pagination::{MAX_CURSOR_BYTES, PAGE_SIZE};
 
@@ -134,6 +134,7 @@ pub enum CatalogError {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Catalog {
     tools: Vec<Tool>,
+    names: HashMap<String, usize>,
     inputs: Vec<schema::PreparedSchema>,
     outputs: Vec<ResultSchema>,
     pages: pagination::Pages,
@@ -147,10 +148,10 @@ impl Catalog {
     /// Returns the first invalid/repeated name or unsupported schema. Both schemas
     /// must be objects; input schemas must declare `type: "object"`.
     pub fn new(tools: Vec<Tool>) -> Result<Self, CatalogError> {
-        let mut names = HashSet::new();
+        let mut names = HashMap::new();
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
-        for tool in &tools {
+        for (index, tool) in tools.iter().enumerate() {
             crate::metadata::validate_icons(&tool.icons).map_err(|error| CatalogError::Schema {
                 tool: tool.name.clone(),
                 field: "icons",
@@ -159,7 +160,7 @@ impl Catalog {
             if !valid_name(&tool.name) {
                 return Err(CatalogError::InvalidName(tool.name.clone()));
             }
-            if !names.insert(tool.name.as_str()) {
+            if names.insert(tool.name.clone(), index).is_some() {
                 return Err(CatalogError::Duplicate(tool.name.clone()));
             }
             let schema_error = |field, problem| CatalogError::Schema {
@@ -199,6 +200,7 @@ impl Catalog {
         let pages = pagination::Pages::new(&tools, &outputs);
         Ok(Self {
             tools,
+            names,
             inputs,
             outputs,
             pages,
@@ -208,7 +210,7 @@ impl Catalog {
     /// Finds a tool by name.
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&Tool> {
-        self.tools.iter().find(|tool| tool.name == name)
+        self.names.get(name).map(|index| &self.tools[*index])
     }
 
     /// The tools in publication order.
@@ -237,10 +239,9 @@ impl Catalog {
     /// Captures an immutable output contract for ordinary calls and durable task settlement.
     #[must_use]
     pub fn result_schema(&self, name: &str) -> Option<ResultSchema> {
-        self.tools
-            .iter()
-            .position(|tool| tool.name == name)
-            .map(|index| self.outputs[index].clone())
+        self.names
+            .get(name)
+            .map(|index| self.outputs[*index].clone())
     }
 
     pub(crate) fn validate_arguments(
@@ -248,12 +249,8 @@ impl Catalog {
         name: &str,
         value: &Value,
     ) -> Result<(), schema::ArgumentError> {
-        let index = self
-            .tools
-            .iter()
-            .position(|tool| tool.name == name)
-            .expect("admitted catalog tool");
-        self.inputs[index].validate(value)
+        let index = self.names.get(name).expect("admitted catalog tool");
+        self.inputs[*index].validate(value)
     }
 }
 
@@ -804,6 +801,54 @@ mod tests {
                 index == 1
             );
         }
+    }
+
+    #[test]
+    fn catalog_lookup_keeps_definition_and_contract_together_across_clones_and_reordering() {
+        let definitions = vec![
+            Tool::new("acme_z", "Return a string.", object())
+                .with_output_schema(json!({"type":"string"})),
+            Tool::new("acme_a", "Return an integer.", object())
+                .with_output_schema(json!({"type":"integer"})),
+        ];
+        let original = Catalog::new(definitions.clone()).unwrap();
+        let retained = original.result_schema("acme_z").unwrap();
+        let mut reordered = definitions;
+        reordered.reverse();
+        let replacement = Catalog::new(reordered).unwrap();
+        for catalog in [original.clone(), replacement] {
+            assert!(catalog.get("acme_missing").is_none());
+            assert!(catalog.result_schema("acme_missing").is_none());
+            for (name, valid, invalid) in [
+                ("acme_z", json!("Acme"), json!(1)),
+                ("acme_a", json!(1), json!("Acme")),
+            ] {
+                assert_eq!(catalog.get(name).unwrap().name, name);
+                let contract = catalog.result_schema(name).unwrap();
+                assert!(
+                    contract
+                        .validate(&ToolResult::structured(valid, false))
+                        .is_ok()
+                );
+                assert!(
+                    contract
+                        .validate(&ToolResult::structured(invalid, false))
+                        .is_err()
+                );
+                catalog.validate_arguments(name, &json!({})).unwrap();
+                assert!(
+                    catalog
+                        .validate_arguments(name, &json!({"extra":true}))
+                        .is_err()
+                );
+            }
+        }
+        assert!(
+            retained
+                .validate(&ToolResult::structured(json!("Acme"), false))
+                .is_ok()
+        );
+        assert_eq!(original.tools()[0].name, "acme_z");
     }
 
     #[test]

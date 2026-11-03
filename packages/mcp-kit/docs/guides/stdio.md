@@ -32,6 +32,12 @@ A full lane answers new requests with `-32000`. `ping`, `tools/list` and
 resource/template listings never wait for a lane. Resource reads use the lane
 chosen by `Handler::admit`; see [resources](resources.md).
 
+The dispatcher writes and flushes frames synchronously. If the host stops
+reading output, a blocked write also delays ping, cancellation and deadline
+processing. Keep admission and diagnostic callbacks quick, keep result sizes
+bounded, and use a separate connection when a workload needs independent
+output progress.
+
 ## Keys
 
 Requests with the same key in one lane run one at a time, in order. Use a key
@@ -76,6 +82,9 @@ When a call carries a progress token, `context.progress(done, Some(total),
 Some("message"))` sends `notifications/progress`. Progress is best effort: it
 is dropped when the buffer is full or after the reply.
 Notifications exceeding `Options::max_output_bytes` are also dropped.
+Progress draining is bounded per dispatcher turn so a busy producer cannot
+keep the dispatcher collecting notifications indefinitely. A successful enqueue
+does not guarantee delivery before the request ends.
 
 ## Extension methods
 

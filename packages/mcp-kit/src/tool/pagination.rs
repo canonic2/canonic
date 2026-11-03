@@ -71,7 +71,11 @@ impl Pages {
         };
         let end = start.saturating_add(PAGE_SIZE).min(count);
         let tools: Vec<&Tool> = (start..end)
-            .map(|index| &catalog.tools[if legacy { self.legacy[index] } else { index }])
+            .map(|index| {
+                #[cfg(test)]
+                crate::test_work::record(|counts| counts.page_definitions += 1);
+                &catalog.tools[if legacy { self.legacy[index] } else { index }]
+            })
             .collect();
         let mut result = json!({"tools":tools});
         if end < count {

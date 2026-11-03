@@ -49,6 +49,8 @@ pub mod skill;
 pub mod stdio;
 pub mod subscription;
 pub mod task;
+#[cfg(test)]
+mod test_work;
 pub mod tool;
 
 pub use completion::{

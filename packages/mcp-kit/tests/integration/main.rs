@@ -2,6 +2,7 @@
 
 mod completion;
 mod confirmation;
+mod contention;
 mod disconnection;
 #[cfg(feature = "docs-build")]
 mod docs;
@@ -16,6 +17,7 @@ mod prompts;
 mod resource_content;
 mod resources;
 mod retained_session;
+mod scaling;
 mod scheduling;
 mod schema;
 mod skills;
