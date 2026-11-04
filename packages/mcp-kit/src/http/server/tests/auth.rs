@@ -26,7 +26,7 @@ impl TokenVerifier for Verifier {
         match token.as_str() {
             "acme-good" => Ok(ours()
                 .with_scopes(["acme:read", "acme:list", "acme:notify"])
-                .with_expiry(SystemTime::now() + Duration::from_secs(3600))),
+                .with_expiry(SystemTime::now() + Duration::from_hours(1))),
             "acme-narrow" => Ok(ours().with_scopes(["acme:read"])),
             "acme-brief" => Ok(ours().with_expiry(SystemTime::now() + Duration::from_millis(300))),
             "acme-foreign" => Ok(Grant::new(vec!["https://other.example.com/mcp".to_owned()])),

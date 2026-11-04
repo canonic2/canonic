@@ -216,7 +216,7 @@ fn metadata_is_served_without_a_token_at_both_paths() {
     options.scopes_supported = Some(vec!["acme:read".to_owned()]);
     options.resource_name = Some("Acme".to_owned());
     options.resource_documentation = Some("https://docs.example.com/mcp".to_owned());
-    options.metadata_max_age = Duration::from_secs(600);
+    options.metadata_max_age = Duration::from_mins(10);
     let endpoint = endpoint(ResourceServer::new(options).unwrap());
     let origin: &[(&str, &[u8])] = &[("Origin", b"https://elsewhere.example.com")];
     for path in [METADATA, METADATA_PREFIX] {
@@ -413,7 +413,7 @@ fn grants_are_refused_for_rejections_bounds_audience_and_expiry() {
     }
     let unexpiring = grant().with_subject("user-1");
     assert!(server.check_grant(Ok(unexpiring), None).is_ok());
-    let live = grant().with_expiry(SystemTime::now() + Duration::from_secs(60));
+    let live = grant().with_expiry(SystemTime::now() + Duration::from_mins(1));
     assert!(server.check_grant(Ok(live), None).is_ok());
 
     let root = ResourceServer::new(ResourceOptions::new(
@@ -547,7 +547,7 @@ fn scope_policies_name_every_required_scope_at_once() {
 fn grants_expose_identity_and_authority_without_a_token() {
     #[derive(Debug, PartialEq)]
     struct Tenant(&'static str);
-    let expires = SystemTime::now() + Duration::from_secs(60);
+    let expires = SystemTime::now() + Duration::from_mins(1);
     let grant = grant()
         .with_scopes(["acme:write", "acme:read"])
         .with_expiry(expires)

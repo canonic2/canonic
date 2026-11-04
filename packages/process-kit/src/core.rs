@@ -689,7 +689,7 @@ mod tests {
         assert!(!gate.tick(Duration::from_secs(200), &Explicit));
         let transferred = work.hold().unwrap();
         drop(work);
-        assert!(!gate.tick(Duration::from_secs(300), &Explicit));
+        assert!(!gate.tick(Duration::from_mins(5), &Explicit));
         drop(transferred);
         let reply = gate.control().unwrap();
         assert!(!gate.tick(Duration::from_secs(301), &Explicit));

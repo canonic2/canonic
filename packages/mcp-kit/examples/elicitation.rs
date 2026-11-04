@@ -132,7 +132,7 @@ impl Handler for Acme {
                 token,
                 arguments: call.arguments,
                 tool: call.name,
-                expires: Instant::now() + Duration::from_secs(300),
+                expires: Instant::now() + Duration::from_mins(5),
                 rounds: 1,
             });
         }

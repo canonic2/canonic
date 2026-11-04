@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn check_fails_after_cancellation_or_deadline() {
-        let control = Control::new(Duration::from_secs(60));
+        let control = Control::new(Duration::from_mins(1));
         assert!(control.check().is_ok());
         control.cancel();
         assert_eq!(control.check(), Err(Interrupted));

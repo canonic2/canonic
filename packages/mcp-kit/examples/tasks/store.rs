@@ -69,8 +69,8 @@ pub(crate) fn policy() -> TaskOptions {
         max_bytes: 8 * RECORD_BYTES,
         max_running: 8,
         max_input_rounds: 1,
-        execution_timeout: std::time::Duration::from_secs(60),
-        input_timeout: std::time::Duration::from_secs(600),
+        execution_timeout: std::time::Duration::from_mins(1),
+        input_timeout: std::time::Duration::from_mins(10),
     }
 }
 

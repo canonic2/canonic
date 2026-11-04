@@ -1,7 +1,7 @@
 # Developing Shield
 
 Shield is one Cargo package (`canonic-shield`), library `shield`, and executable
-`shield`. Rust 1.99.0 is pinned with rustfmt, Clippy and llvm-tools. Cargo.lock
+`shield`. Rust nightly-2026-04-16 (rustc 1.97) is pinned with rustfmt, Clippy and llvm-tools. Cargo.lock
 owns dependency versions; there is no root Cargo workspace.
 
 ## Fast iteration
@@ -51,7 +51,7 @@ For a cross-build from x64, install an `aarch64-linux-gnu-gcc` cross-compiler
 and its GNU target libraries, then add the pinned Rust target:
 
 ```sh
-rustup target add --toolchain 1.99.0 aarch64-unknown-linux-gnu
+rustup target add --toolchain nightly-2026-04-16 aarch64-unknown-linux-gnu
 python3 scripts/release-linux.py build --architecture arm64
 python3 scripts/release-linux.py package --architecture arm64
 ```
@@ -124,7 +124,7 @@ libraries, add the pinned Rust target, and use an MSVC developer terminal target
 ARM64 (for example, the **x64_arm64 Cross Tools Command Prompt**):
 
 ```powershell
-rustup target add --toolchain 1.99.0 aarch64-pc-windows-msvc
+rustup target add --toolchain nightly-2026-04-16 aarch64-pc-windows-msvc
 powershell -NoProfile -File scripts/build-windows.ps1 -Architecture arm64
 ```
 

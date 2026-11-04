@@ -16,7 +16,7 @@ fn options() -> TaskOptions {
         max_bytes: 4 * MAX_SNAPSHOT_BYTES,
         max_running: 2,
         max_input_rounds: 2,
-        execution_timeout: Duration::from_secs(60),
+        execution_timeout: Duration::from_mins(1),
         input_timeout: Duration::from_secs(30),
     }
 }

@@ -10,7 +10,7 @@ canonic-mcp-kit = { path = "../mcp-kit" }
 serde_json = "1.0"
 ```
 
-It needs Rust 1.99 or later and has no features.
+It needs Rust 1.97 or later and has no features.
 
 ## Publish a tool
 

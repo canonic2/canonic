@@ -720,8 +720,8 @@ fn observation_oversized_task_payload_records_encoding_failure_but_validation_do
         max_bytes: 65536,
         max_running: 1,
         max_input_rounds: 1,
-        execution_timeout: Duration::from_secs(60),
-        input_timeout: Duration::from_secs(60),
+        execution_timeout: Duration::from_mins(1),
+        input_timeout: Duration::from_mins(1),
     });
     let snapshot = Snapshot::new(
         Metadata::new(

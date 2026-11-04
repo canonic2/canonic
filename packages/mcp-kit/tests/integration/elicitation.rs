@@ -467,8 +467,8 @@ fn rich_tasks_reopen_consumer_records_and_do_not_reapply_consumed_input() {
         max_bytes: 4 * 1024 * 1024,
         max_running: 1,
         max_input_rounds: 8,
-        execution_timeout: Duration::from_secs(60),
-        input_timeout: Duration::from_secs(60),
+        execution_timeout: Duration::from_mins(1),
+        input_timeout: Duration::from_mins(1),
     });
     let start = |path: PathBuf| records::start(path, options.clone());
     let send = |host: &Host, id, method, params| {

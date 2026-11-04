@@ -58,7 +58,7 @@ impl TokenVerifier for DemoVerifier {
         Ok(Grant::new(vec![resource.to_owned()])
             .with_subject("demo-user")
             .with_scopes(["reports:read"])
-            .with_expiry(SystemTime::now() + Duration::from_secs(3600)))
+            .with_expiry(SystemTime::now() + Duration::from_hours(1)))
     }
 }
 

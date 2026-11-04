@@ -2,7 +2,7 @@
 name = "canonic-tui-kit"
 version = "0.4.0"
 edition = "2024"
-rust-version = "1.99"
+rust-version = "1.97"
 publish = false
 license-file = "../../LICENSE"
 description = "Reusable Canonic terminal components and local component gallery"

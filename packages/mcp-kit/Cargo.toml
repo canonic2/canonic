@@ -2,7 +2,7 @@
 name = "canonic-mcp-kit"
 version = "0.16.0"
 edition = "2024"
-rust-version = "1.99"
+rust-version = "1.97"
 publish = false
 license-file = "LICENSE"
 description = "Model Context Protocol server sessions, tool catalogs and a bounded stdio driver"

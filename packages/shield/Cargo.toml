@@ -2,7 +2,7 @@
 name = "canonic-shield"
 version = "0.17.0"
 edition = "2024"
-rust-version = "1.99"
+rust-version = "1.97"
 publish = false
 license-file = "../../LICENSE"
 description = "Standalone AI-agent protection CLI"

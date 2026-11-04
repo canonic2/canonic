@@ -31,7 +31,7 @@ impl Default for SubscriptionOptions {
     fn default() -> Self {
         Self {
             max_streams: 16,
-            timeout: Duration::from_secs(300),
+            timeout: Duration::from_mins(5),
             resource_uris: Vec::new(),
         }
     }

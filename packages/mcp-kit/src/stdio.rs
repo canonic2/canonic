@@ -39,7 +39,7 @@ use std::{
 /// The default request deadline.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 /// The default time a host's user has to answer a confirmation.
-pub const DEFAULT_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(300);
+pub const DEFAULT_CONFIRMATION_TIMEOUT: Duration = Duration::from_mins(5);
 /// The default time running mutations keep after the input closes.
 pub const DEFAULT_DISCONNECT_GRACE: Duration = Duration::from_millis(250);
 /// The default limit on one encoded output frame, in bytes.
@@ -204,7 +204,7 @@ impl Default for ElicitationPolicy {
     fn default() -> Self {
         Self {
             max_rounds: 8,
-            timeout: Duration::from_secs(300),
+            timeout: Duration::from_mins(5),
         }
     }
 }

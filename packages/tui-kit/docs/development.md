@@ -1,7 +1,7 @@
 # Development
 
 This is one unpublished Cargo package, with optional `gallery` feature and
-`tui-gallery` binary. Rust 1.99.0, Rust 2024, Cargo.lock, rustfmt, strict Clippy,
+`tui-gallery` binary. Rust nightly-2026-04-16 (rustc 1.97), Rust 2024, Cargo.lock, rustfmt, strict Clippy,
 nextest, doctests, rustdoc, cargo-deny, insta and proptest.
 
 `make build` builds a release gallery.

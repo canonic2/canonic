@@ -54,7 +54,7 @@ from your own runtime.
 ## Installation
 
 The library is built from source and has not been published to crates.io.
-You need Rust 1.99 or later; the checkout pins the toolchain version.
+You need Rust 1.97 or later; the checkout pins the toolchain version.
 
 From a sibling Rust package, add a local path dependency:
 

@@ -4,7 +4,7 @@ This page covers contributing to the library itself. Run the commands below
 from `packages/mcp-kit`.
 
 This is one unpublished Cargo package with a library and no binary. It uses
-Rust 1.99.0, Rust 2024, a committed `Cargo.lock`, rustfmt, strict Clippy,
+Rust nightly-2026-04-16 (rustc 1.97), Rust 2024, a committed `Cargo.lock`, rustfmt, strict Clippy,
 nextest, doctests, rustdoc and cargo-deny.
 
 | Task | Command (from this directory) |

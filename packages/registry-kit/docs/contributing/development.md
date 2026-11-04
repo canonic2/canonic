@@ -5,7 +5,7 @@ For application integration tests, start with
 the library itself. Run the commands below from `packages/registry-kit`.
 
 This is one unpublished Cargo package with a library and no binary. It uses
-Rust 1.99.0, Rust 2024, a committed `Cargo.lock`, rustfmt, strict Clippy,
+Rust nightly-2026-04-16 (rustc 1.97), Rust 2024, a committed `Cargo.lock`, rustfmt, strict Clippy,
 nextest, doctests, rustdoc, cargo-deny, insta and proptest.
 
 | Task | Command (from this directory) |

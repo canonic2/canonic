@@ -74,7 +74,7 @@ impl Default for Lifetimes {
     fn default() -> Self {
         Self {
             pending: Duration::from_mins(10),
-            code: Duration::from_secs(60),
+            code: Duration::from_mins(1),
             access: Duration::from_hours(1),
             refresh_idle: Duration::from_hours(14 * 24),
             family: Duration::from_hours(90 * 24),
@@ -97,7 +97,7 @@ impl Lifetimes {
             && within(self.refresh_idle, Duration::from_hours(1), day * 90)
             && within(self.family, Duration::from_hours(1), day * 365)
             && self.family >= self.refresh_idle
-            && self.refresh_grace <= Duration::from_secs(60)
+            && self.refresh_grace <= Duration::from_mins(1)
     }
 }
 

@@ -51,7 +51,7 @@ pub const MAX_RESOURCE_NAME_BYTES: usize = 256;
 /// The largest encoded metadata document, in bytes.
 pub const MAX_METADATA_BYTES: usize = 16 * 1024;
 /// The default metadata cache interval.
-pub const DEFAULT_METADATA_MAX_AGE: Duration = Duration::from_secs(3600);
+pub const DEFAULT_METADATA_MAX_AGE: Duration = Duration::from_hours(1);
 /// The longest metadata cache interval.
 pub const MAX_METADATA_MAX_AGE: Duration = Duration::from_hours(24);
 /// The longest bearer token, in bytes.

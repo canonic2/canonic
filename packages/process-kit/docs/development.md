@@ -1,6 +1,6 @@
 # Development
 
-Rust 1.99.0 and edition 2024 are pinned. Cargo.lock pins dependencies. Run
+Rust nightly-2026-04-16 (rustc 1.97) and edition 2024 are pinned. Cargo.lock pins dependencies. Run
 individual Make targets from the package or use `make -C packages/process-kit`.
 
 | Target | Purpose |

@@ -941,12 +941,12 @@ fn forged_generations_of_a_live_family_are_refused_without_change() {
         presented: wire::digest("rt_forged"),
         proof: wire::digest("rf_forged"),
         refresh: wire::digest("rt_next"),
-        refresh_expires_at: now + Duration::from_secs(60),
+        refresh_expires_at: now + Duration::from_mins(1),
         access: AccessRecord {
             digest: wire::digest("at_next"),
             family_id: family.to_owned(),
             scopes: Vec::new(),
-            expires_at: now + Duration::from_secs(60),
+            expires_at: now + Duration::from_mins(1),
         },
         grace: Duration::from_secs(10),
     };
@@ -1295,11 +1295,11 @@ fn memory_store_evicts_old_pending_and_keeps_one_access_token_per_family() {
         scopes: Vec::new(),
         resource: RESOURCE.to_owned(),
         created_at: now,
-        expires_at: now + Duration::from_secs(60),
+        expires_at: now + Duration::from_mins(1),
         proof: wire::digest(&format!("rf_{id}")),
         generation: 1,
         refresh: wire::digest(id),
-        refresh_expires_at: now + Duration::from_secs(60),
+        refresh_expires_at: now + Duration::from_mins(1),
         previous: None,
         access: wire::digest(&format!("at_{id}")),
     };
@@ -1307,7 +1307,7 @@ fn memory_store_evicts_old_pending_and_keeps_one_access_token_per_family() {
         digest: wire::digest(&format!("at_{id}")),
         family_id: id.to_owned(),
         scopes: Vec::new(),
-        expires_at: now + Duration::from_secs(60),
+        expires_at: now + Duration::from_mins(1),
     };
     let code = |id: &str| CodeRecord {
         digest: wire::digest(&format!("ac_{id}")),

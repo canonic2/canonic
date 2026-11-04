@@ -30,7 +30,7 @@ impl DialogDemo {
             13 => {
                 self.stack.set_terminal_focused(false);
                 self.open(Body::prompt("APP-22-invoice-export"), "rename branch");
-                self.stack.tick(Duration::from_secs(120));
+                self.stack.tick(Duration::from_mins(2));
                 let attention = self.stack.take_attention();
                 self.note = format!(
                     "{} attention intent · notification and title simulated",

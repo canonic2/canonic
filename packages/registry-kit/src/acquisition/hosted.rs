@@ -351,7 +351,7 @@ mod tests {
 
     fn generous() -> NextTimeout {
         NextTimeout {
-            after: time::Duration::Exact(Duration::from_secs(3600)),
+            after: time::Duration::Exact(Duration::from_hours(1)),
             reason: ureq::Timeout::RecvBody,
         }
     }
@@ -400,7 +400,7 @@ mod tests {
     #[test]
     fn connection_setup_is_measured_from_its_start_not_from_the_tcp_connection() {
         let connector = DeadlineConnector {
-            deadline: Instant::now() + Duration::from_secs(60),
+            deadline: Instant::now() + Duration::from_mins(1),
             established: Arc::new(AtomicBool::new(false)),
         };
         // Setup began two seconds ago, before a slow TCP connect: one second remains.
@@ -422,7 +422,7 @@ mod tests {
         let established = Arc::new(AtomicBool::new(false));
         let mut setting_up = DeadlineTransport {
             inner: recording(),
-            deadline: Instant::now() + Duration::from_secs(60),
+            deadline: Instant::now() + Duration::from_mins(1),
             setup_deadline: Instant::now(),
             established: established.clone(),
         };
@@ -444,7 +444,7 @@ mod tests {
         let mut short = DeadlineTransport {
             inner: recording(),
             deadline: Instant::now(),
-            setup_deadline: Instant::now() + Duration::from_secs(60),
+            setup_deadline: Instant::now() + Duration::from_mins(1),
             established: Arc::new(AtomicBool::new(false)),
         };
         assert!(matches!(
