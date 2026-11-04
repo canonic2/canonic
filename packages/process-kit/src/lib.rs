@@ -87,6 +87,10 @@ pub enum Error {
     /// wait expired. A refused leased endpoint can also be congested on macOS.
     #[error("manager is starting")]
     Starting,
+    /// The process this readiness wait launched exited unsuccessfully before
+    /// it became ready, and no other process holds the lease.
+    #[error("manager exited before it was ready ({0})")]
+    Exited(std::process::ExitStatus),
     /// Admission is closed.
     #[error("manager is draining")]
     Draining,

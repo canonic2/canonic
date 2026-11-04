@@ -207,6 +207,13 @@ to release exclusion, even when its endpoints have already closed.
 Each readiness wait invokes the launcher at most once. A child that has not
 locked its lease yet is still starting; the client waits instead of spawning
 duplicates. If readiness expires, a caller can initiate a new connection attempt.
+When the process a `Spawn` launcher started exits unsuccessfully and no other
+process holds the lease, the wait returns `Exited` with its exit status at
+once instead of waiting out readiness; read the product's log for the cause.
+A child that fails after losing the lease to a live holder keeps the wait
+going, so a losing helper may exit with its own failing code. A custom
+`Launcher` gets the same reporting by overriding `launch` to return
+`Launched::reaped(handle)` for the child it started.
 
 `recovery::call(root, launcher, request, transport, recovery_options, reconcile)`
 connects, verifies protocol/capabilities and sends a request. Set positive
@@ -304,8 +311,9 @@ Windows `Service::ScheduledTask` activates an existing task using
 missing, empty or relative values return `Options`. Task names beginning with
 `-` or `/` also return `Options`.
 
-`Absent`, `Starting`, `Draining`, `Capacity` and `Incompatible` are distinct.
-`Starting` means readiness is unconfirmed or an authorized startup wait expired.
+`Absent`, `Starting`, `Exited`, `Draining`, `Capacity` and `Incompatible` are
+distinct. `Starting` means readiness is unconfirmed or an authorized startup
+wait expired; `Exited` means the process that wait launched failed first.
 On macOS it also covers a refused leased endpoint: the OS uses the same error
 for a full backlog and a stale/closed listener, so those cases cannot be safely
 distinguished. On Windows a full listener queue refuses at once and is reported

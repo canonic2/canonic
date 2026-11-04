@@ -5,7 +5,7 @@ use std::{
     ffi::OsString,
     fs::File,
     path::PathBuf,
-    process::{Command, Stdio},
+    process::{Command, ExitStatus, Stdio},
 };
 
 /// The client can start through either detached spawn or an OS registration.
@@ -15,6 +15,48 @@ pub trait Launcher {
     /// # Errors
     /// Returns activation or process-start errors, never an application result.
     fn start(&self) -> Result<()>;
+
+    /// Request startup and return the started process when this launcher
+    /// can observe it, so a readiness wait can report its failure at once.
+    /// The default starts through [`Launcher::start`] and observes nothing.
+    ///
+    /// # Errors
+    /// As [`Launcher::start`].
+    fn launch(&self) -> Result<Launched> {
+        self.start().map(|()| Launched::default())
+    }
+}
+
+/// The process a launcher started, when it can be observed.
+#[derive(Default)]
+pub struct Launched(Option<std::thread::JoinHandle<std::io::Result<ExitStatus>>>);
+
+impl Launched {
+    /// A child whose reaper thread returns its exit status, as from
+    /// [`Spawn::start_reaped`].
+    #[must_use]
+    pub fn reaped(reaper: std::thread::JoinHandle<std::io::Result<ExitStatus>>) -> Self {
+        Self(Some(reaper))
+    }
+
+    /// Whether the observed child has exited; never true for an unobserved one.
+    pub(crate) fn exited(&self) -> bool {
+        self.0
+            .as_ref()
+            .is_some_and(std::thread::JoinHandle::is_finished)
+    }
+
+    /// The child's status once it has exited unsuccessfully. A successful
+    /// exit, an unobserved child and a failed reaper return `None`.
+    pub(crate) fn failure(&mut self) -> Option<ExitStatus> {
+        if !self.exited() {
+            return None;
+        }
+        match self.0.take()?.join() {
+            Ok(Ok(status)) if !status.success() => Some(status),
+            _ => None,
+        }
+    }
 }
 
 /// Re-execute the current binary with a hidden product subcommand.
@@ -36,9 +78,7 @@ impl Spawn {
     ///
     /// # Errors
     /// Returns unsupported, executable lookup, descriptor duplication or spawn errors.
-    pub fn start_reaped(
-        &self,
-    ) -> Result<std::thread::JoinHandle<std::io::Result<std::process::ExitStatus>>> {
+    pub fn start_reaped(&self) -> Result<std::thread::JoinHandle<std::io::Result<ExitStatus>>> {
         crate::supported()?;
         let mut command = Command::new(std::env::current_exe()?);
         command
@@ -95,6 +135,10 @@ impl Launcher for Spawn {
     fn start(&self) -> Result<()> {
         self.start_reaped()?;
         Ok(())
+    }
+
+    fn launch(&self) -> Result<Launched> {
+        self.start_reaped().map(Launched::reaped)
     }
 }
 

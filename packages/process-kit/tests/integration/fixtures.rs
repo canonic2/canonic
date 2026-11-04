@@ -280,6 +280,7 @@ fn entry() {
             ready(&root);
             let _ = std::io::stdin().read(&mut [0]);
         }
+        "fails-at-startup" => std::process::exit(70),
         _ => {
             if mode == "delayed-manager" {
                 std::io::stdin().read_exact(&mut [0]).unwrap();

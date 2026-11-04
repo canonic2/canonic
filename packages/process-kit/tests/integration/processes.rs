@@ -1,7 +1,13 @@
 //! Real startup races, lease death, parent signals and minimal-environment acceptance.
 
 use super::fixtures::*;
-use canonic_process_kit::{Error, client, endpoint::Lease, launch::Launcher};
+use canonic_process_kit::{
+    Error, client,
+    core::{Admission, Explicit},
+    endpoint::Lease,
+    launch::{Launched, Launcher},
+    server,
+};
 use serde_json::json;
 use std::{
     io::Write,
@@ -125,6 +131,68 @@ fn clients_connect_or_start_race_reaches_one_winner() {
         let status = reaper.join().unwrap().unwrap();
         assert!(status.success() || status.code() == Some(73));
     }
+}
+
+#[test]
+fn a_launched_manager_that_fails_before_readiness_is_reported_with_its_status() {
+    let (_temp, root) = root();
+    let mut launch = spawn(&root);
+    launch.environment[1].1 = "fails-at-startup".into();
+    // A timeout would return `Starting`; `Exited` means the wait ended on the exit.
+    match client::connect(&root, Some(&launch), &options()) {
+        Err(Error::Exited(status)) => assert_eq!(status.code(), Some(70)),
+        other => panic!("expected the launched manager's exit, got {other:?}"),
+    }
+    assert!(!root.leased().unwrap());
+}
+
+#[test]
+fn a_launched_child_that_fails_after_losing_the_lease_does_not_end_the_wait() {
+    type Server = std::thread::JoinHandle<canonic_process_kit::Result<()>>;
+    /// Takes the lease, then starts a child that loses it and exits 73; the
+    /// lease holder serves only once that child has exited.
+    struct Lost {
+        root: canonic_process_kit::endpoint::Root,
+        server: std::sync::Mutex<Option<Server>>,
+    }
+    impl Launcher for Lost {
+        fn start(&self) -> canonic_process_kit::Result<()> {
+            unreachable!("connect launches through launch")
+        }
+        fn launch(&self) -> canonic_process_kit::Result<Launched> {
+            let lease = Lease::acquire(&self.root, Duration::ZERO)?;
+            let mut loser = child(&self.root, "manager");
+            let (exited, observed) = std::sync::mpsc::channel();
+            let reaper = std::thread::spawn(move || {
+                let status = loser.0.wait();
+                let _ = exited.send(());
+                status
+            });
+            *self.server.lock().unwrap() = Some(std::thread::spawn(move || {
+                let _ = observed.recv();
+                server::serve(
+                    lease,
+                    identity(),
+                    Admission::new(),
+                    Arc::new(Acme::default()),
+                    &Explicit,
+                    server::Options::default(),
+                )
+            }));
+            Ok(Launched::reaped(reaper))
+        }
+    }
+    let (_temp, root) = root();
+    root.prepare().unwrap();
+    let launch = Lost {
+        root: root.clone(),
+        server: std::sync::Mutex::new(None),
+    };
+    let reached = client::connect(&root, Some(&launch), &options());
+    stop(&root, "drain");
+    let server = launch.server.lock().unwrap().take().unwrap();
+    server.join().unwrap().unwrap();
+    assert_eq!(reached.unwrap().manager_id, identity().manager_id);
 }
 
 #[test]

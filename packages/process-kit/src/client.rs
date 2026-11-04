@@ -4,12 +4,19 @@ use crate::{
     Error, Result,
     endpoint::{self, Root},
     frame,
-    launch::Launcher,
+    launch::{Launched, Launcher},
     net::Stream,
     protocol::{Code, Control, Identity, Reply, Request},
     version::Version,
 };
 use std::time::{Duration, Instant};
+
+/// Longest pause between readiness probes during a wait's first second.
+const STARTUP_POLL: Duration = Duration::from_millis(10);
+/// How long a readiness wait keeps probing at [`STARTUP_POLL`].
+const STARTUP_WINDOW: Duration = Duration::from_secs(1);
+/// Longest pause between probes otherwise.
+const MAX_POLL: Duration = Duration::from_millis(100);
 
 /// Readiness and per-frame deadlines; polling uses capped exponential backoff.
 pub struct Options {
@@ -92,7 +99,8 @@ pub fn upgrade(
 /// not acquired its lease yet is still starting, not evidence for another launch.
 ///
 /// # Errors
-/// Returns `Absent` without a launcher, `Starting` at the deadline, `Draining`
+/// Returns `Absent` without a launcher, `Starting` at the deadline, `Exited`
+/// when the process it launched failed before readiness, `Draining`
 /// during inspection, or
 /// identity/transport errors or launch failure. Successful readiness requires
 /// a control identity reply, not merely an existing socket pathname.
@@ -115,7 +123,8 @@ pub fn connect(
 ///
 /// # Errors
 /// Returns `InvalidVersion` for unorderable release labels, connection/control
-/// failures or `Starting` at the shared readiness deadline. A launcher that
+/// failures, `Exited` when a launched replacement failed before readiness, or
+/// `Starting` at the shared readiness deadline. A launcher that
 /// starts another older manager returns `Incompatible`, without restart churn.
 pub fn connect_versioned(
     root: &Root,
@@ -220,7 +229,7 @@ fn pause_replacement(delay: &mut Duration, deadline: Instant) -> Result<()> {
         return Err(Error::Starting);
     }
     std::thread::sleep((*delay).min(remaining));
-    *delay = (*delay * 2).min(Duration::from_millis(100));
+    *delay = (*delay * 2).min(MAX_POLL);
     Ok(())
 }
 
@@ -230,8 +239,9 @@ pub(crate) fn connect_until(
     options: &Options,
     deadline: Instant,
 ) -> Result<Identity> {
+    let started = Instant::now();
     let mut delay = Duration::from_millis(2);
-    let mut started = false;
+    let mut child: Option<Launched> = None;
     loop {
         if Instant::now() >= deadline {
             return Err(Error::Starting);
@@ -274,17 +284,32 @@ pub(crate) fn connect_until(
                     return Err(Error::Starting);
                 }
                 // Wait for any existing holder to finish before activating.
-                // After activation, an unheld lease may mean the child is still starting.
-                if !started && !root.leased()? {
-                    launcher.start()?;
-                    started = true;
+                // After activation, an unheld lease may mean the child is still
+                // starting; once the child has failed, it means nothing is.
+                // A child that lost the lease to another holder may exit
+                // unsuccessfully too, so a held lease keeps the wait going.
+                match &mut child {
+                    None if !root.leased()? => child = Some(launcher.launch()?),
+                    Some(started) if started.exited() && !root.leased()? => {
+                        if let Some(status) = started.failure() {
+                            return Err(Error::Exited(status));
+                        }
+                    }
+                    _ => {}
                 }
                 std::thread::sleep(delay.min(deadline.saturating_duration_since(Instant::now())));
-                delay = (delay * 2).min(Duration::from_millis(100));
+                // A manager usually becomes ready within its first second, so
+                // probe often enough there that readiness is seen promptly.
+                let cap = if started.elapsed() < STARTUP_WINDOW {
+                    STARTUP_POLL
+                } else {
+                    MAX_POLL
+                };
+                delay = (delay * 2).min(cap);
             }
             Err(Error::Capacity) if Instant::now() < deadline => {
                 std::thread::sleep(delay.min(deadline.saturating_duration_since(Instant::now())));
-                delay = (delay * 2).min(Duration::from_millis(100));
+                delay = (delay * 2).min(MAX_POLL);
             }
             Err(Error::Draining) if launcher.is_some() => {
                 pause_replacement(&mut delay, deadline)?;
