@@ -34,12 +34,17 @@ use crate::{
     tool::{Catalog, ParameterKind},
 };
 use serde_json::{Value, json};
-use std::collections::HashSet;
+use std::{borrow::Cow, collections::HashSet};
 
+pub mod auth;
+pub use auth::{
+    AuthorizationError, BearerToken, Grant, Operation, Rejection, ResourceOptions, ResourceServer,
+    ScopePolicy, TokenVerifier,
+};
 #[cfg(feature = "http-server")]
 pub mod server;
 #[cfg(feature = "http-server")]
-pub use server::{HttpOptions, Shutdown, serve};
+pub use server::{HttpAuthorization, HttpOptions, Shutdown, serve};
 
 #[cfg(test)]
 mod tests;
@@ -77,6 +82,11 @@ pub struct EndpointOptions {
     pub allowed_origins: Vec<String>,
     /// The largest request body, in bytes.
     pub max_body_bytes: usize,
+    /// Bearer token protection. When set, the endpoint serves the
+    /// protected-resource metadata and refuses POSTs without a well-formed
+    /// token; the runtime verifies the token with
+    /// [`ResourceServer::check_grant`] before acting on the request.
+    pub authorization: Option<ResourceServer>,
 }
 
 impl Default for EndpointOptions {
@@ -85,6 +95,7 @@ impl Default for EndpointOptions {
             path: DEFAULT_PATH.to_owned(),
             allowed_origins: Vec::new(),
             max_body_bytes: DEFAULT_MAX_MESSAGE_BYTES,
+            authorization: None,
         }
     }
 }
@@ -105,6 +116,9 @@ pub enum EndpointError {
     /// The body limit is zero.
     #[error("the request body limit must be at least one byte")]
     BodyLimit,
+    /// A protected-resource metadata path is the endpoint path.
+    #[error("the endpoint path must differ from the protected-resource metadata paths")]
+    MetadataPath,
 }
 
 /// Prepared endpoint rules, validated once and shared by every request.
@@ -113,6 +127,7 @@ pub struct Endpoint {
     path: String,
     origins: HashSet<String>,
     max_body_bytes: usize,
+    authorization: Option<ResourceServer>,
 }
 
 /// The parts of an HTTP request known before its body is read.
@@ -176,7 +191,7 @@ pub struct Response {
     /// The status code.
     pub status: u16,
     /// Header fields to send.
-    pub headers: Vec<(&'static str, &'static str)>,
+    pub headers: Vec<(&'static str, Cow<'static, str>)>,
     /// The body; empty for no body and for a stream head.
     pub body: Vec<u8>,
 }
@@ -203,10 +218,16 @@ impl Endpoint {
         if options.max_body_bytes == 0 {
             return Err(EndpointError::BodyLimit);
         }
+        if let Some(server) = &options.authorization
+            && server.metadata_paths().any(|path| path == options.path)
+        {
+            return Err(EndpointError::MetadataPath);
+        }
         Ok(Self {
             path: options.path,
             origins: options.allowed_origins.into_iter().collect(),
             max_body_bytes: options.max_body_bytes,
+            authorization: options.authorization,
         })
     }
 
@@ -216,18 +237,32 @@ impl Endpoint {
         self.max_body_bytes
     }
 
-    /// Checks the path, method, `Origin`, `Content-Type` and `Accept` before the
-    /// body is read, as a runtime answering `Expect: 100-continue` needs.
+    /// The bearer token protection, when configured.
+    #[must_use]
+    pub fn authorization(&self) -> Option<&ResourceServer> {
+        self.authorization.as_ref()
+    }
+
+    /// Checks the path, method, `Origin`, the bearer token's presence and form,
+    /// `Content-Type` and `Accept` before the body is read, as a runtime
+    /// answering `Expect: 100-continue` needs. With authorization, a request
+    /// for protected-resource metadata is answered here too.
     ///
     /// # Errors
-    /// Returns the complete refusal to write instead of reading the body.
+    /// Returns the complete response to write instead of reading the body.
     pub fn check_head(&self, head: &RequestHead<'_>) -> Result<(), Response> {
-        if request_path(head.target) != self.path {
+        let path = request_path(head.target);
+        if let Some(server) = &self.authorization
+            && server.metadata_paths().any(|metadata| metadata == path)
+        {
+            return Err(server.metadata_response(head.method));
+        }
+        if path != self.path {
             return Err(Response::empty(404));
         }
         if head.method != "POST" {
             let mut response = Response::empty(405);
-            response.headers.push(("Allow", "POST"));
+            response.headers.push(("Allow", "POST".into()));
             return Err(response);
         }
         let allowed = match field(head.headers, "origin") {
@@ -243,6 +278,9 @@ impl Endpoint {
                 Value::Null,
                 &RpcError::new(rpc::SERVER_ERROR, "Origin is not allowed"),
             ));
+        }
+        if let Some(server) = &self.authorization {
+            server.bearer(head)?;
         }
         let json = matches!(field(head.headers, "content-type"), Field::One(value)
             if media_type(value).eq_ignore_ascii_case("application/json"));
@@ -273,7 +311,10 @@ impl Endpoint {
     /// Checks a complete request and decides what the runtime does with it.
     ///
     /// Tool parameter headers depend on the served catalog; check them with
-    /// [`Admitted::check_parameters`] before dispatching a request.
+    /// [`Admitted::check_parameters`] before dispatching a request. With
+    /// authorization, this checks only the token's form: verify it and call
+    /// [`ResourceServer::check_grant`] and [`ResourceServer::check_scopes`]
+    /// before acting on the request.
     #[must_use]
     pub fn receive(&self, head: &RequestHead<'_>, body: &[u8]) -> Exchange {
         if let Err(response) = self
@@ -438,8 +479,8 @@ impl Response {
         Self {
             status,
             headers: vec![
-                ("Content-Type", "application/json"),
-                ("Cache-Control", "no-store"),
+                ("Content-Type", "application/json".into()),
+                ("Cache-Control", "no-store".into()),
             ],
             body,
         }
@@ -471,9 +512,9 @@ impl Response {
         Self {
             status: 200,
             headers: vec![
-                ("Content-Type", "text/event-stream"),
-                ("Cache-Control", "no-store"),
-                ("X-Accel-Buffering", "no"),
+                ("Content-Type", "text/event-stream".into()),
+                ("Cache-Control", "no-store".into()),
+                ("X-Accel-Buffering", "no".into()),
             ],
             body: Vec::new(),
         }

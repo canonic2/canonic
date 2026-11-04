@@ -1,7 +1,8 @@
 //! Serve an Acme tool over Streamable HTTP on a loopback address.
 //!
 //! Run with `cargo run --example http --features http-server`, then POST to
-//! `http://127.0.0.1:8080/mcp`. The server authenticates no one, so it binds
+//! `http://127.0.0.1:8080/mcp`. Without bearer token protection (see the
+//! `authorization` example) the server authenticates no one, so it binds
 //! loopback only. It serves until the process ends.
 use canonic_mcp_kit::{
     Catalog, Client, Content, ModernOptions, RpcError, ServerInfo, Tool, ToolResult,

@@ -37,6 +37,7 @@ fn progress_refill_keeps_each_dispatcher_batch_bounded() {
                 rich_rounds: 0,
                 rich_deadline: None,
                 request_context: None,
+                grant: None,
                 id: None,
                 lane: 0,
                 key: None,

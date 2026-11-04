@@ -9,8 +9,8 @@ use super::{
 };
 use crate::{
     http::{
-        Admitted, Exchange, Form, RequestHead, Response, SSE_KEEP_ALIVE, is_token, sse_event,
-        status_for,
+        Admitted, Exchange, Form, Grant, RequestHead, Response, SSE_KEEP_ALIVE, is_token,
+        sse_event, status_for,
     },
     rpc,
 };
@@ -32,6 +32,8 @@ struct Request {
     target: String,
     headers: Vec<(String, Vec<u8>)>,
     body: Vec<u8>,
+    /// The verified grant, when authorization is configured.
+    grant: Option<Arc<Grant>>,
 }
 
 /// Why reading stopped.
@@ -73,12 +75,38 @@ pub(super) fn handle(stream: &TcpStream, shared: &Arc<Shared>) {
             let _ = write_response(stream, &response, false, shared.write_timeout);
         }
         Exchange::Notification { method, params } => {
+            // A notification refused for its scopes is neither accepted nor routed.
+            if let (Some(server), Some(grant), Some(policy)) = (
+                shared.endpoint.authorization(),
+                &request.grant,
+                &shared.policy,
+            ) && let Err(response) =
+                server.check_notification(&method, &params, grant, &**policy)
+            {
+                let _ = write_response(stream, &response, false, shared.write_timeout);
+                return;
+            }
             let _ = write_response(stream, &Response::accepted(), false, shared.write_timeout);
             if shared.notifications.contains(&method) {
-                shared.send(Event::Notification(rpc::notification(&method, params)));
+                shared.send(Event::Notification(
+                    rpc::notification(&method, params),
+                    request.grant,
+                ));
             }
         }
-        Exchange::Request(admitted) => exchange(stream, shared, admitted),
+        Exchange::Request(admitted) => {
+            let scopes = match (
+                shared.endpoint.authorization(),
+                &request.grant,
+                &shared.policy,
+            ) {
+                (Some(server), Some(grant), Some(policy)) => {
+                    server.check_scopes(&admitted, grant, &**policy)
+                }
+                _ => Ok(()),
+            };
+            exchange(stream, shared, admitted, request.grant.clone(), scopes);
+        }
     }
 }
 
@@ -163,6 +191,7 @@ fn read_request(stream: &TcpStream, shared: &Shared) -> Result<Request, Failure>
         target: target.to_owned(),
         headers: read_headers(&mut reader, deadline)?,
         body: Vec::new(),
+        grant: None,
     };
     let headers = request.fields();
     let field = |name: &'static str| {
@@ -180,6 +209,19 @@ fn read_request(stream: &TcpStream, shared: &Shared) -> Result<Request, Failure>
         .endpoint
         .check_head(&head)
         .map_err(Failure::Respond)?;
+    // Verified before the body is read, so an unauthenticated client cannot
+    // make the server read or buffer one.
+    let grant = match (shared.endpoint.authorization(), &shared.verifier) {
+        (Some(server), Some(verifier)) => {
+            let token = server.bearer(&head).map_err(Failure::Respond)?;
+            let outcome = verifier.verify(token, server.resource());
+            let grant = server
+                .check_grant(outcome, shared.policy.as_deref())
+                .map_err(Failure::Respond)?;
+            Some(Arc::new(grant))
+        }
+        _ => None,
+    };
     let length = match length.as_slice() {
         [] => return Err(Failure::status(411)),
         [value] => std::str::from_utf8(value)
@@ -204,6 +246,7 @@ fn read_request(stream: &TcpStream, shared: &Shared) -> Result<Request, Failure>
         _ => return Err(Failure::status(417)),
     }
     drop(headers);
+    request.grant = grant;
     request.body = read_body(&mut reader, length, deadline)?;
     Ok(request)
 }
@@ -319,7 +362,13 @@ fn fill<'a>(reader: &'a mut BufReader<&TcpStream>, deadline: Instant) -> Result<
 }
 
 /// Hands `admitted` to the dispatcher and writes its response.
-fn exchange(stream: &TcpStream, shared: &Arc<Shared>, admitted: Admitted) {
+fn exchange(
+    stream: &TcpStream,
+    shared: &Arc<Shared>,
+    admitted: Admitted,
+    grant: Option<Arc<Grant>>,
+    scopes: Result<(), Response>,
+) {
     let id = shared.next_id.fetch_add(1, Ordering::Relaxed);
     let form = admitted.form;
     let mailbox = Arc::new(Mailbox::default());
@@ -327,6 +376,8 @@ fn exchange(stream: &TcpStream, shared: &Arc<Shared>, admitted: Admitted) {
         id,
         admitted,
         mailbox: Arc::clone(&mailbox),
+        grant,
+        scopes,
     }) {
         return;
     }
@@ -500,6 +551,7 @@ fn reason(status: u16) -> &'static str {
         200 => "OK",
         202 => "Accepted",
         400 => "Bad Request",
+        401 => "Unauthorized",
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
@@ -509,6 +561,7 @@ fn reason(status: u16) -> &'static str {
         415 => "Unsupported Media Type",
         417 => "Expectation Failed",
         431 => "Request Header Fields Too Large",
+        500 => "Internal Server Error",
         501 => "Not Implemented",
         503 => "Service Unavailable",
         505 => "HTTP Version Not Supported",

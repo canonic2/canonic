@@ -9,6 +9,7 @@ mod disconnection;
 mod docs;
 mod elicitation;
 mod fixture;
+mod http_authorization;
 mod http_exchange;
 mod lifecycle;
 mod metadata;

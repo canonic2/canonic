@@ -9,7 +9,10 @@
 
 mod connection;
 
-use super::{Admitted, Endpoint, EndpointOptions, Response};
+use super::{
+    Admitted, Endpoint, EndpointOptions, Grant, ResourceServer, Response, ScopePolicy,
+    TokenVerifier,
+};
 use crate::{
     json,
     rpc::{self, RpcError},
@@ -24,6 +27,7 @@ use crate::{
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
+    fmt,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream},
     sync::{
         Arc, Condvar, Mutex, PoisonError,
@@ -31,7 +35,7 @@ use std::{
         mpsc::{self, Receiver, SyncSender},
     },
     thread::{self, Thread},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 
 #[cfg(test)]
@@ -56,8 +60,8 @@ pub const MAX_HEADER_FIELDS: usize = 100;
 /// Notifications one listen stream may have pending before it is ended.
 pub const LISTEN_BUFFER: usize = 64;
 
-/// How the HTTP server listens and bounds its connections.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// How the HTTP server listens, bounds its connections and protects requests.
+#[derive(Debug, Clone)]
 pub struct HttpOptions {
     /// The exact endpoint path, `/mcp` by default.
     pub path: String,
@@ -71,6 +75,8 @@ pub struct HttpOptions {
     pub write_timeout: Duration,
     /// Keep-alive interval for quiet listen streams, within 1..=300 seconds.
     pub keep_alive: Duration,
+    /// Bearer token protection; `None` authenticates no one.
+    pub authorization: Option<HttpAuthorization>,
 }
 
 impl Default for HttpOptions {
@@ -82,7 +88,52 @@ impl Default for HttpOptions {
             read_timeout: DEFAULT_READ_TIMEOUT,
             write_timeout: DEFAULT_WRITE_TIMEOUT,
             keep_alive: DEFAULT_KEEP_ALIVE,
+            authorization: None,
         }
+    }
+}
+
+/// How the server checks bearer tokens.
+///
+/// The verifier runs on each request's connection thread before its body is
+/// read; the policy runs there too, once the request is parsed. Neither runs
+/// on the dispatcher.
+#[derive(Clone)]
+pub struct HttpAuthorization {
+    /// The resource identity, metadata and challenges.
+    pub resource: ResourceServer,
+    /// Decides whether a token is genuine.
+    pub verifier: Arc<dyn TokenVerifier>,
+    /// Scopes per operation; without one, any verified grant may call anything.
+    pub policy: Option<Arc<dyn ScopePolicy>>,
+}
+
+impl HttpAuthorization {
+    /// Protection for `resource` with `verifier` and no scope policy.
+    #[must_use]
+    pub fn new(resource: ResourceServer, verifier: Arc<dyn TokenVerifier>) -> Self {
+        Self {
+            resource,
+            verifier,
+            policy: None,
+        }
+    }
+
+    /// Adds a scope policy.
+    #[must_use]
+    pub fn with_policy(mut self, policy: Arc<dyn ScopePolicy>) -> Self {
+        self.policy = Some(policy);
+        self
+    }
+}
+
+impl fmt::Debug for HttpAuthorization {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("HttpAuthorization")
+            .field("resource", &self.resource)
+            .field("policy", &self.policy.is_some())
+            .finish_non_exhaustive()
     }
 }
 
@@ -139,7 +190,8 @@ impl Shutdown {
 /// called. [`Handler::connected`] receives one server-wide change sender when
 /// subscriptions are enabled. The request body limit is
 /// [`SessionOptions::max_message_bytes`](crate::SessionOptions::max_message_bytes).
-/// The server authenticates no one: bind a loopback address.
+/// Without [`HttpOptions::authorization`] the server authenticates no one:
+/// bind a loopback address.
 ///
 /// # Errors
 ///
@@ -159,6 +211,10 @@ pub fn serve<H: Handler>(
         path: http.path.clone(),
         allowed_origins: http.allowed_origins.clone(),
         max_body_bytes: options.session.max_message_bytes,
+        authorization: http
+            .authorization
+            .as_ref()
+            .map(|authorization| authorization.resource.clone()),
     })?;
     let session = Session::try_new(catalog, options.session.clone())?;
     let address = listener.local_addr().map_err(ServeError::Input)?;
@@ -167,6 +223,14 @@ pub fn serve<H: Handler>(
     let (events_sender, events) = mpsc::sync_channel(2 * http.max_connections + 1);
     let shared = Arc::new(Shared {
         endpoint,
+        verifier: http
+            .authorization
+            .as_ref()
+            .map(|authorization| Arc::clone(&authorization.verifier)),
+        policy: http
+            .authorization
+            .as_ref()
+            .and_then(|authorization| authorization.policy.clone()),
         notifications: options
             .session
             .extension_notifications
@@ -257,6 +321,8 @@ fn wake_address(address: SocketAddr) -> SocketAddr {
 /// State the accept and connection threads share with the dispatcher.
 struct Shared {
     endpoint: Endpoint,
+    verifier: Option<Arc<dyn TokenVerifier>>,
+    policy: Option<Arc<dyn ScopePolicy>>,
     notifications: HashSet<String>,
     events: SyncSender<Event>,
     dispatcher: Thread,
@@ -333,9 +399,14 @@ enum Event {
         id: u64,
         admitted: Admitted,
         mailbox: Arc<Mailbox>,
+        /// The verified grant, when authorization is configured.
+        grant: Option<Arc<Grant>>,
+        /// The operation scope check, computed on the connection thread and
+        /// applied only once the session admits the request.
+        scopes: Result<(), Response>,
     },
-    /// A product notification the session options list.
-    Notification(Value),
+    /// A product notification the session options list, with its grant.
+    Notification(Value, Option<Arc<Grant>>),
     /// The client closed the connection before its reply.
     Closed(u64),
 }
@@ -413,6 +484,7 @@ struct Pending {
     client: Value,
     mailbox: Arc<Mailbox>,
     listen: bool,
+    grant: Option<Arc<Grant>>,
 }
 
 /// The dispatcher: the one session, the scheduler and every pending reply.
@@ -480,8 +552,20 @@ impl<H: Handler> Dispatcher<H> {
                 id,
                 admitted,
                 mailbox,
-            } => self.submit(id, admitted, mailbox),
-            Event::Notification(message) => {
+                grant,
+                scopes,
+            } => self.submit(
+                id,
+                admitted,
+                Pending {
+                    client: Value::Null,
+                    mailbox,
+                    listen: false,
+                    grant,
+                },
+                scopes,
+            ),
+            Event::Notification(message, grant) => {
                 if self.stopping {
                     return;
                 }
@@ -489,18 +573,24 @@ impl<H: Handler> Dispatcher<H> {
                 if let Ok(work) = stdio::scheduled(&self.session, inbound)
                     && work.id.is_none()
                 {
-                    self.schedule(work);
+                    self.schedule(work, grant);
                 }
             }
             Event::Closed(id) => self.closed(id),
         }
     }
 
-    fn submit(&mut self, id: u64, admitted: Admitted, mailbox: Arc<Mailbox>) {
+    fn submit(
+        &mut self,
+        id: u64,
+        admitted: Admitted,
+        mut pending: Pending,
+        scopes: Result<(), Response>,
+    ) {
         if self.stopping {
             let error = RpcError::new(rpc::REQUEST_CANCELLED, "Server is shutting down");
             let reply = serde_json::to_vec(&rpc::failure(admitted.id, &error)).unwrap_or_default();
-            mailbox.finish(Last::Reply(reply, Some(error.code)));
+            pending.mailbox.finish(Last::Reply(reply, Some(error.code)));
             return;
         }
         // Checked now, while the body is at hand, but applied only once the
@@ -513,14 +603,8 @@ impl<H: Handler> Dispatcher<H> {
             ..
         } = admitted;
         message["id"] = json!(id);
-        self.pending.insert(
-            id,
-            Pending {
-                client,
-                mailbox,
-                listen: false,
-            },
-        );
+        pending.client = client;
+        self.pending.insert(id, pending);
         let inbound = self.session.receive_value(message);
         if let (
             Err(response),
@@ -533,8 +617,33 @@ impl<H: Handler> Dispatcher<H> {
             }
             return;
         }
+        // Operation scopes (step 13a) follow the session's own refusals, which
+        // keep their replies; anything it admitted is released unanswered.
+        let refused = match &inbound {
+            Inbound::Reply(reply) => reply.get("error").is_some(),
+            Inbound::Fatal { .. } => true,
+            _ => false,
+        };
+        if let (Err(response), false) = (scopes, refused) {
+            let key = json!(id);
+            if matches!(inbound, Inbound::Subscription { .. }) {
+                let _ = self.session.end_subscription(&key);
+            } else {
+                self.session.finish(&key);
+            }
+            if let Some(pending) = self.pending.remove(&id) {
+                pending.mailbox.finish(Last::Response(response));
+            }
+            return;
+        }
         let inbound = match stdio::scheduled(&self.session, inbound) {
-            Ok(work) => return self.schedule(work),
+            Ok(work) => {
+                let grant = self
+                    .pending
+                    .get(&id)
+                    .and_then(|pending| pending.grant.clone());
+                return self.schedule(work, grant);
+            }
             Err(inbound) => *inbound,
         };
         match inbound {
@@ -560,7 +669,7 @@ impl<H: Handler> Dispatcher<H> {
         }
     }
 
-    fn schedule(&mut self, work: stdio::Scheduled) {
+    fn schedule(&mut self, work: stdio::Scheduled, grant: Option<Arc<Grant>>) {
         let context = work
             .id
             .as_ref()
@@ -573,6 +682,7 @@ impl<H: Handler> Dispatcher<H> {
             Submission {
                 trace: Trace::default(),
                 id: work.id,
+                grant,
                 request: work.request,
                 admission,
                 read_only: work.read_only,
@@ -609,6 +719,13 @@ impl<H: Handler> Dispatcher<H> {
             return;
         };
         pending.listen = true;
+        if let Some(expires_at) = pending.grant.as_ref().and_then(|grant| grant.expires_at()) {
+            // The stream ends with its final result when its token expires.
+            let left = expires_at
+                .duration_since(SystemTime::now())
+                .unwrap_or_default();
+            self.session.limit_subscription(key, Instant::now() + left);
+        }
         acknowledged["params"]["_meta"][SUBSCRIPTION_KEY] = pending.client.clone();
         if let Ok(bytes) = json::encode(&acknowledged, self.limit) {
             pending.mailbox.event(bytes, LISTEN_BUFFER);

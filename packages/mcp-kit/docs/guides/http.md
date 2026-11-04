@@ -6,8 +6,9 @@ sessions, no GET stream and no initialization. The same `stdio::Handler` serves
 both transports, so lanes, keys, deadlines, progress and cancellation behave as
 in [stdio](stdio.md).
 
-The server authenticates no one. Bind a loopback address, and terminate TLS or
-add authorization in front of it before exposing it further.
+Without [bearer token protection](authorization.md), the server authenticates
+no one: bind a loopback address. The server has no TLS; terminate it in front
+of the server before exposing it further.
 
 ## Try the example
 
@@ -63,6 +64,7 @@ refused, because one session serves every POST.
 | `read_timeout` | 10 s | 1–60 s | Time to receive the whole request; a slow client is closed |
 | `write_timeout` | 30 s | 1–300 s | Time for one write; a stalled client counts as closed |
 | `keep_alive` | 15 s | 1–300 s | Comment interval on a quiet listen stream |
+| `authorization` | None | — | Bearer token protection; see [authorization](authorization.md) |
 
 The request body limit is `SessionOptions::max_message_bytes`.
 
@@ -144,8 +146,9 @@ finishes. `serve` returns once every connection has closed.
 | --- | --- |
 | `200` | A reply, including ordinary JSON-RPC errors such as `-32602` and deadlines |
 | `202` | A notification |
-| `400` | A header mismatch (`-32020`), a malformed message, or conflicting framing |
-| `403` | An `Origin` outside the allowlist |
+| `400` | A header mismatch (`-32020`), a malformed message, conflicting framing, or a malformed bearer token |
+| `401` | With authorization: a missing, invalid, foreign or expired token |
+| `403` | An `Origin` outside the allowlist, or with authorization a missing scope |
 | `404` | Another path, or an unknown method (`-32601`) |
 | `405` | GET, DELETE or any method other than POST, with `Allow: POST` |
 | `406` / `415` | `Accept` lacks JSON or SSE / the body is not `application/json` |
@@ -153,7 +156,7 @@ finishes. `serve` returns once every connection has closed.
 | `417` | An `Expect` other than `100-continue` |
 | `431` | A request line over 8 KiB, or headers over 32 KiB or 100 fields |
 | `501` / `505` | `Transfer-Encoding` / an HTTP version other than 1.1 |
-| `503` | More connections than `max_connections` |
+| `503` | More connections than `max_connections`, or a token verifier that could not decide |
 
 A legacy client that sends `initialize` gets `400`: the server speaks only the
 modern revision.

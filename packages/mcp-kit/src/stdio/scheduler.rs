@@ -40,6 +40,7 @@ struct Meta {
     rich_rounds: u8,
     rich_deadline: Option<Instant>,
     request_context: Option<Arc<crate::RequestContext>>,
+    grant: Option<Arc<crate::http::Grant>>,
     id: Option<Value>,
     lane: usize,
     key: Option<String>,
@@ -75,6 +76,7 @@ struct Assignment {
     reply_kind: ReplyKind,
     result_schema: Option<crate::ResultSchema>,
     request_context: Option<Arc<crate::RequestContext>>,
+    grant: Option<Arc<crate::http::Grant>>,
     sequence: u64,
     id: Option<Value>,
     work: Work,
@@ -177,6 +179,8 @@ pub(crate) struct Scheduler {
 pub(crate) struct Submission {
     pub(crate) trace: Trace,
     pub(crate) id: Option<Value>,
+    /// The verified grant of an authorized HTTP request.
+    pub(crate) grant: Option<Arc<crate::http::Grant>>,
     pub(crate) request: Request,
     pub(crate) admission: Admission,
     pub(crate) read_only: bool,
@@ -243,6 +247,7 @@ impl Scheduler {
         let Submission {
             mut trace,
             id,
+            grant,
             request,
             admission,
             read_only,
@@ -290,6 +295,7 @@ impl Scheduler {
                 rich_rounds: 0,
                 rich_deadline: None,
                 request_context: id.as_ref().and_then(|id| session.request_context(id)),
+                grant,
                 id,
                 lane: admission.lane,
                 key: admission.key,
@@ -924,6 +930,7 @@ impl Scheduler {
                     reply_kind: job.meta.reply_kind,
                     result_schema: job.meta.result_schema.clone(),
                     request_context: job.meta.request_context.clone(),
+                    grant: job.meta.grant.clone(),
                     sequence,
                     id: job.meta.id.clone(),
                     work: job.work,
@@ -1013,6 +1020,7 @@ fn work<H: Handler>(
         let context = Context {
             result_schema: assignment.result_schema,
             protocol: assignment.request_context,
+            grant: assignment.grant,
             id: assignment.id,
             control: assignment.control,
             progress: assignment.progress,

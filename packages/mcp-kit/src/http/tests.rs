@@ -79,7 +79,7 @@ fn path_and_method_are_checked_before_anything_else() {
     for method in ["GET", "DELETE", "PUT", "post"] {
         let refused = endpoint.check_head(&head(method, "/mcp")).unwrap_err();
         assert_eq!(refused.status, 405, "{method}");
-        assert_eq!(refused.headers, vec![("Allow", "POST")]);
+        assert_eq!(refused.headers, vec![("Allow", "POST".into())]);
     }
     let valid = headers("tools/list", &[]);
     for target in ["/mcp?trace=1", "http://localhost:8080/mcp", "/mcp#top"] {
@@ -550,9 +550,9 @@ fn responses_encode_status_headers_and_sse_events() {
     assert!(
         stream
             .headers
-            .contains(&("Content-Type", "text/event-stream"))
+            .contains(&("Content-Type", "text/event-stream".into()))
     );
-    assert!(stream.headers.contains(&("X-Accel-Buffering", "no")));
+    assert!(stream.headers.contains(&("X-Accel-Buffering", "no".into())));
     assert_eq!(
         sse_event(br#"{"jsonrpc":"2.0"}"#),
         b"event: message\ndata: {\"jsonrpc\":\"2.0\"}\n\n"

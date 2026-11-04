@@ -35,7 +35,11 @@ from your own runtime.
   deadlines, cancellation and progress keep request handling bounded.
 - **Streamable HTTP.** Serve the same handler to modern hosts over HTTP POST,
   with header checks, `x-mcp-header` arguments, JSON or SSE replies and
-  cancellation when a client disconnects. Bind loopback; it authenticates no one.
+  cancellation when a client disconnects.
+- **Bearer token protection.** Require OAuth access tokens on HTTP: the library
+  serves discovery metadata, refuses tokens issued for other servers and
+  missing scopes, and passes your handler the grant. You verify tokens with
+  your own authorization server. Without it, bind loopback.
 - **User confirmation.** Ask a yes/no question through the host, using legacy
   continuations or modern input-required replies and retries.
 - **Richer user input.** Collect fields and single/multiple selections, or ask
@@ -121,6 +125,7 @@ authority by itself.
 - [Your first tool](docs/getting-started.md)
 - [Lanes, deadlines and cancellation](docs/guides/stdio.md)
 - [Streamable HTTP](docs/guides/http.md)
+- [Bearer token protection](docs/guides/authorization.md)
 - [Tool catalog pagination](docs/guides/pagination.md)
 - [Subscriptions and change notifications](docs/guides/subscriptions.md)
 - [User confirmation](docs/guides/confirmation.md)

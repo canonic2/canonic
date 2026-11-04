@@ -12,6 +12,8 @@ use std::{
     sync::mpsc::Sender,
 };
 
+mod auth;
+
 const WAIT: Duration = Duration::from_secs(10);
 
 /// Echoes, pauses, reports progress or waits for cancellation.
@@ -55,6 +57,12 @@ impl Handler for Acme {
             |text: &str| Outcome::Tool(ToolResult::success(vec![crate::Content::text(text)]));
         match call.name.as_str() {
             "acme_echo" => text(call.arguments["text"].as_str().unwrap_or_default()),
+            "acme_whoami" => text(
+                context
+                    .authorization()
+                    .and_then(Grant::subject)
+                    .unwrap_or("anonymous"),
+            ),
             "acme_keyed" => {
                 let running = self.keyed.fetch_add(1, Ordering::SeqCst) + 1;
                 self.keyed_peak.fetch_max(running, Ordering::SeqCst);
@@ -116,6 +124,7 @@ fn catalog() -> Arc<Catalog> {
                 "acme_progress",
                 "acme_block",
                 "acme_keyed",
+                "acme_whoami",
             ]
             .into_iter()
             .map(tool)
@@ -314,7 +323,12 @@ fn json_requests_reply_with_their_own_ids_and_statuses() {
     assert_eq!(listed.json()["id"], "list-1");
     assert_eq!(
         listed.json()["result"]["tools"].as_array().unwrap().len(),
-        5
+        6
+    );
+    let anonymous = server.exchange(&call(&json!(6), "acme_whoami", &json!({}), ""));
+    assert_eq!(
+        anonymous.json()["result"]["content"][0]["text"],
+        "anonymous"
     );
 
     let echoed = server.exchange(&call(

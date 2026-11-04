@@ -167,6 +167,16 @@ impl Session {
             .collect()
     }
 
+    /// Moves a stream's deadline earlier, such as to its grant's expiry; a
+    /// later deadline leaves it unchanged. Returns whether the stream exists.
+    pub fn limit_subscription(&mut self, id: &Value, deadline: Instant) -> bool {
+        let Some(stream) = self.subscriptions.get_mut(&id.to_string()) else {
+            return false;
+        };
+        stream.deadline = stream.deadline.min(deadline);
+        true
+    }
+
     /// Time until the nearest stream deadline, for an independent runtime's wakeup.
     #[must_use]
     pub fn subscription_wait(&self) -> Option<Duration> {

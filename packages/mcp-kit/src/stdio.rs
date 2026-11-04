@@ -339,6 +339,7 @@ pub enum ServeError {
 /// The context of one running request.
 pub struct Context {
     protocol: Option<Arc<crate::RequestContext>>,
+    grant: Option<Arc<crate::http::Grant>>,
     id: Option<Value>,
     control: Arc<Control>,
     progress: Option<Progress>,
@@ -362,6 +363,13 @@ impl Context {
     #[must_use]
     pub fn request_context(&self) -> Option<&crate::RequestContext> {
         self.protocol.as_deref()
+    }
+    /// What the request's verified bearer token grants, on an authorized HTTP
+    /// request; `None` on stdio and unprotected HTTP. The server still decides
+    /// what the grant permits.
+    #[must_use]
+    pub fn authorization(&self) -> Option<&crate::http::Grant> {
+        self.grant.as_deref()
     }
     /// The request ID, or `None` for a notification.
     #[must_use]
@@ -711,6 +719,7 @@ impl<H: Handler, W: Write> Connection<H, W> {
             scheduler::Submission {
                 trace: self.output.trace.clone(),
                 id,
+                grant: None,
                 request,
                 admission,
                 read_only,
@@ -953,7 +962,14 @@ pub(crate) enum Outgoing {
     Bytes(Vec<u8>),
     Observed(Box<Self>, Span, FrameKind),
     /// A frame without its own ID, such as progress, for this request ID.
-    Routed(Value, Box<Self>),
+    Routed(
+        #[cfg_attr(
+            not(feature = "http-server"),
+            expect(dead_code, reason = "only the HTTP driver routes frames by request ID")
+        )]
+        Value,
+        Box<Self>,
+    ),
 }
 
 impl Outgoing {
