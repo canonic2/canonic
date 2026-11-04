@@ -81,7 +81,7 @@ fn modern_apply(
 #[test]
 fn modern_confirmation_accept_decline_cancel_and_receipt_replay() {
     for action in ["accept", "decline", "cancel"] {
-        let (transport, project, args) = prepared(Some("claude-code"), &capabilities(FORM));
+        let (transport, project, args) = prepared(Some("claude"), &capabilities(FORM));
         let before = project.revision();
         let interim = transport.request(&modern_apply(10, &args, None, None, true));
         assert_eq!(
@@ -126,7 +126,7 @@ fn modern_confirmation_accept_decline_cancel_and_receipt_replay() {
 #[test]
 fn modern_confirmation_rejects_forgery_changed_arguments_and_lost_capability() {
     for variant in ["forged", "arguments", "capability", "missing-response"] {
-        let (transport, project, args) = prepared(Some("claude-code"), &capabilities(FORM));
+        let (transport, project, args) = prepared(Some("claude"), &capabilities(FORM));
         let before = project.revision();
         let interim = transport.request(&modern_apply(10, &args, None, None, true));
         let mut state = interim["result"]["requestState"].clone();
@@ -151,10 +151,10 @@ fn modern_confirmation_rejects_forgery_changed_arguments_and_lost_capability() {
 
 #[test]
 fn modern_confirmation_rechecks_policy_and_connection_ownership() {
-    let (transport, project, args) = prepared(Some("claude-code"), &capabilities(FORM));
+    let (transport, project, args) = prepared(Some("claude"), &capabilities(FORM));
     let interim = transport.request(&modern_apply(10, &args, None, None, true));
     let state = &interim["result"]["requestState"];
-    let (other_server, other_project) = fixture(Some("claude-code"));
+    let (other_server, other_project) = fixture(Some("claude"));
     let other = Transport::start(other_server);
     let before_other = other_project.revision();
     let foreign = other.request(&modern_apply(11, &args, Some(state), Some("accept"), true));
@@ -175,7 +175,7 @@ fn modern_confirmation_rechecks_policy_and_connection_ownership() {
 
 #[test]
 fn modern_requests_preserve_registered_adapter_and_per_request_capabilities() {
-    for agent in [Some("claude-code"), Some("codex"), None] {
+    for agent in [Some("claude"), Some("codex"), None] {
         // Legacy form support must not bleed into the following modern request.
         let (transport, project, args) = prepared(agent, &capabilities(FORM));
         let before = project.revision();
@@ -186,7 +186,7 @@ fn modern_requests_preserve_registered_adapter_and_per_request_capabilities() {
         assert_eq!(result["result"]["resultType"], "complete", "{result}");
         match agent {
             Some("codex") => assert_eq!(result["result"]["isError"], false, "{result}"),
-            Some("claude-code") => assert_eq!(error_code(&result), "approval_unavailable"),
+            Some("claude") => assert_eq!(error_code(&result), "approval_unavailable"),
             _ => assert_eq!(error_code(&result), "operator_review_required"),
         }
         assert_eq!(project.revision() != before, agent == Some("codex"));
@@ -203,7 +203,7 @@ fn host_answers_other_than_acceptance_leave_the_proposal_pending() {
         json!({"content":{}}),
         json!({"action":true}),
     ] {
-        let (transport, project, args) = prepared(Some("claude-code"), &capabilities(FORM));
+        let (transport, project, args) = prepared(Some("claude"), &capabilities(FORM));
         let before = project.revision();
         let form = transport.call(json!(3), "policy_apply", &args);
         assert_eq!(form["method"], "elicitation/create");
@@ -247,7 +247,7 @@ fn host_answers_other_than_acceptance_leave_the_proposal_pending() {
 #[test]
 fn hosts_without_form_confirmation_cannot_activate_a_proposal() {
     for capabilities in [json!({}), json!({"elicitation":{"url":{}}})] {
-        let (transport, project, args) = prepared(Some("claude-code"), &capabilities);
+        let (transport, project, args) = prepared(Some("claude"), &capabilities);
         let before = project.revision();
         let response = transport.call(json!(3), "policy_apply", &args);
         assert_eq!(response["id"], 3, "{response}");
@@ -424,7 +424,7 @@ fn request_approve_asks_once_for_a_group_and_the_schema_refuses_both_forms() {
 
 #[test]
 fn inspection_runs_while_a_form_is_open_and_a_second_form_is_unavailable() {
-    let (transport, project, args) = prepared(Some("claude-code"), &capabilities(FORM));
+    let (transport, project, args) = prepared(Some("claude"), &capabilities(FORM));
     let before = project.revision();
     let form = transport.call(json!(3), "policy_apply", &args);
     assert_eq!(form["method"], "elicitation/create");
@@ -445,7 +445,7 @@ fn inspection_runs_while_a_form_is_open_and_a_second_form_is_unavailable() {
 
 #[test]
 fn a_declined_form_reports_a_receipt_committed_meanwhile() {
-    let (transport, project, args) = prepared(Some("claude-code"), &capabilities(FORM));
+    let (transport, project, args) = prepared(Some("claude"), &capabilities(FORM));
     let form = transport.call(json!(3), "policy_apply", &args);
     assert_eq!(form["method"], "elicitation/create");
     let applied = commit_elsewhere(&project, &args);
@@ -469,7 +469,7 @@ fn a_declined_form_reports_a_receipt_committed_meanwhile() {
 
 #[test]
 fn a_policy_change_while_the_form_is_open_makes_acceptance_stale() {
-    let (transport, project, args) = prepared(Some("claude-code"), &capabilities(FORM));
+    let (transport, project, args) = prepared(Some("claude"), &capabilities(FORM));
     let form = transport.call(json!(3), "policy_apply", &args);
     assert_eq!(form["method"], "elicitation/create");
     // No writer or connection lock is held while the user decides.
@@ -484,7 +484,7 @@ fn a_policy_change_while_the_form_is_open_makes_acceptance_stale() {
 #[test]
 fn cancellation_or_disconnection_withdraws_the_form_without_committing() {
     for disconnect in [false, true] {
-        let (transport, project, args) = prepared(Some("claude-code"), &capabilities(FORM));
+        let (transport, project, args) = prepared(Some("claude"), &capabilities(FORM));
         let before = project.revision();
         let form = transport.call(json!(3), "policy_apply", &args);
         assert_eq!(form["method"], "elicitation/create");
@@ -512,7 +512,7 @@ fn cancellation_or_disconnection_withdraws_the_form_without_committing() {
 
 #[test]
 fn confirmation_describes_retained_web_scope_and_removed_requirements() {
-    let (transport, project, _) = prepared(Some("claude-code"), &capabilities(FORM));
+    let (transport, project, _) = prepared(Some("claude"), &capabilities(FORM));
     let message = |args: &Value| {
         crate::review::mcp::apply_confirmation(&project.review, args)
             .unwrap()

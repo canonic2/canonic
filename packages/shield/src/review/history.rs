@@ -58,11 +58,9 @@ pub(super) fn inspect(context: &Context, input: &Query<'_>) -> Result<Value, Err
     )
 }
 
-/// Match an agent filter given as a CLI id or a recorded history name.
+/// Match an agent filter against the recorded agent ID, which has one spelling.
 pub(super) fn agent_matches(row: &Value, filter: &str) -> bool {
-    row["provenance"]["agent"]
-        .as_str()
-        .is_some_and(|recorded| crate::agents::same_agent(filter, recorded))
+    row["provenance"]["agent"].as_str() == Some(filter)
 }
 
 /// Group only by retained request IDs; command text and event order cannot
@@ -223,7 +221,7 @@ mod tests {
 
     #[test]
     fn permission_requests_keep_distinct_cwd_and_agent_identities() {
-        for (field, other) in [("cwd", "/acme/other"), ("agent", "claude-code")] {
+        for (field, other) in [("cwd", "/acme/other"), ("agent", "claude")] {
             let pre = decision("pre", "PreToolUse", &json!("acme-call"), "ask");
             let mut permission = decision("permission", "PermissionRequest", &Value::Null, "deny");
             permission["provenance"][field] = json!(other);
@@ -240,12 +238,12 @@ mod tests {
     }
 
     #[test]
-    fn agent_filter_accepts_the_cli_id_or_the_recorded_history_name() {
+    fn agent_filter_matches_the_recorded_agent_id() {
         let row = |agent: &str| json!({"provenance":{"agent":agent}});
-        for filter in ["claude", "claude-code"] {
-            assert!(agent_matches(&row("claude-code"), filter), "{filter}");
-            assert!(!agent_matches(&row("codex"), filter), "{filter}");
-        }
+        assert!(agent_matches(&row("claude"), "claude"));
+        assert!(!agent_matches(&row("codex"), "claude"));
+        // Agent IDs have one spelling; other names are not aliases.
+        assert!(!agent_matches(&row("claude"), "claude-code"));
         assert!(agent_matches(&row("codex"), "codex"));
         assert!(agent_matches(&row("acme-agent"), "acme-agent"));
         assert!(!agent_matches(&row("acme-agent"), "claude"));

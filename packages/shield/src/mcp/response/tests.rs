@@ -38,7 +38,7 @@ fn host_approval_guidance_matches_agent_without_changing_error_evidence() {
             "enable MCP form elicitation",
         ),
         (
-            Some("claude-code"),
+            Some("claude"),
             "enable MCP form elicitation",
             "Codex tool approval is unavailable",
         ),

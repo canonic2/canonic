@@ -13,7 +13,6 @@ pub(super) struct Codex;
 static SPEC: AgentSpec = AgentSpec {
     id: "codex",
     label: "Codex",
-    history_agent: "codex",
     events: &[
         ("PreToolUse", Event::Before),
         ("PermissionRequest", Event::Permission),

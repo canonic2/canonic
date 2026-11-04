@@ -153,7 +153,7 @@ test('installed Claude command hooks discover native reads and withhold unanswer
   assert.doesNotMatch(JSON.stringify(provider.results), /policy_propose|source_entry_id|apply_arguments/);
   assert.ok(!provider.results.some(r => /ACME_DENIED_TEXT|ACME_ASKED_TEXT/.test(JSON.stringify(r))));
   const events = await f.events();
-  assert.ok(events.some(e => e.kind === 'decision' && e.provenance.agent === 'claude-code'));
+  assert.ok(events.some(e => e.kind === 'decision' && e.provenance.agent === 'claude'));
   assert.ok(events.some(e => e.kind === 'completion'));
   assert.doesNotMatch(JSON.stringify(events), /ACME_ALLOWED_TEXT|ACME_DENIED_TEXT/);
   assert.equal((await f.cli(['status'])).coverage.live_host_verification, 'unverified');
@@ -226,7 +226,7 @@ test('installed Claude hooks allow Git staging and deny destructive Git policy',
   assert.ok(provider.results.some(r => JSON.stringify(r).includes('Shield: blocked. The active policy does not allow this request')));
   assert.match(JSON.stringify(provider.requests), /Shield: denied/);
   assert.doesNotMatch(JSON.stringify(provider.results), /policy_propose|source_entry_id|apply_arguments/);
-  assert.ok((await f.events()).some(e => e.kind === 'decision' && e.provenance.agent === 'claude-code' && e.details.decision === 'allow'));
+  assert.ok((await f.events()).some(e => e.kind === 'decision' && e.provenance.agent === 'claude' && e.details.decision === 'allow'));
 });
 
 test('native wrapper explicitly denies an evaluator startup failure', { timeout: 60000 }, async t => {

@@ -36,7 +36,7 @@ fn candidate_artifact_failure_does_not_blame_tool_arguments() {
 #[test]
 fn mcp_connections_setup_refusal_always_names_terminal_review_even_for_supported_hosts() {
     let (_root, mut context, _connection) = fixture();
-    for agent in ["claude-code", "codex"] {
+    for agent in ["claude", "codex"] {
         context.agent = Some(agent.into());
         let response = failure(&context, &Error::McpSetupRequired);
         assert_eq!(response["error"]["code"], "mcp_setup_required");
@@ -1011,7 +1011,7 @@ fn approval_required_messages_follow_the_enrolled_adapter() {
             "If the approval policy is never",
         ),
         (
-            Some("claude-code"),
+            Some("claude"),
             "policy_apply",
             "copy its apply_arguments object unchanged into policy_apply",
         ),
@@ -1168,7 +1168,7 @@ fn release_and_registry_refusals_name_the_user_step() {
 #[test]
 fn receipts_route_pending_proposals_to_apply_and_failed_ones_to_operator_review() {
     let (root, mut context, connection) = fixture();
-    context.agent = Some("claude-code".into());
+    context.agent = Some("claude".into());
     let proposed = proposal(&context, &connection, "failed-receipt");
     let id = proposed["data"]["proposal_id"].as_str().unwrap().to_owned();
     let receipt = || {
@@ -1363,7 +1363,7 @@ fn withdrawal_checks_registered_origin_and_reconnect_requires_new_handles() {
     let mut other = context.clone();
     other.connection_id = Some("two".into());
     let second = Connection::new("two".into());
-    for agent in ["acme", "claude-code", "codex"] {
+    for agent in ["acme", "claude", "codex"] {
         other.agent = Some(agent.into());
         let refused = invoke(
             &other,

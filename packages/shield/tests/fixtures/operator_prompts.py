@@ -55,7 +55,9 @@ def key_bytes(answer, view):
         # Enter would leak into the next host step.
         return answer.encode()
     if b"Agentintegrations" in compact:
-        return {"claude": b"1\r", "codex": b"2\r", "claude,codex": b"12\r"}.get(answer, b"\r")
+        # Rows: Box first, then Claude Code and Codex.
+        return {"box": b"1\r", "claude": b"2\r", "codex": b"3\r",
+                "claude,codex": b"23\r"}.get(answer, b"\r")
     if b"Recordrequesthistory" in compact:
         return {"yes": b"1\r", "no": b"2\r"}.get(answer, b"\r")
     if b"Clear existing history".replace(b" ", b"") in compact:

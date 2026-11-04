@@ -40,15 +40,9 @@ pub(crate) trait ReviewAdapter: Sync {
     }
 }
 
-/// Registered/native agent names and history identities share one resolver.
-/// No unknown name inherits a supported agent's confirmation capability.
+/// The review adapter of a registered agent ID. No other name inherits a
+/// supported agent's confirmation capability.
 pub(crate) fn resolve(name: Option<&str>) -> &'static dyn ReviewAdapter {
-    super::ADAPTERS
-        .iter()
-        .find(|adapter| {
-            name.is_some_and(|name| {
-                name == adapter.spec().id || name == adapter.spec().history_agent
-            })
-        })
+    name.and_then(super::find)
         .map_or(&generic::Generic, |adapter| adapter.review())
 }

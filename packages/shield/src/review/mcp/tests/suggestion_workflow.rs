@@ -198,7 +198,7 @@ fn suggestions_disabled_history_reports_unavailable_evidence() {
 
 #[test]
 fn suggestions_wire_projection_keeps_examples_actions_and_read_only_listing() {
-    for agent in ["codex", "claude-code"] {
+    for agent in ["codex", "claude"] {
         let (_root, mut context, _connection) = fixture();
         context.agent = Some(agent.into());
         record(&context, Some("first"), false, false);

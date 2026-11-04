@@ -79,7 +79,6 @@ struct Acme;
 static SPEC: AgentSpec = AgentSpec {
     id: "acme",
     label: "Acme",
-    history_agent: "acme",
     events: &[("Before", Event::Before)],
     hooks_path: ".codex/config.toml",
     mcp_path: Some(".codex/config.toml"),

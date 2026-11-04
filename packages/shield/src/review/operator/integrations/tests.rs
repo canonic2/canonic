@@ -1487,6 +1487,7 @@ fn reviews_list_the_codex_prefixes_a_change_adds_or_removes() {
     prefix_rules::preview(
         root.path(),
         &mut preview,
+        plan.desired.as_ref(),
         &prefix_rules::active(root.path()).unwrap(),
     );
     let text = super::super::presentation::review(&preview);

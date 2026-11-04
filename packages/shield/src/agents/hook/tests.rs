@@ -1952,7 +1952,7 @@ fn agents_cannot_launch_renamed_mcp_transports_from_shell_tools() {
         ] {
             for arguments in [
                 "mcp serve --agent codex",
-                "--project . mcp serve --agent claude-code",
+                "--project . mcp serve --agent claude",
             ] {
                 let value = call(root.path(), agent, &format!("{executable} {arguments}"));
                 assert_eq!(

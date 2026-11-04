@@ -177,7 +177,7 @@ fn static_reads_respect_the_output_frame_limit() {
 
 #[test]
 fn modern_and_legacy_inspection_share_no_request_capabilities() {
-    let (server, project) = fixture(Some("claude-code"));
+    let (server, project) = fixture(Some("claude"));
     let before = project.revision();
     let transport = Transport::start(server);
     let request = modern(

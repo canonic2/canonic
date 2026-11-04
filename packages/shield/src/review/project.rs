@@ -101,11 +101,16 @@ fn integration_route(coverage: &Value) -> String {
 
 /// Setting up the installed agent again, or guided setup for several or none.
 pub(super) fn agent_setup_route(coverage: &Value) -> String {
-    let agents: Vec<_> = coverage["installed_integrations"]
-        .as_array()
+    let agents: Vec<_> = coverage["box_integration"]["agent"]
+        .as_str()
         .into_iter()
-        .flatten()
-        .filter_map(|row| row["agent"].as_str())
+        .chain(
+            coverage["installed_integrations"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|row| row["agent"].as_str()),
+        )
         .collect();
     match agents.as_slice() {
         [agent] => format!("shield mcp setup --agent {agent}"),

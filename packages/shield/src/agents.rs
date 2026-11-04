@@ -35,25 +35,7 @@ pub(crate) fn names() -> clap::builder::PossibleValuesParser {
 }
 
 pub(crate) fn label(name: &str) -> &str {
-    ADAPTERS
-        .iter()
-        .find(|a| a.spec().id == name || a.spec().history_agent == name)
-        .map_or(name, |a| a.spec().label)
-}
-
-/// Whether a recorded agent name and a filter name the same agent, accepting
-/// either an adapter's CLI id or its history name; unknown names match exactly.
-pub(crate) fn same_agent(filter: &str, recorded: &str) -> bool {
-    let canonical = |name: &str| {
-        ADAPTERS
-            .iter()
-            .find(|a| a.spec().id == name || a.spec().history_agent == name)
-            .map(|a| a.spec().id)
-    };
-    match (canonical(filter), canonical(recorded)) {
-        (Some(a), Some(b)) => a == b,
-        _ => filter == recorded,
-    }
+    find(name).map_or(name, |a| a.spec().label)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -70,9 +52,9 @@ impl Event {
 }
 
 pub(crate) struct AgentSpec {
+    /// The agent ID in `--agent`, MCP launch arguments, records and history.
     pub id: &'static str,
     pub label: &'static str,
-    pub history_agent: &'static str,
     pub events: &'static [(&'static str, Event)],
     pub hooks_path: &'static str,
     /// None uses the shared project JSON MCP file.

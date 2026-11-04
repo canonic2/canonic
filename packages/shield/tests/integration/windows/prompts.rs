@@ -212,10 +212,12 @@ fn keys(answer: &Value, view: &[u8]) -> Vec<u8> {
         return answer.as_bytes().to_vec();
     }
     let selected = if contains(view, b"Agentintegrations") && contains(view, b"spaceselect") {
+        // Rows: Box first, then Claude Code and Codex.
         match answer {
-            "claude" => "1\r",
-            "codex" => "2\r",
-            "claude,codex" => "12\r",
+            "box" => "1\r",
+            "claude" => "2\r",
+            "codex" => "3\r",
+            "claude,codex" => "23\r",
             _ => "\r",
         }
     } else if contains(view, b"Recordrequesthistory") && ["yes", "no"].contains(&answer) {

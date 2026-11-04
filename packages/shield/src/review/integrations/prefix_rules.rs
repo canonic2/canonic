@@ -1,5 +1,5 @@
 //! Shield-owned agent prefix rules files, derived from the active policy.
-use super::{Error, files, registration};
+use super::{Error, Registration, files, registration};
 use crate::{agents, policy::agent_outputs::CodexPrefix};
 use serde_json::Value;
 use std::path::Path;
@@ -7,6 +7,13 @@ use std::path::Path;
 /// Shield never replaces a file it did not write; only moving it repairs this.
 const UNOWNED: &str =
     "agent prefix rules file is not Shield's; move it aside, then run shield mcp setup";
+
+/// Whether `registration` keeps `agent`'s prefix rules file. Box publishes
+/// Codex's hooks but not this file, so Shield keeps writing it for an agent it
+/// covers through Box. Preview and publication both decide here.
+fn installed(registration: Option<&Registration>, agent: &str) -> bool {
+    registration.is_some_and(|r| r.covers(agent))
+}
 
 /// Each registered adapter's file with its desired contents; None removes it.
 fn plan(root: &Path, meta: &Value, prefixes: &[CodexPrefix]) -> Result<Vec<files::Change>, Error> {
@@ -16,9 +23,7 @@ fn plan(root: &Path, meta: &Value, prefixes: &[CodexPrefix]) -> Result<Vec<files
         let Some(path) = adapter.spec().prefix_rules_path else {
             continue;
         };
-        let installed = registered
-            .as_ref()
-            .is_some_and(|r| r.agents.contains_key(adapter.spec().id));
+        let installed = installed(registered.as_ref(), adapter.spec().id);
         let before = files::read(root, path)?;
         if before
             .as_deref()
@@ -56,21 +61,18 @@ pub(in crate::review) fn active(root: &Path) -> Result<Vec<CodexPrefix>, Error> 
 
 /// Add the prefix rules files an integration review leads to, and the prefixes
 /// they hold, to its preview. They are written after the confirmed plan
-/// applies, from `prefixes`, for each agent the review leaves installed.
-pub(crate) fn preview(root: &Path, review: &mut Value, prefixes: &[CodexPrefix]) {
-    let agents = review["agents"].clone();
-    let installed = |id: &str| {
-        agents
-            .as_array()
-            .into_iter()
-            .flatten()
-            .any(|a| a["agent"] == id && a["change"] != "removed")
-    };
+/// applies, from `prefixes`, for each agent its `desired` registration covers.
+pub(in crate::review) fn preview(
+    root: &Path,
+    review: &mut Value,
+    desired: Option<&Registration>,
+    prefixes: &[CodexPrefix],
+) {
     for adapter in agents::ADAPTERS {
         let Some(path) = adapter.spec().prefix_rules_path else {
             continue;
         };
-        let after = if installed(adapter.spec().id) {
+        let after = if installed(desired, adapter.spec().id) {
             adapter.prefix_rules(prefixes)
         } else {
             None

@@ -284,7 +284,7 @@ fn proposed_pack_keeps_the_enrolled_registry_and_publisher_identity() {
     assert_eq!(arguments, json!({"reference":"tools/acme/runtime"}));
     let mut mcp = context.clone();
     mcp.surface = "mcp".into();
-    mcp.agent = Some("claude-code".into());
+    mcp.agent = Some("claude".into());
     mcp.connection_id = Some("acme".into());
     let question = review::mcp::PackQuestion::prepare(&mcp, "pack_add", &arguments).unwrap();
     assert!(!question.needs_input);

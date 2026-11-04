@@ -28,11 +28,17 @@ pub(in crate::review) struct Change {
 }
 
 fn checked_path(root: &Path, name: &str) -> Result<std::path::PathBuf, Error> {
-    if !crate::agents::ADAPTERS.iter().any(|a| {
-        a.spec().hooks_path == name
-            || a.spec().mcp_path == Some(name)
-            || a.spec().prefix_rules_path == Some(name)
-    }) {
+    if ![
+        super::box_definition::PATH,
+        super::box_definition::LOCAL_PATH,
+    ]
+    .contains(&name)
+        && !crate::agents::ADAPTERS.iter().any(|a| {
+            a.spec().hooks_path == name
+                || a.spec().mcp_path == Some(name)
+                || a.spec().prefix_rules_path == Some(name)
+        })
+    {
         return Err(Error::Invalid("invalid owned integration path"));
     }
     let mut path = root.to_path_buf();
@@ -169,6 +175,22 @@ pub(in crate::review) fn create_like(temporary: &Path, target: &Path) -> Result<
     Ok(file)
 }
 
+/// Create a file's missing parent folders. Folders created for Box's private
+/// local layer are owner-only; existing folders keep their permissions.
+fn create_parent(name: &str, parent: &Path) -> Result<(), Error> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    if name == super::box_definition::LOCAL_PATH {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    #[cfg(not(unix))]
+    let _ = name;
+    builder.create(parent)?;
+    Ok(())
+}
+
 pub(in crate::review) fn publish(root: &Path, files: &[Change]) -> Result<(), Error> {
     validate_recovery(root, files)?;
     for f in files {
@@ -179,7 +201,7 @@ pub(in crate::review) fn publish(root: &Path, files: &[Change]) -> Result<(), Er
         let parent = path
             .parent()
             .ok_or(Error::Invalid("integration file parent"))?;
-        fs::create_dir_all(parent)?;
+        create_parent(&f.path, parent)?;
         checked_path(root, &f.path)?;
         if let Some(after) = &f.after {
             let tmp = parent.join(format!(".shield-{}.tmp", std::process::id()));

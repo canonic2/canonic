@@ -33,7 +33,7 @@ fn bound(event: &Value) -> bool {
 fn linkable(event: &Value) -> bool {
     event["details"]["host_decision"] == "allow"
         || (event["provenance"]["surface"] == "hook"
-            && event["provenance"]["agent"] == "claude-code"
+            && event["provenance"]["agent"] == "claude"
             && event["provenance"]["host_event_name"] == "PreToolUse"
             && event["details"]["host_decision"] == "ask"
             && event["details"]["disposition"] == "approval_required")
@@ -261,7 +261,7 @@ mod tests {
             for variant in ["prompt", "blocked", "codex", "sdk", "denied"] {
                 let mut decided = decision("original");
                 let mut completed = completion();
-                decided["provenance"]["agent"] = json!("claude-code");
+                decided["provenance"]["agent"] = json!("claude");
                 decided["details"]["host_decision"] = json!("ask");
                 decided["details"]["disposition"] = json!("approval_required");
                 match variant {

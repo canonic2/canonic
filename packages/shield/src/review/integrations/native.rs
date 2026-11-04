@@ -17,7 +17,7 @@ pub(in crate::review) struct Installation {
 }
 
 #[cfg(not(windows))]
-fn quoted(path: &Path) -> Result<String, Error> {
+pub(in crate::review) fn quoted(path: &Path) -> Result<String, Error> {
     let text = path
         .to_str()
         .ok_or(Error::Invalid("integration path is not UTF-8"))?;
@@ -91,7 +91,21 @@ fn windows_command(
     Ok(command)
 }
 
-fn hook_command(binary: &Path, root: &Path, agent: &str, event: &str) -> Result<String, Error> {
+/// The POSIX hook command line from already quoted binary and project words.
+/// Box definitions pass its placeholders for the project, agent and event.
+#[cfg(not(windows))]
+pub(super) fn posix_hook_command(binary: &str, project: &str, agent: &str, event: &str) -> String {
+    format!(
+        "{binary} __internal native-hook --project {project} --agent {agent} --event {event} || exit 2"
+    )
+}
+
+pub(in crate::review) fn hook_command(
+    binary: &Path,
+    root: &Path,
+    agent: &str,
+    event: &str,
+) -> Result<String, Error> {
     #[cfg(windows)]
     {
         let shell = std::path::PathBuf::from(
@@ -105,10 +119,11 @@ fn hook_command(binary: &Path, root: &Path, agent: &str, event: &str) -> Result<
         windows_command(&shell, binary, root, agent, event)
     }
     #[cfg(not(windows))]
-    Ok(format!(
-        "{} __internal native-hook --project {} --agent {agent} --event {event} || exit 2",
-        quoted(binary)?,
-        quoted(root)?,
+    Ok(posix_hook_command(
+        &quoted(binary)?,
+        &quoted(root)?,
+        agent,
+        event,
     ))
 }
 

@@ -261,7 +261,7 @@ fn catalog_publishes_every_tool_and_marks_only_policy_changes_as_mutations() {
 
 #[test]
 fn registered_host_tools_avoid_top_level_schema_unions() {
-    for agent in ["claude-code", "codex"] {
+    for agent in ["claude", "codex"] {
         for tool in catalog(Some(agent)).unwrap().listing()["tools"]
             .as_array()
             .unwrap()
@@ -279,7 +279,7 @@ fn registered_host_tools_avoid_top_level_schema_unions() {
 #[test]
 fn legacy_skills_methods_are_refused_but_bundled_resources_remain_readable() {
     for version in ["2025-06-18", "2025-11-25"] {
-        for agent in [None, Some("claude-code"), Some("codex")] {
+        for agent in [None, Some("claude"), Some("codex")] {
             let (server, project) = fixture(agent);
             let before = project.revision();
             let mut messages = initialize(&json!({}), "acme-client").to_vec();
@@ -409,7 +409,7 @@ fn documentation_tools_deliver_bundled_text_and_validate_page_arguments() {
 
 #[test]
 fn enrolled_adapters_publish_their_own_apply_schema_and_claude_keeps_its_contract() {
-    for agent in [Some("claude-code"), Some("claude"), Some("acme-agent")] {
+    for agent in [Some("claude"), Some("acme-agent")] {
         let listing = catalog(agent).unwrap().listing().clone();
         let apply = listing["tools"]
             .as_array()
@@ -492,7 +492,7 @@ fn guidance_uses_the_enrolled_agent_never_client_metadata() {
             "MCP form elicitation",
         ),
         (
-            Some("claude-code"),
+            Some("claude"),
             "codex",
             "MCP confirmation form in default, auto and bypassPermissions modes",
             "for Codex tool approval",
@@ -526,7 +526,7 @@ fn guidance_uses_the_enrolled_agent_never_client_metadata() {
         assert!(!instructions.contains(absent), "{instructions}");
         assert_eq!(
             instructions.contains("shield policy review"),
-            agent != Some("claude-code")
+            agent != Some("claude")
         );
         let catalog = catalog(agent).unwrap();
         for name in instructions
@@ -833,7 +833,7 @@ fn structured_errors_carry_the_same_recovery_as_the_text_summary() {
 #[test]
 fn proposals_put_the_adapter_activation_route_in_structured_data() {
     for (agent, route) in [
-        (Some("claude-code"), "policy_apply for MCP confirmation"),
+        (Some("claude"), "policy_apply for MCP confirmation"),
         (Some("codex"), "policy_apply for Codex approval"),
         (None, "shield policy review in their terminal"),
     ] {

@@ -40,6 +40,70 @@ without `--agent` resumes a confirmed interrupted plan. `shield mcp setup --remo
 removes the agents you select, and with every agent selected removes all owned
 registrations while preserving policy, approvals and history.
 
+## Set up through Box
+
+In a project that uses Box, Shield can hand its integration to Box instead of
+writing each agent's files. Box then publishes Shield to whichever agents each
+developer chose with `box setup`, so nobody runs `shield mcp setup` per agent.
+
+```sh
+shield mcp setup --agent box
+box config sync
+```
+
+`box` is the first row on the agent page, and in a folder with
+`.box/config.yml` it is the only row marked until you set something up. Setup
+writes two files and changes no other Box or agent file:
+
+- `.box/mcp/shield.yml` is shared with everyone who uses the project. It names
+  the bare `shield` command, so it holds no path from your machine. It tells Box
+  to run Shield's MCP server for each agent, to allow the tools you marked on
+  the Tool permissions page except `policy_apply`, which always asks, and to
+  install Shield's hooks for Claude Code (`pre_tool_use`, `post_tool_use`,
+  `post_tool_use_failure`) and Codex (`pre_tool_use`, `permission_request`,
+  `post_tool_use`). The hooks start with `{command}`, which Box replaces with
+  the command it launches for the server.
+- `.box/local/mcp/shield.yml` is in Box's private local layer. It pins the
+  Shield binary you ran setup with, so Box launches that binary and its hooks
+  call it. Shield creates the folder owner-only when it is missing.
+
+With both files Box writes the same hook entries a direct setup writes. After
+confirming, run `box setup` the first time or `box config sync` later, then
+restart and trust the agent as below.
+
+Setup refuses `--agent box` when the project has no `.box/config.yml`; run
+`box config init` first. It is not available on Windows, because Box hook
+commands are POSIX shell commands. Shield adopts either file when it already
+holds exactly what Shield would write, and never replaces one it did not
+write.
+
+`shield status` lists Box with the other integrations, and `shield doctor`
+reports a file as missing or changed. `shield mcp setup --agent box` rewrites
+both. `shield mcp setup --remove --agent box` deletes them only while they still
+hold what Shield wrote; restore or delete an edited file yourself first.
+Removing them does not remove entries Box already published; Box manages those.
+
+Codex cannot ask at its hook, so the review shows the same
+[Ask fallback](#codex-approval-handling) a direct Codex setup uses, Allow for a
+new choice. Box carries it for the Codex hooks it publishes.
+
+If Claude Code or Codex already has a direct Shield installation, installing
+Box hands it over by default: Shield stops managing that installation and
+leaves its hooks, MCP entry, approvals and settings exactly as they are. Run
+`box config sync --adopt` so Box takes those identical entries over. Guided
+setup asks first; choose **Keep direct installations** to keep managing them.
+With `--agent box` the review lists the hand-over. Naming an agent too, as in
+`shield mcp setup --agent box --agent claude`, keeps that agent's direct
+installation. A kept direct installation can still be removed with
+`shield mcp setup --remove`, which deletes its entries, including those Box
+then uses. Box does not publish Codex's prefix rules file, so Shield keeps
+writing it from your active policy while Codex is set up through Box.
+
+Some direct settings have no Box form: Shield does not publish
+[project MCP connections](mcp-connections.md) through Box, and Claude Code
+cannot pre-approve `policy_apply`. Set an agent up directly
+when you need these.
+
 ## Load the hooks
 
 Restart the agent, trust the project, enable hooks, and approve the MCP

@@ -29,17 +29,16 @@ pub(crate) fn context(input: &cli::ReviewContext) -> Result<Context, Error> {
     Ok(context)
 }
 
-/// Whether the project's integration record includes this agent, named by
-/// adapter or history identity. The checkpoint is read without the writer lock:
+/// Whether the project's integration record includes this agent ID,
+/// directly or through the recorded Box
+/// definition, which launches the server for each adapter with its ID.
+/// The checkpoint is read without the writer lock:
 /// state is replaced by an atomic rename, so a publication in progress cannot
 /// make a connection start without its adapter. State that cannot be read
 /// records nothing; the generic adapter then needs terminal activation, and
 /// the server's tools report the state problem.
 fn recorded(context: &Context, agent: &str) -> bool {
-    let Some(adapter) = crate::agents::ADAPTERS
-        .iter()
-        .find(|a| a.spec().id == agent || a.spec().history_agent == agent)
-    else {
+    let Some(adapter) = crate::agents::find(agent) else {
         return false;
     };
     super::storage::Store::open(Path::new(&context.project_root))
@@ -50,5 +49,8 @@ fn recorded(context: &Context, agent: &str) -> bool {
         })
         .ok()
         .flatten()
-        .is_some_and(|registration| registration.agents.contains_key(adapter.spec().id))
+        .is_some_and(|registration| {
+            registration.agents.contains_key(adapter.spec().id)
+                || registration.box_definition.is_some()
+        })
 }

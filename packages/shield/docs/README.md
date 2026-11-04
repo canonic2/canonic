@@ -25,8 +25,9 @@ For an existing project, choose a task below or go to
   manage protected files, add access paths, and inspect requests.
 - [Find and manage permission packs](local-registry.md): search, inspect, install,
   configure, update, and remove packs; register your own sources.
-- [Connect Claude and Codex](claude-project.md): load hooks and MCP, understand
-  request coverage, and check the limits of native interception.
+- [Connect Claude and Codex](claude-project.md): load hooks and MCP directly or
+  through Box, understand request coverage, and check the limits of native
+  interception.
 - [Configure project MCP servers](mcp-connections.md): bind connections and pack
   permissions, review host projections, and keep local stdio settings private.
 - [Troubleshoot Shield](troubleshooting.md): investigate unexpected decisions,

@@ -1,6 +1,6 @@
 [package]
 name = "canonic-shield"
-version = "0.16.0"
+version = "0.17.0"
 edition = "2024"
 rust-version = "1.99"
 publish = false
@@ -37,7 +37,7 @@ strip = "none"
 [dependencies]
 canonic-tui-kit = { version = "0.4.0", path = "../tui-kit" }
 canonic-registry-kit = { version = "0.3.0", path = "../registry-kit" }
-canonic-mcp-kit = { version = "0.13.0", path = "../mcp-kit" }
+canonic-mcp-kit = { version = "0.14.0", path = "../mcp-kit" }
 blake3 = "1.8.2"
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -56,7 +56,7 @@ rustls = { version = "0.23.46", default-features = false, features = ["ring", "s
 toml_edit = "0.25"
 
 [build-dependencies]
-canonic-mcp-kit = { version = "0.13.0", path = "../mcp-kit", features = ["docs-build"] }
+canonic-mcp-kit = { version = "0.14.0", path = "../mcp-kit", features = ["docs-build"] }
 
 [target.'cfg(unix)'.dependencies]
 signal-hook = "0.3"
@@ -89,7 +89,7 @@ object = { version = "0.39.1", default-features = false, features = ["read_core"
 base64 = "0.22.1"
 canonic-registry-kit = { version = "0.3.0", path = "../registry-kit", features = ["test-support"] }
 # Builds fixture documentation bundles for the bundled-docs integration tests.
-canonic-mcp-kit = { version = "0.13.0", path = "../mcp-kit", features = ["docs-build"] }
+canonic-mcp-kit = { version = "0.14.0", path = "../mcp-kit", features = ["docs-build"] }
 assert_cmd = "2.2"
 assert_fs = "1.1"
 insta = { version = "1.49", features = ["filters"] }

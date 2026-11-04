@@ -8,9 +8,9 @@ Usage: shield mcp setup [OPTIONS]
 
 Options:
       --agent <AGENTS>
-          Agent to set up or remove; repeat for several. Omission asks
+          Agent to set up or remove, or box for a Box MCP definition; repeat for several. Omission asks
 
-          [possible values: claude, codex]
+          [possible values: box, claude, codex]
 
       --project <PROJECT>
           Select a project; otherwise discover the nearest enrolled ancestor

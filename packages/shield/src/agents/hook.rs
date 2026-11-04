@@ -411,7 +411,7 @@ fn decide(
             "status":if request.event==Event::Failed {"failed"} else if operation["kind"]=="shell" {"unknown"} else {"completed"},"operation":operation});
     }
     let normalized = json!({"protocol_version":1,"request_id":id,"expected_project_id":context.project_id,"cwd":request.cwd,"operation":operation,
-        "host":{"agent":adapter.spec().history_agent,"session_id":request.session,"tool_use_id":request.tool_id,"event":request.event_name,"consumer_id":null},"approval_request_id":null});
+        "host":{"agent":adapter.spec().id,"session_id":request.session,"tool_use_id":request.tool_id,"event":request.event_name,"consumer_id":null},"approval_request_id":null});
     let native = protocol::NativeContext {
         integration: adapter.spec().id,
         approval: adapter.approval(request.event),

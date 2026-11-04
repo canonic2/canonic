@@ -4,7 +4,7 @@ use super::*;
 #[test]
 fn installation_prompts_render_without_acquisition_or_policy_changes() {
     for version in ["2025-06-18", VERSION] {
-        let (server, project) = fixture(Some("claude-code"));
+        let (server, project) = fixture(Some("claude"));
         let before = project.revision();
         let mut messages = initialize(&json!({}), "claude-code").to_vec();
         messages[0]["params"]["protocolVersion"] = json!(version);

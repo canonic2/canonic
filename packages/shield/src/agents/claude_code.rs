@@ -14,7 +14,6 @@ pub(super) struct ClaudeCode;
 static SPEC: AgentSpec = AgentSpec {
     id: "claude",
     label: "Claude Code",
-    history_agent: "claude-code",
     events: &[
         ("PreToolUse", Event::Before),
         ("PostToolUse", Event::Completed),
@@ -164,7 +163,7 @@ impl AgentAdapter for ClaudeCode {
         )
     }
     fn mcp_entry(&self, binary: &Path, root: &Path, _approved: &[String]) -> String {
-        json!({"type":"stdio","command":binary,"args":["mcp","serve","--project",root,"--agent",SPEC.history_agent]}).to_string()
+        json!({"type":"stdio","command":binary,"args":["mcp","serve","--project",root,"--agent",SPEC.id]}).to_string()
     }
     fn has_mcp_entry(&self, source: &str) -> Result<bool, Error> {
         let config = crate::json::parse(source.as_bytes())

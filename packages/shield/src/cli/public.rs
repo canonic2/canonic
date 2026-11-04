@@ -38,8 +38,8 @@ pub struct Cli {
 pub enum PublicCommand {
     /// Create this project's Shield policy and optionally set up agents, after confirmation.
     Init {
-        /// Agent to set up with project hooks and MCP; repeat for several. Omission asks.
-        #[arg(long = "agent", value_parser = crate::agents::names())]
+        /// Agent to set up with project hooks and MCP, or box for Box; repeat for several. Omission asks.
+        #[arg(long = "agent", value_parser = integration_names())]
         agents: Vec<String>,
         /// Set up no agents now.
         #[arg(long, conflicts_with = "agents")]
@@ -130,8 +130,8 @@ pub enum McpCommand {
 /// Agent integration selection.
 #[derive(Args)]
 pub struct Setup {
-    /// Agent to set up or remove; repeat for several. Omission asks.
-    #[arg(long = "agent", value_parser = crate::agents::names())]
+    /// Agent to set up or remove, or box for a Box MCP definition; repeat for several. Omission asks.
+    #[arg(long = "agent", value_parser = integration_names())]
     pub agents: Vec<String>,
     /// Shield integrations are project scoped; user scope is refused.
     #[arg(long, value_enum, default_value = "project")]
@@ -144,12 +144,24 @@ pub struct Setup {
     pub dry_run: bool,
 }
 
+/// The integrations `--agent` accepts: Box first, then the native agent adapters.
+pub(crate) fn integration_names() -> clap::builder::PossibleValuesParser {
+    clap::builder::PossibleValuesParser::new(
+        std::iter::once(crate::review::integrations::box_definition::ID)
+            .chain(crate::agents::ADAPTERS.iter().map(|a| a.spec().id)),
+    )
+}
+
+/// The selection bit of the Box integration, apart from the adapter indexes.
+const BOX_BIT: u64 = 1 << 63;
+
 /// Plan-engine selection; no selection authorizes tool execution.
 #[derive(Clone, Copy)]
 pub(crate) enum IntegrationChoice {
     /// Preserve existing registration, resuming any confirmed repair plan.
     Keep,
-    /// Install the agents in this set, indexed by the immutable adapter registry.
+    /// Install the agents in this set, indexed by the immutable adapter
+    /// registry, with Box as the highest bit.
     Agents(u64),
     /// Remove selected adapters while preserving the others; zero opens selection.
     RemoveAgents(u64),
@@ -181,10 +193,15 @@ impl IntegrationChoice {
 impl IntegrationChoice {
     pub(crate) fn contains(self, agent: &str) -> bool {
         match self {
+            Self::Agents(bits) | Self::RemoveAgents(bits)
+                if agent == crate::review::integrations::box_definition::ID =>
+            {
+                bits & BOX_BIT != 0
+            }
             Self::Agents(bits) | Self::RemoveAgents(bits) => crate::agents::ADAPTERS
                 .iter()
                 .position(|a| a.spec().id == agent)
-                .is_some_and(|i| i < u64::BITS as usize && bits & (1 << i) != 0),
+                .is_some_and(|i| i < 63 && bits & (1 << i) != 0),
             Self::Keep => false,
         }
     }
@@ -194,10 +211,15 @@ impl IntegrationChoice {
         use crate::review::Error;
         let mut bits = 0u64;
         for id in agents {
+            if id.as_ref() == crate::review::integrations::box_definition::ID {
+                bits |= BOX_BIT;
+                continue;
+            }
             let index = crate::agents::ADAPTERS
                 .iter()
                 .position(|a| a.spec().id == id.as_ref())
-                .ok_or(Error::Invalid("Shield supports Claude and Codex only"))?;
+                .filter(|index| *index < 63)
+                .ok_or(Error::Invalid("Shield supports Box, Claude and Codex only"))?;
             bits |= 1u64
                 .checked_shl(
                     u32::try_from(index).map_err(|_| Error::Invalid("too many agent adapters"))?,
@@ -451,6 +473,32 @@ mod mcp_setup_tests {
         ));
         assert!(setup(&["--scope", "user"]).choice().is_err());
         assert!(setup(&["--dry-run"]).dry_run);
+        let boxed = setup(&["--agent", "box"]).choice().unwrap().unwrap();
+        assert!(boxed.contains("box"));
+        for adapter in crate::agents::ADAPTERS {
+            assert!(!boxed.contains(adapter.spec().id));
+            assert!(!choice.contains("box"));
+        }
+        let removal = setup(&["--remove", "--agent", "box"])
+            .choice()
+            .unwrap()
+            .unwrap();
+        assert!(removal.contains("box") && !removal.contains("claude"));
+        // Box is an integration target, never a native hook protocol.
+        assert!(
+            Cli::try_parse_from([
+                "shield",
+                "__internal",
+                "native-hook",
+                "--project",
+                "/srv/acme",
+                "--agent",
+                "box",
+                "--event",
+                "PreToolUse"
+            ])
+            .is_err()
+        );
     }
 
     #[test]

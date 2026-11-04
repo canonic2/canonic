@@ -6,7 +6,7 @@ fn fresh(
     version: &str,
     capabilities: &Value,
 ) -> (Transport, Project, std::path::PathBuf) {
-    let (server, project) = fixture(Some("claude-code"));
+    let (server, project) = fixture(Some("claude"));
     let source = std::path::Path::new(&project.review.project_root).join("registry");
     std::fs::create_dir(&source).unwrap();
     let source = source.canonicalize().unwrap();

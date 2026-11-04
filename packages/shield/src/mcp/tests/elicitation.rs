@@ -71,7 +71,7 @@ fn proposals(project: &Project) -> usize {
 
 #[test]
 fn pack_forms_prepare_only_then_require_separate_adapter_approval() {
-    for agent in ["claude-code", "codex"] {
+    for agent in ["claude", "codex"] {
         let (transport, project) = prepared(agent, &json!({"elicitation":{"form":{}}}));
         let before = project.revision();
         let count = proposals(&project);
@@ -93,7 +93,7 @@ fn pack_forms_prepare_only_then_require_separate_adapter_approval() {
         assert_eq!(proposals(&project), count + 1);
         let apply = &data(&proposal)["data"]["apply_arguments"];
         let result = transport.call(json!(11), "policy_apply", apply);
-        if agent == "claude-code" {
+        if agent == "claude" {
             assert_eq!(result["method"], "elicitation/create");
             assert_eq!(project.revision(), before);
             let result = transport.request(&answer(&result, "accept", json!({})));
@@ -111,7 +111,7 @@ fn pack_forms_prepare_only_then_require_separate_adapter_approval() {
 
 #[test]
 fn pack_forms_unknown_variables_refuse_before_asking_or_preparing() {
-    let (transport, project) = prepared("claude-code", &json!({"elicitation":{"form":{}}}));
+    let (transport, project) = prepared("claude", &json!({"elicitation":{"form":{}}}));
     let before = project.revision();
     let count = proposals(&project);
     let result = transport.call(
@@ -148,7 +148,7 @@ fn pack_forms_refuse_decline_dismissal_invalid_answers_and_missing_capability() 
             "invalid_input",
         ),
     ] {
-        let (transport, project) = prepared("claude-code", &json!({"elicitation":{"form":{}}}));
+        let (transport, project) = prepared("claude", &json!({"elicitation":{"form":{}}}));
         let before = project.revision();
         let count = proposals(&project);
         let form = transport.call(json!(10), "pack_configure", &args());
@@ -157,7 +157,7 @@ fn pack_forms_refuse_decline_dismissal_invalid_answers_and_missing_capability() 
         assert_eq!(project.revision(), before);
         assert_eq!(proposals(&project), count);
     }
-    let (transport, project) = prepared("claude-code", &json!({}));
+    let (transport, project) = prepared("claude", &json!({}));
     let count = proposals(&project);
     let result = transport.call(json!(10), "pack_configure", &args());
     assert_eq!(
@@ -228,7 +228,7 @@ fn pack_forms_modern_partial_invalid_replay_and_argument_binding() {
 
 #[test]
 fn pack_forms_revalidate_pack_constraints_and_active_revision() {
-    let (transport, project) = prepared("claude-code", &json!({"elicitation":{"form":{}}}));
+    let (transport, project) = prepared("claude", &json!({"elicitation":{"form":{}}}));
     let count = proposals(&project);
     let form = transport.call(json!(10), "pack_configure", &args());
     let mut content = values();
@@ -262,7 +262,7 @@ fn pack_forms_revalidate_pack_constraints_and_active_revision() {
 #[test]
 fn pack_forms_cancellation_disconnect_and_busy_slot_create_no_proposals() {
     for disconnect in [false, true] {
-        let (transport, project) = prepared("claude-code", &json!({"elicitation":{"form":{}}}));
+        let (transport, project) = prepared("claude", &json!({"elicitation":{"form":{}}}));
         let before = project.revision();
         let count = proposals(&project);
         let form = transport.call(json!(10), "pack_configure", &args());
@@ -293,7 +293,7 @@ fn pack_forms_timeout_withdraws_input_and_ignores_late_acceptance() {
     let mut options = test_options();
     options.elicitation.timeout = Duration::from_millis(500);
     let (transport, project) = prepared_with_options(
-        "claude-code",
+        "claude",
         &json!({"elicitation":{"form":{}}}),
         options,
         VERSION,

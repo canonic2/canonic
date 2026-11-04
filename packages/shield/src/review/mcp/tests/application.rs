@@ -171,7 +171,7 @@ fn a_connection_starting_during_a_publication_keeps_its_recorded_adapter() {
 #[test]
 fn redacted_apply_arguments_bind_and_commit_the_original_candidate() {
     let (root, mut context, connection) = fixture();
-    context.agent = Some("claude-code".into());
+    context.agent = Some("claude".into());
     let outside = assert_fs::TempDir::new().unwrap();
     let path = outside.path().join("reference --token placeholder");
     std::fs::create_dir(&path).unwrap();
@@ -213,7 +213,7 @@ fn redacted_apply_arguments_bind_and_commit_the_original_candidate() {
 #[test]
 fn inspected_apply_arguments_recover_the_reply_and_keep_approved_changes_after_apply() {
     let (_root, mut context, connection) = fixture();
-    context.agent = Some("claude-code".into());
+    context.agent = Some("claude".into());
     let result = proposal(&context, &connection, "acme-inspected");
     let id = result["data"]["proposal_id"].clone();
     let reply = result["data"]["apply_arguments"].clone();
@@ -306,7 +306,7 @@ fn codex_readable_review_is_exact_retrievable_and_bound_to_the_retained_candidat
             initial
         );
     }
-    for agent in [None, Some("acme-agent"), Some("claude-code")] {
+    for agent in [None, Some("acme-agent"), Some("claude")] {
         let mut other = context.clone();
         other.agent = agent.map(str::to_owned);
         let result =
@@ -365,7 +365,7 @@ fn codex_readable_reviews_cannot_apply_withdrawn_or_stale_proposals() {
 #[test]
 fn withdrawing_a_proposal_after_its_base_changed_reports_the_stale_revision() {
     let (root, mut context, connection) = fixture();
-    context.agent = Some("claude-code".into());
+    context.agent = Some("claude".into());
     let first = proposal(&context, &connection, "acme-first");
     let second = proposal(&context, &connection, "acme-second");
     apply(&context, &connection, &first["data"]["apply_arguments"]);
@@ -397,7 +397,7 @@ fn withdrawing_a_proposal_after_its_base_changed_reports_the_stale_revision() {
 #[test]
 fn a_pending_proposal_whose_base_changed_has_a_stale_receipt() {
     let (root, mut context, connection) = fixture();
-    context.agent = Some("claude-code".into());
+    context.agent = Some("claude".into());
     let first = proposal(&context, &connection, "acme-first");
     let second = proposal(&context, &connection, "acme-second");
     let id = second["data"]["proposal_id"].clone();
@@ -486,7 +486,7 @@ fn host_approved_rules_domains_and_folder_changes_activate_and_retries_are_idemp
 #[test]
 fn host_application_refuses_changed_stale_withdrawn_or_unregistered_requests() {
     let (root, mut context, connection) = fixture();
-    context.agent = Some("claude-code".into());
+    context.agent = Some("claude".into());
     let args = prepare(
         &context,
         &connection,
@@ -539,7 +539,7 @@ fn host_application_refuses_changed_stale_withdrawn_or_unregistered_requests() {
 #[test]
 fn host_application_refuses_after_a_hand_edit_and_keeps_the_edit() {
     let (root, mut context, connection) = fixture();
-    context.agent = Some("claude-code".into());
+    context.agent = Some("claude".into());
     // An applied rule writes the project rules file the hand edit then changes.
     let first = prepare(
         &context,
@@ -683,7 +683,7 @@ fn host_application_preserves_a_deleted_projection_through_later_repair() {
 #[test]
 fn host_approved_pack_add_configuration_update_and_removal_share_the_operator_pipeline() {
     let (root, mut context, connection) = fixture();
-    context.agent = Some("claude-code".into());
+    context.agent = Some("claude".into());
     let source = assert_fs::TempDir::new().unwrap();
     let directory = source.path().canonicalize().unwrap();
     let rules = json!([{"id":"build","decision":"allow","conditions":{"domain":"argv","executable":{"var":"tool"},"arguments":{"kind":"any"}}}]);

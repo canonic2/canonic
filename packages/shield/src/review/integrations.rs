@@ -56,9 +56,11 @@ pub(crate) fn protected_files() -> &'static [&'static str] {
                     .chain(a.spec().prefix_rules_path)
                     .chain(a.spec().settings_paths.iter().copied())
             }))
+            .chain([box_definition::PATH, box_definition::LOCAL_PATH])
             .collect()
     })
 }
+pub(crate) mod box_definition;
 mod connections;
 pub(crate) use connections::{mcp_projection, resolve_mcp_token};
 mod privacy;
@@ -93,6 +95,9 @@ pub(in crate::review) struct Registration {
     pub(in crate::review) approved_tools: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub(in crate::review) connections: std::collections::BTreeMap<String, Value>,
+    /// The exact Box definition files Shield wrote, when Box is set up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(in crate::review) box_definition: Option<box_definition::Definition>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -104,6 +109,10 @@ pub(in crate::review) struct Plan {
     pub(in crate::review) previous: Option<Registration>,
     pub(in crate::review) desired: Option<Registration>,
     pub(in crate::review) files: Vec<files::Change>,
+    /// Direct installations whose records the plan drops while their native
+    /// files stay in place for Box to adopt.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(in crate::review) handed_over: Vec<String>,
 }
 
 pub(in crate::review) fn registration(meta: &Value) -> Result<Option<Registration>, Error> {
@@ -212,8 +221,16 @@ pub(in crate::review) fn confirmed_fallback(
 ) -> Result<Option<AskFallback>, Error> {
     fallback(meta, agent)?;
     Ok(registration(meta)?
-        .filter(|r| r.agents.contains_key(agent))
+        .filter(|r| r.covers(agent))
         .and_then(|r| r.ask_fallback.get(agent).copied()))
+}
+
+impl Registration {
+    /// Whether this record installs `agent`'s hooks, directly or through the
+    /// Box definition, which publishes every adapter's hooks.
+    pub(in crate::review) fn covers(&self, agent: &str) -> bool {
+        self.agents.contains_key(agent) || self.box_definition.is_some()
+    }
 }
 
 pub(crate) fn fallback(meta: &Value, agent: &str) -> Result<AskFallback, Error> {
@@ -231,7 +248,7 @@ pub(crate) fn fallback(meta: &Value, agent: &str) -> Result<AskFallback, Error> 
     }
     Ok(registered
         .as_ref()
-        .filter(|r| r.agents.contains_key(agent))
+        .filter(|r| r.covers(agent))
         .and_then(|r| r.ask_fallback.get(agent))
         .copied()
         .unwrap_or_default())
@@ -353,6 +370,27 @@ pub(in crate::review) fn publish(root: &Path, plan: &Plan) -> Result<(), Error> 
     Ok(())
 }
 
+/// The recorded Box definition's state and the Ask fallbacks it carries.
+fn box_status(
+    root: &Path,
+    meta: &Value,
+    owned: &box_definition::Definition,
+    diagnostics: &mut Vec<&'static str>,
+) -> Value {
+    let state = box_definition::diagnose(root, owned, diagnostics);
+    let fallbacks: serde_json::Map<String, Value> = agents::ADAPTERS
+        .iter()
+        .filter(|a| a.spec().needs_ask_fallback)
+        .map(|a| {
+            let id = a.spec().id;
+            (id.to_owned(), json!(fallback(meta, id).unwrap_or_default()))
+        })
+        .collect();
+    json!({"agent":box_definition::ID,"path":box_definition::PATH,
+        "local_path":box_definition::LOCAL_PATH,"status":state,
+        "ask_fallback":fallbacks,"publish":"box setup (first time) or box config sync"})
+}
+
 pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
     let root = Path::new(&context.project_root);
     let meta = crate::review::project::metadata(state);
@@ -372,6 +410,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
             diagnostics.push("shield MCP entry is not owned by this enrollment");
         }
         let mut agents = Vec::new();
+        let mut box_integration = Value::Null;
         if let Some(r) = &registered {
             for (agent, installation) in &r.agents {
                 fallback(&meta, agent)?;
@@ -384,6 +423,9 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                 && config["mcpServers"]["shield"] != r.entry
             {
                 diagnostics.push("owned MCP entry missing or changed");
+            }
+            if let Some(owned) = &r.box_definition {
+                box_integration = box_status(root, &meta, owned, &mut diagnostics);
             }
             if binary_digest(&r.binary).ok().as_deref() != Some(&r.binary_digest) {
                 diagnostics.push("registered binary missing or changed");
@@ -423,6 +465,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
         );
         let healthy = diagnostics.is_empty();
         Ok::<_, Error>(json!({
+            "box_integration":box_integration,
             "mcp_connections":connections,
             "registered_integrations":agents.iter().map(|agent|json!({"agent":agent,"surface":"mcp","status":if healthy {"registered"} else {"degraded"}})).collect::<Vec<_>>(),
             "installed_integrations":registered.as_ref().map(|r|r.agents.keys().map(|agent| {
@@ -435,7 +478,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                     "ask_fallback":if adapter.is_some_and(|a|a.spec().needs_ask_fallback) { json!(fallback(&meta,agent).unwrap_or_default()) } else { Value::Null }})
             }).collect::<Vec<_>>()).unwrap_or_default(),
             "diagnostics":diagnostics,"repair_needed":!healthy,
-            "tool_interception":if agents.is_empty() {"not installed"} else {"native hooks installed; host loading is unverified"},
+            "tool_interception":if !agents.is_empty() {"native hooks installed; host loading is unverified"} else if box_integration.is_null() {"not installed"} else {"native hooks defined for Box to publish; host loading is unverified"},
             "live_host_verification":"unverified","verification":{"state":"unverified","coverage":"Claude text reads and submitted shell command policy; native grant retries pending"},
             "discovery":"restart host; trust project, review native hooks and approve MCP",
             "operator_protection":"native hooks can be skipped or fail open on host timeout/startup failure; no same-user OS isolation"

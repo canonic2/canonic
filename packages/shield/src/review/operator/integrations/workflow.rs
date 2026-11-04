@@ -5,6 +5,24 @@ use super::{
     approved_tools, confirmed_fallback, json, pending, prepare_approving, review, state,
 };
 
+/// The agent page rows: Box first, then each native agent adapter.
+pub(super) fn rows(
+    box_description: &'static str,
+    agent_description: &'static str,
+) -> Vec<(&'static str, &'static str, &'static str)> {
+    std::iter::once((
+        super::box_definition::ID,
+        super::box_definition::LABEL,
+        box_description,
+    ))
+    .chain(
+        crate::agents::ADAPTERS
+            .iter()
+            .map(|a| (a.spec().id, a.spec().label, agent_description)),
+    )
+    .collect()
+}
+
 /// The integration to set up. A confirmed repair resumes when no selection was
 /// given; otherwise the agent page starts at `answer`, the earlier choice when
 /// the operator came back to it, and records the new one there.
@@ -18,16 +36,10 @@ fn choice(
         return Ok(IntegrationChoice::Keep);
     }
     if matches!(selected, Some(IntegrationChoice::RemoveAgents(0))) {
-        let rows: Vec<_> = crate::agents::ADAPTERS
-            .iter()
-            .map(|a| {
-                (
-                    a.spec().id,
-                    a.spec().label,
-                    "Remove owned hooks, MCP and permission settings together",
-                )
-            })
-            .collect();
+        let rows = rows(
+            "Remove the Box MCP definition Shield wrote",
+            "Remove owned hooks, MCP and permission settings together",
+        );
         let ids = tty.choose_many(
             "Remove agent integrations",
             "Select integrations to remove; an empty selection keeps all integrations.",
@@ -38,27 +50,17 @@ fn choice(
         if ids.is_empty() {
             return Err(Error::Cancelled);
         }
-        let mut bits = 0u64;
-        for (index, adapter) in crate::agents::ADAPTERS.iter().enumerate() {
-            if ids.iter().any(|id| id == adapter.spec().id) {
-                bits |= 1u64 << index;
-            }
-        }
-        return Ok(IntegrationChoice::RemoveAgents(bits));
+        return Ok(IntegrationChoice::RemoveAgents(IntegrationChoice::bits(
+            &ids,
+        )?));
     }
     if let Some(selected) = selected {
         return Ok(selected);
     }
-    let rows: Vec<_> = crate::agents::ADAPTERS
-        .iter()
-        .map(|a| {
-            (
-                a.spec().id,
-                a.spec().label,
-                "Install or repair project hooks and Shield MCP",
-            )
-        })
-        .collect();
+    let rows = rows(
+        "Write .box/mcp/shield.yml; Box publishes it to each developer's agents",
+        "Install or repair project hooks and Shield MCP",
+    );
     let marked: Vec<&str> = answer.iter().map(String::as_str).collect();
     let ids = tty.choose_many(
         "Agent integrations",
@@ -76,19 +78,33 @@ fn choice(
 }
 
 /// The agents the guided page marks first: those already set up, otherwise
-/// the detected agent CLIs.
-fn preselected(meta: &Value) -> Result<Vec<String>, Error> {
+/// Box alone in a Box project, otherwise the detected agent CLIs.
+pub(super) fn preselected(root: &Path, meta: &Value) -> Result<Vec<String>, Error> {
     let registered: Vec<String> = super::registration(meta)?
-        .map(|r| r.agents.keys().cloned().collect())
+        .map(|r| {
+            r.box_definition
+                .as_ref()
+                .map(|_| super::box_definition::ID.to_owned())
+                .into_iter()
+                .chain(r.agents.keys().cloned())
+                .collect()
+        })
         .unwrap_or_default();
-    Ok(if registered.is_empty() {
-        crate::agents::detection::installed()
-            .iter()
-            .map(|id| (*id).to_owned())
-            .collect()
-    } else {
+    Ok(if !registered.is_empty() {
         registered
+    } else if super::box_definition::box_project(root) {
+        vec![super::box_definition::ID.to_owned()]
+    } else {
+        detected()
     })
+}
+
+/// The agents whose CLIs are on `PATH`.
+fn detected() -> Vec<String> {
+    crate::agents::detection::installed()
+        .iter()
+        .map(|id| (*id).to_owned())
+        .collect()
 }
 
 /// The permissions page: every Shield tool, with the saved or default
@@ -132,14 +148,55 @@ fn plan(
     } else {
         None
     };
-    let mut plan = prepare_approving(root, meta, selected, initial, approved)?;
+    // Only guided setup asks; `--agent box` keeps the default hand-over, which
+    // the review states. Init has no earlier installations to hand over.
+    let guided = back && !initial;
+    let handover = approved.is_none() || !guided || handover(tty, meta, selected)?;
+    let mut plan = prepare_approving(root, meta, selected, initial, approved, handover)?;
     with_fallbacks(meta, selected, plan.as_mut())?;
     Ok(Step::Done(plan))
 }
 
+/// Whether a Box install hands Shield's direct installations over to Box;
+/// asked only when there are some, with hand-over as the default.
+fn handover(tty: &mut Terminal, meta: &Value, selected: IntegrationChoice) -> Result<bool, Error> {
+    let direct = super::handed_over(super::registration(meta)?.as_ref(), selected, true);
+    if direct.is_empty() {
+        return Ok(true);
+    }
+    let names: Vec<_> = direct.iter().map(|id| crate::agents::label(id)).collect();
+    // Box does not publish Codex's prefix rules, so Shield keeps writing them.
+    let handover_effect = if direct.iter().any(|id| id == "codex") {
+        "Shield stops managing their hooks and MCP entries; it keeps Codex's prefix rules in step with your policy"
+    } else {
+        "Shield stops managing them and changes none of their files"
+    };
+    let answer = tty.choose(
+        "Hand over to Box",
+        &format!(
+            "Shield also manages direct installations for {}. Handing them over keeps their hooks, MCP entries and settings in place for box config sync --adopt.",
+            names.join(" and ")
+        ),
+        &[
+            (
+                "handover",
+                "Hand over to Box",
+                handover_effect,
+            ),
+            (
+                "keep",
+                "Keep direct installations",
+                "Shield keeps managing them; removing them later deletes their entries",
+            ),
+        ],
+        "handover",
+    )?;
+    Ok(answer == "handover")
+}
+
 /// Preserve confirmed Ask fallbacks of the selected agents; default new ones
 /// to Allow so the final review includes their scope.
-fn with_fallbacks(
+pub(super) fn with_fallbacks(
     meta: &Value,
     selected: IntegrationChoice,
     plan: Option<&mut Plan>,
@@ -152,7 +209,9 @@ fn with_fallbacks(
     }
     for adapter in crate::agents::ADAPTERS {
         let spec = adapter.spec();
-        if selected.contains(spec.id) && spec.needs_ask_fallback {
+        // Box publishes every adapter's hooks, so it carries their fallbacks.
+        let covered = selected.contains(spec.id) || selected.contains(super::box_definition::ID);
+        if covered && spec.needs_ask_fallback {
             desired.ask_fallback.insert(
                 spec.id.into(),
                 confirmed_fallback(meta, spec.id)?.unwrap_or(AskFallback::Allow),
@@ -166,7 +225,8 @@ fn with_fallbacks(
 fn setup_preview(root: &Path, plan: Option<&Plan>) -> Value {
     let mut review = preview(root, plan);
     let prefixes = super::prefix_rules::active(root).unwrap_or_default();
-    super::prefix_rules::preview(root, &mut review, &prefixes);
+    let desired = plan.and_then(|plan| plan.desired.as_ref());
+    super::prefix_rules::preview(root, &mut review, desired, &prefixes);
     review
 }
 
@@ -183,12 +243,12 @@ pub(super) fn review(
     let selected = match selected {
         Some(IntegrationChoice::RemoveAgents(0)) | None if !resumable => {
             let mut tty = Terminal::required(json_mode)?;
-            choice(&mut tty, selected, false, &mut preselected(&meta)?)?
+            choice(&mut tty, selected, false, &mut preselected(root, &meta)?)?
         }
         Some(selected) => selected,
         None => IntegrationChoice::Keep,
     };
-    let mut plan = prepare_approving(root, &meta, selected, false, None)?;
+    let mut plan = prepare_approving(root, &meta, selected, false, None, true)?;
     with_fallbacks(&meta, selected, plan.as_mut())?;
     let mut review = setup_preview(root, plan.as_ref());
     review["dry_run"] = json!(true);
@@ -201,7 +261,19 @@ pub(super) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
     let Some(p) = plan else {
         return json!({"operation":"keep integrations"});
     };
-    let agents: Vec<_> = crate::agents::ADAPTERS
+    let box_row = match (
+        p.previous.as_ref().and_then(|r| r.box_definition.as_ref()),
+        p.desired.as_ref().and_then(|r| r.box_definition.as_ref()),
+    ) {
+        (None, None) => None,
+        (None, Some(_)) => Some("added"),
+        (Some(_), None) => Some("removed"),
+        (Some(b), Some(a)) if b == a => Some("unchanged"),
+        _ => Some("updated"),
+    }
+    .map(|change| json!({"agent":super::box_definition::ID,"change":change,"mcp_server":"shield"}));
+    let direct = p.desired.as_ref().is_some_and(|r| !r.agents.is_empty());
+    let native = crate::agents::ADAPTERS
         .iter()
         .map(|a| a.spec().id)
         .filter_map(|agent| {
@@ -218,6 +290,7 @@ pub(super) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
             let change = match (&before, &after) {
                 (None, None) => return None,
                 (None, Some(_)) => "added",
+                (Some(_), None) if p.handed_over.iter().any(|id| id == agent) => "handed over",
                 (Some(_), None) => "removed",
                 (Some(b), Some(a)) if b == a => "unchanged",
                 _ => "updated",
@@ -230,8 +303,15 @@ pub(super) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
                 .map(|(event, _)| event.clone())
                 .collect();
             Some(json!({"agent":agent,"change":change,"hooks":hooks,"mcp_server":"shield"}))
-        })
-        .collect();
+        });
+    let agents: Vec<_> = box_row.iter().cloned().chain(native).collect();
+    let box_next = box_row
+        .as_ref()
+        .filter(|row| row["change"] != "removed")
+        .map(|_| {
+            json!({"publish":"box setup (first time) or box config sync",
+            "direct_installations":direct,"handed_over":p.handed_over})
+        });
     let fallbacks: Value = crate::agents::ADAPTERS
         .iter()
         .filter(|a| a.spec().needs_ask_fallback)
@@ -243,7 +323,11 @@ pub(super) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
         })
         .collect::<serde_json::Map<String, Value>>()
         .into();
-    let mut files = vec![json!({"path":".mcp.json","before":p.before,"after":p.after})];
+    // Publication leaves an absent shared MCP file absent when nothing goes in it.
+    let mut files: Vec<_> = (p.before.is_some() || !p.after.is_empty())
+        .then(|| json!({"path":".mcp.json","before":p.before,"after":p.after}))
+        .into_iter()
+        .collect();
     files.extend(p.files.iter().map(|change| json!(change)));
     let tool_approvals = p
         .desired
@@ -263,6 +347,7 @@ pub(super) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
         "project":root,
         "binary":p.desired.as_ref().or(p.previous.as_ref()).map(|r| &r.binary),
         "agents":agents,
+        "box":box_next,
         "connections":p.desired.as_ref().map(|r|r.connections.iter().flat_map(|(agent,value)|value["review"].as_array().into_iter().flatten().map(move |row| {let mut row=row.clone();row["agent"]=json!(agent);row})).collect::<Vec<_>>()).unwrap_or_default(),
         "ask_fallbacks":fallbacks,
         "adopt_existing_entries":p.previous.is_some() && !root.join(".shield/review/state.json").exists(),
@@ -280,16 +365,7 @@ enum Stage {
 
 /// The integration for the agents marked on the init agent page.
 fn agent_choice(agents: &[String]) -> Result<IntegrationChoice, Error> {
-    let mut bits = 0u64;
-    for (index, adapter) in crate::agents::ADAPTERS.iter().enumerate() {
-        if agents.iter().any(|id| id == adapter.spec().id) {
-            bits |= 1u64
-                .checked_shl(
-                    u32::try_from(index).map_err(|_| Error::Invalid("too many agent adapters"))?,
-                )
-                .ok_or(Error::Invalid("too many agent adapters"))?;
-        }
-    }
+    let bits = IntegrationChoice::bits(agents)?;
     Ok(if bits == 0 {
         IntegrationChoice::Keep
     } else {
@@ -329,6 +405,7 @@ pub(super) fn onboard(
         root,
         json_mode,
         &preview(root, plan.as_ref()),
+        plan.as_ref().and_then(|plan| plan.desired.as_ref()),
         cache_dir,
         baseline,
     )?;
@@ -360,23 +437,14 @@ fn onboarding_answers(
     fixed: Option<IntegrationChoice>,
     asks_profile: bool,
 ) -> Result<(crate::policy::Profile, Option<Plan>), Error> {
-    let rows: Vec<_> = crate::agents::ADAPTERS
-        .iter()
-        .map(|a| {
-            (
-                a.spec().id,
-                a.spec().label,
-                "Install project hooks and Shield MCP",
-            )
-        })
-        .collect();
+    let rows = rows(
+        "Write .box/mcp/shield.yml; Box publishes it to each developer's agents",
+        "Install project hooks and Shield MCP",
+    );
     // Profile, agents, then tool permissions. Escape goes back one step with
     // the answers kept; on the first step shown it cancels.
     let mut profile = crate::policy::Profile::Recommended;
-    let mut agents: Vec<String> = crate::agents::detection::installed()
-        .iter()
-        .map(|id| (*id).to_owned())
-        .collect();
+    let mut agents = preselected(root, meta)?;
     let mut stage = if asks_profile {
         Stage::Profile
     } else {
@@ -400,7 +468,7 @@ fn onboarding_answers(
                 let marked: Vec<&str> = agents.iter().map(String::as_str).collect();
                 match tty.choose_many_step(
                     "Agent integrations",
-                    "Detected CLIs are preselected. Select agents. Enter with nothing selected: Skip for now. You can configure agents later with shield mcp setup.",
+                    "Box is preselected in a Box project, otherwise detected CLIs. Select agents. Enter with nothing selected: Skip for now. You can configure agents later with shield mcp setup.",
                     &rows,
                     &marked,
                     "Skip for now",
@@ -442,7 +510,7 @@ pub(super) fn setup(
     let resumable = pending(&meta)?.is_some();
     // Escape on the permissions returns to the agent page when it was shown.
     let asked = selected.is_none() && !resumable;
-    let mut answer = preselected(&meta)?;
+    let mut answer = preselected(root, &meta)?;
     let plan = loop {
         let choice = choice(&mut tty, selected, resumable, &mut answer)?;
         match plan(root, &meta, choice, &mut tty, false, asked)? {

@@ -8,9 +8,9 @@ Usage: shield init [OPTIONS]
 
 Options:
       --agent <AGENTS>
-          Agent to set up with project hooks and MCP; repeat for several. Omission asks
+          Agent to set up with project hooks and MCP, or box for Box; repeat for several. Omission asks
 
-          [possible values: claude, codex]
+          [possible values: box, claude, codex]
 
       --project <PROJECT>
           Select a project; otherwise discover the nearest enrolled ancestor

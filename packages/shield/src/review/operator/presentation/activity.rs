@@ -10,10 +10,17 @@ fn agent_name(agent: &Value) -> String {
         .map_or_else(|| label(agent), |name| crate::agents::label(name).into())
 }
 
-/// `shield status` and, with `doctor`, `shield doctor`.
-pub(super) fn status(value: &Value, doctor: bool) -> String {
-    let coverage = &value["coverage"];
-    let agents: Vec<_> = coverage["installed_integrations"]
+/// Each connected integration, Box first, with any repair or fallback note.
+fn integrations(coverage: &Value) -> Vec<String> {
+    let boxed = coverage["box_integration"].as_object().map(|row| {
+        let name = crate::review::integrations::box_definition::LABEL;
+        if row.get("status").is_some_and(|s| s == "installed") {
+            name.to_owned()
+        } else {
+            format!("{name} (needs repair)")
+        }
+    });
+    let agents = coverage["installed_integrations"]
         .as_array()
         .into_iter()
         .flatten()
@@ -25,8 +32,13 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
                 name.push_str(" (Ask fallback allows requests)");
             }
             name
-        })
-        .collect();
+        });
+    boxed.into_iter().chain(agents).collect()
+}
+
+/// `shield status` and, with `doctor`, `shield doctor`.
+pub(super) fn status(value: &Value, doctor: bool) -> String {
+    let agents = integrations(&value["coverage"]);
     let root = label(&value["project_root"]);
     let mut output = if agents.is_empty() {
         format!(
@@ -552,7 +564,7 @@ mod tests {
     fn shell_history_shows_submitted_source_and_unreported_exit() {
         // A decision record cut short for size keeps no request, only the source.
         let mut row = json!({"entry_id":"request-acme","requested_at":"2026-01-01T00:00:00Z",
-            "evaluation":{"decision":"ask"},"request":null,"provenance":{"agent":"claude-code","surface":"hook"},
+            "evaluation":{"decision":"ask"},"request":null,"provenance":{"agent":"claude","surface":"hook"},
             "command":{"kind":"shell","dialect":"bash","source":"mkdir -p src\ncat > src/app.js <<'EOF'\nacme\nEOF\n"},
             "outcome":{"status":"unknown","exit_code":null}});
         assert_eq!(

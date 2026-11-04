@@ -19,6 +19,7 @@ pub(super) fn initialize(
     project: &Path,
     json_mode: bool,
     setup: &Value,
+    desired: Option<&review::integrations::Registration>,
     cache_dir: Option<&Path>,
     baseline: Option<policy::Profile>,
 ) -> Result<Value, Error> {
@@ -92,6 +93,7 @@ pub(super) fn initialize(
     crate::review::integrations::preview_prefix_rules(
         &project,
         &mut setup,
+        desired,
         evaluator.codex_prefixes(),
     );
     tty.confirm(&json!({"operation":"initialize project","project":project,
