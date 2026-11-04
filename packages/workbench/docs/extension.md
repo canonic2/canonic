@@ -111,6 +111,17 @@ shares; set `CANONIC_WORKBENCH_HOME` to use another folder. That first run
 takes a few seconds longer. A copy that no running Workbench uses and none
 has used for a week is removed the next time Workbench unpacks one.
 
+If your project needs its own Node, for example because its native addons are
+built for it, name it in `workbench.local.yaml`; it must be Node 24 or later:
+
+```yaml
+# workbench.local.yaml
+node: /usr/local/bin/node
+```
+
+A path that doesn't exist, or a Node older than 24, stops project code with
+an error naming this setting.
+
 Screenshots need this helper. It runs on macOS 13 or later, Windows, and Linux
 with a display. Elsewhere, or if it can't be unpacked or started, the camera
 and **Copy handoff** show the reason instead of a screenshot, and a

@@ -314,9 +314,11 @@ tells the Workbench server which artboards it shows, and
 `GET /_workbench/view` on the server returns the reference from the canvas
 you changed most recently. Projects with agent hooks set up can give
 it to Claude Code and Codex with every prompt, and to MCP clients through a
-`current_view` tool. A project with a `.canonic` folder gets the server's
-address in `.canonic/.workbench/server.json`; add that folder to
-`.gitignore`.
+`current_view` tool. They find the server through a file it keeps in your
+user cache folder (`~/Library/Caches/canonic-workbench/servers/` on macOS,
+`%LOCALAPPDATA%\canonic-workbench\servers\` on Windows,
+`~/.cache/canonic-workbench/servers/` on Linux), so nothing is written into
+your project.
 
 ## Configure pages
 

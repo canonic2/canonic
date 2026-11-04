@@ -5,6 +5,11 @@ in named scenarios, next to your design pages. You define it in a
 `.workbench.ts` or `.workbench.tsx` file, with an adapter for HTML, React, Vue,
 Astro, React Native Web, or a technology you register yourself.
 
+Workbench builds a preview when you open it. Opening one page does not build
+the rest of your project in the background. Shared code and previously built
+previews are reused as you navigate; opening a new preview can still take time
+to build its own code.
+
 Like a story in Storybook, a preview renders your real component or page, but
 not a running copy of your app. Each scenario supplies the data the page would
 load, through props, providers, or [mocked requests](preview-data.md#request-mocks),
@@ -369,8 +374,9 @@ a `workbench-env.d.ts` file. Include that file in your `tsconfig.json`.
 
 The extension includes the `workbench-server` command in its install folder,
 at `server/bin/<platform>-<arch>/workbench-server`. Project code in
-definitions and configuration runs on Node 24 or later: the `node` on your
-`PATH`, or the program `--node` names.
+definitions and configuration runs on the Node 24 the extension ships, or on
+the Node your `workbench.local.yaml` names with `node`
+([Extension](extension.md)).
 
 ```sh
 ~/.vscode/extensions/canonic.canonic-workbench-<version>/server/bin/darwin-arm64/workbench-server check .

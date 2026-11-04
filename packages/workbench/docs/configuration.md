@@ -131,6 +131,7 @@ collections:
 | `previews` | map or `false` | no | Where [TypeScript previews](#previews) are discovered. `false` turns them off. |
 | `implementations` | map of name to [implementation](#implementations) | no | Where pages also exist as running code, and what renders the examples in pages' docs. |
 | `spaces` | map of id to [space](#spaces) | no | Several spaces in this one file. Without it, the file is one space. |
+| `node` | string | no | Only in `workbench.local.yaml` ([local overrides](#local-overrides)): the Node 24 or later program your project's code runs on, absolute or relative to this folder. Defaults to the Node the extension ships. In `workbench.yaml` it is reported and not used. |
 
 With `previews: false`, no catalog, and no usable collection, the config fails
 with *nothing to show — a config needs at least one collection with one page in
@@ -656,6 +657,7 @@ Common uses:
 | You start the app differently | A `start` block of your own, which replaces the committed one |
 | Storybook's port isn't one `url: auto` finds | The Storybook implementation's `url` |
 | You don't want TypeScript previews compiled | `previews: false` |
+| Your project's code needs your own Node, such as for its native addons | `node`, the path to a Node 24 or later |
 | You want your own collections and pages for a while | A `collections` list, which replaces the committed one |
 | You tell spaces apart differently in the [space switcher](spaces.md) | Your own `name`, `color`, or `icon` |
 

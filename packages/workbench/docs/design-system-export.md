@@ -118,7 +118,9 @@ preview builds.
 When the current space has [TypeScript previews](workbench-previews.md) or
 pages with [docs](docs-pages.md) and examples, the archive also contains a
 `browser/` folder with each preview, and each page's docs in each of its docs
-lenses, compiled for the browser.
+lenses, compiled for the browser. Code that previews have in common, such as
+React or your component library, is written once at the root of `browser/`
+and loaded by every preview that uses it.
 
 The viewer includes `browser/CANONIC-LICENSE.txt` for Canonic-owned code and
 generated authoring types. Your project content and third-party components
