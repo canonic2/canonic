@@ -451,7 +451,7 @@ fn same_value(kind: ParameterKind, body: &Value, sent: &str) -> bool {
 }
 
 impl Response {
-    fn empty(status: u16) -> Self {
+    pub(crate) fn empty(status: u16) -> Self {
         Self {
             status,
             headers: Vec::new(),
@@ -706,7 +706,7 @@ fn accepts_both(headers: &[(&str, &[u8])]) -> bool {
 }
 
 /// The path of an origin-form or absolute-form target, without query or fragment.
-fn request_path(target: &str) -> &str {
+pub(crate) fn request_path(target: &str) -> &str {
     let path = target
         .strip_prefix("http://")
         .or_else(|| target.strip_prefix("https://"))

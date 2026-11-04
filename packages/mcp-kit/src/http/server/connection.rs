@@ -34,6 +34,9 @@ struct Request {
     body: Vec<u8>,
     /// The verified grant, when authorization is configured.
     grant: Option<Arc<Grant>>,
+    /// The request is for the embedded authorization server.
+    #[cfg_attr(not(feature = "authorization-server"), allow(dead_code))]
+    oauth: bool,
 }
 
 /// Why reading stopped.
@@ -70,6 +73,12 @@ pub(super) fn handle(stream: &TcpStream, shared: &Arc<Shared>) {
     };
     let headers = request.fields();
     let head = request.head(&headers);
+    #[cfg(feature = "authorization-server")]
+    if let Some(server) = shared.oauth.as_ref().filter(|_| request.oauth) {
+        let response = server.handle(&head, &request.body);
+        let _ = write_response(stream, &response, false, shared.write_timeout);
+        return;
+    }
     match shared.endpoint.receive(&head, &request.body) {
         Exchange::Respond(response) => {
             let _ = write_response(stream, &response, false, shared.write_timeout);
@@ -192,6 +201,7 @@ fn read_request(stream: &TcpStream, shared: &Shared) -> Result<Request, Failure>
         headers: read_headers(&mut reader, deadline)?,
         body: Vec::new(),
         grant: None,
+        oauth: false,
     };
     let headers = request.fields();
     let field = |name: &'static str| {
@@ -203,6 +213,28 @@ fn read_request(stream: &TcpStream, shared: &Shared) -> Result<Request, Failure>
     let length = field("content-length").collect::<Vec<_>>();
     if field("transfer-encoding").next().is_some() {
         return Err(Failure::status(if length.is_empty() { 501 } else { 400 }));
+    }
+    let expect = field("expect").collect::<Vec<_>>();
+    #[cfg(feature = "authorization-server")]
+    if shared
+        .oauth
+        .as_ref()
+        .is_some_and(|server| server.routes(&request.target))
+    {
+        // Authorization server routes: an optional body within its bound.
+        let length = if length.is_empty() {
+            0
+        } else {
+            content_length(&length)?
+        };
+        if length > crate::oauth::MAX_INTERACTION_BODY_BYTES {
+            return Err(Failure::status(413));
+        }
+        continue_if_expected(stream, &expect, shared.write_timeout)?;
+        drop(headers);
+        request.oauth = true;
+        request.body = read_body(&mut reader, length, deadline)?;
+        return Ok(request);
     }
     let head = request.head(&headers);
     shared
@@ -222,33 +254,47 @@ fn read_request(stream: &TcpStream, shared: &Shared) -> Result<Request, Failure>
         }
         _ => None,
     };
-    let length = match length.as_slice() {
-        [] => return Err(Failure::status(411)),
-        [value] => std::str::from_utf8(value)
-            .ok()
-            .filter(|value| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()))
-            .and_then(|value| value.parse::<usize>().ok())
-            .ok_or_else(|| Failure::status(400))?,
-        _ => return Err(Failure::status(400)),
-    };
+    if length.is_empty() {
+        return Err(Failure::status(411));
+    }
+    let length = content_length(&length)?;
     shared
         .endpoint
         .check_length(length)
         .map_err(Failure::Respond)?;
-    match field("expect").collect::<Vec<_>>().as_slice() {
-        [] => {}
-        [value] if value.eq_ignore_ascii_case(b"100-continue") => {
-            stream
-                .set_write_timeout(Some(shared.write_timeout))
-                .and_then(|()| (&*stream).write_all(b"HTTP/1.1 100 Continue\r\n\r\n"))
-                .map_err(|_| Failure::Close)?;
-        }
-        _ => return Err(Failure::status(417)),
-    }
+    continue_if_expected(stream, &expect, shared.write_timeout)?;
     drop(headers);
     request.grant = grant;
     request.body = read_body(&mut reader, length, deadline)?;
     Ok(request)
+}
+
+/// The value of exactly one `Content-Length` field.
+fn content_length(values: &[&[u8]]) -> Result<usize, Failure> {
+    match values {
+        [value] => std::str::from_utf8(value)
+            .ok()
+            .filter(|value| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()))
+            .and_then(|value| value.parse::<usize>().ok())
+            .ok_or_else(|| Failure::status(400)),
+        _ => Err(Failure::status(400)),
+    }
+}
+
+/// Sends `100 Continue` for `Expect: 100-continue`; any other expectation gets `417`.
+fn continue_if_expected(
+    stream: &TcpStream,
+    expect: &[&[u8]],
+    timeout: Duration,
+) -> Result<(), Failure> {
+    match expect {
+        [] => Ok(()),
+        [value] if value.eq_ignore_ascii_case(b"100-continue") => stream
+            .set_write_timeout(Some(timeout))
+            .and_then(|()| (&*stream).write_all(b"HTTP/1.1 100 Continue\r\n\r\n"))
+            .map_err(|_| Failure::Close),
+        _ => Err(Failure::status(417)),
+    }
 }
 
 /// Reads header fields until the blank line, within the section bounds.
@@ -549,7 +595,10 @@ fn write_response(
 fn reason(status: u16) -> &'static str {
     match status {
         200 => "OK",
+        201 => "Created",
         202 => "Accepted",
+        204 => "No Content",
+        303 => "See Other",
         400 => "Bad Request",
         401 => "Unauthorized",
         403 => "Forbidden",

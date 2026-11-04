@@ -7,7 +7,9 @@ Auth0, Entra ID or Keycloak, and send them on every request. You decide whether
 a token is genuine; the library handles everything around that decision.
 
 Authorization is opt-in. Without it, the HTTP server authenticates no one and
-should bind loopback only. Stdio never uses tokens.
+should bind loopback only. Stdio never uses tokens. To issue tokens from the
+same process instead of an external provider, see
+[Issue tokens from your server](authorization-server.md).
 
 ## What the library does and what you do
 

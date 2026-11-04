@@ -152,6 +152,7 @@ pub enum AuthorizationError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceServer {
     resource: String,
+    issuers: Vec<String>,
     metadata_url: String,
     metadata_path: String,
     serve_root: bool,
@@ -454,6 +455,7 @@ impl ResourceServer {
             metadata_url: format!("{}{metadata_path}", resource.origin),
             metadata_path,
             resource: resource.uri,
+            issuers: options.authorization_servers,
             serve_root: options.serve_root_metadata,
             document,
             max_age: format!("max-age={}", options.metadata_max_age.as_secs()),
@@ -466,6 +468,12 @@ impl ResourceServer {
     #[must_use]
     pub fn resource(&self) -> &str {
         &self.resource
+    }
+
+    /// The issuers of the authorization servers the metadata lists.
+    #[must_use]
+    pub fn authorization_servers(&self) -> &[String] {
+        &self.issuers
     }
 
     /// The protected-resource metadata URL named in every challenge.
@@ -713,7 +721,7 @@ impl ResourceServer {
 }
 
 /// An RFC 6749 scope token.
-fn valid_scope(scope: &str) -> bool {
+pub(crate) fn valid_scope(scope: &str) -> bool {
     (1..=MAX_SCOPE_BYTES).contains(&scope.len())
         && scope.bytes().all(|byte| {
             byte == 0x21 || (0x23..=0x5b).contains(&byte) || (0x5d..=0x7e).contains(&byte)
@@ -738,20 +746,20 @@ fn b64token(token: &str) -> bool {
 }
 
 /// A normalized `https` or loopback `http` URI.
-struct Location {
+pub(crate) struct Location {
     /// Lowercase scheme and host, explicit port only when not the default.
-    origin: String,
+    pub(crate) origin: String,
     /// The path, without a lone `/`.
-    path: String,
+    pub(crate) path: String,
     /// `origin` followed by `path`.
-    uri: String,
-    /// The path has no trailing slash, as a configured resource needs.
-    strict: bool,
+    pub(crate) uri: String,
+    /// The path has no trailing slash, as a configured resource or issuer needs.
+    pub(crate) strict: bool,
 }
 
 impl Location {
     /// Parses an absolute URI without userinfo, query or fragment.
-    fn parse(text: &str) -> Option<Self> {
+    pub(crate) fn parse(text: &str) -> Option<Self> {
         if text.len() > MAX_URL_BYTES || iri_string::types::UriStr::new(text).is_err() {
             return None;
         }

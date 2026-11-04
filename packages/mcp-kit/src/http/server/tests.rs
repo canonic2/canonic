@@ -13,6 +13,8 @@ use std::{
 };
 
 mod auth;
+#[cfg(feature = "authorization-server")]
+mod oauth;
 
 const WAIT: Duration = Duration::from_secs(10);
 

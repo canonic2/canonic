@@ -1,6 +1,6 @@
 [package]
 name = "canonic-mcp-kit"
-version = "0.15.0"
+version = "0.16.0"
 edition = "2024"
 rust-version = "1.99"
 publish = false
@@ -16,6 +16,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
 thiserror = "2.0"
+getrandom = { version = "0.4.3", optional = true }
 yaml-rust2 = { version = "0.13", default-features = false }
 
 [features]
@@ -25,6 +26,9 @@ docs-build = []
 # The blocking Streamable HTTP driver over std::net. It opens sockets and
 # starts threads, so consumers that only use the exchange leave it out.
 http-server = []
+# The embedded OAuth 2.1 authorization server. It adds operating-system
+# randomness for the codes and tokens it issues.
+authorization-server = ["dep:getrandom"]
 
 [dev-dependencies]
 # Only the consumer example/fixtures generate IDs or persist task records.
@@ -40,6 +44,10 @@ required-features = ["http-server"]
 [[example]]
 name = "authorization"
 required-features = ["http-server"]
+
+[[example]]
+name = "authorization_server"
+required-features = ["http-server", "authorization-server"]
 
 [[test]]
 name = "integration"

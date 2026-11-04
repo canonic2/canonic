@@ -77,6 +77,10 @@ pub struct HttpOptions {
     pub keep_alive: Duration,
     /// Bearer token protection; `None` authenticates no one.
     pub authorization: Option<HttpAuthorization>,
+    /// An embedded authorization server answering on the same listener. Its
+    /// issuer must be listed by [`Self::authorization`]'s resource.
+    #[cfg(feature = "authorization-server")]
+    pub authorization_server: Option<Arc<crate::oauth::AuthorizationServer>>,
 }
 
 impl Default for HttpOptions {
@@ -89,6 +93,8 @@ impl Default for HttpOptions {
             write_timeout: DEFAULT_WRITE_TIMEOUT,
             keep_alive: DEFAULT_KEEP_ALIVE,
             authorization: None,
+            #[cfg(feature = "authorization-server")]
+            authorization_server: None,
         }
     }
 }
@@ -231,6 +237,8 @@ pub fn serve<H: Handler>(
             .authorization
             .as_ref()
             .and_then(|authorization| authorization.policy.clone()),
+        #[cfg(feature = "authorization-server")]
+        oauth: http.authorization_server.clone(),
         notifications: options
             .session
             .extension_notifications
@@ -305,6 +313,32 @@ fn validate(http: &HttpOptions, options: &Options) -> Result<(), ServeError> {
             "HTTP connection and time limits are out of range",
         ));
     }
+    #[cfg(feature = "authorization-server")]
+    if let Some(server) = &http.authorization_server {
+        let Some(authorization) = &http.authorization else {
+            return Err(ServeError::Options(
+                "an embedded authorization server needs bearer token protection",
+            ));
+        };
+        let resource = &authorization.resource;
+        let issued_here = resource
+            .authorization_servers()
+            .iter()
+            .any(|issuer| issuer == server.issuer());
+        // Its routes run first, including every path under the interaction
+        // path, so none of them may cover the endpoint or the resource metadata.
+        let collides = server.paths().any(|path| {
+            path == http.path || resource.metadata_paths().any(|metadata| metadata == path)
+        }) || server.routes(&http.path)
+            || resource
+                .metadata_paths()
+                .any(|metadata| server.routes(metadata));
+        if !issued_here || collides {
+            return Err(ServeError::Options(
+                "the authorization server's issuer must be listed by the resource and its paths must not collide",
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -323,6 +357,8 @@ struct Shared {
     endpoint: Endpoint,
     verifier: Option<Arc<dyn TokenVerifier>>,
     policy: Option<Arc<dyn ScopePolicy>>,
+    #[cfg(feature = "authorization-server")]
+    oauth: Option<Arc<crate::oauth::AuthorizationServer>>,
     notifications: HashSet<String>,
     events: SyncSender<Event>,
     dispatcher: Thread,

@@ -39,7 +39,8 @@ from your own runtime.
 - **Bearer token protection.** Require OAuth access tokens on HTTP: the library
   serves discovery metadata, refuses tokens issued for other servers and
   missing scopes, and passes your handler the grant. You verify tokens with
-  your own authorization server. Without it, bind loopback.
+  your own authorization server, or issue tokens from the optional embedded
+  OAuth 2.1 server. Without it, bind loopback.
 - **User confirmation.** Ask a yes/no question through the host, using legacy
   continuations or modern input-required replies and retries.
 - **Richer user input.** Collect fields and single/multiple selections, or ask
@@ -126,6 +127,7 @@ authority by itself.
 - [Lanes, deadlines and cancellation](docs/guides/stdio.md)
 - [Streamable HTTP](docs/guides/http.md)
 - [Bearer token protection](docs/guides/authorization.md)
+- [Embedded authorization server](docs/guides/authorization-server.md)
 - [Tool catalog pagination](docs/guides/pagination.md)
 - [Subscriptions and change notifications](docs/guides/subscriptions.md)
 - [User confirmation](docs/guides/confirmation.md)

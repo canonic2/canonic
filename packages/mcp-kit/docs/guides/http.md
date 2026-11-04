@@ -65,6 +65,7 @@ refused, because one session serves every POST.
 | `write_timeout` | 30 s | 1–300 s | Time for one write; a stalled client counts as closed |
 | `keep_alive` | 15 s | 1–300 s | Comment interval on a quiet listen stream |
 | `authorization` | None | — | Bearer token protection; see [authorization](authorization.md) |
+| `authorization_server` | None | — | An embedded OAuth server on the same listener (feature `authorization-server`); see [authorization server](authorization-server.md) |
 
 The request body limit is `SessionOptions::max_message_bytes`.
 
