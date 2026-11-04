@@ -84,13 +84,14 @@ previews supply the pages. See
 ## Requirements
 
 - VS Code 1.123 or later.
-- Screenshots and handoffs use a bundled Electron helper, which runs on macOS
-  13 or later, Windows, and Linux with a display.
+- Screenshots, handoffs and design-system exports use Workbench's browser
+  runtime, which this release ships only in the Intel macOS (`darwin-x64`)
+  package and which needs macOS 15 or later.
 - The frameworks your previews use (React, Vue, Astro, React Native Web) come
   from your project.
 
 See [The VS Code extension](https://canonic.sh/workbench/docs/extension/) for
-the server, its ports, the capture helper, and workspace trust.
+the server, its ports, the browser runtime, and workspace trust.
 
 ## License
 
@@ -100,7 +101,11 @@ Canonic is proprietary; all rights reserved. See [LICENSE](LICENSE).
 [modern-screenshot](https://github.com/qq15725/modern-screenshot) (MIT, ©
 qq15725).
 
-The bundled Electron runtime includes its MIT license and Chromium's third-party
-notices in `electron-runtime/runtime.tar.gz`, preserved in the extracted cache.
+The bundled Node includes its license in `server/node/runtime/runtime.tar.gz`,
+preserved where it is unpacked. The browser runtime is built on the Chromium
+Embedded Framework (BSD) and Chromium: its archive, `runtime/package/runtime.tar.gz`,
+carries CEF's license (`Contents/Resources/CEF-LICENSE.txt`) and Chromium's
+credits with every third-party license it includes
+(`Contents/Resources/CREDITS.html`), preserved where it is unpacked.
 
 Downloads and release notes: <https://github.com/canonic2/canonic/releases>.

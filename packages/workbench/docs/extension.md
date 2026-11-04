@@ -84,24 +84,25 @@ Each space gets its own server:
 
 **Workbench: Copy Canvas URL** gives the actual address.
 
-## The capture helper
+## The browser runtime
 
-Packaged builds include a capture helper built on Electron. It starts with
-the first space's server, is shared by every space in the window, and
+Screenshots, handoffs, design-system exports and the canvas's background
+images come from Workbench's browser runtime, a Chromium (CEF) that
+Workbench starts and owns. It is shared by every space in the window and
 stays running until the extension stops, so screenshots are fast:
 
 - It keeps an inert, scriptless copy of the page you're viewing up to date in
   the background. See [How screenshots are taken](annotations-and-handoff.md#how-screenshots-are-taken).
 - It renders the background images and static copies that artboards you
-  aren't running show on the canvas, in separate helper processes started when
-  first needed.
-- On macOS it runs as a background agent, with no Dock icon or window.
-- On first activation the runtime is unpacked into the extension's storage.
-  Later activations reuse it, and runtimes from older versions are removed.
-  The first launch after a runtime update can take longer while it is unpacked.
-- If it crashes, it restarts and restores the latest view, waiting longer
-  between attempts while it keeps failing. If a page hangs it, the helper is
-  replaced, and the page is loaded again the next time the canvas asks for it.
+  aren't running show on the canvas in a second runtime process, started when
+  first needed, at a lower priority so your other apps stay responsive.
+- Pages are windowless: it shows no window, and on macOS no Dock icon.
+- The first time it's needed, the runtime is unpacked into
+  `~/.canonic-workbench/runtime/`, next to the bundled Node (see below). The
+  first screenshot after an update can take longer while it is unpacked.
+- If it crashes, the next screenshot starts it again and restores the latest
+  view. If a page stops answering, that page is closed, and the page is loaded
+  again the next time it's needed.
 
 Your project's code (computed definitions, `workbench.config.ts`, Astro and
 Vue pages) runs on the Node 24 the extension ships, so you don't need Node
@@ -122,10 +123,15 @@ node: /usr/local/bin/node
 A path that doesn't exist, or a Node older than 24, stops project code with
 an error naming this setting.
 
-Screenshots need this helper. It runs on macOS 13 or later, Windows, and Linux
-with a display. Elsewhere, or if it can't be unpacked or started, the camera
-and **Copy handoff** show the reason instead of a screenshot, and a
-design-system export lists the missing reference screenshots as warnings.
+Screenshots need the browser runtime. This release ships it only in the Intel
+macOS (`darwin-x64`) `.vsix`, and it needs macOS 15 or later; the other
+platforms' packages don't include it.
+Without it, or if it can't be unpacked or started, the camera and **Copy
+handoff** show the reason instead of a screenshot (for example, "Screenshots
+need Workbench's browser runtime, and this copy of Workbench has no browser
+runtime for linux-x64."), a design-system export lists the missing reference
+screenshots as warnings, and the canvas shows placeholders for artboards you
+aren't running.
 
 The [iOS Simulator](ios-simulator.md) and [app window](windows.md) streams use
 a separate native window capture helper and need Screen Recording permission.
@@ -153,7 +159,7 @@ installation.
 
 ## Logs
 
-Errors from the canvas, the capture helper, the preview compiler, the server,
+Errors from the canvas, the browser runtime, the preview compiler, the server,
 and handoffs are written to the **Workbench** output log. Run **Workbench: Show Log** to open it.
 
 - VS Code manages the log and its retention. Nothing is written to your project.
@@ -181,8 +187,10 @@ In your project, Workbench writes only:
 Outside the project:
 
 - The camera's screenshots go to your browser's or editor's downloads folder.
-- The bundled runtime and the window capture helper are unpacked into the
-  extension's storage in your editor's user data folder (`globalStorage`).
+- The bundled Node and browser runtime are unpacked into
+  `~/.canonic-workbench/runtime/`.
+- The browser runtime's page profiles and the window capture helper go into
+  the extension's storage in your editor's user data folder (`globalStorage`).
   A standalone server uses the system's temporary folder instead.
 - The log is kept by VS Code. See [Logs](#logs).
 
@@ -195,7 +203,7 @@ Network access:
   [URL implementations](lenses.md), and Storybook. Implementations load
   through a proxy on `127.0.0.1` that adds the
   [preview bridge](lenses.md#screenshots-through-a-url-lens) to their pages.
-  If the bridge hasn't connected, the capture helper loads a lens's URL
+  If the bridge hasn't connected, the browser runtime loads a lens's URL
   itself to capture it.
 - `url: auto` probes local ports for a running Storybook, and start commands
   probe the `check` and `ready` addresses you configure.
@@ -212,7 +220,7 @@ To switch a `.vsix` install in VS Code to Marketplace updates, uninstall it
 and install **Canonic Workbench** from the Extensions view.
 
 Then run **Developer: Reload Window** in each open project window. Installing
-replaces the files on disk, but running windows, servers, capture helpers,
+replaces the files on disk, but running windows, servers, browser runtimes,
 and preview evaluators keep the old code until their window reloads. Reloading
 the canvas or running **Refresh Pages** isn't enough.
 

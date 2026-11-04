@@ -330,8 +330,10 @@ See [iOS Simulator troubleshooting](ios-simulator.md#troubleshooting) and
 | --- | --- |
 | A lens screenshot shows a sign-in page, or not what you typed, opened, or scrolled to | The page hadn't finished loading, so its preview bridge hadn't connected, and the helper loaded the URL itself. Take the screenshot again. See [Screenshots through a URL lens](lenses.md#screenshots-through-a-url-lens). |
 | Screenshots of one page fail with a message | The page contains an `iframe`, `object`, or `embed`, or a canvas or video loaded from another origin without CORS. These pages can't be captured. |
-| A font or image is missing in the first screenshot after loading | The helper's copy was still loading assets. Take it again. |
-| Screenshots fail with an error | Read **Workbench: Show Log**. The capture helper needs macOS 13 or later, Windows, or Linux with a display; see [The capture helper](extension.md#the-capture-helper). |
+| A font or image is missing in the first screenshot after loading | The runtime's copy was still loading assets. Take it again. |
+| Screenshots fail with an error | Read **Workbench: Show Log**. |
+| Screenshots say this copy of Workbench has no browser runtime | This release ships the browser runtime only in the Intel macOS (`darwin-x64`) package; other packages take no screenshots, handoff images or exports. See [The browser runtime](extension.md#the-browser-runtime). |
+| Screenshots say the browser runtime needs a display on Linux | Run VS Code in a desktop session, with `DISPLAY` or `WAYLAND_DISPLAY` set. |
 
 See [What screenshots can and can't include](annotations-and-handoff.md#what-screenshots-can-and-cant-include).
 

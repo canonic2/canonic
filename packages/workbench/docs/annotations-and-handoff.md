@@ -71,16 +71,15 @@ project.
 
 ### How screenshots are taken
 
-A background capture helper keeps a live copy of the page you're looking at:
+Workbench's browser runtime keeps a live copy of the page you're looking at:
 its DOM, open shadow roots, styles, form values, scroll positions, hover
 state, and your annotations. When you take a screenshot, it brings the copy up
 to date and captures it. That is why screenshots are fast and show what you see,
 including what you typed and where you scrolled, without running your page's
 scripts a second time.
 
-The helper ships with the extension and starts with the workbench. On macOS it
-runs in the background with no Dock icon or window. See
-[The capture helper](extension.md#the-capture-helper).
+The runtime ships with the extension and runs in the background, with no
+window and no Dock icon. See [The browser runtime](extension.md#the-browser-runtime).
 
 ### What screenshots can and can't include
 

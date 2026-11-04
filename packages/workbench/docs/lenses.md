@@ -297,7 +297,7 @@ answering.
 Screenshots and handoffs of a URL lens show the page as you see it: open
 dialogs and menus, form values, and scroll positions included. The preview
 bridge the proxy adds to each page sends its live document to the workbench,
-which renders it in the capture helper.
+which renders it in its browser runtime.
 
 - The bridge sends the visible document: DOM, open shadow roots, styles, form
   values, and scroll positions. It doesn't send cookies, storage,
@@ -306,7 +306,7 @@ which renders it in the capture helper.
   its messages only from the active iframe.
 
 If the bridge can't connect, for example because the page hasn't finished
-loading, the capture helper loads the same URL itself, in its own session,
+loading, the browser runtime loads the same URL itself, in its own session,
 and lays your annotations over the result. That copy starts fresh: it doesn't
 include what you did in the page, and a page behind sign-in may show its
 sign-in page.

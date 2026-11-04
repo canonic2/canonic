@@ -139,7 +139,7 @@ hidden until the file is back.
 
 Each space runs on its own [server](extension.md#the-server), with its own
 port, [start commands](configuration.md#start-commands), and [preview compiler](extension.md#the-preview-compiler).
-All spaces in a window share one [capture helper](extension.md#the-capture-helper).
+All spaces in a window share one [browser runtime](extension.md#the-browser-runtime).
 
 - A window's own space starts with the window.
 - Any other space starts the first time you switch to it, and keeps running

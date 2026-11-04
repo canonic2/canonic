@@ -33,10 +33,12 @@ Or open the Extensions view, choose **…** › **Install from VSIX…**, and pi
 file. Forks have the same menu, and their own command-line tool, such as
 `cursor --install-extension`.
 
-Each file bundles the runtime its platform needs for screenshots and
-TypeScript previews, so there is nothing else to install. VS Code 1.123 or later
-is required. Screenshots need macOS 13 or later, Windows, or Linux with a
-display; see [The capture helper](extension.md#the-capture-helper).
+Each file bundles the Node its platform needs for TypeScript previews, so
+there is nothing else to install. VS Code 1.123 or later is required.
+Screenshots, handoffs and exports need Workbench's browser runtime, which this
+release ships only in the Intel macOS (`darwin-x64`) file and which needs
+macOS 15 or later; see
+[The browser runtime](extension.md#the-browser-runtime).
 
 > The release builds are unsigned. Desktop macOS is the most exercised
 > platform; Windows and Linux builds have not been validated as thoroughly.
