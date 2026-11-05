@@ -36,7 +36,7 @@ fn documentation_of(page: &str) -> Documentation {
     let bytes = build::bundle(&folder.0).expect("bundle the guide");
     let bundle: &'static Bundle =
         Box::leak(Box::new(Bundle::new(Box::leak(bytes.into_boxed_slice()))));
-    Documentation::new(bundle, "acme", "Acme", "2.0.0")
+    Documentation::new(bundle, "Acme", "2.0.0")
 }
 
 struct TempFolder(PathBuf);
@@ -71,7 +71,7 @@ fn docs_tools_list_validate_and_answer_through_the_driver() {
     host.send(&json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}));
     assert_eq!(host.recv()["result"], catalog.listing());
 
-    host.call(2, "acme_docs_search", json!({"query":"ACME START"}));
+    host.call(2, "docs_search", json!({"query":"ACME START"}));
     let reply = host.recv();
     assert_eq!(reply["result"]["isError"], false);
     assert_eq!(
@@ -82,26 +82,26 @@ fn docs_tools_list_validate_and_answer_through_the_driver() {
 
     host.call(
         3,
-        "acme_docs_read",
+        "docs_read",
         json!({"path":"guides/start.md","limit":400}),
     );
     assert_eq!(host.recv()["result"]["structuredContent"]["content"], GUIDE);
 
     host.call(
         4,
-        "acme_docs_read",
+        "docs_read",
         json!({"path":"guides/start.md","project":"acme"}),
     );
     let refused = host.recv();
     assert_eq!(refused["result"]["isError"], true);
     assert!(result_text(&refused).contains("project"));
 
-    host.call(5, "acme_docs_read", json!({"path":"../start.md"}));
+    host.call(5, "docs_read", json!({"path":"../start.md"}));
     let missing = host.recv();
     assert_eq!(missing["result"]["isError"], true);
     assert_eq!(
         result_text(&missing),
-        "Unknown documentation page; call acme_docs_list."
+        "Unknown documentation page; call docs_list."
     );
     host.assert_quiet();
 }
@@ -119,7 +119,7 @@ fn escaping_heavy_pages_paginate_within_the_default_output_frame() {
     for id in 1.. {
         host.call(
             id,
-            "acme_docs_read",
+            "docs_read",
             json!({"path":"guides/start.md","start_line":start,"limit":400}),
         );
         let reply = host.recv();
@@ -133,7 +133,7 @@ fn escaping_heavy_pages_paginate_within_the_default_output_frame() {
     }
     assert_eq!(content, page);
 
-    host.call(100, "acme_docs_search", json!({"query":"acme","limit":100}));
+    host.call(100, "docs_search", json!({"query":"acme","limit":100}));
     let reply = host.recv();
     assert_eq!(reply["result"]["isError"], false);
     let result = &reply["result"]["structuredContent"];
@@ -164,7 +164,7 @@ fn an_independent_runtime_answers_docs_calls_through_the_core() {
     let call = rpc::request(
         json!(7),
         "tools/call",
-        json!({"name":"acme_docs_list","arguments":{}}),
+        json!({"name":"docs_list","arguments":{}}),
     );
     let Inbound::Tool { id, call } = session.receive_value(call) else {
         panic!("tool call");

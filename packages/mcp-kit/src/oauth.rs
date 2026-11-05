@@ -21,8 +21,8 @@ pub use client::{
     MAX_URI_BYTES, RegisteredClient,
 };
 pub use store::{
-    AccessRecord, CodeRecord, CodeTake, Digest, FamilyRecord, GrantStore, MemoryStore,
-    PendingRecord, Rotated, Rotation, StoreError,
+    AccessRecord, CapacityError, CodeRecord, CodeTake, Digest, FamilyRecord, GrantStore,
+    MemoryStore, PendingRecord, Rotated, Rotation, StoreError,
 };
 
 use crate::http::{

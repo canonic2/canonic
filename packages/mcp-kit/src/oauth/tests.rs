@@ -642,6 +642,23 @@ fn authorization_requests_refuse_each_step_and_never_redirect_unverified() {
             authorization(&[("redirect_uri", "http://localhost:8888/callback")]),
             "redirect",
         ),
+        // Userinfo that looks like the loopback host and port: browsers send
+        // these to evil.example.
+        (
+            authorization(&[(
+                "redirect_uri",
+                "http://127.0.0.1:1234@evil.example/callback",
+            )]),
+            "redirect",
+        ),
+        (
+            authorization(&[("redirect_uri", "http://127.0.0.1:@evil.example/callback")]),
+            "redirect",
+        ),
+        (
+            authorization(&[("redirect_uri", "http://127.0.0.1:12ab/callback")]),
+            "redirect",
+        ),
     ] {
         let response = harness.authorize(&pairs);
         assert_eq!(response.status, 400);
@@ -656,6 +673,14 @@ fn authorization_requests_refuse_each_step_and_never_redirect_unverified() {
         (vec![("code_challenge_method", "plain")], "invalid_request"),
         (vec![("code_challenge_method", "")], "invalid_request"),
         (vec![("code_challenge", "short")], "invalid_request"),
+        (
+            vec![("code_challenge", &"a~".repeat(22)[..43])],
+            "invalid_request",
+        ),
+        (
+            vec![("code_challenge", &"a.".repeat(22)[..43])],
+            "invalid_request",
+        ),
         (
             vec![("resource", "https://other.example.com/mcp")],
             "invalid_target",
@@ -935,7 +960,7 @@ fn a_replay_before_family_creation_leaves_no_live_grant() {
 
 #[test]
 fn completed_sign_ins_keep_the_pending_queue_bounded() {
-    let harness = harness_with(options(), MemoryStore::with_capacity(2));
+    let harness = harness_with(options(), MemoryStore::with_capacity(2).unwrap());
     let (waiting, _) = harness.start(&authorization(&[]));
     // No token requests run, so nothing but the store itself can trim it.
     for _ in 0..50 {
@@ -1144,7 +1169,7 @@ fn each_client_holds_a_bounded_number_of_client_credentials_grants() {
         let mut options = options();
         options.client_grants = limit;
         client_grants_stay_within(
-            &harness_with(options, MemoryStore::with_capacity(64)),
+            &harness_with(options, MemoryStore::with_capacity(64).unwrap()),
             limit,
         );
     }
@@ -1591,7 +1616,14 @@ fn the_store_receives_digests_never_secret_values() {
 
 #[test]
 fn memory_store_evicts_old_pending_and_keeps_one_access_token_per_family() {
-    let harness = harness_with(options(), MemoryStore::with_capacity(2));
+    for refused in [0, store::MAX_MEMORY_CAPACITY + 1] {
+        assert_eq!(
+            MemoryStore::with_capacity(refused).err(),
+            Some(CapacityError(refused))
+        );
+    }
+    assert!(MemoryStore::with_capacity(store::MAX_MEMORY_CAPACITY).is_ok());
+    let harness = harness_with(options(), MemoryStore::with_capacity(2).unwrap());
     let (first, _) = harness.start(&authorization(&[]));
     let (second, _) = harness.start(&authorization(&[]));
     let (third, _) = harness.start(&authorization(&[]));
@@ -1609,7 +1641,7 @@ fn memory_store_evicts_old_pending_and_keeps_one_access_token_per_family() {
             .expect("the store never fills")
             .to_owned();
     }
-    let store = MemoryStore::with_capacity(1);
+    let store = MemoryStore::with_capacity(1).unwrap();
     let family = |id: &str| FamilyRecord {
         id: id.to_owned(),
         subject: "user-1".to_owned(),

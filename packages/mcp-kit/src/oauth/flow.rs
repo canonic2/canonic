@@ -43,8 +43,13 @@ impl AuthorizationServer {
         if param("response_type") != Some("code") {
             return fail("unsupported_response_type");
         }
-        let challenge = param("code_challenge")
-            .filter(|challenge| challenge.len() == 43 && wire::unreserved(challenge));
+        // An S256 challenge is unpadded base64url: no `.` or `~`, unlike a verifier.
+        let challenge = param("code_challenge").filter(|challenge| {
+            challenge.len() == 43
+                && challenge
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        });
         let Some(challenge) = challenge.filter(|_| param("code_challenge_method") == Some("S256"))
         else {
             return fail("invalid_request");

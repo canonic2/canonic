@@ -119,18 +119,18 @@ pub fn embed() -> Result<Vec<Source>, BuildError> {
     let root =
         env::var_os("CARGO_MANIFEST_DIR").ok_or(BuildError::Environment("CARGO_MANIFEST_DIR"))?;
     let out = env::var_os("OUT_DIR").ok_or(BuildError::Environment("OUT_DIR"))?;
-    let docs = Path::new(&root).join("docs");
-    println!("cargo:rerun-if-changed={}", docs.display());
-    embed_into(&docs, Path::new(&out))
+    embed_into(&Path::new(&root).join("docs"), Path::new(&out))
 }
 
-/// Bundles `docs` into `out` as [`FILE_NAME`] and returns the selected sources.
+/// Bundles `docs` into `out` as [`FILE_NAME`], asks Cargo to rebuild when
+/// `docs` changes and returns the selected sources.
 ///
 /// # Errors
 ///
 /// Returns [`BuildError`] when the folder cannot be bundled or the bundle
 /// cannot be written.
 pub fn embed_into(docs: &Path, out: &Path) -> Result<Vec<Source>, BuildError> {
+    println!("cargo:rerun-if-changed={}", docs.display());
     let sources = sources(docs)?;
     let bytes = encode(&sources)?;
     fs::write(out.join(FILE_NAME), bytes).map_err(|source| BuildError::Io {
@@ -140,7 +140,9 @@ pub fn embed_into(docs: &Path, out: &Path) -> Result<Vec<Source>, BuildError> {
     Ok(sources)
 }
 
-/// The bundle for `docs`, without writing it.
+/// The bundle for `docs`, without writing it. Declares nothing to Cargo: a
+/// build script that calls it prints `cargo:rerun-if-changed` for `docs`
+/// itself.
 ///
 /// # Errors
 ///
@@ -152,7 +154,8 @@ pub fn bundle(docs: &Path) -> Result<Vec<u8>, BuildError> {
 /// The Markdown pages under `docs`, in bundle order: bytewise by relative path.
 ///
 /// Recurses into folders, skips entries whose names start with `.` and
-/// ignores files not ending in `.md`.
+/// ignores files not ending in `.md`. Declares nothing to Cargo, like
+/// [`bundle`].
 ///
 /// # Errors
 ///

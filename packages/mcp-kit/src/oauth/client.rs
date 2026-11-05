@@ -261,13 +261,26 @@ fn is_loopback(host: &str) -> bool {
             .is_ok_and(|ip| ip.is_loopback())
 }
 
-/// The scheme, host and everything after the port of an `http` loopback IP
-/// literal URI; `localhost` names get no port exception.
+/// The scheme, host and everything after the port of a valid `http` loopback
+/// IP literal URI whose port, if any, is decimal digits; `localhost` names get
+/// no port exception. Userinfo is refused, so `127.0.0.1:1@evil.example`
+/// cannot pass as a loopback host.
 fn loopback_ip_parts(uri: &str) -> Option<(String, String, String)> {
+    if !valid_redirect(uri) {
+        return None;
+    }
     let rest = uri.strip_prefix("http://")?;
     let split = rest.find(['/', '?']).unwrap_or(rest.len());
     let (authority, tail) = rest.split_at(split);
     let host = host(authority);
+    let port = &authority[host.len()..];
+    if !port.is_empty()
+        && !port
+            .strip_prefix(':')
+            .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+    {
+        return None;
+    }
     host.trim_start_matches('[')
         .trim_end_matches(']')
         .parse::<IpAddr>()

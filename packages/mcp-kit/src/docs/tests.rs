@@ -91,7 +91,7 @@ fn leak(bytes: Vec<u8>) -> &'static Bundle {
 
 fn docs_for(bytes: Vec<u8>) -> (Documentation, &'static Bundle) {
     let bundle = leak(bytes);
-    (Documentation::new(bundle, "acme", "Acme", "1.2.3"), bundle)
+    (Documentation::new(bundle, "Acme", "1.2.3"), bundle)
 }
 
 fn sample() -> (Documentation, &'static Bundle) {
@@ -108,8 +108,7 @@ fn go() -> Result<(), Interrupted> {
 }
 
 fn call(docs: &Documentation, tool: &str, arguments: &Value) -> Result<Value, DocsError> {
-    docs.call(&format!("acme_docs_{tool}"), arguments, &go)
-        .unwrap()
+    docs.call(&format!("docs_{tool}"), arguments, &go).unwrap()
 }
 
 /// Every page's bytes, reassembled from reads of `limit` lines.
@@ -478,12 +477,12 @@ fn paths_must_match_a_bundled_page_exactly() {
             assert_eq!(
                 error,
                 DocsError::NotFound {
-                    list_tool: "acme_docs_list".into()
+                    list_tool: "docs_list".into()
                 }
             );
             assert_eq!(
                 error.to_string(),
-                "Unknown documentation page; call acme_docs_list."
+                "Unknown documentation page; call docs_list."
             );
         }
     }
@@ -576,7 +575,7 @@ fn interruption_partway_through_list_discards_rows_and_reuses_index() {
         }
     };
     assert_eq!(
-        docs.call("acme_docs_list", &json!({}), &check).unwrap(),
+        docs.call("docs_list", &json!({}), &check).unwrap(),
         Err(DocsError::Cancelled)
     );
     assert_eq!(calls.load(Ordering::Relaxed), 3);
@@ -597,7 +596,7 @@ fn interruption_after_preparation_cancels_a_read_past_the_first_line() {
     };
     let arguments = json!({"path":"faq.md","start_line":2,"limit":1});
     assert_eq!(
-        docs.call("acme_docs_read", &arguments, &once).unwrap(),
+        docs.call("docs_read", &arguments, &once).unwrap(),
         Err(DocsError::Cancelled)
     );
     assert_eq!(bundle.stages.counts(), [1, 1, 0]);
@@ -616,7 +615,7 @@ fn interruption_after_preparation_cancels_a_read_past_the_first_line() {
     };
     let skipped = json!({"path":"long.md","start_line":CHECK_INTERVAL * 2,"limit":1});
     assert_eq!(
-        docs.call("acme_docs_read", &skipped, &twice).unwrap(),
+        docs.call("docs_read", &skipped, &twice).unwrap(),
         Err(DocsError::Cancelled)
     );
     assert_eq!(calls.load(Ordering::Relaxed), 3);
@@ -632,7 +631,7 @@ fn interruption_cancels_without_partial_results_and_keeps_prepared_state() {
         ("read", json!({"path":"faq.md"})),
     ] {
         let outcome = docs
-            .call(&format!("acme_docs_{tool}"), &arguments, &stop)
+            .call(&format!("docs_{tool}"), &arguments, &stop)
             .unwrap();
         assert_eq!(outcome, Err(DocsError::Cancelled), "{tool}");
     }
@@ -646,7 +645,7 @@ fn interruption_cancels_without_partial_results_and_keeps_prepared_state() {
         }
     };
     let outcome = docs
-        .call("acme_docs_search", &json!({"query":"acme"}), &later)
+        .call("docs_search", &json!({"query":"acme"}), &later)
         .unwrap();
     assert_eq!(outcome, Err(DocsError::Cancelled));
     call(&docs, "read", &json!({"path":"faq.md"})).unwrap();
@@ -769,7 +768,14 @@ fn corrupt_bundles_fail_every_call_without_affecting_other_tools() {
 fn tools_publish_strict_read_only_schemas() {
     let (docs, _) = sample();
     let catalog = Catalog::new(docs.tools()).unwrap();
-    for name in ["acme_docs_list", "acme_docs_search", "acme_docs_read"] {
+    assert_eq!(
+        docs.tools()
+            .iter()
+            .map(|tool| tool.name.as_str())
+            .collect::<Vec<_>>(),
+        ["docs_list", "docs_search", "docs_read"]
+    );
+    for name in ["docs_list", "docs_search", "docs_read"] {
         let tool = catalog.get(name).unwrap();
         assert!(docs.handles(name));
         assert!(tool.read_only());
@@ -778,8 +784,9 @@ fn tools_publish_strict_read_only_schemas() {
         assert_eq!(tool.input_schema["additionalProperties"], false);
         assert!(tool.description.contains("Acme"));
     }
-    assert!(!docs.handles("acme_docs_open"));
-    assert_eq!(docs.list_tool(), "acme_docs_list");
+    assert!(!docs.handles("docs_open"));
+    assert!(!docs.handles("acme_docs_read"));
+    assert_eq!(docs.list_tool(), "docs_list");
 }
 
 #[test]
@@ -792,6 +799,6 @@ fn default_results_carry_structured_data_or_recovery_text() {
     assert!(failure.is_error);
     assert_eq!(
         serde_json::to_value(&failure.content).unwrap(),
-        json!([{"type":"text","text":"Unknown documentation page; call acme_docs_list."}])
+        json!([{"type":"text","text":"Unknown documentation page; call docs_list."}])
     );
 }

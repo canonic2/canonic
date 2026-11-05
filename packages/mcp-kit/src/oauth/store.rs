@@ -206,6 +206,13 @@ pub enum StoreError {
 
 /// Atomic storage for pending authorizations, codes, families and access
 /// tokens. Every method is one atomic operation.
+///
+/// The library answers the client as soon as a method returns, so a durable
+/// backend returns `Ok` only once the change survives a restart. Losing an
+/// acknowledged [`take_pending`](Self::take_pending),
+/// [`take_code`](Self::take_code), [`rotate`](Self::rotate) or
+/// [`revoke_family`](Self::revoke_family) brings back a spent code, a replaced
+/// refresh token or a revoked family.
 pub trait GrantStore: Send + Sync {
     /// Inserts a pending authorization.
     ///
@@ -311,6 +318,11 @@ pub trait GrantStore: Send + Sync {
     fn purge_expired(&self, now: SystemTime, limit: usize) -> Result<usize, StoreError>;
 }
 
+/// A [`MemoryStore`] capacity outside 1..=[`MAX_MEMORY_CAPACITY`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("memory store capacity {0} is outside 1..={MAX_MEMORY_CAPACITY}")]
+pub struct CapacityError(pub usize);
+
 /// An in-memory [`GrantStore`] for tests and single-process servers. Its
 /// records are lost when the process ends, so clients sign in again.
 pub struct MemoryStore {
@@ -334,17 +346,25 @@ impl MemoryStore {
     /// A store holding up to [`DEFAULT_MEMORY_CAPACITY`] of each record kind.
     #[must_use]
     pub fn new() -> Self {
-        Self::with_capacity(DEFAULT_MEMORY_CAPACITY)
-    }
-
-    /// A store holding up to `capacity` of each record kind, clamped to
-    /// 1..=[`MAX_MEMORY_CAPACITY`].
-    #[must_use]
-    pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            capacity: capacity.clamp(1, MAX_MEMORY_CAPACITY),
+            capacity: DEFAULT_MEMORY_CAPACITY,
             state: Mutex::default(),
         }
+    }
+
+    /// A store holding up to `capacity` of each record kind.
+    ///
+    /// # Errors
+    /// Returns [`CapacityError`] when `capacity` is outside
+    /// 1..=[`MAX_MEMORY_CAPACITY`].
+    pub fn with_capacity(capacity: usize) -> Result<Self, CapacityError> {
+        if !(1..=MAX_MEMORY_CAPACITY).contains(&capacity) {
+            return Err(CapacityError(capacity));
+        }
+        Ok(Self {
+            capacity,
+            state: Mutex::default(),
+        })
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {

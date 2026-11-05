@@ -225,8 +225,13 @@ answers `200` for unknown tokens.
 restarting the process signs everyone out. For durable storage, implement
 `GrantStore` over your database. Every method is one atomic operation, and the
 records contain hashes, never usable secrets, so a copied database cannot be
-replayed. Your backend still needs integrity: losing a write may only end a
-sign-in early, never extend one.
+replayed. The library answers the client as soon as a method returns, so
+return success only after the change survives a restart. This matters most
+for `take_pending`, `take_code`, `rotate` and `revoke_family`: if one of them
+is lost, a used code works again, a replaced refresh token becomes current
+again, or a revoked sign-in comes back. A lost insertion only signs someone
+out early, and a lost `purge_expired` is harmless. If your backend can lose
+acknowledged writes, tell your operators about that risk.
 
 The library removes expired records during token requests. A full
 `MemoryStore` drops the oldest pending sign-in, because anyone can start one,

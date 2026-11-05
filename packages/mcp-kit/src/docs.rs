@@ -16,10 +16,10 @@
 //!
 //! // A real server embeds its build output: `static GUIDES: Bundle = canonic_mcp_kit::include_docs!();`
 //! static GUIDES: Bundle = Bundle::new(b"");
-//! let docs = Documentation::new(&GUIDES, "acme", "Acme", "1.0.0");
+//! let docs = Documentation::new(&GUIDES, "Acme", "1.0.0");
 //! let catalog = Catalog::new(docs.tools())?;
-//! assert!(catalog.get("acme_docs_search").is_some());
-//! assert!(docs.handles("acme_docs_read"));
+//! assert!(catalog.get("docs_search").is_some());
+//! assert!(docs.handles("docs_read"));
 //! # Ok::<(), canonic_mcp_kit::CatalogError>(())
 //! ```
 
@@ -258,19 +258,19 @@ enum Kind {
 }
 
 impl Documentation {
-    /// Tools named `<prefix>_docs_list`, `_search` and `_read`, describing
+    /// Tools named `docs_list`, `docs_search` and `docs_read`, describing
     /// `product`'s guides and reporting `version` in every result.
     ///
-    /// Tool names are checked when the tools are added to a [`crate::Catalog`].
+    /// The MCP server supplies the namespace; tool names need no product prefix.
     #[must_use]
-    pub fn new(bundle: &'static Bundle, prefix: &str, product: &str, version: &str) -> Self {
+    pub fn new(bundle: &'static Bundle, product: &str, version: &str) -> Self {
         Self {
             bundle,
             product: product.to_owned(),
             version: version.to_owned(),
-            list: format!("{prefix}_docs_list"),
-            search: format!("{prefix}_docs_search"),
-            read: format!("{prefix}_docs_read"),
+            list: "docs_list".into(),
+            search: "docs_search".into(),
+            read: "docs_read".into(),
         }
     }
 

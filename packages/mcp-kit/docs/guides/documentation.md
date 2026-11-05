@@ -39,8 +39,14 @@ prints that line, Cargo reruns it only when a listed path changes rather than
 any file in your package. If your build script does other work, print
 `cargo:rerun-if-changed` for that work's inputs too.
 
-Embed the bundle in a `static` and publish the tools with your own prefix and
-product name. This server answers only documentation calls:
+To bundle another folder, or write somewhere other than Cargo's output folder,
+call `embed_into(docs, out)` instead; it declares `docs` for rebuilds the same
+way. The lower-level `bundle` and `sources` functions declare nothing, so a
+build script that uses them prints `cargo:rerun-if-changed` for the folder
+itself.
+
+Embed the bundle in a `static` and publish the tools with your product's
+display name. This server answers only documentation calls:
 
 ```rust,ignore
 use canonic_mcp_kit::{
@@ -52,15 +58,15 @@ use std::{io, sync::{Arc, LazyLock}};
 
 static GUIDES: Bundle = canonic_mcp_kit::include_docs!();
 static DOCS: LazyLock<Documentation> =
-    LazyLock::new(|| Documentation::new(&GUIDES, "acme", "Acme", env!("CARGO_PKG_VERSION")));
+    LazyLock::new(|| Documentation::new(&GUIDES, "Acme", env!("CARGO_PKG_VERSION")));
 
 struct Acme;
 
 impl Handler for Acme {
     fn initialize(&self, _: &Client) -> Result<ServerInfo, RpcError> {
         Ok(ServerInfo::new("acme", env!("CARGO_PKG_VERSION")).with_instructions(
-            "For usage help, or when a request is refused, use acme_docs_list, \
-             acme_docs_search and acme_docs_read.",
+            "For usage help, or when a request is refused, use docs_list, \
+             docs_search and docs_read.",
         ))
     }
 
@@ -115,8 +121,8 @@ repository instructions and machine-specific values do not belong in `docs/`.
 
 ## The three tools
 
-With the prefix `acme`, the tools are `acme_docs_list`, `acme_docs_search` and
-`acme_docs_read`. They are annotated read-only, idempotent and closed-world,
+The tools are `docs_list`, `docs_search` and
+`docs_read`. They are annotated read-only, idempotent and closed-world,
 and their schemas refuse unknown arguments. Every result includes `version`,
 the version you passed to `Documentation::new`.
 
