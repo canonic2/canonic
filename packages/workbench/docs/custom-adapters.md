@@ -199,7 +199,7 @@ the button logs `acme-press` in **Actions**. The
 [checker](workbench-previews.md#command-line-tools) reports:
 
 ```text
-$ <extension>/server/bin/<platform>-<arch>/workbench-server check acme-ui
+$ <extension>/server/bin/<platform>-<arch>/workbench check acme-ui
 Built components/acme-button
 ```
 

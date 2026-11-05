@@ -120,7 +120,7 @@ without the canvas, run the
 [checker](workbench-previews.md#command-line-tools) on the project:
 
 ```text
-$ <extension>/server/bin/<platform>-<arch>/workbench-server check acme-site
+$ <extension>/server/bin/<platform>-<arch>/workbench check acme-site
 Built components/plan-card
 ```
 

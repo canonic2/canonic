@@ -220,7 +220,7 @@ To check every preview without the canvas, run the extension's checker on the
 project. It builds each preview and lists the failures:
 
 ```sh
-~/.vscode/extensions/canonic.canonic-workbench-*/server/bin/*/workbench-server check path/to/project
+~/.vscode/extensions/canonic.canonic-workbench-*/server/bin/*/workbench check path/to/project
 ```
 
 See [TypeScript Workbench previews](workbench-previews.md).
@@ -336,7 +336,7 @@ See [What screenshots can and can't include](annotations-and-handoff.md#what-scr
 
 Handoffs need the VS Code extension's server. They work in the editor and in a
 browser opened with **Workbench: Open Canvas in Browser**, but not with a server
-you started yourself with `workbench-server start` or `node server/node/server.js`. Use the camera there instead.
+you started yourself with `workbench start` or `node server/node/server.js`. Use the camera there instead.
 
 ## An agent can't find the handoff's screenshot
 

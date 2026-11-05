@@ -372,14 +372,14 @@ a `workbench-env.d.ts` file. Include that file in your `tsconfig.json`.
 
 ## Command-line tools
 
-The extension includes the `workbench-server` command in its install folder,
-at `server/bin/<platform>-<arch>/workbench-server`. Project code in
+The extension includes the `workbench` command in its install folder,
+at `server/bin/<platform>-<arch>/workbench`. Project code in
 definitions and configuration runs on the Node 24 the extension ships, or on
 the Node your `workbench.local.yaml` names with `node`
 ([Extension](extension.md)).
 
 ```sh
-~/.vscode/extensions/canonic.canonic-workbench-<version>/server/bin/darwin-arm64/workbench-server check .
+~/.vscode/extensions/canonic.canonic-workbench-<version>/server/bin/darwin-arm64/workbench check .
 ```
 
 | Command | What it does |

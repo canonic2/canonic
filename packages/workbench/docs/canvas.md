@@ -310,15 +310,20 @@ to point an agent or a colleague at the canvas. It doesn't take a screenshot or 
 those, use a [handoff](annotations-and-handoff.md#hand-off-to-an-agent).
 
 Agents can also read the same reference without a paste. Every open canvas
-tells the Workbench server which artboards it shows, and
-`GET /_workbench/view` on the server returns the reference from the canvas
-you changed most recently. Projects with agent hooks set up can give
-it to Claude Code and Codex with every prompt, and to MCP clients through a
-`current_view` tool. They find the server through a file it keeps in your
-user cache folder (`~/Library/Caches/canonic-workbench/servers/` on macOS,
-`%LOCALAPPDATA%\canonic-workbench\servers\` on Windows,
-`~/.cache/canonic-workbench/servers/` on Linux), so nothing is written into
-your project.
+tells Workbench which artboards it shows, and the `workbench` command returns
+the reference from the canvas you changed most recently:
+
+- `workbench view show` prints it; add `--json` for each artboard's page,
+  scenario, lens and size.
+- Its MCP server, `workbench mcp serve`, gives it to MCP clients through the
+  `view_show` tool.
+- Its prompt hook, `workbench hook user-prompt`, gives it to Claude Code and
+  Codex with every prompt while a canvas is open.
+
+The extension keeps the `workbench` command in `~/.local/bin`
+(`%USERPROFILE%\.local\bin` on Windows), pointing at the version it ships, and
+says in the **Workbench** log when that folder is not on your `PATH`. Nothing
+is written into your project.
 
 ## Configure pages
 
