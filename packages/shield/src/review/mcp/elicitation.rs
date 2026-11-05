@@ -52,7 +52,7 @@ impl PackQuestion {
             properties,
             names,
             &format!(
-                "Choose settings for {reference}. This prepares an inactive proposal in the {} layer; a separate final review is required. Do not enter credentials.",
+                "Choose settings for {reference} ({} layer). This prepares a proposal; final approval is separate. Do not enter credentials.",
                 args["layer"].as_str().unwrap_or("project")
             ),
         )?;
@@ -68,15 +68,34 @@ impl PackQuestion {
     }
 
     fn installation(context: &Context, args: &Value) -> Result<Self, Error> {
-        fields(args, &["reference", "profile", "layer"])?;
-        let reference = required(args, "reference")?;
-        let profile = args
-            .get("profile")
-            .map(|p| {
-                serde_json::from_value(p.clone())
-                    .map_err(|_| Error::Invalid("choose loose, recommended or strict profile"))
-            })
-            .transpose()?;
+        fields(
+            args,
+            &["reference", "profile", "variables", "packs", "layer"],
+        )?;
+        let selections: Vec<packs::installation::Selection> = if let Some(packs) = args.get("packs")
+        {
+            if ["reference", "profile", "variables"]
+                .iter()
+                .any(|key| args.get(key).is_some())
+            {
+                return Err(Error::Invalid(
+                    "supply reference or packs, without mixing selection fields",
+                ));
+            }
+            serde_json::from_value(packs.clone())
+                .map_err(|_| Error::Invalid("invalid pack selections"))?
+        } else {
+            required(args, "reference")?;
+            let mut selection = args.clone();
+            selection
+                .as_object_mut()
+                .ok_or(Error::Invalid("invalid selection"))?
+                .remove("layer");
+            vec![
+                serde_json::from_value(selection)
+                    .map_err(|_| Error::Invalid("invalid pack selection"))?,
+            ]
+        };
         if args
             .get("layer")
             .is_some_and(|layer| ![json!("project"), json!("local")].contains(layer))
@@ -85,8 +104,7 @@ impl PackQuestion {
         }
         let installation = packs::installation::Installation::prepare(
             context,
-            reference,
-            profile,
+            &selections,
             args["layer"] == "local",
         )?;
         if installation.settings.len() > 16 {
@@ -107,7 +125,12 @@ impl PackQuestion {
             properties,
             &names,
             &format!(
-                "Supply required settings to install {reference} in the {} layer. Values apply to the captured verified pack releases and dependencies. Submission prepares an inactive proposal; separate final approval is required. Do not enter credentials.",
+                "Choose settings for {} ({} layer). This prepares one proposal; final approval is separate. Do not enter credentials.",
+                selections
+                    .iter()
+                    .map(|s| s.reference.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 args["layer"].as_str().unwrap_or("project")
             ),
         )?;
@@ -132,20 +155,25 @@ impl PackQuestion {
     ) -> Value {
         let result: Result<Value, Error> = (|| {
             checkpoint()?;
-            let mut change = if self.installation.is_some() {
-                let mut change = self.arguments.clone();
-                change["kind"] = json!("pack_add");
-                change
-            } else {
-                json!({"kind":"pack_configure","reference":self.selector,"set":values})
-            };
-            if let Some(layer) = self.arguments.get("layer") {
-                change["layer"] = layer.clone();
-            }
-            let mut input: changes::Input = serde_json::from_value(json!({
-                "change":change,"idempotency_key":key,
+            let mut proposal = json!({
+                "idempotency_key":key,
                 "agent_reason":"Pack review prepared through guided MCP input; final approval required."
-            })).map_err(|_| Error::Invalid("invalid pack settings answer"))?;
+            });
+            if let Some(installation) = &self.installation {
+                if installation.changes.len() == 1 {
+                    proposal["change"] = installation.changes[0].clone();
+                } else {
+                    proposal["changes"] = json!(installation.changes);
+                }
+            } else {
+                proposal["change"] =
+                    json!({"kind":"pack_configure","reference":self.selector,"set":values});
+                if let Some(layer) = self.arguments.get("layer") {
+                    proposal["change"]["layer"] = layer.clone();
+                }
+            }
+            let mut input: changes::Input = serde_json::from_value(proposal)
+                .map_err(|_| Error::Invalid("invalid pack settings answer"))?;
             input.expected_policy_revision = Some(self.revision.clone());
             input.prepared = self
                 .installation
@@ -165,7 +193,7 @@ impl PackQuestion {
                 context,
                 "stale_revision",
                 &format!(
-                    "Policy or review context changed while the form was open. Call {} again so the user can re-answer; do not reconstruct their answers",
+                    "Policy or review context changed. Call {} again so the user can re-answer; do not reuse old answers",
                     self.tool
                 ),
                 Some(self.tool),

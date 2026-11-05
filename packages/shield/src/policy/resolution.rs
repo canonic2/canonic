@@ -141,6 +141,7 @@ pub(super) fn dynamic(document: &PackDocument) -> bool {
 /// Capabilities that a dynamic source document uses beyond its resolved rules.
 pub(super) struct Features {
     pub(super) variables: bool,
+    pub(super) parts: bool,
     pub(super) templates: bool,
     pub(super) patterns: BTreeSet<String>,
 }
@@ -162,6 +163,7 @@ pub(super) fn sample(document: &PackDocument) -> Result<(PackDocument, Features)
         used: Used {
             variables: !document.variables.is_empty(),
             templates: false,
+            parts: false,
         },
     };
     let output = resolver.document(document.clone(), &BTreeMap::new(), &mut Vec::new())?;
@@ -169,6 +171,7 @@ pub(super) fn sample(document: &PackDocument) -> Result<(PackDocument, Features)
         output,
         Features {
             variables: resolver.used.variables,
+            parts: resolver.used.parts,
             templates: resolver.used.templates,
             patterns: document
                 .variables
@@ -239,6 +242,7 @@ struct Resolver<'a> {
 struct Used {
     variables: bool,
     templates: bool,
+    parts: bool,
 }
 
 enum Activity {
@@ -516,7 +520,8 @@ impl Resolver<'_> {
                     .get(name)
                     .and_then(|value| declaration.selector(value)))
             };
-            variables::substitute(tree, domain, &lookup, &mut unset)?;
+            self.used.parts |=
+                variables::substitute(tree, domain, &lookup, &mut unset, self.sample)?;
             names.extend(referenced);
         }
         if self.templates {

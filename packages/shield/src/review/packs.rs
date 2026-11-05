@@ -304,6 +304,26 @@ fn selection(
         )),
     }
 }
+/// Locate an added pack within the source its acquisition reference resolves to.
+/// Installed selectors retain their source-independent lookup behavior.
+fn addition_selection(meta: &Value, reference: &str) -> Result<usize, Error> {
+    let rows = meta["installed"]
+        .as_array()
+        .ok_or(Error::Invalid("installed packs missing"))?;
+    let named = named_source(meta, reference);
+    let candidates: Vec<usize> = (0..rows.len())
+        .filter(|index| {
+            named
+                .as_deref()
+                .is_none_or(|identity| rows[*index]["source_identity"] == identity)
+        })
+        .collect();
+    let scoped: Vec<Value> = candidates
+        .iter()
+        .map(|index| rows[*index].clone())
+        .collect();
+    selection(&scoped, &current_aliases(meta), reference).map(|index| candidates[index])
+}
 /// The distinct rows whose installed entries `reference` matches. A leading
 /// alias of any entry scopes the match to that alias.
 fn matching_rows(entries: &[(usize, Installed<'_>)], reference: &str) -> Vec<usize> {
@@ -688,7 +708,17 @@ pub(super) fn prepare_add(
     local: bool,
     choose: impl FnOnce(&str, &str) -> Result<Profile, Error>,
 ) -> Result<(Value, Value), Error> {
-    let (candidate, mut meta) = prepare_shared_add(context, before, reference, profile, choose)?;
+    let (candidate, meta) = prepare_shared_add(context, before, reference, profile, choose)?;
+    add_layer(before, candidate, meta, local)
+}
+
+/// Assign newly acquired selections to the requested layer after a complete add.
+pub(super) fn add_layer(
+    before: &crate::review::model::State,
+    candidate: Value,
+    mut meta: Value,
+    local: bool,
+) -> Result<(Value, Value), Error> {
     if !local {
         return Ok((candidate, meta));
     }
@@ -729,31 +759,18 @@ fn prepare_shared_add(
     let mut meta = state::metadata(before);
     let pinned = reference.contains('@');
     if !pinned {
-        let aliases = current_aliases(&meta);
-        let named = named_source(&meta, reference);
-        let rows = meta["installed"]
-            .as_array_mut()
-            .ok_or(Error::Invalid("installed packs missing"))?;
         // A catalog reference names one source: the default for a bare name,
         // else its alias's. Only rows retained from that source answer to it,
         // so another source's same-named row is never re-rooted in its place.
-        let candidates: Vec<usize> = (0..rows.len())
-            .filter(|index| {
-                named
-                    .as_deref()
-                    .is_none_or(|identity| rows[*index]["source_identity"] == identity)
-            })
-            .collect();
-        let scoped: Vec<Value> = candidates
-            .iter()
-            .map(|index| rows[*index].clone())
-            .collect();
-        let selected = match selection(&scoped, &aliases, reference) {
-            Ok(index) => Some(candidates[index]),
+        let selected = match addition_selection(&meta, reference) {
+            Ok(index) => Some(index),
             Err(Error::Missing) => None,
             Err(error) => return Err(error),
         };
         if let Some(index) = selected {
+            let rows = meta["installed"]
+                .as_array_mut()
+                .ok_or(Error::Invalid("installed packs missing"))?;
             if let Some(profile) = profile {
                 rows[index]["profile"] = json!(profile);
             }

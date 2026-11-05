@@ -131,7 +131,7 @@ fn rules_selection() -> Value {
 }
 pub(super) fn tools(agent: Option<&str>) -> Value {
     let output = object(
-        json!({"schema_version":{"const":1},"project_id":string(),"policy_revision":nullable(string()),"data":{},"missing":{"type":"array"},"truncated":{"type":"boolean"},"redacted":{"type":"boolean"},"error":nullable(object(json!({"code":string(),"message":string(),"operator_route":nullable(string()),"alternatives":{"type":"array","maxItems":crate::review::MAX_ALTERNATIVES,"items":string()},"alternatives_total":{"type":"integer","minimum":0},"pack":string(),"dependents":{"type":"array","maxItems":crate::review::MAX_ALTERNATIVES,"items":string()},"dependents_total":{"type":"integer","minimum":0}}),&["code","message","operator_route"]))}),
+        json!({"schema_version":{"const":1},"project_id":string(),"policy_revision":nullable(string()),"data":{},"missing":{"type":"array"},"truncated":{"type":"boolean"},"redacted":{"type":"boolean"},"error":nullable(object(json!({"code":string(),"message":string(),"operator_route":nullable(string()),"alternatives":{"type":"array","maxItems":crate::review::MAX_ALTERNATIVES,"items":string()},"alternatives_total":{"type":"integer","minimum":0},"pack":string(),"dependents":{"type":"array","maxItems":crate::review::MAX_ALTERNATIVES,"items":string()},"dependents_total":{"type":"integer","minimum":0},"retry_arguments":object(json!({"request_ids":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":id()}}), &["request_ids"]),"remaining_request_ids":{"type":"array","minItems":1,"maxItems":7,"uniqueItems":true,"items":id()}}),&["code","message","operator_route"]))}),
         &[
             "schema_version",
             "project_id",
@@ -174,7 +174,7 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
 fn policy_propose() -> Definition {
     (
         "policy_propose",
-        "Draft policy changes for policy_apply approval; does not activate them. Use project_files_adopt alone to review edits already on disk, then propose other changes after approval. Adapt complete inputSchema examples after reviewing effects. After a deadline, inspect pending policy_show proposals, then retry identical arguments on this connection if needed. Report unresolved failures. Never retry user cancellation.",
+        "Prepare an inactive proposal from 1-16 changes for atomic policy_apply approval. Use pack_add for guided settings. Apply project_files_adopt separately before preparing other changes. After a deadline, inspect policy_show before retrying identical arguments on this connection. Report unresolved failures; never retry cancellation.",
         || {
             let mut schema = object(
                 json!({"change":change(),"changes":{"type":"array","minItems":1,"maxItems":16,"items":change()},"idempotency_key":id(),"agent_reason":string(),"source_entry_id":id(),"review_ids":{"type":"array","maxItems":16,"items":{"type":"string","minLength":64,"maxLength":64}},"supersedes_proposal_id":id()}),
@@ -194,7 +194,7 @@ fn policy_propose() -> Definition {
 fn request_approve() -> Definition {
     (
         "request_approve",
-        "Ask the user, in one Shield confirmation form, to allow one or more requests Shield refused in this session; on approval, repeat each identical call once",
+        "Request user approval for 1-8 still-needed requests from this session. Forms are limited to 12,000 bytes; oversized groups return retry_arguments and remaining_request_ids. After approval, repeat each identical call once.",
         || {
             let mut schema = object(
                 json!({"request_id":id(),"request_ids":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":id()}}),
@@ -203,6 +203,10 @@ fn request_approve() -> Definition {
             schema["if"] = json!({"required":["request_id"]});
             schema["then"] = json!({"not":{"required":["request_ids"]}});
             schema["else"] = json!({"required":["request_ids"]});
+            schema["examples"] = json!([
+                {"request_id":"hook-request-acme-1"},
+                {"request_ids":["hook-request-acme-1","hook-request-acme-2"]}
+            ]);
             schema
         },
     )
@@ -217,7 +221,11 @@ pub(super) fn proposal_examples() -> Value {
                 "cwd":{"exact":{"root":"project"}}}}},
             "agent_reason":"Example only: review dev, predev and postdev scripts and executed code before offering this project-root command. Script edits will also execute under this permission."},
         {"change":crate::proposal_draft::web_fetch("http://localhost:3000/health").expect("valid example URL"),
-            "agent_reason":"Allow recurring GET/HEAD requests to local servers on any port, without following redirects."}
+            "agent_reason":"Allow recurring GET/HEAD requests to local servers on any port, without following redirects."},
+        {"changes":[
+            {"kind":"pack_add","reference":"acme/git","profile":"recommended","layer":"local"},
+            {"kind":"pack_add","reference":"acme/node","profile":"recommended","layer":"local"}
+        ],"agent_reason":"Example only: inspect both packs before proposing them together. Use guided pack_add when settings need user input."}
     ])
 }
 
@@ -284,7 +292,7 @@ fn inventory() -> Vec<Definition> {
         ),
         (
             "policy_apply",
-            "Activate a proposal after per-call user approval; copy the returned apply_arguments object unchanged, without reconstructing or summarizing its fields",
+            "Activate a proposal with per-call user approval. Copy its returned apply_arguments unchanged.",
             || {
                 object(
                     json!({"proposal_id":id(),"candidate_digest":string(),"changes":{"type":"array","maxItems":4096,"items":{"type":"object"}},"review":object(json!({"packs":{"type":"object"},"comparison":{"type":"object"}}), &["packs", "comparison"])}),
@@ -294,7 +302,7 @@ fn inventory() -> Vec<Definition> {
         ),
         (
             "policy_receipt",
-            "Show the receipt of a proposal the user applied",
+            "Show a proposal's status and application receipt, if any",
             || object(json!({"proposal_id":id()}), &["proposal_id"]),
         ),
         (
@@ -316,7 +324,7 @@ fn inventory() -> Vec<Definition> {
         ),
         (
             "policy_evaluate",
-            "Preview the decision for a command or file request without running it",
+            "Preview a request's policy decision without executing or authorizing it",
             || {
                 object(
                     json!({"input":input(),"context":context(),"candidate_id":id()}),
@@ -335,12 +343,23 @@ fn inventory() -> Vec<Definition> {
 fn pack_add() -> Definition {
     (
         "pack_add",
-        "Prepare a guided installation of a verified registry pack and its dependencies. Ask required settings through a host form, then save an inactive proposal from the captured artifacts. Profile defaults to recommended for a new selection; layer defaults to project. Review and copy apply_arguments unchanged to policy_apply for separate final approval. Decline or dismissal ends the offer; never invent answers. Use shield pack add in the user's terminal if forms are unsupported.",
+        "Prepare 1-16 packs and dependencies as one inactive proposal. Inspect pack_info; request declared variables needed for the user's restrictions, otherwise keep defaults. Report unsupported restrictions instead of broadening scope. A form collects required/requested values; never invent answers or retry cancellation. Copy apply_arguments unchanged to policy_apply for approval. Unsupported forms require shield pack add in the user's terminal.",
         || {
-            object(
-                json!({"reference":string(),"profile":{"enum":["loose","recommended","strict"]},"layer":layer()}),
-                &["reference"],
-            )
+            let variables =
+                json!({"type":"array","minItems":1,"maxItems":16,"uniqueItems":true,"items":id()});
+            let selection = json!({"reference":string(),"profile":{"enum":["loose","recommended","strict"],"description":"New selections default to recommended; installed selections keep their profile."},"variables":variables});
+            let mut properties = selection.clone();
+            properties["layer"] = layer();
+            properties["layer"]["description"] = json!(
+                "Storage layer for all selections; defaults to project. Local storage does not restrict remote targets."
+            );
+            properties["packs"] = json!({"type":"array","minItems":1,"maxItems":16,"items":object(selection, &["reference"])});
+            let mut schema = object(properties, &[]);
+            schema["if"] = json!({"required":["packs"]});
+            schema["then"] = json!({"not":{"anyOf":[{"required":["reference"]},{"required":["profile"]},{"required":["variables"]}]}});
+            schema["else"] = json!({"required":["reference"]});
+            schema["examples"] = json!([{"packs":[{"reference":"acme/git"},{"reference":"acme/node","variables":["manager"]}],"layer":"local"}]);
+            schema
         },
     )
 }
@@ -348,7 +367,7 @@ fn pack_add() -> Definition {
 fn pack_configure() -> Definition {
     (
         "pack_configure",
-        "Ask the user for installed pack settings through an MCP form, then save an inactive proposal. Inspect pack_list first; select 1-16 variable names. Form answers never activate policy: copy returned apply_arguments unchanged to policy_apply for separate final approval. If forms are unavailable, ask the user in conversation and use policy_propose with pack_configure; never infer missing answers or retry cancellation.",
+        "Collect 1-16 installed-pack settings through a form; prepare an inactive proposal. Inspect pack_list for names. Copy apply_arguments unchanged to policy_apply for approval. If forms are unavailable, collect values in chat and use policy_propose with pack_configure. Never invent answers or retry cancellation.",
         || {
             object(
                 json!({"reference":string(),"variables":{"type":"array","minItems":1,"maxItems":16,"items":id()},"layer":layer()}),
@@ -361,14 +380,17 @@ fn pack_configure() -> Definition {
 fn pack_info() -> Definition {
     (
         "pack_info",
-        "Inspect pack permissions, profiles, settings or rules without installing it",
+        "Inspect pack permissions and setup. Summary/settings include declared variables and pack_add arguments. Exact rule_id accepts view=rules or no view, without filters or paging. Installs nothing.",
         || {
-            object(
+            let mut schema = object(
                 paging(
                     json!({"reference":string(),"view":{"enum":["summary","rules","settings"],"default":"summary"},"query":{"type":"string","minLength":1,"maxLength":4096,"description":"Filter rule IDs and reasons in the rules view."},"rule_id":id()}),
                 ),
                 &["reference"],
-            )
+            );
+            schema["if"] = json!({"required":["rule_id"]});
+            schema["then"] = json!({"properties":{"view":{"const":"rules"}},"not":{"anyOf":[{"required":["query"]},{"required":["cursor"]},{"required":["limit"]}]}});
+            schema
         },
     )
 }
@@ -399,7 +421,7 @@ fn suggestions_tool() -> Definition {
 fn defer_tool() -> Definition {
     (
         "review_defer",
-        "Defer unchanged reviews for this session. This records an advisory choice only; active policy and approvals are unchanged.",
+        "Defer unchanged reviews for this session; policy and approvals stay unchanged.",
         || {
             object(
                 json!({"session_id":id(),"review_ids":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"string","minLength":64,"maxLength":64}}}),

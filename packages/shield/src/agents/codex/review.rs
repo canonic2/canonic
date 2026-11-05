@@ -49,10 +49,10 @@ impl ReviewAdapter for super::Codex {
 }
 
 static GUIDANCE: Guidance = Guidance {
-    instructions: "Copy the returned apply_arguments object unchanged into policy_apply for Codex tool approval; do not reconstruct or summarize its fields. If the approval policy is never, leave the proposal pending and ask the user to activate it with shield policy review in their terminal; never bypass that restriction. ",
+    instructions: "Copy apply_arguments unchanged to policy_apply for Codex tool approval. If the approval policy is never, leave the proposal pending and ask the user to activate it with shield policy review in their terminal; never bypass that restriction. ",
     unavailable: "Codex tool approval is unavailable. Ask the user to activate the pending proposal with shield policy review in their terminal; do not change or bypass the approval policy.",
     required: "Approval required. Inspect the proposal with policy_show using its proposal_id, then copy its apply_arguments object unchanged into policy_apply. If the approval policy is never, leave the proposal pending and ask the user to activate it with shield policy review in their terminal; never bypass that restriction.",
-    proposed: "Policy proposal saved; inactive. Copy the returned apply_arguments object unchanged into policy_apply for Codex approval; do not reconstruct or summarize its fields. Wait before the next proposal; acceptance makes other pending proposals stale. If the approval policy is never, leave the proposal pending and ask the user to activate it with shield policy review in their terminal; never bypass that restriction.",
+    proposed: "Policy proposal saved; inactive. Copy apply_arguments unchanged to policy_apply for Codex approval. Wait before the next proposal; activation stales other proposals. If the approval policy is never, leave the proposal pending and ask the user to activate it with shield policy review in their terminal; never bypass that restriction.",
     ask: "For eligible reviewed groups, prepare one bounded batch with policy_propose. Copy apply_arguments unchanged to policy_apply for host approval. Do not repeat unchanged proposed/deferred offers. Decline or cancellation ends the offer; do not retry.",
 };
 

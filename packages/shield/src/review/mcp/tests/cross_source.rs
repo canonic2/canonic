@@ -420,6 +420,71 @@ fn cross_source_bare_add_acquires_from_the_default_source_beside_another_sources
 }
 
 #[test]
+fn cross_source_guided_add_keeps_default_registry_scoping() {
+    for batch in [false, true] {
+        for reference in ["acme/child", "acme/child@1.0.0", "child", "child@1.0.0"] {
+            let pinned = reference.contains('@');
+            let (_root, context, connection) = fixture();
+            let (a, b) = sources(&context);
+            add(&context, &connection, "b/acme/child", "other-source");
+            let before = read(&context);
+            let retained = before.operator["installed"][0].clone();
+            assert_eq!(retained["source_identity"], json!(b.identity));
+            let selection = json!({"reference":reference,"profile":"recommended"});
+            let arguments = if batch {
+                json!({"packs":[selection]})
+            } else {
+                selection
+            };
+            let question =
+                super::super::elicitation::PackQuestion::prepare(&context, "pack_add", &arguments)
+                    .unwrap();
+            assert!(!question.needs_input);
+            let proposed =
+                question.propose(&context, &connection, &json!({}), "default-source", &|| {
+                    Ok(())
+                });
+            assert!(proposed["error"].is_null(), "{proposed}");
+            let state = read(&context);
+            unchanged_policy(&before, &state);
+            let proposal = state
+                .proposals
+                .iter()
+                .find(|p| proposed["data"]["proposal_id"] == p.id)
+                .unwrap();
+            let rows = proposal.candidate_metadata["installed"].as_array().unwrap();
+            assert_eq!(rows.len(), 2);
+            assert_eq!(
+                rows.iter()
+                    .find(|row| row["selector"] == retained["selector"]),
+                Some(&retained)
+            );
+            let added = rows
+                .iter()
+                .find(|row| row["source_identity"] == a.identity)
+                .unwrap();
+            assert_eq!(added["id"], "acme/child");
+            assert_eq!(added["profile"], "recommended");
+            assert_eq!(added["pinned"], pinned);
+            review::operator::commit_proposal_fixture(
+                &context,
+                proposed["data"]["proposal_id"].as_str().unwrap(),
+            )
+            .unwrap();
+            // Re-adding the bare name also stays scoped when both rows already exist.
+            assert!(
+                super::super::elicitation::PackQuestion::prepare(
+                    &context,
+                    "pack_add",
+                    &json!({"reference":"acme/child"}),
+                )
+                .is_ok()
+            );
+        }
+    }
+}
+
+#[test]
 fn cross_source_add_of_a_missing_catalog_name_is_not_found() {
     let (_root, context, connection) = fixture();
     let (_a, _b) = sources(&context);

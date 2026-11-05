@@ -272,19 +272,41 @@ fn the_grouping_hint_ignores_requests_a_policy_change_invalidated() {
 
 #[test]
 fn a_group_too_long_to_show_whole_is_refused() {
-    let fixture = fixture();
-    let mut long = summary();
-    long.action = format!("Run this command:\necho {}", "a".repeat(3_500));
-    let ids: Vec<String> = (0..4)
-        .map(|n| pending(fixture.refuse_with("acme-session", &format!("acme-{n}"), &long)))
-        .collect();
-    let mcp = fixture.connection("codex");
-    // Each fits alone.
-    assert!(confirmation(&mcp, &json!({"request_id":ids[0]})).is_ok());
-    assert!(matches!(
-        approve(&mcp, &json!({"request_ids":ids}), true),
-        Err(Error::Invalid(_))
-    ));
+    // UTF-8 bytes, rather than character count, decide whether even two fit.
+    for (character, expected_prefix) in [("a", 3), ("é", 1)] {
+        let fixture = fixture();
+        let mut long = summary();
+        long.action = format!("Run this command:\necho {}", character.repeat(3_500));
+        let ids: Vec<String> = (0..8)
+            .map(|n| pending(fixture.refuse_with("acme-session", &format!("acme-{n}"), &long)))
+            .collect();
+        let mcp = fixture.connection("codex");
+        let args = json!({"request_ids":ids});
+        let before = state_bytes(&fixture);
+        let Err(Error::ApprovalFormTooLong { retry, remaining }) = confirmation(&mcp, &args) else {
+            panic!("expected a fitting prefix and remaining IDs");
+        };
+        assert_eq!(retry, ids[..expected_prefix]);
+        assert_eq!(remaining, ids[expected_prefix..]);
+        assert!(matches!(
+            approve(&mcp, &args, true),
+            Err(Error::ApprovalFormTooLong { .. })
+        ));
+        assert_eq!(state_bytes(&fixture), before);
+
+        let retry_args = json!({"request_ids":retry});
+        assert!(confirmation(&mcp, &retry_args).unwrap().len() <= MAX_FORM);
+        assert!(matches!(
+            approve(&mcp, &retry_args, false),
+            Err(Error::ApprovalRequired)
+        ));
+        assert_eq!(state_bytes(&fixture), before);
+        approve(&mcp, &retry_args, true).unwrap();
+        // Approving the prefix never answers any remaining request.
+        for id in remaining {
+            assert!(confirmation(&mcp, &json!({"request_id":id})).is_ok());
+        }
+    }
 }
 
 fn summary() -> Summary {

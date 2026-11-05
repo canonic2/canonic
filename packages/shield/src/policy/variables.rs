@@ -786,16 +786,17 @@ impl Test {
     }
 }
 
-/// Replace every `{var: name}` selector in a predicate tree.
-///
-/// Returns the names of variables without a value; selectors for those names
-/// remain in place, and the caller treats the entry as inactive.
+/// Replace variable selectors, recording unset names and returning whether the
+/// tree uses a component projection. Unset selectors remain in place so the
+/// caller can treat the whole entry as inactive. Sample resolution checks the
+/// projection's shape and type without requiring representative text to split.
 pub(crate) fn substitute(
     value: &mut Value,
     domain: &str,
     resolve: &dyn Fn(&str) -> Result<Option<Value>, Error>,
     unset: &mut BTreeSet<String>,
-) -> Result<(), Error> {
+    sample: bool,
+) -> Result<bool, Error> {
     if optional_reference(value).is_some() {
         return Err(Error::Contract(
             "unset: any applies only to an option value's match",
@@ -803,36 +804,55 @@ pub(crate) fn substitute(
     }
     if let Some(name) = reference(value) {
         let name = name.to_owned();
+        let part = part(value)?;
         match resolve(&name)? {
-            Some(selector) => *value = selector,
+            Some(selector) => {
+                *value = if let Some((separator, index)) = &part {
+                    let text = selector.as_str().ok_or(Error::Contract(
+                        "variable parts require a string or choice variable",
+                    ))?;
+                    let projected = if sample {
+                        "sample"
+                    } else {
+                        text.split(separator.as_str())
+                            .nth(*index)
+                            .filter(|part| !part.is_empty())
+                            .ok_or(Error::Contract("variable part is missing or empty"))?
+                    };
+                    json!(projected)
+                } else {
+                    selector
+                }
+            }
             None => {
                 unset.insert(name);
             }
         }
-        return Ok(());
+        return Ok(part.is_some());
     }
+    let mut parts = false;
     match value {
         Value::Object(fields) => {
             for (key, child) in fields {
                 if key == "environment" {
                     for selector in selectors::environment_selectors_mut(child) {
-                        substitute(selector, domain, resolve, unset)?;
+                        parts |= substitute(selector, domain, resolve, unset, sample)?;
                     }
                 } else if !(["exact", "input", "context"].contains(&key.as_str())
                     || domain == "mcp" && key == "arguments")
                 {
-                    substitute(child, domain, resolve, unset)?;
+                    parts |= substitute(child, domain, resolve, unset, sample)?;
                 }
             }
         }
         Value::Array(items) => {
             for item in items {
-                substitute(item, domain, resolve, unset)?;
+                parts |= substitute(item, domain, resolve, unset, sample)?;
             }
         }
         _ => {}
     }
-    Ok(())
+    Ok(parts)
 }
 
 /// Names referenced through `{var}` selectors, without changing the tree.
@@ -866,11 +886,40 @@ pub(crate) fn references(value: &Value, domain: &str, names: &mut BTreeSet<Strin
 
 fn reference(value: &Value) -> Option<&str> {
     let fields = value.as_object()?;
-    if fields.len() == 1 {
+    if fields.len() == 1 || (fields.len() == 2 && fields.contains_key("split")) {
         fields.get("var")?.as_str()
     } else {
         None
     }
+}
+
+/// A bounded literal projection, resolved once while preparing a pack binding.
+fn part(value: &Value) -> Result<Option<(String, usize)>, Error> {
+    let Some(split) = value.get("split") else {
+        return Ok(None);
+    };
+    let fields = split
+        .as_object()
+        .ok_or(Error::Contract("split requires separator and index"))?;
+    let separator = fields
+        .get("separator")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty() && s.len() <= 16 && !s.contains('\0'))
+        .ok_or(Error::Contract(
+            "split separator must contain 1-16 bytes without NUL",
+        ))?;
+    let index = fields
+        .get("index")
+        .and_then(Value::as_u64)
+        .filter(|index| *index < 16)
+        .ok_or(Error::Contract("split index must be 0-15"))?;
+    if fields.len() != 2 {
+        return Err(Error::Contract("split requires only separator and index"));
+    }
+    Ok(Some((
+        separator.to_owned(),
+        usize::try_from(index).map_err(|_| Error::Limit)?,
+    )))
 }
 
 /// The variable named by `{var: name, unset: ...}`, an option value match that

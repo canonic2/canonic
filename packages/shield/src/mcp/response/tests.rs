@@ -81,7 +81,7 @@ fn host_approval_guidance_matches_agent_without_changing_error_evidence() {
         "{proposed}"
     );
     assert!(
-        proposed.contains("Copy the returned apply_arguments object unchanged into policy_apply for Codex approval"),
+        proposed.contains("Copy apply_arguments unchanged to policy_apply for Codex approval"),
         "{proposed}"
     );
     assert!(

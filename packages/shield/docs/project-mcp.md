@@ -165,11 +165,35 @@ For exact evidence, use the same tool with `rule_id`, or set `view` to `rules`
 and optionally `query` to filter rule IDs and reasons. Rule listings default to
 10 entries per page; `limit` accepts 1–100. Continue with `next_cursor` and the
 same reference, view, query and limit. Cursor pages retain the acquired evidence
-even if the registry changes. A `rule_id` cannot coexist with view, filters or
-paging. Summaries do not accept filters or paging.
+even if the registry changes. A `rule_id` accepts `view: "rules"` or no view,
+without filters or paging. Summaries do not accept filters or paging.
 Use `view: "settings"` for complete variable definitions, preconditions and
 dependencies, including sections omitted from a large summary. This view also
 does not accept filters or paging.
+
+Summary and settings results include `setup`: whether configuration is available,
+installation arguments, and a `settings_arguments_template` for requesting
+settings with `pack_add.variables`. Replace the placeholder with only declared
+names needed for the user's request. Missing required values are collected
+automatically; unrequested optional values stay unchanged. Inspect each variable's
+type and constraints; unsupported form types need terminal installation.
+If a release has no settings, installation cannot add a requested
+target restriction. Do not offer an unrestricted pack as a scoped installation.
+The `local` layer chooses storage on this machine; it does not restrict remote
+repositories or accounts.
+
+Tell the agent the restriction you want, for example “install AWS requiring the
+acme-read-only profile.” It inspects the pack's declared settings, selects the
+matching optional names and opens the
+settings form before final approval. A plain install without a requested
+restriction keeps the pack's defaults for unrequested optional settings. If the selected
+release cannot represent the restriction, the agent should explain that gap.
+
+For a pack declaring an optional `manager` setting, request it with
+`{"reference":"acme/settings","variables":["manager"]}`. The user supplies
+the value in the form; one final approval activates the installation and setting
+together. Use only names declared by the selected release; do not guess fields
+or search general rule-authoring docs for undeclared pack settings.
 
 ```json
 {"reference":"main/canonic/node"}
@@ -212,14 +236,43 @@ Ask the agent to inspect the registry pack with `pack_info`, then call `pack_add
 
 For a new pack, omitted `profile` selects `recommended`; omitted `layer` selects
 `project`. Use `local` for a personal installation. Existing selections keep their
-profile unless one is supplied explicitly.
+profile unless one is supplied explicitly. Local batches refuse explicit profiles
+for packs installed before the batch; requested variable values use local overlays.
 
-Shield resolves and verifies the pack and its dependencies, then asks for required
+Shield resolves and verifies the packs and their dependencies, then asks for required
 settings that have neither a value nor a declared default. Fields identify their
 pack and variable; field keys such as `setting_0` are private to that form. Answer
-every field explicitly. Optional settings can be changed later with
-`pack_configure`. If no required input is missing, Shield prepares the proposal
-without opening a settings form.
+every field explicitly. To ask about optional settings during installation, pass
+`variables` with the exact names from `pack_info`'s `settings` view. Requested
+variables are asked even when they already have a value or declared default;
+other optional settings remain unchanged. For example:
+
+```json
+{"reference":"acme/settings","variables":["manager"]}
+```
+
+Use `packs` to install up to 16 selections together. Each selection accepts
+`reference`, optional `profile` and optional `variables`. The top-level `layer`
+applies to every selection and its newly added dependencies:
+
+```json
+{
+  "packs": [
+    {"reference":"acme/git","profile":"recommended"},
+    {"reference":"acme/settings","variables":["manager"]}
+  ],
+  "layer":"local"
+}
+```
+
+Supply either a single `reference` with its `profile` and `variables`, or `packs`;
+do not mix those selection fields. Select each installed pack only once, including
+when it is also another selection's dependency. Required dependency settings
+and requested variables appear in one form, with shared dependencies asked once.
+The response contains one proposal for one final approval and atomic activation.
+If no required or requested input needs answering, preparation opens no settings
+form. Unknown variable names or a failed selection leave no partial proposal.
+Installed settings can also be changed later with `pack_configure`.
 
 The form retains the exact acquired releases. A registry change while it is open
 does not substitute another release. A changed project policy or review context
@@ -232,7 +285,7 @@ form opened. A fresh call can create another proposal; do not reconstruct privat
 form answers.
 
 Guided installation supports the same field types and protocol compatibility as
-the settings forms below, with at most 16 missing required values and 4 MiB of
+the settings forms below, with at most 16 required/requested fields in total and 4 MiB of
 retained candidate source per interaction. Unsupported forms, free-text lists or
 larger installations use `shield pack add` in the user's terminal.
 

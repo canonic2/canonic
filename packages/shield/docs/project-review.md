@@ -147,7 +147,13 @@ policy and protection settings do not change. If you decline, the agent
 continues without it.
 
 When one task needs several blocked requests, such as deleting the same branch
-in two repositories, the agent can ask about up to eight of them in one form.
+in two repositories, the agent can ask about up to eight of them in one form,
+subject to a 12,000-byte limit for the complete confirmation. It should include
+only requests still needed for the task. If a group is too long, Shield approves
+nothing and returns `retry_arguments` for a prefix that fits, plus
+`remaining_request_ids` to review separately. Each new call still needs your
+confirmation. The agent can also ask about just one request, for example
+`request_approve({"request_id":"hook-request-acme-1"})`, using an ID from its refusal.
 The form starts by saying how many one-time permissions accepting creates and
 how many override a deny or change agent settings, then shows each request in
 full. Accepting allows each listed request once; the agent repeats each one

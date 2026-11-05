@@ -148,7 +148,7 @@ fn validate_with_views(
     };
     if args != expected {
         return Err(Error::Invalid(
-            "approval arguments differ from the proposed change. Retrieve the proposal with policy_show using its proposal_id, then copy the returned apply_arguments object unchanged into policy_apply; do not reconstruct or summarize its fields",
+            "approval arguments differ from the proposal. Retrieve it with policy_show using proposal_id, then copy apply_arguments unchanged to policy_apply",
         ));
     }
     if proposal.status == "applied" {

@@ -686,6 +686,24 @@ variables:
 A skipped question keeps the variable's current value. A required variable
 without a default cannot use `unset` or `ask_when`.
 
+### Parts of a variable
+
+A pack can use one string setting for a compound CLI name and its separate MCP
+fields. With `variable-parts-v1`, this text selector selects a zero-based component:
+
+```yaml
+fields:
+  /owner: {text: {var: repository, split: {separator: /, index: 0}}}
+  /repo: {text: {var: repository, split: {separator: /, index: 1}}}
+```
+
+For `repository: acme/web`, the fields must equal `acme` and `web`. The result is
+literal text, never a pattern. Declare a string `match` constraint to require the
+complete setting's shape. Separators contain 1–16 bytes without NUL; indexes are
+0–15. Missing or empty selected parts refuse preparation. An unset setting leaves
+the referencing entry inactive, as with ordinary variable selectors. Parts apply
+to string and choice settings; lists, booleans and paths cannot be split.
+
 ### Optional checks
 
 A `{var}` reference turns its whole entry off while the variable is unset. To

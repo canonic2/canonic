@@ -248,6 +248,9 @@ impl PackDocument {
         if features.variables {
             extra.insert("variables-v1".to_owned());
         }
+        if features.parts {
+            extra.insert("variable-parts-v1".to_owned());
+        }
         if features.templates {
             extra.insert("templates-v1".to_owned());
         }

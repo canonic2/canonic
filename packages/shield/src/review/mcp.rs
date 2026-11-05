@@ -270,6 +270,10 @@ fn failure(context: &Context, error: &Error) -> Value {
     };
     let mut value = refused(context, code, &message, route.as_deref());
     match error {
+        Error::ApprovalFormTooLong { retry, remaining } => {
+            value["error"]["retry_arguments"] = json!({"request_ids":retry});
+            value["error"]["remaining_request_ids"] = json!(remaining);
+        }
         Error::Ambiguous {
             alternatives,
             total,
@@ -370,7 +374,9 @@ fn error_fields(error: &Error) -> (&'static str, String) {
             format!("Ambiguous reference: {error}"),
         ),
         // Its recovery is in the message; it names no submitted text.
-        Error::Grouped { .. } => ("invalid_input", format!("Shield: {error}")),
+        Error::Grouped { .. } | Error::ApprovalFormTooLong { .. } => {
+            ("invalid_input", format!("Shield: {error}"))
+        }
         _ => ("invalid_input", invalid_input_message(error)),
     }
 }

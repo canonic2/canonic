@@ -16,12 +16,13 @@ pub(super) fn inspect(context: &Context, views: &mut Views, args: &Value) -> Res
     let view = view(args)?;
     let rule_id = text(args, "rule_id")?;
     if rule_id.is_some()
-        && ["view", "limit", "query"]
-            .iter()
-            .any(|key| args.get(key).is_some())
+        && ((args.get("view").is_some() && view != "rules")
+            || ["limit", "query", "cursor"]
+                .iter()
+                .any(|key| args.get(key).is_some()))
     {
         return Err(Error::Invalid(
-            "rule selection cannot coexist with view or paging",
+            "rule_id accepts view=rules or no view, without query, cursor or limit",
         ));
     }
     if view != "rules"
@@ -34,7 +35,7 @@ pub(super) fn inspect(context: &Context, views: &mut Views, args: &Value) -> Res
     if view == "settings" {
         return Ok(
             json!({"view":"settings","reference":reference,"selected_release":data["selected_release"],
-            "variables":data["variables"],"preconditions":data["preconditions"],"dependencies":data["dependencies"],"mcp_integrations":data["mcp_integrations"]}),
+            "variables":data["variables"],"preconditions":data["preconditions"],"dependencies":data["dependencies"],"mcp_integrations":data["mcp_integrations"],"setup":setup(&data, reference)}),
         );
     }
     if let Some(id) = rule_id {
@@ -223,7 +224,8 @@ fn settings_summary(data: &Value, missing: &mut Vec<&'static str>) -> Value {
     let definitions = data["variables"].as_object();
     for (name, value) in definitions.into_iter().flatten().take(8) {
         variables[name] = json!({"type":value["type"],"description":excerpt(&value["description"],160),
-            "default":value["default"],"values":value["values"]});
+            "default":value["default"],"values":value["values"],"required":value["required"] == true,
+            "match":value["match"],"setup":value["setup"]});
     }
     if definitions.is_some_and(|items| items.len() > 8) {
         missing.push("variables");
@@ -249,6 +251,27 @@ fn settings_summary(data: &Value, missing: &mut Vec<&'static str>) -> Value {
         "preconditions":guards,"dependencies":data["dependencies"]})
 }
 
+fn setup(data: &Value, reference: &str) -> Value {
+    let names: Vec<_> = data["variables"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(name, _)| name)
+        .collect();
+    let mut result = json!({"settings_available":!names.is_empty(),
+    "install_arguments":{"reference":reference},
+    "message":if names.is_empty() {
+        "No settings are declared. Installation cannot add a requested target restriction; report the gap instead of proposing unrestricted permissions."
+    } else {
+        "settings_arguments_template is a template, not ready-to-call arguments. Replace its placeholder with only declared names needed for the user's request; required missing values are collected automatically. Omit unrequested optional settings. Unsupported form types need terminal installation. Local storage does not restrict targets."
+    }});
+    if !names.is_empty() {
+        result["settings_arguments_template"] =
+            json!({"reference":reference,"variables":["<declared-variable-name>"]});
+    }
+    result
+}
+
 fn summary(data: &Value, reference: &str) -> Result<Value, Error> {
     let rules = data["rules"].as_array().map_or(&[][..], Vec::as_slice);
     let mut groups = permission_groups(rules)?;
@@ -269,6 +292,7 @@ fn summary(data: &Value, reference: &str) -> Result<Value, Error> {
         "scope":"Declared rule outcomes. Effective permissions also depend on conditions, requirements, variable bindings, preconditions and other active policy.",
         "inspect_rules":{"reference":reference,"view":"rules","limit":10},
         "inspect_settings":{"reference":reference,"view":"settings"},
+        "setup":setup(data,reference),
         "inspect_rule":{"reference":reference,"rule_id":"<example_rule_id>"}});
     result
         .as_object_mut()

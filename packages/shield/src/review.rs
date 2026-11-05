@@ -74,6 +74,15 @@ pub(crate) enum Error {
         reason: &'static str,
         recovery: &'static str,
     },
+    /// A validated group's form exceeds the display bound. The suggested
+    /// prefix fits; the remaining IDs still need their own review.
+    #[error(
+        "these requests are too long to show together. Nothing was approved. Call request_approve with {{\"request_ids\":{retry:?}}}; remaining request_ids: {remaining:?}. Approve only requests still needed; every call requires confirmation"
+    )]
+    ApprovalFormTooLong {
+        retry: Vec<String>,
+        remaining: Vec<String>,
+    },
     #[error("review state is locked; retry after the owning writer finishes")]
     Locked,
     #[error("review object was not found")]
@@ -169,6 +178,7 @@ impl Error {
             | Self::Ambiguous { .. }
             | Self::NotPortable(_)
             | Self::Grouped { .. }
+            | Self::ApprovalFormTooLong { .. }
             | Self::UnsupportedReleases(_)
             | Self::RequiredPack { .. } => "invalid-review",
             Self::Locked => "review-locked",

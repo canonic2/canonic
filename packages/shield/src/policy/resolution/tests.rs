@@ -66,6 +66,57 @@ const NODE_CAPABILITIES: &[&str] = &[
     "templates-v1",
 ];
 
+#[test]
+fn variable_parts_bind_literal_selectors_and_unset_keeps_gates_inactive() {
+    let source = document(
+        &[
+            "structured-rules-v1",
+            "argument-rules-v1",
+            "variables-v1",
+            "variable-parts-v1",
+            "preconditions-v1",
+        ],
+        json!({"target":{"type":"string","description":"Explicit namespace/name"}}),
+        json!([rule(
+            "inspect",
+            json!("acme"),
+            json!({"kind":"any"}),
+            "allow"
+        )]),
+        json!([{"id":"name","conditions":argv("acme",json!({"kind":"any"})),
+            "requires_any":[{"arguments":{"kind":"exact","values":[{"var":"target","split":{"separator":"/","index":1}}]}}],
+            "on_unmet":{"decision":"deny"}}]),
+    );
+    let unset = Pack::from_yaml(&source).unwrap();
+    assert_eq!(decide(&unset, &["acme", "other"]), Decision::Allow);
+    let pack =
+        Pack::from_yaml_bound(&source, &bound(json!({"target":"team/name.*"})), true).unwrap();
+    assert_eq!(decide(&pack, &["acme", "name.*"]), Decision::Allow);
+    assert_eq!(decide(&pack, &["acme", "nameXYZ"]), Decision::Deny);
+    assert!(Pack::from_yaml_bound(&source, &bound(json!({"target":"team"})), true).is_err());
+    assert!(Pack::from_yaml_bound(&source, &bound(json!({"target":"team/"})), true).is_err());
+    let mut missing_cap: Value = serde_json::from_str(&source).unwrap();
+    missing_cap["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|cap| cap != "variable-parts-v1");
+    assert!(Pack::from_yaml(&missing_cap.to_string()).is_err());
+    for split in [
+        json!({"separator":"","index":0}),
+        json!({"separator":"/","index":16}),
+        json!({"separator":"/","index":-1}),
+        json!({"separator":"/","index":1,"extra":true}),
+    ] {
+        let mut invalid: Value = serde_json::from_str(&source).unwrap();
+        invalid["preconditions"][0]["requires_any"][0]["arguments"]["values"][0]["split"] = split;
+        assert!(Pack::from_yaml(&invalid.to_string()).is_err(), "{invalid}");
+    }
+    let mut invalid: Value = serde_json::from_str(&source).unwrap();
+    invalid["variables"]["target"] =
+        json!({"type":"list","description":"Names","items":{"type":"string"}});
+    assert!(Pack::from_yaml(&invalid.to_string()).is_err());
+}
+
 fn node_pack() -> String {
     document(
         NODE_CAPABILITIES,

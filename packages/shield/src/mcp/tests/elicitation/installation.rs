@@ -71,6 +71,405 @@ fn approve(transport: &Transport, id: i64, proposal: &Value) {
 }
 
 #[test]
+fn pack_installation_batch_collects_optional_and_required_settings_and_activates_once() {
+    let (transport, project, source) = fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
+    let mut root: Value =
+        serde_json::from_str(&std::fs::read_to_string(source.join("pack.yml")).unwrap()).unwrap();
+    root["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("dependencies-v1"));
+    root["dependencies"] = json!([{"pack":"acme/child","requirement":"^1"}]);
+    let mut child = root.clone();
+    child["id"] = json!("acme/child");
+    child["dependencies"] = json!([]);
+    child["variables"] =
+        json!({"label":{"type":"string","description":"Required label","required":true}});
+    publish(
+        &source,
+        &[
+            ("pack.yml", root.to_string()),
+            ("child.yml", child.to_string()),
+        ],
+    );
+    let before = project.revision();
+    let form = transport.call(json!(10), "pack_add", &json!({
+        "packs":[{"reference":"fixture/acme/settings","variables":["manager"]},{"reference":"fixture/acme/child","profile":"strict","variables":["label"]}],
+        "layer":"local"
+    }));
+    assert_eq!(form["method"], "elicitation/create", "{form}");
+    assert_eq!(
+        form["params"]["requestedSchema"]["properties"]
+            .as_object()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(proposals(&project), 0);
+    assert_eq!(project.revision(), before);
+    // Neither the answer nor final activation may reacquire registry artifacts.
+    std::fs::remove_file(source.join("catalog.json")).unwrap();
+    std::fs::remove_file(source.join("pack.yml")).unwrap();
+    std::fs::remove_file(source.join("child.yml")).unwrap();
+    let proposal = transport.request(&answer(&form, "accept", form_values(&form)));
+    assert!(data(&proposal)["error"].is_null(), "{proposal}");
+    assert_eq!(proposals(&project), 1);
+    assert_eq!(project.revision(), before);
+    approve(&transport, 11, &proposal);
+    assert_ne!(project.revision(), before);
+    let folder = std::path::Path::new(&project.review.project_root).join(".shield");
+    let local: Value =
+        crate::policy::parse(&std::fs::read_to_string(folder.join("config.local.yml")).unwrap())
+            .unwrap();
+    let rows = local["packs"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    let root = rows
+        .iter()
+        .find(|row| row["id"] == "acme/settings")
+        .unwrap();
+    assert_eq!(root["variables"], json!({"manager":"just"}));
+    let child = rows.iter().find(|row| row["id"] == "acme/child").unwrap();
+    assert_eq!(child["profile"], "strict");
+    assert_eq!(child["variables"], json!({"label":"Acme"}));
+}
+
+#[test]
+fn pack_installation_batch_reduces_three_installations_to_one_publication() {
+    for batch in [false, true] {
+        let (transport, project, source) =
+            fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
+        let root: Value =
+            serde_json::from_str(&std::fs::read_to_string(source.join("pack.yml")).unwrap())
+                .unwrap();
+        let documents: Vec<_> = ["first", "second", "third"]
+            .into_iter()
+            .map(|name| {
+                let mut pack = root.clone();
+                pack["id"] = json!(format!("acme/{name}"));
+                (format!("{name}.yml"), pack.to_string())
+            })
+            .collect();
+        publish(
+            &source,
+            &documents
+                .iter()
+                .map(|(path, bytes)| (path.as_str(), bytes.clone()))
+                .collect::<Vec<_>>(),
+        );
+        let selections: Vec<_> = ["first", "second", "third"]
+            .into_iter()
+            .map(|name| json!({"reference":format!("fixture/acme/{name}"),"variables":["manager"]}))
+            .collect();
+        let calls = if batch {
+            vec![json!({"packs":selections})]
+        } else {
+            selections
+        };
+        let mut elapsed = std::time::Duration::ZERO;
+        for (index, arguments) in calls.iter().enumerate() {
+            let started = std::time::Instant::now();
+            let form = transport.call(json!(10 + index * 2), "pack_add", arguments);
+            assert_eq!(form["method"], "elicitation/create", "{form}");
+            let proposal = transport.request(&answer(&form, "accept", form_values(&form)));
+            approve(
+                &transport,
+                i64::try_from(11 + index * 2).unwrap(),
+                &proposal,
+            );
+            elapsed += started.elapsed();
+        }
+        assert_eq!(proposals(&project), if batch { 1 } else { 3 });
+        let config: Value = crate::policy::parse(
+            &std::fs::read_to_string(
+                std::path::Path::new(&project.review.project_root).join(".shield/config.yml"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let rows = config["packs"].as_array().unwrap();
+        assert_eq!(rows.len(), 3);
+        assert!(
+            rows.iter()
+                .all(|row| row["variables"] == json!({"manager":"just"}))
+        );
+        assert!(transport.close().1.is_ok());
+        eprintln!(
+            "pack installation retained MCP batch={batch} complete_installation_us={} settings_forms={} final_approvals={}",
+            elapsed.as_micros(),
+            calls.len(),
+            calls.len()
+        );
+    }
+}
+
+#[test]
+fn pack_installation_explicit_optional_setting_overrides_default_only_after_approval() {
+    let (transport, project, _) = fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
+    let before = project.revision();
+    let form = transport.call(
+        json!(10),
+        "pack_add",
+        &json!({"reference":"fixture/acme/settings","variables":["manager"]}),
+    );
+    assert_eq!(form["method"], "elicitation/create", "{form}");
+    assert_eq!(
+        form["params"]["requestedSchema"]["properties"]
+            .as_object()
+            .unwrap()
+            .len(),
+        1
+    );
+    let proposal = transport.request(&answer(&form, "accept", form_values(&form)));
+    assert!(data(&proposal)["error"].is_null(), "{proposal}");
+    assert_eq!(project.revision(), before);
+    approve(&transport, 11, &proposal);
+    let config: Value = crate::policy::parse(
+        &std::fs::read_to_string(
+            std::path::Path::new(&project.review.project_root).join(".shield/config.yml"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(config["packs"][0]["variables"], json!({"manager":"just"}));
+}
+
+#[test]
+fn pack_installation_optional_repository_setting_prepares_scope_before_final_approval() {
+    let (transport, project, source) = fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
+    let mut pack: Value =
+        serde_json::from_str(&std::fs::read_to_string(source.join("pack.yml")).unwrap()).unwrap();
+    pack["variables"] = json!({"repository":{"type":"string","description":"Optional exact owner/repository; omit for no restriction","match":{"regex":"[a-z]+/[a-z]+"}}});
+    pack["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("preconditions-v1"));
+    pack["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("regex-v1"));
+    pack["rules"] = json!([{"id":"inspect","conditions":{"domain":"argv","executable":"gh","arguments":{"kind":"any"}},"decision":"allow"}]);
+    pack["preconditions"] = json!([{"id":"repository","conditions":{"domain":"argv","executable":"gh"},
+        "requires_any":[{"arguments":{"kind":"exact","values":["repo","view","-R",{"var":"repository"}]}}],"on_unmet":{"decision":"deny"}}]);
+    publish(&source, &[("pack.yml", pack.to_string())]);
+    let before = project.revision();
+    let unscoped = transport.call(
+        json!(10),
+        "pack_add",
+        &json!({"reference":"fixture/acme/settings"}),
+    );
+    assert!(data(&unscoped)["error"].is_null(), "{unscoped}");
+    let form = transport.call(
+        json!(11),
+        "pack_add",
+        &json!({"reference":"fixture/acme/settings","variables":["repository"]}),
+    );
+    assert_eq!(form["method"], "elicitation/create", "{form}");
+    let key = form["params"]["requestedSchema"]["properties"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap();
+    let mut values = json!({});
+    values[key] = json!("acme/web");
+    let scoped = transport.request(&answer(&form, "accept", values));
+    assert!(data(&scoped)["error"].is_null(), "{scoped}");
+    assert_eq!(project.revision(), before);
+    for (id, proposal, repository, expected) in [
+        (12, &unscoped, "outside/web", "allow"),
+        (13, &scoped, "acme/web", "allow"),
+        (14, &scoped, "outside/web", "deny"),
+    ] {
+        let result = transport.call(json!(id), "policy_evaluate", &json!({
+            "candidate_id":data(proposal)["data"]["after_candidate_id"],
+            "input":{"kind":"argv","executable":"gh","arguments":["repo","view","-R",repository],"original_input":{}},
+            "context":{"cwd":project.review.project_root}
+        }));
+        assert_eq!(data(&result)["data"]["decision"], expected, "{result}");
+    }
+    assert_eq!(project.revision(), before);
+    approve(&transport, 15, &scoped);
+    assert_ne!(project.revision(), before);
+}
+
+#[test]
+fn pack_installation_batch_refuses_invalid_selections_without_partial_proposals() {
+    for arguments in [
+        json!({"packs":[]}),
+        json!({"packs":vec![json!({"reference":"fixture/acme/settings"});17]}),
+        json!({"packs":[{"reference":"fixture/acme/settings"}],"reference":"fixture/acme/settings"}),
+        json!({"packs":[{"reference":"fixture/acme/settings"}],"profile":"strict"}),
+        json!({"packs":[{"reference":"fixture/acme/settings"},{"reference":"fixture/acme/settings"}]}),
+        json!({"packs":[{"reference":"fixture/acme/settings"},{"reference":"fixture/acme/missing"}]}),
+        json!({"packs":[{"reference":"fixture/acme/settings","variables":["missing"]}]}),
+        json!({"reference":"fixture/acme/settings","variables":["manager","manager"]}),
+    ] {
+        let (transport, project, _) = fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
+        let before = project.revision();
+        let result = transport.call(json!(10), "pack_add", &arguments);
+        assert_eq!(result["id"], 10, "{arguments}: {result}");
+        assert!(
+            result.get("error").is_some() || !data(&result)["error"].is_null(),
+            "{result}"
+        );
+        assert_eq!(proposals(&project), 0);
+        assert_eq!(project.revision(), before);
+    }
+}
+
+#[test]
+fn pack_installation_batch_defaults_need_no_form_and_commit_one_generation() {
+    let (transport, project, source) = fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
+    let root = std::fs::read_to_string(source.join("pack.yml")).unwrap();
+    let mut other: Value = serde_json::from_str(&root).unwrap();
+    other["id"] = json!("acme/other");
+    publish(
+        &source,
+        &[("pack.yml", root), ("other.yml", other.to_string())],
+    );
+    let before = project.revision();
+    let result = transport.call(
+        json!(10),
+        "pack_add",
+        &json!({"packs":[
+            {"reference":"fixture/acme/settings"},{"reference":"fixture/acme/other"}
+        ]}),
+    );
+    assert!(data(&result)["error"].is_null(), "{result}");
+    assert_eq!(proposals(&project), 1);
+    assert_eq!(project.revision(), before);
+    approve(&transport, 11, &result);
+    let applied = project.revision();
+    assert_ne!(applied, before);
+    // Reapplying returns the same receipt without another activation.
+    let repeated = transport.call(
+        json!(12),
+        "policy_apply",
+        &data(&result)["data"]["apply_arguments"],
+    );
+    assert!(data(&repeated)["error"].is_null(), "{repeated}");
+    assert_eq!(project.revision(), applied);
+    let listed = transport.call(json!(13), "pack_list", &json!({}));
+    assert_eq!(data(&listed)["data"]["packs"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn pack_installation_batch_decline_cancel_and_stale_input_leave_no_pack_proposal() {
+    for outcome in ["decline", "cancel", "stale"] {
+        let (transport, project, source) =
+            fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
+        let root = std::fs::read_to_string(source.join("pack.yml")).unwrap();
+        let mut other: Value = serde_json::from_str(&root).unwrap();
+        other["id"] = json!("acme/other");
+        publish(
+            &source,
+            &[("pack.yml", root), ("other.yml", other.to_string())],
+        );
+        let form = transport.call(
+            json!(10),
+            "pack_add",
+            &json!({"packs":[
+                {"reference":"fixture/acme/settings","variables":["manager"]},
+                {"reference":"fixture/acme/other","variables":["manager"]}
+            ]}),
+        );
+        assert_eq!(form["method"], "elicitation/create", "{form}");
+        assert_eq!(
+            form["params"]["requestedSchema"]["properties"]
+                .as_object()
+                .unwrap()
+                .len(),
+            2
+        );
+        if outcome == "stale" {
+            let other = transport.call(json!(11), "policy_propose", &json!({"change":{"kind":"rule_add","rule":{"id":"other","decision":"ask","conditions":{"domain":"argv","executable":"other","arguments":{"kind":"any"}}}}}));
+            // A separate operator/connection changes policy while this form owns
+            // the connection's pending input slot.
+            let applied = crate::review::mcp::call_with_confirmation(
+                &project.review,
+                &crate::review::mcp::Connection::new("other".into()),
+                "policy_apply",
+                &data(&other)["data"]["apply_arguments"],
+                &|| Ok(()),
+                true,
+            );
+            assert!(applied["error"].is_null(), "{applied}");
+        }
+        let before = project.revision();
+        let count = proposals(&project);
+        let (action, values, code) = match outcome {
+            "stale" => ("accept", form_values(&form), "stale_revision"),
+            "decline" => ("decline", json!({}), "input_declined"),
+            _ => ("cancel", json!({}), "input_cancelled"),
+        };
+        let result = transport.request(&answer(&form, action, values));
+        assert_eq!(data(&result)["error"]["code"], code, "{result}");
+        assert_eq!(project.revision(), before);
+        assert_eq!(proposals(&project), count);
+        let listed = transport.call(json!(13), "pack_list", &json!({}));
+        assert!(
+            data(&listed)["data"]["packs"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+    }
+}
+
+#[test]
+fn pack_installation_batch_bounds_requested_settings_across_all_selections() {
+    for fields in [8, 9] {
+        let (transport, project, source) =
+            fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
+        let mut root: Value =
+            serde_json::from_str(&std::fs::read_to_string(source.join("pack.yml")).unwrap())
+                .unwrap();
+        let names: Vec<_> = (0..fields).map(|i| format!("flag_{i}")).collect();
+        root["variables"] = json!(
+            names
+                .iter()
+                .map(|name| (
+                    name,
+                    json!({"type":"boolean","description":"Optional flag","default":false})
+                ))
+                .collect::<std::collections::BTreeMap<_, _>>()
+        );
+        let mut other = root.clone();
+        other["id"] = json!("acme/other");
+        publish(
+            &source,
+            &[
+                ("pack.yml", root.to_string()),
+                ("other.yml", other.to_string()),
+            ],
+        );
+        let result = transport.call(
+            json!(10),
+            "pack_add",
+            &json!({"packs":[
+                {"reference":"fixture/acme/settings","variables":names},
+                {"reference":"fixture/acme/other","variables":names}
+            ]}),
+        );
+        if fields == 8 {
+            assert_eq!(result["method"], "elicitation/create", "{result}");
+            assert_eq!(
+                result["params"]["requestedSchema"]["properties"]
+                    .as_object()
+                    .unwrap()
+                    .len(),
+                16
+            );
+            let declined = transport.request(&answer(&result, "decline", json!({})));
+            assert_eq!(data(&declined)["error"]["code"], "input_declined");
+        } else {
+            assert_eq!(data(&result)["error"]["code"], "invalid_input", "{result}");
+        }
+        assert_eq!(proposals(&project), 0);
+    }
+}
+
+#[test]
 fn pack_installation_allows_sixteen_missing_settings_but_refuses_seventeen_without_proposal() {
     for count in [16, 17] {
         let (transport, project, source) =
@@ -143,6 +542,95 @@ fn pack_installation_refuses_more_than_four_mib_of_retained_source_without_propo
     );
     assert_eq!(project.revision(), before);
     assert_eq!(proposals(&project), proposals_before);
+}
+
+#[test]
+fn pack_installation_local_batch_refuses_profiles_for_preexisting_packs() {
+    let (transport, project, source) = fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
+    let root: Value =
+        serde_json::from_str(&std::fs::read_to_string(source.join("pack.yml")).unwrap()).unwrap();
+    let mut child = root.clone();
+    child["id"] = json!("acme/child");
+    publish(
+        &source,
+        &[
+            ("pack.yml", root.to_string()),
+            ("child.yml", child.to_string()),
+        ],
+    );
+    let proposal = transport.call(
+        json!(10),
+        "policy_propose",
+        &json!({
+            "change":{"kind":"pack_add","reference":"fixture/acme/settings"}
+        }),
+    );
+    approve(&transport, 11, &proposal);
+    let folder = std::path::Path::new(&project.review.project_root).join(".shield");
+    let shared_before = std::fs::read(folder.join("config.yml")).unwrap();
+    let revision = project.revision();
+    let count = proposals(&project);
+    for profile in ["recommended", "strict"] {
+        for existing_first in [true, false] {
+            let existing = json!({"reference":"fixture/acme/settings","profile":profile});
+            let new = json!({"reference":"fixture/acme/child"});
+            let packs = if existing_first {
+                json!([existing, new])
+            } else {
+                json!([new, existing])
+            };
+            let refused = transport.call(
+                json!(12),
+                "pack_add",
+                &json!({"packs":packs,"layer":"local"}),
+            );
+            assert_eq!(
+                data(&refused)["error"]["code"],
+                "invalid_input",
+                "{refused}"
+            );
+            assert!(
+                data(&refused)["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("cannot change its profile"),
+                "{refused}"
+            );
+            assert_eq!(project.revision(), revision);
+            assert_eq!(proposals(&project), count);
+            assert_eq!(
+                std::fs::read(folder.join("config.yml")).unwrap(),
+                shared_before
+            );
+        }
+    }
+    // Without a profile, an existing selection can still receive personal values.
+    let form = transport.call(
+        json!(13),
+        "pack_add",
+        &json!({
+            "packs":[{"reference":"fixture/acme/settings","variables":["manager"]},
+                {"reference":"fixture/acme/child"}],"layer":"local"
+        }),
+    );
+    assert_eq!(form["method"], "elicitation/create", "{form}");
+    let proposal = transport.request(&answer(&form, "accept", form_values(&form)));
+    approve(&transport, 14, &proposal);
+    assert_eq!(
+        std::fs::read(folder.join("config.yml")).unwrap(),
+        shared_before
+    );
+    let local: Value =
+        crate::policy::parse(&std::fs::read_to_string(folder.join("config.local.yml")).unwrap())
+            .unwrap();
+    let overlay = local["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "acme/settings")
+        .unwrap();
+    assert_eq!(overlay["variables"], json!({"manager":"just"}));
+    assert!(overlay.get("profile").is_none());
 }
 
 #[test]

@@ -8,7 +8,8 @@ use serde_json::json;
 pub(super) fn catalog() -> Result<PromptCatalog, PromptError> {
     let mut prompt = Prompt::new("install_pack");
     prompt.title = Some("Install a permission pack".into());
-    prompt.description = Some("Start a guided Shield pack installation with required settings and separate final approval.".into());
+    prompt.description =
+        Some("Install a permission pack with guided settings and separate approval.".into());
     for (name, required, description) in [
         (
             "reference",
@@ -45,7 +46,8 @@ pub(super) fn render(call: &PromptCall) -> Outcome {
         arguments[name] = json!(value);
     }
     let text = format!(
-        "Install a Shield permission pack using these pack_add arguments (JSON data): {arguments}\nThe tools require a Shield MCP connection to an enrolled project. If this is a discovery-only connection, enroll the intended project with shield init and connect Shield to that project before calling tools. Inspect its pack_info first, then call pack_add to collect required settings through the host form. Never invent missing answers. Review the inactive proposal and use its exact apply_arguments with policy_apply for separate final approval. Decline or dismissal ends the offer. Retrieving this prompt does not install or approve anything."
+        "Install a Shield pack with these base pack_add arguments: {arguments}\nUse an enrolled project connection; discovery-only connections need shield init and reconnection first. {} Call pack_add with selected variables, review the inactive proposal, then copy apply_arguments unchanged to policy_apply for approval. Stop on decline or dismissal. Retrieving this prompt changes nothing.",
+        crate::proposal_draft::PACK_SETUP_GUIDANCE
     );
     match GetPromptResult::new(
         Some("Guided permission pack installation".into()),

@@ -44,6 +44,7 @@ impl From<Error> for RuntimeError {
             Error::Invalid(reason)
             | Error::Ambiguous { reason, .. }
             | Error::Grouped { reason, .. } => Self::Invalid(reason),
+            Error::ApprovalFormTooLong { .. } => Self::Invalid("approval form is too long"),
             Error::NotPortable(_) => Self::Invalid("rule names a folder on this machine"),
             Error::Dependency(_) => Self::Invalid("dependency closure is invalid"),
             Error::RequiredPack { .. } => Self::Invalid("pack is required by another selection"),

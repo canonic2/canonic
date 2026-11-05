@@ -151,6 +151,13 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             reason,
             &["Nothing was approved."],
         ),
+        Error::ApprovalFormTooLong { .. } => Report::detailed(
+            "The approval form is too long",
+            "Nothing was approved.",
+            &[
+                "Use the suggested request_approve arguments; review the remaining requests separately.",
+            ],
+        ),
         Error::Dependency(error) => dependency(error),
         Error::Policy(error) => policy(error),
         Error::Io(error) => io_report(error),

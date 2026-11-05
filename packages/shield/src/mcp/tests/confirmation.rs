@@ -349,10 +349,8 @@ fn codex_applies_after_its_own_tool_permission_without_a_form() {
     assert_ne!(project.revision(), before);
 }
 
-#[test]
-fn request_approve_asks_once_for_a_group_and_the_schema_refuses_both_forms() {
+fn pending_hook_requests(project: &Project, action: String, count: usize) -> Vec<String> {
     use crate::review::hook_approval::{Identity, Key, Outcome, Summary, refused};
-    let (server, project) = fixture(Some("codex"));
     let root = std::path::Path::new(&project.review.project_root);
     let active = crate::review::runtime::status(&project.review).unwrap()["active"].clone();
     let identity = Identity {
@@ -361,29 +359,39 @@ fn request_approve_asks_once_for_a_group_and_the_schema_refuses_both_forms() {
         candidate_digest: active["candidate_digest"].as_str().unwrap(),
     };
     let summary = Summary {
-        action: "Run this command:\ngit branch -D acme/task".into(),
+        action,
         reason: "the active policy denies it".into(),
         overrides_deny: true,
         deny_rules: vec!["acme-branch-delete".into()],
         settings_change: false,
     };
-    let ids: Vec<String> = ["acme-first", "acme-second"]
-        .iter()
-        .map(|input| {
+    (0..count)
+        .map(|n| {
             let key = Key {
                 agent: "codex",
                 session: "acme-session",
                 cwd: "/workspace/acme",
                 tool: "Bash",
-                input_digest: crate::policy::fingerprint(input.as_bytes()),
+                input_digest: crate::policy::fingerprint(
+                    format!("{}-{n}", summary.action).as_bytes(),
+                ),
             };
             match refused(root, &key, &identity, &summary).unwrap() {
                 Outcome::Pending(id, _) => id,
                 Outcome::Allowed => panic!("expected a pending request"),
             }
         })
-        .collect();
+        .collect()
+}
 
+#[test]
+fn request_approve_asks_once_for_a_group_and_the_schema_refuses_both_forms() {
+    let (server, project) = fixture(Some("codex"));
+    let ids = pending_hook_requests(
+        &project,
+        "Run this command:\ngit branch -D acme/task".into(),
+        2,
+    );
     let transport = Transport::start(server);
     for message in initialize(&capabilities(FORM), "codex") {
         transport.send(&message);
@@ -420,6 +428,54 @@ fn request_approve_asks_once_for_a_group_and_the_schema_refuses_both_forms() {
         summary.starts_with("The user approved these 2 requests once each."),
         "{summary}"
     );
+}
+
+#[test]
+fn request_approve_examples_and_size_recovery_require_confirmation() {
+    let (server, project) = fixture(Some("codex"));
+    let ids = pending_hook_requests(
+        &project,
+        format!("Run this command:\necho {}", "é".repeat(3_500)),
+        8,
+    );
+    let transport = Transport::start(server);
+    for message in initialize(&capabilities(FORM), "codex") {
+        transport.send(&message);
+    }
+    assert!(transport.receive()["result"].is_object());
+    let catalog =
+        transport.request(&json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}));
+    let tool = catalog["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "request_approve")
+        .unwrap();
+    let examples = &tool["inputSchema"]["examples"];
+    let mut group = examples[1].clone();
+    group["request_ids"] = json!(ids);
+    // Eight is schema-valid, but the complete form must also fit. A refusal
+    // returns usable arguments through the real transport without opening a form.
+    let oversized = transport.call(json!(3), "request_approve", &group);
+    assert_eq!(error_code(&oversized), "invalid_input", "{oversized}");
+    let error = &oversized["result"]["structuredContent"]["error"];
+    assert_eq!(error["retry_arguments"], json!({"request_ids":[ids[0]]}));
+    assert_eq!(error["remaining_request_ids"], json!(ids[1..]));
+    let text = oversized["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains(&ids[0]), "{text}");
+    assert!(text.contains("Nothing was approved"), "{text}");
+    let retry = transport.call(json!(4), "request_approve", &error["retry_arguments"]);
+    assert_eq!(retry["method"], "elicitation/create", "{retry}");
+    assert!(retry["params"]["message"].as_str().unwrap().len() <= 12_000);
+    let declined = transport.request(&answer(&retry, &json!({"action":"decline"})));
+    assert_eq!(error_code(&declined), "approval_declined", "{declined}");
+    // The advertised single-request example uses the same confirmation boundary.
+    let mut single = examples[0].clone();
+    single["request_id"] = json!(ids[1]);
+    let form = transport.call(json!(5), "request_approve", &single);
+    assert_eq!(form["method"], "elicitation/create", "{form}");
+    let declined = transport.request(&answer(&form, &json!({"action":"decline"})));
+    assert_eq!(error_code(&declined), "approval_declined", "{declined}");
 }
 
 #[test]

@@ -122,7 +122,7 @@ fn route(reply: &mut Reply, id: &str, others: bool) {
     if others {
         append(
             &mut reply.agent_context,
-            "Other pending requests from this session for the same task can go in the same call as request_ids.",
+            "For this task, approve only requests still needed. Pass up to eight pending requests from this session as request_ids, subject to the 12,000-byte confirmation limit; one request_id is always an option. If a group is too long, use the returned retry_arguments and review the remaining_request_ids separately.",
         );
     }
     if reply.decision != Decision::Allow {

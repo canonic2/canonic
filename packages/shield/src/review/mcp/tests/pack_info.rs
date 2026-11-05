@@ -80,9 +80,131 @@ fn pack_info_summarizes_profiles_and_groups_without_returning_full_rules() {
     );
     assert_eq!(data["precondition_count"], 1);
     assert_eq!(data["preconditions"][0]["on_unmet_decisions"], "deny");
+    assert_eq!(data["setup"]["settings_available"], true);
+    assert_eq!(
+        data["setup"]["settings_arguments_template"],
+        json!({"reference":"tools/acme/runtime","variables":["<declared-variable-name>"]})
+    );
     let state = Store::open(root.path()).unwrap().read().unwrap();
     assert!(state.proposals.is_empty());
     assert_eq!(state.operator["installed"], json!([]));
+}
+
+#[test]
+fn pack_info_setup_template_does_not_select_required_optional_or_list_settings() {
+    let (root, context, connection) = fixture();
+    let source = available(&context, &root);
+    let path = source.path().join("runtime.json");
+    let mut pack: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    pack["variables"]["required_flag"] =
+        json!({"type":"boolean","description":"Required flag","required":true});
+    pack["variables"]["labels"] =
+        json!({"type":"list","description":"Optional labels","items":{"type":"string"}});
+    let bytes = pack.to_string();
+    std::fs::write(&path, &bytes).unwrap();
+    let catalog_path = source.path().join("catalog.json");
+    let mut catalog: Value =
+        serde_json::from_slice(&std::fs::read(&catalog_path).unwrap()).unwrap();
+    catalog["packs"][0]["sha256"] = json!(crate::policy::fingerprint(bytes.as_bytes()));
+    std::fs::write(catalog_path, catalog.to_string()).unwrap();
+    for view in ["summary", "settings"] {
+        let result = invoke(
+            &context,
+            &connection,
+            "pack_info",
+            json!({"reference":"tools/acme/runtime","view":view}),
+        );
+        assert!(result["error"].is_null(), "{result}");
+        let setup = &result["data"]["setup"];
+        assert!(setup.get("settings_arguments").is_none());
+        assert_eq!(
+            setup["settings_arguments_template"],
+            json!({"reference":"tools/acme/runtime","variables":["<declared-variable-name>"]})
+        );
+        let message = setup["message"].as_str().unwrap();
+        assert!(message.contains("not ready-to-call"), "{message}");
+        assert!(
+            message.contains("required missing values are collected automatically"),
+            "{message}"
+        );
+        assert!(message.contains("Unsupported form types"), "{message}");
+        assert_eq!(result["data"]["variables"]["labels"]["type"], "list");
+    }
+}
+
+#[test]
+fn pack_info_without_settings_explains_that_installation_cannot_add_scope() {
+    let (root, context, connection) = fixture();
+    let source = available(&context, &root);
+    let path = source.path().join("runtime.json");
+    let mut pack: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    pack.as_object_mut().unwrap().remove("variables");
+    pack.as_object_mut().unwrap().remove("preconditions");
+    pack["capabilities"].as_array_mut().unwrap().retain(|cap| {
+        !["variables-v1", "preconditions-v1", "templates-v1"]
+            .iter()
+            .any(|removed| cap == removed)
+    });
+    let bytes = pack.to_string();
+    std::fs::write(&path, &bytes).unwrap();
+    let catalog_path = source.path().join("catalog.json");
+    let mut catalog: Value =
+        serde_json::from_slice(&std::fs::read(&catalog_path).unwrap()).unwrap();
+    catalog["packs"][0]["sha256"] = json!(crate::policy::fingerprint(bytes.as_bytes()));
+    std::fs::write(catalog_path, catalog.to_string()).unwrap();
+    for view in ["summary", "settings"] {
+        let result = invoke(
+            &context,
+            &connection,
+            "pack_info",
+            json!({"reference":"tools/acme/runtime","view":view}),
+        );
+        assert!(result["error"].is_null(), "{result}");
+        assert_eq!(result["data"]["setup"]["settings_available"], false);
+        assert!(
+            result["data"]["setup"]
+                .get("settings_arguments_template")
+                .is_none()
+        );
+        assert!(
+            result["data"]["setup"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("cannot add a requested target restriction")
+        );
+    }
+}
+
+#[test]
+fn pack_info_exact_rule_with_rules_view_passes_the_published_transport_schema() {
+    let (root, context, _connection) = fixture();
+    let _source = available(&context, &root);
+    let transport =
+        crate::mcp::tests::Transport::start(crate::mcp::Server::for_review(context).unwrap());
+    for message in crate::mcp::tests::initialize(&json!({}), "acme") {
+        transport.send(&message);
+    }
+    assert!(transport.receive()["result"].is_object());
+    let result = transport.call(
+        json!(10),
+        "pack_info",
+        &json!({"reference":"tools/acme/runtime","rule_id":"install","view":"rules"}),
+    );
+    assert!(
+        result["result"]["structuredContent"]["error"].is_null(),
+        "{result}"
+    );
+    assert_eq!(
+        result["result"]["structuredContent"]["data"]["rule"]["id"],
+        "install"
+    );
+    let invalid = transport.call(
+        json!(11),
+        "pack_info",
+        &json!({"reference":"tools/acme/runtime","rule_id":"install","view":"summary"}),
+    );
+    assert_eq!(invalid["result"]["isError"], true, "{invalid}");
+    assert!(transport.close().1.is_ok());
 }
 
 #[test]
@@ -97,7 +219,7 @@ fn pack_info_filters_pages_retains_evidence_and_selects_exact_rules() {
         &context,
         &connection,
         "pack_info",
-        json!({"reference":"tools/acme/runtime","rule_id":"install"}),
+        json!({"reference":"tools/acme/runtime","rule_id":"install","view":"rules"}),
     );
     assert_eq!(
         exact["data"]["rule"]["conditions"]["arguments"]["values"],
@@ -125,6 +247,10 @@ fn pack_info_filters_pages_retains_evidence_and_selects_exact_rules() {
         json!([{"executable":"acme"}])
     );
     assert_eq!(settings["data"]["variables"]["manager"]["type"], "choice");
+    assert_eq!(
+        settings["data"]["setup"]["settings_arguments_template"],
+        json!({"reference":"tools/acme/runtime","variables":["<declared-variable-name>"]})
+    );
     let missing = invoke(
         &context,
         &connection,
@@ -197,7 +323,8 @@ fn pack_info_rejects_mixed_summary_and_rule_arguments() {
         json!({"view":"raw"}),
         json!({"limit":2}),
         json!({"query":"install"}),
-        json!({"rule_id":"install","view":"rules"}),
+        json!({"rule_id":"install","view":"settings"}),
+        json!({"rule_id":"install","view":"summary"}),
         json!({"rule_id":"install","query":"install"}),
     ] {
         let mut args = fields;

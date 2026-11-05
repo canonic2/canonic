@@ -44,7 +44,11 @@ pub(super) fn offer(
                 String::new()
             };
             Some(format!(
-                "Several available packs advertise this command: {shown}{more}. Inspect with pack_info and choose with the user; relevance grants no permission. Use short names unless ambiguous; keep full references in tools. Call pack_add with arguments {{\"reference\":\"<selected full reference>\"}} to collect required settings and prepare an inactive installation proposal, then copy the returned apply_arguments object unchanged into policy_apply for approval."
+                "Several available packs advertise this command: {shown}{more}. Inspect with pack_info and choose with the user; relevance grants no permission. Use short names unless ambiguous; keep full references in tools. {}",
+                proposal_draft::offer(&proposal_draft::arguments(
+                    &proposal_draft::pack("<selected full reference>"),
+                    entry
+                ))
             ))
         }
     }

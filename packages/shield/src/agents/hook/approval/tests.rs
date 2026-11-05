@@ -187,6 +187,32 @@ fn claude_settings_change_recovers_in_the_session_once() {
 }
 
 #[test]
+fn grouping_guidance_keeps_the_single_request_route_and_pending_id() {
+    let (_root, context) = fixture();
+    let root = Path::new(&context.project_root);
+    shell(root, "codex", "git checkout -- .codex/config.toml");
+    let command = "git checkout -- .claude/settings.json";
+    let refused = shell(root, "codex", command);
+    let id = offered_id(&refused).unwrap();
+    let guidance = agent_context(&refused);
+    assert!(
+        guidance.contains("only requests still needed"),
+        "{guidance}"
+    );
+    assert!(guidance.contains("up to eight"), "{guidance}");
+    assert!(guidance.contains("12,000-byte"), "{guidance}");
+    assert!(guidance.contains("retry_arguments"), "{guidance}");
+    assert!(guidance.contains("one request_id"), "{guidance}");
+    // An identical refusal keeps its ID; the hint does not require collecting more.
+    assert_eq!(offered_id(&shell(root, "codex", command)), Some(id.clone()));
+    assert_eq!(
+        request_approve(root, "codex", &id, true)["data"]["status"],
+        "approved"
+    );
+    assert!(agent_context(&shell(root, "codex", command)).contains("allowed once"));
+}
+
+#[test]
 fn a_retry_with_changed_execution_options_needs_its_own_approval() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);

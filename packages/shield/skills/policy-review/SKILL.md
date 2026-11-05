@@ -5,44 +5,35 @@ description: Review recurring Shield permission interruptions when the user asks
 
 # Review Shield permissions
 
-Use this workflow when the user asks to review recurring permission interruptions
-or interpret a request before a lasting policy change. Do not start a review
-after every task or every Allow, Ask or Deny.
+Review permissions when requested or when `suggestion_list` marks recurring
+groups eligible. Avoid reviews after every task or decision.
 
-1. Inspect `suggestion_list`. Follow each row's next action. When needed, inspect
-   selected `history_list`, `rule_list` or `policy_show` evidence. Incomplete
-   coverage is not evidence that a command grammar or permission is safe. Reuse
-   an existing proposal or respect a retained deferral instead of repeating it.
-2. Determine whether the user needs a one-time action, a lasting policy change,
-   or an unsupported operation. Follow the returned route. Shield's MCP tools
-   cannot grant a one-time action. A denied request alone does not authorize
-   a lasting permission change.
-3. For an authorized lasting change, use `policy_propose` with the narrowest
-   justified scope and the returned review context where available. Learn the
-   actual command grammar; do not guess it from a single invocation. Preserve
-   useful deny boundaries and explain any broadening. Read the bundled guides
-   through `shield_docs_list`, `shield_docs_search` and `shield_docs_read` when
-   rule syntax or scope needs clarification.
-   If the change would overwrite unreviewed policy files, propose
-   `{"change":{"kind":"project_files_adopt"}}` separately and submit its
-   exact `apply_arguments` for host approval. This reviews all captured file
-   edits before preparing the original change again. Changed files make the
-   adoption stale; request a fresh proposal after inspecting them. Do not send
-   Claude Code or Codex users to terminal review for ordinary policy file drift.
-4. Inspect the retained proposal through `policy_show`. Copy its exact
-   `apply_arguments` unchanged into `policy_apply` only through the registered
-   adapter's returned approval route. Claude Code uses host form confirmation;
-   Codex uses its tool permission review. Generic hosts require the user to run
-   `shield policy review` in their terminal. Preparation and successful diagnostic
-   evaluation do not activate policy or approve execution.
-5. Treat decline, cancellation, expiry, stale policy and unavailable approval as
-   explicit outcomes. Inspect current policy and `policy_receipt` before a
-   still-needed retry. Retry only while the original task and authorization
-   remain valid. Do not repeat a rejected proposal to seek acceptance; wait for
-   a new user request. Do not add conversational confirmation around work the
-   user has already authorized.
+1. For recurring interruptions, inspect `suggestion_list` and relevant `history_list`, `rule_list` or
+   `policy_show` evidence. Follow returned next actions. Respect incomplete
+   coverage, existing proposals and deferrals.
+2. For one-time access, follow a returned `request_approve` route, wait for user
+   approval, then repeat the identical call once. A refusal alone does not
+   authorize a permanent permission change. Do not bypass unsupported operations.
+3. For packs, inspect `pack_info` setup/settings. Select declared optional
+   variable names needed for the requested restriction in `pack_add`'s `variables`; the
+   form collects values. For example, AWS declares `profile`. Omit unrequested
+   settings. Report missing scope support instead of proposing broader permissions.
+   `local` means storage, not target scope.
+   Use `packs` on `pack_add` for related selections and their variables.
+4. For authorized custom rules, inspect command grammar and effects; preserve
+   scope and deny boundaries. Use `policy_propose` schema examples and link
+   returned review context. Batch related changes in `changes` (up to 16).
+   Read bundled guides only for missing rule syntax, not undeclared pack settings.
+   For unreviewed file edits, propose `{"change":{"kind":"project_files_adopt"}}` alone, obtain approval,
+   then prepare the original change. Changed files require fresh adoption.
+5. Review the proposal; use `policy_show` if more evidence is needed. Copy
+   `apply_arguments` unchanged into `policy_apply` through its returned approval
+   route. Do not add a preliminary chat confirmation. Preparation and previews
+   neither activate policy nor authorize execution.
+6. Stop on decline or cancellation. For uncertain completion, inspect current
+   policy and `policy_receipt` before retrying. Stale proposals need fresh
+   preparation; unavailable approval follows the returned user route. Retry only
+   while the task and authorization remain valid.
 
-Never edit protected Shield state, launch the operator CLI from an agent, change
-the host's permission mode, fabricate confirmation responses, or select a more
-privileged adapter using a client name. The host owns skill activation and user
-approval; reading this file grants no authority.
+Never edit protected state, run the operator CLI as an agent, change permission
+modes, fabricate confirmation responses or impersonate another host adapter.

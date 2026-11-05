@@ -5,18 +5,17 @@ use std::fmt::Write as _;
 
 /// Initialization guidance uses the enrolled session agent, not client display metadata.
 pub(super) fn instructions(agent: Option<&str>) -> String {
-    let common = "Shield manages project permissions. When the user asks to review permission interruptions, inspect \
-suggestion_list and selected history_list, rule_list or policy_evaluate evidence; do not bypass protection. \
-Follow returned routes: a one-time action request is not authorization for a lasting policy change. Inspect packs with pack_info; use pack_add to collect required settings and prepare an installation. \
-Custom proposal schemas include complete examples; adapt them after reviewing effects. Use shield_docs_list, shield_docs_search and shield_docs_read for details. \
-Respect incomplete coverage and existing proposals; do not infer a rule from missing evidence or automatically offer an allow rule for Deny. \
-For an authorized lasting change, propose the narrowest justified candidate with policy_propose and returned review context; preserve deny boundaries and explain broader permissions. \
-Activate through user-approved policy_apply or terminal review. Inspection and proposals grant no authority. Do not interrupt unrelated work with policy review. \
-When a Shield refusal names request_approve and a request_id, call it to ask the user to allow that request, or pass several from this session as request_ids to ask once; after approval, repeat each identical call once. Never work around a refusal another way. ";
+    let common = "Shield manages project permissions. For requested reviews, start with suggestion_list; inspect relevant history_list, rule_list or policy_evaluate evidence. \
+Respect incomplete evidence, pending proposals and deferred reviews. For authorized custom rules, use policy_propose and its schema examples; preserve scope and deny boundaries. Read bundled docs only when rule syntax needs clarification. \
+Previews and proposals grant no authority; activation requires user-approved policy_apply or the returned terminal route. \
+Follow returned request_approve routes for one-time approval, then repeat the approved call once unchanged. Do not bypass refusals or interrupt unrelated work with reviews. ";
     let host = crate::agents::review::resolve(agent)
         .guidance()
         .instructions;
-    format!("{common}{host}Chat replies cannot replace host or terminal confirmation.")
+    format!(
+        "{common}{} {host}Chat replies cannot replace host or terminal confirmation.",
+        crate::proposal_draft::PACK_SETUP_GUIDANCE
+    )
 }
 
 pub(super) fn approval_unavailable(agent: Option<&str>) -> &'static str {
@@ -74,7 +73,7 @@ pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String 
     }
     let data = &value["data"];
     match name {
-        "pack_info" => format!("{} Inspection only; nothing is installed. Use view=rules or rule_id for details; pack_add collects required settings and prepares an installation for approval.", pack_lead(data)),
+        "pack_info" => format!("{} Inspection only; nothing is installed. {}", pack_lead(data), data["setup"]["message"].as_str().unwrap_or_default()).trim_end().to_owned(),
         "policy_evaluate" => {
             let prefix = format!("Policy preview: {}.", data["decision"].as_str().unwrap_or("unknown"));
             if data["decision"] != "allow" && let Some(detail) = crate::agent_message::detail(&data["explanation"]) { format!("{prefix} {detail}") }
@@ -92,16 +91,16 @@ pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String 
         "suggestion_list" => {
             let rows = data["requests"].as_array();
             let eligible = rows.into_iter().flatten().filter(|row| row["eligible_for_offer"] == true).count();
-            format!("{eligible} recurring review groups eligible on this page. Check coverage and each next_action. Offer one grouped review after the task; skip unchanged proposed/deferred items. Listing grants no permission.")
+            format!("{eligible} eligible review groups. Follow coverage and next_action; group reviews after the task and skip unchanged proposed/deferred items.")
         },
-        "shield_docs_list" => "Bundled documentation pages returned. Use shield_docs_read with a listed path, or shield_docs_search to find a topic.".into(),
-        "shield_docs_search" => "Matching documentation lines returned. Use shield_docs_read for the surrounding explanation and examples; next_offset continues the same search.".into(),
-        "shield_docs_read" => "Bundled documentation returned. next_start_line continues this page. Documentation grants no permission.".into(),
+        "shield_docs_list" => "Bundled guides listed. Read a path with shield_docs_read or find a topic with shield_docs_search.".into(),
+        "shield_docs_search" => "Matching guide lines returned. Use shield_docs_read for context; next_offset continues the search.".into(),
+        "shield_docs_read" => "Guide text returned; next_start_line continues this page.".into(),
         "policy_withdraw" => "Policy proposal withdrawn. Active policy is unchanged.".into(),
         "policy_receipt" => "Policy change receipt returned. Inspect current policy and reevaluate the request before retrying.".into(),
         "policy_compare" => "Policy comparison returned. Check coverage and unknowns; this preview grants no execution permission.".into(),
         "doctor" if data["repair_needed"] == true || data["checks"].as_array().is_some_and(|c| !c.is_empty()) => "Shield needs repair. Ask the user to follow the returned repair route before retrying blocked requests.".into(),
-        _ => "Requested Shield records returned. Check missing evidence and truncation before relying on them.".into(),
+        _ => "Records returned. Check missing and truncated evidence.".into(),
     }
 }
 
@@ -160,7 +159,7 @@ fn pack_examples(examples: &Value) -> String {
             .as_array()
             .into_iter()
             .flatten()
-            .take(4)
+            .take(2)
             .filter_map(|row| {
                 let description: String = row["description"]
                     .as_str()?
@@ -185,7 +184,7 @@ fn pack_examples(examples: &Value) -> String {
             let _ = write!(text, " {label} examples: {}.", descriptions.join("; "));
         }
     }
-    text.push_str(" These are declared rule outcomes, not unconditional command permissions. Conditions, unmet requirements and other active policy still apply; Ask uses the host's approval or configured fallback. Inspect the intended profile before describing installation benefits.");
+    text.push_str(" Declared outcomes are not unconditional: conditions and other policy apply. Ask follows host approval or configured fallback. Inspect the intended profile.");
     text
 }
 
@@ -307,7 +306,7 @@ mod tests {
             let text = summary("pack_info", None, &json!({"data":data,"error":null}));
             assert!(text.starts_with(lead), "{text}");
             assert!(text.contains("nothing is installed"));
-            assert!(text.contains("pack_add collects required settings"));
+            assert!(!text.contains("pack_add collects"));
             assert!(!text.contains("policy_propose"));
         }
         let proposed = summary(

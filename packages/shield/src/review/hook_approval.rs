@@ -570,9 +570,17 @@ fn question(rows: &[&HookRequest]) -> Result<String, Error> {
     if text.len() <= MAX_FORM {
         Ok(text)
     } else {
-        Err(Error::Invalid(
-            "these requests are too long to show together; approve them in smaller groups",
-        ))
+        // At most eight rows were selected. Find a fitting prefix using the
+        // actual renderer; a single row was admitted only if its form fits.
+        let mut split = rows.len() - 1;
+        while split > 1 && group_message(&rows[..split]).len() > MAX_FORM {
+            split -= 1;
+        }
+        let ids = |rows: &[&HookRequest]| rows.iter().map(|row| row.request_id.clone()).collect();
+        Err(Error::ApprovalFormTooLong {
+            retry: ids(&rows[..split]),
+            remaining: ids(&rows[split..]),
+        })
     }
 }
 

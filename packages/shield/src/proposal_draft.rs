@@ -2,6 +2,9 @@
 use serde_json::{Value, json};
 use std::path::Path;
 
+/// Shared installation guidance for startup, pack offers and conversation prompts.
+pub(crate) const PACK_SETUP_GUIDANCE: &str = "Inspect pack_info setup/settings before installation. Request declared optional variables needed for the user's restrictions with pack_add.variables; the form collects values. Omit unrequested optional settings. If unsupported, explain the gap instead of proposing broader permissions. Local storage does not restrict targets.";
+
 /// Whether a matched pack rule's guidance for this operation asks for a project
 /// rule proposal, as pack rules for project scripts do. Standalone requests
 /// share a null operation reference. Shield's own generic advice has no rule
@@ -169,7 +172,7 @@ pub(crate) fn offer(arguments: &Value) -> String {
             .as_str()
             .map_or_else(String::new, |entry| format!(" Observed request {entry}."));
         return format!(
-            "Call pack_add with arguments {input} to collect required settings and prepare an inactive installation proposal. Review its Allow/Ask/Deny scope; use pack_info for requested detail. Copy the returned apply_arguments object unchanged into policy_apply for user approval.{observed}"
+            "{PACK_SETUP_GUIDANCE} Call pack_add with arguments {input} to collect settings; add selected variables to these base arguments. Review the proposal, then copy apply_arguments unchanged to policy_apply for approval.{observed}"
         );
     }
     let entry = arguments["source_entry_id"]
