@@ -40,6 +40,15 @@ impl QuestionForm {
     /// Preferred content height; the host clamps it while retaining transcript rows.
     #[must_use]
     pub fn height(&self, width: u16, p: Presentation) -> u16 {
+        self.content_height(width, p, false)
+    }
+    /// Space for the question, context and at least one visible answer row.
+    /// Hosts must also reserve their own footer before allowing submission.
+    #[must_use]
+    pub fn minimum_height(&self, width: u16, p: Presentation) -> u16 {
+        self.content_height(width, p, true)
+    }
+    fn content_height(&self, width: u16, p: Presentation, minimum: bool) -> u16 {
         let body = if let Some(q) = self.request.questions.get(self.step) {
             let field = self.editing || q.kind == Kind::Text;
             wrapped(&clean(&q.prompt, 65_536, true), width).len()
@@ -54,12 +63,20 @@ impl QuestionForm {
                             width.saturating_sub(usize_to_u16(usize::from(width >= 50) * 3)),
                             p.symbols,
                         )
-                        .clamp(1, 6)
+                        .clamp(1, if minimum { 1 } else { 6 })
                 } else {
-                    q.choices.len() + usize::from(q.other)
+                    if minimum {
+                        1
+                    } else {
+                        q.choices.len() + usize::from(q.other)
+                    }
                 }
         } else {
-            self.request.questions.len() * if width < 50 { 2 } else { 1 }
+            (if minimum {
+                1
+            } else {
+                self.request.questions.len()
+            }) * if width < 50 { 2 } else { 1 }
         };
         usize_to_u16(
             2 + usize::from(self.stages.len() > 1) + body + usize::from(!self.status().is_empty()),

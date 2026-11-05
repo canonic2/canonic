@@ -874,6 +874,9 @@ alternate-screen support reports unavailable browser/inspection entry.
 Product CLIs require Canonic TUI for interactive prompts. Their terminal failures
 return actionable errors; JSON and piped protocols remain noninteractive. The
 numbered plain scenarios above belong to the standalone gallery fixture host.
+Use the [CLI prompt guide](cli-prompts.md) for shared guided hosting, Back versus
+cancellation, validation and the common MCP setup sequence. Ordinary product
+prompts use this host instead of implementing their own component event loops.
 For simple single-line prompts, explicitly call `runtime::prompts::read` with a
 caller-owned buffer, hidden flag and byte limit. It borrows the buffer and keeps
 no history. It reserves `limit` bytes before editing, so edits never reallocate

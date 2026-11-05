@@ -24,8 +24,10 @@ the adapter. See [usage](docs/usage.md#status-panels-and-notices).
 The Cargo package is `canonic-tui-kit`; Rust code imports it as `canonic_tui_kit`.
 Consuming CLIs declare it as a required, versioned local Cargo path dependency.
 Every CLI build includes the shared TUI. Interactive prompts use its components
-and leases; unsupported terminals return errors. Plain and structured
-noninteractive output remain host-owned. Ratatui
+and leases; unsupported terminals return errors. CLI pickers and guided questions
+use the [shared prompt host](docs/cli-prompts.md), including the common MCP setup
+action, agent page and confirmation. Plain and structured noninteractive output
+remain host-owned. Ratatui
 renders the views; Crossterm supplies terminal events and modes. Importing the
 library does not open a terminal or execute product operations.
 
@@ -145,7 +147,8 @@ Consumers compile the dependency through their ordinary package targets:
 cargo check --locked --manifest-path path/to/consumer/Cargo.toml
 ```
 
-Existing product interfaces retain their behavior; their UI migrations are
-separate increments. See [usage](docs/usage.md) and [development](docs/development.md).
+Ordinary product questions use the shared CLI prompt host; custom application
+screens compose components under their existing lease. See
+[usage](docs/usage.md) and [development](docs/development.md).
 No crates.io publication or gallery
 installation is required.
