@@ -1,134 +1,110 @@
-//! Shield's single inline terminal host; views return intent and never authorize policy.
+//! Shield descriptors and native signal checks over the shared prompt host.
 use super::{Card, Step};
 use crate::review::Error;
 use canonic_tui_kit::{
-    editor::{Editor, EditorView},
-    event::{Event, KeyCode, KeyEventKind, KeyModifiers},
-    permission_review::{self, Kind, PermissionReview, Resource},
-    picker::{Choice, ChoicePicker, Filter, Intent, PickerView, SelectionMode},
-    ratatui::{
-        Frame,
-        layout::{Constraint, Layout, Rect},
-        widgets::Paragraph,
+    permission_review::{self, Kind, Resource},
+    picker::Choice,
+    runtime::{
+        InlineSession,
+        prompts::{self, Outcome, PickerPrompt},
     },
-    runtime::{Capabilities, InlineOptions, InlineSession},
-    theme::{ColorMode, Presentation},
     tool_call_card::Output,
 };
-use std::{io::IsTerminal, time::Duration};
 mod signals;
+pub(super) type Host = prompts::Host<'static>;
 
-pub(super) struct Host {
-    session: InlineSession,
-    signals: signals::Signals,
+pub(super) fn mcp_action(host: Host) -> Result<prompts::setup::Action, Error> {
+    let mut prompt = prompts::setup::action_prompt()?;
+    let ids = step(host.pick(&mut prompt)?)?.or_cancel()?;
+    match ids.first().map(String::as_str) {
+        Some("install") => Ok(prompts::setup::Action::Install),
+        Some("remove") => Ok(prompts::setup::Action::Remove),
+        _ => Err(Error::Invalid("setup action missing")),
+    }
 }
-/// Acquire the required shared UI or report the terminal prerequisite.
+pub(super) fn agents(
+    host: Host,
+    choices: Vec<Choice>,
+    marked: &[&str],
+    remove: bool,
+    back: bool,
+) -> Result<Step<Vec<String>>, Error> {
+    let mut prompt = prompts::setup::agent_prompt(choices, marked, remove)?.back(back);
+    first_step(step(host.pick(&mut prompt)?)?, back)
+}
+/// The picker reports Escape as Back even when it names it as cancel; without
+/// an earlier step to return to, that is a cancellation.
+fn first_step<T>(step: Step<T>, back: bool) -> Result<Step<T>, Error> {
+    match step {
+        Step::Back if !back => Err(Error::Cancelled),
+        step => Ok(step),
+    }
+}
+pub(super) fn confirm_mcp(host: Host) -> Result<(), Error> {
+    let mut prompt = prompts::setup::confirmation_prompt(
+        "The review above lists the hooks, MCP entries, permissions and files to change. Cancel keeps your configuration.",
+    )?;
+    let ids = step(host.pick(&mut prompt)?)?.or_cancel()?;
+    if ids.first().is_some_and(|id| id == "apply") {
+        Ok(())
+    } else {
+        Err(Error::Cancelled)
+    }
+}
+
 pub(super) fn open(height: u16) -> Result<Host, Error> {
-    let term = std::env::var("TERM").unwrap_or_default();
-    if !std::io::stdin().is_terminal()
-        || !std::io::stdout().is_terminal()
-        || !(cfg!(windows) && term.is_empty()
-            || ["xterm", "screen", "tmux", "linux", "vt", "ansi"]
-                .iter()
-                .any(|p| term.starts_with(p)))
-    {
-        return Err(Error::Invalid(
-            "interactive TUI requires terminal stdin/stdout and a native console or cursor-capable TERM",
-        ));
-    }
     let signals = signals::Signals::new()?;
-    let session = InlineSession::open(InlineOptions {
-        height,
-        capabilities: Capabilities {
-            cursor: true,
-            alternate: false,
-        },
-    });
-    match session {
-        Ok(session) => Ok(Host { session, signals }),
-        Err(_) if signals.cancelled() => Err(Error::Cancelled),
-        Err(error) => Err(error.into()),
-    }
+    let host = match Host::open(height) {
+        Ok(host) => host,
+        Err(_) if signals.cancelled() => return Err(Error::Cancelled),
+        Err(error) => return Err(error.into()),
+    };
+    Ok(host.with_checkpoint(move |session| {
+        signals.check(session).map_err(|error| match error {
+            Error::Cancelled => {
+                std::io::Error::new(std::io::ErrorKind::Interrupted, "operator cancelled")
+            }
+            Error::Io(error) => error,
+            other => std::io::Error::other(other),
+        })
+    }))
 }
-fn presentation() -> Presentation {
-    Presentation {
-        colors: if std::env::var_os("NO_COLOR").is_some() {
-            ColorMode::NoColor
-        } else {
-            ColorMode::Ansi16
-        },
-        ..Presentation::default()
-    }
+fn choices(rows: &[(&str, &str, &str)]) -> Vec<Choice> {
+    rows.iter()
+        .map(|(id, label, detail)| {
+            let mut choice = Choice::new(*id, *label);
+            choice.detail = (*detail).into();
+            choice
+        })
+        .collect()
 }
-fn entered(event: &Event) -> bool {
-    matches!(event, Event::Key(k) if k.kind == KeyEventKind::Press && k.code == KeyCode::Enter && k.modifiers.is_empty())
-}
-fn cancelled(event: &Event) -> bool {
-    escaped(event) || interrupted(event)
-}
-fn escaped(event: &Event) -> bool {
-    matches!(event, Event::Key(k) if k.kind != KeyEventKind::Release && k.code == KeyCode::Esc)
-}
-fn interrupted(event: &Event) -> bool {
-    matches!(event, Event::Key(k) if k.kind != KeyEventKind::Release && k.code == KeyCode::Char('c') && k.modifiers.contains(KeyModifiers::CONTROL))
-}
-#[cfg(test)]
-fn accepted(picker: &mut ChoicePicker, event: &Event, available: bool) -> Option<String> {
-    collected(picker, event, available).and_then(|ids| ids.into_iter().next())
-}
-fn collected(picker: &mut ChoicePicker, event: &Event, available: bool) -> Option<Vec<String>> {
-    match picker.update(event) {
-        Intent::Selected(id) if entered(event) && available => Some(vec![id]),
-        Intent::Confirmed(ids) if entered(event) && available => Some(ids),
-        _ => None,
+fn step<T>(outcome: Outcome<T>) -> Result<Step<T>, Error> {
+    match outcome {
+        Outcome::Submitted(value) => Ok(Step::Done(value)),
+        Outcome::Back => Ok(Step::Back),
+        Outcome::Cancelled => Err(Error::Cancelled),
     }
 }
 pub(super) fn choose(
     host: Host,
     title: &str,
     context: &str,
-    choices: &[(&str, &str, &str)],
+    rows: &[(&str, &str, &str)],
     default: &str,
 ) -> Result<String, Error> {
-    let menu = Menu {
-        title,
-        context,
-        choices,
-        default: Some(default),
-        mode: SelectionMode::Single,
-        escape: None,
-        marked: &[],
-        empty: "",
-    };
-    match select(host, &menu)? {
-        Step::Done(ids) => ids
-            .into_iter()
-            .next()
-            .ok_or(Error::Invalid("prompt choice missing")),
-        Step::Back => Err(Error::Cancelled),
-    }
+    choose_step(host, title, context, rows, default, "cancel")?.or_cancel()
 }
-/// One step of a guided flow: Escape returns [`Step::Back`] and the footer
-/// reads `esc <escape>`; Ctrl-C still cancels.
 pub(super) fn choose_step(
     host: Host,
     title: &str,
     context: &str,
-    choices: &[(&str, &str, &str)],
+    rows: &[(&str, &str, &str)],
     default: &str,
     escape: &str,
 ) -> Result<Step<String>, Error> {
-    let menu = Menu {
-        title,
-        context,
-        choices,
-        default: Some(default),
-        mode: SelectionMode::Single,
-        escape: Some(escape),
-        marked: &[],
-        empty: "",
-    };
-    Ok(match select(host, &menu)? {
+    let mut prompt =
+        PickerPrompt::single(title, context, choices(rows), Some(default))?.back(escape == "back");
+    Ok(match step(host.pick(&mut prompt)?)? {
         Step::Done(ids) => Step::Done(
             ids.into_iter()
                 .next()
@@ -137,209 +113,38 @@ pub(super) fn choose_step(
         Step::Back => Step::Back,
     })
 }
-/// A multiple choice starting with `marked` rows marked; `empty` is the
-/// settled answer when the operator confirms nothing.
-pub(super) fn choose_many(
-    host: Host,
-    title: &str,
-    context: &str,
-    choices: &[(&str, &str, &str)],
-    marked: &[&str],
-    empty: &str,
-) -> Result<Vec<String>, Error> {
-    let menu = Menu {
-        title,
-        context,
-        choices,
-        default: None,
-        mode: SelectionMode::Multiple,
-        escape: None,
-        marked,
-        empty,
-    };
-    match select(host, &menu)? {
-        Step::Done(ids) => Ok(ids),
-        Step::Back => Err(Error::Cancelled),
-    }
-}
-/// A multiple choice as one step of a guided flow: Escape returns
-/// [`Step::Back`] and the footer reads `esc <escape>`; Ctrl-C still cancels.
+
 pub(super) fn choose_many_step(
     host: Host,
     title: &str,
     context: &str,
-    choices: &[(&str, &str, &str)],
+    rows: &[(&str, &str, &str)],
     marked: &[&str],
     empty: &str,
     escape: &str,
 ) -> Result<Step<Vec<String>>, Error> {
-    let menu = Menu {
-        title,
-        context,
-        choices,
-        default: None,
-        mode: SelectionMode::Multiple,
-        escape: Some(escape),
-        marked,
-        empty,
-    };
-    select(host, &menu)
+    let mut prompt = PickerPrompt::multiple(title, context, choices(rows), marked, 0, empty)?
+        .back(escape == "back");
+    step(host.pick(&mut prompt)?)
 }
-/// A picker prompt; `escape` makes Escape a step back instead of a cancel.
-struct Menu<'a> {
-    title: &'a str,
-    context: &'a str,
-    choices: &'a [(&'a str, &'a str, &'a str)],
-    default: Option<&'a str>,
-    mode: SelectionMode,
-    escape: Option<&'a str>,
-    /// Rows marked when a multiple choice opens.
-    marked: &'a [&'a str],
-    /// The settled answer when nothing is marked.
-    empty: &'a str,
+pub(super) fn question(
+    host: Host,
+    question: &super::Question,
+    check: &mut super::Check<'_>,
+) -> Result<Step<super::Reply>, Error> {
+    step(host.question(question, check)?)
 }
-fn select(host: Host, menu: &Menu<'_>) -> Result<Step<Vec<String>>, Error> {
-    let Menu {
-        title,
-        context,
-        choices,
-        default,
-        mode,
-        escape,
-        marked,
-        empty,
-    } = *menu;
-    let signals = host.signals;
-    let mut session = host.session;
-    let mut picker = ChoicePicker::new(
-        choices
-            .iter()
-            .map(|(id, label, detail)| {
-                let mut c = Choice::new(*id, *label);
-                c.detail = (*detail).into();
-                c
-            })
-            .collect(),
-        default,
-        mode,
-        // Long lists, such as a pack's rules, get a search row; short ones keep digit shortcuts.
-        if choices.len() > 9 {
-            Filter::Auto
-        } else {
-            Filter::Off
-        },
-    )
-    .map_err(|_| Error::Invalid("duplicate prompt choices"))?;
-    picker.set_marked(marked);
-    // The footer names the empty answer, such as `enter skip for now`.
-    let nothing = if empty.is_empty() {
-        "continue".to_owned()
-    } else {
-        empty.to_lowercase()
-    };
-    loop {
-        session = signals.check(session)?;
-        let area = session.area();
-        session.draw(|frame| {
-            picker.render(
-                frame,
-                area,
-                PickerView {
-                    title,
-                    context,
-                    source: "Shield",
-                    max_height: area.height,
-                    presentation: presentation(),
-                    escape: escape.unwrap_or("cancel"),
-                    empty: &nothing,
-                },
-                true,
-            );
-        })?;
-        let Some(event) = session.poll(Duration::from_millis(100))? else {
-            continue;
-        };
-        // Escape clears a search query before it closes this step.
-        let leaves = interrupted(&event) || (escaped(&event) && picker.query().is_empty());
-        if leaves && escape.is_some() && !interrupted(&event) {
-            // The first step of a flow cancels; its settled line says so.
-            let settled = if escape == Some("back") {
-                "back"
-            } else {
-                "cancelled"
-            };
-            session.finish(&format!("{title} → {settled}"))?;
-            return Ok(Step::Back);
-        }
-        if leaves {
-            session.finish(&format!("{title} → cancelled"))?;
-            return Err(Error::Cancelled);
-        }
-        // Numbers highlight. Only a deliberate Enter can confirm an operator choice.
-        if let Some(ids) = collected(&mut picker, &event, session.confirmation_available()) {
-            let label = if ids.is_empty() {
-                empty.into()
-            } else if ids.len() > 4 {
-                format!("{} of {} marked", ids.len(), choices.len())
-            } else {
-                ids.iter()
-                    .map(|id| {
-                        choices
-                            .iter()
-                            .find(|(key, _, _)| *key == id)
-                            .map_or(id.as_str(), |(_, label, _)| *label)
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            };
-            session.finish(&format!("{title} → {label}"))?;
-            return Ok(Step::Done(ids));
-        }
-    }
+pub(super) fn input(host: Host, title: &str) -> Result<String, Error> {
+    Ok(step(host.edit(title, 65_536)?)?
+        .or_cancel()?
+        .trim()
+        .to_owned())
 }
-
-/// One proposal as a permission review. Accept takes a second check that
-/// quotes the change; Esc leaves it pending.
 pub(super) fn review(host: Host, card: &Card, waiting: usize) -> Result<String, Error> {
-    let signals = host.signals;
-    let mut session = host.session;
-    let mut review = PermissionReview::new(request(card))
-        .map_err(|_| Error::Invalid("proposal review exceeds limits"))?;
-    loop {
-        session = signals.check(session)?;
-        let width = session.area().width;
-        // Leave room for Details to open without scrolling the transcript.
-        // The Accept check draws over the card and needs its own rows.
-        let check = if review.confirming() { 8 } else { 1 };
-        session.set_height(review.height(width, presentation()).saturating_add(check))?;
-        let area = session.area();
-        session.draw(|frame| {
-            review.render_with(frame, area, presentation(), waiting);
-            review.render_overlay(frame, area, presentation());
-        })?;
-        let Some(event) = session.poll(Duration::from_millis(100))? else {
-            continue;
-        };
-        if matches!(&event, Event::Key(k) if k.kind != KeyEventKind::Release && k.code == KeyCode::Char('c') && k.modifiers.contains(KeyModifiers::CONTROL))
-        {
-            session.finish(&format!("{} → cancelled", card.title))?;
-            return Err(Error::Cancelled);
-        }
-        review.update(&event);
-        if let Some(intent) = review.take_intents().into_iter().next() {
-            let choice = match intent {
-                permission_review::Intent::Respond(response) => response.choice,
-                permission_review::Intent::Dismissed { .. } => "leave".into(),
-            };
-            let outcome = match choice.as_str() {
-                "accept" => "accepted",
-                "reject" => "rejected",
-                _ => "left pending",
-            };
-            session.finish(&format!("{} → {outcome} · {}", card.title, card.summary))?;
-            return Ok(choice);
-        }
-    }
+    Ok(match step(host.review(request(card), waiting)?)? {
+        Step::Done(choice) => choice,
+        Step::Back => "leave".into(),
+    })
 }
 
 fn request(card: &Card) -> permission_review::Request {
@@ -379,232 +184,15 @@ fn request(card: &Card) -> permission_review::Request {
     }
 }
 
-/// One setup question in the shared question form. A refused reply reopens
-/// the question with its typed text kept and the reason shown.
-pub(super) fn question(
-    host: Host,
-    question: &super::Question,
-    check: &mut super::Check<'_>,
-) -> Result<Step<super::Reply>, Error> {
-    let signals = host.signals;
-    let mut session = host.session;
-    let mut questions = setup_form(question)?;
-    loop {
-        session = signals.check(session)?;
-        let width = session.area().width;
-        session.set_height(
-            questions
-                .height(width, presentation())
-                .max(8)
-                .saturating_add(1),
-        )?;
-        let area = session.area();
-        session.draw(|frame| {
-            render_question(&mut questions, frame, area);
-        })?;
-        let Some(event) = session.poll(Duration::from_millis(100))? else {
-            questions.tick(Duration::from_millis(100));
-            continue;
-        };
-        if interrupted(&event) {
-            session.finish(&format!("{} → cancelled", question.title))?;
-            return Err(Error::Cancelled);
-        }
-        questions.update(&event);
-        for intent in questions.take_intents() {
-            match intent {
-                form::Intent::Submit(response) => {
-                    let reply = reply(&response);
-                    match check(&reply) {
-                        Ok(()) => {
-                            questions.acknowledge(&response.ticket, form::Result::Accepted);
-                            let summary = summary(question, &reply);
-                            session.finish(&format!("{} → {summary}", question.title))?;
-                            return Ok(Step::Done(reply));
-                        }
-                        Err(reason) => {
-                            let refused = form::Result::Refused {
-                                question: "answer".into(),
-                                reason,
-                            };
-                            questions.acknowledge(&response.ticket, refused);
-                        }
-                    }
-                }
-                // The form closed one layer; the flow decides whether that is a
-                // step back or, on its first step, cancellation.
-                form::Intent::Cancelled { .. } => {
-                    session.finish(&format!("{} → back", question.title))?;
-                    return Ok(Step::Back);
-                }
-                form::Intent::Copy { .. } => {}
-            }
-        }
-    }
-}
-
-use canonic_tui_kit::question_form::{
-    self as form, AnswerValue, Kind as Shape, QuestionForm, Request,
-};
-
-/// The reusable panel leaves its keyboard hint to its host's footer.
-fn render_question(questions: &mut QuestionForm, frame: &mut Frame<'_>, area: Rect) {
-    let [body, footer] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
-    let presentation = presentation();
-    questions.render_with(frame, body, presentation, 0);
-    frame.render_widget(
-        Paragraph::new(questions.hint_for(area.width)).style(presentation.muted()),
-        footer,
-    );
-    questions.render_overlay(frame, area, presentation);
-}
-
-fn setup_form(question: &super::Question) -> Result<QuestionForm, Error> {
-    let shape = match (question.multiple, question.choices.is_empty()) {
-        (true, _) => Shape::Multiple,
-        (false, true) => Shape::Text,
-        (false, false) => Shape::Single,
-    };
-    let mut asked = form::Question::new("answer", &question.title, &question.prompt, shape);
-    asked.description.clone_from(&question.context);
-    // Leaving a value unset is its own listed answer, so single answers are required.
-    asked.required = shape != Shape::Multiple;
-    asked.choices = question
-        .choices
-        .iter()
-        .map(|(id, label, detail)| {
-            let mut choice = Choice::new(id, label);
-            choice.detail.clone_from(detail);
-            choice
-        })
-        .collect();
-    asked.default = question.default.clone().filter(|_| shape == Shape::Single);
-    if let Some((label, placeholder)) = &question.typed {
-        asked.placeholder.clone_from(placeholder);
-        if shape != Shape::Text {
-            asked.other = true;
-            asked.other_label = Some(label.clone());
-        }
-    }
-    QuestionForm::new(Request {
-        id: "setup".into(),
-        revision: 1,
-        title: question.title.clone(),
-        questions: vec![asked],
-        partial: false,
-        back: question.back,
-    })
-    .map_err(|_| Error::Invalid("setup question exceeds limits"))
-}
-
-/// A typed row's text, or the chosen IDs; a skipped optional question chose none.
-fn reply(response: &form::Response) -> super::Reply {
-    match response.answers.first().map(|a| &a.value) {
-        Some(
-            AnswerValue::Text(text)
-            | AnswerValue::Choices {
-                other: Some(text), ..
-            },
-        ) => super::Reply::Typed(text.trim().into()),
-        Some(AnswerValue::Choices { ids, other: None }) => super::Reply::Choices(ids.clone()),
-        None => super::Reply::Choices(vec![]),
-    }
-}
-
-fn summary(question: &super::Question, reply: &super::Reply) -> String {
-    match reply {
-        super::Reply::Typed(text) => text.clone(),
-        super::Reply::Choices(ids) if ids.is_empty() => "none".into(),
-        super::Reply::Choices(ids) => ids
-            .iter()
-            .map(|id| {
-                question
-                    .choices
-                    .iter()
-                    .find(|(key, _, _)| key == id)
-                    .map_or(id.as_str(), |(_, label, _)| label)
-            })
-            .collect::<Vec<_>>()
-            .join(", "),
-    }
-}
-
-pub(super) fn input(host: Host, title: &str) -> Result<String, Error> {
-    let signals = host.signals;
-    let mut session = host.session;
-    let mut editor = Editor::new(65_536);
-    editor.set_reject_overflow(true);
-    loop {
-        session = signals.check(session)?;
-        let area = session.area();
-        session.draw(|frame| {
-            editor.render_with(
-                frame,
-                area,
-                EditorView {
-                    title,
-                    footer: "Enter continue · Ctrl-J newline · Esc cancel",
-                    presentation: presentation(),
-                    ..EditorView::default()
-                },
-                true,
-            );
-        })?;
-        let Some(event) = session.poll(Duration::from_millis(100))? else {
-            continue;
-        };
-        if cancelled(&event) {
-            session.finish("Input → cancelled")?;
-            return Err(Error::Cancelled);
-        }
-        if entered(&event) && session.confirmation_available() {
-            let text = editor.text().trim().to_owned();
-            session.finish("Input → received")?;
-            return Ok(text);
-        }
-        editor.update(&event);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use canonic_tui_kit::{
-        event::KeyEvent,
+        event::{Event, KeyCode, KeyEvent, KeyModifiers},
+        permission_review::PermissionReview,
         ratatui::{Terminal, backend::TestBackend},
+        theme::{ColorMode, Presentation},
     };
-    #[test]
-    fn setup_questions_show_controls_for_choices_and_text_entry() {
-        let question = super::super::Question {
-            title: "Acme profile".into(),
-            prompt: "Restrict the profile?".into(),
-            context: String::new(),
-            choices: vec![("unset".into(), "Any profile".into(), String::new())],
-            multiple: false,
-            typed: Some(("Only this profile".into(), None)),
-            default: None,
-            back: false,
-        };
-        let mut questions = setup_form(&question).unwrap();
-        let mut terminal = Terminal::new(TestBackend::new(120, 12)).unwrap();
-        for expected in ["enter choose", "ctrl+j new line"] {
-            terminal
-                .draw(|frame| render_question(&mut questions, frame, frame.area()))
-                .unwrap();
-            let text = terminal
-                .backend()
-                .buffer()
-                .content()
-                .iter()
-                .map(canonic_tui_kit::ratatui::buffer::Cell::symbol)
-                .collect::<String>();
-            assert!(text.contains(expected), "{text}");
-            questions.update(&Event::Key(KeyEvent::new(
-                KeyCode::Char('2'),
-                KeyModifiers::NONE,
-            )));
-        }
-    }
     fn card(stale: bool) -> Card {
         Card {
             title: "pack add".into(),
@@ -626,6 +214,21 @@ mod tests {
                 permission_review::Intent::Respond(response) => Some(response.choice),
                 permission_review::Intent::Dismissed { .. } => None,
             })
+    }
+    #[test]
+    fn escape_on_the_agent_page_goes_back_only_when_an_earlier_page_exists() {
+        // Guided setup came from the action page: Escape returns to it.
+        assert_eq!(
+            first_step(Step::<Vec<String>>::Back, true).unwrap(),
+            Step::Back
+        );
+        // `--remove` and its dry run start on the agent page: Escape cancels.
+        assert!(matches!(
+            first_step(Step::<Vec<String>>::Back, false),
+            Err(Error::Cancelled)
+        ));
+        let marked = Step::Done(vec!["claude".to_owned()]);
+        assert_eq!(first_step(marked.clone(), false).unwrap(), marked);
     }
     #[test]
     fn proposals_are_chosen_without_ids_and_accepting_takes_a_second_check() {
@@ -717,96 +320,5 @@ mod tests {
         assert!(text.contains("Back"), "{text}");
         assert!(text.contains("[ Install acme/git 1.0.0 ]"), "{text}");
         assert!(text.contains("active policy right away"), "{text}");
-    }
-    #[test]
-    fn multiple_agents_are_staged_and_empty_confirmation_skips() {
-        let mut picker = ChoicePicker::new(
-            vec![
-                Choice::new("claude", "Claude Code"),
-                Choice::new("codex", "Codex"),
-            ],
-            None,
-            SelectionMode::Multiple,
-            Filter::Off,
-        )
-        .unwrap();
-        let key = |code| Event::Key(KeyEvent::new(code, KeyModifiers::NONE));
-        assert_eq!(
-            collected(&mut picker, &key(KeyCode::Enter), true),
-            Some(vec![])
-        );
-        assert_eq!(collected(&mut picker, &key(KeyCode::Char('1')), true), None);
-        assert_eq!(collected(&mut picker, &key(KeyCode::Char('2')), true), None);
-        assert_eq!(collected(&mut picker, &key(KeyCode::Enter), false), None);
-        assert_eq!(
-            collected(&mut picker, &key(KeyCode::Enter), true),
-            Some(vec!["claude".into(), "codex".into()])
-        );
-    }
-    #[test]
-    fn digits_highlight_and_only_visible_deliberate_enter_confirms() {
-        let mut picker = ChoicePicker::new(
-            vec![
-                Choice::new("cancel", "Cancel"),
-                Choice::new("apply", "Apply change"),
-            ],
-            Some("cancel"),
-            SelectionMode::Single,
-            Filter::Off,
-        )
-        .unwrap();
-        let key = |code| Event::Key(KeyEvent::new(code, KeyModifiers::NONE));
-        assert_eq!(accepted(&mut picker, &key(KeyCode::Char('2')), true), None);
-        assert_eq!(picker.selected(), Some("apply"));
-        assert_eq!(accepted(&mut picker, &key(KeyCode::Enter), false), None);
-        let mut repeat = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-        repeat.kind = KeyEventKind::Repeat;
-        assert_eq!(accepted(&mut picker, &Event::Key(repeat), true), None);
-        assert_eq!(
-            accepted(&mut picker, &key(KeyCode::Enter), true),
-            Some("apply".into())
-        );
-    }
-    #[test]
-    fn narrow_monochrome_review_keeps_safe_choice_and_explicit_apply_label() {
-        let mut terminal = Terminal::new(TestBackend::new(32, 10)).unwrap();
-        let mut picker = ChoicePicker::new(
-            vec![
-                Choice::new("cancel", "Cancel"),
-                Choice::new("apply", "Apply change"),
-            ],
-            Some("cancel"),
-            SelectionMode::Single,
-            Filter::Off,
-        )
-        .unwrap();
-        terminal
-            .draw(|frame| {
-                picker.render(
-                    frame,
-                    frame.area(),
-                    PickerView {
-                        title: "Review",
-                        context: "Project policy",
-                        presentation: Presentation {
-                            colors: ColorMode::NoColor,
-                            ..Presentation::default()
-                        },
-                        ..PickerView::default()
-                    },
-                    true,
-                );
-            })
-            .unwrap();
-        let text = terminal
-            .backend()
-            .buffer()
-            .content()
-            .iter()
-            .map(canonic_tui_kit::ratatui::buffer::Cell::symbol)
-            .collect::<String>();
-        assert!(text.contains("Cancel"));
-        assert!(text.contains("Apply change"));
-        assert_eq!(picker.selected(), Some("cancel"));
     }
 }

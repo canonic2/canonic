@@ -246,7 +246,12 @@ fn guided_mcp_setup_cancellation_repair_and_removal_preserve_project_policy() {
             .len(),
         1
     );
-    assert_eq!(interactive(&root, &remove, "yes\n")["code"], 0);
+    // The common guided action can remove registrations too; it skips the
+    // permissions page and still needs the separate safe confirmation.
+    assert_eq!(
+        interactive(&root, &["mcp", "setup"], "2\nclaude\nyes\n")["code"],
+        0
+    );
     let after = query(&root, &["status"]);
     assert_eq!(after["active"], before["active"]);
     assert_eq!(after["coverage"]["registered_integrations"], json!([]));
@@ -1588,7 +1593,7 @@ fn escape_in_init_and_setup_goes_back_with_answers_kept() {
     let other = TempDir::new().expect("project");
     assert_eq!(interactive(&other, &["init"], "yes\n")["code"], 0);
     // Back from the permissions returns to the agent page with the agent kept.
-    let result = interactive(&other, &["mcp", "setup"], "claude\nback\n\n\nyes\n");
+    let result = interactive(&other, &["mcp", "setup"], "\nclaude\nback\n\n\nyes\n");
     assert_eq!(result["code"], 0, "{result}");
     assert_eq!(agents(&other), ["claude"]);
 }

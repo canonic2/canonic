@@ -79,7 +79,12 @@ pub(super) fn describe(value: &Value) -> String {
     if let Some(leading) = value.get("leading") {
         let _ = write!(
             scope,
-            "; leading options before the prefix{}",
+            "; leading options before the prefix{}{}",
+            if leading["interleaved"] == true {
+                " and between its words"
+            } else {
+                ""
+            },
             options(leading)
         );
     }
@@ -190,6 +195,13 @@ mod tests {
             assert!(scope.contains(expected), "missing {expected}: {scope}");
         }
         assert!(!scope.contains('{'));
+        let interleaved = describe(&json!({"kind":"prefix","values":["branch","remove"],
+            "leading":{"flags":["--json"],"values":[],"interleaved":true}}));
+        assert!(
+            interleaved
+                .contains("leading options before the prefix and between its words; flags: --json"),
+            "{interleaved}"
+        );
         let scan = describe(&json!({"kind":"options","prefix":[],"flags":[],
             "values":[{"name":"--profile","match":{"not":{"one_of":["acme-prod"]}}}],
             "operands":true,"unknown_options":"skip","long_abbreviations":true}));

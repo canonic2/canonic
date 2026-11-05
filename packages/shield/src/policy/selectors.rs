@@ -133,12 +133,18 @@ pub(super) fn field_map(value: &Value) -> Result<(), Error> {
     }
     for (pointer, predicate) in fields {
         pointer_validate(pointer)?;
-        self::fields(predicate, &["exact", "text"])?;
+        self::fields(predicate, &["exact", "text", "not"])?;
         if predicate.as_object().is_none_or(|v| v.len() != 1) {
             return Err(Error::Syntax);
         }
         if let Some(selector) = predicate.get("text") {
             text(selector, false)?;
+        }
+        if let Some(inner) = predicate.get("not") {
+            self::fields(inner, &["exact"])?;
+            if inner.as_object().is_none_or(|fields| fields.len() != 1) {
+                return Err(Error::Contract("field not requires one exact predicate"));
+            }
         }
     }
     Ok(())
@@ -173,6 +179,12 @@ pub(super) fn fields_match(
         };
         if let Some(expected) = predicate.get("exact") {
             if expected != value {
+                return Ok(Some("predicate_mismatch"));
+            }
+        } else if let Some(expected) = predicate.get("not").and_then(|inner| inner.get("exact")) {
+            // The pointer lookup above is deliberate: negation cannot turn a
+            // missing field into evidence that an override was supplied.
+            if expected == value {
                 return Ok(Some("predicate_mismatch"));
             }
         } else if let Some(selector) = predicate.get("text") {

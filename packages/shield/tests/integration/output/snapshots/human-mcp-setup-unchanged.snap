@@ -19,6 +19,6 @@ Agent integrations
 
 After confirming, restart each agent, trust this project, review its hooks and approve the MCP server.
 
-Review and confirm → Apply change
+Apply MCP setup? → Apply reviewed changes
 Connected Claude Code. Restart it, trust this project and approve Shield's hooks and MCP server.
 --- exit 0

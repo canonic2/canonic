@@ -54,7 +54,7 @@ def key_bytes(answer, view):
         # Question Form's digits choose a single answer immediately; an extra
         # Enter would leak into the next host step.
         return answer.encode()
-    if b"Agentintegrations" in compact:
+    if b"Agentintegrations" in compact or b"Selectagents" in compact:
         # Rows: Box first, then Claude Code and Codex.
         return {"box": b"1\r", "claude": b"2\r", "codex": b"3\r",
                 "claude,codex": b"23\r"}.get(answer, b"\r")

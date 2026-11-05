@@ -45,7 +45,7 @@ fn enum_text(values: &[&str]) -> Value {
     ])
 }
 fn fields() -> Value {
-    json!({"type":"object","minProperties":1,"maxProperties":256,"additionalProperties":{"oneOf":[object(json!({"exact":{}}),&["exact"]),object(json!({"text":reference("text")}),&["text"])]}})
+    json!({"type":"object","minProperties":1,"maxProperties":256,"additionalProperties":{"oneOf":[object(json!({"exact":{}}),&["exact"]),object(json!({"text":reference("text")}),&["text"]),object(json!({"not":object(json!({"exact":{}}),&["exact"])}),&["not"])]}})
 }
 fn context() -> Value {
     object(
@@ -137,7 +137,9 @@ fn arguments() -> Value {
         ),
     ]);
     let grammar = json!({"flags":names(),"values":list(valued.clone(),0),"optional_values":list(valued,0),"short_clusters":{"type":"boolean","default":true},"long_equals":{"type":"boolean","default":true},"short_attached":{"type":"boolean","default":true},"long_abbreviations":{"type":"boolean","default":false}});
-    let leading = object(grammar.clone(), &["flags", "values"]);
+    let mut leading = grammar.clone();
+    leading["interleaved"] = json!({"type":"boolean","default":false});
+    let leading = object(leading, &["flags", "values"]);
     let mut options = grammar;
     options["kind"] = json!({"const":"options"});
     options["unknown_options"] = json!({"enum":["refuse","skip"],"default":"refuse"});

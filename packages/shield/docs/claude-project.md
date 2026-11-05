@@ -17,6 +17,15 @@ Use `shield history list` to inspect recorded requests and completion.
 
 ## Install or repair an integration
 
+Run `shield mcp setup` for guided management. Choose **Install or repair** or
+**Remove owned registrations**, mark at least one integration with Space on
+**Select agents**, then press Enter. Installation includes a **Tool permissions**
+page. Review the complete changes and choose **Apply reviewed changes** on
+**Apply MCP setup?**; **Cancel** is highlighted by default. Unmarked agents keep
+their configuration. Setup shows each integration's registration status, and
+Box is unavailable until this folder is a Box project, and on Windows. During first-time
+`shield init`, no marked agents means **Skip for now** instead.
+
 Initialize the project with `shield init`, then run `shield mcp setup --agent claude` in an operator terminal to install native
 command hooks and Shield's project MCP entry. Confirmation shows the owned files,
 binary and project. Claude uses `.claude/settings.local.json` and `.mcp.json`.

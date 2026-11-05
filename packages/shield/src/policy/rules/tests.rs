@@ -90,6 +90,140 @@ fn prefix_leading_matches_operations_without_scanning_values_or_suffixes() {
     invalid["conditions"]["arguments"]["leading"]["operands"] = json!(true);
     assert!(document(&[invalid]).is_err());
 }
+/// Decides each request with the reference resolver, the compiled plan and a
+/// plan restored from its bytes, which must agree.
+fn assert_decisions(rows: &[Value], cases: &[(Vec<&str>, Decision)]) {
+    let evaluator = prepared(rows.to_vec());
+    let restored =
+        configuration::Evaluator::from_authenticated_compiled(evaluator.compiled_bytes().to_vec())
+            .unwrap();
+    for (args, expected) in cases {
+        let req = request(args);
+        let reference = crate::policy::evaluate(
+            &[],
+            Some(&custom(rows.to_vec())),
+            Profile::Recommended,
+            &req,
+        )
+        .unwrap()
+        .decision;
+        assert_eq!(reference, *expected, "reference {args:?}");
+        for candidate in [&evaluator, &restored] {
+            assert_eq!(
+                candidate.evaluate(&req).unwrap().decision,
+                *expected,
+                "{args:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn interleaved_leading_options_match_between_prefix_words_only_when_declared() {
+    let leading = json!({"flags":["-q","--json"],"values":[{"name":"--format","match":{"one_of":["json","text"]},"repeat":"forbid"},"-C",
+            {"name":"--color","match":"never","repeat":"last"},{"name":"--level","match":"1"}],
+        "long_abbreviations":true,"interleaved":true});
+    let restriction = json!({"id":"remove","decision":"deny","conditions":{"domain":"argv","executable":"acme",
+        "arguments":{"kind":"prefix","values":["branch","remove"],"leading":leading}}});
+    let broad = json!({"id":"broad","decision":"allow","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}}});
+    let rows = vec![restriction.clone(), broad.clone()];
+    let source = document(&rows).unwrap();
+    assert!(
+        source["capabilities"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("interleaved-leading-v1"))
+    );
+    assert_decisions(
+        &rows,
+        &[
+            (vec!["branch", "remove", "old"], Decision::Deny),
+            (vec!["branch", "--json", "remove", "old"], Decision::Deny),
+            (vec!["--json", "branch", "-q", "remove"], Decision::Deny),
+            (vec!["branch", "--format=json", "remove"], Decision::Deny),
+            (vec!["branch", "--format", "text", "remove"], Decision::Deny),
+            (vec!["branch", "--form", "text", "remove"], Decision::Deny),
+            (vec!["branch", "-qCdir", "remove"], Decision::Deny),
+            // A valued option consumes its value even when it spells the next word.
+            (vec!["branch", "-C", "remove", "remove"], Decision::Deny),
+            (vec!["branch", "remove", "--verbose"], Decision::Deny),
+            (vec!["branch", "-C", "remove"], Decision::Allow),
+            (vec!["branch", "--verbose", "remove"], Decision::Allow),
+            (vec!["branch", "-qv", "remove"], Decision::Allow),
+            (vec!["branch", "--", "remove"], Decision::Allow),
+            (vec!["branch", "--json=1", "remove"], Decision::Allow),
+            (vec!["branch", "--format=xml", "remove"], Decision::Allow),
+            (
+                vec!["--format=json", "branch", "--format=text", "remove"],
+                Decision::Allow,
+            ),
+            (vec!["branch", "--format"], Decision::Allow),
+            // Repetition spans the leading phase and the gaps, in argv order.
+            (
+                vec!["--color=always", "branch", "--color=never", "remove"],
+                Decision::Deny,
+            ),
+            (
+                vec!["--color=never", "branch", "--color=always", "remove"],
+                Decision::Allow,
+            ),
+            (
+                vec!["--level=1", "branch", "--level=1", "remove"],
+                Decision::Deny,
+            ),
+            (
+                vec!["--level=1", "branch", "--level=2", "remove"],
+                Decision::Allow,
+            ),
+        ],
+    );
+
+    // Without the setting, a global between words misses as before.
+    let mut plain = restriction.clone();
+    plain["conditions"]["arguments"]["leading"]
+        .as_object_mut()
+        .unwrap()
+        .remove("interleaved");
+    assert_decisions(
+        &[plain, broad.clone()],
+        &[
+            (vec!["--json", "branch", "remove"], Decision::Deny),
+            (vec!["branch", "--json", "remove"], Decision::Allow),
+        ],
+    );
+
+    // Options grammars count gap records toward their requirements.
+    let required = json!({"id":"quiet-remove","decision":"deny","conditions":{"domain":"argv","executable":"acme",
+        "arguments":{"kind":"options","prefix":["branch","remove"],"leading":{"flags":["-q"],"values":[],"interleaved":true},
+            "flags":[],"values":[],"operands":true,"require_all":["-q"]}}});
+    assert_decisions(
+        &[required, broad.clone()],
+        &[
+            (vec!["branch", "-q", "remove", "old"], Decision::Deny),
+            (vec!["branch", "remove", "old"], Decision::Allow),
+        ],
+    );
+
+    let mut missing = source;
+    missing["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|cap| cap != "interleaved-leading-v1");
+    assert!(CustomRules::from_yaml(&missing.to_string()).is_err());
+    let mut main_phase = json!({"kind":"options","prefix":["branch","remove"],"flags":[],"values":[],"operands":true,"interleaved":true});
+    assert!(document(&[rule(main_phase.clone())]).is_err());
+    main_phase["leading"] = json!({"flags":[],"values":[],"interleaved":"yes"});
+    main_phase.as_object_mut().unwrap().remove("interleaved");
+    assert!(document(&[rule(main_phase)]).is_err());
+    assert!(
+        document(&[rule(
+            json!({"kind":"sequence","prefix":["branch"],"rest":{"kind":"any"},
+        "leading":{"flags":[],"values":[],"interleaved":true}})
+        )])
+        .is_err()
+    );
+}
+
 #[test]
 fn argument_paths_validate_declared_values_and_do_not_claim_runtime_footprints() {
     let root = assert_fs::TempDir::new().unwrap();
@@ -443,6 +577,101 @@ fn expiry_uses_actual_instants_and_clock_failure_blocks() {
     let mut row = rule(json!({"kind":"any"}));
     row["expires_at"] = json!("2000-01-01T00:00:00.1Z");
     assert_eq!(evaluate(row, &[])["decision"], "ask");
+}
+
+#[test]
+fn typed_mcp_field_negation_matches_only_present_unequal_json_values() {
+    let row = json!({"id":"override","decision":"deny","conditions":{"domain":"mcp","server":"acme","tool":"build","fields":{"/env":{"not":{"exact":{}}}}}});
+    let source = document(std::slice::from_ref(&row)).unwrap();
+    for capability in [FIELD_NEGATION, NEGATED_SELECTORS] {
+        assert!(
+            source["capabilities"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(capability))
+        );
+        let mut missing = source.clone();
+        missing["capabilities"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|value| value != capability);
+        assert!(CustomRules::from_yaml(&missing.to_string()).is_err());
+    }
+    let evaluator = prepared(vec![row]);
+    let restored =
+        configuration::Evaluator::from_authenticated_compiled(evaluator.compiled_bytes().to_vec())
+            .unwrap();
+    let context = Context {
+        cwd: request(&[]).cwd,
+        environment: None,
+        working_files: None,
+    };
+    for (arguments, expected) in [
+        (json!({}), "ask"),
+        (json!({"env":{}}), "ask"),
+        (json!({"env":{"PATH":"/acme/bin"}}), "deny"),
+        (json!({"env":null}), "deny"),
+        (json!({"env":[]}), "deny"),
+        (json!({"env":false}), "deny"),
+    ] {
+        let input = Input::Mcp {
+            server: "acme".into(),
+            tool: "build".into(),
+            arguments,
+            connection: None,
+            original_input: json!({}),
+        };
+        for candidate in [&evaluator, &restored] {
+            let result = candidate
+                .evaluate_normalized(
+                    &input,
+                    &context,
+                    &context.cwd,
+                    None,
+                    &crate::evidence::now(),
+                    &|| Ok(()),
+                )
+                .unwrap();
+            assert_eq!(result["decision"], expected);
+        }
+    }
+    let fields = json!({"/inline":{"not":{"exact":null}}});
+    assert!(!crate::policy::matches_mcp_fields(&fields, &json!({})).unwrap());
+    assert!(!crate::policy::matches_mcp_fields(&fields, &json!({"inline":null})).unwrap());
+    assert!(crate::policy::matches_mcp_fields(&fields, &json!({"inline":{}})).unwrap());
+    let nested = json!({"/overrides/launch_env":{"not":{"exact":{}}}});
+    for absent in [
+        json!({}),
+        json!({"overrides":{}}),
+        json!({"overrides":{"launch_env":{}}}),
+    ] {
+        assert!(!crate::policy::matches_mcp_fields(&nested, &absent).unwrap());
+    }
+    assert!(
+        crate::policy::matches_mcp_fields(
+            &nested,
+            &json!({"overrides":{"launch_env":{"NODE_OPTIONS":"--require=/acme/init.cjs"}}})
+        )
+        .unwrap()
+    );
+    for invalid in [
+        json!({"not":{}}),
+        json!({"not":{"text":"x"}}),
+        json!({"not":{"not":{"exact":{}}}}),
+        json!({"not":{"exact":{},"text":"x"}}),
+        json!({"not":{"exact":{}} ,"exact":{}}),
+    ] {
+        assert!(crate::policy::validate_mcp_fields(&json!({"/env":invalid})).is_err());
+    }
+    let literal = json!({"id":"literal","decision":"deny","conditions":{"domain":"mcp","server":"acme","tool":"build","fields":{"/env":{"not":{"exact":{"regex":"literal","fields":{"/x":{"not":{"exact":{}}}}}}}}}});
+    assert_eq!(
+        document(&[literal]).unwrap()["capabilities"],
+        json!([
+            "field-negation-v1",
+            "negated-selectors-v1",
+            "structured-rules-v1"
+        ])
+    );
 }
 
 #[test]

@@ -211,7 +211,9 @@ fn keys(answer: &Value, view: &[u8]) -> Vec<u8> {
     {
         return answer.as_bytes().to_vec();
     }
-    let selected = if contains(view, b"Agentintegrations") && contains(view, b"spaceselect") {
+    let selected = if (contains(view, b"Agentintegrations") || contains(view, b"Selectagents"))
+        && contains(view, b"spaceselect")
+    {
         // Rows: Box first, then Claude Code and Codex.
         match answer {
             "box" => "1\r",

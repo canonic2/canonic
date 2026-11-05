@@ -45,7 +45,7 @@ impl Confirmations {
             token,
             Pending {
                 arguments: call.arguments.clone(),
-                expires: Instant::now() + Duration::from_secs(300),
+                expires: Instant::now() + Duration::from_mins(5),
             },
         );
         Ok(result)

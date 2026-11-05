@@ -87,7 +87,7 @@ The `arguments` condition describes the arguments after the executable.
 | --- | --- | --- |
 | `any` | No additional fields. | Accept any argument list. |
 | `exact` | `values`: literal string array. | Match the complete argument list, including an empty list. |
-| `prefix` | `values`: selector array; optional `leading` grammar. | Match the start and leave the suffix unrestricted. Leading options require `prefix-leading-v1`. |
+| `prefix` | `values`: selector array; optional `leading` grammar. | Match the start and leave the suffix unrestricted. Leading options require `prefix-leading-v1`; `leading.interleaved: true` also accepts them between prefix words and requires `interleaved-leading-v1`. |
 | `sequence` | `prefix`: selector array; `rest`: `none`, `any`, or `each`. | Match initial tokens and constrain the rest. |
 | `options` | `prefix`, `flags`, `values`, `operands`; optional parsing controls. | Accept a declared operation and reviewed options. |
 | `risk_tokens` | `prefix`, `any_of`. | Detect restrictions conservatively; cannot grant Allow. |
@@ -178,6 +178,14 @@ and [web rules](policy-rules.md#allow-searches-and-documentation-fetches).
 
 ## Capabilities
 
+Typed JSON field maps (`fields`, `request_fields` and MCP `connection`) accept
+`{not: {exact: VALUE}}` to match a present value unequal to `VALUE`. Missing
+fields never match this predicate; a present null remains distinct from absence.
+For example, `/env: {not: {exact: {}}}` detects supplied non-empty environment
+maps without matching an omitted or empty map. This requires both
+`field-negation-v1` and `negated-selectors-v1`. Nested field negation and negated
+text predicates are not accepted; use a text selector's own `not` for the latter.
+
 Declare exactly the capabilities used anywhere in the document, once each.
 
 | Capability | Required for |
@@ -194,6 +202,7 @@ Declare exactly the capabilities used anywhere in the document, once each.
 | `dependencies-v1` | A dependencies array, including an empty one. |
 | `invocation-groups-v1`, `command-sets-v1` | References to their respective shared pack definitions. |
 | `prefix-leading-v1` | Leading options on a prefix argument selector. |
+| `interleaved-leading-v1` | `interleaved: true` in a `leading` grammar, on `prefix` or `options` selectors. |
 | `variables-v1` | Pack variables, variable selectors, or activation tests. |
 | `preconditions-v1` | Pack preconditions. |
 | `directory-options-v1` | Directory option declarations. |
@@ -203,6 +212,7 @@ Declare exactly the capabilities used anywhere in the document, once each.
 | `mcp-connection-facts-v1` | Typed `connection` predicates over reviewed MCP facts. |
 | `mcp-effective-fields-v1` | Pack mappings from request fields and reviewed defaults to effective facts. |
 | `mcp-command-fields-v1` | Declared MCP fields evaluated as literal fixed-executable commands. |
+| `field-negation-v1` | Typed JSON field predicates using `{not: {exact: VALUE}}`. |
 | `unknown-options-v1` | `unknown_options: skip` in an options grammar. |
 | `option-abbreviations-v1` | `long_abbreviations: true` in an option phase. |
 | `negated-selectors-v1` | `not` text selectors. |

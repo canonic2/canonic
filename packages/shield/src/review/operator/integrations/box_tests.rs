@@ -554,6 +554,45 @@ fn guided_setup_preselects_only_box_in_a_box_project() {
 }
 
 #[test]
+fn guided_setup_rows_report_registration_and_box_availability() {
+    let (root, context) = fixture();
+    let choices = workflow::setup_choices(root.path(), &meta(&context), false).unwrap();
+    assert!(
+        choices[0]
+            .disabled
+            .as_deref()
+            .unwrap()
+            .contains("Box project")
+    );
+    assert!(
+        choices
+            .iter()
+            .find(|row| row.id == "claude")
+            .unwrap()
+            .detail
+            .starts_with("not registered")
+    );
+    // Removal stays available even after the Box marker is gone.
+    assert!(
+        workflow::setup_choices(root.path(), &meta(&context), true).unwrap()[0]
+            .disabled
+            .is_none()
+    );
+    box_project(root.path());
+    setup(&context, choice(&["claude"])).unwrap();
+    let choices = workflow::setup_choices(root.path(), &meta(&context), false).unwrap();
+    assert!(choices[0].disabled.is_none());
+    assert!(
+        choices
+            .iter()
+            .find(|row| row.id == "claude")
+            .unwrap()
+            .detail
+            .starts_with("configured; ownership checked on review")
+    );
+}
+
+#[test]
 fn codex_covered_through_box_keeps_its_prefix_rules() {
     let (root, context) = fixture();
     box_project(root.path());

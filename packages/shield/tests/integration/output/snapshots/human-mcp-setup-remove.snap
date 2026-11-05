@@ -13,6 +13,6 @@ Agent integrations
     .claude/settings.local.json  updated    Claude Code hooks
   Other settings in these files are preserved.
 
-Review and confirm → Apply change
+Apply MCP setup? → Apply reviewed changes
 No agent is connected. Connect one with shield mcp setup.
 --- exit 0

@@ -491,7 +491,7 @@ fn windows_agent_setup_repair_and_removal_preserve_policy_and_other_settings() {
             run(
                 root.path(),
                 &["mcp", "setup", "--agent", agent],
-                &[("Tool permissions", b"\r"), ("Review and confirm", b"2\r")],
+                &[("Tool permissions", b"\r"), ("Apply MCP setup?", b"2\r")],
                 0,
             );
         }
@@ -512,7 +512,7 @@ fn windows_agent_setup_repair_and_removal_preserve_policy_and_other_settings() {
         run(
             root.path(),
             &["mcp", "setup", "--remove", "--agent", agent],
-            &[("Review and confirm", b"2\r")],
+            &[("Apply MCP setup?", b"2\r")],
             0,
         );
     }
@@ -618,7 +618,7 @@ fn native_agent(agent: &str) {
     run(
         root.path(),
         &["mcp", "setup", "--agent", agent],
-        &[("Tool permissions", b"\r"), ("Review and confirm", b"2\r")],
+        &[("Tool permissions", b"\r"), ("Apply MCP setup?", b"2\r")],
         0,
     );
     run(root.path(), &["__agent-probe", agent], &[], 0);

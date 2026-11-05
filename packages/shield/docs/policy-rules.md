@@ -230,6 +230,30 @@ after them, and leaves the suffix unconstrained. This lets an administration
 restriction cover unknown suffix options without matching words in option values
 or later operands.
 
+Many CLIs accept their global options after a subcommand too, such as clap
+options declared `global = true`. Set `interleaved: true` in `leading`, with
+`interleaved-leading-v1`, to also accept the declared leading options between
+prefix words. This rule then denies both `acme-vcs --json branch remove old` and
+`acme-vcs branch --json remove old`:
+
+```yaml
+id: no-branch-removal
+decision: deny
+conditions:
+  domain: argv
+  executable: acme-vcs
+  arguments:
+    kind: prefix
+    values: [branch, remove]
+    leading: {flags: [--json], values: [--project], interleaved: true}
+```
+
+Only declared leading options are skipped between words. An undeclared option
+or `--` there makes the rule miss: `acme-vcs branch --verbose remove` is decided
+by your other rules. Use this setting only when the tool accepts every declared
+leading option, with the same meaning, at each level of the prefix; `git -C`
+means something else after `git commit`.
+
 For reusable allowances, choose a grammar for the operation rather than copying
 one observed argv. `exact` matches only the complete literal argument vector.
 `prefix` leaves every later argument unrestricted, so it is unsuitable when only

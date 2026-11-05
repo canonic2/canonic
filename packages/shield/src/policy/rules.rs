@@ -28,6 +28,9 @@ pub(crate) const UNKNOWN_OPTIONS: &str = "unknown-options-v1";
 pub(crate) const OPTION_ABBREVIATIONS: &str = "option-abbreviations-v1";
 /// Text selectors of the form `{not: SELECTOR}`.
 pub(crate) const NEGATED_SELECTORS: &str = "negated-selectors-v1";
+/// Leading option phases also parsed between prefix words.
+pub(crate) const INTERLEAVED_LEADING: &str = "interleaved-leading-v1";
+pub(crate) const FIELD_NEGATION: &str = "field-negation-v1";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -532,6 +535,11 @@ pub(super) fn capabilities(value: &Value, domain: &str, result: &mut BTreeSet<St
             if value["kind"] == "prefix" && value.get("leading").is_some() {
                 result.insert("prefix-leading-v1".into());
             }
+            if matches!(value["kind"].as_str(), Some("prefix" | "options"))
+                && value["leading"]["interleaved"] == true
+            {
+                result.insert(INTERLEAVED_LEADING.into());
+            }
             if value["kind"] == "options" && value["unknown_options"] == "skip" {
                 result.insert(UNKNOWN_OPTIONS.into());
             }
@@ -547,6 +555,15 @@ pub(super) fn capabilities(value: &Value, domain: &str, result: &mut BTreeSet<St
                 }
                 if key == "argument_paths" {
                     result.insert("location-v1".into());
+                }
+                if ["fields", "request_fields", "connection"].contains(&key.as_str())
+                    && v.as_object().is_some_and(|fields| {
+                        fields
+                            .values()
+                            .any(|predicate| predicate.get("not").is_some())
+                    })
+                {
+                    result.insert(FIELD_NEGATION.into());
                 }
                 if ["exact", "input", "context"].contains(&key.as_str()) {
                     continue;

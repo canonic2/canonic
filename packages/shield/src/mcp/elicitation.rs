@@ -104,7 +104,7 @@ pub(super) fn call(
                 arguments: call.arguments,
                 plan,
                 requests,
-                expires: Instant::now() + Duration::from_secs(300),
+                expires: Instant::now() + Duration::from_mins(5),
                 rounds: 1,
             },
         );

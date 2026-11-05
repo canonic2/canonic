@@ -80,6 +80,8 @@ pub(crate) const CAPABILITIES: &[&str] = &[
     rules::UNKNOWN_OPTIONS,
     rules::OPTION_ABBREVIATIONS,
     rules::NEGATED_SELECTORS,
+    rules::INTERLEAVED_LEADING,
+    rules::FIELD_NEGATION,
 ];
 
 /// Decision severity, ordered from least to most restrictive.

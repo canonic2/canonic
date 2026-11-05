@@ -25,56 +25,82 @@ pub(super) fn rows(
 
 /// The integration to set up. A confirmed repair resumes when no selection was
 /// given; otherwise the agent page starts at `answer`, the earlier choice when
-/// the operator came back to it, and records the new one there.
+/// the operator came back to it, and records the new one there. With `back`,
+/// Escape on the agent page returns [`Step::Back`] to the action page.
 fn choice(
     tty: &mut Terminal,
+    root: &Path,
+    meta: &Value,
     selected: Option<IntegrationChoice>,
     resumable: bool,
     answer: &mut Vec<String>,
-) -> Result<IntegrationChoice, Error> {
+    back: bool,
+) -> Result<Step<IntegrationChoice>, Error> {
     if selected.is_none() && resumable {
-        return Ok(IntegrationChoice::Keep);
+        return Ok(Step::Done(IntegrationChoice::Keep));
     }
     if matches!(selected, Some(IntegrationChoice::RemoveAgents(0))) {
-        let rows = rows(
-            "Remove the Box MCP definition Shield wrote",
-            "Remove owned hooks, MCP and permission settings together",
-        );
-        let ids = tty.choose_many(
-            "Remove agent integrations",
-            "Select integrations to remove; an empty selection keeps all integrations.",
-            &rows,
-            &[],
-            "Skip for now",
-        )?;
-        if ids.is_empty() {
-            return Err(Error::Cancelled);
-        }
-        return Ok(IntegrationChoice::RemoveAgents(IntegrationChoice::bits(
-            &ids,
-        )?));
+        let Step::Done(ids) =
+            tty.setup_agents(setup_choices(root, meta, true)?, &[], true, back)?
+        else {
+            return Ok(Step::Back);
+        };
+        return Ok(Step::Done(IntegrationChoice::RemoveAgents(
+            IntegrationChoice::bits(&ids)?,
+        )));
     }
     if let Some(selected) = selected {
-        return Ok(selected);
+        return Ok(Step::Done(selected));
     }
-    let rows = rows(
-        "Write .box/mcp/shield.yml; Box publishes it to each developer's agents",
-        "Install or repair project hooks and Shield MCP",
-    );
     let marked: Vec<&str> = answer.iter().map(String::as_str).collect();
-    let ids = tty.choose_many(
-        "Agent integrations",
-        "Select agents to install or repair. Remove one with shield mcp setup --remove.",
-        &rows,
-        &marked,
-        "Skip for now",
-    )?;
-    if ids.is_empty() {
-        return Err(Error::Cancelled);
-    }
+    let Step::Done(ids) =
+        tty.setup_agents(setup_choices(root, meta, false)?, &marked, false, back)?
+    else {
+        return Ok(Step::Back);
+    };
     let bits = IntegrationChoice::bits(&ids)?;
     *answer = ids;
-    Ok(IntegrationChoice::Agents(bits))
+    Ok(Step::Done(IntegrationChoice::Agents(bits)))
+}
+
+/// Host facts stay in Shield; the shared setup page owns selection behavior.
+pub(super) fn setup_choices(
+    root: &Path,
+    meta: &Value,
+    remove: bool,
+) -> Result<Vec<canonic_tui_kit::picker::Choice>, Error> {
+    let registration = super::registration(meta)?;
+    Ok(rows(
+        "Box publishes Shield hooks, MCP and permissions to each developer's agents",
+        "Manage project hooks, Shield MCP and permission settings together",
+    )
+    .into_iter()
+    .map(|(id, label, detail)| {
+        let configured = registration.as_ref().is_some_and(|r| {
+            if id == super::box_definition::ID {
+                r.box_definition.is_some()
+            } else {
+                r.agents.contains_key(id)
+            }
+        });
+        let mut choice = canonic_tui_kit::picker::Choice::new(id, label);
+        choice.detail = format!(
+            "{}; {detail}",
+            if configured {
+                "configured; ownership checked on review"
+            } else {
+                "not registered"
+            }
+        );
+        if !remove && id == super::box_definition::ID && !super::box_definition::box_project(root) {
+            choice.disabled = Some("requires a Box project".into());
+        }
+        if !remove && id == super::box_definition::ID && cfg!(windows) {
+            choice.disabled = Some("Box hook integration requires a Unix host".into());
+        }
+        choice
+    })
+    .collect())
 }
 
 /// The agents the guided page marks first: those already set up, otherwise
@@ -90,9 +116,10 @@ pub(super) fn preselected(root: &Path, meta: &Value) -> Result<Vec<String>, Erro
                 .collect()
         })
         .unwrap_or_default();
+    // Box setup is disabled on Windows, so it cannot be the preselection there.
     Ok(if !registered.is_empty() {
         registered
-    } else if super::box_definition::box_project(root) {
+    } else if !cfg!(windows) && super::box_definition::box_project(root) {
         vec![super::box_definition::ID.to_owned()]
     } else {
         detected()
@@ -243,7 +270,15 @@ pub(super) fn review(
     let selected = match selected {
         Some(IntegrationChoice::RemoveAgents(0)) | None if !resumable => {
             let mut tty = Terminal::required(json_mode)?;
-            choice(&mut tty, selected, false, &mut preselected(root, &meta)?)?
+            let shown = selected.is_none();
+            let mut action = management_action(&mut tty, selected)?;
+            let mut answer = preselected(root, &meta)?;
+            loop {
+                match choice(&mut tty, root, &meta, action, false, &mut answer, shown)? {
+                    Step::Done(choice) => break choice,
+                    Step::Back => action = management_action(&mut tty, None)?,
+                }
+            }
         }
         Some(selected) => selected,
         None => IntegrationChoice::Keep,
@@ -508,11 +543,24 @@ pub(super) fn setup(
     let meta = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
     let root = Path::new(&context.project_root);
     let resumable = pending(&meta)?.is_some();
-    // Escape on the permissions returns to the agent page when it was shown.
-    let asked = selected.is_none() && !resumable;
+    // Escape on the agent page returns to the action page when it was shown,
+    // and Escape on the permissions returns to the agent page.
+    let shown = selected.is_none() && !resumable;
+    let mut action = if resumable {
+        selected
+    } else {
+        management_action(&mut tty, selected)?
+    };
     let mut answer = preselected(root, &meta)?;
     let plan = loop {
-        let choice = choice(&mut tty, selected, resumable, &mut answer)?;
+        let choice = match choice(&mut tty, root, &meta, action, resumable, &mut answer, shown)? {
+            Step::Done(choice) => choice,
+            Step::Back => {
+                action = management_action(&mut tty, None)?;
+                continue;
+            }
+        };
+        let asked = action.is_none() && !resumable;
         match plan(root, &meta, choice, &mut tty, false, asked)? {
             Step::Done(plan) => break plan,
             Step::Back if asked => {}
@@ -520,9 +568,26 @@ pub(super) fn setup(
         }
     };
     if plan.is_some() {
-        tty.confirm(&setup_preview(root, plan.as_ref()))?;
+        tty.confirm_mcp(&setup_preview(root, plan.as_ref()))?;
     }
     finish(context, &meta, plan.as_ref(), None)
+}
+
+/// Ask the common action once; returning from permissions revisits the agent
+/// page directly and retains the chosen operation.
+fn management_action(
+    tty: &mut Terminal,
+    selected: Option<IntegrationChoice>,
+) -> Result<Option<IntegrationChoice>, Error> {
+    if selected.is_some() {
+        return Ok(selected);
+    }
+    Ok(match tty.mcp_action()? {
+        canonic_tui_kit::runtime::prompts::setup::Action::Install => None,
+        canonic_tui_kit::runtime::prompts::setup::Action::Remove => {
+            Some(IntegrationChoice::RemoveAgents(0))
+        }
+    })
 }
 
 /// Apply a confirmed plan, then bring prefix rules in line with the active

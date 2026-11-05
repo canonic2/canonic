@@ -138,8 +138,12 @@ fn leading(value: &Value) -> Result<Option<BTreeMap<String, Spec>>, Error> {
                     "long_equals",
                     "short_attached",
                     "long_abbreviations",
+                    "interleaved",
                 ],
             )?;
+            if v.get("interleaved").is_some_and(|i| !i.is_boolean()) {
+                return Err(Error::Syntax);
+            }
             grammar(v)
         })
         .transpose()
@@ -400,15 +404,22 @@ pub(super) fn matches(
             };
             let prefix = array(&value[key])?;
             let mut position = 0;
-            if value["kind"] == "prefix" {
-                let declarations = parse_leading(value, args, &mut position, &mut result)?;
-                check_values(declarations, patterns, &mut result)?;
-            }
-            if !prefix_matches(prefix, &args[position..], patterns)? {
+            let global = if value["kind"] == "prefix" {
+                parse_leading(value, args, &mut position, &mut result)?
+            } else {
+                BTreeMap::new()
+            };
+            let words = Words {
+                settings: value,
+                global: &global,
+                prefix,
+            };
+            if !words.matches(args, &mut position, patterns, &mut result)? {
                 result.fail("argument_mismatch");
                 return Ok(result);
             }
-            let suffix = &args[position + prefix.len()..];
+            check_values(global, patterns, &mut result)?;
+            let suffix = &args[position..];
             if value["kind"] == "sequence" {
                 match value["rest"]["kind"].as_str() {
                     Some("none") if !suffix.is_empty() => result.fail("argument_mismatch"),
@@ -427,16 +438,74 @@ pub(super) fn matches(
     Ok(result)
 }
 
-fn prefix_matches(
-    prefix: &[Value],
-    args: &[String],
-    patterns: &dyn Provider,
-) -> Result<bool, Error> {
-    if args.len() < prefix.len() {
+/// A selector's prefix words with the leading phase that may separate them.
+struct Words<'a> {
+    /// The argument selector, whose `leading.interleaved` enables gaps.
+    settings: &'a Value,
+    /// The leading phase's declarations; empty without a leading phase.
+    global: &'a BTreeMap<String, Spec>,
+    prefix: &'a [Value],
+}
+
+impl Words<'_> {
+    /// Matches the prefix words at `position` and advances past them. With an
+    /// interleaved leading phase, declared leading options between words are
+    /// parsed as leading records; any other token must match the next word.
+    fn matches(
+        &self,
+        args: &[String],
+        position: &mut usize,
+        patterns: &dyn Provider,
+        result: &mut ResultSet,
+    ) -> Result<bool, Error> {
+        let leading = &self.settings["leading"];
+        let interleaved = leading["interleaved"] == true;
+        for (index, word) in self.prefix.iter().enumerate() {
+            if interleaved && index > 0 {
+                while *position < args.len() && declared(leading, self.global, &args[*position])? {
+                    option(leading, self.global, args, position, 0, result)?;
+                }
+            }
+            match args.get(*position) {
+                Some(arg) if selectors::matches(word, arg, patterns)? => *position += 1,
+                _ => return Ok(false),
+            }
+        }
+        Ok(true)
+    }
+}
+
+/// Whether `arg` is an option `grammar` declares, written in a form the
+/// phase's settings admit, so parsing it records no failure. Anything else in a
+/// gap between prefix words is matched against the next word instead.
+fn declared(settings: &Value, grammar: &BTreeMap<String, Spec>, arg: &str) -> Result<bool, Error> {
+    if arg.starts_with("--") {
+        let (name, attached) = arg
+            .split_once('=')
+            .map_or((arg, None), |(name, value)| (name, Some(value)));
+        if name.len() <= 2 || attached.is_some() && !setting(settings, "long_equals")? {
+            return Ok(false);
+        }
+        return Ok(match long(settings, grammar, name)? {
+            Long::Declared(declared) => attached.is_none() || grammar[declared].arity != 0,
+            Long::Ambiguous | Long::Undeclared => false,
+        });
+    }
+    let Some(letters) = arg.strip_prefix('-') else {
+        return Ok(false);
+    };
+    if letters.is_empty() || !letters.is_ascii() {
         return Ok(false);
     }
-    for (predicate, value) in prefix.iter().zip(args) {
-        if !selectors::matches(predicate, value, patterns)? {
+    for (offset, letter) in letters.char_indices() {
+        let Some(spec) = grammar.get(&format!("-{letter}")) else {
+            return Ok(false);
+        };
+        let rest = &letters[offset + 1..];
+        if spec.arity != 0 {
+            return Ok(rest.is_empty() || setting(settings, "short_attached")?);
+        }
+        if !rest.is_empty() && !setting(settings, "short_clusters")? {
             return Ok(false);
         }
     }
@@ -473,15 +542,19 @@ fn parse_options(
     result: &mut ResultSet,
 ) -> Result<(), Error> {
     let mut position = 0;
-    let mut declarations = parse_leading(value, args, &mut position, result)?;
-    declarations.extend(grammar(value)?);
-    let prefix = array(&value["prefix"])?;
-    if !prefix_matches(prefix, &args[position..], patterns)? {
+    let global = parse_leading(value, args, &mut position, result)?;
+    let words = Words {
+        settings: value,
+        global: &global,
+        prefix: array(&value["prefix"])?,
+    };
+    if !words.matches(args, &mut position, patterns, result)? {
         result.fail("argument_mismatch");
         return Ok(());
     }
-    position += prefix.len();
     let main = grammar(value)?;
+    let mut declarations = global;
+    declarations.extend(main.clone());
     let skip = value["unknown_options"] == "skip";
     let mut options = true;
     let mut remaining = Vec::new();

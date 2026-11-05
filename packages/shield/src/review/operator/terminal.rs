@@ -9,22 +9,7 @@ use std::{
 
 mod inline;
 
-/// One setup question: listed answers, optionally followed by a typed row.
-pub(super) struct Question {
-    pub(super) title: String,
-    pub(super) prompt: String,
-    pub(super) context: String,
-    /// `(id, label, detail)` in display order.
-    pub(super) choices: Vec<(String, String, String)>,
-    /// Mark any number of choices instead of picking one.
-    pub(super) multiple: bool,
-    /// The typed row's label and optional placeholder.
-    pub(super) typed: Option<(String, Option<String>)>,
-    /// Highlighting never answers.
-    pub(super) default: Option<String>,
-    /// An earlier step exists: Escape reads "back" instead of "cancel".
-    pub(super) back: bool,
-}
+pub(super) use canonic_tui_kit::runtime::prompts::{Check, Question, Reply};
 
 /// Escape returns to the previous step; Ctrl-C cancels the whole flow.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,22 +27,29 @@ impl<T> Step<T> {
     }
 }
 
-/// The operator's answer to a [`Question`].
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum Reply {
-    /// Choice IDs, possibly none for an optional multiple choice.
-    Choices(Vec<String>),
-    /// Text typed into the typed row.
-    Typed(String),
-}
-/// Checks a reply before it is accepted; a reason reopens the question.
-pub(super) type Check<'a> = dyn FnMut(&Reply) -> Result<(), String> + 'a;
-
 /// Operator interaction through the controlling terminal, separate from stdin.
 pub(super) struct Terminal {
     output: File,
 }
 impl Terminal {
+    pub(super) fn mcp_action(
+        &mut self,
+    ) -> Result<canonic_tui_kit::runtime::prompts::setup::Action, Error> {
+        inline::mcp_action(self.host(12)?)
+    }
+    pub(super) fn setup_agents(
+        &mut self,
+        choices: Vec<canonic_tui_kit::picker::Choice>,
+        marked: &[&str],
+        remove: bool,
+        back: bool,
+    ) -> Result<Step<Vec<String>>, Error> {
+        inline::agents(self.host(16)?, choices, marked, remove, back)
+    }
+    pub(super) fn confirm_mcp(&mut self, value: &Value) -> Result<(), Error> {
+        self.display(value)?;
+        inline::confirm_mcp(self.host(12)?)
+    }
     pub(super) fn required(json: bool) -> Result<Self, Error> {
         if json {
             return Err(Error::Invalid(
@@ -212,16 +204,6 @@ impl Terminal {
             "loose" => Ok(Step::Done(Profile::Loose)),
             _ => Err(Error::Invalid("invalid pack profile")),
         }
-    }
-    pub(super) fn choose_many(
-        &mut self,
-        title: &str,
-        context: &str,
-        choices: &[(&str, &str, &str)],
-        marked: &[&str],
-        empty: &str,
-    ) -> Result<Vec<String>, Error> {
-        inline::choose_many(self.host(12)?, title, context, choices, marked, empty)
     }
     /// A guided multiple choice: Escape returns [`Step::Back`], labeled as
     /// back or cancel according to whether an earlier step exists.
