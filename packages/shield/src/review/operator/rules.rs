@@ -488,35 +488,6 @@ fn history_menu(history: &mut History, tty: &mut Terminal) -> Result<Step<()>, E
     }
 }
 
-/// The edited `config.yml` and optional `config.local.yml` as adopted, with
-/// their merged configuration. Project rules live in `rules.yml`; pointing
-/// `config.yml` there edits the file and keeps its comments.
-fn adopted_config(directory: &std::path::Path) -> Result<(String, Option<String>, Value), Error> {
-    let read = |name: &str, message: &'static str| {
-        crate::application::read(&directory.join(name)).map_err(|_| Error::Invalid(message))
-    };
-    let source = read("config.yml", "project config unreadable")?;
-    let mut shared: Value =
-        crate::policy::parse(&source).map_err(|_| Error::Invalid("invalid project config"))?;
-    let source = if shared["rules"] == "rules.yml" {
-        source
-    } else {
-        shared["rules"] = json!("rules.yml");
-        crate::policy_files::write(Some(&source), &shared)?.text
-    };
-    let local = if directory.join("config.local.yml").exists() {
-        Some(read("config.local.yml", "local config unreadable")?)
-    } else {
-        None
-    };
-    let config: Value = crate::policy::parse(&crate::configuration::layers::merge(
-        &source,
-        local.as_deref(),
-    )?)
-    .map_err(|_| Error::Invalid("invalid project config"))?;
-    Ok((source, local, config))
-}
-
 fn manual(
     context: &Context,
     before: &crate::review::model::State,
@@ -525,80 +496,9 @@ fn manual(
 ) -> Result<Value, Error> {
     let fingerprint =
         crate::review::publication::projections::projection_fingerprint(context, before)?;
-    let directory = crate::review::project::root(context).join(".shield");
-    let read = |name: &str, message: &'static str| {
-        crate::application::read(&directory.join(name)).map_err(|_| Error::Invalid(message))
-    };
-    let (source, local, config) = adopted_config(&directory)?;
-    let mut meta = crate::review::project::metadata(before);
-    // Installed and locally disabled selections are both known releases.
-    let known: Vec<Value> = meta["installed"]
-        .as_array()
-        .into_iter()
-        .chain(meta["disabled"].as_array())
-        .flatten()
-        .cloned()
-        .collect();
-    let mut selected = Vec::new();
-    let mut bytes = Vec::new();
-    let mut disabled_rows = Vec::new();
-    let mut disabled_bytes = Vec::new();
-    for (list, rows, artifacts) in [
-        ("packs", &mut selected, &mut bytes),
-        ("disabled", &mut disabled_rows, &mut disabled_bytes),
-    ] {
-        for row in config[list].as_array().into_iter().flatten() {
-            let original = known
-                .iter()
-                .find(|p| {
-                    p["id"] == row["id"]
-                        && (row["registry_identity"].is_null()
-                            || p["source_identity"] == row["registry_identity"])
-                        && p["version"] == row["version"]
-                })
-                .ok_or(Error::Invalid("use shield pack add for a new pack release"))?;
-            let path = row["path"]
-                .as_str()
-                .ok_or(Error::Invalid("pack path missing"))?;
-            let artifact = contained(&directory, path)?;
-            if crate::policy::fingerprint(artifact.as_bytes()) != original["digest"] {
-                return Err(Error::Invalid(
-                    "installed artifact bytes changed; reacquire the pack",
-                ));
-            }
-            let mut selection = original.clone();
-            selection["profile"] = row["profile"].clone();
-            if let Some(fields) = selection.as_object_mut() {
-                fields.remove("layer");
-            }
-            if row["layer"] == "local" {
-                selection["layer"] = json!("local");
-            }
-            rows.push(selection);
-            artifacts.push(artifact);
-        }
-    }
-    meta["installed"] = json!(selected);
-    if disabled_rows.is_empty() {
-        if let Some(fields) = meta.as_object_mut() {
-            fields.remove("disabled");
-        }
-    } else {
-        meta["disabled"] = json!(disabled_rows);
-    }
-    let rules = read("rules.yml", "manual rules unreadable")?;
-    let local_rules = config["local_rules"]
-        .as_str()
-        .map(|path| contained(&directory, path))
-        .transpose()?;
-    let candidate = json!(crate::configuration::Bundle::capture_layers(
-        &source,
-        local.as_deref(),
-        &bytes,
-        Some(&rules),
-        local_rules.as_deref(),
-        &disabled_bytes,
-    )?);
+    let captured = crate::review::changes::project_files::capture(context, before)?;
+    let candidate = captured.candidate;
+    let meta = captured.metadata;
     let candidates = std::collections::BTreeMap::from([("project".into(), candidate.clone())]);
     let (comparison, plan) = review::compare_prepared(&before.candidates, &candidates, Some(base))?;
     let mut view = json!({"operation":"adopt manual project edits",
@@ -619,14 +519,4 @@ fn manual(
         Some(&fingerprint),
         &plan,
     )
-}
-
-/// A project file named by a configuration path, refusing paths that leave .shield.
-fn contained(directory: &std::path::Path, path: &str) -> Result<String, Error> {
-    crate::configuration::portable_path(path)?;
-    let resolved = directory.join(path).canonicalize()?;
-    if !resolved.starts_with(directory.canonicalize()?) {
-        return Err(Error::Invalid("manual artifact escapes project"));
-    }
-    crate::application::read(&resolved).map_err(|_| Error::Invalid("project artifact unreadable"))
 }

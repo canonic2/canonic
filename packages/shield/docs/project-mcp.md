@@ -296,14 +296,31 @@ supersession links, and an ASCII `idempotency_key` of 1–128 characters.
 
 | Change | Purpose |
 | --- | --- |
+| `project_files_adopt` | Capture and review policy edits on disk; must be proposed alone. |
 | `rule_add`, `rule_edit`, `rule_remove` | Add, replace, or remove a custom rule. |
 | `pack_add`, `pack_update`, `pack_remove` | Install, update, or remove a pack and its dependencies. |
 | `pack_configure` | Set variables or rule overrides on an installed pack. |
 | `access_path_add`, `access_path_remove` | Add or remove one absolute read/write directory. |
 
-Every change except `pack_update` and `pack_remove` accepts `layer: project`
+Every change except `project_files_adopt`, `pack_update` and `pack_remove` accepts `layer: project`
 (default) or `local` for uncommitted local configuration. Rules use the project
 condition schema.
+
+If a pack or rule change would overwrite unreviewed `.shield/` edits, first call
+`policy_propose` with `{"change":{"kind":"project_files_adopt"}}` and submit
+its returned `apply_arguments` unchanged to `policy_apply`. Approval presents
+the captured policy edits relative to active policy. The semantic comparison
+covers supported command decisions; file, web and pack-precondition decisions
+are not compared. The prompt reports incomplete comparison coverage, and its
+summary can abbreviate large changes; inspect the retained proposal with
+`policy_show` for the full structural diff. The files remain inactive until
+approval; edits made while the prompt is open make the proposal stale. After
+approval, prepare the pack or rule change again. This uses the host's ordinary
+Shield approval flow and needs no terminal review. Existing verified pack bytes
+are required; new releases still use pack acquisition. Changes to MCP connection
+settings still require the setup review described below.
+Missing or linked policy files keep the `shield policy review` repair route;
+adoption requires regular files.
 
 The `policy_propose` change with `kind: "pack_configure"` requires an installed `reference` and at least one of `set`,
 `unset`, `override`, or `clear_override`. Overrides map rule IDs to `off`,

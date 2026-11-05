@@ -210,6 +210,9 @@ Reject, or Leave pending; Accept asks for final confirmation.
 Agents can also submit a proposal's exact `apply_arguments` to
 `policy_apply` for host approval. `policy_receipt` reads the
 committed receipt. See [MCP review](project-mcp.md#proposals-and-operator-review).
+If policy files already have unreviewed edits, an agent can prepare a separate
+`project_files_adopt` proposal for the same host approval flow. Approval covers
+the complete captured policy difference; further edits make that review stale.
 
 Changes to policy, setup, registry settings, or cache location can invalidate
 a proposal. Ask the agent to prepare a fresh one, even if the policy revision

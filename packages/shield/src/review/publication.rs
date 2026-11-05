@@ -208,7 +208,8 @@ fn commit_confirmed(
     let mut attempted_activation = None;
     let mut preserved = BTreeSet::new();
     let result = store.update_checkpoint(context, &|| Ok(()), |state| {
-        preserved = verify_confirmation_files(context, before, manual_fingerprint, &files)?;
+        preserved =
+            verify_confirmation_files(context, before, manual_fingerprint, &files, proposal)?;
         if expected != publication_identity(state) {
             return Err(Error::Invalid("project changed; review again"));
         }
@@ -300,16 +301,32 @@ fn prepare_projection_repair(
 
 /// Refuse a commit that would overwrite project files edited by hand, and
 /// return the edited files it leaves unchanged. Those stay on disk, pending the
-/// operator's review, because a proposal is built from retained policy and
-/// never from them. A manual review binds the exact files it showed.
+/// operator's review. Ordinary proposals use retained policy; adoption and
+/// manual reviews bind the exact files captured for their review.
 fn verify_confirmation_files(
     context: &Context,
     before: &State,
     manual_fingerprint: Option<&str>,
     files: &BTreeMap<String, String>,
+    proposal: Option<&str>,
 ) -> Result<BTreeSet<String>, Error> {
     const CHANGED: Error =
         Error::Invalid("project files changed during confirmation; review again");
+    if let Some(row) = proposal
+        .and_then(|id| before.proposals.iter().find(|row| row.id == id))
+        .filter(|row| row.reviewed_files.is_some())
+    {
+        if Some(super::changes::project_files::fingerprint(
+            context,
+            before,
+            &row.candidate,
+            &row.candidate_metadata,
+        )?) != row.reviewed_files
+        {
+            return Err(Error::StaleSnapshot);
+        }
+        return Ok(BTreeSet::new());
+    }
     if let Some(fingerprint) = manual_fingerprint {
         if projection_fingerprint(context, before)? != fingerprint {
             return Err(CHANGED);
@@ -330,7 +347,7 @@ fn verify_confirmation_files(
             != recorded.get(name).cloned()
     }) {
         return Err(Error::Invalid(
-            "this change would overwrite unreviewed edits to .shield files; ask the user to review them with shield policy review, then propose the change again",
+            "this change would overwrite unreviewed edits to .shield files; use policy_propose with change {kind: project_files_adopt} alone and policy_apply to review those edits, then propose the change again",
         ));
     }
     Ok(edited)

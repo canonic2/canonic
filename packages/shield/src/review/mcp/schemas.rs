@@ -57,6 +57,7 @@ fn layer() -> Value {
 fn change() -> Value {
     let mut variants = vec![];
     for (kind, mut fields, mut required) in [
+        ("project_files_adopt", json!({}), vec![]),
         (
             "rule_add",
             json!({"rule":rule(),"layer":layer()}),
@@ -173,7 +174,7 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
 fn policy_propose() -> Definition {
     (
         "policy_propose",
-        "Draft policy changes for policy_apply approval; does not activate them. Adapt complete inputSchema examples after reviewing effects. After a deadline, inspect pending policy_show proposals, then retry identical arguments on this connection if needed. Report unresolved failures. Never retry user cancellation.",
+        "Draft policy changes for policy_apply approval; does not activate them. Use project_files_adopt alone to review edits already on disk, then propose other changes after approval. Adapt complete inputSchema examples after reviewing effects. After a deadline, inspect pending policy_show proposals, then retry identical arguments on this connection if needed. Report unresolved failures. Never retry user cancellation.",
         || {
             let mut schema = object(
                 json!({"change":change(),"changes":{"type":"array","minItems":1,"maxItems":16,"items":change()},"idempotency_key":id(),"agent_reason":string(),"source_entry_id":id(),"review_ids":{"type":"array","maxItems":16,"items":{"type":"string","minLength":64,"maxLength":64}},"supersedes_proposal_id":id()}),

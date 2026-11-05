@@ -13,6 +13,14 @@ private = { ignore = true }
 allow = ["Apache-2.0", "MIT", "Unicode-3.0"]
 confidence-threshold = 0.9
 
+# JSON Schema validation uses fluent-uri's borrow-or-share helper. Its reviewed
+# MIT-0 license permits unrestricted reuse/distribution without attribution,
+# consistent with Shield's permissive dependency policy and MCP Kit's exception.
+[[licenses.exceptions]]
+name = "borrow-or-share"
+version = "0.2.4"
+allow = ["MIT-0"]
+
 # Ratatui's layout/cache hash tables use foldhash's permissive Zlib license,
 # reviewed with the same scoped exception as Canonic TUI.
 [[licenses.exceptions]]

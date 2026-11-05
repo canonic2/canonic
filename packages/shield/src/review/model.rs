@@ -143,6 +143,8 @@ pub(crate) struct Proposal {
     pub(crate) retry_key: String,
     pub(crate) retry_owner: String,
     pub(crate) signature: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) reviewed_files: Option<String>,
 }
 impl Proposal {
     pub(crate) fn apply_arguments(&self) -> Value {

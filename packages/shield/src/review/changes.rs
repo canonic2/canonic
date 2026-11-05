@@ -1,5 +1,6 @@
 //! Complete project candidates shared by MCP proposal capture and operator commit.
 pub(super) mod diff;
+pub(super) mod project_files;
 use super::{Checkpoint, Context, Error, model::Proposal, snapshots, storage::Store};
 use crate::{configuration, policy};
 use serde::{Deserialize, Serialize};
@@ -9,6 +10,7 @@ use std::{collections::BTreeMap, path::Path};
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum Change {
+    ProjectFilesAdopt,
     RuleAdd {
         rule: policy::normalized::Rule,
         #[serde(
@@ -239,8 +241,16 @@ pub(super) fn propose(
     let _trace = crate::diagnostics::trace::span("proposal.prepare");
     validate_input(input)?;
     let changes = input.changes()?;
-    let signature = policy::fingerprint(json!(input).to_string().as_bytes());
-    let retry_key = input.retry_key();
+    let adopt_files = changes
+        .iter()
+        .any(|change| matches!(change, Change::ProjectFilesAdopt));
+    if adopt_files && changes.len() != 1 {
+        return Err(Error::Invalid(
+            "project_files_adopt must be reviewed separately from other changes",
+        ));
+    }
+    let mut signature = policy::fingerprint(json!(input).to_string().as_bytes());
+    let mut retry_key = input.retry_key();
     let store = Store::open(Path::new(&context.project_root))?;
     let mut before = store.read_checkpoint()?;
     before.check(context)?;
@@ -256,13 +266,41 @@ pub(super) fn propose(
             "operator workflow requires project-only policy",
         ));
     }
+    let adopted = if adopt_files {
+        // Checkpoint reads carry source references. File capture needs the
+        // exact current policy, independently of optional history or proposals.
+        for candidate in before.candidates.values_mut() {
+            *candidate = store.captured_candidate(candidate)?;
+        }
+        let project_files::Capture {
+            candidate,
+            metadata: meta,
+            fingerprint,
+        } = project_files::capture(context, &before)?;
+        super::publication::validate_mcp_change(&before, &candidate)?;
+        signature = policy::fingerprint(
+            json!([input, fingerprint, before.policy_revision])
+                .to_string()
+                .as_bytes(),
+        );
+        if input.idempotency_key.is_none() {
+            retry_key = format!("proposal-{}", &signature[..32]);
+        }
+        Some((candidate, meta, fingerprint))
+    } else {
+        None
+    };
     if let Some(row) = before
         .proposals
         .iter_mut()
         .find(|p| p.retry_owner == context.retry_owner() && p.retry_key == retry_key)
     {
         if row.signature != signature {
-            return Err(Error::Invalid("idempotency key reused with changed input"));
+            return Err(if adopt_files && row.operation == "project_files_adopt" {
+                Error::StaleSnapshot
+            } else {
+                Error::Invalid("idempotency key reused with changed input")
+            });
         }
         store.hydrate_proposal(row)?;
         reserve(
@@ -277,7 +315,11 @@ pub(super) fn propose(
     capacity(&before.proposals)?;
     checkpoint()?;
     let (mut before, base_plan, base_snapshots) = store.read_for_comparison(before)?;
-    let (candidate, meta, captured) = if let Some(prepared) = &input.prepared {
+    let mut reviewed_files = None;
+    let (candidate, meta, captured) = if let Some((candidate, meta, fingerprint)) = adopted {
+        reviewed_files = Some(fingerprint);
+        (candidate, meta, None)
+    } else if let Some(prepared) = &input.prepared {
         if prepared.binding != prepared_binding(&before) {
             return Err(Error::StaleSnapshot);
         }
@@ -343,6 +385,8 @@ pub(super) fn propose(
                 row.candidate = store.captured_candidate(&row.candidate)?;
                 reserve(&row.base_candidate, &row.base_metadata, &row.candidate, &row.candidate_metadata, None)?;
                 Ok(present(row))
+            } else if adopt_files && row.operation == "project_files_adopt" {
+                Err(Error::StaleSnapshot)
             } else { Err(Error::Invalid("idempotency key reused with changed input")) };
         }
         if input.supersedes_proposal_id.as_ref().is_some_and(|id| !state.proposals.iter().any(|p| p.id == *id)) { return Err(Error::Missing); }
@@ -355,7 +399,7 @@ pub(super) fn propose(
         let event = state.event("proposal_created", context, json!({"proposal_id":id,"source_entry_id":input.source_entry_id,"supersedes_proposal_id":input.supersedes_proposal_id}),json!({"agent_reason":input.agent_reason}),json!({"operation":kind,"policy_revision":state.policy_revision}));
         let mut event = event;
         event["links"]["review_ids"] = json!(input.review_ids);
-        let row = Proposal { id, created_at:event["recorded_at"].as_str().ok_or(Error::Invalid("timestamp unavailable"))?.into(), status:"pending".into(), provenance:context.provenance(), links:event["links"].clone(), reasons:event["reasons"].clone(), policy_revision:state.policy_revision.clone(),target_scope:"project".into(),operation:kind,rule_id,candidate,base_candidate:before.candidates["project"].clone(),base_metadata:before.operator.clone(),candidate_metadata:meta,receipt:Value::Null,comparison,operator:None,retry_key:retry_key.clone(),retry_owner:context.retry_owner(),signature };
+        let row = Proposal { id, created_at:event["recorded_at"].as_str().ok_or(Error::Invalid("timestamp unavailable"))?.into(), status:"pending".into(), provenance:context.provenance(), links:event["links"].clone(), reasons:event["reasons"].clone(), policy_revision:state.policy_revision.clone(),target_scope:"project".into(),operation:kind,rule_id,candidate,base_candidate:before.candidates["project"].clone(),base_metadata:before.operator.clone(),candidate_metadata:meta,receipt:Value::Null,comparison,operator:None,retry_key:retry_key.clone(),retry_owner:context.retry_owner(),signature,reviewed_files };
         let result = {
             let _trace = crate::diagnostics::trace::span("proposal.present");
             present(&row)

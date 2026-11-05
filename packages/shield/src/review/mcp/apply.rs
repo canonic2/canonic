@@ -197,6 +197,7 @@ pub(super) fn argument_binding(context: &Context, proposal: &Proposal) -> String
             proposal.base_metadata,
             proposal.candidate_metadata,
             proposal.comparison,
+            proposal.reviewed_files,
         ])
         .to_string()
         .as_bytes(),

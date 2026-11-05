@@ -317,6 +317,7 @@ dependencies = [
  "jsonschema",
  "miniz_oxide",
  "referencing",
+ "rustix 1.1.5",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -344,7 +345,7 @@ dependencies = [
 
 [[package]]
 name = "canonic-shield"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "assert_cmd",
  "assert_fs",

@@ -41,7 +41,14 @@ fn static_discovery_get_and_read_need_no_project_or_handshake() {
     let source = include_str!("../../../skills/policy-review/SKILL.md");
     let tools = catalog(None).unwrap();
     for reference in source.split('`').skip(1).step_by(2) {
-        if reference.contains('_') && reference != "apply_arguments" {
+        if reference.starts_with('{') {
+            let arguments: Value = serde_json::from_str(reference).unwrap();
+            canonic_mcp_kit::schema::validate(
+                &tools.get("policy_propose").unwrap().input_schema,
+                &arguments,
+            )
+            .unwrap();
+        } else if reference.contains('_') && reference != "apply_arguments" {
             assert!(
                 tools.tools().iter().any(|tool| tool.name == reference),
                 "unknown bundled tool reference: {reference}"

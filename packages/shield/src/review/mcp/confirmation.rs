@@ -67,6 +67,9 @@ pub(super) fn headline(changes: &Value) -> Option<String> {
 /// hosts whose own prompt supplies them.
 pub(super) fn summary(proposal: &Proposal, args: &Value) -> String {
     let mut lines = Vec::new();
+    if proposal.reviewed_files.is_some() {
+        lines.push("Adopt the current edits to this project's .shield policy files.".into());
+    }
     let changes = args["changes"].as_array().map_or(&[][..], Vec::as_slice);
     // Several changes lead with one line naming them all, which is what a
     // host showing only the first line can display.

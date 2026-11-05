@@ -23,6 +23,12 @@ after every task or every Allow, Ask or Deny.
    useful deny boundaries and explain any broadening. Read the bundled guides
    through `shield_docs_list`, `shield_docs_search` and `shield_docs_read` when
    rule syntax or scope needs clarification.
+   If the change would overwrite unreviewed policy files, propose
+   `{"change":{"kind":"project_files_adopt"}}` separately and submit its
+   exact `apply_arguments` for host approval. This reviews all captured file
+   edits before preparing the original change again. Changed files make the
+   adoption stale; request a fresh proposal after inspecting them. Do not send
+   Claude Code or Codex users to terminal review for ordinary policy file drift.
 4. Inspect the retained proposal through `policy_show`. Copy its exact
    `apply_arguments` unchanged into `policy_apply` only through the registered
    adapter's returned approval route. Claude Code uses host form confirmation;

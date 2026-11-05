@@ -490,6 +490,15 @@ fn status(context: &Context, views: &mut views::Views, doctor: bool) -> Result<V
         return project::doctor(context);
     }
     let mut data = project::status(context)?;
+    if data["repair_needed"] == true
+        && data["coverage"]["repair_needed"] != true
+        && crate::agents::review::resolve(context.agent.as_deref()).confirmation()
+            != crate::agents::review::Confirmation::Terminal
+        && changes::project_files::adoption_available(context)?
+    {
+        data["repair_route"] = json!("policy_propose");
+        data["repair_arguments"] = json!({"change":{"kind":"project_files_adopt"}});
+    }
     let id = views.active(context)?;
     let captured = views.get(&id)?;
     if data["active"]["policy_revision"] != captured.revision()? {

@@ -2,6 +2,277 @@
 use super::*;
 
 #[test]
+fn project_files_adopt_recovers_hand_edits_through_both_host_approvals() {
+    for agent in ["claude", "codex"] {
+        let (root, mut context, connection) = fixture();
+        context.agent = Some(agent.into());
+        let first = prepare(
+            &context,
+            &connection,
+            &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
+        );
+        apply(&context, &connection, &first);
+        let path = root.path().join(".shield/rules.yml");
+        let edited = crate::policy::rules::document(&[rule("adopted", "deny")])
+            .unwrap()
+            .to_string();
+        std::fs::write(&path, &edited).unwrap();
+        let status = invoke(&context, &connection, "status", json!({}));
+        assert!(status["error"].is_null(), "{status}");
+        assert_eq!(
+            status["data"]["coverage"]["repair_needed"], false,
+            "{status}"
+        );
+        assert_eq!(status["data"]["repair_route"], "policy_propose");
+        assert_eq!(
+            status["data"]["repair_arguments"]["change"]["kind"],
+            "project_files_adopt"
+        );
+        let before = Store::open(root.path())
+            .unwrap()
+            .read()
+            .unwrap()
+            .policy_revision;
+        let args = prepare(
+            &context,
+            &connection,
+            &json!({"kind":"project_files_adopt"}),
+        );
+        assert_eq!(
+            args,
+            prepare(
+                &context,
+                &connection,
+                &json!({"kind":"project_files_adopt"})
+            )
+        );
+        assert!(args.to_string().contains("adopted"), "{args}");
+        assert_eq!(
+            Store::open(root.path())
+                .unwrap()
+                .read()
+                .unwrap()
+                .policy_revision,
+            before
+        );
+        if agent == "claude" {
+            let refused = invoke(&context, &connection, "policy_apply", args.clone());
+            assert_eq!(refused["error"]["code"], "operator_review_required");
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), edited);
+        }
+        apply(&context, &connection, &args);
+        let after = Store::open(root.path()).unwrap().read().unwrap();
+        assert_ne!(after.policy_revision, before);
+        assert!(
+            after.candidates["project"]["rules"]
+                .as_str()
+                .unwrap()
+                .contains("adopted")
+        );
+        assert!(
+            !super::super::super::publication::projections::projection_changed(&context, &after)
+                .unwrap()
+        );
+        let next = prepare(
+            &context,
+            &connection,
+            &json!({"kind":"rule_add","rule":rule("next", "allow")}),
+        );
+        apply(&context, &connection, &next);
+    }
+}
+
+#[test]
+fn project_files_adopt_rejects_edits_during_confirmation_including_new_local_files() {
+    for local in [false, true] {
+        let (root, mut context, connection) = fixture();
+        context.agent = Some("codex".into());
+        let first = prepare(
+            &context,
+            &connection,
+            &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
+        );
+        apply(&context, &connection, &first);
+        let path = root.path().join(if local {
+            ".shield/config.local.yml"
+        } else {
+            ".shield/rules.yml"
+        });
+        if local {
+            std::fs::write(
+                &path,
+                "schema_version: 1\naccess_paths:\n  read: [/tmp/acme]\n",
+            )
+            .unwrap();
+        }
+        let args = prepare(
+            &context,
+            &connection,
+            &json!({"kind":"project_files_adopt"}),
+        );
+        let before = Store::open(root.path())
+            .unwrap()
+            .read()
+            .unwrap()
+            .policy_revision;
+        let edited = format!(
+            "{}\n# changed during confirmation\n",
+            std::fs::read_to_string(&path).unwrap()
+        );
+        std::fs::write(&path, &edited).unwrap();
+        let refused = invoke(&context, &connection, "policy_apply", args);
+        assert_eq!(refused["error"]["code"], "stale_revision", "{refused}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), edited);
+        assert_eq!(
+            Store::open(root.path())
+                .unwrap()
+                .read()
+                .unwrap()
+                .policy_revision,
+            before
+        );
+        let fresh = prepare(
+            &context,
+            &connection,
+            &json!({"kind":"project_files_adopt"}),
+        );
+        apply(&context, &connection, &fresh);
+    }
+}
+
+#[test]
+fn project_files_adopt_refuses_combined_permission_changes() {
+    let (_root, context, connection) = fixture();
+    let result = invoke(
+        &context,
+        &connection,
+        "policy_propose",
+        json!({"changes":[
+            {"kind":"project_files_adopt"},
+            {"kind":"rule_add","rule":rule("extra", "allow")}
+        ]}),
+    );
+    assert_eq!(result["error"]["code"], "invalid_input");
+    assert!(
+        result["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("separately")
+    );
+}
+
+#[test]
+fn project_files_adopt_refuses_local_file_created_after_review() {
+    let (root, mut context, connection) = fixture();
+    context.agent = Some("codex".into());
+    let first = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
+    );
+    apply(&context, &connection, &first);
+    let args = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"project_files_adopt"}),
+    );
+    let path = root.path().join(".shield/config.local.yml");
+    let source = "schema_version: 1\naccess_paths:\n  read: [/tmp/acme]\n";
+    std::fs::write(&path, source).unwrap();
+    let refused = invoke(&context, &connection, "policy_apply", args);
+    assert_eq!(refused["error"]["code"], "stale_revision", "{refused}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), source);
+}
+
+#[test]
+fn project_files_adopt_status_keeps_repair_for_a_deleted_rules_file() {
+    let (root, mut context, connection) = fixture();
+    context.agent = Some("codex".into());
+    let first = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
+    );
+    apply(&context, &connection, &first);
+    std::fs::remove_file(root.path().join(".shield/rules.yml")).unwrap();
+    let status = invoke(&context, &connection, "status", json!({}));
+    assert!(status["error"].is_null(), "{status}");
+    assert_eq!(
+        status["data"]["coverage"]["repair_needed"], false,
+        "{status}"
+    );
+    assert_eq!(status["data"]["repair_needed"], true);
+    assert_eq!(status["data"]["repair_route"], "shield policy review");
+    assert!(status["data"].get("repair_arguments").is_none());
+}
+
+#[test]
+fn project_files_adopt_explicit_retry_reports_stale_files() {
+    let (root, mut context, connection) = fixture();
+    context.agent = Some("codex".into());
+    let first = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
+    );
+    apply(&context, &connection, &first);
+    let input = json!({"change":{"kind":"project_files_adopt"},"idempotency_key":"adopt-acme"});
+    let proposed = invoke(&context, &connection, "policy_propose", input.clone());
+    assert!(proposed["error"].is_null(), "{proposed}");
+    let retried = invoke(&context, &connection, "policy_propose", input.clone());
+    assert_eq!(
+        proposed["data"]["proposal_id"],
+        retried["data"]["proposal_id"]
+    );
+    let path = root.path().join(".shield/rules.yml");
+    let edited = format!(
+        "{}\n# changed after proposal\n",
+        std::fs::read_to_string(&path).unwrap()
+    );
+    std::fs::write(&path, &edited).unwrap();
+    let stale = invoke(&context, &connection, "policy_propose", input);
+    assert_eq!(stale["error"]["code"], "stale_revision", "{stale}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), edited);
+    let fresh = invoke(
+        &context,
+        &connection,
+        "policy_propose",
+        json!({"change":{"kind":"project_files_adopt"},"idempotency_key":"adopt-acme-fresh"}),
+    );
+    assert!(fresh["error"].is_null(), "{fresh}");
+    assert_ne!(
+        fresh["data"]["proposal_id"],
+        proposed["data"]["proposal_id"]
+    );
+    apply(&context, &connection, &fresh["data"]["apply_arguments"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn project_files_adopt_status_keeps_repair_for_a_linked_rules_file() {
+    let (root, mut context, connection) = fixture();
+    context.agent = Some("codex".into());
+    let first = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
+    );
+    apply(&context, &connection, &first);
+    let path = root.path().join(".shield/rules.yml");
+    let target = root.path().join(".shield/linked-rules.yml");
+    std::fs::rename(&path, &target).unwrap();
+    std::os::unix::fs::symlink(&target, &path).unwrap();
+    let status = invoke(&context, &connection, "status", json!({}));
+    assert!(status["error"].is_null(), "{status}");
+    assert_eq!(
+        status["data"]["coverage"]["repair_needed"], false,
+        "{status}"
+    );
+    assert_eq!(status["data"]["repair_route"], "shield policy review");
+    assert!(status["data"].get("repair_arguments").is_none());
+}
+
+#[test]
 fn prepared_apply_verifies_source_bytes_and_reconnect_can_prepare_its_own_plan() {
     let (root, mut context, connection) = fixture();
     context.agent = Some("codex".into());
