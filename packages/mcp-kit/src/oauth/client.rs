@@ -62,6 +62,10 @@ pub struct ClientOptions {
     pub auth: ClientAuth,
     /// The secret of a confidential client, 32 to 512 bytes; kept as a digest.
     pub secret: Option<String>,
+    /// The client may use the `client_credentials` grant for machine-to-machine
+    /// access, with no user. Only confidential clients may; such a client may
+    /// have no redirect URIs.
+    pub client_credentials: bool,
 }
 
 /// A client registered through a [`ClientRegistrar`], as the registrar stores it.
@@ -114,6 +118,8 @@ pub(super) struct Client {
     pub(super) scopes: Option<Vec<String>>,
     pub(super) auth: ClientAuth,
     pub(super) secret: Option<Digest>,
+    /// May use the `client_credentials` grant.
+    pub(super) machine: bool,
 }
 
 impl Client {
@@ -128,9 +134,12 @@ impl Client {
                 .secret
                 .as_deref()
                 .map(|secret| wire::digest(&format!("cs_{secret}"))),
+            machine: options.client_credentials,
         }
     }
 
+    /// Registered clients never get `client_credentials`: its credentials are
+    /// provisioned out of band, not through registration.
     pub(super) fn registered(client: RegisteredClient) -> Self {
         Self {
             id: client.client_id,
@@ -139,7 +148,13 @@ impl Client {
             scopes: None,
             auth: client.auth,
             secret: client.secret,
+            machine: false,
         }
+    }
+
+    /// Whether the client authenticates with a secret.
+    pub(super) fn confidential(&self) -> bool {
+        self.auth != ClientAuth::None
     }
 
     /// Whether `presented` matches a registered redirect URI: exactly, or with
@@ -176,8 +191,10 @@ pub(super) fn valid_options(options: &ClientOptions) -> bool {
             .bytes()
             .all(|byte| (0x21..=0x7e).contains(&byte))
         && valid_name(options.client_name.as_deref())
-        && valid_redirects(&options.redirect_uris)
+        && (valid_redirects(&options.redirect_uris)
+            || (options.client_credentials && options.redirect_uris.is_empty()))
         && secret_fits
+        && (!options.client_credentials || options.auth != ClientAuth::None)
 }
 
 fn valid_name(name: Option<&str>) -> bool {
@@ -299,6 +316,7 @@ pub(super) fn from_document(client_id: &str, document: &[u8]) -> Result<Client, 
         scopes: None,
         auth: ClientAuth::None,
         secret: None,
+        machine: false,
     })
 }
 

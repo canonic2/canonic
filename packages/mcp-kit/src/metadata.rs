@@ -114,6 +114,13 @@ fn valid_key(key: &str) -> bool {
         })
 }
 
+/// An extension identifier: a reverse-DNS vendor prefix, `/` and a name.
+pub(crate) fn extension_identifier(key: &str) -> bool {
+    key.split_once('/')
+        .is_some_and(|(_, name)| !name.is_empty() && !name.contains('/'))
+        && valid_key(key)
+}
+
 pub(crate) fn website_url(url: &str) -> bool {
     icon::web_url(url, false)
 }

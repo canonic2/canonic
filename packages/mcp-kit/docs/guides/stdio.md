@@ -102,6 +102,26 @@ methods return `-32601`. Handshake-based clients retain `ping`. The driver
 validates modern protocol error codes and required data before publication;
 see [independent-runtime encoding](session.md) for the same boundary.
 
+## Advertised extensions
+
+When your server implements an extension itself, declare it in
+`SessionOptions::extensions` so modern clients find it in `server/discover`
+under `capabilities.extensions`. Each entry maps the extension's identifier
+(a reverse-DNS prefix, `/` and a name, such as `com.acme/widgets`) to its
+settings object:
+
+```rust
+use serde_json::json;
+
+options.extensions.insert("com.acme/widgets".into(), json!({"version": 2}));
+```
+
+Declarations require modern protocol support, and their settings are at most
+64 KiB. The library adds the Skills and Tasks identifiers itself when those
+features are enabled, so declaring them is refused. A declaration only
+advertises: implement what the extension requires, such as its methods in
+`extension_methods`.
+
 Optional [Tasks](tasks.md) uses `Request::Task` and `Outcome::Task`; its methods
 are protocol-owned and must not be registered as product methods. Returning a
 handle releases the original RPC's worker and key. Your execution service owns

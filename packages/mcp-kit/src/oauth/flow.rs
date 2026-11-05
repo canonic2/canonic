@@ -78,7 +78,7 @@ impl AuthorizationServer {
         let (Ok(reference), Ok(binding)) = (wire::secret("pr_"), wire::secret("pb_")) else {
             return fail("server_error");
         };
-        let now = SystemTime::now();
+        let now = self.now();
         let record = PendingRecord {
             reference: reference.clone(),
             binding: wire::digest(&binding),
@@ -121,7 +121,7 @@ impl AuthorizationServer {
         let reference = wire::form(query)
             .and_then(|mut query| query.remove("pending"))
             .or_else(|| form.as_ref().and_then(|form| form.get("pending").cloned()));
-        let now = SystemTime::now();
+        let now = self.now();
         let pending = reference.as_deref().and_then(|reference| {
             let record = self.store.get_pending(reference, now).ok()??;
             let cookie = wire::cookie(head.headers, &self.cookie_name(reference))?;

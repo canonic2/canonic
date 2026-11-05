@@ -48,6 +48,7 @@ fn embedded_at(interaction: &str, root_metadata: bool) -> HttpOptions {
         scopes: vec!["acme:read".to_owned()],
         auth: ClientAuth::None,
         secret: None,
+        client_credentials: false,
     }];
     let server = Arc::new(
         AuthorizationServer::new(

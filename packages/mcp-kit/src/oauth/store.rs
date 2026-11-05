@@ -265,6 +265,20 @@ pub trait GrantStore: Send + Sync {
     /// Returns [`StoreError::Unavailable`] when the backend fails.
     fn get_family(&self, id: &str, now: SystemTime) -> Result<Option<FamilyRecord>, StoreError>;
 
+    /// Inserts a `client_credentials` grant: a family of generation 0, which
+    /// has no refresh token, with its one access token. When the client
+    /// already holds `limit` such grants, the oldest is removed first, with
+    /// its access token.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when it cannot be stored.
+    fn create_client_grant(
+        &self,
+        family: FamilyRecord,
+        access: AccessRecord,
+        limit: usize,
+    ) -> Result<(), StoreError>;
+
     /// Rotates a family's refresh token: unless the family has moved past
     /// [`Rotation::expected`], which is stale, the current generation, or the
     /// previous one within its grace, advances; an older one carrying the
@@ -312,6 +326,8 @@ struct State {
     codes: HashMap<Digest, CodeRecord>,
     families: HashMap<String, FamilyRecord>,
     access: HashMap<Digest, AccessRecord>,
+    /// Each client's `client_credentials` families, oldest first.
+    client_grants: HashMap<String, VecDeque<String>>,
 }
 
 impl MemoryStore {
@@ -492,6 +508,46 @@ impl GrantStore for MemoryStore {
 
     fn get_family(&self, id: &str, now: SystemTime) -> Result<Option<FamilyRecord>, StoreError> {
         Ok(self.lock().live_family(id, now).cloned())
+    }
+
+    fn create_client_grant(
+        &self,
+        family: FamilyRecord,
+        access: AccessRecord,
+        limit: usize,
+    ) -> Result<(), StoreError> {
+        let mut state = self.lock();
+        let State {
+            families,
+            access: tokens,
+            client_grants,
+            ..
+        } = &mut *state;
+        let grants = client_grants.entry(family.client_id.clone()).or_default();
+        // Expired, revoked or purged grants no longer count.
+        grants.retain(|id| families.contains_key(id));
+        while grants.len() >= limit.max(1) {
+            let Some(oldest) = grants.pop_front() else {
+                break;
+            };
+            if let Some(ended) = families.remove(&oldest) {
+                tokens.remove(&ended.access);
+            }
+        }
+        if families.len() >= self.capacity {
+            state.purge(SystemTime::now(), usize::MAX);
+            if state.families.len() >= self.capacity {
+                return Err(StoreError::Full);
+            }
+        }
+        state
+            .client_grants
+            .entry(family.client_id.clone())
+            .or_default()
+            .push_back(family.id.clone());
+        state.access.insert(access.digest, access);
+        state.families.insert(family.id.clone(), family);
+        Ok(())
     }
 
     fn rotate(&self, rotation: Rotation, now: SystemTime) -> Result<Rotated, StoreError> {

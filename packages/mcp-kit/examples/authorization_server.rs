@@ -110,6 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         scopes: vec!["reports:read".to_owned()],
         auth: ClientAuth::None,
         secret: None,
+        client_credentials: false,
     }];
     let server = Arc::new(AuthorizationServer::new(
         issuer,

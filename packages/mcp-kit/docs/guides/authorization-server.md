@@ -77,10 +77,11 @@ doesn't or if any path collides with the MCP endpoint or its metadata.
 | `issuer` | Required | `https`, or `http` on a loopback host; endpoints sit under its path |
 | `interaction_path` | Required | Your sign-in path; it and paths under it go to your `Interaction` |
 | `clients` | None | Pre-registered clients, at most 256 |
-| `default_scopes` | None | Granted when a client asks for none |
+| `default_scopes` | None | Granted when a client asks for none, within what the client may request |
 | `scopes_supported` | None | Listed in metadata; what document and registered clients may request |
 | `lifetimes` | See below | Record lifetimes |
 | `metadata_max_age` | 1 hour | How long clients may cache the metadata |
+| `client_grants` | 16 | Live [machine client](#machine-clients) tokens per client, 1–1,024; a new one replaces the oldest |
 
 | Lifetime | Default | Range |
 | --- | --- | --- |
@@ -137,10 +138,11 @@ sends `access_denied`.
 ## Clients
 
 **Pre-registered.** List them in `clients`. A public client (`ClientAuth::None`)
-sends only its `client_id`; a confidential one uses `SecretBasic` or
-`SecretPost` with a secret of at least 32 bytes, which the library keeps only
-as a hash. Redirect URIs must be `https` or loopback `http` and match exactly,
-except that a loopback IP address such as `127.0.0.1` may use any port.
+sends only its `client_id`; a confidential one (`SecretBasic` or `SecretPost`)
+has a secret of at least 32 bytes, which the library keeps only as a hash, and
+may send it either by HTTP Basic or in the form. Redirect URIs must be `https`
+or loopback `http` and match exactly, except that a loopback IP address such
+as `127.0.0.1` may use any port.
 
 **Client ID Metadata Documents.** Call `with_resolver` with a `ClientResolver`
 to accept clients whose `client_id` is an `https` URL. The library never opens
@@ -156,6 +158,52 @@ generates the client ID and secret; your registrar approves it, stores the
 `RegisteredClient` (with only the secret's hash) and applies its own policy and
 rate limits. Without a registrar, `/register` does not exist and the metadata
 does not advertise it.
+
+## Machine clients
+
+Background services, CI jobs and other servers have no user to sign in. Give
+them a confidential pre-registered client with `client_credentials: true`
+(the OAuth Client Credentials extension); it may have no redirect URIs. It
+asks the token endpoint directly:
+
+```sh
+curl -sS https://mcp.example.com/token \
+  -u acme-nightly:$ACME_NIGHTLY_SECRET \
+  -d grant_type=client_credentials \
+  -d scope=reports:read \
+  -d resource=https://mcp.example.com/mcp
+```
+
+The reply has an `access_token` and no `refresh_token`: the client asks again
+when the token expires. The token's grant has the client ID as its subject,
+so `context.authorization()` tells your handler which service called. A
+requested `scope` must be within the client's `scopes`. Without one, the token
+gets the `default_scopes` that the client may request, as at sign-in; when you
+set no default scopes, that is none, and only tools that require no scope
+accept the token. Give machine clients a default, or have them always send
+`scope`. Public clients, registered clients and clients without the flag get
+`unauthorized_client`.
+
+Each client holds at most `client_grants` live tokens (16 unless you set it,
+up to 1,024). A new token replaces the client's oldest, so one busy service
+cannot fill the store, but a replaced token stops working before it expires.
+When many instances share one client ID, have each reuse its token until it
+expires, give each instance its own client, or raise `client_grants` above the
+number of instances.
+
+To tell modern clients that machine clients are supported, advertise the
+extension in `server/discover` (see [advertised extensions](stdio.md#advertised-extensions)):
+
+```rust
+session_options.extensions.insert(
+    canonic_mcp_kit::oauth::CLIENT_CREDENTIALS_EXTENSION.into(),
+    serde_json::json!({}),
+);
+```
+
+Keep machine secrets in a secrets manager and rotate them. Signed JWT client
+assertions (`private_key_jwt`), which the extension recommends, are not
+supported; use an external authorization server for them.
 
 ## Tokens
 
@@ -190,7 +238,7 @@ and otherwise refuses with `503` only when every record is still live.
 | --- | --- | --- |
 | `/.well-known/oauth-authorization-server` + issuer path | GET | — |
 | `/authorize` | GET | A `400` page for an unknown client or redirect URI; otherwise a redirect with `error`, `state` and `iss` |
-| `/token` | POST form | RFC 6749 JSON errors: `invalid_client` (`401`), `invalid_grant`, `invalid_scope`, `invalid_target`, `unsupported_grant_type` |
+| `/token` | POST form | RFC 6749 JSON errors: `invalid_client` (`401`), `invalid_grant`, `invalid_scope`, `invalid_target`, `unauthorized_client`, `unsupported_grant_type` |
 | `/revoke` | POST form | `invalid_client` only |
 | `/register` | POST JSON | `invalid_client_metadata` |
 

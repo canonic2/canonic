@@ -157,6 +157,49 @@ fn discovery_is_optional_and_never_changes_legacy_readiness() {
 }
 
 #[test]
+fn discovery_advertises_declared_extensions_beside_the_library_ones() {
+    let catalog = || Arc::new(Catalog::new(vec![]).unwrap());
+    let declared = |extensions: Value| SessionOptions {
+        modern: Some(ModernOptions::new(ServerInfo::new("acme", "1"))),
+        extensions: extensions.as_object().unwrap().clone(),
+        ..SessionOptions::default()
+    };
+    let mut options = declared(json!({
+        "io.modelcontextprotocol/oauth-client-credentials":{},
+        "com.acme/widgets":{"version":2}
+    }));
+    options.skills = Some(Arc::new(crate::SkillCatalog::new(vec![]).unwrap()));
+    let mut session = Session::try_new(catalog(), options).unwrap();
+    let result = reply(session.receive_value(request(1, "server/discover", json!({}), json!({}))));
+    assert_eq!(
+        result["result"]["capabilities"]["extensions"],
+        json!({
+            "io.modelcontextprotocol/oauth-client-credentials":{},
+            "com.acme/widgets":{"version":2},
+            crate::skill::EXTENSION:{}
+        })
+    );
+    let mut legacy = declared(json!({"com.acme/widgets":{}}));
+    legacy.modern = None;
+    assert!(Session::try_new(catalog(), legacy).is_err());
+    for extensions in [
+        json!({crate::skill::EXTENSION:{}}),
+        json!({crate::task::EXTENSION:{}}),
+        json!({"widgets":{}}),
+        json!({"com.acme/":{}}),
+        json!({"com.acme/a/b":{}}),
+        json!({"1acme/widgets":{}}),
+        json!({"com.acme/widgets":true}),
+        json!({"com.acme/widgets":{"blob":"x".repeat(crate::metadata::MAX_METADATA_BYTES)}}),
+    ] {
+        assert!(
+            Session::try_new(catalog(), declared(extensions.clone())).is_err(),
+            "{extensions}"
+        );
+    }
+}
+
+#[test]
 fn missing_invalid_or_unsupported_metadata_dispatches_nothing() {
     let mut session = session();
     let mut unknown = request(1, "tools/call", json!({"name":"acme_echo"}), json!({}));

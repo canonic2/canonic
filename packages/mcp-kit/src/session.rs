@@ -49,6 +49,10 @@ pub struct SessionOptions {
     pub prompts: Option<Arc<crate::PromptCatalog>>,
     /// Explicit completion capability; consumers supply suggestions for published targets.
     pub completions: bool,
+    /// Extensions the consumer implements, advertised in `server/discover`
+    /// under `capabilities.extensions`: identifier to settings object. Requires
+    /// modern opt-in; Skills and Tasks are declared by their own options.
+    pub extensions: serde_json::Map<String, Value>,
     /// The longest accepted message, in bytes, excluding the line break.
     pub max_message_bytes: usize,
     /// Messages accepted before the connection ends; `None` for no limit.
@@ -69,6 +73,7 @@ impl Default for SessionOptions {
             resources: None,
             prompts: None,
             completions: false,
+            extensions: serde_json::Map::new(),
             max_message_bytes: DEFAULT_MAX_MESSAGE_BYTES,
             max_messages: None,
             extension_methods: Vec::new(),
@@ -1117,14 +1122,15 @@ impl Session {
                     json!({"listChanged":true,"subscribe":!policy.resource_uris.is_empty()});
             }
         }
+        let mut extensions = self.options.extensions.clone();
         if self.options.skills.is_some() {
-            result["capabilities"]["extensions"] = json!({crate::skill::EXTENSION:{}});
+            extensions.insert(crate::skill::EXTENSION.into(), json!({}));
         }
         if self.options.tasks.is_some() {
-            if result["capabilities"].get("extensions").is_none() {
-                result["capabilities"]["extensions"] = json!({});
-            }
-            result["capabilities"]["extensions"][crate::task::EXTENSION] = json!({});
+            extensions.insert(crate::task::EXTENSION.into(), json!({}));
+        }
+        if !extensions.is_empty() {
+            result["capabilities"]["extensions"] = Value::Object(extensions);
         }
         if let Some(instructions) = self
             .options
@@ -1175,6 +1181,28 @@ fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
         return Err(ConfigurationError(
             "Tasks methods and identifier are reserved".into(),
         ));
+    }
+    if !options.extensions.is_empty() {
+        if options.modern.is_none() {
+            return Err(ConfigurationError(
+                "extensions require modern protocol support".into(),
+            ));
+        }
+        let invalid = options.extensions.iter().any(|(identifier, settings)| {
+            !crate::metadata::extension_identifier(identifier)
+                || identifier == crate::skill::EXTENSION
+                || identifier == crate::task::EXTENSION
+                || !settings.is_object()
+        });
+        let declarations = Value::Object(options.extensions.clone());
+        if invalid
+            || crate::modern::bounded(&declarations, crate::metadata::MAX_METADATA_BYTES, 16)
+                .is_err()
+        {
+            return Err(ConfigurationError(
+                "extensions need valid identifiers other than Skills and Tasks, with bounded settings objects".into(),
+            ));
+        }
     }
     if let Some(modern) = &options.modern
         && modern.server.validate().is_err()

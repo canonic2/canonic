@@ -52,6 +52,15 @@ pub const MAX_STATE_BYTES: usize = 1024;
 pub const MAX_REQUESTED_SCOPES: usize = 64;
 /// Expired records removed per token request.
 pub const PURGE_PER_REQUEST: usize = 64;
+/// The OAuth Client Credentials extension identifier. A server whose
+/// authorization server has machine clients may advertise it through
+/// [`SessionOptions::extensions`](crate::SessionOptions::extensions).
+pub const CLIENT_CREDENTIALS_EXTENSION: &str = "io.modelcontextprotocol/oauth-client-credentials";
+/// The default number of live `client_credentials` grants one client may
+/// hold; a new one replaces the oldest, so one busy client cannot fill the store.
+pub const DEFAULT_CLIENT_GRANTS: usize = 16;
+/// The largest configurable per-client `client_credentials` grant limit.
+pub const MAX_CLIENT_GRANTS: usize = 1024;
 
 /// How long each record lives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,6 +130,10 @@ pub struct AuthorizationServerOptions {
     pub lifetimes: Lifetimes,
     /// How long clients may cache the metadata, at most 24 hours.
     pub metadata_max_age: Duration,
+    /// Live `client_credentials` grants each client may hold, 1 to
+    /// [`MAX_CLIENT_GRANTS`]; a new one replaces the oldest. Raise it when
+    /// many instances share one client ID and each requests its own token.
+    pub client_grants: usize,
 }
 
 impl AuthorizationServerOptions {
@@ -135,6 +148,7 @@ impl AuthorizationServerOptions {
             interaction_path: interaction_path.into(),
             lifetimes: Lifetimes::default(),
             metadata_max_age: auth::DEFAULT_METADATA_MAX_AGE,
+            client_grants: DEFAULT_CLIENT_GRANTS,
         }
     }
 }
@@ -160,6 +174,9 @@ pub enum AuthorizationServerError {
     /// A lifetime is out of range.
     #[error("a lifetime is out of range")]
     Lifetime,
+    /// The per-client grant limit is out of range.
+    #[error("client_grants must be from 1 to {MAX_CLIENT_GRANTS}")]
+    ClientGrants,
 }
 
 /// Authenticates users and records their consent for a pending authorization.
@@ -233,6 +250,7 @@ pub struct AuthorizationServer {
     scopes_supported: Option<Vec<String>>,
     interaction_path: String,
     lifetimes: Lifetimes,
+    client_grants: usize,
     max_age: String,
     secure_cookies: bool,
     store: Arc<dyn GrantStore>,
@@ -240,6 +258,8 @@ pub struct AuthorizationServer {
     resolver: Option<Arc<dyn ClientResolver>>,
     registrar: Option<Arc<dyn ClientRegistrar>>,
     metadata: Vec<u8>,
+    /// The time every expiry is judged by; tests move it forward.
+    clock: Arc<dyn Fn() -> SystemTime + Send + Sync>,
 }
 
 impl std::fmt::Debug for AuthorizationServer {
@@ -301,6 +321,9 @@ impl AuthorizationServer {
         if !options.lifetimes.valid() || options.metadata_max_age > auth::MAX_METADATA_MAX_AGE {
             return Err(AuthorizationServerError::Lifetime);
         }
+        if !(1..=MAX_CLIENT_GRANTS).contains(&options.client_grants) {
+            return Err(AuthorizationServerError::ClientGrants);
+        }
         let issuer_path = issuer.path.clone();
         let mut server = Self {
             issuer: options.issuer,
@@ -312,12 +335,14 @@ impl AuthorizationServer {
             scopes_supported: options.scopes_supported,
             interaction_path: options.interaction_path,
             lifetimes: options.lifetimes,
+            client_grants: options.client_grants,
             max_age: format!("max-age={}", options.metadata_max_age.as_secs()),
             store,
             interaction,
             resolver: None,
             registrar: None,
             metadata: Vec::new(),
+            clock: Arc::new(SystemTime::now),
         };
         let path = &server.interaction_path;
         let colliding = server
@@ -351,6 +376,16 @@ impl AuthorizationServer {
         self.registrar = Some(registrar);
         self.prepare_metadata();
         self
+    }
+
+    #[cfg(test)]
+    fn with_clock(mut self, clock: Arc<dyn Fn() -> SystemTime + Send + Sync>) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    fn now(&self) -> SystemTime {
+        (self.clock)()
     }
 
     /// The issuer.
@@ -450,10 +485,20 @@ impl AuthorizationServer {
 
     fn prepare_metadata(&mut self) {
         let base = self.issuer.trim_end_matches('/');
+        // A confidential client accepts either secret method.
         let mut methods = self
             .clients
             .iter()
-            .map(|client| client.auth.name())
+            .flat_map(|client| {
+                if client.confidential() {
+                    vec![
+                        ClientAuth::SecretBasic.name(),
+                        ClientAuth::SecretPost.name(),
+                    ]
+                } else {
+                    vec![ClientAuth::None.name()]
+                }
+            })
             .collect::<Vec<_>>();
         if self.resolver.is_some() {
             methods.push(ClientAuth::None.name());
@@ -487,7 +532,11 @@ impl AuthorizationServer {
         document.insert("response_types_supported".into(), json!(["code"]));
         document.insert(
             "grant_types_supported".into(),
-            json!(["authorization_code", "refresh_token"]),
+            if self.clients.iter().any(|client| client.machine) {
+                json!(["authorization_code", "refresh_token", "client_credentials"])
+            } else {
+                json!(["authorization_code", "refresh_token"])
+            },
         );
         document.insert("code_challenge_methods_supported".into(), json!(["S256"]));
         document.insert(
@@ -562,10 +611,7 @@ impl TokenVerifier for AuthorizationServer {
         if !token.starts_with("at_") {
             return Err(Rejection::invalid());
         }
-        match self
-            .store
-            .lookup_access(&wire::digest(token), SystemTime::now())
-        {
+        match self.store.lookup_access(&wire::digest(token), self.now()) {
             Ok(Some((access, family))) => Ok(Grant::new(vec![family.resource])
                 .with_scopes(access.scopes)
                 .with_expiry(access.expires_at)

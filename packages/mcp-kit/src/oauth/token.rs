@@ -6,7 +6,10 @@ use super::{
     store::{AccessRecord, CodeTake, FamilyRecord, Rotated, Rotation},
     wire,
 };
-use crate::{content::decode_base64, http::Response};
+use crate::{
+    content::decode_base64,
+    http::{Response, auth},
+};
 use serde_json::json;
 use std::{collections::HashMap, time::SystemTime};
 
@@ -21,7 +24,7 @@ struct Issued {
 
 impl AuthorizationServer {
     pub(super) fn token(&self, headers: &[(&str, &[u8])], body: &[u8]) -> Response {
-        let now = SystemTime::now();
+        let now = self.now();
         // Retention follows lifetimes, not traffic; a failed purge waits for the next request.
         let _ = self.store.purge_expired(now, super::PURGE_PER_REQUEST);
         let Some(form) = form_body(headers, body) else {
@@ -40,12 +43,94 @@ impl AuthorizationServer {
         match form.get("grant_type").map(String::as_str) {
             Some("authorization_code") => self.exchange_code(&client, &form, now),
             Some("refresh_token") => self.refresh(&client, &form, now),
+            Some("client_credentials") => self.client_grant(&client, &form, now),
             _ => wire::oauth_error(
                 400,
                 "unsupported_grant_type",
-                "Use authorization_code or refresh_token",
+                "Use authorization_code, refresh_token or client_credentials",
             ),
         }
+    }
+
+    /// The `client_credentials` grant: an access token for the client itself,
+    /// with no user and no refresh token (RFC 6749 §4.4).
+    fn client_grant(
+        &self,
+        client: &client::Client,
+        form: &HashMap<String, String>,
+        now: SystemTime,
+    ) -> Response {
+        if !client.machine || !client.confidential() {
+            return wire::oauth_error(
+                400,
+                "unauthorized_client",
+                "This client may not use client_credentials",
+            );
+        }
+        let allowed = self.allowed_scopes(client);
+        let scopes = match form.get("scope") {
+            Some(scope) => {
+                let scopes = scope.split(' ').map(str::to_owned).collect::<Vec<_>>();
+                let valid = scopes.len() <= super::MAX_REQUESTED_SCOPES
+                    && scopes
+                        .iter()
+                        .all(|scope| auth::valid_scope(scope) && allowed.contains(scope));
+                if !valid {
+                    return wire::oauth_error(400, "invalid_scope", "The scope is not allowed");
+                }
+                scopes
+            }
+            None => self
+                .default_scopes
+                .iter()
+                .filter(|scope| allowed.contains(scope))
+                .cloned()
+                .collect(),
+        };
+        let (Ok(family_id), Ok(access), Ok(unused)) =
+            (wire::identifier(), wire::secret("at_"), wire::secret(""))
+        else {
+            return unavailable();
+        };
+        let expires_at = now + self.lifetimes.access;
+        let access_record = AccessRecord {
+            digest: wire::digest(&access),
+            family_id: family_id.clone(),
+            scopes: scopes.clone(),
+            expires_at,
+        };
+        // Generation 0 has no refresh token: no presented token can name it.
+        let family = FamilyRecord {
+            id: family_id,
+            subject: client.id.clone(),
+            client_id: client.id.clone(),
+            scopes: scopes.clone(),
+            resource: self.resource.clone(),
+            created_at: now,
+            expires_at,
+            proof: wire::digest(&format!("rf_{unused}")),
+            generation: 0,
+            refresh: wire::digest(&format!("rt_{unused}")),
+            refresh_expires_at: expires_at,
+            previous: None,
+            access: access_record.digest,
+        };
+        if self
+            .store
+            .create_client_grant(family, access_record, self.client_grants)
+            .is_err()
+        {
+            return unavailable();
+        }
+        wire::json(
+            200,
+            &json!({
+                "access_token": access,
+                "token_type": "Bearer",
+                "expires_in": self.lifetimes.access.as_secs(),
+                "scope": scopes.join(" "),
+            }),
+        )
     }
 
     fn exchange_code(
@@ -231,7 +316,7 @@ impl AuthorizationServer {
         let Some(token) = form.get("token") else {
             return invalid_request("token is required");
         };
-        let now = SystemTime::now();
+        let now = self.now();
         let family = if token.starts_with("at_") {
             match self.store.lookup_access(&wire::digest(token), now) {
                 Ok(found) => found.map(|(_, family)| family),
@@ -293,7 +378,8 @@ impl AuthorizationServer {
         if let Err(reason) = registrar.register(&registered) {
             return wire::oauth_error(400, "invalid_client_metadata", &reason);
         }
-        let issued_at = SystemTime::now()
+        let issued_at = self
+            .now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
@@ -374,7 +460,13 @@ impl AuthorizationServer {
         let client = self
             .client(&client_id)
             .map_err(|_| refuse(basic.is_some()))?;
-        let authenticated = client.auth == method
+        // A confidential client may send its secret either way (OAuth 2.1
+        // requires Basic support); a public client sends none.
+        let method_fits = match client.auth {
+            ClientAuth::None => method == ClientAuth::None,
+            ClientAuth::SecretBasic | ClientAuth::SecretPost => method != ClientAuth::None,
+        };
+        let authenticated = method_fits
             && secret
                 .as_deref()
                 .is_none_or(|secret| client.secret_matches(secret));

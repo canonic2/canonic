@@ -14,6 +14,8 @@ const SIGN_IN: &str = "/oauth/sign-in";
 const PUBLIC: &str = "acme-desktop";
 const CONFIDENTIAL: &str = "acme-backend";
 const SECRET: &str = "acme-backend-secret-0123456789abcdef";
+const MACHINE: &str = "acme-nightly";
+const MACHINE_SECRET: &str = "acme-nightly-secret-0123456789abcdef";
 const REDIRECT: &str = "http://127.0.0.1:7777/callback";
 const VERIFIER: &str = "acme-verifier-0123456789-0123456789-0123456789";
 
@@ -118,6 +120,15 @@ impl GrantStore for Recording {
         }
         self.inner.create_family(code, family, access)
     }
+    fn create_client_grant(
+        &self,
+        family: FamilyRecord,
+        access: AccessRecord,
+        limit: usize,
+    ) -> Result<(), StoreError> {
+        self.record(&(&family, &access));
+        self.inner.create_client_grant(family, access, limit)
+    }
     fn get_family(&self, id: &str, now: SystemTime) -> Result<Option<FamilyRecord>, StoreError> {
         let family = self.inner.get_family(id, now);
         let gate = self.gate.lock().unwrap().clone();
@@ -213,6 +224,7 @@ fn options() -> AuthorizationServerOptions {
             scopes: vec!["acme:read".to_owned(), "acme:write".to_owned()],
             auth: ClientAuth::None,
             secret: None,
+            client_credentials: false,
         },
         ClientOptions {
             client_id: CONFIDENTIAL.to_owned(),
@@ -221,6 +233,16 @@ fn options() -> AuthorizationServerOptions {
             scopes: vec!["acme:read".to_owned()],
             auth: ClientAuth::SecretBasic,
             secret: Some(SECRET.to_owned()),
+            client_credentials: false,
+        },
+        ClientOptions {
+            client_id: MACHINE.to_owned(),
+            client_name: None,
+            redirect_uris: Vec::new(),
+            scopes: vec!["acme:read".to_owned(), "acme:write".to_owned()],
+            auth: ClientAuth::SecretPost,
+            secret: Some(MACHINE_SECRET.to_owned()),
+            client_credentials: true,
         },
     ];
     options
@@ -484,7 +506,7 @@ fn construction_refuses_invalid_issuers_clients_paths_and_lifetimes() {
         let first = options.clients[0].clone();
         options.clients.push(first);
     };
-    assert_eq!(with(&repeated), Err(AuthorizationServerError::Client(2)));
+    assert_eq!(with(&repeated), Err(AuthorizationServerError::Client(3)));
     for change in [
         (|client: &mut ClientOptions| client.secret = Some("short".to_owned()))
             as fn(&mut ClientOptions),
@@ -493,6 +515,13 @@ fn construction_refuses_invalid_issuers_clients_paths_and_lifetimes() {
         |client| client.redirect_uris.clear(),
         |client| client.auth = ClientAuth::SecretPost,
         |client| client.scopes = vec!["a b".to_owned()],
+        // A public client cannot use client credentials, and only a client
+        // that does may have no redirect URIs.
+        |client| client.client_credentials = true,
+        |client| {
+            client.client_credentials = true;
+            client.redirect_uris.clear();
+        },
     ] {
         assert_eq!(
             with(&|options| change(&mut options.clients[0])),
@@ -518,6 +547,13 @@ fn construction_refuses_invalid_issuers_clients_paths_and_lifetimes() {
         with(&|options| options.lifetimes.family = Duration::from_hours(2)),
         Err(AuthorizationServerError::Lifetime)
     );
+    for grants in [0, MAX_CLIENT_GRANTS + 1] {
+        assert_eq!(
+            with(&|options| options.client_grants = grants),
+            Err(AuthorizationServerError::ClientGrants),
+            "{grants}"
+        );
+    }
 }
 
 #[test]
@@ -539,6 +575,10 @@ fn metadata_lists_the_issuer_and_only_supported_methods() {
     assert_eq!(
         metadata["code_challenge_methods_supported"],
         json!(["S256"])
+    );
+    assert_eq!(
+        metadata["grant_types_supported"],
+        json!(["authorization_code", "refresh_token", "client_credentials"])
     );
     assert_eq!(
         metadata["token_endpoint_auth_methods_supported"],
@@ -578,7 +618,7 @@ fn metadata_lists_the_issuer_and_only_supported_methods() {
     );
     assert_eq!(
         metadata["token_endpoint_auth_methods_supported"],
-        json!(["client_secret_basic", "none"])
+        json!(["client_secret_basic", "client_secret_post", "none"])
     );
     assert!(!plain.routes("/register"));
 
@@ -992,6 +1032,276 @@ fn only_a_token_of_the_family_can_report_reuse() {
 }
 
 #[test]
+fn client_credentials_issue_access_tokens_without_a_user_or_refresh() {
+    let harness = harness();
+    let grant = |client: &str, secret: &str, scope: Option<&str>| {
+        let mut fields = vec![
+            ("grant_type", "client_credentials"),
+            ("client_id", client),
+            ("client_secret", secret),
+        ];
+        if let Some(scope) = scope {
+            fields.push(("scope", scope));
+        }
+        harness.token(&fields, &[])
+    };
+    let issued = grant(MACHINE, MACHINE_SECRET, None);
+    assert_eq!(issued.status, 200);
+    let issued = json_body(&issued);
+    assert_eq!(issued["token_type"], "Bearer");
+    assert_eq!(issued["expires_in"], 3600);
+    assert_eq!(issued["scope"], "acme:read");
+    assert!(issued.get("refresh_token").is_none());
+    let verified = harness
+        .grant(issued["access_token"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(
+        (verified.subject(), verified.client_id()),
+        (Some(MACHINE), Some(MACHINE))
+    );
+    assert_eq!(verified.audiences(), [RESOURCE]);
+    assert!(resource().check_grant(Ok(verified), None).is_ok());
+
+    let wider = json_body(&grant(
+        MACHINE,
+        MACHINE_SECRET,
+        Some("acme:read acme:write"),
+    ));
+    assert_eq!(wider["scope"], "acme:read acme:write");
+    for scope in ["acme:admin", "acme:read  acme:write"] {
+        assert_eq!(
+            json_body(&grant(MACHINE, MACHINE_SECRET, Some(scope)))["error"],
+            "invalid_scope"
+        );
+    }
+    // Only clients configured for it, and never public ones.
+    assert_eq!(
+        json_body(&grant(CONFIDENTIAL, SECRET, None))["error"],
+        "unauthorized_client"
+    );
+    let public = harness.token(
+        &[("grant_type", "client_credentials"), ("client_id", PUBLIC)],
+        &[],
+    );
+    assert_eq!(json_body(&public)["error"], "unauthorized_client");
+    assert_eq!(grant(MACHINE, "wrong", None).status, 401);
+    let foreign = harness.token(
+        &[
+            ("grant_type", "client_credentials"),
+            ("client_id", MACHINE),
+            ("client_secret", MACHINE_SECRET),
+            ("resource", "https://other.example.com/mcp"),
+        ],
+        &[],
+    );
+    assert_eq!(json_body(&foreign)["error"], "invalid_target");
+
+    // A machine client has no sign-in: the authorization endpoint refuses it.
+    let pairs = authorization(&[("client_id", MACHINE)]);
+    assert_eq!(harness.authorize(&pairs).status, 400);
+    // Revocation ends a client credentials token like any other.
+    let revoked = grant(MACHINE, MACHINE_SECRET, None);
+    let access = json_body(&revoked)["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let body = format!(
+        "token={access}&client_id={MACHINE}&client_secret={}",
+        wire::encode_component(MACHINE_SECRET)
+    );
+    let response = harness.send(
+        "POST",
+        "/revoke",
+        &[("Content-Type", b"application/x-www-form-urlencoded")],
+        body.as_bytes(),
+    );
+    assert_eq!(response.status, 200);
+    assert!(harness.grant(&access).is_err());
+
+    // Without default scopes, leaving `scope` out grants none, as at sign-in.
+    let mut bare = options();
+    bare.default_scopes = Vec::new();
+    let bare = harness_with(bare, MemoryStore::new());
+    let issued = json_body(&bare.token(
+        &[
+            ("grant_type", "client_credentials"),
+            ("client_id", MACHINE),
+            ("client_secret", MACHINE_SECRET),
+        ],
+        &[],
+    ));
+    assert_eq!(issued["scope"], "");
+    let verified = bare
+        .grant(issued["access_token"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(verified.scopes().count(), 0);
+}
+
+#[test]
+fn each_client_holds_a_bounded_number_of_client_credentials_grants() {
+    // The default limit, and a raised one for many instances sharing a client.
+    for limit in [DEFAULT_CLIENT_GRANTS, 40] {
+        let mut options = options();
+        options.client_grants = limit;
+        client_grants_stay_within(
+            &harness_with(options, MemoryStore::with_capacity(64)),
+            limit,
+        );
+    }
+}
+
+fn client_grants_stay_within(harness: &Harness, limit: usize) {
+    let issue = || {
+        let issued = json_body(&harness.token(
+            &[
+                ("grant_type", "client_credentials"),
+                ("client_id", MACHINE),
+                ("client_secret", MACHINE_SECRET),
+            ],
+            &[],
+        ));
+        issued["access_token"].as_str().unwrap().to_owned()
+    };
+    let tokens = (0..=limit).map(|_| issue()).collect::<Vec<_>>();
+    // The oldest gave way to the newest; the rest stay live.
+    assert!(harness.grant(&tokens[0]).is_err());
+    for token in &tokens[1..] {
+        assert!(harness.grant(token).is_ok());
+    }
+    // A sign-in by another client is untouched by the machine client's churn.
+    let signed_in = json_body(&harness.exchange(&harness.code(&authorization(&[]))));
+    for _ in 0..(2 * limit) {
+        issue();
+    }
+    assert!(
+        harness
+            .grant(signed_in["access_token"].as_str().unwrap())
+            .is_ok()
+    );
+}
+
+/// The server's clock, which a test moves forward.
+struct Clock(Arc<Mutex<SystemTime>>);
+
+impl Clock {
+    fn install(harness: Harness) -> (Harness, Self) {
+        let time = Arc::new(Mutex::new(SystemTime::now()));
+        let source = Arc::clone(&time);
+        let server = harness
+            .server
+            .with_clock(Arc::new(move || *source.lock().unwrap()));
+        (Harness { server, ..harness }, Self(time))
+    }
+
+    fn advance(&self, by: Duration) {
+        *self.0.lock().unwrap() += by;
+    }
+}
+
+#[test]
+fn expired_sign_ins_and_codes_cannot_complete() {
+    let (harness, clock) = Clock::install(harness());
+    let (reference, cookie) = harness.start(&authorization(&[]));
+    clock.advance(Lifetimes::default().pending + Duration::from_secs(1));
+    assert_eq!(harness.decide(&reference, &cookie, "approve").status, 400);
+    let seen = harness.sign_in.seen.lock().unwrap();
+    assert!(seen.last().unwrap().1.is_none());
+    drop(seen);
+
+    let code = harness.code(&authorization(&[]));
+    // The default code lifetime is one minute.
+    clock.advance(Duration::from_secs(50));
+    assert_eq!(harness.exchange(&code).status, 200);
+    let code = harness.code(&authorization(&[]));
+    clock.advance(Lifetimes::default().code + Duration::from_secs(1));
+    assert_eq!(
+        json_body(&harness.exchange(&code))["error"],
+        "invalid_grant"
+    );
+}
+
+#[test]
+fn tokens_expire_by_their_lifetimes() {
+    let mut options = options();
+    options.lifetimes = Lifetimes {
+        access: Duration::from_mins(10),
+        refresh_idle: Duration::from_hours(1),
+        family: Duration::from_hours(2),
+        ..Lifetimes::default()
+    };
+    let (harness, clock) = Clock::install(harness_with(options, MemoryStore::new()));
+    let second = Duration::from_secs(1);
+    let sign_in = || json_body(&harness.exchange(&harness.code(&authorization(&[]))));
+    let token = |tokens: &Value, key: &str| tokens[key].as_str().unwrap().to_owned();
+
+    // An access token ends at its lifetime; its refresh token still rotates.
+    let first = sign_in();
+    clock.advance(Duration::from_secs(599));
+    assert!(harness.grant(&token(&first, "access_token")).is_ok());
+    clock.advance(2 * second);
+    assert_eq!(
+        harness.grant(&token(&first, "access_token")).unwrap_err(),
+        Rejection::invalid()
+    );
+    let rotated = json_body(&harness.refresh(&token(&first, "refresh_token"), None));
+    assert!(harness.grant(&token(&rotated, "access_token")).is_ok());
+    // An idle refresh token ends.
+    clock.advance(Duration::from_hours(1) + second);
+    assert_eq!(
+        json_body(&harness.refresh(&token(&rotated, "refresh_token"), None))["error"],
+        "invalid_grant"
+    );
+
+    // Rotating within the idle limit cannot outlive the family.
+    let mut tokens = sign_in();
+    for _ in 0..2 {
+        clock.advance(Duration::from_mins(50));
+        tokens = json_body(&harness.refresh(&token(&tokens, "refresh_token"), None));
+        assert!(tokens.get("refresh_token").is_some(), "{tokens}");
+    }
+    clock.advance(Duration::from_mins(25));
+    assert_eq!(
+        json_body(&harness.refresh(&token(&tokens, "refresh_token"), None))["error"],
+        "invalid_grant"
+    );
+
+    // The replaced refresh token retries only within the grace.
+    // The default grace is ten seconds.
+    for (wait, retried) in [
+        (Duration::from_secs(9), true),
+        (Duration::from_secs(11), false),
+    ] {
+        let first = sign_in();
+        let rotated = json_body(&harness.refresh(&token(&first, "refresh_token"), None));
+        clock.advance(wait);
+        let retry = json_body(&harness.refresh(&token(&first, "refresh_token"), None));
+        if retried {
+            assert!(harness.grant(&token(&retry, "access_token")).is_ok());
+        } else {
+            // Reuse after the grace ends the family.
+            assert_eq!(retry["error"], "invalid_grant");
+            assert_eq!(
+                json_body(&harness.refresh(&token(&rotated, "refresh_token"), None))["error"],
+                "invalid_grant"
+            );
+        }
+    }
+
+    // A client credentials token ends at the access lifetime too.
+    let machine = json_body(&harness.token(
+        &[
+            ("grant_type", "client_credentials"),
+            ("client_id", MACHINE),
+            ("client_secret", MACHINE_SECRET),
+        ],
+        &[],
+    ));
+    assert!(harness.grant(&token(&machine, "access_token")).is_ok());
+    clock.advance(Duration::from_mins(10) + second);
+    assert!(harness.grant(&token(&machine, "access_token")).is_err());
+}
+
+#[test]
 fn a_zero_grace_treats_the_previous_refresh_token_as_reuse() {
     let mut options = options();
     options.lifetimes.refresh_grace = Duration::ZERO;
@@ -1064,9 +1374,17 @@ fn client_authentication_follows_the_registered_method() {
         )
     };
     let good = basic(CONFIDENTIAL, SECRET);
-    // Authenticated, then refused for the unknown token.
+    // Authenticated, then refused for the unknown token. A confidential client
+    // may send its secret by Basic or in the form.
     assert_eq!(
         json_body(&token(&[("Authorization", good.as_bytes())], &[]))["error"],
+        "invalid_grant"
+    );
+    assert_eq!(
+        json_body(&token(
+            &[],
+            &[("client_id", CONFIDENTIAL), ("client_secret", SECRET)]
+        ))["error"],
         "invalid_grant"
     );
     for (headers, fields) in [
@@ -1076,9 +1394,13 @@ fn client_authentication_follows_the_registered_method() {
         ),
         (
             vec![],
-            vec![("client_id", CONFIDENTIAL), ("client_secret", SECRET)],
+            vec![("client_id", CONFIDENTIAL), ("client_secret", "wrong")],
         ),
         (vec![], vec![("client_id", CONFIDENTIAL)]),
+        (
+            vec![],
+            vec![("client_id", PUBLIC), ("client_secret", SECRET)],
+        ),
         (vec![], vec![("client_id", "acme-unknown")]),
         (vec![], vec![]),
         (
