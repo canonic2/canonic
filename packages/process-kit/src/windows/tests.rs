@@ -204,7 +204,7 @@ fn pending_socket_deletion_respects_connection_and_readiness_budgets() {
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(&path)
         .unwrap();
-    let disposition = FILE_DISPOSITION_INFO { DeleteFile: 1 };
+    let disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
     // SAFETY: the handle has DELETE access; the pointer and size describe
     // `disposition`, which outlives the call. Keeping the handle holds deletion pending.
     check(unsafe {

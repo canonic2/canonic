@@ -15,6 +15,70 @@ use std::{
     time::Duration,
 };
 
+#[cfg(windows)]
+#[test]
+fn captured_parent_output_closes_while_its_detached_manager_keeps_running() {
+    use std::{
+        io::Read,
+        process::{Command, Stdio},
+        sync::mpsc,
+    };
+    let (_temp, root) = root();
+    let mut parent = ChildGuard(
+        Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "fixtures::entry", "--nocapture"])
+            .env("ACME_ROOT", root.path())
+            .env("ACME_MODE", "parent")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    let mut stdout = parent.0.stdout.take().unwrap();
+    let mut stderr = parent.0.stderr.take().unwrap();
+    let (sent, received) = mpsc::channel();
+    let output = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let result = stdout.read_to_end(&mut bytes);
+        sent.send(result).unwrap();
+        bytes
+    });
+    let (sent, errors) = mpsc::channel();
+    let error_output = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let result = stderr.read_to_end(&mut bytes);
+        sent.send(result).unwrap();
+        bytes
+    });
+    ready(&root);
+    wait(|| parent.0.try_wait().unwrap());
+    let stdout_closed = received.recv_timeout(Duration::from_secs(5));
+    let stderr_closed = errors.recv_timeout(Duration::from_secs(5));
+    let manager_alive = root.leased().unwrap();
+    let log = std::fs::read_to_string(root.path().join("acme.log")).unwrap();
+    // Always release the manager before asserting, including the failing
+    // inherited-pipe case, so the reader workers can join.
+    stop(&root, "drain");
+    wait(|| (!root.leased().unwrap()).then_some(()));
+    output.join().unwrap();
+    error_output.join().unwrap();
+    parent.0.wait().unwrap();
+    assert!(manager_alive);
+    assert!(
+        stdout_closed.unwrap().is_ok(),
+        "stdout remained open after parent exit"
+    );
+    assert!(
+        stderr_closed.unwrap().is_ok(),
+        "stderr remained open after parent exit"
+    );
+    assert!(
+        log.contains("running 1 test"),
+        "manager stdout did not reach its selected log"
+    );
+}
+
 #[test]
 fn one_client_activates_once_while_its_child_has_not_acquired_the_lease() {
     struct Delayed {

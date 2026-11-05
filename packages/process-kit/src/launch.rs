@@ -85,7 +85,9 @@ impl Spawn {
             .args(&self.args)
             .env_clear()
             .envs(self.environment.iter().cloned())
-            .current_dir(&self.directory)
+            .current_dir(&self.directory);
+        #[cfg(not(windows))]
+        command
             .stdin(Stdio::null())
             .stdout(self.log.try_clone()?)
             .stderr(self.log.try_clone()?);
@@ -100,7 +102,10 @@ impl Spawn {
         {
             command.env("SystemRoot", root);
         }
+        #[cfg(not(windows))]
         let mut child = spawn_detached(&mut command)?;
+        #[cfg(windows)]
+        let mut child = crate::windows::spawn_detached(&command, &self.log)?;
         Ok(std::thread::spawn(move || child.wait()))
     }
 }
@@ -111,26 +116,6 @@ fn spawn_detached(command: &mut Command) -> std::io::Result<std::process::Child>
     command.spawn()
 }
 
-/// A detached process with no console, in its own process group, outside the
-/// client's job when the job allows breaking away; closing the client's
-/// console or job then does not end it.
-#[cfg(windows)]
-fn spawn_detached(command: &mut Command) -> std::io::Result<std::process::Child> {
-    use std::os::windows::process::CommandExt;
-    const DETACHED_PROCESS: u32 = 0x0000_0008;
-    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
-    command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB);
-    match command.spawn() {
-        Ok(child) => Ok(child),
-        // A job that forbids breakaway refuses the flag; start inside it instead.
-        Err(error) if error.raw_os_error() == Some(5) => {
-            command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
-            command.spawn()
-        }
-        Err(error) => Err(error),
-    }
-}
 impl Launcher for Spawn {
     fn start(&self) -> Result<()> {
         self.start_reaped()?;

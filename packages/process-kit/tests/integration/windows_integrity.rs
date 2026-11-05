@@ -74,7 +74,7 @@ fn integrity_role() {
         "hold" => {
             let _stream = endpoint::connect(&root, false, Duration::from_secs(5)).unwrap();
             fs::write(&result, "holding").unwrap();
-            std::thread::sleep(Duration::from_secs(60));
+            std::thread::sleep(Duration::from_mins(1));
         }
         other => panic!("unknown role {other}"),
     }

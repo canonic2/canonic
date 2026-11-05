@@ -297,6 +297,11 @@ because sockets cannot start without it. The manager runs without a console, in
 a new process group, and outside the client's job object when that job allows
 breakaway; a job that forbids breakaway keeps the manager inside it, so closing
 that job ends the manager.
+Only null stdin and the selected log handles are inherited on Windows;
+captured output pipes belonging to the starting client close when that client
+exits, independently of the manager. Arguments retain Windows CRT quoting,
+and the explicit environment is encoded as a case-insensitively sorted Unicode
+block. Embedded NULs and invalid environment names are refused before launch.
 The client reaps it on a dedicated thread while alive; `start_reaped()` returns
 the join handle when the caller needs its exit result. An OS registration owns
 the manager when `Service` activates it; registration/removal stay with the

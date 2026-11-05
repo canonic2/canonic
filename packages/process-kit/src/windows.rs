@@ -8,6 +8,8 @@
 )]
 
 use crate::net::Stream;
+mod launch;
+pub(crate) use launch::spawn_detached;
 use std::{
     ffi::{OsString, c_void},
     fs::{File, OpenOptions},
