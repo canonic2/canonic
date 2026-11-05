@@ -30,7 +30,8 @@ from your own runtime.
   variables using validated references and contextual string inputs.
 - **Bundled skills.** Publish workflows alongside their tools, with parsed
   metadata, complete file manifests and SHA-256 digests. Files are prepared
-  once and served from memory.
+  once and served from memory. Optionally serve directory listings, and
+  publish generated skills whose files your handler supplies on request.
 - **Managed stdio requests.** Worker lanes, per-key ordering, queue limits,
   deadlines, cancellation and progress keep request handling bounded.
 - **Streamable HTTP.** Serve the same handler to modern hosts over HTTP POST,
@@ -98,7 +99,9 @@ See [publishing resources](docs/guides/resources.md).
 Skills add discoverable workflows and complete manifests over those resources.
 Supply `SKILL.md` and its supporting files, then enable the skill catalog and
 modern protocol support. The library validates their metadata, derives digests
-from the exact bytes and serves the bundle. See
+from the exact bytes and serves the bundle. For content generated on request,
+publish a dynamic skill: your handler serves its files, and the library checks
+that each served `SKILL.md` matches the published metadata. See
 [publishing skills](docs/guides/skills.md).
 
 ## Protocol and runtime support

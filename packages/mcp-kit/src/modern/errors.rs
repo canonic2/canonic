@@ -4,7 +4,7 @@ use crate::rpc::{self, RpcError};
 use std::borrow::Cow;
 
 pub(super) fn normalize<'a>(method: &str, error: &'a RpcError) -> Cow<'a, RpcError> {
-    if method == "resources/read"
+    if ["resources/read", "resources/directory/read"].contains(&method)
         && error.code == rpc::RESOURCE_NOT_FOUND
         && error
             .data

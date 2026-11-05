@@ -303,3 +303,37 @@ fn resources_encode_contents_and_bound_raw_data() {
         Some(json!({"uri":"acme:missing"}))
     );
 }
+
+#[test]
+fn directory_results_validate_children_page_size_and_cursor() {
+    let child = |uri: &str| Resource::new(uri, "child");
+    let mut directory = child("skill://acme/report/data");
+    directory.mime_type = Some(DIRECTORY_MIME_TYPE.into());
+    let result =
+        ReadDirectoryResult::new(vec![directory], Some("acme-page-2".into())).expect("valid page");
+    assert_eq!(
+        serde_json::to_value(&result).unwrap(),
+        json!({"resources":[{"uri":"skill://acme/report/data","name":"child","mimeType":"inode/directory"}],"nextCursor":"acme-page-2"})
+    );
+    assert_eq!(
+        ReadDirectoryResult::new(vec![child("relative")], None),
+        Err(ResourceError::Field("uri"))
+    );
+    for cursor in [
+        String::new(),
+        "x".repeat(MAX_CURSOR_BYTES + 1),
+        "a\0b".into(),
+    ] {
+        assert_eq!(
+            ReadDirectoryResult::new(vec![], Some(cursor)),
+            Err(ResourceError::Field("nextCursor"))
+        );
+    }
+    let many = (0..=MAX_ENTRIES)
+        .map(|i| child(&format!("acme://dir/{i}")))
+        .collect();
+    assert_eq!(
+        ReadDirectoryResult::new(many, None),
+        Err(ResourceError::Limit("directory entries"))
+    );
+}

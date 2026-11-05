@@ -70,8 +70,8 @@ pub use prompt::{
     GetPromptResult, Prompt, PromptArgument, PromptCall, PromptCatalog, PromptError, PromptMessage,
 };
 pub use resource::{
-    ReadResourceResult, Resource, ResourceCatalog, ResourceContents, ResourceError, ResourceLink,
-    ResourceTemplate,
+    ReadDirectoryResult, ReadResourceResult, Resource, ResourceCatalog, ResourceContents,
+    ResourceError, ResourceLink, ResourceTemplate,
 };
 pub use rpc::RpcError;
 pub use session::{
@@ -79,7 +79,7 @@ pub use session::{
     LATEST_PROTOCOL_VERSION, MAX_CLIENT_FIELD_BYTES, MAX_VERSION_BYTES,
     SUPPORTED_PROTOCOL_VERSIONS, ServerInfo, Session, SessionOptions,
 };
-pub use skill::{BundledRead, SkillCatalog, SkillDefinition, SkillError, SkillFile};
+pub use skill::{BundledRead, DynamicSkill, SkillCatalog, SkillDefinition, SkillError, SkillFile};
 pub use subscription::{Change, SubscriptionOptions};
 pub use tool::{
     Annotations, Catalog, CatalogError, Content, ResultSchema, Tool, ToolCall, ToolResult,

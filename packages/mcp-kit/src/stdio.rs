@@ -109,7 +109,9 @@ pub enum Request {
     Resource(crate::BundledRead),
     /// A tool call whose name and arguments the session has checked.
     Tool(ToolCall),
-    /// A validated resource read or product request from [`SessionOptions::extension_methods`].
+    /// A validated resource read, a `resources/directory/read` inside a dynamic
+    /// skill namespace (answered with [`Outcome::Directory`]), or a product
+    /// request from [`SessionOptions::extension_methods`].
     Method {
         /// The method.
         method: String,
@@ -146,6 +148,8 @@ pub enum Outcome {
     InputRequired(crate::InputRequiredResult),
     /// Validated resource read contents.
     Resource(crate::resource::ReadResourceResult),
+    /// One page of a dynamic skill directory's direct children.
+    Directory(crate::ReadDirectoryResult),
     /// A tool result.
     Tool(ToolResult),
     /// An extension request's result.
@@ -551,7 +555,7 @@ pub(crate) fn scheduled(session: &Session, inbound: Inbound) -> Result<Scheduled
             work(Some(id), Request::Tool(call), read_only, token)
         }
         Inbound::Method { id, method, params } => {
-            let read_only = method == "resources/read";
+            let read_only = method == "resources/read" || method == "resources/directory/read";
             let token = read_only
                 .then(|| params["_meta"].get("progressToken").cloned())
                 .flatten();

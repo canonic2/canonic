@@ -4,6 +4,9 @@
 | --- | --- |
 | Publish tools | `Tool`, `Annotations`, `Catalog::new` |
 | Publish bundled workflows | `SkillCatalog`, `SkillDefinition`, `SkillFile`, `SessionOptions::skills` |
+| Publish generated workflows | `DynamicSkill`, `SkillCatalog::with_dynamic`; serve their files from `Request::Method`; see [generated skills](../guides/skills.md#publish-generated-skills) |
+| Serve skill directory reads | `SkillCatalog::with_directory_reads`, `ReadDirectoryResult`, `resource::DIRECTORY_MIME_TYPE`, `stdio::Outcome::Directory` |
+| Check generated replies in another runtime | `SkillCatalog::dynamic_document`, `SkillCatalog::check_read`, `SkillCatalog::check_directory` |
 | Publish your guides as documentation tools | `docs::build::embed` (feature `docs-build`), `include_docs!`, `docs::Bundle`, `docs::Documentation`, `docs::DocsError` |
 | Enable modern protocol handling | `ModernOptions`, `SessionOptions::modern`, `Session::try_new` |
 | Enable optional task handles | `task::TaskOptions`, `SessionOptions::tasks`, `RequestContext::task_eligible` |

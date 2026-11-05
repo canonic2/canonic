@@ -1,4 +1,5 @@
-//! Immutable bundled workflows, prepared manifests and resource namespace ownership.
+//! Immutable bundled and dynamic workflows, prepared manifests and directory
+//! listings, and resource namespace ownership.
 
 mod source;
 #[cfg(test)]
@@ -24,6 +25,8 @@ pub const MAX_SKILLS: usize = 128;
 pub const MAX_FILES: usize = 512;
 /// Maximum aggregate raw bytes in one manifest.
 pub const MAX_SKILL_BYTES: usize = 16 * 1024 * 1024;
+/// Maximum prepared directories across static skill namespaces.
+pub const MAX_DIRECTORIES: usize = 4096;
 const ENTRY_BYTES: usize = 256 * 1024;
 const PAGE_BYTES: usize = 1024 * 1024;
 
@@ -101,6 +104,32 @@ impl SkillDefinition {
     }
 }
 
+/// A generated skill whose files the server's read handler serves on request.
+///
+/// Its entry publishes `"resources": "dynamic"` instead of digests. Every
+/// `SKILL.md` the handler serves must carry the same frontmatter as `document`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DynamicSkill {
+    /// Hierarchical root URI without a trailing slash or SKILL.md suffix.
+    pub root: String,
+    /// A `SKILL.md` whose frontmatter the entry publishes; its body is not served.
+    pub document: Arc<[u8]>,
+    /// Whether skill/resource discovery enumerates this root. Not access control.
+    pub listed: bool,
+}
+
+impl DynamicSkill {
+    /// Creates an enumerated dynamic skill.
+    #[must_use]
+    pub fn new(root: impl Into<String>, document: impl AsRef<str>) -> Self {
+        Self {
+            root: root.into(),
+            document: Arc::from(document.as_ref().as_bytes()),
+            listed: true,
+        }
+    }
+}
+
 /// Invalid source data or composition; no partial catalog is published.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SkillError {
@@ -130,6 +159,34 @@ pub enum SkillError {
     /// A resource content primitive refused the file.
     #[error(transparent)]
     Resource(#[from] resource::ResourceError),
+    /// A handler's read or directory listing for a dynamic skill is inconsistent.
+    #[error("invalid dynamic skill reply: {0}")]
+    Reply(&'static str),
+}
+
+/// Where a skill-owned address is answered.
+pub(crate) enum Route {
+    /// Library-held bytes.
+    Bundled(BundledRead),
+    /// The consumer's handler, inside a dynamic skill namespace.
+    Consumer,
+    /// Inside a static namespace but not published.
+    Missing,
+}
+
+/// How a directory read is answered.
+pub(crate) enum DirectoryRoute {
+    /// A prepared static page.
+    Page(Value),
+    /// The consumer's handler, inside a dynamic skill namespace.
+    Consumer,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Directories {
+    snapshot: String,
+    /// Directory URI to its ordinal and prepared pages.
+    index: HashMap<String, (usize, Vec<Value>)>,
 }
 
 /// A prepared, immutable file read. Clone shares the encoded content.
@@ -162,12 +219,16 @@ struct StoredFile {
 pub struct SkillCatalog {
     roots: Vec<String>,
     root_index: HashSet<String>,
+    dynamic_roots: HashSet<String>,
+    /// Dynamic `SKILL.md` URIs and the frontmatter their entries publish.
+    documents: HashMap<String, Value>,
     entries: HashMap<String, Value>,
     files: BTreeMap<String, StoredFile>,
     descriptors: Vec<Resource>,
     pages: Vec<Value>,
     snapshot: String,
     raw_bytes: usize,
+    directories: Option<Directories>,
 }
 
 impl SkillCatalog {
@@ -177,40 +238,69 @@ impl SkillCatalog {
     /// Returns [`SkillError`] for invalid source, namespace conflicts, incomplete
     /// nested manifests or any documented byte/count budget.
     pub fn new(definitions: Vec<SkillDefinition>) -> Result<Self, SkillError> {
-        Self::with_budgets(definitions, ByteBudgets::DEFAULT)
+        Self::with_budgets(definitions, &[], ByteBudgets::DEFAULT)
+    }
+
+    /// Builds a catalog of static skills followed by generated ones, listed in that order.
+    ///
+    /// A dynamic skill's namespace cannot contain or sit inside another skill root.
+    ///
+    /// # Errors
+    /// Returns [`SkillError`] as [`Self::new`] does, and for an invalid dynamic
+    /// document, root or nesting.
+    pub fn with_dynamic(
+        definitions: Vec<SkillDefinition>,
+        dynamic: &[DynamicSkill],
+    ) -> Result<Self, SkillError> {
+        Self::with_budgets(definitions, dynamic, ByteBudgets::DEFAULT)
     }
 
     fn with_budgets(
         definitions: Vec<SkillDefinition>,
+        dynamic: &[DynamicSkill],
         budgets: ByteBudgets,
     ) -> Result<Self, SkillError> {
-        if definitions.len() > MAX_SKILLS {
+        if definitions.len() + dynamic.len() > MAX_SKILLS {
             return Err(SkillError::Limit("skill count"));
         }
         let mut catalog = Self {
             roots: Vec::new(),
             root_index: HashSet::new(),
+            dynamic_roots: HashSet::new(),
+            documents: HashMap::new(),
             entries: HashMap::new(),
             files: BTreeMap::new(),
             descriptors: Vec::new(),
             pages: Vec::new(),
             snapshot: String::new(),
             raw_bytes: 0,
+            directories: None,
         };
         let mut listed = Vec::new();
         let mut memberships = Vec::new();
         let mut metadata_bytes = 0;
-        for definition in definitions {
-            let (entry, members) = catalog.insert(definition, budgets)?;
-            metadata_bytes += json::measure(&entry, ENTRY_BYTES, &|| Ok(()))
+        let mut measure = |entry: &Value| {
+            metadata_bytes += json::measure(entry, ENTRY_BYTES, &|| Ok(()))
                 .map_err(|_| SkillError::Limit("entry bytes"))?;
             if metadata_bytes > budgets.metadata {
                 return Err(SkillError::Limit("catalog metadata bytes"));
             }
+            Ok(())
+        };
+        for definition in definitions {
+            let (entry, members) = catalog.insert(definition, budgets)?;
+            measure(&entry)?;
             if members.1 {
                 listed.push(entry);
             }
             memberships.push(members.0);
+        }
+        for skill in dynamic {
+            let (entry, enumerated) = catalog.insert_dynamic(skill)?;
+            measure(&entry)?;
+            if enumerated {
+                listed.push(entry);
+            }
         }
         for (root, members) in catalog.roots.iter().zip(memberships) {
             if catalog
@@ -220,6 +310,14 @@ impl SkillCatalog {
             {
                 return Err(SkillError::Incomplete(root.clone()));
             }
+        }
+        if let Some(nested) = catalog.dynamic_roots.iter().find(|dynamic| {
+            catalog
+                .root_index
+                .iter()
+                .any(|root| under(root, dynamic) || under(dynamic, root))
+        }) {
+            return Err(SkillError::Conflict(nested.clone()));
         }
         let fingerprint = json::encode(&listed, budgets.metadata + 1024)
             .map_err(|_| SkillError::Limit("catalog metadata bytes"))?;
@@ -258,12 +356,7 @@ impl SkillCatalog {
                 uri: uri.clone(),
                 source: Box::new(source),
             })?;
-        let name = frontmatter["name"]
-            .as_str()
-            .ok_or(SkillError::Source("missing name"))?;
-        if root.rsplit('/').next() != Some(name) {
-            return Err(SkillError::Address(root));
-        }
+        let name = named(&root, &frontmatter)?;
         let mut members = HashSet::new();
         let mut manifest = BTreeMap::new();
         let mut total = 0;
@@ -311,6 +404,248 @@ impl SkillCatalog {
         self.roots.push(root);
         self.entries.insert(uri, entry.clone());
         Ok((entry, (members, definition.listed)))
+    }
+
+    fn insert_dynamic(&mut self, skill: &DynamicSkill) -> Result<(Value, bool), SkillError> {
+        if skill.document.len() > resource::MAX_BYTES {
+            return Err(SkillError::Limit("file raw bytes"));
+        }
+        let root = canonical_root(&skill.root)?;
+        let uri = format!("{root}/SKILL.md");
+        if self.entries.contains_key(&uri) {
+            return Err(SkillError::Conflict(uri));
+        }
+        let frontmatter =
+            source::frontmatter(&skill.document).map_err(|source| SkillError::File {
+                uri: uri.clone(),
+                source: Box::new(source),
+            })?;
+        let name = named(&root, &frontmatter)?;
+        if skill.listed {
+            let mut resource = Resource::new(&uri, name);
+            resource.description = frontmatter["description"].as_str().map(str::to_owned);
+            resource.mime_type = Some("text/markdown".into());
+            self.descriptors.push(resource);
+        }
+        let entry = json!({"uri":uri,"frontmatter":frontmatter,"resources":"dynamic"});
+        self.root_index.insert(root.clone());
+        self.dynamic_roots.insert(root);
+        self.documents.insert(uri.clone(), frontmatter);
+        self.entries.insert(uri, entry.clone());
+        Ok((entry, skill.listed))
+    }
+
+    /// Prepares `resources/directory/read` for every directory in the static
+    /// skill namespaces and advertises `directoryRead`. Dynamic namespaces are
+    /// listed by the server's handler.
+    ///
+    /// # Errors
+    /// Returns [`SkillError::Limit`] above [`MAX_DIRECTORIES`] directories, and
+    /// [`SkillError::Conflict`] when one path is both a file and a directory.
+    pub fn with_directory_reads(mut self) -> Result<Self, SkillError> {
+        let mut index: BTreeMap<String, BTreeMap<String, Resource>> = self
+            .roots
+            .iter()
+            .map(|root| (root.clone(), BTreeMap::new()))
+            .collect();
+        for (uri, file) in &self.files {
+            for root in self.roots.iter().filter(|root| under(uri, root)) {
+                let mut parent = root.clone();
+                let mut segments = uri[root.len() + 1..].split('/').peekable();
+                while let Some(segment) = segments.next() {
+                    let child = format!("{parent}/{segment}");
+                    let mut resource = Resource::new(&child, decode(segment).unwrap_or_default());
+                    if segments.peek().is_some() {
+                        resource.mime_type = Some(resource::DIRECTORY_MIME_TYPE.into());
+                    } else {
+                        resource.mime_type = Some(file.mime.clone());
+                        resource.size = Some(file.bytes.len() as u64);
+                    }
+                    let existing = index
+                        .entry(parent)
+                        .or_default()
+                        .entry(child.clone())
+                        .or_insert_with(|| resource.clone());
+                    // A path cannot be both a file and a directory.
+                    if *existing != resource {
+                        return Err(SkillError::Conflict(child));
+                    }
+                    if index.len() > MAX_DIRECTORIES {
+                        return Err(SkillError::Limit("directories"));
+                    }
+                    parent = child;
+                }
+            }
+        }
+        let mut hasher = Sha256::new();
+        let mut prepared = HashMap::new();
+        for (ordinal, (directory, children)) in index.into_iter().enumerate() {
+            hasher.update(directory.as_bytes());
+            for child in children.values() {
+                hasher.update([0]);
+                hasher.update(child.uri.as_bytes());
+                hasher.update(child.mime_type.as_deref().unwrap_or_default().as_bytes());
+                hasher.update(child.size.unwrap_or_default().to_le_bytes());
+            }
+            hasher.update([1]);
+            let children: Vec<_> = children.into_values().collect();
+            let mut pages: Vec<Value> = children
+                .chunks(resource::PAGE_SIZE)
+                .map(|page| json!({"resources":page}))
+                .collect();
+            if pages.is_empty() {
+                pages.push(json!({"resources":[]}));
+            }
+            prepared.insert(directory, (ordinal, pages));
+        }
+        self.directories = Some(Directories {
+            snapshot: format!("{:x}", hasher.finalize()),
+            index: prepared,
+        });
+        Ok(self)
+    }
+
+    /// Whether `resources/directory/read` is served.
+    #[must_use]
+    pub fn directory_reads(&self) -> bool {
+        self.directories.is_some()
+    }
+
+    pub(crate) fn dynamic_namespace(&self, uri: &str) -> bool {
+        self.dynamic_roots.contains(uri)
+            || uri
+                .match_indices('/')
+                .any(|(offset, _)| self.dynamic_roots.contains(&uri[..offset]))
+    }
+
+    /// Where a read of an owned address is answered; `None` outside skill namespaces.
+    pub(crate) fn route(&self, uri: &str) -> Option<Route> {
+        if !self.owns(uri) {
+            return None;
+        }
+        Some(match self.read(uri) {
+            Some(read) => Route::Bundled(read),
+            None if self.dynamic_namespace(uri) => Route::Consumer,
+            None => Route::Missing,
+        })
+    }
+
+    /// Whether `uri` is a dynamic skill's `SKILL.md`, whose reads [`Self::check_read`] checks.
+    #[must_use]
+    pub fn dynamic_document(&self, uri: &str) -> bool {
+        self.documents.contains_key(uri)
+    }
+
+    /// Checks a handler's read of a dynamic skill's `SKILL.md`: one text content
+    /// at that URI whose frontmatter equals the published entry. Other reads pass.
+    ///
+    /// # Errors
+    /// Returns [`SkillError::Reply`] when the served document would fail a host's
+    /// frontmatter check.
+    pub fn check_read(&self, uri: &str, result: &ReadResourceResult) -> Result<(), SkillError> {
+        let Some(expected) = self.documents.get(uri) else {
+            return Ok(());
+        };
+        let [content] = result.contents.as_slice() else {
+            return Err(SkillError::Reply("SKILL.md needs exactly one content"));
+        };
+        let text = content
+            .text_value()
+            .filter(|_| content.uri() == uri)
+            .ok_or(SkillError::Reply("SKILL.md must be text at its own URI"))?;
+        match source::frontmatter(text.as_bytes()) {
+            Ok(frontmatter) if frontmatter == *expected => Ok(()),
+            Ok(_) => Err(SkillError::Reply(
+                "SKILL.md frontmatter does not match its entry",
+            )),
+            Err(_) => Err(SkillError::Reply("SKILL.md frontmatter is invalid")),
+        }
+    }
+
+    /// Checks a handler's directory listing inside a dynamic skill namespace:
+    /// every child is a distinct direct child of `uri`.
+    ///
+    /// # Errors
+    /// Returns [`SkillError::Reply`] outside a dynamic namespace or for a child
+    /// that is not a single, distinct path segment below `uri`.
+    pub fn check_directory(
+        &self,
+        uri: &str,
+        result: &crate::ReadDirectoryResult,
+    ) -> Result<(), SkillError> {
+        if !self.dynamic_namespace(uri) {
+            return Err(SkillError::Reply(
+                "handlers list only dynamic skill directories",
+            ));
+        }
+        let mut seen = HashSet::new();
+        for child in result.resources() {
+            let direct = child
+                .uri
+                .strip_prefix(uri)
+                .and_then(|rest| rest.strip_prefix('/'))
+                .and_then(decode)
+                .is_some_and(|segment| {
+                    !segment.is_empty()
+                        && segment != "."
+                        && segment != ".."
+                        && !segment.contains(['/', '\\'])
+                });
+            if !direct || !seen.insert(child.uri.as_str()) {
+                return Err(SkillError::Reply(
+                    "listing entries must be distinct direct children",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn directory(&self, params: &Value) -> Result<DirectoryRoute, RpcError> {
+        let invalid = || RpcError::new(rpc::INVALID_PARAMS, "Unknown or invalid directory");
+        if !rpc::only(params, &["uri", "cursor", "_meta"]) {
+            return Err(invalid());
+        }
+        let uri = params["uri"].as_str().ok_or_else(invalid)?;
+        resource::validate_uri(uri).map_err(|_| invalid())?;
+        let cursor = match params.get("cursor") {
+            None => None,
+            Some(cursor) => Some(
+                cursor
+                    .as_str()
+                    .filter(|text| text.len() <= resource::MAX_CURSOR_BYTES)
+                    .ok_or_else(invalid)?,
+            ),
+        };
+        if params["_meta"]
+            .get("progressToken")
+            .is_some_and(|token| !(token.is_string() || token.is_i64() || token.is_u64()))
+        {
+            return Err(invalid());
+        }
+        if self.dynamic_namespace(uri) {
+            return Ok(DirectoryRoute::Consumer);
+        }
+        let directories = self.directories.as_ref().ok_or_else(invalid)?;
+        let (ordinal, pages) = directories.index.get(uri).ok_or_else(invalid)?;
+        let prefix = format!("{}:{ordinal}:", directories.snapshot);
+        let index = match cursor {
+            None => 0,
+            Some(cursor) => {
+                let offset = cursor
+                    .strip_prefix(&prefix)
+                    .and_then(|offset| offset.parse::<usize>().ok())
+                    .ok_or_else(invalid)?;
+                if offset == 0 || offset >= pages.len() || cursor != format!("{prefix}{offset}") {
+                    return Err(invalid());
+                }
+                offset
+            }
+        };
+        let mut page = pages[index].clone();
+        if index + 1 < pages.len() {
+            page["nextCursor"] = json!(format!("{prefix}{}", index + 1));
+        }
+        Ok(DirectoryRoute::Page(page))
     }
 
     fn prepare_pages(&mut self, entries: Vec<Value>) -> Result<(), SkillError> {
@@ -402,6 +737,31 @@ impl SkillCatalog {
         }
         Ok(page)
     }
+}
+
+fn named<'a>(root: &str, frontmatter: &'a Value) -> Result<&'a str, SkillError> {
+    let name = frontmatter["name"]
+        .as_str()
+        .ok_or(SkillError::Source("missing name"))?;
+    if root.rsplit('/').next() != Some(name) {
+        return Err(SkillError::Address(root.into()));
+    }
+    Ok(name)
+}
+
+/// Decodes one percent-encoded URI path segment; `None` for malformed escapes or UTF-8.
+fn decode(segment: &str) -> Option<String> {
+    let mut bytes = Vec::with_capacity(segment.len());
+    let mut input = segment.bytes();
+    while let Some(byte) = input.next() {
+        if byte == b'%' {
+            let hex = [input.next()?, input.next()?];
+            bytes.push(u8::from_str_radix(std::str::from_utf8(&hex).ok()?, 16).ok()?);
+        } else {
+            bytes.push(byte);
+        }
+    }
+    String::from_utf8(bytes).ok()
 }
 
 fn document_size(files: &BTreeMap<String, StoredFile>, uri: &str) -> u64 {

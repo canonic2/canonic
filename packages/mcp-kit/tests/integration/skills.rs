@@ -2,8 +2,8 @@
 
 use crate::fixture::{Events, Host, Latch, Script, arguments, text};
 use canonic_mcp_kit::{
-    CachePolicy, CacheScope, ModernOptions, ServerInfo, SkillCatalog, SkillDefinition, SkillFile,
-    modern, rpc,
+    CachePolicy, CacheScope, DynamicSkill, ModernOptions, ReadDirectoryResult, ReadResourceResult,
+    Resource, ResourceContents, ServerInfo, SkillCatalog, SkillDefinition, SkillFile, modern, rpc,
     stdio::{Options, Outcome, Request},
 };
 use serde_json::{Value, json};
@@ -12,8 +12,21 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-fn options() -> Options {
-    let skills = SkillCatalog::new(vec![SkillDefinition::new("skill://acme/status", vec![SkillFile::text("SKILL.md", "---\nname: status\ndescription: Inspect Acme state.\n---\nUse acme_echo; see references/GUIDE.md.\n"), SkillFile::text("references/GUIDE.md", "Acme reference\n"), SkillFile::binary("assets/icon.bin", Arc::<[u8]>::from(&b"\0\xff"[..]))])]).expect("valid fixture skills");
+fn status() -> SkillDefinition {
+    SkillDefinition::new(
+        "skill://acme/status",
+        vec![
+            SkillFile::text(
+                "SKILL.md",
+                "---\nname: status\ndescription: Inspect Acme state.\n---\nUse acme_echo; see references/GUIDE.md.\n",
+            ),
+            SkillFile::text("references/GUIDE.md", "Acme reference\n"),
+            SkillFile::binary("assets/icon.bin", Arc::<[u8]>::from(&b"\0\xff"[..])),
+        ],
+    )
+}
+
+fn serving(skills: SkillCatalog) -> Options {
     let mut modern = ModernOptions::new(ServerInfo::new("acme", "1"));
     modern.skills_cache = CachePolicy::new(1000, CacheScope::Public).expect("valid policy");
     Options {
@@ -24,6 +37,299 @@ fn options() -> Options {
         },
         ..Options::default()
     }
+}
+
+fn options() -> Options {
+    serving(SkillCatalog::new(vec![status()]).expect("valid fixture skills"))
+}
+
+const REPORT: &str = "---\nname: report\ndescription: Summarize the Acme queue.\n---\n";
+
+fn dynamic_options() -> Options {
+    serving(
+        SkillCatalog::with_dynamic(
+            vec![status()],
+            &[DynamicSkill::new("skill://acme/report", REPORT)],
+        )
+        .and_then(SkillCatalog::with_directory_reads)
+        .expect("valid fixture skills"),
+    )
+}
+
+fn markdown(uri: &str, text: &str) -> Outcome {
+    Outcome::Resource(
+        ReadResourceResult::new(vec![
+            ResourceContents::text(uri, Some("text/markdown".into()), text).expect("valid text"),
+        ])
+        .expect("valid read"),
+    )
+}
+
+fn children(uris: &[&str]) -> Outcome {
+    Outcome::Directory(
+        ReadDirectoryResult::new(
+            uris.iter()
+                .map(|uri| Resource::new(*uri, uri.rsplit('/').next().unwrap_or_default()))
+                .collect(),
+            None,
+        )
+        .expect("valid listing"),
+    )
+}
+
+/// Generates the report skill: its document, one data file and its directories.
+fn report_handler(drift: Arc<AtomicBool>) -> Script {
+    Script::new(move |request, _| {
+        let Request::Method { method, params } = &request else {
+            return children(&["skill://acme/report/SKILL.md"]);
+        };
+        let uri = params["uri"].as_str().unwrap_or_default();
+        match (method.as_str(), uri) {
+            ("resources/read", "skill://acme/report/SKILL.md") if drift.load(Ordering::SeqCst) => {
+                markdown(uri, "---\nname: report\ndescription: Drifted.\n---\n")
+            }
+            ("resources/read", "skill://acme/report/SKILL.md") => markdown(
+                uri,
+                "---\ndescription: Summarize the Acme queue.\nname: report\n---\nThe queue holds 3 items; read data/today.md.\n",
+            ),
+            ("resources/read", "skill://acme/report/data/today.md") => markdown(uri, "queue: 3\n"),
+            ("resources/directory/read", "skill://acme/report") => {
+                children(&["skill://acme/report/SKILL.md", "skill://acme/report/data"])
+            }
+            ("resources/directory/read", "skill://acme/report/data") => {
+                children(&["skill://acme/report/data/nested/today.md"])
+            }
+            _ => Outcome::ResourceNotFound(uri.into()),
+        }
+    })
+}
+
+#[test]
+fn directory_reads_and_dynamic_skills_route_through_the_shared_driver() {
+    let host = Host::start(
+        report_handler(Arc::new(AtomicBool::new(false))),
+        dynamic_options(),
+    );
+    send(&host, 1, "server/discover", json!({}), json!({}));
+    assert_eq!(
+        host.recv()["result"]["capabilities"]["extensions"][canonic_mcp_kit::skill::EXTENSION],
+        json!({"directoryRead":true})
+    );
+    send(&host, 2, "skills/list", json!({}), json!({}));
+    let list = host.recv();
+    assert_eq!(list["result"]["skills"][1]["resources"], "dynamic");
+    assert_eq!(list["result"]["skills"][1]["frontmatter"]["name"], "report");
+    send(
+        &host,
+        3,
+        "resources/directory/read",
+        json!({"uri":"skill://acme/status"}),
+        json!({}),
+    );
+    let page = host.recv();
+    assert_eq!(page["result"]["resultType"], "complete");
+    assert_eq!(page["result"]["ttlMs"], 1000);
+    assert_eq!(
+        page["result"]["resources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|child| child["name"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["SKILL.md", "assets", "references"]
+    );
+    send(
+        &host,
+        4,
+        "resources/directory/read",
+        json!({"uri":"skill://acme/report"}),
+        json!({}),
+    );
+    // Generated listings and files use the consumer read policy, not the Skills one.
+    let page = host.recv();
+    assert_eq!(page["result"]["resultType"], "complete");
+    assert_eq!(page["result"]["cacheScope"], "private");
+    assert_eq!(page["result"]["ttlMs"], 0);
+    assert_eq!(
+        page["result"]["resources"][1]["uri"],
+        "skill://acme/report/data"
+    );
+    send(
+        &host,
+        5,
+        "resources/read",
+        json!({"uri":"skill://acme/report/SKILL.md"}),
+        json!({}),
+    );
+    let read = host.recv();
+    assert_eq!(read["result"]["resultType"], "complete");
+    assert_eq!(read["result"]["cacheScope"], "private");
+    assert!(
+        read["result"]["contents"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("3 items")
+    );
+    send(
+        &host,
+        6,
+        "resources/read",
+        json!({"uri":"skill://acme/report/data/today.md"}),
+        json!({}),
+    );
+    assert_eq!(host.recv()["result"]["contents"][0]["text"], "queue: 3\n");
+    host.finish().0.unwrap();
+}
+
+#[test]
+fn drifted_or_malformed_dynamic_replies_and_bad_directory_reads_refuse() {
+    let host = Host::start(
+        report_handler(Arc::new(AtomicBool::new(true))),
+        dynamic_options(),
+    );
+    for (id, method, params, code) in [
+        (
+            7,
+            "resources/read",
+            json!({"uri":"skill://acme/report/SKILL.md"}),
+            rpc::INTERNAL_ERROR,
+        ),
+        (
+            8,
+            "resources/directory/read",
+            json!({"uri":"skill://acme/report/data"}),
+            rpc::INTERNAL_ERROR,
+        ),
+        (
+            9,
+            "resources/directory/read",
+            json!({"uri":"skill://acme/report/missing"}),
+            rpc::INVALID_PARAMS,
+        ),
+        (
+            10,
+            "resources/directory/read",
+            json!({"uri":"skill://acme/status/SKILL.md"}),
+            rpc::INVALID_PARAMS,
+        ),
+        (
+            11,
+            "resources/directory/read",
+            json!({"uri":"skill://acme/status","cursor":"stale"}),
+            rpc::INVALID_PARAMS,
+        ),
+        (
+            12,
+            "tools/call",
+            json!({"name":"acme_echo"}),
+            rpc::INTERNAL_ERROR,
+        ),
+    ] {
+        send(&host, id, method, params, json!({}));
+        let reply = host.recv();
+        assert_eq!(reply["error"]["code"], code, "{id}: {reply}");
+        let reason = match id {
+            7 => "SKILL.md frontmatter does not match its entry",
+            8 => "listing entries must be distinct direct children",
+            12 => "Directory results answer only directory reads",
+            _ => continue,
+        };
+        assert_eq!(reply["error"]["message"], reason);
+    }
+    host.finish().0.unwrap();
+}
+
+#[test]
+fn legacy_revisions_read_dynamic_files_but_not_directories() {
+    let host = Host::ready(
+        report_handler(Arc::new(AtomicBool::new(false))),
+        dynamic_options(),
+        json!({}),
+    );
+    host.send(&rpc::request(
+        json!(2),
+        "resources/directory/read",
+        json!({"uri":"skill://acme/status"}),
+    ));
+    assert_eq!(host.recv()["error"]["code"], rpc::METHOD_NOT_FOUND);
+    host.send(&rpc::request(
+        json!(3),
+        "resources/read",
+        json!({"uri":"skill://acme/report/SKILL.md"}),
+    ));
+    let reply = host.recv();
+    assert!(reply["result"].get("resultType").is_none());
+    assert!(reply["result"]["contents"][0]["text"].is_string());
+    host.finish().0.unwrap();
+}
+
+#[test]
+fn dynamic_documents_ask_for_input_and_check_the_final_reply() {
+    let drift = Arc::new(AtomicBool::new(false));
+    let drifted = drift.clone();
+    let script = Script::new(move |request, context| {
+        let Request::Method { params, .. } = &request else {
+            return Outcome::ResourceNotFound("acme://unknown".into());
+        };
+        let uri = params["uri"].as_str().unwrap_or_default();
+        let modern = context.request_context().expect("modern fixture");
+        if modern.input_responses.is_none() {
+            return match modern.confirmation("Generate the report?", "report-state") {
+                Ok(result) => Outcome::InputRequired(result),
+                Err(error) => Outcome::Method(Err(error)),
+            };
+        }
+        match modern.confirmation_decision() {
+            Ok(Some(canonic_mcp_kit::Decision::Accepted)) if drifted.load(Ordering::SeqCst) => {
+                markdown(uri, "---\nname: report\ndescription: Drifted.\n---\n")
+            }
+            Ok(Some(canonic_mcp_kit::Decision::Accepted)) => {
+                markdown(uri, &format!("{REPORT}The queue holds 3 items.\n"))
+            }
+            _ => Outcome::Method(Err(canonic_mcp_kit::RpcError::new(
+                rpc::INVALID_PARAMS,
+                "Report declined",
+            ))),
+        }
+    });
+    let host = Host::start(script, dynamic_options());
+    let caps = json!({"elicitation":{"form":{}}});
+    let read = |uri: &str| json!({"uri":uri});
+    let retry = |uri: &str| json!({"uri":uri,"requestState":"report-state","inputResponses":{"confirmation":{"action":"accept"}}});
+    let document = "skill://acme/report/SKILL.md";
+    send(&host, 1, "resources/read", read(document), caps.clone());
+    assert_eq!(host.recv()["result"]["resultType"], "input_required");
+    send(&host, 2, "resources/read", retry(document), caps.clone());
+    let reply = host.recv();
+    assert_eq!(reply["result"]["resultType"], "complete", "{reply}");
+    assert!(
+        reply["result"]["contents"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("3 items")
+    );
+    drift.store(true, Ordering::SeqCst);
+    send(&host, 3, "resources/read", retry(document), caps.clone());
+    let reply = host.recv();
+    assert_eq!(reply["error"]["code"], rpc::INTERNAL_ERROR);
+    assert_eq!(
+        reply["error"]["message"],
+        "SKILL.md frontmatter does not match its entry"
+    );
+    let data = "skill://acme/report/data/today.md";
+    send(&host, 4, "resources/read", read(data), caps.clone());
+    assert_eq!(host.recv()["result"]["resultType"], "input_required");
+    send(&host, 5, "resources/read", retry(data), caps.clone());
+    assert_eq!(host.recv()["result"]["contents"][0]["uri"], data);
+    send(
+        &host,
+        6,
+        "resources/read",
+        retry("skill://acme/status/SKILL.md"),
+        caps,
+    );
+    assert_eq!(host.recv()["error"]["code"], rpc::INVALID_PARAMS);
+    host.finish().0.unwrap();
 }
 
 fn send(host: &Host, id: u64, method: &str, mut params: Value, capabilities: Value) {

@@ -41,7 +41,7 @@ pub struct SessionOptions {
     pub modern: Option<crate::ModernOptions>,
     /// Optional consumer task policy; requires modern opt-in. Allocates no store.
     pub tasks: Option<crate::task::TaskOptions>,
-    /// Immutable bundled skills; requires modern opt-in at construction.
+    /// Immutable bundled and dynamic skills; requires modern opt-in at construction.
     pub skills: Option<Arc<crate::SkillCatalog>>,
     /// Optional immutable resource catalog; `None` disables resource methods.
     pub resources: Option<Arc<crate::resource::ResourceCatalog>>,
@@ -842,23 +842,25 @@ impl Session {
         if let Err(error) = crate::resource::read_params(&params) {
             return Inbound::Reply(rpc::failure(id, &error));
         }
-        if let Some(skills) = &self.options.skills
-            && skills.owns(params["uri"].as_str().unwrap_or_default())
+        let uri = params["uri"].as_str().unwrap_or_default();
+        match self
+            .options
+            .skills
+            .as_ref()
+            .and_then(|skills| skills.route(uri))
         {
-            return match skills.read(params["uri"].as_str().unwrap_or_default()) {
-                Some(read) => {
-                    self.outstanding.insert(id.to_string());
-                    Inbound::BundledResource {
-                        id,
-                        read,
-                        progress_token: params["_meta"].get("progressToken").cloned(),
-                    }
-                }
-                None => Inbound::Reply(rpc::failure(
+            Some(crate::skill::Route::Bundled(read)) => {
+                self.outstanding.insert(id.to_string());
+                return Inbound::BundledResource {
                     id,
-                    &crate::resource::not_found(params["uri"].as_str().unwrap_or_default()),
-                )),
-            };
+                    read,
+                    progress_token: params["_meta"].get("progressToken").cloned(),
+                };
+            }
+            Some(crate::skill::Route::Missing) => {
+                return Inbound::Reply(rpc::failure(id, &crate::resource::not_found(uri)));
+            }
+            Some(crate::skill::Route::Consumer) | None => {}
         }
         self.outstanding.insert(id.to_string());
         Inbound::Method {
@@ -866,6 +868,51 @@ impl Session {
             method: method.to_owned(),
             params,
         }
+    }
+
+    fn directory_request(&mut self, id: Value, method: &str, params: Value) -> Inbound {
+        let Some(skills) = self
+            .options
+            .skills
+            .as_ref()
+            .filter(|skills| skills.directory_reads())
+        else {
+            return Inbound::Reply(rpc::failure(
+                id,
+                &RpcError::new(rpc::METHOD_NOT_FOUND, "Directory reads disabled"),
+            ));
+        };
+        match skills.directory(&params) {
+            Ok(crate::skill::DirectoryRoute::Page(page)) => Inbound::Reply(rpc::success(id, page)),
+            Ok(crate::skill::DirectoryRoute::Consumer) => {
+                self.outstanding.insert(id.to_string());
+                Inbound::Method {
+                    id,
+                    method: method.to_owned(),
+                    params,
+                }
+            }
+            Err(error) => Inbound::Reply(rpc::failure(id, &error)),
+        }
+    }
+
+    fn skills_query(&self, id: Value, method: &str, params: &Value) -> Value {
+        let result = match &self.options.skills {
+            _ if !["skills/list", "skills/get"].contains(&method) => {
+                Err(RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found"))
+            }
+            None => Err(RpcError::new(rpc::METHOD_NOT_FOUND, "Skills disabled")),
+            Some(skills) => skills.query(method, params),
+        };
+        match result {
+            Ok(result) => rpc::success(id, result),
+            Err(error) => rpc::failure(id, &error),
+        }
+    }
+
+    /// The catalog that checks dynamic skill replies, when Skills are enabled.
+    pub(crate) fn skills(&self) -> Option<&Arc<crate::SkillCatalog>> {
+        self.options.skills.as_ref()
     }
 
     fn metadata_request(&mut self, id: Value, method: &str, params: Value) -> Inbound {
@@ -915,18 +962,20 @@ impl Session {
                     .with_data(json!({"requested":version,"supported":supported})),
             );
         };
-        let cache_override = if method == "resources/list" && self.options.skills.is_some() {
-            Some(options.resources_cache.merged(options.skills_cache))
-        } else if method == "resources/read"
-            && self
-                .options
-                .skills
-                .as_ref()
-                .is_some_and(|skills| skills.owns(params["uri"].as_str().unwrap_or_default()))
-        {
-            Some(options.skills_cache)
-        } else {
-            None
+        // Bundled skill content uses the Skills policy; generated content is a
+        // consumer read, as for any handler-served resource.
+        let uri = params["uri"].as_str().unwrap_or_default();
+        let skills = self.options.skills.as_ref();
+        let generated = skills.is_some_and(|skills| skills.dynamic_namespace(uri));
+        let cache_override = match method {
+            "resources/list" if skills.is_some() => {
+                Some(options.resources_cache.merged(options.skills_cache))
+            }
+            "resources/read" if skills.is_some_and(|skills| skills.owns(uri)) && !generated => {
+                Some(options.skills_cache)
+            }
+            "resources/directory/read" if generated => Some(options.reads_cache),
+            _ => None,
         };
         let context = match crate::RequestContext::parse_prepared(
             &params,
@@ -984,17 +1033,11 @@ impl Session {
             }
             return Inbound::Reply(rpc::success(id, self.discovery()));
         }
-        if method.starts_with("skills/") || method == "resources/directory/read" {
-            if !["skills/list", "skills/get"].contains(&method) {
-                return failure(RpcError::new(rpc::METHOD_NOT_FOUND, "Method not found"));
-            }
-            return match &self.options.skills {
-                None => failure(RpcError::new(rpc::METHOD_NOT_FOUND, "Skills disabled")),
-                Some(skills) => match skills.query(method, &params) {
-                    Ok(result) => Inbound::Reply(rpc::success(id, result)),
-                    Err(error) => failure(error),
-                },
-            };
+        if method == "resources/directory/read" {
+            return self.directory_request(id, method, params);
+        }
+        if method.starts_with("skills/") {
+            return Inbound::Reply(self.skills_query(id, method, &params));
         }
         if method.starts_with("completion/") {
             return self.completion_request(id, method, &params);
@@ -1019,12 +1062,12 @@ impl Session {
             ) {
                 return failure(crate::modern::invalid("Invalid operation parameters"));
             }
+            // Bundled files never ask for input; dynamic skill files are consumer reads.
             if method == "resources/read"
-                && self
-                    .options
-                    .skills
-                    .as_ref()
-                    .is_some_and(|skills| skills.owns(params["uri"].as_str().unwrap_or_default()))
+                && self.options.skills.as_ref().is_some_and(|skills| {
+                    let uri = params["uri"].as_str().unwrap_or_default();
+                    skills.owns(uri) && !skills.dynamic_namespace(uri)
+                })
                 && (context.request_state.is_some() || context.input_responses.is_some())
             {
                 return failure(crate::modern::invalid(
@@ -1123,8 +1166,15 @@ impl Session {
             }
         }
         let mut extensions = self.options.extensions.clone();
-        if self.options.skills.is_some() {
-            extensions.insert(crate::skill::EXTENSION.into(), json!({}));
+        if let Some(skills) = &self.options.skills {
+            extensions.insert(
+                crate::skill::EXTENSION.into(),
+                if skills.directory_reads() {
+                    json!({"directoryRead":true})
+                } else {
+                    json!({})
+                },
+            );
         }
         if self.options.tasks.is_some() {
             extensions.insert(crate::task::EXTENSION.into(), json!({}));

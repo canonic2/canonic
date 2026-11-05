@@ -29,6 +29,7 @@ mod sealed {
     impl Payload for serde_json::Value {}
     impl Payload for crate::ToolResult {}
     impl Payload for crate::ReadResourceResult {}
+    impl Payload for crate::ReadDirectoryResult {}
     impl Payload for crate::GetPromptResult {}
     impl Payload for crate::CompleteResult {}
 }
@@ -157,6 +158,18 @@ impl CompletePayload for crate::ReadResourceResult {
         Some(self)
     }
 }
+impl CompletePayload for crate::ReadDirectoryResult {
+    fn write_fields<M: serde::ser::SerializeMap>(&self, map: &mut M) -> Result<(), M::Error> {
+        map.serialize_entry("resources", &self.resources)?;
+        if let Some(cursor) = &self.next_cursor {
+            map.serialize_entry("nextCursor", cursor)?;
+        }
+        Ok(())
+    }
+    fn valid_payload(&self) -> bool {
+        true
+    }
+}
 
 /// Which authorization contexts may share a cached result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -226,9 +239,10 @@ pub struct ModernOptions {
     pub prompts_cache: CachePolicy,
     /// Ordinary resource/template catalog cache hints.
     pub resources_cache: CachePolicy,
-    /// Skill entries and bundled file cache hints.
+    /// Skill entries, bundled skill file reads and static skill directory listings.
     pub skills_cache: CachePolicy,
-    /// Default consumer-resolved resource read hints.
+    /// Default consumer-resolved resource read hints, including dynamic skill
+    /// files and listings.
     pub reads_cache: CachePolicy,
 }
 
@@ -333,7 +347,7 @@ impl RequestContext {
             "tools/list" => Some(options.tools_cache),
             "prompts/list" => Some(options.prompts_cache),
             "resources/list" | "resources/templates/list" => Some(options.resources_cache),
-            "skills/list" | "skills/get" => Some(options.skills_cache),
+            "skills/list" | "skills/get" | "resources/directory/read" => Some(options.skills_cache),
             "resources/read" => Some(options.reads_cache),
             _ => None,
         };

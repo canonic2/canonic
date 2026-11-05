@@ -32,6 +32,11 @@
 | `-32603` | Cannot encode error response within its output limit | A modern error exceeds the response budget | Shorten the error message or data |
 | `-32603` | Request failed | The handler panicked | Fix the handler; the worker continues |
 | `-32603` | Request asked for confirmation twice | A continuation returned `Outcome::Confirm` | Ask once per request |
+| `-32601` | Directory reads disabled | `resources/directory/read` on a catalog without `with_directory_reads` | Enable directory reads, or browse with `skills/get` manifests |
+| `-32602` | Unknown or invalid directory | A file URI, trailing slash, unknown path, address outside skill namespaces, or a cursor from another directory or catalog | Use a directory URI from a listing and forward `nextCursor` unchanged |
+| `-32603` | SKILL.md frontmatter does not match its entry, SKILL.md frontmatter is invalid, SKILL.md must be text at its own URI, SKILL.md needs exactly one content | A handler's dynamic `SKILL.md` read differs from the published `DynamicSkill` document | Generate the document from the same frontmatter; only the body may change |
+| `-32603` | listing entries must be distinct direct children | A dynamic directory listing names a grandchild, sibling, duplicate or encoded separator | List only one path segment below the requested URI |
+| `-32603` | Dynamic SKILL.md requires a typed resource result, Directory reads require a typed directory result, Directory results answer only directory reads | A handler returned the wrong outcome kind | Return `Outcome::Resource` for reads and `Outcome::Directory` only for directory reads |
 | `-32000` | Server not initialized | A request before initialization completed | Initialize first |
 | `-32000` | Server request capacity reached | The lane is full | Retry later or raise `Lane::capacity` |
 | `-32000` | Session message limit reached | `SessionOptions::max_messages` was exceeded | The connection ends |

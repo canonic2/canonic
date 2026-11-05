@@ -23,7 +23,7 @@ Start with the [quick start](getting-started.md).
 - [Suggest argument values](guides/completion.md) — optional contextual choices for prompt arguments and resource-template variables.
 - [Return audio and content hints](guides/audio.md) — inline recordings, audience, priority and modification hints, and task persistence.
 - [Validate arguments and results](guides/schemas.md) — prepared JSON Schema 2020-12, bundled references, resource limits and output contracts.
-- [Publish bundled skills](guides/skills.md) — offline workflows, verified manifests, modern request context and legacy resource fallback.
+- [Publish bundled skills](guides/skills.md) — offline workflows, verified manifests, directory reads, generated skills, modern request context and legacy resource fallback.
 - [Bundle your guides as documentation tools](guides/documentation.md) — build-time guide bundles and the list, search and read tools.
 - [Return a task for long-running work](guides/tasks.md) — optional handles, durable consumer state, polling, input and cancellation.
 - [Collect choices, fields and external consent](guides/elicitation.md) — rich forms and bounded legacy/modern interactions.

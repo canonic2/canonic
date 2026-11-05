@@ -358,7 +358,8 @@ impl fmt::Debug for Grant {
 pub struct Operation<'a> {
     /// The JSON-RPC method.
     pub method: &'a str,
-    /// The tool or prompt name, or the resource URI for `resources/read`.
+    /// The tool or prompt name, or the resource URI for `resources/read` and
+    /// `resources/directory/read`.
     pub name: Option<&'a str>,
     /// The request parameters, including tool arguments and listen filters.
     pub params: &'a Value,
@@ -619,7 +620,10 @@ impl ResourceServer {
         policy: &dyn ScopePolicy,
     ) -> Result<(), Response> {
         let params = &admitted.message["params"];
-        let source = if admitted.method == "resources/read" {
+        let source = if matches!(
+            admitted.method.as_str(),
+            "resources/read" | "resources/directory/read"
+        ) {
             "uri"
         } else {
             "name"

@@ -363,9 +363,10 @@ fn raw_skill_and_catalog_storage_budgets_refuse_atomically() {
         stored: 4096,
         ..ByteBudgets::DEFAULT
     };
-    assert!(SkillCatalog::with_budgets(vec![source_with_bytes("status", 1024)], budgets).is_ok());
+    let static_only = |definitions, budgets| SkillCatalog::with_budgets(definitions, &[], budgets);
+    assert!(static_only(vec![source_with_bytes("status", 1024)], budgets).is_ok());
     assert_eq!(
-        SkillCatalog::with_budgets(vec![source_with_bytes("status", 1025)], budgets),
+        static_only(vec![source_with_bytes("status", 1025)], budgets),
         Err(SkillError::Limit("skill raw bytes"))
     );
     let mut definitions: Vec<_> = (0..4)
@@ -375,12 +376,12 @@ fn raw_skill_and_catalog_storage_budgets_refuse_atomically() {
         skill: 1025,
         ..budgets
     };
-    assert!(SkillCatalog::with_budgets(definitions.clone(), budgets).is_ok());
+    assert!(static_only(definitions.clone(), budgets).is_ok());
     definitions[3]
         .files
         .push(SkillFile::binary("overflow", Arc::<[u8]>::from(&b"x"[..])));
     assert_eq!(
-        SkillCatalog::with_budgets(definitions, budgets),
+        static_only(definitions, budgets),
         Err(SkillError::Limit("stored bytes"))
     );
 }
@@ -434,7 +435,7 @@ fn entry_and_combined_manifest_metadata_budgets() {
         ..ByteBudgets::DEFAULT
     };
     let definitions: Vec<_> = (0..4).map(|i| definition(&format!("skill-{i}"))).collect();
-    let catalog = SkillCatalog::with_budgets(definitions.clone(), budgets).unwrap();
+    let catalog = SkillCatalog::with_budgets(definitions.clone(), &[], budgets).unwrap();
     assert_eq!(
         catalog
             .entries
@@ -446,11 +447,351 @@ fn entry_and_combined_manifest_metadata_budgets() {
     assert_eq!(
         SkillCatalog::with_budgets(
             definitions,
+            &[],
             ByteBudgets {
                 metadata: budgets.metadata - 1,
                 ..budgets
             }
         ),
         Err(SkillError::Limit("catalog metadata bytes"))
+    );
+}
+
+fn page(catalog: &SkillCatalog, uri: &str, cursor: Option<&str>) -> Result<Value, RpcError> {
+    let mut params = json!({"uri":uri});
+    if let Some(cursor) = cursor {
+        params["cursor"] = json!(cursor);
+    }
+    match catalog.directory(&params)? {
+        DirectoryRoute::Page(page) => Ok(page),
+        DirectoryRoute::Consumer => panic!("static directories never reach the handler"),
+    }
+}
+
+fn names(page: &Value) -> Vec<(&str, &str)> {
+    page["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|child| {
+            (
+                child["name"].as_str().unwrap(),
+                child["mimeType"].as_str().unwrap(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn static_directory_reads_list_direct_children_with_file_metadata() {
+    let mut source = definition("status");
+    source
+        .files
+        .push(SkillFile::text("references/deep/NOTE.md", "n"));
+    source.files.push(SkillFile::text("references/a b.md", "x"));
+    let document_size = source.files[0].bytes.len();
+    let catalog = SkillCatalog::new(vec![source]).unwrap();
+    assert!(!catalog.directory_reads());
+    assert!(
+        catalog
+            .directory(&json!({"uri":"skill://acme/status"}))
+            .is_err()
+    );
+    let catalog = catalog.with_directory_reads().unwrap();
+    assert!(catalog.directory_reads());
+    let root = page(&catalog, "skill://acme/status", None).unwrap();
+    assert_eq!(
+        names(&root),
+        [
+            ("SKILL.md", "text/markdown"),
+            ("assets", "inode/directory"),
+            ("references", "inode/directory"),
+        ]
+    );
+    assert_eq!(root["resources"][0]["size"], document_size);
+    assert!(root["resources"][1].get("size").is_none());
+    assert!(root.get("nextCursor").is_none());
+    let references = page(&catalog, "skill://acme/status/references", None).unwrap();
+    assert_eq!(
+        names(&references),
+        [
+            ("GUIDE.md", "text/plain"),
+            ("a b.md", "text/plain"),
+            ("deep", "inode/directory"),
+        ]
+    );
+    assert_eq!(
+        references["resources"][1]["uri"],
+        "skill://acme/status/references/a%20b.md"
+    );
+    assert_eq!(
+        names(&page(&catalog, "skill://acme/status/references/deep", None).unwrap()),
+        [("NOTE.md", "text/plain")]
+    );
+    for params in [
+        json!({"uri":"skill://acme/status/SKILL.md"}),
+        json!({"uri":"skill://acme/status/"}),
+        json!({"uri":"skill://acme"}),
+        json!({"uri":"skill://acme/status/missing"}),
+        json!({"uri":"skill://acme/status","extra":1}),
+        json!({"uri":"skill://acme/status","cursor":7}),
+        json!({"uri":"skill://acme/status","_meta":{"progressToken":true}}),
+    ] {
+        assert_eq!(
+            catalog.directory(&params).err().map(|error| error.code),
+            Some(rpc::INVALID_PARAMS),
+            "{params}"
+        );
+    }
+}
+
+#[test]
+fn static_directory_pages_bind_cursors_to_their_directory_and_snapshot() {
+    let mut source = definition("status");
+    for i in 0..70 {
+        source
+            .files
+            .push(SkillFile::text(format!("many/{i:03}.md"), ""));
+    }
+    let catalog = SkillCatalog::new(vec![source.clone()])
+        .unwrap()
+        .with_directory_reads()
+        .unwrap();
+    let first = page(&catalog, "skill://acme/status/many", None).unwrap();
+    assert_eq!(first["resources"].as_array().unwrap().len(), 64);
+    let cursor = first["nextCursor"].as_str().unwrap();
+    let second = page(&catalog, "skill://acme/status/many", Some(cursor)).unwrap();
+    assert_eq!(second["resources"].as_array().unwrap().len(), 6);
+    assert!(second.get("nextCursor").is_none());
+    assert!(page(&catalog, "skill://acme/status", Some(cursor)).is_err());
+    assert!(page(&catalog, "skill://acme/status/many", Some("0")).is_err());
+    let first_page = cursor.rsplit_once(':').unwrap().0.to_owned() + ":0";
+    assert!(page(&catalog, "skill://acme/status/many", Some(&first_page)).is_err());
+    source.files.push(SkillFile::text("many/zzz.md", ""));
+    let changed = SkillCatalog::new(vec![source])
+        .unwrap()
+        .with_directory_reads()
+        .unwrap();
+    assert!(page(&changed, "skill://acme/status/many", Some(cursor)).is_err());
+}
+
+#[test]
+fn nested_static_roots_share_directories_and_refuse_file_directory_collisions() {
+    let inner = definition("status");
+    let mut files = vec![SkillFile::text(
+        "SKILL.md",
+        "---\nname: suite\ndescription: Acme suite.\n---\n",
+    )];
+    files.extend(inner.files.iter().map(|file| SkillFile {
+        path: format!("status/{}", file.path),
+        ..file.clone()
+    }));
+    let mut nested = inner.clone();
+    nested.root = "skill://acme/suite/status".into();
+    let catalog = SkillCatalog::new(vec![
+        SkillDefinition::new("skill://acme/suite", files),
+        nested,
+    ])
+    .unwrap()
+    .with_directory_reads()
+    .unwrap();
+    assert_eq!(
+        names(&page(&catalog, "skill://acme/suite", None).unwrap()),
+        [("SKILL.md", "text/markdown"), ("status", "inode/directory")]
+    );
+    assert_eq!(
+        names(&page(&catalog, "skill://acme/suite/status", None).unwrap()),
+        [
+            ("SKILL.md", "text/markdown"),
+            ("assets", "inode/directory"),
+            ("references", "inode/directory"),
+        ]
+    );
+    let mut collision = definition("status");
+    collision.files.push(SkillFile::text("references", "file"));
+    assert!(matches!(
+        SkillCatalog::new(vec![collision])
+            .unwrap()
+            .with_directory_reads(),
+        Err(SkillError::Conflict(_))
+    ));
+}
+
+fn dynamic(name: &str) -> DynamicSkill {
+    DynamicSkill::new(
+        format!("skill://acme/{name}"),
+        format!("---\nname: {name}\ndescription: Generated Acme report.\n---\nUnused body.\n"),
+    )
+}
+
+#[test]
+fn dynamic_entries_publish_frontmatter_and_route_reads_to_the_handler() {
+    let mut hidden = dynamic("hidden");
+    hidden.listed = false;
+    let catalog =
+        SkillCatalog::with_dynamic(vec![definition("status")], &[dynamic("report"), hidden])
+            .unwrap();
+    let list = catalog.query("skills/list", &json!({})).unwrap();
+    assert_eq!(list["skills"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        list["skills"][1],
+        json!({"uri":"skill://acme/report/SKILL.md","frontmatter":{"name":"report","description":"Generated Acme report."},"resources":"dynamic"})
+    );
+    assert_eq!(
+        catalog
+            .query("skills/get", &json!({"uri":"skill://acme/hidden/SKILL.md"}))
+            .unwrap()["skill"]["resources"],
+        "dynamic"
+    );
+    for (uri, consumer) in [
+        ("skill://acme/report/SKILL.md", true),
+        ("skill://acme/report/data/today.csv", true),
+        ("skill://acme/hidden/SKILL.md", true),
+        ("skill://acme/status/missing", false),
+    ] {
+        assert_eq!(
+            matches!(catalog.route(uri), Some(Route::Consumer)),
+            consumer,
+            "{uri}"
+        );
+    }
+    assert!(matches!(
+        catalog.route("skill://acme/status/missing"),
+        Some(Route::Missing)
+    ));
+    assert!(catalog.route("skill://acme/reporting/SKILL.md").is_none());
+    assert!(catalog.dynamic_document("skill://acme/report/SKILL.md"));
+    assert!(!catalog.dynamic_document("skill://acme/status/SKILL.md"));
+    assert!(matches!(
+        catalog.directory(&json!({"uri":"skill://acme/report/data"})),
+        Ok(DirectoryRoute::Consumer)
+    ));
+    let listing = catalog
+        .compose(None)
+        .unwrap()
+        .listing(&json!({}), false)
+        .unwrap();
+    let descriptors = listing["resources"].as_array().unwrap();
+    assert_eq!(descriptors.len(), 2);
+    assert_eq!(descriptors[1]["uri"], "skill://acme/report/SKILL.md");
+    assert!(descriptors[1].get("size").is_none());
+}
+
+#[test]
+fn dynamic_skills_refuse_nesting_duplicates_and_invalid_documents() {
+    let nested_static = || {
+        let mut source = definition("status");
+        source.root = "skill://acme/report/status".into();
+        source
+    };
+    let mut inner_dynamic = dynamic("live");
+    inner_dynamic.root = "skill://acme/status/live".into();
+    let mut deeper_dynamic = dynamic("deeper");
+    deeper_dynamic.root = "skill://acme/report/deeper".into();
+    let mut renamed = dynamic("report");
+    renamed.root = "skill://acme/other".into();
+    let mut duplicate = dynamic("status");
+    duplicate.root = "skill://acme/status".into();
+    for (definitions, generated) in [
+        (vec![definition("status")], vec![inner_dynamic]),
+        (vec![nested_static()], vec![dynamic("report")]),
+        (vec![], vec![dynamic("report"), deeper_dynamic]),
+        (vec![definition("status")], vec![duplicate]),
+        (vec![], vec![dynamic("report"), dynamic("report")]),
+        (vec![], vec![renamed]),
+        (
+            vec![],
+            vec![DynamicSkill::new("skill://acme/report", "no frontmatter")],
+        ),
+    ] {
+        assert!(
+            SkillCatalog::with_dynamic(definitions, &generated).is_err(),
+            "nested, duplicate or invalid dynamic skills must refuse"
+        );
+    }
+}
+
+#[test]
+fn dynamic_documents_must_match_their_published_frontmatter() {
+    let catalog = SkillCatalog::with_dynamic(vec![], &[dynamic("report")]).unwrap();
+    let uri = "skill://acme/report/SKILL.md";
+    let read = |contents: Vec<ResourceContents>| ReadResourceResult::new(contents).unwrap();
+    let text = |uri: &str, text: &str| {
+        ResourceContents::text(uri, Some("text/markdown".into()), text).unwrap()
+    };
+    let reordered = "---\ndescription: Generated Acme report.\nname: report\n---\nToday's body.\n";
+    assert_eq!(
+        catalog.check_read(uri, &read(vec![text(uri, reordered)])),
+        Ok(())
+    );
+    for result in [
+        read(vec![text(
+            uri,
+            "---\nname: report\ndescription: Changed.\n---\n",
+        )]),
+        read(vec![text(uri, "no frontmatter")]),
+        read(vec![text("skill://acme/report/OTHER.md", reordered)]),
+        read(vec![text(uri, reordered), text(uri, reordered)]),
+        read(vec![
+            ResourceContents::blob(uri, None, reordered.as_bytes()).unwrap(),
+        ]),
+    ] {
+        assert!(matches!(
+            catalog.check_read(uri, &result),
+            Err(SkillError::Reply(_))
+        ));
+    }
+    let data = "skill://acme/report/data.csv";
+    assert_eq!(
+        catalog.check_read(data, &read(vec![text(data, "x")])),
+        Ok(())
+    );
+}
+
+#[test]
+fn dynamic_directory_listings_contain_only_distinct_direct_children() {
+    let catalog =
+        SkillCatalog::with_dynamic(vec![definition("status")], &[dynamic("report")]).unwrap();
+    let listing = |uris: &[&str]| {
+        crate::ReadDirectoryResult::new(
+            uris.iter()
+                .map(|uri| Resource::new(*uri, "child"))
+                .collect(),
+            None,
+        )
+        .unwrap()
+    };
+    let root = "skill://acme/report";
+    assert_eq!(
+        catalog.check_directory(
+            root,
+            &listing(&["skill://acme/report/SKILL.md", "skill://acme/report/data"])
+        ),
+        Ok(())
+    );
+    assert_eq!(
+        catalog.check_directory(
+            "skill://acme/report/data",
+            &listing(&["skill://acme/report/data/today.csv"])
+        ),
+        Ok(())
+    );
+    for children in [
+        &["skill://acme/report/data/today.csv"][..],
+        &["skill://acme/other"],
+        &["skill://acme/report/"],
+        &["skill://acme/report/a%2Fb"],
+        &["skill://acme/report/%2E%2E"],
+        &["skill://acme/report/x", "skill://acme/report/x"],
+    ] {
+        assert!(
+            catalog.check_directory(root, &listing(children)).is_err(),
+            "{children:?}"
+        );
+    }
+    assert!(
+        catalog
+            .check_directory("skill://acme/status", &listing(&[]))
+            .is_err()
     );
 }

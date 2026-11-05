@@ -64,11 +64,37 @@ struct Job {
     holds_key: bool,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum ReplyKind {
     Ordinary,
     Prompt,
     Completion,
+    /// A handler read of a dynamic skill's `SKILL.md`, checked against its entry.
+    SkillDocument(Arc<crate::SkillCatalog>, String),
+    /// A handler listing inside a dynamic skill namespace.
+    SkillDirectory(Arc<crate::SkillCatalog>, String),
+}
+
+impl ReplyKind {
+    fn of(request: &Request, session: &Session) -> Self {
+        match request {
+            Request::Prompt(_) => Self::Prompt,
+            Request::Completion(_) => Self::Completion,
+            Request::Method { method, params } => {
+                let uri = params["uri"].as_str().unwrap_or_default();
+                match session.skills() {
+                    Some(skills) if method == "resources/directory/read" => {
+                        Self::SkillDirectory(Arc::clone(skills), uri.to_owned())
+                    }
+                    Some(skills) if method == "resources/read" && skills.dynamic_document(uri) => {
+                        Self::SkillDocument(Arc::clone(skills), uri.to_owned())
+                    }
+                    _ => Self::Ordinary,
+                }
+            }
+            _ => Self::Ordinary,
+        }
+    }
 }
 
 struct Assignment {
@@ -282,11 +308,7 @@ impl Scheduler {
             queued: trace.span(Stage::Queue),
             meta: Meta {
                 trace,
-                reply_kind: match &request {
-                    Request::Prompt(_) => ReplyKind::Prompt,
-                    Request::Completion(_) => ReplyKind::Completion,
-                    _ => ReplyKind::Ordinary,
-                },
+                reply_kind: ReplyKind::of(&request, session),
                 result_schema: match &request {
                     Request::Tool(call) => session.catalog().result_schema(&call.name),
                     _ => None,
@@ -927,7 +949,7 @@ impl Scheduler {
                 });
                 let assignment = Assignment {
                     trace: job.meta.trace.clone(),
-                    reply_kind: job.meta.reply_kind,
+                    reply_kind: job.meta.reply_kind.clone(),
                     result_schema: job.meta.result_schema.clone(),
                     request_context: job.meta.request_context.clone(),
                     grant: job.meta.grant.clone(),
@@ -1042,7 +1064,7 @@ fn work<H: Handler>(
                     Work::ElicitResume(resume, answer) => resume(answer, &context),
                 }
             };
-            let outcome = checked_outcome(assignment.reply_kind, outcome);
+            let outcome = checked_outcome(&assignment.reply_kind, outcome);
             let outcome = match outcome {
                 Outcome::Confirm(confirm) if context.protocol.is_some() => {
                     let _handler = assignment
@@ -1055,7 +1077,10 @@ fn work<H: Handler>(
             let _validation = assignment
                 .trace
                 .span_with_parent(Stage::Validation, Stage::Worker);
-            let outcome = checked_outcome(assignment.reply_kind, outcome);
+            let outcome = checked_skill_reply(
+                &assignment.reply_kind,
+                checked_outcome(&assignment.reply_kind, outcome),
+            );
             match (&context.result_schema, outcome) {
                 (Some(schema), Outcome::Tool(result)) if context.protocol.is_none() => match schema
                     .validate_checked(&result, false, &|| context.check())
@@ -1080,6 +1105,7 @@ fn work<H: Handler>(
                     | Outcome::ResourceWithCache(..)
                     | Outcome::Prompt(_)
                     | Outcome::Completion(_)
+                    | Outcome::Directory(_)
                     | Outcome::Bundled(_),
                 ) => Outcome::Method(Err(RpcError::new(
                     rpc::INTERNAL_ERROR,
@@ -1114,11 +1140,10 @@ fn work<H: Handler>(
     }
 }
 
-fn checked_outcome(kind: ReplyKind, outcome: Outcome) -> Outcome {
+fn checked_outcome(kind: &ReplyKind, outcome: Outcome) -> Outcome {
     let valid = matches!(
-        (&kind, &outcome),
+        (kind, &outcome),
         (_, Outcome::Method(Err(_)) | Outcome::Task(Err(_)))
-            | (ReplyKind::Ordinary, _)
             | (
                 ReplyKind::Prompt,
                 Outcome::Prompt(_)
@@ -1127,7 +1152,21 @@ fn checked_outcome(kind: ReplyKind, outcome: Outcome) -> Outcome {
                     | Outcome::InputRequired(_),
             )
             | (ReplyKind::Completion, Outcome::Completion(_))
-    );
+            | (
+                ReplyKind::SkillDocument(..),
+                Outcome::Resource(_)
+                    | Outcome::ResourceWithCache(..)
+                    | Outcome::ResourceNotFound(_)
+                    | Outcome::Confirm(_)
+                    | Outcome::Elicit(_)
+                    | Outcome::InputRequired(_),
+            )
+            | (
+                ReplyKind::SkillDirectory(..),
+                Outcome::Directory(_) | Outcome::ResourceNotFound(_),
+            )
+    ) || matches!(kind, ReplyKind::Ordinary)
+        && !matches!(outcome, Outcome::Directory(_));
     if valid {
         return outcome;
     }
@@ -1135,9 +1174,38 @@ fn checked_outcome(kind: ReplyKind, outcome: Outcome) -> Outcome {
         rpc::INTERNAL_ERROR,
         match kind {
             ReplyKind::Completion => "Completion requires a typed complete result",
-            _ => "Prompt retrieval requires a typed prompt result",
+            ReplyKind::Prompt => "Prompt retrieval requires a typed prompt result",
+            ReplyKind::SkillDocument(..) => "Dynamic SKILL.md requires a typed resource result",
+            ReplyKind::SkillDirectory(..) => "Directory reads require a typed directory result",
+            ReplyKind::Ordinary => "Directory results answer only directory reads",
         },
     )))
+}
+
+/// Refuses dynamic skill replies a host would reject: a `SKILL.md` whose
+/// frontmatter differs from its entry, or a malformed directory listing.
+/// Input steps pass; the reply that ends the request is checked.
+fn checked_skill_reply(kind: &ReplyKind, outcome: Outcome) -> Outcome {
+    let checked = match (kind, &outcome) {
+        (
+            ReplyKind::SkillDocument(skills, uri),
+            Outcome::Resource(result) | Outcome::ResourceWithCache(result, _),
+        ) => skills.check_read(uri, result),
+        (ReplyKind::SkillDirectory(skills, uri), Outcome::Directory(result)) => {
+            skills.check_directory(uri, result)
+        }
+        _ => Ok(()),
+    };
+    match checked {
+        Ok(()) => outcome,
+        Err(error) => Outcome::Method(Err(RpcError::new(
+            rpc::INTERNAL_ERROR,
+            match error {
+                crate::SkillError::Reply(reason) => reason,
+                _ => "Invalid dynamic skill reply",
+            },
+        ))),
+    }
 }
 
 fn settle(
@@ -1193,6 +1261,7 @@ fn settle(
         },
         Ok(Outcome::Resource(result)) => encoded(id, &result, limit, context, trace),
         Ok(Outcome::Bundled(read)) => encoded(id, read.result(), limit, context, trace),
+        Ok(Outcome::Directory(result)) => encoded(id, &result, limit, context, trace),
         Ok(Outcome::ResourceWithCache(result, policy)) => {
             encoded_with_cache(id, &result, limit, context, Some(policy), trace)
         }

@@ -439,7 +439,9 @@ impl ScopePolicy for Policy {
                 }
                 scopes
             }
-            ("resources/read", Some(uri)) if uri.starts_with("acme://secret/") => {
+            ("resources/read" | "resources/directory/read", Some(uri))
+                if uri.starts_with("acme://secret/") =>
+            {
                 vec!["acme:secret".to_owned()]
             }
             ("notifications/acme/deployed", None) => vec!["acme:write".to_owned()],
@@ -504,6 +506,17 @@ fn scope_policies_name_every_required_scope_at_once() {
     assert_eq!(
         server
             .check_scopes(&secret, &reader, &Policy)
+            .unwrap_err()
+            .status,
+        403
+    );
+    let folder = admitted(
+        "resources/directory/read",
+        json!({"uri": "acme://secret/reports"}),
+    );
+    assert_eq!(
+        server
+            .check_scopes(&folder, &reader, &Policy)
             .unwrap_err()
             .status,
         403

@@ -538,7 +538,68 @@ impl ReadResourceResult {
     }
 }
 
+/// MIME type that marks a directory resource.
+pub const DIRECTORY_MIME_TYPE: &str = "inode/directory";
+/// Maximum opaque cursor length in a directory listing.
+pub const MAX_CURSOR_BYTES: usize = 1024;
+
+/// One validated page of a directory's direct children, for `resources/directory/read`.
+/// Child directories carry [`DIRECTORY_MIME_TYPE`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadDirectoryResult {
+    pub(crate) resources: Vec<Resource>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) next_cursor: Option<String>,
+}
+
+impl ReadDirectoryResult {
+    /// Validates each child like a [`ResourceLink`], the page size and the cursor.
+    ///
+    /// # Errors
+    /// Returns [`ResourceError`] for invalid children, more than [`MAX_ENTRIES`]
+    /// children, an empty or oversized cursor, or an encoding above [`MAX_BYTES`].
+    pub fn new(
+        resources: Vec<Resource>,
+        next_cursor: Option<String>,
+    ) -> Result<Self, ResourceError> {
+        if resources.len() > MAX_ENTRIES {
+            return Err(ResourceError::Limit("directory entries"));
+        }
+        for resource in &resources {
+            ResourceLink::new(resource.clone())?;
+        }
+        if let Some(cursor) = &next_cursor
+            && (cursor.is_empty() || cursor.len() > MAX_CURSOR_BYTES || cursor.contains('\0'))
+        {
+            return Err(ResourceError::Field("nextCursor"));
+        }
+        let result = Self {
+            resources,
+            next_cursor,
+        };
+        json::measure(&result, MAX_BYTES, &|| Ok(()))
+            .map_err(|_| ResourceError::Limit("directory bytes"))?;
+        Ok(result)
+    }
+
+    /// The children on this page.
+    #[must_use]
+    pub fn resources(&self) -> &[Resource] {
+        &self.resources
+    }
+}
+
 impl ResourceContents {
+    pub(crate) fn uri(&self) -> &str {
+        &self.uri
+    }
+    pub(crate) fn text_value(&self) -> Option<&str> {
+        match &self.data {
+            Data::Text { text } => Some(text),
+            Data::Blob { .. } => None,
+        }
+    }
     /// Attaches immutable metadata to these contents.
     #[must_use]
     pub fn with_metadata(mut self, meta: crate::Metadata) -> Self {

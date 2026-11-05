@@ -14,6 +14,8 @@ grant permission to run code.
 The complete [skills example](../../examples/skills.rs) exposes `acme_status`
 and a workflow at `skill://acme/status/SKILL.md`, with a format reference and
 an SVG served as binary content. All three files are embedded at compilation.
+It also publishes a generated `skill://acme/queue` workflow and serves
+directory reads; see [Publish generated skills](#publish-generated-skills).
 From the library package, run:
 
 ```sh
@@ -109,7 +111,7 @@ numbers and numbers that lose precision in the JSON representation.
 | Files per skill | 512, including root and nested content |
 | Raw bytes per skill | 16 MiB |
 | Raw bytes per file | 1 MiB |
-| Skills per catalog | 128, including unlisted entries |
+| Skills per catalog | 128, including unlisted and dynamic entries |
 | Distinct files / stored raw bytes | 4096 / 64 MiB |
 | Encoded entry / combined entries | 256 KiB / 8 MiB |
 | List page | At most 32 whole entries and 1 MiB including modern result metadata |
@@ -124,7 +126,111 @@ internal error. Manifests are never split or truncated.
 Pagination uses `nextCursor` unchanged on the next `skills/list` call. Cursors
 bind to prepared catalog content; invalid, cross-kind or stale cursors return
 `-32602`. Unknown skills and unknown modern resource reads also return `-32602`.
-Directory reads and dynamic manifests are not implemented.
+
+## Serve directory reads
+
+Directory reads let a host browse a skill's files one level at a time, without
+reading the manifest first. Enable them on the finished catalog:
+
+```rust,ignore
+let skills = SkillCatalog::new(definitions)?.with_directory_reads()?;
+```
+
+`server/discover` then declares
+`{"io.modelcontextprotocol/skills":{"directoryRead":true}}`, and
+`resources/directory/read` accepts any directory in a skill namespace:
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"resources/directory/read","params":{"uri":"skill://acme/status/references","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}
+```
+
+The result lists the directory's direct children in URI order: files with their
+name, MIME type and size, and subdirectories with `mimeType: "inode/directory"`.
+Directory URIs have no trailing slash; the skill root is a directory too. Pages
+hold up to 64 children; pass `nextCursor` back as `cursor` for the next page.
+Static pages carry the Skills cache policy (`skills_cache`). Listings are prepared once, when you call
+`with_directory_reads`, so requests do no path work.
+
+`with_directory_reads` returns `SkillError::Limit` above 4096 directories and
+`SkillError::Conflict` when one path is both a file and a directory (for
+example, files named `references` and `references/GUIDE.md`). A file URI, an
+unknown path, an address outside every skill namespace or a cursor from another
+directory returns `-32602`. Without `with_directory_reads` the method returns
+`-32601`; legacy revisions never serve it. A listing does not extend the
+manifest; hosts take digests only from `skills/list` and `skills/get`.
+
+## Publish generated skills
+
+Use a dynamic skill when its content is generated on request, such as a
+workflow that embeds live queue state, so stable digests cannot be published.
+Publish anything with stable bytes as a static skill instead: hosts can verify
+static files, and some hosts decline dynamic skills.
+
+Supply the root and a `SKILL.md` whose frontmatter the entry publishes; its
+body is never served:
+
+```rust,ignore
+use canonic_mcp_kit::DynamicSkill;
+
+const QUEUE: &str = "---\nname: queue\ndescription: Review the items waiting in the Acme queue.\n---\n";
+let skills = SkillCatalog::with_dynamic(static_definitions, &[
+    DynamicSkill::new("skill://acme/queue", QUEUE),
+])?
+.with_directory_reads()?;
+```
+
+The entry is `{"uri":"skill://acme/queue/SKILL.md","frontmatter":{...},"resources":"dynamic"}`
+in both `skills/list` and `skills/get`. Static entries come first in the
+listing. Set `listed` to `false` for URI-only discovery, as for static skills.
+A dynamic root cannot contain or sit inside another skill root; construction
+returns `SkillError::Conflict`.
+
+Your handler serves everything under the dynamic root. Reads arrive as
+`Request::Method` with `resources/read`, and directory reads as
+`Request::Method` with `resources/directory/read`:
+
+```rust,ignore
+Request::Method { method, params } => {
+    let uri = params["uri"].as_str().unwrap_or_default();
+    let answer = if method == "resources/directory/read" {
+        queue_directory(uri).map(Outcome::Directory)
+    } else {
+        queue_file(uri).map(Outcome::Resource)
+    };
+    answer.unwrap_or_else(|| Outcome::ResourceNotFound(uri.into()))
+}
+```
+
+Build listings with `ReadDirectoryResult::new(children, next_cursor)`. It
+validates each child like a resource link and refuses more than 1024 children,
+an encoding above 1 MiB, or an empty or oversized cursor. Mark child
+directories with `resource::DIRECTORY_MIME_TYPE`. The cursor is yours to define;
+the host sends it back unchanged.
+
+The driver checks your replies before sending them, because hosts compare the
+served `SKILL.md` with the entry and refuse the skill on any difference:
+
+| Reply | Requirement | Otherwise |
+| --- | --- | --- |
+| `SKILL.md` read | One text content at that URI; its frontmatter equals the entry's. The body, key order and YAML spelling may change | Internal error: `SKILL.md frontmatter does not match its entry` |
+| Directory listing | `Outcome::Directory` whose children are distinct direct children of the requested URI | Internal error: `listing entries must be distinct direct children` |
+| Unknown path | `Outcome::ResourceNotFound` | — (returns `-32602`) |
+| `Outcome::Directory` for any other request | Not allowed | Internal error |
+
+A dynamic file read may ask the host for input first, like any consumer read:
+return `Outcome::InputRequired` (see [Modern confirmation retries](#modern-confirmation-retries))
+or a legacy `Outcome::Confirm` or `Outcome::Elicit`. The check applies to the
+reply that ends the request. Bundled files never ask for input, so a bundled
+read that carries `requestState` or `inputResponses` returns `-32602`.
+
+Generated files and listings are consumer reads, so they carry the
+`reads_cache` policy rather than `skills_cache`. Return
+`Outcome::ResourceWithCache` to choose a file's policy explicitly.
+
+Other files under the root are returned as you supply them. Directory reads
+of a dynamic skill need `with_directory_reads`, like static ones. Hosts get no
+integrity guarantee for generated content and must not treat an earlier
+approval as covering it; say so in your server's documentation.
 
 ## Protocols, context and caching
 
@@ -133,8 +239,9 @@ configuration is refused before stdio threads start; another runtime should use
 `Session::try_new`. Modern requests carry their own revision and client
 capabilities and work without a handshake or prior discovery call.
 `server/discover` publishes the enabled protocol revisions, resources and
-`io.modelcontextprotocol/skills` extension. Its declaration does not establish
-that a particular host supports skill activation.
+`io.modelcontextprotocol/skills` extension, with `directoryRead` when enabled.
+Its declaration does not establish that a particular host supports skill
+activation.
 
 Both legacy revisions remain supported. They use initialization, omit Skills
 from capabilities and refuse `skills/*`; the bundled files remain ordinary
@@ -174,7 +281,10 @@ operation or capability, or the encoder's overflow/interruption error.
 `Inbound::BundledResource` carries a shared `BundledRead::result()`. Schedule it
 as read-only work, propagate cancellation and emit its bounded reply only if
 `Session::finish` succeeds. Immediate `Inbound::Reply` values are already
-revision-correct. See [Drive the session yourself](session.md).
+revision-correct, including static directory pages. Dynamic reads and
+directory reads arrive as `Inbound::Method`; check your result with
+`SkillCatalog::check_read(uri, &result)` or `check_directory(uri, &listing)`
+before encoding it, as the shared driver does. See [Drive the session yourself](session.md).
 
 ## Modern confirmation retries
 
