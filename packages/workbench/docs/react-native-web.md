@@ -5,9 +5,7 @@ browser through [React Native Web](https://necolas.github.io/react-native-web/),
 with the preview's inputs as its props. Use it to review shared components and
 screens at real device widths, next to their designs, without building the app.
 
-It shows the web rendering, which can differ from iOS and Android. To review
-the native app itself, stream it from the [iOS Simulator](ios-simulator.md) or
-an [app window](windows.md), such as an Android emulator.
+It shows the web rendering, which can differ from iOS and Android.
 
 The adapter works like the [React adapter](react.md), with three differences:
 imports of `react-native` load `react-native-web`, `.web.*` files are
@@ -298,8 +296,7 @@ navigator or a mock that implements those hooks.
 ### Safe areas and device dimensions
 
 Choose the same logical width and height as the device you are comparing with,
-using the [Resizable artboard](canvas.md#artboard-sizes) when needed. A Simulator image's
-pixel dimensions can be larger than the device's logical dimensions. The
+using the [Resizable artboard](canvas.md#artboard-sizes) when needed. The
 `mobile` size is a preset, not a simulation of every phone model.
 
 If the app uses `react-native-safe-area-context`, supply its contexts in the
@@ -354,11 +351,6 @@ Even with the app shell, React Native Web renders the web platform:
 - Fonts, text wrapping, scrolling, and native controls can differ. Load the
   project's web fonts and compare at the same logical size and theme.
 - Native menus, keyboards, system bars, and gestures need the native runtime.
-
-Use the [iOS Simulator lens](ios-simulator.md) or an
-[Android emulator window](windows.md) to review those differences alongside
-the browser preview. Check the native screen itself for missing safe-area
-handling before adding preview-only padding to make it look correct.
 
 ## Replace native-only modules
 

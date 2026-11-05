@@ -19,11 +19,9 @@ Selecting Workbench or running **Workbench: Open Canvas** opens the tab
 immediately. It shows **Opening Workbench** while its server starts and the
 editor connects to it. Configured services, such as Storybook, start alongside
 Workbench; their readiness checks do not delay opening the canvas. The page
-list refreshes when those checks finish. The sidebar shows which catalogs it
-is waiting for, or
-**Finding previews…** during preview discovery. Search becomes available when
-the list is ready. The canvas shows **Loading pages…** while reading its
-catalogs. Preview loads show **Loading preview…** after 200 ms if still pending.
+list refreshes when those checks finish. The sidebar shows that it is finding
+pages during preview discovery. Search becomes available when the list is
+ready. The canvas shows **Loading pages…** while reading its pages. Preview loads show **Loading preview…** after 200 ms if still pending.
 Later page changes mark the sidebar immediately and keep the previous preview
 visible for up to 200 ms; a ready replacement appears immediately.
 
@@ -133,9 +131,6 @@ runtime for linux-x64."), a design-system export lists the missing reference
 screenshots as warnings, and the canvas shows placeholders for artboards you
 aren't running.
 
-The [iOS Simulator](ios-simulator.md) and [app window](windows.md) streams use
-a separate native window capture helper and need Screen Recording permission.
-
 ## The preview compiler
 
 The server compiles [TypeScript previews](workbench-previews.md) and
@@ -189,7 +184,7 @@ Outside the project:
 - The camera's screenshots go to your browser's or editor's downloads folder.
 - The bundled Node and browser runtime are unpacked into
   `~/.canonic-workbench/runtime/`.
-- The browser runtime's page profiles and the window capture helper go into
+- The browser runtime's page profiles go into
   the extension's storage in your editor's user data folder (`globalStorage`).
   A standalone server uses the system's temporary folder instead.
 - The log is kept by VS Code. See [Logs](#logs).
@@ -262,7 +257,7 @@ What works where:
 | | VS Code, or **Open Canvas in Browser** | `server/node/server.js` in a browser |
 | --- | --- | --- |
 | Pages, scenarios, sizes, zoom | Yes | Yes |
-| Lenses, including Simulator and window streams | Yes | Yes |
+| Lenses | Yes | Yes |
 | TypeScript previews | Yes | Yes |
 | Docs and their examples | Yes | Yes |
 | Annotations and camera | Yes | Yes |
@@ -280,8 +275,6 @@ workspaces (SSH, containers, WSL), and other platforms have had less
 validation. A remote workspace runs the extension on the remote machine, so
 install the `.vsix` built for that machine's platform, and on a Linux host
 without a display, screenshots aren't available. Browser-only VS Code, such as
-vscode.dev, can't run the local server or helper. The
-[iOS Simulator](ios-simulator.md) and [app window](windows.md) lenses need
-macOS.
+vscode.dev, can't run the local server or browser runtime.
 
 Release builds are unsigned.

@@ -48,8 +48,7 @@ previews supply the pages. See
   through `html[data-wb-scenario]`. See
   [Pages and scenarios](https://canonic.sh/workbench/docs/pages-and-scenarios/).
 - **Implementations**, shown as lenses next to a page's design: Storybook
-  stories, URLs on a dev server or staging, the iOS Simulator, or a macOS app
-  window. See [Lenses](https://canonic.sh/workbench/docs/lenses/).
+  stories or URLs on a dev server or staging. See [Lenses](https://canonic.sh/workbench/docs/lenses/).
 
 ## Features
 

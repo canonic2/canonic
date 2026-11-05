@@ -106,9 +106,8 @@ no other references.
 
 Capture runs as a background job with a progress bar over the canvas. It uses
 up to four renderers in parallel and doesn't change what the canvas shows. A
-screenshot that fails, or a page that can't be captured, such as an
-[iOS Simulator](ios-simulator.md) page or one whose design file is missing,
-is listed under `captureWarnings` in `canonic-export.json`, and the rest of the
+screenshot that fails, or a page that can't be captured, such as one whose
+design file is missing, is listed under `captureWarnings` in `canonic-export.json`, and the rest of the
 export continues. When the download finishes, a message gives the total
 number of export warnings, covering unresolved sources, screenshots and portable
 preview builds.

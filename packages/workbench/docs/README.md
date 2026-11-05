@@ -8,8 +8,7 @@ of them for a coding agent.
 
 A project's configuration is `workbench.yaml` at the project root. Pages can
 come from HTML design pages you list there, from Markdown pages with live
-examples, from TypeScript previews of your own components, or from a
-Simulator catalog. A page can also be mapped to a Storybook story, and any page
+examples, or from TypeScript previews of your own components. A page can also be mapped to a Storybook story, and any page
 can have Markdown docs as a lens. The tool ships inside
 the extension; in your project it writes only handoff screenshots and the
 collections you edit with **Configure pages**. See
@@ -45,9 +44,6 @@ collections you edit with **Configure pages**. See
 | --- | --- |
 | [Lenses and URL implementations](lenses.md) | Compare a design with previews or a dev, staging, or live website; customize every lens label, point at its code, and start the server automatically |
 | [Storybook](storybook.md) | Map pages to stories, or import a whole Storybook as the workbench |
-| [iOS Simulator](ios-simulator.md) | Stream and drive a booted Simulator on the canvas |
-| [App windows](windows.md) | Stream a window from any macOS app, such as an Android emulator |
-
 ## Reference
 
 | Guide | Contents |

@@ -3,7 +3,7 @@
 export const docGroups = [
   { title: 'Getting started', ids: ['index', 'getting-started', 'pages-and-scenarios', 'docs-pages', 'canvas', 'annotations-and-handoff', 'spaces'] },
   { title: 'Previews', ids: ['workbench-previews', 'preview-data', 'react', 'react-native-web', 'vue', 'astro', 'html', 'custom-adapters'] },
-  { title: 'Connect your implementation', ids: ['lenses', 'storybook', 'ios-simulator', 'windows'] },
+  { title: 'Connect your implementation', ids: ['lenses', 'storybook'] },
   { title: 'Reference', ids: ['configuration', 'design-system-export', 'extension', 'troubleshooting'] },
 ];
 

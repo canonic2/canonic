@@ -55,7 +55,7 @@ Use **Workbench: Copy Canvas URL** for the actual port. The answer includes:
 - `files`: whether `workbench.yaml` (`main`) and `workbench.local.yaml`
   (`local`) were read.
 
-Read `problems` first whenever a lens, story, preview, catalog page, docs
+Read `problems` first whenever a lens, story, preview, docs
 example, or source link is missing, or a hand-written page was dropped; see
 [A page is missing from the list](#a-page-is-missing-from-the-list).
 
@@ -79,7 +79,7 @@ curl -s "http://127.0.0.1:3579/_workbench/stories?implementation=storybook&title
 ### Other places
 
 - **The Workbench log.** Run **Workbench: Show Log** for screenshot, server,
-  handoff, preview compiler, Simulator, and window stream errors. For slow
+  handoff, and preview compiler errors. For slow
   TypeScript previews, `preview.request.completed` events give the time the
   server spent compiling and serving each request (`workMs`), and
   `preview.browser.phase` events time setup, mounting,
@@ -131,8 +131,8 @@ name each one and why. The usual reasons:
 - Its collection (its `collections` entry) has no `name`.
 
 HTML pages aren't scanned for. A page that isn't listed in `workbench.yaml`
-isn't shown, except for pages imported by a [catalog](configuration.md#catalogs)
-and the previews and docs pages that `*.workbench.ts` files define.
+isn't shown, except for the previews and docs pages that `*.workbench.ts`
+files define.
 
 ## A page is blank or shows a 404
 
@@ -318,11 +318,6 @@ own** works while you fix the app.
 ## Storybook problems
 
 See [Storybook troubleshooting](storybook.md#troubleshooting).
-
-## Simulator and window streams
-
-See [iOS Simulator troubleshooting](ios-simulator.md#troubleshooting) and
-[App window troubleshooting](windows.md#troubleshooting).
 
 ## Screenshots look wrong
 

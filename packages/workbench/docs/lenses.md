@@ -5,16 +5,13 @@ A design page is one picture of something that also exists as code. A
 same size, with your annotations over it. Switch between them to compare the
 design with what was built, then hand the difference to an agent.
 
-There are six kinds of implementation:
+There are four kinds of implementation:
 
 | Kind | Shows | Guide |
 | --- | --- | --- |
 | `url` | A page from any web server: your dev server, a preview deployment, staging | This page |
 | `workbench` | A named TypeScript preview from this project | [Workbench previews](workbench-previews.md) |
-| `storybook` | One Storybook story, without Storybook's own interface | [Storybook](storybook.md) |
-| `ios-simulator` | A live, interactive stream of a booted iOS Simulator | [iOS Simulator](ios-simulator.md) |
-| `window` | A live stream of a window from any macOS app, such as an Android emulator | [App windows](windows.md) |
-| `docs` | A page's docs, with their examples rendered by an adapter such as React or React Native Web | [Docs](docs-pages.md#lenses) |
+| `storybook` | One Storybook story, without Storybook's own interface | [Storybook](storybook.md) || `docs` | A page's docs, with their examples rendered by an adapter such as React or React Native Web | [Docs](docs-pages.md#lenses) |
 
 This page covers how lenses work in general, how to set up a `url`
 implementation, and how to point a design page at a
@@ -27,8 +24,7 @@ top bar: the page's [docs lenses](#docs-lenses) first, then the authored page,
 then one button per implementation the page has. The authored page's button
 defaults to **Design**. On a page whose `src` is a `.workbench.ts` or
 `.workbench.tsx` file, it defaults to **Preview** instead. The switcher shows
-only when there are two or more lenses to choose from, so a page imported from
-a single catalog, with no design, has none.
+only when there are two or more lenses to choose from.
 
 - **A page opens on its default lens:** its first docs lens when it has docs,
   otherwise the authored page.

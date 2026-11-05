@@ -117,7 +117,7 @@ In VS Code, the page list is one stop in the tab order. **Up** and **Down**
 move through its groups, pages, and scenarios, **Right** expands a group or page,
 **Left** collapses it, **Home** and **End** jump to the first and last, and
 **Enter** or **Space** shows the focused page or scenario. The problems list,
-above the page list, shows problems importing a catalog or TypeScript previews.
+above the page list, shows problems importing TypeScript previews.
 
 In a standalone browser, ⌘K or Ctrl+K jumps to search. Drag the sidebar's edge
 to resize it, focus the edge and use the arrow keys, or double-click it to
@@ -354,4 +354,4 @@ The canvas also works in a regular browser:
 
 In a browser, the sidebar is on the left of the page, browser shortcuts and
 menus work normally, and the camera downloads screenshots. Problems importing
-a catalog or TypeScript previews are listed only in VS Code's sidebar.
+TypeScript previews are listed only in VS Code's sidebar.

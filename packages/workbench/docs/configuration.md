@@ -20,7 +20,6 @@ to be the top of an open folder; see
 - [A page's implementations](#a-pages-implementations)
 - [Code pointers](#code-pointers)
 - [Start commands](#start-commands)
-- [Catalogs](#catalogs)
 - [Spaces](#spaces)
 - [Local overrides](#local-overrides)
 - [YAML that the reader accepts](#yaml-that-the-reader-accepts)
@@ -127,13 +126,13 @@ collections:
 | `name` | string | no | Titles the sidebar and the browser tab in a standalone browser, names the space in the [space switcher](spaces.md), and names [design-system exports](design-system-export.md). The canvas defaults to `Workbench`, and the switcher and exports to the space's folder name. In VS Code, the canvas tab is always *Workbench*. |
 | `color` | string | no | The space's color in the [space switcher](spaces.md#name-color-and-icon): `blue`, `green`, `orange`, `purple`, `pink`, `teal`, `red`, `yellow`, `gray`, or a hex value such as `"#2f7d55"`. Quote a hex value. Defaults to a color chosen from the space's folder. |
 | `icon` | string | no | The space's icon in the switcher: a [Lucide](https://lucide.dev/icons/) icon name such as `rocket`, or a project-relative `.svg`, `.png`, `.jpg`, `.webp`, or `.gif` file of at most 256 KB, such as `brand/logo.svg`. Defaults to the first letter of `name`. |
-| `collections` | list of [collections](#collections) | no, unless `previews: false` and no [catalog](#catalogs) | The sidebar's collections, in order. |
+| `collections` | list of [collections](#collections) | no, unless `previews: false` | The sidebar's collections, in order. |
 | `previews` | map or `false` | no | Where [TypeScript previews](#previews) are discovered. `false` turns them off. |
 | `implementations` | map of name to [implementation](#implementations) | no | Where pages also exist as running code, and what renders the examples in pages' docs. |
 | `spaces` | map of id to [space](#spaces) | no | Several spaces in this one file. Without it, the file is one space. |
 | `node` | string | no | Only in `workbench.local.yaml` ([local overrides](#local-overrides)): the Node 24 or later program your project's code runs on, absolute or relative to this folder. Defaults to the Node the extension ships. In `workbench.yaml` it is reported and not used. |
 
-With `previews: false`, no catalog, and no usable collection, the config fails
+With `previews: false` and no usable collection, the config fails
 with *nothing to show — a config needs at least one collection with one page in
 it.*
 
@@ -219,7 +218,7 @@ collections:
 
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | string | yes | The collection's label. [Previews](#previews), discovered [Markdown pages](docs-pages.md#declare-a-markdown-page-in-a-definition), and [Simulator catalog](#catalogs) pages that belong in a collection with the same name are added to it. |
+| `name` | string | yes | The collection's label. [Previews](#previews) and discovered [Markdown pages](docs-pages.md#declare-a-markdown-page-in-a-definition) that belong in a collection with the same name are added to it. |
 | `icon` | Lucide icon name | no | Shown on the collection and on its pages that don't set their own. Defaults to `file-text`. |
 | `items` | list of [pages](#pages) and [groups](#groups) | unless `icon` is set | An icon-only collection styles previews and Markdown pages imported into the same collection. Collections that remain empty after imports are hidden. An empty collection without an icon is dropped and reported. |
 
@@ -243,8 +242,7 @@ Collection icons use the collection name as the prefix lookup target. Highest
 priority first: an explicit handwritten collection icon, a `previews.icons`
 mapping, configured `previews.icon`, then built-in defaults. This holds for
 collections of discovered previews and docs pages alike. A collection of
-previews defaults to `component`, one of docs pages to `book-open`, and a
-catalog's to its `catalogIcon` or `smartphone`. Conflicting mappings or fallbacks at the
+previews defaults to `component` and one of docs pages to `book-open`. Conflicting mappings or fallbacks at the
 same priority use the alphabetically first icon name. Import order does not
 decide the icon.
 An authored collection without an explicit icon keeps `file-text` when
@@ -368,17 +366,14 @@ implementations:
 
 | Key | Kinds | Required | Description |
 | --- | --- | --- | --- |
-| `kind` | all | yes | `workbench`, `url`, `storybook`, `docs`, `ios-simulator`, or `window`. |
+| `kind` | all | yes | `workbench`, `url`, `storybook`, or `docs`. |
 | `label` | all | no | The lens's display label, independent of kind: for example **Live**, **Prod**, or **Design**. Defaults to the name in sentence case. Changing it preserves the implementation key and addresses. |
 | `base` | `url` | yes | The app's origin and optional base path, starting with `http://` or `https://`, or a Box service such as `box://demo/dev`. Page paths are appended to it. A trailing slash is removed. |
 | `url` | `storybook` | no | The origin of a Storybook you run, starting with `http://` or `https://`, or `auto` to [detect a running Storybook](storybook.md#detect-the-port-with-url-auto). Without it, Workbench [runs your project's Storybook itself](storybook.md#let-workbench-run-storybook) from `root`, the space's folder unless set, on a private local socket, in trusted workspaces. |
-| `device` | `ios-simulator` | no | `booted` (default) for every booted Simulator, or one exact device name or UDID. |
 | `adapter` | `docs` | yes | What renders the examples in a page's docs: `html`, `react`, `vue`, `astro`, `react-native-web`, or an adapter registered in `workbench.config.ts`. |
 | `styles` | `docs` | no | Stylesheets loaded with the examples, relative to the project root. |
 | `environment` | `docs` | no | An [environment](preview-data.md#environments) around the examples, relative to the project root. |
-| `app` | `window` | yes | The macOS application whose window is streamed: its bundle ID, or part of it, such as `com.example.app`. Letters, digits, dots, and hyphens only. |
 | `root` | all but `workbench` and `docs` | no | The folder where this implementation's code lives, relative to `workbench.yaml` or absolute. Needed for [code pointers](#code-pointers) and Storybook source paths. Must be a path, not a URL. |
-| `catalog` | `ios-simulator` | no | Import each booted device as a page. See [Catalogs](#catalogs). |
 | `start` | `url`, `storybook` with `url` | no | A command that starts the implementation in VS Code. See [Start commands](#start-commands). |
 
 Box is a private, unpublished CLI. This optional integration is for users who
@@ -398,8 +393,8 @@ letters, digits or hyphens, followed by an optional path, without a query or fra
 A `workbench` implementation shows this space's
 [TypeScript previews](#previews). It takes no address, `start`, or `root`: its
 root is always the project root, and any other `root` is reported and the
-implementation dropped. A `catalog` or `start` on a kind that doesn't support
-it is reported and ignored.
+implementation dropped. A `start` on a kind that doesn't support it is
+reported and ignored.
 
 A `docs` implementation renders the examples in pages' [docs](docs-pages.md).
 It takes no address or `start`, and its root is the project root. It applies
@@ -411,8 +406,7 @@ implementation gets the built-in **Docs** lens, keyed `docs`, so no other
 implementation it maps can be named `docs`.
 
 Guides: [TypeScript previews](workbench-previews.md), [Docs](docs-pages.md),
-[URL implementations](lenses.md), [Storybook](storybook.md),
-[iOS Simulator](ios-simulator.md), [App windows](windows.md).
+[URL implementations](lenses.md), [Storybook](storybook.md).
 
 ## A page's implementations
 
@@ -463,24 +457,6 @@ prefix. `Components/Button` and `Button` are different titles.
 ```yaml
 implementations:
   storybook: Components/Button
-```
-
-**`ios-simulator`**: the device's UDID. The lens streams only a device that the
-implementation's `catalog` has imported, so the implementation needs
-`catalog: true`. The reader also accepts a device name, but the stream refuses
-it. See [iOS Simulator](ios-simulator.md#add-a-simulator-lens-to-a-design-page).
-
-```yaml
-implementations:
-  simulator: 6A1F2B3C-0000-4000-8000-123456789ABC
-```
-
-**`window`**: the window's title, or part of it, ignoring case. When several
-of the app's windows match, the largest is streamed.
-
-```yaml
-implementations:
-  emulator: Example Phone
 ```
 
 A page may only name implementations declared at the top level.
@@ -544,24 +520,6 @@ does while it builds. The canvas opens while these checks run, and the page
 list refreshes when they finish. If `ready` times out, the
 **Workbench** output channel records the timeout. Start commands never run in untrusted workspaces or outside
 VS Code. See [Start the server automatically](lenses.md#start-the-server-automatically).
-
-## Catalogs
-
-`catalog` on an **iOS Simulator** implementation imports each matching
-booted device as a page, instead of listing devices by hand. See
-[iOS Simulator](ios-simulator.md).
-
-`catalog: true` turns it on. A map turns it on and sets the icon of the
-imported pages:
-
-```yaml
-catalog:
-  icon: tablet-smartphone    # defaults to smartphone
-```
-
-Other kinds don't take `catalog`. Storybook pages are the pages you list in
-`collections` and map to a story title; see [Storybook](storybook.md).
-TypeScript previews are [discovered](#previews) without one.
 
 ## Spaces
 
@@ -693,7 +651,7 @@ everything else:
 - The problems list above the page list shows every problem, in VS Code's
   sidebar and in a browser window's sidebar.
 - `GET /_workbench/config` on the workbench server lists the same problems
-  under `problems`, with catalogs and previews that couldn't load and
+  under `problems`, with previews that couldn't load and
   [docs problems](docs-pages.md#requirements-and-problems), alongside the
   config as your machine resolves it. See
   [Troubleshooting](troubleshooting.md#read-the-resolved-config).
