@@ -64,12 +64,10 @@ impl QuestionForm {
                             p.symbols,
                         )
                         .clamp(1, if minimum { 1 } else { 6 })
+                } else if minimum {
+                    1
                 } else {
-                    if minimum {
-                        1
-                    } else {
-                        q.choices.len() + usize::from(q.other)
-                    }
+                    q.choices.len() + usize::from(q.other)
                 }
         } else {
             (if minimum {
