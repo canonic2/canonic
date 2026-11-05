@@ -6,6 +6,25 @@ the choices you make.
 Tool calls must return `Outcome::Tool(ToolResult)`, including when no output
 schema is declared; raw `Outcome::Method` success replies are refused.
 
+## Protect the standard streams
+
+A stray `println!` in your server, or a child process that inherits standard
+output, would write into the protocol and break the connection. Take the
+streams for the protocol before anything else runs, and serve on what
+`stdio::protect` returns:
+
+```rust,ignore
+use canonic_mcp_kit::stdio;
+
+let protocol = stdio::protect()?;
+stdio::serve(server, catalog, std::io::BufReader::new(protocol.input), protocol.output, &options)?;
+```
+
+On Unix, afterwards standard input reads end of input and standard output goes
+to stderr, for your code and every child it starts. On Windows the streams
+stay where they are: there, never print to standard output from code a request
+can reach.
+
 ## Lanes
 
 A lane is a group of workers with its own queue and capacity. The default is

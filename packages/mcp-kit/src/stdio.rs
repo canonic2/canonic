@@ -8,6 +8,7 @@
 
 mod changes;
 mod observation;
+mod protect;
 mod reader;
 pub(crate) mod scheduler;
 #[cfg(feature = "http-server")]
@@ -18,6 +19,7 @@ pub use observation::{
     ObservationSender, Settlement, Stage, observation_channel,
 };
 pub(crate) use observation::{Span, Trace};
+pub use protect::{Protocol, protect};
 
 use crate::{
     control::{Control, Interrupted},

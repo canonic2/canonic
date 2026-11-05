@@ -19,6 +19,10 @@ thiserror = "2.0"
 getrandom = { version = "0.4.3", optional = true }
 yaml-rust2 = { version = "0.13", default-features = false }
 
+# `stdio::protect` points descriptors 0 and 1 away from the protocol.
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.1.5", default-features = false, features = ["std", "stdio"] }
+
 [features]
 # The documentation bundle builder, for consumers' build scripts. It reads files,
 # so ordinary runtime builds leave it out.

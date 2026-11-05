@@ -22,6 +22,7 @@
 | Return tool artifacts | `Content::resource_link`, `ResourceLink`, `Content::resource`, `ResourceContents`; see [artifact results](../guides/resources.md#return-artifacts-from-tools) |
 | Refuse an unknown resource | `Outcome::ResourceNotFound` for revision-aware replies; `resource::not_found` emits a legacy error |
 | Run a stdio server | `stdio::serve`, `stdio::Handler`, `stdio::Options` |
+| Keep the standard streams to the protocol | `stdio::protect`, `stdio::Protocol` |
 | Run a Streamable HTTP server | `http::serve`, `http::HttpOptions`, `http::Shutdown` (feature `http-server`); see [HTTP](../guides/http.md) |
 | Issue tokens from the server | `oauth::AuthorizationServer`, `oauth::Interaction`, `oauth::GrantStore`, `oauth::MemoryStore`, `oauth::ClientResolver`, `oauth::ClientRegistrar`, `HttpOptions::authorization_server` (feature `authorization-server`); see [authorization server](../guides/authorization-server.md) |
 | Require bearer tokens | `http::ResourceServer`, `http::TokenVerifier`, `http::ScopePolicy`, `http::Grant`, `http::HttpAuthorization`, `Context::authorization`; see [authorization](../guides/authorization.md) |
