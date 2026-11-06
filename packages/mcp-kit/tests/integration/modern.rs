@@ -228,6 +228,30 @@ fn modern_conformance_independent_runtime_error_allocation_bounds_and_cancellati
 }
 
 #[test]
+fn reserved_extension_registration_is_refused_before_driver_input() {
+    use crate::fixture::Script;
+    use canonic_mcp_kit::stdio::{self, Options, ServeError};
+    for notification in [false, true] {
+        let mut options = Options::default();
+        if notification {
+            options.session.extension_notifications = vec!["server/discover".into()];
+        } else {
+            options.session.extension_methods = vec!["skills/acme".into()];
+        }
+        let result = stdio::serve(
+            Arc::new(Script::new(|_, _| {
+                panic!("invalid configuration cannot dispatch")
+            })),
+            Arc::new(Catalog::new(vec![]).unwrap()),
+            std::io::Cursor::new(Vec::<u8>::new()),
+            Vec::new(),
+            &options,
+        );
+        assert!(matches!(result, Err(ServeError::Configuration(_))));
+    }
+}
+
+#[test]
 fn modern_conformance_driver_errors_and_unavailable_methods_match_core() {
     use crate::fixture::{Host, Script};
     use canonic_mcp_kit::stdio::{Options, Outcome, Request};
@@ -274,11 +298,7 @@ fn modern_conformance_driver_errors_and_unavailable_methods_match_core() {
     options.session.resources = Some(Arc::new(
         canonic_mcp_kit::ResourceCatalog::new(vec![], vec![]).unwrap(),
     ));
-    options.session.extension_methods = unavailable
-        .iter()
-        .map(|method| (*method).into())
-        .chain(std::iter::once("acme/inspect".into()))
-        .collect();
+    options.session.extension_methods = vec!["acme/inspect".into()];
     let host = Host::start_with(
         Arc::new(script),
         Arc::new(Catalog::new(vec![]).unwrap()),

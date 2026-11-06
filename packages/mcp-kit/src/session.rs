@@ -35,6 +35,9 @@ pub const DEFAULT_MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 /// Connection limits and product extension methods.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionOptions {
+    /// Enable both initialization-based revisions; disabling requires modern support.
+    /// The HTTP driver always disables legacy protocols in its session.
+    pub legacy_protocols: bool,
     /// Optional bounded modern change streams; requires modern opt-in.
     pub subscriptions: Option<crate::SubscriptionOptions>,
     /// Explicit modern protocol opt-in; absent preserves legacy behavior.
@@ -58,14 +61,17 @@ pub struct SessionOptions {
     /// Messages accepted before the connection ends; `None` for no limit.
     pub max_messages: Option<u64>,
     /// Product request methods, such as `acme/task_end`, routed as [`Inbound::Method`].
+    /// Protocol-owned names and `notifications/*` are refused at construction.
     pub extension_methods: Vec<String>,
     /// Product notification methods routed as [`Inbound::Notification`].
+    /// Protocol-owned names are refused at construction, even for disabled capabilities.
     pub extension_notifications: Vec<String>,
 }
 
 impl Default for SessionOptions {
     fn default() -> Self {
         Self {
+            legacy_protocols: true,
             subscriptions: None,
             modern: None,
             tasks: None,
@@ -357,6 +363,18 @@ pub struct Session {
 pub struct ConfigurationError(pub String);
 
 impl Session {
+    fn supported_versions(&self) -> Vec<&'static str> {
+        let mut versions = if self.options.legacy_protocols {
+            SUPPORTED_PROTOCOL_VERSIONS.to_vec()
+        } else {
+            Vec::new()
+        };
+        if self.options.modern.is_some() {
+            versions.push(crate::modern::PROTOCOL_VERSION);
+        }
+        versions
+    }
+
     /// A new connection serving `catalog`.
     ///
     /// Configuration errors are stored rather than returned. If modern identity
@@ -675,9 +693,14 @@ impl Session {
     }
 
     fn notification(&mut self, method: String, params: Value) -> Inbound {
+        // New protocol notifications also belong in reserved_extension_name and
+        // the independent RESERVED_EXTENSION_NAMES cases in session/tests.rs.
         // A modern notification carries its revision and needs no handshake.
         let modern = self.options.modern.is_some()
             && params["_meta"][crate::modern::VERSION_KEY] == crate::modern::PROTOCOL_VERSION;
+        if !self.options.legacy_protocols && !modern {
+            return Inbound::Ignored;
+        }
         if modern && crate::modern::removed_notification(&method) {
             return Inbound::Ignored;
         }
@@ -710,6 +733,8 @@ impl Session {
     }
 
     fn request(&mut self, id: Value, method: &str, params: Value) -> Inbound {
+        // Keep protocol routes/prefixes in sync with reserved_extension_name and
+        // the independent RESERVED_EXTENSION_NAMES cases in session/tests.rs.
         if self.outstanding.contains(&id.to_string()) {
             return Inbound::Fatal {
                 reply: rpc::failure(
@@ -737,6 +762,12 @@ impl Session {
         .any(|key| meta.get(*key).is_some())
         {
             return self.metadata_request(id, method, params);
+        }
+        if !self.options.legacy_protocols {
+            return Inbound::Reply(rpc::failure(
+                id,
+                &crate::modern::invalid("Protocol metadata is required"),
+            ));
         }
         let reply = |error: RpcError| Inbound::Reply(rpc::failure(id.clone(), &error));
         match method {
@@ -925,7 +956,7 @@ impl Session {
                 "Missing or invalid protocol version",
             ));
         };
-        if SUPPORTED_PROTOCOL_VERSIONS.contains(&version) {
+        if self.options.legacy_protocols && SUPPORTED_PROTOCOL_VERSIONS.contains(&version) {
             if self
                 .client
                 .as_ref()
@@ -953,13 +984,9 @@ impl Session {
             .as_ref()
             .filter(|_| version == crate::modern::PROTOCOL_VERSION)
         else {
-            let mut supported: Vec<&str> = SUPPORTED_PROTOCOL_VERSIONS.to_vec();
-            if self.options.modern.is_some() {
-                supported.push(crate::modern::PROTOCOL_VERSION);
-            }
             return failure(
                 RpcError::new(-32022, "Unsupported protocol version")
-                    .with_data(json!({"requested":version,"supported":supported})),
+                    .with_data(json!({"requested":version,"supported":self.supported_versions()})),
             );
         };
         // Bundled skill content uses the Skills policy; generated content is a
@@ -1024,6 +1051,8 @@ impl Session {
         context: &Arc<crate::RequestContext>,
     ) -> Inbound {
         let failure = |error: RpcError| Inbound::Reply(rpc::failure(id.clone(), &error));
+        // New modern routes/prefixes also belong in reserved_extension_name and
+        // the independent RESERVED_EXTENSION_NAMES cases in session/tests.rs.
         if method.starts_with("tasks/") {
             return self.task_request(id, method, &params, context);
         }
@@ -1143,8 +1172,7 @@ impl Session {
     }
 
     fn discovery(&self) -> Value {
-        let mut versions = SUPPORTED_PROTOCOL_VERSIONS.to_vec();
-        versions.push(crate::modern::PROTOCOL_VERSION);
+        let versions = self.supported_versions();
         let mut result = json!({"supportedVersions":versions,"capabilities":{"tools":{}}});
         if self.options.completions {
             result["capabilities"]["completions"] = json!({});
@@ -1194,7 +1222,56 @@ impl Session {
     }
 }
 
+/// Protocol routes cannot be supplied by product extension registration.
+/// Keep in sync with request/notification routing and the independent
+/// `RESERVED_EXTENSION_NAMES` cases in session/tests.rs.
+fn reserved_extension_name(method: &str) -> bool {
+    [
+        "skills/",
+        "tasks/",
+        "subscriptions/",
+        "prompts/",
+        "completion/",
+    ]
+    .iter()
+    .any(|prefix| method.starts_with(prefix))
+        || crate::modern::removed_notification(method)
+        || [
+            "initialize",
+            "ping",
+            "server/discover",
+            "tools/list",
+            "tools/call",
+            "resources/list",
+            "resources/templates/list",
+            "resources/read",
+            "resources/directory/read",
+            "resources/subscribe",
+            "resources/unsubscribe",
+            "logging/setLevel",
+            "roots/list",
+            "sampling/createMessage",
+            "elicitation/create",
+            "notifications/cancelled",
+            "notifications/progress",
+            "notifications/message",
+            "notifications/tools/list_changed",
+            "notifications/prompts/list_changed",
+            "notifications/resources/list_changed",
+            "notifications/resources/updated",
+            "notifications/subscriptions/acknowledged",
+            "notifications/tasks",
+            crate::task::EXTENSION,
+        ]
+        .contains(&method)
+}
+
 fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
+    if !options.legacy_protocols && options.modern.is_none() {
+        return Err(ConfigurationError(
+            "disabling legacy protocols requires modern protocol support".into(),
+        ));
+    }
     if let Some(policy) = &options.subscriptions {
         if options.modern.is_none() {
             return Err(ConfigurationError(
@@ -1218,19 +1295,20 @@ fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
             .validate()
             .map_err(|error| ConfigurationError(error.to_string()))?;
     }
-    if options
+    if let Some(method) = options
         .extension_methods
         .iter()
-        .chain(&options.extension_notifications)
-        .any(|method| {
-            method.starts_with("tasks/")
-                || method == crate::task::EXTENSION
-                || method == "notifications/tasks"
+        .find(|method| method.starts_with("notifications/") || reserved_extension_name(method))
+        .or_else(|| {
+            options
+                .extension_notifications
+                .iter()
+                .find(|method| reserved_extension_name(method))
         })
     {
-        return Err(ConfigurationError(
-            "Tasks methods and identifier are reserved".into(),
-        ));
+        return Err(ConfigurationError(format!(
+            "extension registration uses reserved protocol name {method:?}"
+        )));
     }
     if !options.extensions.is_empty() {
         if options.modern.is_none() {

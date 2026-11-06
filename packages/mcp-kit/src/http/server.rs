@@ -193,7 +193,9 @@ impl Shutdown {
 ///
 /// Requires [`SessionOptions::modern`](crate::SessionOptions::modern); the
 /// legacy lifecycle is never reached and [`Handler::initialize`] is never
-/// called. [`Handler::connected`] receives one server-wide change sender when
+/// called. Legacy protocols are disabled in the driver's session regardless of
+/// the caller's setting; discovery advertises only `2026-07-28`.
+/// [`Handler::connected`] receives one server-wide change sender when
 /// subscriptions are enabled. The request body limit is
 /// [`SessionOptions::max_message_bytes`](crate::SessionOptions::max_message_bytes).
 /// Without [`HttpOptions::authorization`] the server authenticates no one:
@@ -222,7 +224,9 @@ pub fn serve<H: Handler>(
             .as_ref()
             .map(|authorization| authorization.resource.clone()),
     })?;
-    let session = Session::try_new(catalog, options.session.clone())?;
+    let mut session_options = options.session.clone();
+    session_options.legacy_protocols = false;
+    let session = Session::try_new(catalog, session_options)?;
     let address = listener.local_addr().map_err(ServeError::Input)?;
     let dispatcher = thread::current();
     let scheduler = Scheduler::start(&handler, options, dispatcher.clone())?;

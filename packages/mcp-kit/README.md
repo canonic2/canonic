@@ -108,9 +108,11 @@ that each served `SKILL.md` matches the published metadata. See
 
 The default configuration supports `2025-06-18` and `2025-11-25` through the
 initialization handshake. Explicit modern configuration adds `2026-07-28`,
-including discovery, per-request client context and cache hints. Skills
-discovery uses the modern path; legacy clients can read the bundled files as
-ordinary resources.
+including discovery, per-request client context and cache hints. Set
+`SessionOptions::legacy_protocols` to `false` with modern support enabled to
+serve only `2026-07-28`; the HTTP driver selects this profile automatically.
+Skills discovery uses the modern path; legacy clients can read the bundled
+files as ordinary resources.
 
 The shared transports are newline-delimited JSON-RPC over stdio and, with the
 `http-server` feature, Streamable HTTP for `2026-07-28` only. For an

@@ -726,6 +726,8 @@ fn input_method(method: &str) -> bool {
 }
 
 pub(crate) fn unavailable_method(method: &str) -> bool {
+    // New protocol names must also be refused by session::reserved_extension_name
+    // and covered by RESERVED_EXTENSION_NAMES in session/tests.rs.
     method.starts_with("notifications/")
         || [
             "initialize",

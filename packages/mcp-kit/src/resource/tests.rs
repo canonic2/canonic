@@ -23,8 +23,6 @@ fn session(resources: Option<ResourceCatalog>, version: &str) -> Session {
         Arc::new(Catalog::new(vec![]).unwrap()),
         SessionOptions {
             resources: resources.map(Arc::new),
-            // Reserved names cannot bypass capability checks.
-            extension_methods: vec!["resources/read".into(), "resources/list".into()],
             ..SessionOptions::default()
         },
     );

@@ -316,6 +316,32 @@ fn http() -> HttpOptions {
 }
 
 #[test]
+fn discovery_advertises_only_the_http_revision() {
+    // The fixture leaves legacy_protocols at its default; serve must override it.
+    let server = Server::start(http(), None);
+    let discovery = server.exchange(&post("server/discover", &json!(1), json!({}), ""));
+    assert_eq!(discovery.status, 200);
+    assert_eq!(
+        discovery.json()["result"]["supportedVersions"],
+        json!(["2026-07-28"])
+    );
+    for version in ["2025-06-18", "2025-11-25", "2099-01-01"] {
+        let request = String::from_utf8(post("tools/list", &json!(2), json!({}), "")).unwrap();
+        let request = request.replace("2026-07-28", version);
+        let refused = server.exchange(request.as_bytes());
+        assert_eq!(refused.status, 400);
+        assert_eq!(refused.json()["error"]["code"], -32022);
+        assert_eq!(
+            refused.json()["error"]["data"],
+            json!({"requested":version,"supported":["2026-07-28"]})
+        );
+    }
+    let listed = server.exchange(&post("tools/list", &json!(2), json!({}), ""));
+    assert_eq!(listed.status, 200);
+    assert!(listed.json()["result"]["tools"].is_array());
+}
+
+#[test]
 fn json_requests_reply_with_their_own_ids_and_statuses() {
     let server = Server::start(http(), None);
     let listed = server.exchange(&post("tools/list", &json!("list-1"), json!({}), ""));

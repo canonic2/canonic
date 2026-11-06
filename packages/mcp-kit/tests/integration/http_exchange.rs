@@ -35,6 +35,7 @@ impl Runtime {
         )])
         .expect("valid Acme catalog");
         let options = SessionOptions {
+            legacy_protocols: false,
             modern: Some(ModernOptions::new(ServerInfo::new("acme", "1.0.0"))),
             ..SessionOptions::default()
         };
@@ -127,6 +128,17 @@ fn reply(response: &Response) -> Value {
 #[test]
 fn an_independent_runtime_serves_the_exchange_without_the_driver() {
     let mut runtime = Runtime::new();
+    let discovery = runtime
+        .post(
+            &headers("server/discover", &[]),
+            &body(&json!("d"), "server/discover", json!({})),
+        )
+        .unwrap();
+    assert_eq!(discovery.status, 200);
+    assert_eq!(
+        reply(&discovery)["result"]["supportedVersions"],
+        json!(["2026-07-28"])
+    );
     let listed = runtime
         .post(
             &headers("tools/list", &[]),

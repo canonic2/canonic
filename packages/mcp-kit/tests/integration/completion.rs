@@ -107,10 +107,6 @@ fn completion_disabled_or_invalid_never_dispatches() {
     for enabled in [false, true] {
         let mut options = options();
         options.session.completions = enabled;
-        options
-            .session
-            .extension_methods
-            .push("completion/complete".into());
         let mut host = Host::start(Script::new(|_, _| panic!("no valid completion")), options);
         let init = host.initialize(json!({}));
         assert_eq!(

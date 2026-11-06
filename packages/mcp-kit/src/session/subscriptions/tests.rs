@@ -394,7 +394,6 @@ fn subscriptions_validate_opt_in_and_finite_policy() {
         catalog,
         SessionOptions {
             modern: Some(ModernOptions::new(ServerInfo::new("acme", "1"))),
-            extension_methods: vec!["subscriptions/listen".into()],
             ..SessionOptions::default()
         },
     );

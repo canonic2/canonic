@@ -71,7 +71,7 @@ preparation limits and invalid `x-mcp-header` annotations; see
 | --- | --- |
 | `Options` | No lanes, a lane without workers, capacity below workers, or limits too small; over HTTP, also missing modern options, a session message limit, or HTTP connection and time limits out of range |
 | `Endpoint` | An invalid HTTP endpoint path, allowed origin or body limit |
-| `Configuration` | Invalid modern identity, Skills or Tasks without modern opt-in, invalid task policy/reserved method registration, or conflicting resource namespace ownership |
+| `Configuration` | Invalid modern identity, Skills or Tasks without modern opt-in, invalid task policy, protocol-owned name in either product registration list, or conflicting resource namespace ownership |
 | `Spawn` | A reader or worker thread could not start |
 | `Input` | Reading stdin failed, admitted work settled first; over HTTP, the listener has no local address |
 | `Output` | Writing stdout failed |

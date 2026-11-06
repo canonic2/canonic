@@ -1,5 +1,6 @@
 use super::*;
 use crate::tool::Tool;
+use std::time::Duration;
 
 fn catalog() -> Arc<Catalog> {
     Arc::new(
@@ -402,6 +403,123 @@ fn frames_are_bounded_and_invalid_json_is_answered() {
             ..
         }
     ));
+}
+
+// Keep these independent cases aligned with the protocol routers as well as
+// reserved_extension_name, so extending either surface requires a coverage review.
+const RESERVED_EXTENSION_NAMES: &[&str] = &[
+    "initialize",
+    "ping",
+    "server/discover",
+    "tools/list",
+    "tools/call",
+    "resources/list",
+    "resources/templates/list",
+    "resources/read",
+    "resources/directory/read",
+    "resources/subscribe",
+    "resources/unsubscribe",
+    "skills/list",
+    "skills/get",
+    "skills/acme",
+    "tasks/get",
+    "tasks/update",
+    "tasks/cancel",
+    "tasks/acme",
+    "subscriptions/listen",
+    "subscriptions/acme",
+    "prompts/list",
+    "prompts/get",
+    "prompts/acme",
+    "completion/complete",
+    "completion/acme",
+    "logging/setLevel",
+    "roots/list",
+    "sampling/createMessage",
+    "elicitation/create",
+    "notifications/initialized",
+    "notifications/cancelled",
+    "notifications/progress",
+    "notifications/message",
+    "notifications/tools/list_changed",
+    "notifications/prompts/list_changed",
+    "notifications/resources/list_changed",
+    "notifications/resources/updated",
+    "notifications/subscriptions/acknowledged",
+    "notifications/roots/list_changed",
+    "notifications/elicitation/complete",
+    "notifications/tasks",
+    crate::task::EXTENSION,
+];
+
+#[test]
+fn reserved_extension_names_are_refused_for_requests_and_notifications() {
+    let catalog = catalog();
+    let modern = SessionOptions {
+        modern: Some(crate::ModernOptions::new(ServerInfo::new("acme", "1"))),
+        ..SessionOptions::default()
+    };
+    let enabled = SessionOptions {
+        skills: Some(Arc::new(crate::SkillCatalog::new(vec![]).unwrap())),
+        resources: Some(Arc::new(
+            crate::ResourceCatalog::new(vec![], vec![]).unwrap(),
+        )),
+        prompts: Some(Arc::new(crate::PromptCatalog::new(vec![]).unwrap())),
+        completions: true,
+        subscriptions: Some(crate::SubscriptionOptions::default()),
+        tasks: Some(crate::task::TaskOptions {
+            max_records: 1,
+            max_bytes: 1024,
+            max_running: 1,
+            max_input_rounds: 1,
+            execution_timeout: Duration::from_secs(1),
+            input_timeout: Duration::from_secs(1),
+        }),
+        ..modern.clone()
+    };
+    for base in [
+        SessionOptions::default(),
+        modern.clone(),
+        SessionOptions {
+            legacy_protocols: false,
+            ..modern
+        },
+        enabled,
+    ] {
+        // The base must be valid, so an unrelated configuration failure cannot pass this test.
+        assert!(Session::try_new(catalog.clone(), base.clone()).is_ok());
+        for &name in RESERVED_EXTENSION_NAMES {
+            for notification in [false, true] {
+                let mut options = base.clone();
+                if notification {
+                    options.extension_notifications = vec![name.into()];
+                } else {
+                    options.extension_methods = vec![name.into()];
+                }
+                let Err(error) = Session::try_new(catalog.clone(), options.clone()) else {
+                    panic!("reserved name accepted: {name}")
+                };
+                assert!(error.0.contains(name), "{error}");
+                let mut deferred = Session::new(catalog.clone(), options);
+                assert!(
+                    matches!(deferred.receive_value(initialize(LATEST_PROTOCOL_VERSION, &json!({}))), Inbound::Fatal { reply, .. } if reply["error"]["code"] == rpc::INTERNAL_ERROR)
+                );
+            }
+        }
+        let mut valid = base;
+        valid.extension_methods = vec!["acme/inspect".into(), "skills-acme/inspect".into()];
+        valid.extension_notifications = vec!["notifications/acme/changed".into()];
+        assert!(Session::try_new(catalog.clone(), valid).is_ok());
+    }
+}
+
+#[test]
+fn notification_namespace_is_not_a_product_request_method() {
+    let options = SessionOptions {
+        extension_methods: vec!["notifications/acme/changed".into()],
+        ..SessionOptions::default()
+    };
+    assert!(Session::try_new(catalog(), options).is_err());
 }
 
 #[test]

@@ -56,6 +56,12 @@ subscriptions are enabled, `Handler::connected` receives one change sender for
 the whole server. A session message limit (`SessionOptions::max_messages`) is
 refused, because one session serves every POST.
 
+The driver always disables legacy protocols in its session, so `server/discover`
+advertises only `2026-07-28`, matching its version refusals. It leaves the
+caller's options unchanged. If you drive the HTTP exchange in your own runtime,
+set `SessionOptions::legacy_protocols` to `false` with modern support enabled;
+see [selecting protocol versions](session.md#select-protocol-versions).
+
 | `HttpOptions` field | Default | Range | Purpose |
 | --- | --- | --- | --- |
 | `path` | `/mcp` | Absolute path | The only path served; others get `404` |

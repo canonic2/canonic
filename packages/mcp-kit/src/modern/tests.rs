@@ -140,6 +140,10 @@ fn discovery_is_optional_and_never_changes_legacy_readiness() {
     assert_eq!(result["result"]["resultType"], "complete");
     assert_eq!(result["result"]["cacheScope"], "private");
     assert_eq!(result["result"]["_meta"][SERVER_KEY]["name"], "acme");
+    assert_eq!(
+        result["result"]["supportedVersions"],
+        json!(["2025-06-18", "2025-11-25", PROTOCOL_VERSION])
+    );
     assert!(!session.ready());
     assert!(matches!(
         session.receive_value(request(
@@ -154,6 +158,90 @@ fn discovery_is_optional_and_never_changes_legacy_readiness() {
         reply(session.receive_value(rpc::request(json!(3), "tools/list", json!({}))))["error"]["code"],
         rpc::SERVER_ERROR
     );
+}
+
+#[test]
+fn modern_only_discovery_and_refusals_match_admission() {
+    let mut session = Session::try_new(
+        Arc::new(
+            Catalog::new(vec![Tool::new(
+                "acme_echo",
+                "Echo",
+                json!({"type":"object"}),
+            )])
+            .unwrap(),
+        ),
+        SessionOptions {
+            legacy_protocols: false,
+            modern: Some(ModernOptions::new(ServerInfo::new("acme", "1"))),
+            extension_notifications: vec!["notifications/acme/changed".into()],
+            ..SessionOptions::default()
+        },
+    )
+    .unwrap();
+    let discovery =
+        reply(session.receive_value(request(1, "server/discover", json!({}), json!({}))));
+    assert_eq!(
+        discovery["result"]["supportedVersions"],
+        json!([PROTOCOL_VERSION])
+    );
+    for version in ["2025-06-18", "2025-11-25", "2099-01-01"] {
+        let mut message = request(2, "tools/call", json!({"name":"acme_echo"}), json!({}));
+        message["params"]["_meta"][VERSION_KEY] = json!(version);
+        let refused = reply(session.receive_value(message));
+        assert_eq!(refused["error"]["code"], -32022);
+        assert_eq!(
+            refused["error"]["data"],
+            json!({"requested":version,"supported":[PROTOCOL_VERSION]})
+        );
+        assert!(session.request_context(&json!(2)).is_none());
+    }
+    for (method, params) in [
+        (
+            "initialize",
+            json!({"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"acme-host","version":"1"}}),
+        ),
+        ("ping", json!({})),
+        ("tools/call", json!({"name":"acme_echo"})),
+    ] {
+        let refused = reply(session.receive_value(rpc::request(json!(2), method, params)));
+        assert_eq!(refused["error"]["code"], rpc::INVALID_PARAMS, "{method}");
+        assert!(!session.ready());
+    }
+    assert!(matches!(
+        session.receive_value(request(
+            2,
+            "tools/call",
+            json!({"name":"acme_echo"}),
+            json!({})
+        )),
+        Inbound::Tool { .. }
+    ));
+    assert!(matches!(
+        session.receive_value(rpc::notification(
+            "notifications/cancelled",
+            json!({"requestId":2})
+        )),
+        Inbound::Ignored
+    ));
+    assert!(session.request_context(&json!(2)).is_some());
+    assert!(matches!(
+        session.receive_value(rpc::notification(
+            "notifications/acme/changed",
+            json!({"_meta":{VERSION_KEY:PROTOCOL_VERSION}})
+        )),
+        Inbound::Notification { .. }
+    ));
+    assert!(session.finish(&json!(2)));
+}
+
+#[test]
+fn disabling_every_protocol_is_invalid_configuration() {
+    let options = SessionOptions {
+        legacy_protocols: false,
+        ..SessionOptions::default()
+    };
+    assert!(Session::try_new(Arc::new(Catalog::new(vec![]).unwrap()), options).is_err());
 }
 
 #[test]
@@ -480,7 +568,6 @@ fn modern_conformance_removed_and_unavailable_methods_never_dispatch() {
         Arc::new(Catalog::new(vec![]).unwrap()),
         SessionOptions {
             modern: Some(ModernOptions::new(ServerInfo::new("acme", "1"))),
-            extension_methods: methods.iter().map(|method| (*method).into()).collect(),
             ..SessionOptions::default()
         },
     )
@@ -670,7 +757,7 @@ fn modern_conformance_mrtr_retries_keep_mode_and_state_request_local() {
 }
 
 #[test]
-fn modern_conformance_removed_notifications_cannot_dispatch_legacy_handlers() {
+fn modern_conformance_removed_notifications_are_ignored_without_advancing_handshake() {
     let methods = [
         "notifications/roots/list_changed",
         "notifications/elicitation/complete",
@@ -680,7 +767,6 @@ fn modern_conformance_removed_notifications_cannot_dispatch_legacy_handlers() {
             Arc::new(Catalog::new(vec![]).unwrap()),
             SessionOptions {
                 modern: enabled.then(|| ModernOptions::new(ServerInfo::new("acme", "1"))),
-                extension_notifications: methods.iter().map(|name| (*name).into()).collect(),
                 ..SessionOptions::default()
             },
         )
@@ -698,14 +784,10 @@ fn modern_conformance_removed_notifications_cannot_dispatch_legacy_handlers() {
                 method,
                 json!({"_meta":{VERSION_KEY:PROTOCOL_VERSION}}),
             ));
-            if enabled {
-                assert!(matches!(inbound, Inbound::Ignored));
-            } else {
-                assert!(matches!(inbound, Inbound::Notification { .. }));
-            }
+            assert!(matches!(inbound, Inbound::Ignored));
             assert!(matches!(
                 session.receive_value(rpc::notification(method, json!({}))),
-                Inbound::Notification { .. }
+                Inbound::Ignored
             ));
             assert!(session.ready());
             assert_eq!(session.outstanding(), 0);

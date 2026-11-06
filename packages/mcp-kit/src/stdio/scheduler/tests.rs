@@ -1,8 +1,4 @@
-//! Refill pressure must not turn a bounded progress queue into an unbounded batch.
-//!
-//! The batch bound and the total count pass deterministically. Detecting a
-//! drain-until-empty regression depends on the producer refilling the channel
-//! during a drain; a blocking sender of many items makes that likely, not certain.
+//! A deterministic backlog exercises the real dispatcher's progress drain.
 use super::*;
 use crate::{Catalog, Client, ServerInfo, SessionOptions};
 
@@ -16,13 +12,10 @@ impl Handler for NoCalls {
     }
 }
 
-#[test]
-fn progress_refill_keeps_each_dispatcher_batch_bounded() {
-    const COUNT: usize = 65536;
+fn scheduler_with_progress(frames: Vec<(u64, Value)>) -> (Scheduler, Session) {
     let mut scheduler =
         Scheduler::start(&Arc::new(NoCalls), &Options::default(), thread::current()).unwrap();
-    // Supply one live assignment without a consumer handler. This unit boundary
-    // exercises the real channel, live-owner filter and outgoing batch ownership.
+    // Supply one live assignment without a consumer handler.
     scheduler.lanes[0].idle.clear();
     scheduler.lanes[0].running = 1;
     scheduler.running.insert(
@@ -51,31 +44,51 @@ fn progress_refill_keeps_each_dispatcher_batch_bounded() {
             grace: None,
         },
     );
-    let mut session = Session::new(
+    let session = Session::new(
         Arc::new(Catalog::new(vec![]).unwrap()),
         SessionOptions::default(),
     );
-    let sender = scheduler.progress_sender.clone();
-    let producer = thread::spawn(move || {
-        for _ in 0..COUNT {
-            // A timed-out drain drops the receiver; stop so the assertions report it.
-            if sender.send((0, Value::Null)).is_err() {
-                break;
-            }
-        }
-    });
-    let mut received = 0;
-    let mut maximum = 0;
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while received < COUNT && Instant::now() < deadline {
-        let batch = scheduler.settle(&mut session);
-        received += batch.len();
-        maximum = maximum.max(batch.len());
-        thread::yield_now();
+    // Only this test channel has extra capacity. Preloading more than a turn's
+    // budget models a producer refilling the production channel during a drain,
+    // without depending on thread scheduling. settle uses the real Receiver and
+    // drain path; removing its budget deterministically consumes too many items.
+    let (sender, receiver) = mpsc::sync_channel(frames.len());
+    scheduler.progress = receiver;
+    scheduler.progress_sender = sender;
+    for frame in frames {
+        scheduler.progress_sender.try_send(frame).unwrap();
     }
-    drop(scheduler);
-    producer.join().unwrap();
-    eprintln!("progress frames={received}, maximum batch={maximum}");
-    assert_eq!(received, COUNT);
-    assert!(maximum <= PROGRESS_BUFFER, "batch grew to {maximum}");
+    (scheduler, session)
+}
+
+#[test]
+fn progress_drain_stops_at_its_budget_and_preserves_remaining_frames() {
+    let expected: Vec<Value> = (0..=2 * PROGRESS_BUFFER).map(Value::from).collect();
+    let (mut scheduler, mut session) =
+        scheduler_with_progress(expected.iter().cloned().map(|value| (0, value)).collect());
+    let mut received = Vec::new();
+    for count in [PROGRESS_BUFFER, PROGRESS_BUFFER, 1, 0] {
+        let batch = scheduler.settle(&mut session);
+        assert_eq!(batch.len(), count);
+        for frame in batch {
+            let Outgoing::Value(value) = frame else {
+                panic!("progress value expected")
+            };
+            received.push(value);
+        }
+    }
+    assert_eq!(received, expected);
+}
+
+#[test]
+fn stale_progress_consumes_the_turn_budget() {
+    // Unknown assignment 1 is stale; live assignment 0 must wait for turn two.
+    let mut frames = vec![(1, Value::Null); PROGRESS_BUFFER];
+    frames.push((0, Value::from("live")));
+    let (mut scheduler, mut session) = scheduler_with_progress(frames);
+    assert!(scheduler.settle(&mut session).is_empty());
+    let mut next = scheduler.settle(&mut session);
+    assert_eq!(next.len(), 1);
+    assert!(matches!(next.pop(), Some(Outgoing::Value(value)) if value == "live"));
+    assert!(scheduler.settle(&mut session).is_empty());
 }

@@ -104,10 +104,9 @@ fn prompts_legacy_revisions_and_modern_publish_and_validate_before_dispatch() {
 }
 
 #[test]
-fn prompts_disabled_catalog_cannot_be_enabled_by_registration() {
+fn prompts_disabled_catalog_never_dispatches() {
     let mut options = Options::default();
     options.session.modern = Some(ModernOptions::new(ServerInfo::new("acme", "1")));
-    options.session.extension_methods = vec!["prompts/get".into(), "prompts/list".into()];
     let host = Host::ready(
         Script::new(|_, _| panic!("disabled prompt dispatch")),
         options,

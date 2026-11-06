@@ -8,9 +8,30 @@ processing a parsed message then returns `Inbound::Fatal` with code `-32603`
 and a null request ID. Use `try_new` when startup must report configuration
 errors before a client connects.
 
+Both constructors reject protocol-owned names in product method and notification
+registrations, including when a capability is disabled. The error names the
+conflict; use a product name such as `acme/inspect` or
+`notifications/acme/changed`. See [extension methods](stdio.md#extension-methods)
+for the reserved namespaces and registration rules.
+
 The stdio driver is synchronous. A server with its own runtime, such as an
 asynchronous one, can use the protocol core directly and keep the same
 protocol behavior. `Session` performs no I/O and starts no threads.
+
+## Select protocol versions
+
+`SessionOptions::legacy_protocols` defaults to `true`, enabling the
+initialization-based revisions `2025-06-18` and `2025-11-25`. Setting `modern`
+adds `2026-07-28`. To serve only `2026-07-28`, set `legacy_protocols: false`
+alongside your modern options; disabling legacy support without enabling
+modern support is a configuration error.
+
+In modern-only sessions, discovery and unsupported-version errors list only
+`2026-07-28`. Requests without protocol metadata return `-32602`, including
+`initialize` and `ping`; metadata naming a legacy revision returns `-32022`.
+Notifications without the modern revision are ignored. Independent HTTP
+runtimes should select this profile to match the exchange's supported version.
+The shared [HTTP driver](http.md) selects it automatically.
 
 ## The loop
 
