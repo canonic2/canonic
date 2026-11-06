@@ -1,0 +1,359 @@
+//! Vendor-specific paths and schemas; availability is explicit per scope.
+use super::{Context, Error, Result, Scope, Tool};
+use serde_json::{Value, json};
+use std::path::PathBuf;
+
+/// Every setup choice with its CLI discovery names: Box first, then each host
+/// surface; Box, editor surfaces and ambiguous names have none.
+pub(crate) const CATALOG: &[(&str, &[&str])] = &[
+    (BOX, &[]),
+    ("claude", &["claude"]),
+    ("codex", &["codex"]),
+    ("copilot-vscode", &[]),
+    ("copilot-cli", &[]), // Also names an unrelated infrastructure CLI.
+    ("cursor", &[]),
+    ("gemini", &["gemini"]),
+    ("kilo", &[]),
+    ("kiro", &[]),
+    ("kimi", &["kimi"]),
+    ("opencode", &["opencode"]),
+    ("qwen", &["qwen"]),
+    ("amp", &["amp"]),
+    ("droid", &["droid"]),
+    ("windsurf", &[]),
+    ("cline", &[]),
+    ("cline-cli", &["cline"]),
+    ("augment", &[]),
+    ("augment-cli", &["auggie"]),
+    ("goose", &[]), // Also names an unrelated database migration CLI.
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Format {
+    Json,
+    Jsonc,
+    Toml,
+    Yaml,
+}
+
+pub(crate) struct Destination {
+    pub path: PathBuf,
+    pub format: Format,
+    pub key: &'static str,
+    pub entry: Value,
+    pub surfaces: Vec<String>,
+}
+
+pub(crate) fn destination(context: &Context, id: &str, scope: Scope) -> Result<Destination> {
+    if context.root.to_str().is_none() {
+        return Err(Error::invalid(
+            "Project path is not Unicode; agent configuration cannot represent it",
+        ));
+    }
+    let project = scope == Scope::Project;
+    // From home (or above it), several agents' project files are their user
+    // files; project scope must never write user configuration.
+    if project && context.home.starts_with(&context.root) {
+        return Err(Error::invalid(format!(
+            "{} is your home folder or contains it, not a project; run setup from inside a project, or pass --scope user to configure this OS user's agents",
+            context.root.display()
+        )));
+    }
+    let base = if project {
+        &context.root
+    } else {
+        &context.home
+    };
+    let (relative, key, mut format) = match id {
+        "claude" | "copilot-cli" if project => (".mcp.json", "mcpServers", Format::Json),
+        "claude" => (".claude.json", "mcpServers", Format::Json),
+        "codex" => (".codex/config.toml", "mcp_servers", Format::Toml),
+        "copilot-vscode" if project => (".vscode/mcp.json", "servers", Format::Jsonc),
+        "copilot-vscode" => {
+            return Err(Error::selection(
+                "Select the VS Code profile's MCP configuration manually; automatic user scope is unavailable",
+            ));
+        }
+        "copilot-cli" => (".copilot/mcp-config.json", "mcpServers", Format::Json),
+        "cursor" => (".cursor/mcp.json", "mcpServers", Format::Json),
+        "gemini" => (".gemini/settings.json", "mcpServers", Format::Json),
+        "qwen" => (".qwen/settings.json", "mcpServers", Format::Json),
+        "kimi" => (".kimi-code/mcp.json", "mcpServers", Format::Json),
+        "kiro" => (".kiro/settings/mcp.json", "mcpServers", Format::Json),
+        "kilo" if project => (".kilo/kilo.jsonc", "mcp", Format::Json),
+        "kilo" => (".config/kilo/kilo.jsonc", "mcp", Format::Json),
+        "opencode" if project => ("opencode.json", "mcp", Format::Json),
+        "opencode" => (".config/opencode/opencode.json", "mcp", Format::Json),
+        "amp" => (".amp/settings.json", "amp.mcpServers", Format::Json),
+        "droid" => (".factory/mcp.json", "mcpServers", Format::Json),
+        "windsurf" if !project => (".config/devin/mcp_config.json", "mcpServers", Format::Json),
+        "windsurf" => {
+            return Err(Error::selection(
+                "Windsurf/Devin project MCP registration is unverified; user scope must be selected explicitly",
+            ));
+        }
+        "cline-cli" if !project => (
+            ".cline/data/settings/cline_mcp_settings.json",
+            "mcpServers",
+            Format::Json,
+        ),
+        "augment-cli" if !project => (".augment/settings.json", "mcpServers", Format::Json),
+        "goose" if !project => (".config/goose/config.yaml", "extensions", Format::Yaml),
+        "cline" | "cline-cli" | "augment" | "augment-cli" | "goose" => {
+            return Err(Error::selection(format!(
+                "{id}: automatic registration for this scope is unverified; configure this host manually"
+            )));
+        }
+        _ => {
+            return Err(Error::selection(format!(
+                "Unknown agent {id}; choose one of {}",
+                CATALOG
+                    .iter()
+                    .map(|(id, _)| *id)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        }
+    };
+    let mut path = base.join(relative);
+    if !project {
+        path = user_path(context, id, path)?;
+    }
+    let path = existing_alternate(context, id, project, path)?;
+    if path.to_str().is_none() {
+        return Err(Error::invalid("Agent configuration path is not Unicode"));
+    }
+    // Project files are often committed, so they name the command for PATH
+    // lookup instead of this user's install path; user files keep the path.
+    let program = if let Some(command) = &context.launch_command {
+        command.as_str()
+    } else if project {
+        context.product.as_str()
+    } else {
+        context
+            .program
+            .to_str()
+            .ok_or_else(|| Error::invalid("Executable path is not Unicode"))?
+    };
+    if path.extension().is_some_and(|ext| ext == "jsonc") {
+        format = Format::Jsonc;
+    }
+    Ok(Destination {
+        path,
+        key,
+        format,
+        entry: entry(context, id, program),
+        surfaces: if project && matches!(id, "claude" | "copilot-cli") {
+            vec!["claude".into(), "copilot-cli".into()]
+        } else {
+            vec![id.into()]
+        },
+    })
+}
+
+/// A user-scope path after the agent's native home and XDG overrides, so setup
+/// never writes a default file the agent ignores.
+fn user_path(context: &Context, id: &str, mut path: PathBuf) -> Result<PathBuf> {
+    if let Some(directory) = context.agent_homes.get(id) {
+        if !directory.is_absolute() {
+            return Err(Error::invalid("Agent home override must be absolute"));
+        }
+        path = if id == "cline-cli" {
+            directory.clone()
+        } else {
+            directory.join(
+                path.file_name()
+                    .ok_or_else(|| Error::invalid("Agent configuration path has no file name"))?,
+            )
+        };
+    }
+    if id == "amp" {
+        path = context.home.join(".config/amp/settings.json");
+    }
+    if matches!(id, "opencode" | "kilo" | "goose")
+        && let Some(config) = context.agent_homes.get("xdg").filter(|p| p.is_absolute())
+    {
+        path = config.join(match id {
+            "opencode" => "opencode/opencode.json",
+            "kilo" => "kilo/kilo.jsonc",
+            _ => "goose/config.yaml",
+        });
+    }
+    #[cfg(windows)]
+    if id == "goose" {
+        path = context
+            .agent_homes
+            .get("roaming")
+            .cloned()
+            .unwrap_or_else(|| context.home.join("AppData/Roaming"))
+            .join("Block/goose/config/config.yaml");
+    }
+    Ok(path)
+}
+
+/// Prefers an existing supported alternative file, and refuses ambiguous ones.
+fn existing_alternate(
+    context: &Context,
+    id: &str,
+    project: bool,
+    mut path: PathBuf,
+) -> Result<PathBuf> {
+    if matches!(id, "opencode" | "amp") {
+        let alternate = path.with_extension("jsonc");
+        if path.exists() && alternate.exists() {
+            return Err(Error::invalid(format!(
+                "Both {} and {} exist; choose one host configuration first",
+                path.display(),
+                alternate.display()
+            )));
+        }
+        if alternate.exists() {
+            path = alternate;
+        }
+    }
+    if id == "kilo" {
+        let candidates = if project {
+            vec![
+                context.root.join(".kilo/kilo.jsonc"),
+                context.root.join(".kilo/kilo.json"),
+                context.root.join("kilo.jsonc"),
+                context.root.join("kilo.json"),
+            ]
+        } else {
+            vec![path.clone(), path.with_extension("json")]
+        };
+        let existing: Vec<_> = candidates.into_iter().filter(|p| p.exists()).collect();
+        if existing.len() > 1 {
+            return Err(Error::invalid(
+                "Multiple Kilo project configurations exist; resolve their precedence before setup",
+            ));
+        }
+        if let Some(existing) = existing.into_iter().next() {
+            path = existing;
+        }
+    }
+    Ok(path)
+}
+
+/// The server entry in the agent's own schema.
+fn entry(context: &Context, id: &str, program: &str) -> Value {
+    let mut entry = json!({"command":program,"args":context.arguments});
+    if id == "goose" {
+        entry = json!({"type":"stdio","name":context.product,"enabled":true,"cmd":program,"args":context.arguments,"envs":{},"env_keys":[],"timeout":300});
+    } else if matches!(id, "opencode" | "kilo") {
+        entry = json!({"type":"local","command":std::iter::once(program.to_string()).chain(context.arguments.clone()).collect::<Vec<_>>(),"enabled":true});
+    } else if matches!(id, "claude" | "copilot-vscode" | "copilot-cli" | "droid") {
+        entry["type"] = json!("stdio");
+    }
+    entry
+}
+
+/// The choice that writes a Box server definition instead of an agent's own
+/// file; Box then publishes it to every agent each developer chose.
+pub(crate) const BOX: &str = "box";
+
+/// `.box/mcp/<product>.yml` in the project, or in `~/.box` for user scope,
+/// refusing a folder Box does not configure.
+pub(crate) fn box_definition_path(context: &Context, scope: Scope) -> Result<PathBuf> {
+    let project = scope == Scope::Project;
+    if project && context.home.starts_with(&context.root) {
+        return Err(Error::selection(format!(
+            "{} is your home folder or contains it, not a project; pass --scope user for your personal Box configuration",
+            context.root.display()
+        )));
+    }
+    let base = if project {
+        &context.root
+    } else {
+        &context.home
+    };
+    if !base.join(".box/config.yml").is_file() {
+        return Err(Error::selection(format!(
+            "{} has no Box configuration (.box/config.yml); run `box config init{}` first",
+            base.display(),
+            if project { "" } else { " --scope user" }
+        )));
+    }
+    Ok(base
+        .join(".box/mcp")
+        .join(format!("{}.yml", context.product)))
+}
+
+/// The server definition Box publishes: the same launch as the agents' own
+/// entries, with the approved tools allowed and every other tool asking.
+pub(crate) fn box_definition(
+    context: &Context,
+    scope: Scope,
+    approved: &[String],
+) -> Result<String> {
+    let command = if let Some(command) = &context.launch_command {
+        command.clone()
+    } else if scope == Scope::Project {
+        context.product.clone()
+    } else {
+        context
+            .program
+            .to_str()
+            .ok_or_else(|| Error::invalid("Executable path is not Unicode"))?
+            .to_owned()
+    };
+    // JSON strings are YAML double-quoted scalars, so values need no YAML codec.
+    let quote = |text: &str| serde_json::to_string(text).expect("serializing a string cannot fail");
+    let mut text = format!(
+        "# Written by `{product} mcp setup --agent box`; rerun it to change this file.\nschema_version: 1\nconnection:\n  transport: stdio\n  command: {}\n  args: [{}]\n",
+        quote(&command),
+        context
+            .arguments
+            .iter()
+            .map(|arg| quote(arg))
+            .collect::<Vec<_>>()
+            .join(", "),
+        product = context.product,
+    );
+    if !approved.is_empty() {
+        text.push_str("permissions:\n  tools:\n");
+        for tool in approved {
+            text.push_str("    ");
+            text.push_str(&quote(tool));
+            text.push_str(": allow\n");
+        }
+    }
+    Ok(text)
+}
+
+/// Agents whose tool approvals setup writes: Codex in its server entry, Claude
+/// Code as `permissions.allow` rules in a separate settings file, and Box in
+/// the definition it publishes.
+pub(crate) const APPROVALS: &[&str] = &[BOX, "claude", "codex"];
+
+/// Codex asks before every tool except those approved here.
+pub(crate) fn codex_approvals(entry: &mut Value, tools: &[Tool], approved: &[String]) {
+    entry["default_tools_approval_mode"] = json!("prompt");
+    entry["tools"] = tools
+        .iter()
+        .map(|tool| {
+            let mode = if approved.contains(&tool.name) {
+                "approve"
+            } else {
+                "prompt"
+            };
+            (tool.name.clone(), json!({"approval_mode":mode}))
+        })
+        .collect::<serde_json::Map<_, _>>()
+        .into();
+}
+
+/// Claude Code's settings file for permission rules. Project rules go in the
+/// personal, uncommitted local settings, like the absolute launch path.
+pub(crate) fn claude_settings(context: &Context, scope: Scope) -> PathBuf {
+    match scope {
+        Scope::Project => context.root.join(".claude/settings.local.json"),
+        Scope::User => context.home.join(".claude/settings.json"),
+    }
+}
+
+/// Claude Code's permission rule for one tool of this product's server.
+pub(crate) fn claude_rule(product: &str, tool: &str) -> String {
+    format!("mcp__{product}__{tool}")
+}

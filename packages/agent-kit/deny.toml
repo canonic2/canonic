@@ -1,0 +1,37 @@
+# Dependency checks for `make deps`. See docs/development.md.
+[graph]
+all-features = true
+
+[advisories]
+unmaintained = "workspace"
+
+[licenses]
+# The unpublished Canonic packages carry their own proprietary license.
+private = { ignore = true }
+allow = ["Apache-2.0", "MIT", "Unicode-3.0"]
+confidence-threshold = 0.9
+
+# TUI Kit's Ratatui dependency uses foldhash's Zlib-licensed implementation.
+[[licenses.exceptions]]
+name = "foldhash"
+allow = ["Zlib"]
+
+# Same scoped exception as Box and Gate for native home-directory discovery.
+[[licenses.exceptions]]
+name = "option-ext"
+version = "0.2.0"
+allow = ["MPL-2.0"]
+
+# Same scoped exception as Box, Gate and Shield for YAML encoding tables.
+[[licenses.exceptions]]
+name = "encoding_rs"
+allow = ["BSD-3-Clause"]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
