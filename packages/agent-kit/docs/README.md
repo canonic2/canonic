@@ -15,10 +15,27 @@ Project scope is the default; user scope is explicit. `Options` supports
 repeated agent IDs, removal, dry run and explicit `yes`. `prepare` returns a
 `Plan` with `review` and `apply` when the product owns the interaction instead.
 
+Use `Context::local_at_root` when the consumer already selected an explicit root;
+it canonicalizes that root without replacing it with an enclosing checkout.
+`run_with_policy` and `prepare_with_policy` accept `SetupPolicy` for terminal-only
+authorization, optional project cwd on supported adapters, and exclusive Box/native
+install routes. `Authorization::TerminalOnly` rejects `yes` and requires terminal
+acceptance for every applying action; the default `run` policy remains unchanged.
+The optional catalog observer receives only the executable path and returns a
+guard held through the shared bounded check, for tracing. It cannot replace
+execution or turn an invalid catalog result into success.
+
+Custom inspection can use `PreparationSession::new(context, scope, policy)`:
+call `inspect` for typed host status and `prepare` with the same scope to share
+file snapshots and prepared codecs. Drop the session after building the plan;
+apply still reads fresh bytes. `catalog` supplies stable IDs/discovery names and
+`discovery_defaults` accepts an explicit PATH snapshot without executing agents.
+
 The host catalog covers Claude Code, Codex, Copilot in VS Code and its CLI,
 Cursor, Gemini, Kilo, Kiro, Kimi, OpenCode, Qwen, Amp, Droid, Windsurf,
 Cline, Augment and Goose. Unsupported automatic scopes return a manual-setup
-reason. Box definitions are available when the selected scope has a Box config.
+reason. Box installation requires a configuration marker in the selected scope;
+removal can withdraw an owned definition after that marker is gone.
 Install/repair checks the trusted executable's catalog before publication. The
 child has a 30-second deadline and a 16 MiB stdout limit; timeout kills and reaps
 the direct child and reports an error without changing agent configuration.

@@ -14,8 +14,39 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub use agents::Format;
-pub use workflow::{Plan, human, prepare, run};
+pub use agents::{Format, catalog};
+pub use detection::defaults_on_path as discovery_defaults;
+pub use preflight::check as check_catalog;
+pub use workflow::{
+    AgentStatus, Plan, PreparationSession, human, prepare, prepare_with_policy, run,
+    run_with_policy,
+};
+
+/// Authorization boundary selected by the embedding product.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Authorization {
+    /// Terminal confirmation or explicit named-agent `yes`.
+    #[default]
+    ConfirmOrExplicitYes,
+    /// Every applying operation requires terminal confirmation.
+    TerminalOnly,
+}
+
+/// Product choices layered over shared registration mechanics.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SetupPolicy {
+    pub authorization: Authorization,
+    /// Set the project root as cwd only for adapters with a supported cwd field.
+    pub project_directory: bool,
+    /// Refuse Box and native agents together for install/repair; allow removal.
+    pub exclusive_routes: bool,
+    /// Payload-free trace observer. The returned guard lives through the bounded
+    /// catalog check; the observer cannot replace execution or its validation.
+    pub catalog_observer: Option<CatalogObserver>,
+}
+
+/// Metadata observer returning a guard retained through catalog execution.
+pub type CatalogObserver = fn(&Path) -> Box<dyn std::any::Any>;
 
 /// Host configuration destination; project is always the default.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, ValueEnum, PartialEq, Eq)]
@@ -95,7 +126,18 @@ impl Context {
     /// Returns an error if the project path cannot be resolved, the native home
     /// or configuration directory is unavailable, or executable lookup fails.
     pub fn local(product: &str, root: &Path, arguments: Vec<String>) -> Result<Self> {
-        let root = project_root(root)?;
+        Self::local_resolved(product, project_root(root)?, arguments)
+    }
+
+    /// Use an explicitly selected root without discovering a containing project.
+    ///
+    /// # Errors
+    /// Returns an error when resolving the root, native user directories or executable fails.
+    pub fn local_at_root(product: &str, root: &Path, arguments: Vec<String>) -> Result<Self> {
+        Self::local_resolved(product, root.canonicalize()?, arguments)
+    }
+
+    fn local_resolved(product: &str, root: PathBuf, arguments: Vec<String>) -> Result<Self> {
         let native_home =
             dirs::home_dir().ok_or_else(|| Error::invalid("Home directory is unavailable"))?;
         let home = native_home.canonicalize()?;

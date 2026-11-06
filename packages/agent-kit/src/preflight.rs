@@ -25,7 +25,11 @@ impl OwnedChild {
     }
 }
 
-pub(crate) fn check(context: &Context) -> Result<()> {
+/// Validate the trusted installed catalog with the shared deadline and output bound.
+///
+/// # Errors
+/// Returns `CatalogCheck` on spawn, timeout, output, exit or JSON validation failure.
+pub fn check(context: &Context) -> Result<()> {
     let mut command = Command::new(&context.program);
     command
         .args(&context.arguments)

@@ -28,6 +28,11 @@ pub(crate) const CATALOG: &[(&str, &[&str])] = &[
     ("goose", &[]), // Also names an unrelated database migration CLI.
 ];
 
+/// Ordered host identifiers and their unambiguous CLI discovery names.
+pub fn catalog() -> impl Iterator<Item = (&'static str, &'static [&'static str])> {
+    CATALOG.iter().copied()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Format {
@@ -55,7 +60,7 @@ pub(crate) fn destination(context: &Context, id: &str, scope: Scope) -> Result<D
     // From home (or above it), several agents' project files are their user
     // files; project scope must never write user configuration.
     if project && context.home.starts_with(&context.root) {
-        return Err(Error::invalid(format!(
+        return Err(Error::selection(format!(
             "{} is your home folder or contains it, not a project; run setup from inside a project, or pass --scope user to configure this OS user's agents",
             context.root.display()
         )));
@@ -255,7 +260,11 @@ pub(crate) const BOX: &str = "box";
 
 /// `.box/mcp/<product>.yml` in the project, or in `~/.box` for user scope,
 /// refusing a folder Box does not configure.
-pub(crate) fn box_definition_path(context: &Context, scope: Scope) -> Result<PathBuf> {
+pub(crate) fn box_definition_path(
+    context: &Context,
+    scope: Scope,
+    remove: bool,
+) -> Result<PathBuf> {
     let project = scope == Scope::Project;
     if project && context.home.starts_with(&context.root) {
         return Err(Error::selection(format!(
@@ -268,7 +277,7 @@ pub(crate) fn box_definition_path(context: &Context, scope: Scope) -> Result<Pat
     } else {
         &context.home
     };
-    if !base.join(".box/config.yml").is_file() {
+    if !remove && !base.join(".box/config.yml").is_file() {
         return Err(Error::selection(format!(
             "{} has no Box configuration (.box/config.yml); run `box config init{}` first",
             base.display(),
@@ -280,6 +289,28 @@ pub(crate) fn box_definition_path(context: &Context, scope: Scope) -> Result<Pat
         .join(format!("{}.yml", context.product)))
 }
 
+pub(crate) fn project_directory(entry: &mut Value, id: &str, context: &Context) {
+    if matches!(
+        id,
+        "codex" | "copilot-vscode" | "gemini" | "qwen" | "kimi" | "opencode" | "kilo"
+    ) {
+        entry["cwd"] = json!(context.root);
+    }
+}
+
+pub(crate) fn launch_command(context: &Context, scope: Scope) -> Result<&str> {
+    if let Some(command) = &context.launch_command {
+        return Ok(command);
+    }
+    if scope == Scope::Project {
+        return Ok(&context.product);
+    }
+    context
+        .program
+        .to_str()
+        .ok_or_else(|| Error::invalid("Executable path is not Unicode"))
+}
+
 /// The server definition Box publishes: the same launch as the agents' own
 /// entries, with the approved tools allowed and every other tool asking.
 pub(crate) fn box_definition(
@@ -287,22 +318,12 @@ pub(crate) fn box_definition(
     scope: Scope,
     approved: &[String],
 ) -> Result<String> {
-    let command = if let Some(command) = &context.launch_command {
-        command.clone()
-    } else if scope == Scope::Project {
-        context.product.clone()
-    } else {
-        context
-            .program
-            .to_str()
-            .ok_or_else(|| Error::invalid("Executable path is not Unicode"))?
-            .to_owned()
-    };
+    let command = launch_command(context, scope)?;
     // JSON strings are YAML double-quoted scalars, so values need no YAML codec.
     let quote = |text: &str| serde_json::to_string(text).expect("serializing a string cannot fail");
     let mut text = format!(
         "# Written by `{product} mcp setup --agent box`; rerun it to change this file.\nschema_version: 1\nconnection:\n  transport: stdio\n  command: {}\n  args: [{}]\n",
-        quote(&command),
+        quote(command),
         context
             .arguments
             .iter()

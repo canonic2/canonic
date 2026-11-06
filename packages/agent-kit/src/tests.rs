@@ -3,6 +3,236 @@ use serde_json::json;
 use std::fs;
 
 #[test]
+fn shared_policy_exclusive_routes_refuse_install_and_allow_combined_removal() {
+    let (_temp, context) = fixture();
+    let policy = SetupPolicy {
+        exclusive_routes: true,
+        ..SetupPolicy::default()
+    };
+    fs::create_dir_all(context.root.join(".box")).unwrap();
+    fs::write(context.root.join(".box/config.yml"), "schema_version: 1\n").unwrap();
+    for agents in [&["box", "codex"][..], &["codex", "box"]] {
+        assert!(matches!(
+            prepare_with_policy(&context, &options(agents), policy),
+            Err(Error::InvalidSelection(_))
+        ));
+    }
+    let definition = context.root.join(".box/mcp/acme.yml");
+    let native = context.root.join(".codex/config.toml");
+    assert!(!definition.exists());
+    assert!(!native.exists());
+    assert!(!context.state.exists());
+    for agent in ["box", "codex"] {
+        prepare_with_policy(&context, &options(&[agent]), policy)
+            .unwrap()
+            .apply()
+            .unwrap();
+    }
+    assert!(definition.is_file());
+    assert!(native.is_file());
+    let removal = Options {
+        remove: true,
+        ..options(&["box", "codex"])
+    };
+    let result = prepare_with_policy(&context, &removal, policy)
+        .unwrap()
+        .apply()
+        .unwrap();
+    assert_eq!(result["registration_verified"], true);
+    assert!(!definition.exists());
+    let source = fs::read_to_string(&native).unwrap();
+    let parsed: toml_edit::DocumentMut = source.parse().unwrap();
+    assert!(
+        parsed
+            .get("mcp_servers")
+            .and_then(|group| group.get("acme"))
+            .is_none()
+    );
+}
+
+#[test]
+fn shared_policy_box_removal_does_not_require_the_configuration_marker() {
+    let (_temp, context) = fixture();
+    let marker = context.root.join(".box/config.yml");
+    fs::create_dir_all(marker.parent().unwrap()).unwrap();
+    fs::write(&marker, "schema_version: 1\n").unwrap();
+    let selected = options(&["box"]);
+    prepare(&context, &selected).unwrap().apply().unwrap();
+    let definition = context.root.join(".box/mcp/acme.yml");
+    assert!(definition.is_file());
+    fs::remove_file(&marker).unwrap();
+    assert!(matches!(
+        prepare(&context, &selected),
+        Err(Error::InvalidSelection(_))
+    ));
+    let session = PreparationSession::new(&context, Scope::Project, SetupPolicy::default());
+    assert!(session.inspect("box", true).unavailable.is_none());
+    let removal = Options {
+        remove: true,
+        ..selected
+    };
+    session.prepare(&removal).unwrap().apply().unwrap();
+    assert!(!definition.exists());
+    assert!(!marker.exists());
+    let ledger = context
+        .state
+        .join("acme")
+        .join(format!("{}.json", storage::identity(&definition)));
+    assert!(!ledger.exists());
+}
+
+#[test]
+fn shared_policy_repeated_codex_selections_plan_and_apply_one_change() {
+    let (_temp, context) = fixture();
+    let user_file = context.home.join(".codex/config.toml");
+    fs::create_dir_all(user_file.parent().unwrap()).unwrap();
+    let user_source = "[mcp_servers.acme]\ncommand = \"user-acme\"\n";
+    fs::write(&user_file, user_source).unwrap();
+    let selected = options(&["codex", "codex"]);
+    let plan = prepare(&context, &selected).unwrap();
+    let review = plan.review();
+    assert_eq!(review["registrations"].as_array().unwrap().len(), 1);
+    assert_eq!(review["registrations"][0]["agents"], json!(["codex"]));
+    assert_eq!(review["other_scopes"].as_array().unwrap().len(), 1);
+    plan.apply().unwrap();
+    let source = fs::read_to_string(context.root.join(".codex/config.toml")).unwrap();
+    let parsed: toml_edit::DocumentMut = source.parse().unwrap();
+    assert_eq!(parsed["mcp_servers"].as_table_like().unwrap().len(), 1);
+    assert_eq!(
+        parsed["mcp_servers"]["acme"]["command"].as_str(),
+        Some("acme")
+    );
+    assert_eq!(fs::read_to_string(user_file).unwrap(), user_source);
+    let repeated = prepare(&context, &selected).unwrap().review();
+    assert_eq!(repeated["registrations"][0]["change"], "unchanged");
+}
+
+#[test]
+fn shared_policy_catalog_observer_runs_once_for_install_and_never_for_removal() {
+    fn observe(program: &std::path::Path) -> Box<dyn std::any::Any> {
+        let marker = program.with_extension("observed");
+        let count: usize = fs::read_to_string(&marker).map_or(0, |text| text.parse().unwrap());
+        fs::write(marker, (count + 1).to_string()).unwrap();
+        Box::new(())
+    }
+    let (_temp, mut context) = fixture();
+    // A missing executable tests observer invocation even when preflight fails,
+    // without creating a subprocess or depending on an installed host tool.
+    context.program = context.root.join("missing-catalog-program");
+    let marker = context.program.with_extension("observed");
+    let policy = SetupPolicy {
+        catalog_observer: Some(observe),
+        ..SetupPolicy::default()
+    };
+    let install = Options {
+        yes: true,
+        ..options(&["codex"])
+    };
+    assert!(matches!(
+        run_with_policy(&context, install.clone(), true, policy),
+        Err(Error::CatalogCheck(_))
+    ));
+    assert_eq!(fs::read_to_string(&marker).unwrap(), "1");
+    assert!(!context.root.join(".codex/config.toml").exists());
+    assert!(!context.state.exists());
+    prepare(&context, &options(&["codex"]))
+        .unwrap()
+        .apply()
+        .unwrap();
+    let removal = Options {
+        remove: true,
+        ..install
+    };
+    let result = run_with_policy(&context, removal, true, policy).unwrap();
+    assert_eq!(result["registration_verified"], true);
+    assert_eq!(fs::read_to_string(marker).unwrap(), "1");
+}
+
+#[test]
+fn public_preparation_session_shares_inspection_and_rejects_scope_or_file_changes() {
+    let (_temp, context) = fixture();
+    let session = PreparationSession::new(&context, Scope::Project, SetupPolicy::default());
+    assert_eq!(session.inspect("claude", false).detail, "not registered");
+    let selected = options(&["claude"]);
+    let wrong_scope = Options {
+        scope: Scope::User,
+        ..selected.clone()
+    };
+    assert!(matches!(
+        session.prepare(&wrong_scope),
+        Err(Error::Invalid(_))
+    ));
+    let path = context.root.join(".mcp.json");
+    fs::write(&path, "{\"external\":true}").unwrap();
+    let plan = session.prepare(&selected).unwrap();
+    assert!(matches!(plan.apply(), Err(Error::Conflict(_))));
+    assert_eq!(fs::read_to_string(path).unwrap(), "{\"external\":true}");
+}
+
+#[test]
+fn terminal_policy_preserves_project_launch_and_rejects_unattended_changes() {
+    let (_temp, context) = fixture();
+    let policy = SetupPolicy {
+        authorization: Authorization::TerminalOnly,
+        project_directory: true,
+        exclusive_routes: true,
+        ..SetupPolicy::default()
+    };
+    let selected = options(&["codex"]);
+    let review = prepare_with_policy(&context, &selected, policy)
+        .unwrap()
+        .review();
+    assert_eq!(
+        review["registrations"][0]["entry"]["cwd"],
+        json!(context.root)
+    );
+    let user = Options {
+        scope: Scope::User,
+        ..selected.clone()
+    };
+    let review = prepare_with_policy(&context, &user, policy)
+        .unwrap()
+        .review();
+    assert!(review["registrations"][0]["entry"].get("cwd").is_none());
+    let default = prepare(&context, &selected).unwrap().review();
+    assert!(default["registrations"][0]["entry"].get("cwd").is_none());
+    let unattended = Options {
+        yes: true,
+        ..selected.clone()
+    };
+    assert!(matches!(
+        run_with_policy(&context, unattended, true, policy),
+        Err(Error::InvalidSelection(_))
+    ));
+    assert!(matches!(
+        run_with_policy(&context, selected.clone(), true, policy),
+        Err(Error::ConfirmationRequired(_))
+    ));
+    let removal = Options {
+        remove: true,
+        ..selected
+    };
+    assert!(matches!(
+        run_with_policy(&context, removal, true, policy),
+        Err(Error::ConfirmationRequired(_))
+    ));
+    assert!(!context.state.exists());
+    assert!(!context.root.join(".codex").exists());
+}
+
+#[test]
+fn explicit_context_root_does_not_expand_to_the_enclosing_project() {
+    let (_temp, context) = fixture();
+    fs::write(context.root.join("gate.yml"), "").unwrap();
+    let nested = context.root.join("nested");
+    fs::create_dir(&nested).unwrap();
+    let explicit = Context::local_at_root("acme", &nested, vec!["serve".into()]).unwrap();
+    let discovered = Context::local("acme", &nested, vec!["serve".into()]).unwrap();
+    assert_eq!(explicit.root, nested);
+    assert_eq!(discovered.root, context.root);
+}
+
+#[test]
 fn explicit_path_launch_policy_and_product_names_are_respected_in_both_scopes() {
     let (_temp, mut context) = fixture();
     context.product = "acme".into();

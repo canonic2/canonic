@@ -1,5 +1,8 @@
 //! Review and confirmation compose pure codecs with owned host-file publication.
-use super::{Context, Error, Options, Result, Scope, agents, inputs::Inputs, storage};
+use super::{
+    Authorization, Context, Error, Options, Result, Scope, SetupPolicy, agents, inputs::Inputs,
+    storage,
+};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeSet,
@@ -27,6 +30,7 @@ struct Change {
     ledger_before: Option<String>,
     record: storage::Record,
     ownership_unchanged: bool,
+    launch: Option<Value>,
 }
 
 /// A reviewed plan binds the exact configuration and ownership bytes read.
@@ -43,6 +47,52 @@ pub struct Plan {
     /// setup did not write, with those rules.
     kept_by_other_rules: Vec<String>,
     other_rules: Vec<String>,
+}
+
+/// Host inspection metadata independent of a terminal UI representation.
+#[derive(Clone, Debug)]
+pub struct AgentStatus {
+    pub id: String,
+    pub detail: String,
+    pub unavailable: Option<String>,
+}
+
+/// One context/scope/policy-bound lifetime for inspection and plan preparation.
+/// It retains native-file snapshots only until the caller drops the session.
+pub struct PreparationSession<'a> {
+    context: &'a Context,
+    scope: Scope,
+    policy: SetupPolicy,
+    inputs: Inputs,
+}
+
+impl<'a> PreparationSession<'a> {
+    #[must_use]
+    pub fn new(context: &'a Context, scope: Scope, policy: SetupPolicy) -> Self {
+        Self {
+            context,
+            scope,
+            policy,
+            inputs: Inputs::default(),
+        }
+    }
+
+    /// Inspect a host through this session's shared snapshots without writes.
+    #[must_use]
+    pub fn inspect(&self, id: &str, remove: bool) -> AgentStatus {
+        inspect_inputs(self.context, id, self.scope, remove, &self.inputs)
+    }
+
+    /// Prepare an immutable plan from the same inputs used by inspection.
+    ///
+    /// # Errors
+    /// Returns an error for mismatched scope or any failure described by [`prepare`].
+    pub fn prepare(&self, options: &Options) -> Result<Plan> {
+        if options.scope != self.scope {
+            return Err(Error::invalid("Preparation session scope changed"));
+        }
+        prepare_inputs(self.context, options, &self.inputs, self.policy)
+    }
 }
 impl Plan {
     /// Review metadata excludes unrelated configuration and credentials.
@@ -65,7 +115,10 @@ impl Plan {
                 match c.kind {
                     Kind::Server => row["entry"] = json!(c.record.desired),
                     Kind::Approvals => row["permission_rules"] = json!(c.record.desired),
-                    Kind::Definition => row["definition"] = json!(c.after),
+                    Kind::Definition => {
+                        row["definition"] = json!(c.after);
+                        row["entry"] = json!(c.launch);
+                    }
                 }
                 row
             }).collect::<Vec<_>>(),
@@ -189,10 +242,31 @@ pub fn prepare(context: &Context, options: &Options) -> Result<Plan> {
     prepare_with_inputs(context, options, &Inputs::default())
 }
 
+/// Prepare registration using the embedding product's explicit policy.
+///
+/// # Errors
+/// Returns the same preparation errors as [`prepare`], plus incompatible-route errors.
+pub fn prepare_with_policy(
+    context: &Context,
+    options: &Options,
+    policy: SetupPolicy,
+) -> Result<Plan> {
+    PreparationSession::new(context, options.scope, policy).prepare(options)
+}
+
 pub(crate) fn prepare_with_inputs(
     context: &Context,
     options: &Options,
     inputs: &Inputs,
+) -> Result<Plan> {
+    prepare_inputs(context, options, inputs, SetupPolicy::default())
+}
+
+fn prepare_inputs(
+    context: &Context,
+    options: &Options,
+    inputs: &Inputs,
+    policy: SetupPolicy,
 ) -> Result<Plan> {
     if context.product.is_empty()
         || context.product.len() > 64
@@ -210,6 +284,7 @@ pub(crate) fn prepare_with_inputs(
             "Select agents with --agent, or run mcp setup in a terminal",
         ));
     }
+    validate_policy(options, policy)?;
     let approved = approved(context, options, inputs);
     let mut plan = Plan {
         context: context.clone(),
@@ -230,13 +305,20 @@ pub(crate) fn prepare_with_inputs(
         kept_by_other_rules: Vec::new(),
         other_rules: Vec::new(),
     };
+    let mut selected = BTreeSet::new();
     for id in &options.agents {
+        if !selected.insert(id.as_str()) {
+            continue;
+        }
         if id == agents::BOX {
             plan.changes
                 .extend(definition_change(context, options, &plan.approved, inputs)?);
             continue;
         }
         let mut destination = agents::destination(context, id, options.scope)?;
+        if policy.project_directory && options.scope == Scope::Project {
+            agents::project_directory(&mut destination.entry, id, context);
+        }
         if id == "codex" && !context.tools.is_empty() {
             agents::codex_approvals(&mut destination.entry, &context.tools, &plan.approved);
         }
@@ -259,6 +341,24 @@ pub(crate) fn prepare_with_inputs(
         }
     }
     Ok(plan)
+}
+
+fn validate_policy(options: &Options, policy: SetupPolicy) -> Result<()> {
+    if options.yes && policy.authorization == Authorization::TerminalOnly {
+        return Err(Error::selection(
+            "Setup requires terminal confirmation; unattended authorization is unavailable",
+        ));
+    }
+    if policy.exclusive_routes
+        && !options.remove
+        && options.agents.iter().any(|a| a == agents::BOX)
+        && options.agents.iter().any(|a| a != agents::BOX)
+    {
+        return Err(Error::selection(
+            "Choose only --agent box, or native agents without Box; both routes would publish competing server entries",
+        ));
+    }
+    Ok(())
 }
 
 /// The agent's registration in the scope not being configured, which the host
@@ -351,6 +451,7 @@ fn server_change(
         ledger_before,
         record,
         ownership_unchanged,
+        launch: None,
     }))
 }
 
@@ -363,7 +464,7 @@ fn definition_change(
     approved: &[String],
     inputs: &Inputs,
 ) -> Result<Option<Change>> {
-    let path = agents::box_definition_path(context, options.scope)?;
+    let path = agents::box_definition_path(context, options.scope, options.remove)?;
     let before = inputs.read(&path)?;
     let ledger = ledger(context, &path);
     let ledger_before = inputs.read(&ledger)?;
@@ -402,6 +503,13 @@ fn definition_change(
         .is_some_and(|r| !r.pending && r.desired == desired && r.previous == desired);
     Ok(Some(Change {
         kind: Kind::Definition,
+        launch: if options.remove {
+            None
+        } else {
+            Some(
+                json!({"command":agents::launch_command(context, options.scope)?,"args":context.arguments}),
+            )
+        },
         agents: vec![agents::BOX.into()],
         record: storage::Record {
             version: 1,
@@ -522,7 +630,7 @@ fn approved(context: &Context, options: &Options, inputs: &Inputs) -> Vec<String
 /// entry, or Claude Code's rules once setup owns any of them.
 fn current_approvals(context: &Context, options: &Options, inputs: &Inputs) -> Option<Vec<String>> {
     if options.agents.iter().any(|a| a == agents::BOX)
-        && let Ok(path) = agents::box_definition_path(context, options.scope)
+        && let Ok(path) = agents::box_definition_path(context, options.scope, options.remove)
         && inputs
             .read(&ledger(context, &path))
             .ok()
@@ -657,6 +765,7 @@ fn claude_approvals(
         ledger,
         ledger_before,
         ownership_unchanged,
+        launch: None,
     }))
 }
 
@@ -844,39 +953,10 @@ fn select_agents(
     let choices = agents::CATALOG
         .iter()
         .map(|(id, _)| {
-            let mut choice = canonic_tui_kit::picker::Choice::new(*id, *id);
-            if *id == agents::BOX {
-                match agents::box_definition_path(context, options.scope) {
-                    Ok(path) => {
-                        choice.detail = match inputs.read(&path) {
-                            Ok(Some(_)) => "defined for Box; ownership checked on review",
-                            Ok(None) => "Box publishes it to each developer's agents",
-                            Err(_) => "unreadable definition",
-                        }
-                        .into();
-                    }
-                    Err(error) => choice.disabled = Some(error.to_string()),
-                }
-                return choice;
-            }
-            match agents::destination(context, id, options.scope) {
-                Ok(dest) => {
-                    choice.detail = match inputs.read(&dest.path) {
-                        Ok(Some(_)) => match inputs
-                            .document(&dest.path, dest.format)
-                            .and_then(|doc| doc.edit(dest.key, &context.product, None))
-                        {
-                            Ok((Some(_), _)) => "configured; ownership checked on review",
-                            Ok(_) => "not registered",
-                            Err(_) => "invalid configuration",
-                        },
-                        Ok(None) => "not registered",
-                        Err(_) => "unreadable configuration",
-                    }
-                    .into();
-                }
-                Err(_) => choice.disabled = Some("unavailable in this scope".into()),
-            }
+            let status = inspect_inputs(context, id, options.scope, options.remove, inputs);
+            let mut choice = canonic_tui_kit::picker::Choice::new(&status.id, &status.id);
+            choice.detail = status.detail;
+            choice.disabled = status.unavailable;
             choice
         })
         .collect();
@@ -889,14 +969,84 @@ fn select_agents(
     )?)
 }
 
+fn inspect_inputs(
+    context: &Context,
+    id: &str,
+    scope: Scope,
+    remove: bool,
+    inputs: &Inputs,
+) -> AgentStatus {
+    let mut choice = AgentStatus {
+        id: id.to_owned(),
+        detail: String::new(),
+        unavailable: None,
+    };
+    if id == agents::BOX {
+        match agents::box_definition_path(context, scope, remove) {
+            Ok(path) => {
+                choice.detail = match inputs.read(&path) {
+                    Ok(Some(_)) => "defined for Box; ownership checked on review",
+                    Ok(None) => "Box publishes it to each developer's agents",
+                    Err(_) => "unreadable definition",
+                }
+                .into();
+            }
+            Err(error) => choice.unavailable = Some(error.to_string()),
+        }
+        return choice;
+    }
+    match agents::destination(context, id, scope) {
+        Ok(dest) => {
+            choice.detail = match inputs.read(&dest.path) {
+                Ok(Some(_)) => match inputs
+                    .document(&dest.path, dest.format)
+                    .and_then(|doc| doc.edit(dest.key, &context.product, None))
+                {
+                    Ok((Some(_), _)) => "configured; ownership checked on review",
+                    Ok(_) => "not registered",
+                    Err(_) => "invalid configuration",
+                },
+                Ok(None) => "not registered",
+                Err(_) => "unreadable configuration",
+            }
+            .into();
+        }
+        Err(error) => {
+            choice.unavailable = Some(
+                error
+                    .to_string()
+                    .lines()
+                    .next()
+                    .unwrap_or("unavailable in this scope")
+                    .trim()
+                    .to_owned(),
+            );
+        }
+    }
+    choice
+}
+
 /// Guided selection and confirmation. JSON and pipes never prompt; explicit
 /// selection with `yes` can apply without terminal confirmation.
 ///
 /// # Errors
 /// Returns an error for invalid selections, unavailable confirmation, failed
 /// catalog checks, terminal I/O, preparation conflicts or publication failures.
-pub fn run(context: &Context, mut options: Options, machine: bool) -> Result<Value> {
-    let inputs = Inputs::default();
+pub fn run(context: &Context, options: Options, machine: bool) -> Result<Value> {
+    run_with_policy(context, options, machine, SetupPolicy::default())
+}
+
+/// Run shared setup under consumer-selected authorization and launch policy.
+///
+/// # Errors
+/// Returns setup, confirmation, catalog and publication failures as [`run`] does.
+pub fn run_with_policy(
+    context: &Context,
+    mut options: Options,
+    machine: bool,
+    policy: SetupPolicy,
+) -> Result<Value> {
+    let session = PreparationSession::new(context, options.scope, policy);
     if options.yes && options.agents.is_empty() {
         return Err(Error::selection(
             "--yes requires explicit --agent selections",
@@ -918,11 +1068,12 @@ pub fn run(context: &Context, mut options: Options, machine: bool) -> Result<Val
                 None => return Ok(json!({"cancelled_by_user":true})),
             }
         }
-        match select_agents(context, &options, &inputs)? {
+        match select_agents(context, &options, &session.inputs)? {
             Some(agents) => options.agents = agents,
             None => return Ok(json!({"cancelled_by_user":true})),
         }
     }
+    validate_policy(&options, policy)?;
     if interactive
         && !options.remove
         && !options.dry_run
@@ -932,26 +1083,33 @@ pub fn run(context: &Context, mut options: Options, machine: bool) -> Result<Val
             .iter()
             .any(|id| options.agents.iter().any(|a| a == id))
     {
-        match permissions(context, &options, &inputs)? {
+        match permissions(context, &options, &session.inputs)? {
             Some(selected) => options.approved = Some(selected),
             None => return Ok(json!({"cancelled_by_user":true})),
         }
     }
-    let plan = prepare_with_inputs(context, &options, &inputs)?;
-    drop(inputs);
+    let plan = session.prepare(&options)?;
+    drop(session);
     let review = plan.review();
     if options.dry_run {
         return Ok(review);
     }
     if !interactive && !options.yes {
         return Err(Error::ConfirmationRequired(
-            "Setup needs terminal confirmation or --yes; --dry-run --json inspects selected changes without writes".into(),
+            if policy.authorization == Authorization::TerminalOnly {
+                "Setup needs terminal confirmation to authorize registrations and tool approvals; --dry-run --json inspects selected changes without writes".into()
+            } else {
+                "Setup needs terminal confirmation or --yes; --dry-run --json inspects selected changes without writes".into()
+            },
         ));
     }
     // Only a product's known check entry point is run; host settings cannot
     // select the executable used by this probe.
     if !options.remove {
-        super::preflight::check(context)?;
+        let _observed = policy
+            .catalog_observer
+            .map(|observe| observe(&context.program));
+        super::check_catalog(context)?;
     }
     if options.yes {
         return plan.apply();

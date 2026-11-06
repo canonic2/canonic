@@ -13,8 +13,10 @@ pub(super) fn defaults(context: &Context, options: &Options) -> Vec<String> {
     defaults_on_path(context, options, &search_path)
 }
 
-/// An explicit search path keeps discovery fixtures independent of the host.
-pub(super) fn defaults_on_path(
+/// Resolve install-picker defaults from an explicit PATH snapshot without execution.
+/// Explicit agents remain authoritative and removal receives no inferred marks.
+#[must_use]
+pub fn defaults_on_path(
     context: &Context,
     options: &Options,
     search_path: &[PathBuf],
@@ -23,7 +25,7 @@ pub(super) fn defaults_on_path(
         return options.agents.clone();
     }
     // In a Box project, Box publishes to each developer's agents.
-    if agents::box_definition_path(context, options.scope).is_ok() {
+    if agents::box_definition_path(context, options.scope, false).is_ok() {
         return vec![agents::BOX.to_owned()];
     }
     agents::CATALOG
