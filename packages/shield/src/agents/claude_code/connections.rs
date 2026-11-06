@@ -30,6 +30,27 @@ pub(super) fn decode(entry: &Value) -> Result<Transport, Error> {
     serde_json::from_value(entry).map_err(|_| Error::Invalid("unsupported MCP connection settings"))
 }
 
+pub(super) fn observe(entry: &Value) -> Result<Option<Transport>, Error> {
+    let fields = entry
+        .as_object()
+        .ok_or(Error::Invalid("invalid Claude MCP entry"))?;
+    if let Some(kind) = entry.get("type") {
+        let kind = kind
+            .as_str()
+            .ok_or(Error::Invalid("invalid Claude MCP transport type"))?;
+        if !["stdio", "http"].contains(&kind) {
+            return Ok(None);
+        }
+    }
+    if fields
+        .keys()
+        .any(|key| !["type", "command", "args", "env", "url"].contains(&key.as_str()))
+    {
+        return Ok(None);
+    }
+    decode(entry).map(Some)
+}
+
 pub(super) fn settings(
     source: &str,
     previous: &Value,

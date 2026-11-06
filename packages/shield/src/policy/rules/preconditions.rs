@@ -57,6 +57,49 @@ fn split(alternative: &Value, domain: &str) -> Result<(Map<String, Value>, Value
 }
 
 impl Precondition {
+    /// Reject argv scope misses before cloning compiled gate descriptors. MCP
+    /// identities are bound later and must not be tested against template names.
+    pub(crate) fn candidate(&self, facts: &Facts<'_>) -> bool {
+        if self.domain() != "argv" {
+            return true;
+        }
+        let Input::Argv {
+            executable,
+            arguments,
+            ..
+        } = facts.input
+        else {
+            return false;
+        };
+        let identity = &self.conditions["executable"];
+        if selectors::exact(identity).is_some_and(|name| name != executable) {
+            return false;
+        }
+        if let Some(names) = identity["one_of"].as_array()
+            && names.iter().all(Value::is_string)
+            && !names.iter().any(|name| name.as_str() == Some(executable))
+        {
+            return false;
+        }
+        let grammar = &self.conditions["arguments"];
+        if !facts.known_arguments || grammar.get("leading").is_some() {
+            return true;
+        }
+        if matches!(grammar["kind"].as_str(), Some("prefix" | "exact"))
+            && let Some(values) = grammar["values"].as_array()
+            && values.iter().all(Value::is_string)
+        {
+            return arguments.len() >= values.len()
+                && (grammar["kind"] != "exact" || arguments.len() == values.len())
+                && values
+                    .iter()
+                    .zip(arguments)
+                    .all(|(expected, actual)| expected.as_str() == Some(actual));
+        }
+        // Patterns, contextual identity and option grammars retain the ordinary
+        // bounded resolver. Dispatch never guesses a semantic mismatch.
+        true
+    }
     pub(crate) fn domain(&self) -> &str {
         self.conditions["domain"].as_str().unwrap_or_default()
     }

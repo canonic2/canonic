@@ -49,10 +49,10 @@ impl ReviewAdapter for super::Codex {
 }
 
 static GUIDANCE: Guidance = Guidance {
-    instructions: "Copy apply_arguments unchanged to policy_apply for Codex tool approval. If the approval policy is never, leave the proposal pending and ask the user to activate it with shield policy review in their terminal; never bypass that restriction. ",
-    unavailable: "Codex tool approval is unavailable. Ask the user to activate the pending proposal with shield policy review in their terminal; do not change or bypass the approval policy.",
-    required: "Approval required. Inspect the proposal with policy_show using its proposal_id, then copy its apply_arguments object unchanged into policy_apply. If the approval policy is never, leave the proposal pending and ask the user to activate it with shield policy review in their terminal; never bypass that restriction.",
-    proposed: "Policy proposal saved; inactive. Copy apply_arguments unchanged to policy_apply for Codex approval. Wait before the next proposal; activation stales other proposals. If the approval policy is never, leave the proposal pending and ask the user to activate it with shield policy review in their terminal; never bypass that restriction.",
+    instructions: "Immediately copy apply_arguments unchanged to policy_apply for Codex approval. Connection changes require Shield's form. Closed attempts cannot resume. If approvals are disabled, ask the user to enable prompts with /permissions in this session, then prepare fresh. Never send the user to a terminal or change approval settings yourself. ",
+    unavailable: "Codex approval is unavailable and this attempt is closed. Ask the user to enable confirmation prompts with /permissions in this session, then prepare fresh. Do not change approval settings yourself or send the user to a terminal.",
+    required: "Approval required. Inspect the live proposal with policy_show, then copy apply_arguments unchanged into policy_apply. Closed attempts require fresh preparation. Do not change approval settings yourself.",
+    proposed: "Inactive change prepared. Immediately copy apply_arguments unchanged to policy_apply for Codex approval. Wait for its outcome before preparing another change. Never finish with an undecided proposal; withdraw an abandoned attempt. Save intent with policy_defer only when the user explicitly requests deferral.",
     ask: "For eligible reviewed groups, prepare one bounded batch with policy_propose. Copy apply_arguments unchanged to policy_apply for host approval. Do not repeat unchanged proposed/deferred offers. Decline or cancellation ends the offer; do not retry.",
 };
 

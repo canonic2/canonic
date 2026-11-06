@@ -21,8 +21,10 @@ fn prepared_with_options(
     std::fs::write(source.join("catalog.json"), json!({"schema_version":1,"packs":[{"id":"acme/settings","version":"1.0.0","path":"pack.yml","sha256":crate::policy::fingerprint(bytes.as_bytes())}]}).to_string()).unwrap();
     crate::review::mcp::register_fixture(&project.review, &source);
     let connection = crate::review::mcp::Connection::new("install".into());
+    let mut installation = (*project.review).clone();
+    installation.connection_id = Some("install".into());
     let result = crate::review::mcp::call(
-        &project.review,
+        &installation,
         &connection,
         "policy_propose",
         &json!({"change":{"kind":"pack_add","reference":"fixture/acme/settings"}}),
@@ -30,7 +32,7 @@ fn prepared_with_options(
     );
     assert!(result["error"].is_null(), "{result}");
     let result = crate::review::mcp::call_with_confirmation(
-        &project.review,
+        &installation,
         &connection,
         "policy_apply",
         &result["data"]["apply_arguments"],
@@ -274,15 +276,7 @@ fn pack_forms_revalidate_pack_constraints_and_active_revision() {
     let form = transport.call(json!(11), "pack_configure", &args());
     let change = json!({"change":{"kind":"rule_add","rule":{"id":"other","decision":"ask","conditions":{"domain":"argv","executable":"other","arguments":{"kind":"any"}}}}});
     let result = transport.call(json!(12), "policy_propose", &change);
-    let applied = crate::review::mcp::call_with_confirmation(
-        &project.review,
-        &crate::review::mcp::Connection::new("other".into()),
-        "policy_apply",
-        &data(&result)["data"]["apply_arguments"],
-        &|| Ok(()),
-        true,
-    );
-    assert!(applied["error"].is_null(), "{applied}");
+    super::confirmation::commit_elsewhere(&project, &data(&result)["data"]["apply_arguments"]);
     let before = project.revision();
     let result = transport.request(&answer(&form, "accept", values()));
     assert_eq!(data(&result)["error"]["code"], "stale_revision", "{result}");

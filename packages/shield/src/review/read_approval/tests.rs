@@ -31,6 +31,7 @@ fn fixture() -> (assert_fs::TempDir, Context, EvaluatedRequest, String) {
         project: context.project_root.clone(),
     };
     let resource = review::runtime::consumer::ResourceRequest {
+        mcp: None,
         input: policy::normalized::Input::File {
             action: "read".into(),
             sources: request.arguments.clone(),
@@ -246,6 +247,7 @@ fn additional_read_roots_support_exact_one_time_grants() {
         project: context.project_root.clone(),
     };
     let resource = ResourceRequest {
+        mcp: None,
         input: Input::File {
             action: "read".into(),
             sources: request.arguments.clone(),
@@ -319,6 +321,7 @@ fn typed_read_grants_bind_original_input_and_retain_resource_during_review() {
         Err(Error::Invalid(_))
     ));
     let resource = ResourceRequest {
+        mcp: None,
         input: Input::File {
             action: "read".into(),
             sources: previous.request().arguments[..1].to_vec(),

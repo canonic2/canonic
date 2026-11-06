@@ -57,6 +57,7 @@ pub(crate) const CAPABILITIES: &[&str] = &[
     "structured-rules-v1",
     "argument-rules-v1",
     "argument-paths-v1",
+    "graphql-v1",
     "field-paths-v1",
     "glob-v1",
     "regex-v1",
@@ -364,6 +365,9 @@ impl Evaluation {
 }
 
 impl Pack {
+    pub(crate) fn has_mcp_integrations(&self) -> bool {
+        !self.document.mcp_integrations.is_empty()
+    }
     pub(crate) fn mcp_effective_fields(
         &self,
         integration: &str,
@@ -410,14 +414,13 @@ impl Pack {
         serde_json::from_value(defaults.clone())
             .map_err(|_| Error::Contract("unresolved MCP defaults"))
     }
-    /// Bind MCP scopes to explicitly associated project connections. The raw
-    /// artifact remains unchanged; the configuration revision owns this image.
-    pub(crate) fn bind_mcp_connections(
-        &mut self,
+    /// Validate explicit constraints without discarding rules needed by servers
+    /// configured after activation.
+    pub(crate) fn validate_mcp_connections(
+        &self,
         connections: &crate::mcp_connections::Connections,
     ) -> Result<(), Error> {
-        let mut bindings = std::collections::BTreeMap::<String, Vec<String>>::new();
-        for (id, connection) in connections {
+        for connection in connections.values() {
             let Some(name) = connection.packs.get(self.id()) else {
                 continue;
             };
@@ -433,11 +436,17 @@ impl Pack {
                     "project MCP connection does not match its pack integration",
                 ));
             }
-            if connection.enabled && !connection.agents.is_empty() {
-                bindings.entry(name.clone()).or_default().push(id.clone());
-            }
         }
-        let patterns = self.patterns.clone();
+        Ok(())
+    }
+
+    /// Materialize only selected MCP postings using request-owned matches and
+    /// the compiled pattern provider. No parsing or pattern compilation occurs.
+    pub(crate) fn bind_mcp_scopes(
+        &mut self,
+        bindings: &BTreeMap<String, Vec<String>>,
+        patterns: &dyn patterns::Provider,
+    ) -> Result<(), Error> {
         if !self
             .document
             .rules
@@ -456,8 +465,8 @@ impl Pack {
                 return Ok(true);
             }
             let mut names = std::collections::BTreeSet::new();
-            for (integration, ids) in &bindings {
-                if selectors::matches(&conditions["server"], integration, patterns.as_ref())? {
+            for (integration, ids) in bindings {
+                if selectors::matches(&conditions["server"], integration, patterns)? {
                     names.extend(ids.iter().cloned());
                 }
             }
@@ -499,9 +508,6 @@ impl Pack {
             }
         }
         self.document.preconditions = preconditions;
-        self.index = index::Index::new(self.document.rules.iter().map(rules::Rule::executable));
-        self.patterns =
-            model::prepare_patterns(&self.document.rules, &self.document.preconditions)?.into();
         Ok(())
     }
     /// Parse and validate a supported declarative pack document.
@@ -568,12 +574,19 @@ impl Pack {
                 .any(rules::Precondition::semantic);
         let patterns = {
             let _trace = crate::diagnostics::trace::span("pack.patterns");
-            model::prepare_patterns_reusing(
+            let mut store = model::prepare_patterns_reusing(
                 &document.rules,
                 &document.preconditions,
                 previous.map(|pack| pack.patterns.as_ref()),
-            )?
-            .into()
+            )?;
+            for integration in document.mcp_integrations.values() {
+                store.collect_reusing(
+                    &integration.fields,
+                    "mcp",
+                    previous.map(|pack| pack.patterns.as_ref()),
+                )?;
+            }
+            store.into()
         };
         Ok(Self {
             document,
@@ -1103,7 +1116,9 @@ fn evaluate_facts(
     let mut revision_parts = Vec::new();
     let mut matches = Vec::new();
     let mut materialization = invocations::Budget::default();
-    let prepared = prepared.map(|p| patterns::Memo::new(p, checkpoint));
+    let unused = patterns::Store::default();
+    let shared = patterns::Memo::new(prepared.unwrap_or(&unused), checkpoint);
+    let prepared = prepared.map(|_| &shared as &dyn patterns::Provider);
     for (owner, (pack, profile)) in packs.iter().enumerate() {
         if !identities.insert(pack.id()) {
             return Err(Error::Contract("duplicate pack identity"));
@@ -1115,14 +1130,15 @@ fn evaluate_facts(
             facts,
             indexed,
             checkpoint,
-            prepared.as_ref().map(|p| p as &dyn patterns::Provider),
+            prepared,
+            &shared,
             &mut matches,
             &mut materialization,
         )?;
     }
     for custom in customs {
         revision_parts.push(format!("custom:{}", custom.digest));
-        let memo = patterns::Memo::new(custom.patterns.as_ref(), checkpoint);
+        let memo = patterns::Memo::sharing(custom.patterns.as_ref(), checkpoint, &shared);
         for position in
             custom
                 .index
@@ -1131,9 +1147,7 @@ fn evaluate_facts(
             checkpoint()?;
             if let Some(matched) = custom.document.rules[position].matching(
                 facts,
-                prepared
-                    .as_ref()
-                    .map_or(&memo as &dyn patterns::Provider, |p| p),
+                prepared.unwrap_or(&memo),
                 "custom:project",
                 Profile::Recommended,
                 0,
@@ -1190,11 +1204,12 @@ fn collect_pack_matches(
     indexed: bool,
     checkpoint: &dyn Fn() -> Result<(), Error>,
     prepared: Option<&dyn patterns::Provider>,
+    shared: &dyn patterns::Provider,
     matches: &mut Vec<Match>,
     budget: &mut invocations::Budget,
 ) -> Result<(), Error> {
     let (owner, pack, profile) = selection;
-    let memo = patterns::Memo::new(pack.patterns.as_ref(), checkpoint);
+    let memo = patterns::Memo::sharing(pack.patterns.as_ref(), checkpoint, shared);
     let provider = prepared.unwrap_or(&memo);
     // A failed precondition decides the pack; its ordinary rules do not compete.
     let before = matches.len();

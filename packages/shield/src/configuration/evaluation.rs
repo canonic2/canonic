@@ -63,7 +63,20 @@ impl Evaluator {
         context: &policy::normalized::Context,
         checkpoint: &dyn Fn() -> Result<(), Error>,
     ) -> Result<CandidateEvaluation, Error> {
-        let bound = self.mcp_input(input);
+        self.evaluate_resource_mcp(request, input, context, None, checkpoint)
+    }
+
+    pub(crate) fn evaluate_resource_mcp(
+        &self,
+        request: &Request,
+        input: &policy::normalized::Input,
+        context: &policy::normalized::Context,
+        mcp: Option<&policy::compiled::ResolvedMcp>,
+        checkpoint: &dyn Fn() -> Result<(), Error>,
+    ) -> Result<CandidateEvaluation, Error> {
+        let resolved = self.mcp_resolution(input, mcp)?;
+        let resolved = resolved.as_deref();
+        let bound = Self::mcp_input(input, resolved);
         let input = bound.as_ref();
         input.validate(context, &request.project)?;
         let now = crate::evidence::now();
@@ -80,34 +93,67 @@ impl Evaluator {
             locations: Some(&observer),
             effects: None,
         };
-        let mut evaluation = self.plan.evaluate_input(request, &facts, checkpoint)?;
-        self.constrain_mcp(&mut evaluation, input, request, checkpoint)?;
+        let mut evaluation = self
+            .plan
+            .evaluate_input_mcp(request, &facts, resolved, checkpoint)?;
+        self.constrain_mcp(&mut evaluation, input, request, resolved, checkpoint)?;
         Ok(self.candidate(evaluation))
     }
 
     fn mcp_input<'a>(
-        &self,
         input: &'a policy::normalized::Input,
+        resolved: Option<&policy::compiled::ResolvedMcp>,
     ) -> std::borrow::Cow<'a, policy::normalized::Input> {
         if !matches!(input, policy::normalized::Input::Mcp { .. }) {
             return std::borrow::Cow::Borrowed(input);
         }
         let mut input = input.clone();
         if let policy::normalized::Input::Mcp {
-            server,
             connection,
             arguments,
             ..
         } = &mut input
         {
-            *connection = self
-                .effective
-                .mcp_connections()
-                .get(server)
-                .filter(|c| c.enabled && !c.agents.is_empty())
-                .map(|c| c.facts(arguments));
+            *connection = resolved.and_then(|mcp| mcp.facts(arguments));
         }
         std::borrow::Cow::Owned(input)
+    }
+
+    fn mcp_resolution<'a>(
+        &self,
+        input: &policy::normalized::Input,
+        supplied: Option<&'a policy::compiled::ResolvedMcp>,
+    ) -> Result<Option<std::borrow::Cow<'a, policy::compiled::ResolvedMcp>>, Error> {
+        let policy::normalized::Input::Mcp { server, .. } = input else {
+            return Ok(None);
+        };
+        if let Some(supplied) = supplied {
+            if supplied.server != *server || supplied.revision != self.revision {
+                return Err(Error::Contract(
+                    "MCP observation belongs to another connection or policy revision",
+                ));
+            }
+            return Ok(Some(std::borrow::Cow::Borrowed(supplied)));
+        }
+        Ok(Some(std::borrow::Cow::Owned(self.resolve_mcp(
+            server,
+            self.effective.mcp_connections(),
+            "project",
+        )?)))
+    }
+
+    pub(crate) fn has_mcp_integrations(&self) -> bool {
+        self.plan.has_mcp_integrations()
+    }
+
+    pub(crate) fn resolve_mcp(
+        &self,
+        server: &str,
+        connections: &crate::mcp_connections::Connections,
+        source: &str,
+    ) -> Result<policy::compiled::ResolvedMcp, Error> {
+        self.plan
+            .resolve_mcp(server, connections, source, &self.revision)
     }
 
     fn constrain_mcp(
@@ -115,21 +161,17 @@ impl Evaluator {
         evaluation: &mut policy::Evaluation,
         input: &policy::normalized::Input,
         request: &Request,
+        resolved: Option<&policy::compiled::ResolvedMcp>,
         checkpoint: &dyn Fn() -> Result<(), Error>,
     ) -> Result<(), Error> {
         let policy::normalized::Input::Mcp {
-            server,
-            tool,
-            arguments,
-            ..
+            tool, arguments, ..
         } = input
         else {
             return Ok(());
         };
-        let Some(mapping) = self
-            .effective
-            .mcp_connections()
-            .get(server)
+        let Some(mapping) = resolved
+            .and_then(|mcp| mcp.connection.as_ref())
             .filter(|c| c.enabled)
             .and_then(|c| c.command_fields.get(tool))
         else {
@@ -175,7 +217,9 @@ impl Evaluator {
         checkpoint: &dyn Fn() -> Result<(), Error>,
     ) -> Result<serde_json::Value, Error> {
         use policy::normalized::Input;
-        let bound = self.mcp_input(input);
+        let resolved = self.mcp_resolution(input, None)?;
+        let resolved = resolved.as_deref();
+        let bound = Self::mcp_input(input, resolved);
         let input = bound.as_ref();
         let (name, arguments) = match input {
             Input::Argv {
@@ -204,8 +248,10 @@ impl Evaluator {
             locations: Some(&observer),
             effects: None,
         };
-        let mut evaluation = self.plan.evaluate_input(&request, &facts, checkpoint)?;
-        self.constrain_mcp(&mut evaluation, input, &request, checkpoint)?;
+        let mut evaluation = self
+            .plan
+            .evaluate_input_mcp(&request, &facts, resolved, checkpoint)?;
+        self.constrain_mcp(&mut evaluation, input, &request, resolved, checkpoint)?;
         let complete = !matches!(input, Input::Unknown { .. } | Input::Shell { .. })
             && !self.plan.semantic()
             && observer.complete();

@@ -161,11 +161,6 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
         Error::Dependency(error) => dependency(error),
         Error::Policy(error) => policy(error),
         Error::Io(error) => io_report(error),
-        Error::McpSetupRequired => Report::new(
-            "MCP setup requires terminal review",
-            "Connection settings or defaults changed.",
-            &["Run shield policy review in your terminal, then shield mcp setup."],
-        ),
         Error::ApprovalRequired => Report::new(
             "Operator approval is required",
             "An inspection or proposal cannot activate this change.",

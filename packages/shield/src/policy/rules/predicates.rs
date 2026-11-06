@@ -36,12 +36,21 @@ pub(super) fn checks(
     patterns: &dyn Provider,
 ) -> Result<Failures, Error> {
     let mut failures = Vec::new();
-    for (key, predicate) in value.as_object().ok_or(Error::Syntax)? {
+    let fields = value.as_object().ok_or(Error::Syntax)?;
+    // Cheap conjuncts can establish a miss without initializing semantic work.
+    for (key, predicate) in fields.iter().filter(|(k, _)| k.as_str() != "graphql") {
         let codes = predicate_codes(key, predicate, facts, patterns)?;
         for code in codes {
             if !failures.contains(&(key.clone(), code)) {
                 failures.push((key.clone(), code));
             }
+        }
+    }
+    if (failures.is_empty() || !fields.contains_key("domain"))
+        && let Some(predicate) = fields.get("graphql")
+    {
+        for code in predicate_codes("graphql", predicate, facts, patterns)? {
+            failures.push(("graphql".into(), code));
         }
     }
     Ok(failures)
@@ -109,6 +118,7 @@ fn predicate_codes(
             _ => codes.push("evidence_unavailable"),
         },
         "argument_paths" => codes.extend(argument_paths(predicate, facts, patterns)?),
+        "graphql" => codes.extend(graphql(predicate, facts, patterns)?.map(|f| f.code)),
         "field_paths" => codes.extend(field_paths(predicate, facts, patterns)?),
         "targets" | "sources" | "destination" if !facts.known_arguments => {
             codes.push("evidence_unavailable");
@@ -137,6 +147,38 @@ fn predicate_codes(
         _ => return typed_codes(key, predicate, facts, patterns),
     }
     Ok(codes)
+}
+
+pub(super) fn graphql(
+    predicate: &Value,
+    facts: &Facts<'_>,
+    patterns: &dyn Provider,
+) -> Result<Option<crate::graphql::Failure>, Error> {
+    let unavailable = || {
+        let mut failure = crate::graphql::Failure::new("carrier", "arguments unavailable");
+        failure.code = "evidence_unavailable";
+        failure
+    };
+    let Input::Argv { arguments, .. } = facts.input else {
+        return Ok(Some(unavailable()));
+    };
+    if !facts.known_arguments {
+        return Ok(Some(unavailable()));
+    }
+    if arguments.first().map(String::as_str) != Some("api") {
+        return Ok(Some(crate::graphql::Failure::new(
+            "carrier",
+            "not a GitHub API command",
+        )));
+    }
+    let state = patterns.analysis()?;
+    state.borrow_mut().check(
+        predicate,
+        arguments,
+        facts.context.environment.as_ref(),
+        patterns,
+        &|| patterns.checkpoint(),
+    )
 }
 
 fn field_paths(

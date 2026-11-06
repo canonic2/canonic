@@ -8,6 +8,143 @@ fn edit_rules_before_adoption(root: &Path) {
 }
 
 #[test]
+fn mcp_connection_adoption_requires_the_form_even_with_codex_tool_permission() {
+    let (root, mut context, connection) = fixture();
+    context.agent = Some("codex".into());
+    let first = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
+    );
+    apply(&context, &connection, &first);
+    let path = root.path().join(".shield/config.yml");
+    let mut config: Value = crate::policy::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    config["mcp"] = json!({"cloud":{"transport":{"type":"stdio","command":"acme-connector"},"agents":{"codex":"cloud"}}});
+    std::fs::write(&path, config.to_string()).unwrap();
+    let args = prepare(
+        &context,
+        &connection,
+        &json!({"kind":"project_files_adopt"}),
+    );
+    let before = Store::open(root.path())
+        .unwrap()
+        .read()
+        .unwrap()
+        .policy_revision;
+    let refused = invoke(&context, &connection, "policy_apply", args.clone());
+    assert_eq!(
+        refused["error"]["code"], "operator_review_required",
+        "{refused}"
+    );
+    assert_eq!(
+        Store::open(root.path())
+            .unwrap()
+            .read()
+            .unwrap()
+            .policy_revision,
+        before
+    );
+    let result = apply(&context, &connection, &args);
+    assert_eq!(result["data"]["operator"]["mechanism"], "host-elicitation");
+    let state = Store::open(root.path()).unwrap().read().unwrap();
+    assert_eq!(
+        state.candidates["project"]["lock"]["mcp"]["cloud"]["agents"]["codex"],
+        "cloud"
+    );
+}
+
+#[test]
+fn mcp_connection_form_marks_masked_settings_changes_without_disclosure() {
+    for agent in ["claude", "codex"] {
+        let (root, mut context, connection) = fixture();
+        context.agent = Some(agent.into());
+        let initial = prepare(
+            &context,
+            &connection,
+            &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
+        );
+        apply(&context, &connection, &initial);
+        let path = root.path().join(".shield/config.local.yml");
+        let local = |value: &str| {
+            json!({"schema_version":1,"mcp":{"token":{
+                "transport":{"type":"stdio","command":"acme-connector","env":{"PROFILE":value}},
+                "agents":{agent:"cloud"}
+            }}})
+            .to_string()
+        };
+        // Credential fields are not admitted. A valid connection ID matching the
+        // redactor's sensitive-key grammar still masks this entire private entry.
+        std::fs::write(&path, local("before-private")).unwrap();
+        let first = prepare(
+            &context,
+            &connection,
+            &json!({"kind":"project_files_adopt"}),
+        );
+        apply(&context, &connection, &first);
+        let before = Store::open(root.path()).unwrap().read().unwrap();
+        let edited = local("after-private");
+        std::fs::write(&path, &edited).unwrap();
+        let args = prepare(
+            &context,
+            &connection,
+            &json!({"kind":"project_files_adopt"}),
+        );
+        let message = crate::review::mcp::apply_confirmation(&context, &connection, &args)
+            .unwrap()
+            .unwrap();
+        assert!(message.contains("[REDACTED - changed]"), "{message}");
+        assert!(
+            !message.contains("[REDACTED - added]"),
+            "replacement is not an addition: {message}"
+        );
+        for value in ["before-private", "after-private"] {
+            assert!(!message.contains(value), "{message}");
+            assert!(!args.to_string().contains(value));
+        }
+        assert_eq!(
+            Store::open(root.path())
+                .unwrap()
+                .read()
+                .unwrap()
+                .policy_revision,
+            before.policy_revision
+        );
+        apply(&context, &connection, &args);
+        let after = Store::open(root.path()).unwrap().read().unwrap();
+        assert_eq!(
+            after.candidates["project"]["lock"]["mcp"]["token"]["transport"]["env"]["PROFILE"],
+            "after-private"
+        );
+        let published: Value =
+            crate::policy::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(published, serde_json::from_str::<Value>(&edited).unwrap());
+    }
+}
+
+#[test]
+fn mcp_connection_default_changes_are_detected_without_declaration_edits() {
+    let config = json!({"schema_version":1,"packs":[{
+        "id":"acme/cloud","version":"1.0.0","profile":"recommended","path":"pack.yml"
+    }],"mcp":{"cloud":{
+        "transport":{"type":"defaults","pack":"acme/cloud","integration":"cloud"},
+        "agents":{"codex":"cloud"},"packs":{"acme/cloud":"cloud"}
+    }}})
+    .to_string();
+    let candidate = |command: &str| {
+        let pack = json!({"schema_version":1,"kind":"pack","id":"acme/cloud","version":"1.0.0",
+            "description":"Acme cloud","license":"MIT","maintainers":["Acme"],"engines":{"shield":"*"},
+            "capabilities":["structured-rules-v1","mcp-integrations-v1"],"rules":[],
+            "mcp_integrations":{"cloud":{"transport":"stdio","fields":{"/command":{"exact":command}},"defaults":{"type":"stdio","command":command}}}
+        }).to_string();
+        json!(Bundle::capture(&config, &[pack], None).unwrap())
+    };
+    let before = candidate("acme-read");
+    let after = candidate("acme-admin");
+    assert!(!crate::review::publication::mcp_changed(&before, &before).unwrap());
+    assert!(crate::review::publication::mcp_changed(&before, &after).unwrap());
+}
+
+#[test]
 fn project_files_adopt_recovers_hand_edits_through_both_host_approvals() {
     for agent in ["claude", "codex"] {
         let (root, mut context, connection) = fixture();
@@ -330,6 +467,13 @@ fn prepared_apply_verifies_source_bytes_and_reconnect_can_prepare_its_own_plan()
         .unwrap();
     let reconnected = Connection::new("reconnected".into());
     context.connection_id = Some("reconnected".into());
+    assert!(!invoke(&context, &reconnected, "policy_apply", args)["error"].is_null());
+    let args = fresh_prepare(
+        &context,
+        &reconnected,
+        &json!({"kind":"rule_add","rule":rule("acme-source", "allow")}),
+        "reconnected-plan",
+    );
     apply(&context, &reconnected, &args);
     apply(&context, &reconnected, &args);
     let after = store.read().unwrap();
@@ -353,6 +497,17 @@ pub(super) fn prepare(context: &Context, connection: &Connection, change: &Value
         json!({"change":change}),
     );
     assert!(result["error"].is_null(), "{change}: {result}");
+    result["data"]["apply_arguments"].clone()
+}
+
+fn fresh_prepare(context: &Context, connection: &Connection, change: &Value, key: &str) -> Value {
+    let result = invoke(
+        context,
+        connection,
+        "policy_propose",
+        json!({"change":change,"idempotency_key":key}),
+    );
+    assert!(result["error"].is_null(), "{result}");
     result["data"]["apply_arguments"].clone()
 }
 
@@ -411,13 +566,13 @@ fn a_declared_agent_selects_its_review_adapter_only_when_its_integration_is_reco
             );
         } else {
             // Without a recorded integration, --agent is attribution alone:
-            // the generic adapter sends activation to the terminal.
+            // the generic adapter reports its missing in-session capability.
             assert_eq!(
                 result["error"]["code"], "operator_review_required",
                 "{result}"
             );
-            assert_eq!(result["error"]["operator_route"], "shield policy review");
-            assert_eq!(proposal.status, "pending");
+            assert!(result["error"]["operator_route"].is_null());
+            assert_eq!(proposal.status, "withdrawn");
         }
     }
 }
@@ -484,8 +639,14 @@ fn redacted_apply_arguments_bind_and_commit_the_original_candidate() {
             "invalid_input"
         );
     }
-    apply(&context, &connection, &args);
-    apply(&context, &connection, &args);
+    let fresh = fresh_prepare(
+        &context,
+        &connection,
+        &json!({"kind":"access_path_add","access":"read","path":path}),
+        "after-invalid-arguments",
+    );
+    apply(&context, &connection, &fresh);
+    apply(&context, &connection, &fresh);
     let after = Store::open(root.path()).unwrap().read().unwrap();
     assert_eq!(after.candidates["project"], candidate);
     let config: Value = serde_saphyr::from_str(candidate["config"].as_str().unwrap()).unwrap();
@@ -513,11 +674,20 @@ fn inspected_apply_arguments_recover_the_reply_and_keep_approved_changes_after_a
     // A lost reply is recovered from inspection; the copy must apply unchanged.
     let recovered = inspect();
     assert_eq!(recovered, reply);
-    apply(&context, &connection, &recovered);
-    // After activation, inspection still shows the change that was approved.
+    let committed = apply(&context, &connection, &recovered);
+    // Closed inspection has no reusable approval arguments; the receipt is kept.
     let applied = inspect();
-    assert_eq!(applied["changes"], reply["changes"]);
-    assert_eq!(applied["candidate_digest"], reply["candidate_digest"]);
+    assert!(applied.is_null());
+    let receipt = invoke(
+        &context,
+        &connection,
+        "policy_receipt",
+        json!({"proposal_id":id}),
+    );
+    assert_eq!(
+        receipt["data"]["receipt"]["candidate_digest"],
+        committed["data"]["receipt"]["candidate_digest"]
+    );
 }
 
 #[test]
@@ -595,8 +765,14 @@ fn codex_readable_review_is_exact_retrievable_and_bound_to_the_retained_candidat
             call_with_confirmation(&other, &connection, "policy_apply", args, &|| Ok(()), true);
         assert!(!result["error"].is_null(), "{result}");
     }
-    apply(&context, &connection, args);
-    apply(&context, &connection, args);
+    let fresh = fresh_prepare(
+        &context,
+        &connection,
+        &json!({"kind":"rule_add","rule":rule("acme-readable", "allow")}),
+        "after-invalid-readable",
+    );
+    apply(&context, &connection, &fresh);
+    apply(&context, &connection, &fresh);
     assert_eq!(
         Store::open(root.path()).unwrap().read().unwrap().candidates["project"],
         candidate
@@ -628,8 +804,15 @@ fn codex_readable_reviews_cannot_apply_withdrawn_or_stale_proposals() {
         initial
     );
     let stale = proposal(&context, &connection, "acme-stale");
-    let fresh = proposal(&context, &connection, "acme-fresh");
-    apply(&context, &connection, &fresh["data"]["apply_arguments"]);
+    let mut independent = context.clone();
+    independent.connection_id = Some("independent-review".into());
+    let independent_connection = Connection::new("independent-review".into());
+    let fresh = proposal(&independent, &independent_connection, "acme-fresh");
+    apply(
+        &independent,
+        &independent_connection,
+        &fresh["data"]["apply_arguments"],
+    );
     let active = json!(Store::open(root.path()).unwrap().read().unwrap().active);
     let refused = invoke(
         &context,
@@ -648,9 +831,12 @@ fn codex_readable_reviews_cannot_apply_withdrawn_or_stale_proposals() {
 fn withdrawing_a_proposal_after_its_base_changed_reports_the_stale_revision() {
     let (root, mut context, connection) = fixture();
     context.agent = Some("claude".into());
-    let first = proposal(&context, &connection, "acme-first");
+    let mut other = context.clone();
+    other.connection_id = Some("independent-review".into());
+    let other_connection = Connection::new("independent-review".into());
+    let first = proposal(&other, &other_connection, "acme-first");
     let second = proposal(&context, &connection, "acme-second");
-    apply(&context, &connection, &first["data"]["apply_arguments"]);
+    apply(&other, &other_connection, &first["data"]["apply_arguments"]);
     let id = second["data"]["proposal_id"].clone();
     for _ in 0..2 {
         let result = invoke(
@@ -659,9 +845,8 @@ fn withdrawing_a_proposal_after_its_base_changed_reports_the_stale_revision() {
             "policy_withdraw",
             json!({"proposal_id":id}),
         );
-        assert_eq!(result["error"]["code"], "stale_revision", "{result}");
-        assert_eq!(result["error"]["operator_route"], "policy_propose");
-        assert!(result["data"].is_null(), "{result}");
+        assert!(result["error"].is_null(), "{result}");
+        assert_eq!(result["data"]["status"], "stale");
     }
     let state = Store::open(root.path()).unwrap().read().unwrap();
     let row = state.proposals.iter().find(|p| p.id == id).unwrap();
@@ -672,15 +857,18 @@ fn withdrawing_a_proposal_after_its_base_changed_reports_the_stale_revision() {
         "policy_receipt",
         json!({"proposal_id":id}),
     );
-    assert_eq!(receipt["error"]["code"], "stale_revision", "{receipt}");
-    assert_eq!(receipt["error"]["operator_route"], "policy_propose");
+    assert!(receipt["error"].is_null(), "{receipt}");
+    assert_eq!(receipt["data"]["status"], "stale");
 }
 
 #[test]
 fn a_pending_proposal_whose_base_changed_has_a_stale_receipt() {
     let (root, mut context, connection) = fixture();
     context.agent = Some("claude".into());
-    let first = proposal(&context, &connection, "acme-first");
+    let mut other = context.clone();
+    other.connection_id = Some("independent-review".into());
+    let other_connection = Connection::new("independent-review".into());
+    let first = proposal(&other, &other_connection, "acme-first");
     let second = proposal(&context, &connection, "acme-second");
     let id = second["data"]["proposal_id"].clone();
     // Before the base changes, the receipt routes to apply.
@@ -694,19 +882,19 @@ fn a_pending_proposal_whose_base_changed_has_a_stale_receipt() {
         pending["error"]["code"], "operator_review_required",
         "{pending}"
     );
-    apply(&context, &connection, &first["data"]["apply_arguments"]);
+    apply(&other, &other_connection, &first["data"]["apply_arguments"]);
     let receipt = invoke(
         &context,
         &connection,
         "policy_receipt",
         json!({"proposal_id":id}),
     );
-    assert_eq!(receipt["error"]["code"], "stale_revision", "{receipt}");
-    assert_eq!(receipt["error"]["operator_route"], "policy_propose");
-    // The receipt only inspects; the proposal stays pending until a change.
+    assert!(receipt["error"].is_null(), "{receipt}");
+    assert_eq!(receipt["data"]["status"], "stale");
+    // Closure follows the changed base, without an attempted application.
     let state = Store::open(root.path()).unwrap().read().unwrap();
     let row = state.proposals.iter().find(|p| p.id == id).unwrap();
-    assert_eq!(row.status, "pending");
+    assert_eq!(row.status, "stale");
 }
 
 #[test]
@@ -806,12 +994,15 @@ fn host_application_refuses_changed_stale_withdrawn_or_unregistered_requests() {
         &connection,
         &json!({"kind":"rule_add","rule":rule("old", "allow")}),
     );
+    let mut independent = context.clone();
+    independent.connection_id = Some("independent-review".into());
+    let independent_connection = Connection::new("independent-review".into());
     let fresh = prepare(
-        &context,
-        &connection,
+        &independent,
+        &independent_connection,
         &json!({"kind":"rule_add","rule":rule("new", "deny")}),
     );
-    apply(&context, &connection, &fresh);
+    apply(&independent, &independent_connection, &fresh);
     assert_eq!(
         invoke(&context, &connection, "policy_apply", stale)["error"]["code"],
         "stale_revision"

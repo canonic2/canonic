@@ -47,6 +47,8 @@ const EVENTS: &[&str] = &[
     "user_prompt_submit",
     "session_start",
     "stop",
+    "session_end",
+    "interrupt",
 ];
 /// Tools that ask for every agent: Codex always prompts before applying policy.
 #[cfg(not(windows))]
@@ -290,6 +292,8 @@ mod tests {
             ("UserPromptSubmit", "user_prompt_submit"),
             ("SessionStart", "session_start"),
             ("Stop", "stop"),
+            ("SessionEnd", "session_end"),
+            ("Interrupt", "interrupt"),
         ] {
             assert_eq!(portable(native).unwrap(), portable_name);
         }

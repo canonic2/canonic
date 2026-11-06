@@ -2,7 +2,7 @@
 source: tests/integration/output.rs
 expression: "String::from_utf8_lossy(&output.get_output().stdout)"
 ---
-Review pending proposals, edited files, projection repair or history settings in a terminal
+Review a live change, edited files, projection repair or history settings in a terminal
 
 Usage: shield policy review [OPTIONS]
 

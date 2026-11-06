@@ -25,7 +25,7 @@ pub(in crate::agents) const OFFER: &str = " The agent can ask you to allow it on
 pub(super) fn refusal(receipt: &Value) -> Value {
     json!({"code":receipt["code"],"fixed_protection":receipt["fixed_protection"],
         "identity":receipt["identity"],"protected_path":receipt["protected_path"],
-        "protected_group":receipt["protected_group"],"deny_rules":receipt["deny_rules"]})
+        "protected_group":receipt["protected_group"],"deny_rules":receipt["deny_rules"],"mcp_match":receipt["mcp_match"],"_mcp_binding":receipt["_mcp_binding"]})
 }
 
 fn approvable(refusal: &Value) -> bool {
@@ -59,7 +59,18 @@ pub(super) fn in_session(
         session: request.session,
         cwd: request.cwd.as_ref(),
         tool: request.tool,
-        input_digest: input_digest(request),
+        input_digest: if refusals.iter().any(|r| !r["mcp_match"].is_null()) {
+            crate::json::fingerprint(&(
+                input_digest(request),
+                refusals
+                    .iter()
+                    .map(|r| (&r["mcp_match"], &r["_mcp_binding"]))
+                    .collect::<Vec<_>>(),
+            ))
+            .ok()?
+        } else {
+            input_digest(request)
+        },
     };
     match request.event {
         Event::Before => {
@@ -90,7 +101,7 @@ pub(super) fn in_session(
             .ok()
             .filter(|covered| *covered)
             .map(|_| allowed()),
-        Event::Completed | Event::Failed => None,
+        Event::Completed | Event::Failed | Event::Ended => None,
     }
 }
 

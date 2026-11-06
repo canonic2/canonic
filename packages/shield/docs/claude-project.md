@@ -152,11 +152,15 @@ PreToolUse checks requests against the registered project's policy.
 | Claude Bash and monitor commands | Shell policy. |
 | Codex `view_image` | Image-file read; calls naming another environment block. |
 | Codex `webrun` searches and direct URL opens | Web policy, as described below. |
-| Bound project MCP tool calls | MCP policy using the stable project connection ID and full arguments. |
+| MCP calls matching installed packs, and managed project MCP calls | Current MCP policy using configuration observations and full arguments. |
 
-Configure these bindings through [project MCP connections](mcp-connections.md).
-Unbound servers retain their host behavior. Bound calls whose project settings
-drift are blocked until setup is reviewed again. Codex's inner MCP calls from
+Installed pack/profile policy applies automatically to matching configured servers;
+see [MCP connections](mcp-connections.md). No manual association or host tool-name
+approval update is needed. Servers identified as having no applicable Shield
+policy retain host behavior. An unreadable, malformed or oversized shared
+configuration file prevents that classification and blocks third-party MCP calls
+when an MCP-integrating pack is active. Managed calls whose project settings drift are blocked until setup is
+reviewed again. Codex's inner MCP calls from
 code mode use the same per-call hook path.
 
 Session-management tools pass through to the host's permissions. For Claude,

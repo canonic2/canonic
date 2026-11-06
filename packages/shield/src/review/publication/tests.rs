@@ -30,6 +30,81 @@ fn changed(before: &State) -> Value {
 }
 
 #[test]
+fn automatic_mcp_matching_pack_updates_apply_without_host_permission_rewrites() {
+    let environment = assert_fs::TempDir::new().unwrap();
+    let home = environment.path().join("home");
+    fs::create_dir_all(&home).unwrap();
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "review::publication::tests::automatic_mcp_matching_pack_update_fixture",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env_clear()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("CODEX_HOME", home.join("codex"))
+        .env("CLAUDE_CONFIG_DIR", home.join("claude"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+}
+
+#[test]
+#[ignore = "run by parent with isolated agent homes"]
+fn automatic_mcp_matching_pack_update_fixture() {
+    let (root, context) = fixture();
+    fs::create_dir_all(root.path().join(".codex")).unwrap();
+    let host = root.path().join(".codex/config.toml");
+    let home = std::path::PathBuf::from(std::env::var_os("CODEX_HOME").unwrap());
+    fs::create_dir_all(&home).unwrap();
+    let mut user = toml_edit::DocumentMut::new();
+    user["projects"][context.project_root.as_str()]["trust_level"] = toml_edit::value("trusted");
+    fs::write(home.join("config.toml"), user.to_string()).unwrap();
+    let approvals = "[mcp_servers.my_tools]\ncommand = 'acme-connector'\nargs = ['mcp', 'serve']\ndefault_tools_approval_mode = 'prompt'\n[mcp_servers.my_tools.tools.legacy_docs_search]\napproval_mode = 'approve'\n";
+    fs::write(&host, approvals).unwrap();
+    for (version, tool) in [("1.0.0", "legacy_docs_search"), ("1.1.0", "docs_search")] {
+        let source = json!({"schema_version":1,"kind":"pack","id":"acme/connector","version":version,
+            "description":"Acme permissions","license":"MIT","maintainers":["Acme"],"engines":{"shield":"*"},
+            "capabilities":["structured-rules-v1","mcp-integrations-v1"],
+            "mcp_integrations":{"connector":{"transport":"stdio","fields":{"/command":{"text":"acme-connector"},"/args":{"exact":["mcp","serve"]}}}},
+            "rules":[{"id":"docs","decision":"allow","conditions":{"domain":"mcp","server":"connector","tool":tool}}]}).to_string();
+        let config = json!({"schema_version":1,"packs":[{"id":"acme/connector","version":version,"profile":"recommended","path":"pack.yml"}]}).to_string();
+        let candidate = json!(configuration::Bundle::capture(&config, &[source], None).unwrap());
+        let before = load(&context).unwrap();
+        let project = crate::runtime::Project::open(root.path()).unwrap();
+        let previous = project.snapshot().unwrap();
+        // Preparing source bytes alone cannot change the active snapshot.
+        assert_eq!(previous.has_mcp_integrations(), version == "1.1.0");
+        commit(&context, &before, candidate, metadata(&before), None).unwrap();
+        for requested in ["legacy_docs_search", "docs_search"] {
+            let response = crate::agents::translate_event(
+                root.path(), crate::agents::find("codex").unwrap(),
+                &serde_json::to_vec(&json!({"hook_event_name":"PermissionRequest","session_id":"acme-session",
+                    "cwd":context.project_root,"tool_name":format!("mcp__my_tools__{requested}"),"tool_input":{}})).unwrap(),
+                crate::agents::Event::Permission, &crate::diagnostics::Log::disabled(),
+            );
+            if requested == tool {
+                assert_eq!(
+                    response["hookSpecificOutput"]["decision"]["behavior"], "allow",
+                    "{response}"
+                );
+            } else {
+                assert_eq!(response, json!({}), "{response}");
+            }
+        }
+        assert_eq!(fs::read_to_string(&host).unwrap(), approvals);
+    }
+}
+
+#[test]
 fn operator_review_retains_its_plan_but_still_refuses_changed_files() {
     use clap::Parser as _;
     use std::sync::Arc;
@@ -187,7 +262,7 @@ fn local_mcp_values_stay_out_of_proposal_views_receipts_and_activation_history()
 }
 
 #[test]
-fn mcp_connections_host_confirmation_cannot_activate_connection_changes() {
+fn mcp_connections_tool_permission_cannot_activate_connection_changes() {
     let (_root, context) = fixture();
     let before = load(&context).unwrap();
     let candidate=json!(configuration::Bundle::capture(&json!({"schema_version":1,"packs":[],"mcp":{"cloud":{
@@ -203,7 +278,7 @@ fn mcp_connections_host_confirmation_cannot_activate_connection_changes() {
         None,
     )
     .unwrap_err();
-    assert!(error.to_string().contains("terminal"));
+    assert!(matches!(error, Error::ApprovalRequired));
     assert_eq!(
         load(&context).unwrap().policy_revision,
         before.policy_revision
@@ -222,7 +297,7 @@ fn mcp_connections_project_only_survive_permission_rebuild_without_null_associat
 }
 
 #[test]
-fn mcp_connections_variable_driven_settings_need_terminal_review_and_rebuild_keeps_connections() {
+fn mcp_connections_variable_driven_settings_need_form_review_and_rebuild_keeps_connections() {
     let root = assert_fs::TempDir::new().unwrap();
     let pack=json!({"schema_version":1,"kind":"pack","id":"acme/cloud","version":"1.0.0","description":"Acme cloud","license":"MIT","maintainers":["Acme"],"engines":{"shield":"*"},
         "capabilities":["structured-rules-v1","variables-v1","mcp-integrations-v1"],"variables":{"endpoint":{"type":"string","description":"Endpoint","default":"https://cloud.example.com/mcp"}},
@@ -258,7 +333,7 @@ fn mcp_connections_variable_driven_settings_need_terminal_review_and_rebuild_kee
         None,
     )
     .unwrap_err();
-    assert!(error.to_string().contains("defaults changed"), "{error}");
+    assert!(matches!(error, Error::ApprovalRequired), "{error}");
     let mut rows = vec![
         json!({"id":"acme/cloud","source_identity":"acme-registry","version":"1.0.0","profile":"recommended","digest":policy::fingerprint(pack.as_bytes())}),
     ];

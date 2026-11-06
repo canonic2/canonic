@@ -27,6 +27,8 @@ For an existing project, choose a task below or go to
   temporary approval while keeping project policy unchanged.
 - [Find and manage permission packs](local-registry.md): search, inspect, install,
   configure, update, and remove packs; register your own sources.
+- [Check GitHub GraphQL permissions](local-registry.md#github-graphql-reads):
+  distinguish engine analysis support from installed pack permissions.
 - [Connect Claude and Codex](claude-project.md): load hooks and MCP directly or
   through Box, understand request coverage, and check the limits of native
   interception.

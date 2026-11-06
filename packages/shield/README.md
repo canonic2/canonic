@@ -112,6 +112,8 @@ Packs come from Shield's built-in `main` registry, whose signing key is pinned
 in the binary, or from local folders and signed HTTPS sources that you register.
 Installing a pack adds rules only; it does not install the tool the pack
 describes. See [permission packs](docs/local-registry.md).
+For inline GitHub API queries, the [GraphQL guide](docs/local-registry.md#github-graphql-reads)
+explains compatible versions, repository scope and pagination.
 
 ## Agents
 

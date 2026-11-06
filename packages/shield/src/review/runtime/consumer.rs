@@ -57,7 +57,6 @@ impl From<Error> for RuntimeError {
             Error::StaleSnapshot => Self::StaleSnapshot,
             Error::CacheUnavailable => Self::CacheUnavailable,
             Error::ApprovalRequired => Self::Invalid("operator approval is required"),
-            Error::McpSetupRequired => Self::Invalid("MCP setup requires terminal review"),
             Error::CandidateUnavailable | Error::CursorUnavailable => {
                 Self::Invalid("diagnostic view is unavailable")
             }
@@ -172,10 +171,11 @@ impl Project {
                     }
                     if evaluated.time_sensitive {
                         let current = if let Some(resource) = &evaluated.resource {
-                            evaluated.evaluator.evaluate_resource(
+                            evaluated.evaluator.evaluate_resource_mcp(
                                 &evaluated.request,
                                 &resource.input,
                                 &resource.context,
+                                resource.mcp.as_deref(),
                                 &|| Ok(()),
                             )?
                         } else {
@@ -248,6 +248,22 @@ pub(crate) fn codex_covers(
 }
 
 impl Snapshot {
+    pub(crate) fn has_mcp_integrations(&self) -> bool {
+        self.evaluator.has_mcp_integrations()
+    }
+    pub(crate) fn resolve_mcp(
+        &self,
+        server: &str,
+        connections: &crate::mcp_connections::Connections,
+        source: &str,
+    ) -> Result<policy::compiled::ResolvedMcp, RuntimeError> {
+        let mut resolved = self
+            .evaluator
+            .resolve_mcp(server, connections, source)
+            .map_err(RuntimeError::Policy)?;
+        resolved.project_id = Some(self.identity.project_id.clone());
+        Ok(resolved)
+    }
     pub(crate) fn mcp_connections(&self) -> &crate::mcp_connections::Connections {
         self.evaluator.effective().mcp_connections()
     }
@@ -343,13 +359,28 @@ impl Snapshot {
                 "resource context differs from runtime request",
             ));
         }
+        if resource
+            .mcp
+            .as_ref()
+            .is_some_and(|mcp| mcp.project_id.as_deref() != Some(self.identity.project_id.as_str()))
+        {
+            return Err(RuntimeError::Invalid(
+                "MCP observation belongs to another project",
+            ));
+        }
         resource
             .context
             .working_files
             .clone_from(&self.working_files);
         let evaluation = self
             .evaluator
-            .evaluate_resource(&request, &resource.input, &resource.context, &|| Ok(()))
+            .evaluate_resource_mcp(
+                &request,
+                &resource.input,
+                &resource.context,
+                resource.mcp.as_deref(),
+                &|| Ok(()),
+            )
             .map_err(RuntimeError::Policy)?;
         Ok(EvaluatedRequest {
             identity: self.identity.clone(),
@@ -407,6 +438,9 @@ pub struct EvaluatedRequest {
 pub(crate) struct ResourceRequest {
     pub(crate) input: policy::normalized::Input,
     pub(crate) context: policy::normalized::Context,
+    /// Adapter-derived matching authority, never decoded from a request or grant.
+    #[serde(skip)]
+    pub(crate) mcp: Option<Arc<policy::compiled::ResolvedMcp>>,
 }
 impl EvaluatedRequest {
     pub(crate) fn resource(&self) -> Option<&ResourceRequest> {

@@ -23,6 +23,7 @@ pub(crate) struct NativeContext<'a> {
     pub context_complete: bool,
     pub working_files: Option<&'a crate::location::WorkingFiles>,
 }
+mod mcp;
 mod native_gate;
 
 #[cfg(test)]
@@ -208,6 +209,13 @@ pub(crate) fn evaluate(root: &Path, bytes: &[u8]) -> (Value, u8) {
 pub(crate) struct Prepared {
     project: Project,
     snapshot: crate::runtime::Snapshot,
+    mcp: Option<PreparedMcp>,
+}
+
+struct PreparedMcp {
+    alias: String,
+    resolved: std::sync::Arc<policy::compiled::ResolvedMcp>,
+    observation: Option<crate::agents::McpObservation>,
 }
 
 impl Prepared {
@@ -219,11 +227,11 @@ impl Prepared {
         let project = Project::open(root)?;
         let snapshot = project.snapshot()?;
         stage("snapshot_load_ready");
-        Ok(Self { project, snapshot })
-    }
-
-    pub(crate) fn snapshot(&self) -> &crate::runtime::Snapshot {
-        &self.snapshot
+        Ok(Self {
+            project,
+            snapshot,
+            mcp: None,
+        })
     }
 }
 
@@ -293,6 +301,9 @@ fn evaluate_with_original(
         fields.remove("_file_targets");
         fields.remove("_file_access");
         fields.remove("_file_search");
+        if native.is_none() {
+            fields.remove("_mcp_binding");
+        }
     }
     let observed = value
         .as_object_mut()
@@ -382,7 +393,7 @@ fn record(
         json!({"operation":input.operation,"original_input":original,"request":observed["request"],
         "evaluation":observed["evaluation"],"policy_revision":value["identity"]["policy_revision"],
         "activation_id":value["identity"]["activation_id"],"candidate_digest":value["identity"]["candidate_digest"],
-        "decision":policy,"host_decision":host_decision,"disposition":value["disposition"],"ask_fallback":value["ask_fallback"],"integration":value["integration"],"host_context_complete":value["host_context_complete"],"code":value["code"],"approval":value["approval"],"authorization":value["authorization"],"execution":"unobserved"}),
+        "decision":policy,"host_decision":host_decision,"disposition":value["disposition"],"ask_fallback":value["ask_fallback"],"integration":value["integration"],"mcp_match":value["mcp_match"],"host_context_complete":value["host_context_complete"],"code":value["code"],"approval":value["approval"],"authorization":value["authorization"],"execution":"unobserved"}),
     )
 }
 
@@ -438,22 +449,32 @@ fn evaluate_inner(
     prepared: Option<Prepared>,
     stage: &dyn Fn(&'static str),
 ) -> (Value, u8) {
-    let working_files = native.and_then(|n| n.working_files);
     let id = Some(input.request_id.as_str());
-    let Prepared {
-        project,
-        mut snapshot,
-    } = match prepared.map_or_else(|| Prepared::load(root, stage), Ok) {
+    let mut prepared = match prepared.map_or_else(|| Prepared::load(root, stage), Ok) {
         Ok(prepared) => prepared,
         Err(error) => return (failure(id, runtime_failure(&error)), 2),
     };
-    snapshot.observe_working_files(working_files);
-    let identity = snapshot.identity();
     if !matches!(input.operation, Operation::Register)
-        && input.expected_project_id.as_deref() != Some(identity.project_id())
+        && input.expected_project_id.as_deref() != Some(prepared.snapshot.identity().project_id())
     {
         return (failure(id, "project-changed"), 2);
     }
+    if let (Operation::Mcp { alias, .. }, Some(native)) = (&input.operation, native)
+        && prepared.mcp.is_none()
+    {
+        match prepared.prepare_mcp(root, Path::new(&input.cwd), native.integration, alias) {
+            Ok(true) => {}
+            Ok(false) => return (failure(id, "unsupported-operation"), 0),
+            Err(_) => return (failure(id, "mcp-binding-changed"), 2),
+        }
+    }
+    let Prepared {
+        project,
+        mut snapshot,
+        mcp,
+    } = prepared;
+    snapshot.observe_working_files(native.and_then(|n| n.working_files));
+    let identity = snapshot.identity();
     let metadata = json!(identity);
     let response = |code: &str, decision: &str, operation: Option<&Operation>| {
         json!({"protocol_version":1,"request_id":input.request_id,"decision":decision,
@@ -491,7 +512,7 @@ fn evaluate_inner(
                 &project,
                 &snapshot,
                 &cwd,
-                native.expect("native MCP context checked"),
+                mcp.as_ref().expect("native MCP prepared"),
                 original,
             );
         }
@@ -565,6 +586,7 @@ fn evaluate_shell(
             .into(),
     };
     let resource = crate::review::runtime::consumer::ResourceRequest {
+        mcp: None,
         input: policy::normalized::Input::Shell {
             source: source.into(),
             dialect: json!(dialect).as_str().expect("dialect string").into(),
@@ -656,6 +678,7 @@ fn evaluate_file(
             .into(),
     };
     let resource = crate::review::runtime::consumer::ResourceRequest {
+        mcp: None,
         input: policy::normalized::Input::File {
             action: name.into(),
             sources,
@@ -729,6 +752,7 @@ fn evaluate_web(
             .into(),
     };
     let resource = crate::review::runtime::consumer::ResourceRequest {
+        mcp: None,
         input: policy::normalized::Input::Web {
             action: name.into(),
             query,
@@ -769,7 +793,7 @@ fn evaluate_bound_mcp(
     project: &Project,
     snapshot: &crate::runtime::Snapshot,
     cwd: &Path,
-    native: NativeContext<'_>,
+    prepared: &PreparedMcp,
     original: Option<&Value>,
 ) -> (Value, u8) {
     let Operation::Mcp {
@@ -780,18 +804,8 @@ fn evaluate_bound_mcp(
     else {
         unreachable!()
     };
-    let root = snapshot.identity().project_root();
     let id = Some(input.request_id.as_str());
-    let agent = native.integration;
-    let Some((server, connection)) = snapshot.mcp_connection(agent, alias) else {
-        return (failure(id, "unsupported-operation"), 0);
-    };
-    let projected =
-        crate::review::integrations::mcp_projection(root, agent, server, connection).ok();
-    if projected.as_ref().is_none_or(|transport| {
-        crate::review::integrations::verify_mcp_connection_at(root, cwd, agent, alias, transport)
-            .is_err()
-    }) {
+    if prepared.alias != *alias {
         return (failure(id, "mcp-binding-changed"), 2);
     }
     evaluate_mcp_policy(
@@ -799,7 +813,8 @@ fn evaluate_bound_mcp(
         project,
         snapshot,
         cwd,
-        (server, tool, arguments),
+        (tool, arguments),
+        prepared,
         original,
     )
 }
@@ -809,7 +824,8 @@ fn evaluate_mcp_policy(
     project: &Project,
     snapshot: &crate::runtime::Snapshot,
     cwd: &Path,
-    (server, tool, arguments): (&str, &str, &Value),
+    (tool, arguments): (&str, &Value),
+    prepared: &PreparedMcp,
     original: Option<&Value>,
 ) -> (Value, u8) {
     let request = policy::Request {
@@ -824,8 +840,9 @@ fn evaluate_mcp_policy(
             .into(),
     };
     let resource = crate::review::runtime::consumer::ResourceRequest {
+        mcp: Some(std::sync::Arc::clone(&prepared.resolved)),
         input: policy::normalized::Input::Mcp {
-            server: server.into(),
+            server: prepared.resolved.server.clone(),
             tool: tool.into(),
             arguments: arguments.clone(),
             connection: None,
@@ -841,6 +858,13 @@ fn evaluate_mcp_policy(
         return (failure(Some(&input.request_id), "invalid-input"), 2);
     };
     let observation = json!({"request":evidence.request(),"evaluation":evidence.evaluation()});
+    if prepared
+        .observation
+        .as_ref()
+        .is_some_and(|o| o.verify().is_err())
+    {
+        return (failure(Some(&input.request_id), "mcp-binding-changed"), 2);
+    }
     let (decision, code) = match handoff(project, AgentAccess::Ordinary, evidence, |_, _| ()) {
         Ok(()) => ("allow", "policy-allow"),
         Err(Error::Denied) => ("deny", "policy-deny"),
@@ -849,7 +873,9 @@ fn evaluate_mcp_policy(
     };
     (
         json!({"protocol_version":1,"request_id":input.request_id,"decision":decision,"code":code,
-        "identity":snapshot.identity(),"operation":null,"_observation":observation}),
+        "identity":snapshot.identity(),"operation":null,"_observation":observation,
+        "_mcp_binding":prepared.resolved.connection_digest,
+        "mcp_match":{"alias":prepared.alias,"source":prepared.resolved.source,"matches":prepared.resolved.matches,"effective_connection_identity":"unverified"}}),
         0,
     )
 }
@@ -963,6 +989,7 @@ fn read_resource(
     operation: &Operation,
 ) -> crate::review::runtime::consumer::ResourceRequest {
     crate::review::runtime::consumer::ResourceRequest {
+        mcp: None,
         input: policy::normalized::Input::File {
             action: "read".into(),
             sources: vec![path.to_str().expect("UTF-8 path").into()],

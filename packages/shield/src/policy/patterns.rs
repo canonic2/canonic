@@ -17,6 +17,20 @@ pub(super) const MAX_PREPARED_BYTES: usize = 256 * 1024 * 1024;
 pub(crate) trait Provider {
     fn matches(&self, key: &str, value: &str) -> Result<bool, Error>;
     fn work(&self, key: &str, value: &str) -> Result<usize, Error>;
+    fn analysis(&self) -> Result<crate::graphql::Shared, Error> {
+        Err(Error::Contract("request memo unavailable"))
+    }
+    fn checkpoint(&self) -> Result<(), Error> {
+        Ok(())
+    }
+    fn model(&self, _key: &str) -> Result<std::sync::Arc<Value>, Error> {
+        Err(Error::Contract("prepared GraphQL model unavailable"))
+    }
+}
+
+enum Cached {
+    Pattern(bool),
+    Analysis(crate::graphql::Shared),
 }
 
 // Sharing lasts for this evaluation only. Source keys include selector dialect;
@@ -24,7 +38,8 @@ pub(crate) trait Provider {
 pub(super) struct Memo<'a> {
     provider: &'a dyn Provider,
     checkpoint: &'a dyn Fn() -> Result<(), Error>,
-    results: RefCell<BTreeMap<(String, String), bool>>,
+    results: RefCell<BTreeMap<(String, String), Cached>>,
+    shared: Option<&'a dyn Provider>,
     work: Cell<usize>,
     bytes: Cell<usize>,
 }
@@ -37,16 +52,48 @@ impl<'a> Memo<'a> {
             provider,
             checkpoint,
             results: RefCell::default(),
+            shared: None,
             work: Cell::new(0),
             bytes: Cell::new(0),
         }
     }
+    pub(super) fn sharing(
+        provider: &'a dyn Provider,
+        checkpoint: &'a dyn Fn() -> Result<(), Error>,
+        shared: &'a dyn Provider,
+    ) -> Self {
+        Self {
+            shared: Some(shared),
+            ..Self::new(provider, checkpoint)
+        }
+    }
 }
 impl Provider for Memo<'_> {
+    fn model(&self, key: &str) -> Result<std::sync::Arc<Value>, Error> {
+        self.provider.model(key)
+    }
+    fn analysis(&self) -> Result<crate::graphql::Shared, Error> {
+        if let Some(shared) = self.shared {
+            return shared.analysis();
+        }
+        // Reuse the existing request memo. No GraphQL container is initialized
+        // on unrelated paths; this reserved key is inserted only on demand.
+        let mut results = self.results.borrow_mut();
+        let entry = results
+            .entry((String::new(), String::new()))
+            .or_insert_with(|| Cached::Analysis(std::rc::Rc::default()));
+        match entry {
+            Cached::Analysis(state) => Ok(state.clone()),
+            Cached::Pattern(_) => Err(Error::Syntax),
+        }
+    }
+    fn checkpoint(&self) -> Result<(), Error> {
+        (self.checkpoint)()
+    }
     fn matches(&self, key: &str, value: &str) -> Result<bool, Error> {
         (self.checkpoint)()?;
         let identity = (key.to_owned(), value.to_owned());
-        if let Some(result) = self.results.borrow().get(&identity) {
+        if let Some(Cached::Pattern(result)) = self.results.borrow().get(&identity) {
             return Ok(*result);
         }
         let work = self
@@ -65,7 +112,9 @@ impl Provider for Memo<'_> {
         self.work.set(work);
         self.bytes.set(bytes);
         let result = self.provider.matches(key, value)?;
-        self.results.borrow_mut().insert(identity, result);
+        self.results
+            .borrow_mut()
+            .insert(identity, Cached::Pattern(result));
         Ok(result)
     }
     fn work(&self, key: &str, value: &str) -> Result<usize, Error> {
@@ -102,7 +151,11 @@ impl Store {
                     }
                 }
                 for (key, value) in fields {
-                    if key == "environment" {
+                    if key == "graphql" {
+                        for selector in crate::graphql::selectors(value) {
+                            self.collect_reusing(selector, domain, previous)?;
+                        }
+                    } else if key == "environment" {
                         for selector in selectors::environment_selectors(value) {
                             self.collect_reusing(selector, domain, previous)?;
                         }

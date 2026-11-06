@@ -6,7 +6,7 @@ use std::path::Path;
 mod packs;
 mod presentation;
 // Agents change policy only by proposal; the user reviews and activates it.
-const PROPOSE: &str = "If the user requests an allowance, read the rule grammar with docs_search and docs_read, then propose a bounded reusable rule or outside-folder access with policy_propose; copy the returned apply_arguments object unchanged into policy_apply for approval.";
+const PROPOSE: &str = "If the user requests an allowance, propose a bounded reusable rule or outside-folder access with policy_propose; copy the returned apply_arguments object unchanged into policy_apply for approval.";
 // Stable marker for protected-access feedback across groups.
 const PROTECTED_ACCESS: &str = "Shield: protected path.";
 

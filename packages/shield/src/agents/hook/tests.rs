@@ -2,6 +2,7 @@
 use super::*;
 use crate::{configuration::Bundle, review};
 use std::fs;
+mod automatic_mcp;
 mod google;
 mod mcp_connections;
 #[cfg(unix)]

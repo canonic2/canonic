@@ -97,16 +97,10 @@ fn mcp_connections_packs_cannot_bypass_associations_with_exact_requests() {
 }
 
 #[test]
-fn absent_disabled_and_unassociated_mcp_leave_commands_working_without_mcp_allowances() {
+fn absent_and_disabled_mcp_leave_commands_working_without_mcp_allowances() {
     let mut disabled = connection();
     disabled["enabled"] = json!(false);
-    let mut unassociated = connection();
-    unassociated["packs"] = json!({});
-    for mcp in [
-        json!({}),
-        json!({"project-cloud":disabled}),
-        json!({"project-cloud":unassociated}),
-    ] {
+    for mcp in [json!({}), json!({"project-cloud":disabled})] {
         let image = evaluator(&config(mcp)).unwrap();
         assert_eq!(decide(&image, "project-cloud", "inspect"), "ask");
         let request = policy::Request {
@@ -123,6 +117,106 @@ fn absent_disabled_and_unassociated_mcp_leave_commands_working_without_mcp_allow
 }
 
 #[test]
+fn mcp_connections_unassociated_matching_servers_use_active_pack_rules() {
+    let mut unassociated = connection();
+    unassociated["packs"] = json!({});
+    let image = evaluator(&config(json!({"project-cloud":unassociated}))).unwrap();
+    let restored = Evaluator::from_authenticated_compiled(image.compiled_bytes().to_vec()).unwrap();
+    for image in [&image, &restored] {
+        assert_eq!(decide(image, "project-cloud", "inspect"), "allow");
+        assert_eq!(decide(image, "project-cloud", "delete"), "deny");
+        assert_eq!(decide(image, "cloud", "inspect"), "ask");
+    }
+}
+
+#[test]
+fn automatic_mcp_matching_observations_cannot_cross_policy_revisions() {
+    let mut config = config(json!({"project-cloud":connection()}));
+    let first = evaluator(&config).unwrap();
+    let observed = first
+        .resolve_mcp(
+            "project-cloud",
+            first.effective().mcp_connections(),
+            "project",
+        )
+        .unwrap();
+    config["packs"][0]["profile"] = json!("strict");
+    let second = evaluator(&config).unwrap();
+    let root = crate::test_support::absolute("/acme");
+    let request = policy::Request {
+        executable: "shield:mcp".into(),
+        arguments: vec![],
+        cwd: root.to_string(),
+        project: root.to_string(),
+    };
+    let input = Input::Mcp {
+        server: "project-cloud".into(),
+        tool: "inspect".into(),
+        arguments: json!({}),
+        connection: None,
+        original_input: json!({}),
+    };
+    let context = Context {
+        cwd: root.into_owned(),
+        environment: None,
+        working_files: None,
+    };
+    assert!(matches!(
+        second.evaluate_resource_mcp(&request, &input, &context, Some(&observed), &|| Ok(())),
+        Err(Error::Contract(
+            "MCP observation belongs to another connection or policy revision"
+        ))
+    ));
+}
+
+#[test]
+fn automatic_mcp_matching_composes_all_installed_packs_and_conflicting_mappings_refuse() {
+    let mut first: Value = policy::parse(&pack()).unwrap();
+    let mut second = first.clone();
+    second["id"] = json!("acme/restrictions");
+    second["rules"][1]["decision"] = json!("deny");
+    let mut connection = connection();
+    connection["packs"] = json!({});
+    let config = json!({"schema_version":1,"packs":[
+        {"id":"acme/cloud","version":"1.0.0","profile":"recommended","path":"first.yml"},
+        {"id":"acme/restrictions","version":"1.0.0","profile":"recommended","path":"second.yml"}
+    ],"mcp":{"my-project-server":connection}});
+    let build = |first: &Value, second: &Value| {
+        Evaluator::new(vec![(
+            Scope::Project,
+            Candidate::from_yaml(&config.to_string())
+                .unwrap()
+                .capture(&[first.to_string(), second.to_string()], None)
+                .unwrap(),
+        )])
+        .unwrap()
+    };
+    let image = build(&first, &second);
+    let restored = Evaluator::from_authenticated_compiled(image.compiled_bytes().to_vec()).unwrap();
+    for image in [&image, &restored] {
+        assert_eq!(decide(image, "my-project-server", "inspect"), "deny");
+    }
+    for (source, pointer) in [(&mut first, "/command"), (&mut second, "/different")] {
+        source["capabilities"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!("mcp-command-fields-v1"));
+        source["mcp_integrations"]["cloud"]["command_fields"] =
+            json!({"inspect":{"executable":"acme-cloud","pointer":pointer,"encoding":"argv-v1"}});
+    }
+    let image = build(&first, &second);
+    assert!(
+        image
+            .resolve_mcp(
+                "my-project-server",
+                image.effective().mcp_connections(),
+                "project"
+            )
+            .is_err()
+    );
+}
+
+#[test]
 fn mcp_precondition_binding_drops_only_unavailable_server_alternatives() {
     let source = multi_integration_gate(&json!([
         {"server":"cloud","fields":{"/mode":{"text":"read"}}},
@@ -134,11 +228,9 @@ fn mcp_precondition_binding_drops_only_unavailable_server_alternatives() {
     spare["agents"] = json!({"claude":"my_spare","codex":"another_spare"});
     let mut disabled = spare.clone();
     disabled["enabled"] = json!(false);
-    let mut unassociated = spare.clone();
-    unassociated["packs"] = json!({});
     let mut unbound = spare.clone();
     unbound["agents"] = json!({});
-    for inactive in [None, Some(disabled), Some(unassociated), Some(unbound)] {
+    for inactive in [None, Some(disabled), Some(unbound)] {
         // The active project's ID intentionally equals the unavailable pack
         // integration name: leaving the original selector could grant access.
         let mut mcp = json!({"spare":connection()});

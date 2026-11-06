@@ -1,5 +1,5 @@
 //! Agent-owned MCP presentation and confirmation capabilities. Unknown hosts
-//! receive inspection/proposal guidance and must activate policy in a terminal.
+//! receive inspection/proposal guidance and an explicit in-session capability gap.
 use serde_json::Value;
 
 mod form;

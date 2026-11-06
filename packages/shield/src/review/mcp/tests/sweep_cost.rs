@@ -9,12 +9,24 @@ use std::{
 };
 
 #[test]
-fn reconnected_apply_reuses_active_plan_and_prepares_only_the_selected_candidate() {
+fn uncached_owned_apply_reuses_active_plan_and_prepares_only_the_selected_candidate() {
     let (_root, mut context, connection) = fixture();
     context.agent = Some("codex".into());
     let proposed = proposal(&context, &connection, "acme-cold-apply");
     context.connection_id = Some("reconnected".into());
     let reconnected = Connection::enrolled(&context).unwrap();
+    let refused = invoke(
+        &context,
+        &reconnected,
+        "policy_apply",
+        proposed["data"]["apply_arguments"].clone(),
+    );
+    assert_eq!(refused["error"]["code"], "invalid_input", "{refused}");
+    let proposed = proposal(&context, &reconnected, "acme-fresh-apply");
+    assert!(proposed["error"].is_null(), "{proposed}");
+    // Keep the live owner while exercising apply without retained presentation
+    // plans. Reconnection cannot transfer another interaction's approval.
+    *reconnected.views.lock().unwrap() = super::super::views::Views::new("uncached-apply".into());
     let logs = assert_fs::TempDir::new().unwrap();
     let cli = crate::cli::Cli::parse_from([
         "shield",

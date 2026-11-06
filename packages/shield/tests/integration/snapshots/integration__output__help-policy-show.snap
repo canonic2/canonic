@@ -2,7 +2,7 @@
 source: tests/integration/output.rs
 expression: "String::from_utf8_lossy(&output.get_output().stdout)"
 ---
-Show active policy, pending proposals and history settings
+Show active policy, live reviews and history settings
 
 Usage: shield policy show [OPTIONS]
 

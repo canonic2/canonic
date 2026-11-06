@@ -160,7 +160,7 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
             }
         }
         if ["policy_propose","rule_add","rule_edit","session_grant_propose"].contains(&name) { let mut definitions = crate::policy::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
-        let mutation=super::super::admin::supports(name) || ["policy_propose","rule_add","rule_edit","rule_remove","pack_configure","pack_add","pack_update","pack_remove","policy_withdraw","policy_apply","review_defer","request_approve","request_deny","session_grant_propose","session_grant_approve","session_grant_revoke"].contains(&name);
+        let mutation=super::super::admin::supports(name) || ["policy_propose","policy_defer","policy_draft_remove","rule_add","rule_edit","rule_remove","pack_configure","pack_add","pack_update","pack_remove","policy_withdraw","policy_apply","review_defer","request_approve","request_deny","session_grant_propose","session_grant_approve","session_grant_revoke"].contains(&name);
         json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply","protection_set","registry_remove","history_configure","policy_reject","mcp_setup"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","pack_update","policy_propose","registry_add","mcp_setup"].contains(&name))}})
     }).chain(super::documentation::tools().into_iter().map(|mut tool| {
         // The shared definitions carry their own schemas and annotations;
@@ -335,7 +335,7 @@ fn admin_inventory() -> Vec<Definition> {
 }
 
 fn policy_inventory() -> Vec<Definition> {
-    vec![
+    let mut tools: Vec<Definition> = vec![
         (
             "status",
             "Show policy status and protection coverage",
@@ -405,6 +405,9 @@ fn policy_inventory() -> Vec<Definition> {
             rules_selection,
         ),
         policy_propose(),
+    ];
+    tools.extend(draft_inventory());
+    tools.extend([
         suggestions_tool(),
         defer_tool(),
         (
@@ -426,6 +429,32 @@ fn policy_inventory() -> Vec<Definition> {
             "policy_receipt",
             "Show a proposal's status and application receipt, if any",
             || object(json!({"proposal_id":id()}), &["proposal_id"]),
+        ),
+    ]);
+    tools
+}
+
+fn draft_inventory() -> Vec<Definition> {
+    vec![
+        (
+            "policy_defer",
+            "Save intent only when the user explicitly asks to decide later; withdraw an optional owned proposal. To resume, prepare fresh; a draft grants no authority.",
+            || {
+                object(
+                    json!({"intent":string(),"constraints":string(),"proposal_id":id(),"idempotency_key":id()}),
+                    &["intent", "idempotency_key"],
+                )
+            },
+        ),
+        (
+            "policy_draft_list",
+            "Inspect explicitly deferred intent; drafts have no apply arguments and require fresh preparation.",
+            || selectable("draft_id", json!({}), id()),
+        ),
+        (
+            "policy_draft_remove",
+            "Remove deferred intent; does not change policy or any committed receipt.",
+            || object(json!({"draft_id":id()}), &["draft_id"]),
         ),
     ]
 }

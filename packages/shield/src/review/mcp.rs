@@ -1,6 +1,7 @@
 //! Canonical project MCP tools with connection-owned diagnostic and paging evidence.
 mod apply;
 mod confirmation;
+mod connection_review;
 mod diagnostics;
 mod documentation;
 mod elicitation;
@@ -26,13 +27,56 @@ pub(crate) fn question_error(context: &Context, error: &Error) -> Value {
 }
 
 /// Validate exact retained review bytes before showing a host confirmation.
-pub(crate) fn apply_confirmation(context: &Context, args: &Value) -> Result<Option<String>, Error> {
+pub(crate) fn apply_confirmation(
+    context: &Context,
+    connection: &Connection,
+    args: &Value,
+) -> Result<Option<String>, Error> {
+    if crate::agents::review::resolve(context.agent.as_deref()).confirmation()
+        == crate::agents::review::Confirmation::ToolPermission
+        && connection
+            .views
+            .lock()
+            .map_err(|_| Error::Locked)?
+            .connection_review(args)
+            == Some(false)
+    {
+        return Ok(None);
+    }
     let (state, id) = apply::validate(context, args)?;
-    Ok(state
+    let Some(proposal) = state
         .proposals
         .iter()
         .find(|p| p.id == id && p.status == "pending")
-        .map(|proposal| confirmation::message(proposal, &proposal.apply_arguments())))
+    else {
+        return Ok(None);
+    };
+    let changed = super::publication::mcp_changed(&proposal.base_candidate, &proposal.candidate)?;
+    if !changed
+        && crate::agents::review::resolve(context.agent.as_deref()).confirmation()
+            != crate::agents::review::Confirmation::Form
+    {
+        return Ok(None);
+    }
+    let mut message = confirmation::message(proposal, &proposal.apply_arguments());
+    if changed {
+        // Local settings are deliberately absent from public changes and tool
+        // arguments. This human form compares the retained values privately,
+        // then labels masked additions, edits and removals without exposing them.
+        let review = connection_review::projection(&proposal.base_candidate, &proposal.candidate)?;
+        message.push_str("\n\nMCP connection settings (before and after):\n");
+        message.push_str(
+            &serde_json::to_string_pretty(&review)
+                .map_err(|_| Error::Invalid("connection review encoding"))?,
+        );
+        message.push_str("\nThis approves the connection configuration. Use mcp_setup for a separate host-settings review and publication.");
+    }
+    if message.len() > 48 * 1024 {
+        return Err(Error::Invalid(
+            "policy review exceeds form bound; prepare a smaller change for in-session approval",
+        ));
+    }
+    Ok(Some(message))
 }
 
 /// Present the exact stored request whose pending decision or unused grant is revoked.
@@ -46,7 +90,7 @@ pub(crate) fn deny_confirmation(context: &Context, args: &Value) -> Result<Strin
     );
     if message.len() > 48 * 1024 {
         return Err(Error::Invalid(
-            "request review exceeds form bound; use operator terminal",
+            "request review exceeds the in-session form bound; reduce the reviewed group",
         ));
     }
     Ok(message)
@@ -94,15 +138,8 @@ struct Refusal {
 /// Only the proposing connection may withdraw; review belongs to the operator.
 const FOREIGN_WITHDRAWAL: Refusal = Refusal {
     code: "operator_review_required",
-    message: "Only the proposing connection can withdraw this proposal. If it is no longer needed, ask the user to reject it with shield policy review in their terminal",
-    route: Some("shield policy review"),
-};
-
-/// A failed proposal has no receipt and cannot be applied again.
-const FAILED_PROPOSAL: Refusal = Refusal {
-    code: "operator_review_required",
-    message: "This proposal failed to apply and has no receipt. Ask the user to review it with shield policy review in their terminal; do not call policy_apply for it",
-    route: Some("shield policy review"),
+    message: "Only the proposing interaction can withdraw this live review. Inspect its outcome with policy_receipt; if still needed, prepare a fresh change in this session. Do not send the user to a proposal queue",
+    route: Some("policy_receipt"),
 };
 
 /// `request_approve` reached without the person's answer: the host showed no form.
@@ -114,7 +151,7 @@ const REQUEST_CONFIRMATION: Refusal = Refusal {
 
 const SESSION_CONFIRMATION: Refusal = Refusal {
     code: "operator_review_required",
-    message: "The user must accept Shield's session-grant confirmation form. Enable confirmation prompts and retry with unchanged apply_arguments, or ask the person to run shield session-grant approve PROPOSAL_ID in their terminal. The agent must not run that operator command",
+    message: "The user must accept Shield's session-grant confirmation form. Enable confirmation prompts in this session and retry while the candidate remains current. If the host cannot show the form, report the missing capability; do not send the user to a terminal",
     route: None,
 };
 
@@ -138,6 +175,7 @@ impl From<crate::policy::Error> for Failure {
 }
 
 pub(crate) struct Connection {
+    owner: Mutex<Option<super::proposal_lifecycle::Lease>>,
     views: Mutex<views::Views>,
     admin: Mutex<
         std::collections::BTreeMap<u64, (std::time::Instant, String, super::admin::Prepared)>,
@@ -154,6 +192,7 @@ impl Connection {
         );
         views.active(context)?;
         Ok(Self {
+            owner: Mutex::new(Some(super::proposal_lifecycle::Lease::new(context)?)),
             views: Mutex::new(views),
             admin: Mutex::new(BTreeMap::default()),
             admin_sequence: std::sync::atomic::AtomicU64::new(0),
@@ -162,10 +201,27 @@ impl Connection {
     #[cfg(test)]
     pub(crate) fn new(seed: String) -> Self {
         Self {
+            owner: Mutex::new(None),
             views: Mutex::new(views::Views::new(seed)),
             admin: Mutex::new(BTreeMap::default()),
             admin_sequence: std::sync::atomic::AtomicU64::new(0),
         }
+    }
+    fn ensure_owner(&self, context: &Context) -> Result<(), Error> {
+        let Some(id) = &context.connection_id else {
+            return Ok(());
+        };
+        let mut owner = self.owner.lock().map_err(|_| Error::Locked)?;
+        if let Some(owner) = owner.as_ref() {
+            if owner.root != context.project_root || owner.connection != *id {
+                return Err(Error::Invalid(
+                    "connection ownership differs from registration",
+                ));
+            }
+        } else {
+            *owner = Some(super::proposal_lifecycle::Lease::new(context)?);
+        }
+        Ok(())
     }
 }
 
@@ -192,7 +248,8 @@ pub(crate) fn admin_confirmation(
     }
     if name == "registry_add" {
         // Enrollment discovers a trust key at an agent-selected location.
-        // Do not perform that I/O before the person's terminal workflow.
+        // No in-session trust-discovery review is implemented for enrollment.
+        // Refuse without I/O and report that capability gap.
         return Err(Error::ApprovalRequired);
     }
     if (name == "mcp_setup" && args["dry_run"] == true)
@@ -220,7 +277,7 @@ pub(crate) fn admin_confirmation(
     );
     if message.len() > 48 * 1024 {
         return Err(Error::Invalid(
-            "administrative review exceeds form bound; use operator terminal",
+            "administrative review exceeds the in-session form bound; prepare a smaller change",
         ));
     }
     let id = connection
@@ -313,6 +370,7 @@ pub(crate) fn call_with_bound_confirmation(
         if documentation::handles(name) {
             return documentation::call(name, args, checkpoint).map_err(Failure::Documentation);
         }
+        connection.ensure_owner(context)?;
         if super::admin::supports(name) {
             return Ok(admin_call(
                 context, connection, name, args, checkpoint, confirmed, binding,
@@ -352,7 +410,60 @@ pub(crate) fn call_with_bound_confirmation(
         }
         Ok(data)
     })();
+    if name == "policy_apply"
+        && let Err(Failure::Review(error)) = &result
+        && let Some(outcome) = settle_apply_failure(context, args, error)
+    {
+        return outcome;
+    }
     result_envelope(context, name, result)
+}
+
+/// Pre-form failures and post-confirmation failures close through the same
+/// writer-locked reconciliation, including a commit whose reply was lost.
+pub(crate) fn settle_apply_failure(
+    context: &Context,
+    args: &Value,
+    error: &Error,
+) -> Option<Value> {
+    let unsupported = crate::agents::review::resolve(context.agent.as_deref()).confirmation()
+        == crate::agents::review::Confirmation::Terminal;
+    if matches!(error, Error::Missing | Error::Locked | Error::Io(_))
+        || matches!(error, Error::ApprovalRequired) && !unsupported
+    {
+        return None;
+    }
+    let (status, reason) = match error {
+        Error::StaleSnapshot => ("stale", "base_changed"),
+        Error::ApprovalRequired => ("withdrawn", "unsupported_host"),
+        Error::Cancelled | Error::Policy(crate::policy::Error::Interrupted) => {
+            ("withdrawn", "cancelled")
+        }
+        _ => ("failed", "apply_failed"),
+    };
+    super::proposal_lifecycle::settle(context, args, status, reason)
+        .ok()
+        .filter(|outcome| outcome["status"] == "applied" && !matches!(error, Error::Invalid(_)))
+        .map(|outcome| result_envelope(context, "policy_apply", Ok(outcome)))
+}
+
+pub(crate) fn policy_outcome(context: &Context, args: &Value, code: &str) -> Value {
+    let status = if code == "approval_declined" {
+        "rejected"
+    } else {
+        "withdrawn"
+    };
+    let outcome = super::proposal_lifecycle::settle(context, args, status, code);
+    let mut value = result_envelope(context, "policy_apply", outcome.map_err(Failure::from));
+    if value["error"].is_null() && value["data"]["status"] != "applied" {
+        let message = if code == "approval_unavailable" {
+            "This approval attempt is closed. Enable host confirmation prompts in this session (Codex: /permissions), then prepare fresh with a new idempotency_key if still authorized. Do not change host settings yourself."
+        } else {
+            "This approval attempt is closed without applying. Continue without it; do not repeat a declined offer unless the user requests it."
+        };
+        value["error"] = json!({"code":code,"message":message,"operator_route":null});
+    }
+    value
 }
 
 fn result_envelope(context: &Context, name: &str, result: Result<Value, Failure>) -> Value {
@@ -448,12 +559,12 @@ pub(crate) fn admin_route(name: &str) -> Option<&'static str> {
 
 pub(crate) fn admin_error(context: &Context, name: &str, error: &Error) -> Value {
     let mut value = failure(context, error);
-    if let Some(route) = admin_route(name) {
+    if admin_route(name).is_some() {
         if matches!(error, Error::ApprovalRequired) {
-            value["error"]["operator_route"] = json!(route);
-            value["error"]["message"] = json!(format!(
-                "This administrative change needs human confirmation. Ask the person to run {route} with the intended arguments in their terminal. The agent must not run that operator command."
-            ));
+            value["error"]["operator_route"] = Value::Null;
+            value["error"]["message"] = json!(
+                "This administrative change requires supported in-session confirmation. Report the missing capability; do not send the user to a terminal or perform an unreviewed change."
+            );
         } else if matches!(error, Error::StaleSnapshot) {
             value["error"]["operator_route"] = json!(name);
             value["error"]["message"] = json!(format!(
@@ -467,13 +578,12 @@ pub(crate) fn admin_error(context: &Context, name: &str, error: &Error) -> Value
 fn failure(context: &Context, error: &Error) -> Value {
     let (code, mut message) = error_fields(error);
     let route = match error {
-        Error::McpSetupRequired => Some("shield policy review".into()),
         Error::ApprovalRequired => {
             // The adapter's guidance is the recovery in both structured and text results.
             let adapter = crate::agents::review::resolve(context.agent.as_deref());
             message = adapter.guidance().required.into();
             if adapter.confirmation() == crate::agents::review::Confirmation::Terminal {
-                Some("shield policy review".into())
+                None
             } else {
                 Some("policy_apply".into())
             }
@@ -620,10 +730,10 @@ fn error_fields(error: &Error) -> (&'static str, String) {
 fn capacity_message(kind: CapacityKind, pending: usize, retained: usize, limit: usize) -> String {
     let next = match kind {
         CapacityKind::Proposals => {
-            "ask the user to review or reject them with shield policy review, then retry"
+            "other live interactions hold the project capacity. Finish or withdraw your own interaction in this session, or wait for those interactions to finish or expire"
         }
         CapacityKind::RetainedProposals => {
-            "retained proposal storage is full and cannot be cleared yet. Continue without proposing; tell the user that new policy proposals cannot be saved"
+            "the retained outcome recovery window is full. Continue without proposing and retry after older closed outcomes leave their 24-hour recovery window; do not ask the user to clear a queue"
         }
         CapacityKind::ReadRequests | CapacityKind::RunRequests => {
             "ask the user to review them with shield request list (or deny with shield request deny), then retry"
@@ -676,10 +786,6 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
         Error::Policy(crate::policy::Error::ArtifactMismatch) => (
             "candidate_error",
             "Shield could not build a consistent pack candidate. No change was activated. Continue without this proposal and report the failure; changing tool arguments is not a recovery for this error",
-        ),
-        Error::McpSetupRequired => (
-            "mcp_setup_required",
-            "Connection settings changed. Review the complete candidate with shield policy review in an operator terminal, then run shield mcp setup; policy_apply cannot activate this change",
         ),
         Error::CandidateUnavailable => (
             "candidate_unavailable",
@@ -761,6 +867,20 @@ fn dispatch(
     confirmed: bool,
 ) -> Result<Value, Failure> {
     match name {
+        "policy_defer" => {
+            fields(
+                args,
+                &["intent", "constraints", "proposal_id", "idempotency_key"],
+            )?;
+            Ok(super::proposal_lifecycle::drafts::save(context, args)?)
+        }
+        "policy_draft_remove" => {
+            fields(args, &["draft_id"])?;
+            Ok(super::proposal_lifecycle::drafts::remove(
+                context,
+                required(args, "draft_id")?,
+            )?)
+        }
         "session_grant_show" | "session_grant_list" => {
             Ok(super::session_grants::show(context, args)?)
         }
@@ -905,6 +1025,14 @@ fn inspection_tool(
     args: &Value,
 ) -> Result<Value, Error> {
     match name {
+        "policy_draft_list" => {
+            fields(args, &["draft_id", "cursor", "limit"])?;
+            let data = super::proposal_lifecycle::drafts::list(context, text(args, "draft_id")?)?;
+            if args.get("draft_id").is_some() {
+                return Ok(data);
+            }
+            views.page(name, args, data, "drafts")
+        }
         "status" | "doctor" => {
             fields(args, &[])?;
             status(context, views, name == "doctor")
@@ -1019,7 +1147,7 @@ fn cursor_fields(name: &str, args: &Value) -> Result<(), Error> {
     fields(
         args,
         match name {
-            "pack_list" | "request_list" => &["cursor", "limit"],
+            "pack_list" | "request_list" | "policy_draft_list" => &["cursor", "limit"],
             "rule_list" => &["candidate_id", "cursor", "limit"],
             "pack_search" => &["query", "cursor", "limit"],
             "pack_info" => &["reference", "view", "query", "cursor", "limit"],
@@ -1094,6 +1222,8 @@ fn propose_input(
             presentation.replace(Some((
                 apply::argument_binding(context, proposal),
                 data["apply_arguments"].clone(),
+                super::publication::mcp_changed(&proposal.base_candidate, &proposal.candidate)
+                    .unwrap_or(true),
             )));
             skipped_pinned(&mut data, input, &proposal.base_metadata);
             data
@@ -1110,8 +1240,8 @@ fn propose_input(
     // persistence. Reopening the store here rehydrates every proposal
     // and pack after the write, risking a deadline without its receipt.
     let (before, after) = handles.ok_or(Error::CandidateUnavailable)?;
-    if let Some((binding, arguments)) = presentation.into_inner() {
-        views.remember_approval(binding, arguments);
+    if let Some((binding, arguments, connection_review)) = presentation.into_inner() {
+        views.remember_approval(binding, arguments, connection_review);
     }
     data["before_candidate_id"] = json!(before);
     data["after_candidate_id"] = json!(after);

@@ -245,13 +245,13 @@ pub struct Policy {
 /// Project policy operations.
 #[derive(Subcommand)]
 pub enum PolicyCommand {
-    /// Show active policy, pending proposals and history settings.
+    /// Show active policy, live reviews and history settings.
     Show,
-    /// Review pending proposals, edited files, projection repair or history settings in a terminal.
+    /// Review a live change, edited files, projection repair or history settings in a terminal.
     Review,
     /// Restore managed project files from committed policy after confirmation.
     Repair,
-    /// Reject a retained pending proposal after confirmation.
+    /// Reject a live proposal after confirmation.
     Reject {
         proposal_id: String,
         #[arg(long)]

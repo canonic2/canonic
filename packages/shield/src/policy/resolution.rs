@@ -581,7 +581,8 @@ impl Resolver<'_> {
                 }
                 for (key, child) in fields.iter_mut() {
                     // Environment selectors are text selectors, never option grammars.
-                    if !(["exact", "input", "context", "environment"].contains(&key.as_str())
+                    if !(["exact", "input", "context", "environment", "graphql"]
+                        .contains(&key.as_str())
                         || domain == "mcp" && key == "arguments")
                     {
                         self.optional_checks(child, domain, names)?;

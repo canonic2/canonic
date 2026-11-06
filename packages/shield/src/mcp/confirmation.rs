@@ -29,6 +29,7 @@ pub(super) struct Confirmations {
 }
 
 struct Pending {
+    guard: Option<super::PolicyWait>,
     tool: String,
     arguments: serde_json::Value,
     expires: Instant,
@@ -49,6 +50,7 @@ impl Confirmations {
         call: &ToolCall,
         message: &str,
         review_binding: Option<u64>,
+        guard: Option<super::PolicyWait>,
     ) -> Result<canonic_mcp_kit::modern::InputRequiredResult, RpcError> {
         self.pending
             .retain(|_, pending| pending.expires > Instant::now());
@@ -67,6 +69,7 @@ impl Confirmations {
         self.pending.insert(
             token,
             Pending {
+                guard,
                 tool: call.name.clone(),
                 arguments: call.arguments.clone(),
                 expires: Instant::now() + Duration::from_mins(5),
@@ -90,7 +93,7 @@ impl Confirmations {
         let token = request.request_state.as_ref().ok_or_else(invalid)?;
         // Consume on any retry, including decline, changed arguments or missing
         // capability. Connection destruction revokes every remaining token.
-        let pending = self.pending.remove(token).ok_or_else(invalid)?;
+        let mut pending = self.pending.remove(token).ok_or_else(invalid)?;
         if pending.expires <= Instant::now()
             || !CONFIRMED_TOOLS.contains(&call.name.as_str())
             || pending.tool != call.name
@@ -98,10 +101,11 @@ impl Confirmations {
         {
             return Err(invalid());
         }
-        Ok((
-            request.confirmation_decision()?.ok_or_else(invalid)?,
-            pending.review_binding,
-        ))
+        let decision = request.confirmation_decision()?.ok_or_else(invalid)?;
+        if let Some(guard) = &mut pending.guard {
+            guard.disarm();
+        }
+        Ok((decision, pending.review_binding))
     }
 }
 
@@ -151,12 +155,12 @@ mod tests {
         let request = context(None);
         for _ in 0..8 {
             confirmations
-                .begin(&request, &call, "Review", None)
+                .begin(&request, &call, "Review", None, None)
                 .unwrap();
         }
         assert!(
             confirmations
-                .begin(&request, &call, "Review", None)
+                .begin(&request, &call, "Review", None, None)
                 .is_err()
         );
         let token = confirmations.pending.keys().next().unwrap().clone();
@@ -166,7 +170,7 @@ mod tests {
         assert!(confirmations.resume(&context(Some(&token)), &call).is_err());
         assert!(confirmations.resume(&context(Some(&token)), &call).is_err());
         confirmations
-            .begin(&request, &call, "Review", None)
+            .begin(&request, &call, "Review", None, None)
             .unwrap();
     }
 }

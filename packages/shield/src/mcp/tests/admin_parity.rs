@@ -47,8 +47,9 @@ fn admin_parity_unavailable_and_cancelled_forms_preserve_settings_and_tool_recov
                 "{result}"
             );
             if action == "unavailable" {
-                assert_eq!(error["operator_route"], "shield history configure");
-                assert!(message.contains("shield history configure"), "{result}");
+                assert!(error["operator_route"].is_null());
+                assert!(message.contains("/permissions"), "{result}");
+                assert!(!message.contains("terminal"), "{result}");
             } else {
                 assert!(message.contains("administrative change"), "{result}");
             }
@@ -58,7 +59,7 @@ fn admin_parity_unavailable_and_cancelled_forms_preserve_settings_and_tool_recov
 }
 
 #[test]
-fn admin_parity_known_native_hosts_without_form_ui_use_terminal_guidance() {
+fn admin_parity_known_native_hosts_without_form_ui_report_the_in_session_gap() {
     for (agent, version) in [("gemini", "0.67.0"), ("agy", "1.5.1")] {
         let (server, _project) = fixture(Some(agent));
         let transport = Transport::start(server);
@@ -76,7 +77,7 @@ fn admin_parity_known_native_hosts_without_form_ui_use_terminal_guidance() {
             error["message"]
                 .as_str()
                 .unwrap()
-                .contains("shield history configure")
+                .contains("missing in-session capability")
         );
         assert!(
             !error["message"]

@@ -8,6 +8,13 @@ description: Prepare bounded session grants before repeated privileged operation
 Review permissions when requested or when `suggestion_list` marks recurring
 groups eligible. Avoid reviews after every task or decision.
 
+Keep approvals, connection changes and setup inside this conversation through
+Shield MCP tools and the host's confirmation UI. Telling the user to run terminal
+commands is a product bug, not an acceptable workaround. If a tool offers only
+that route, report the missing in-session capability. For Codex with prompts
+disabled, ask the user to enable them with `/permissions`, then prepare a fresh
+attempt; never change host approval settings yourself.
+
 Before a known batch of repeated privileged operations, inspect
 `session_grant_show`. Use the native hook's `session_ref` to propose a bounded
 temporary batch or constrained argv family with `session_grant_propose`; prefer
@@ -20,7 +27,7 @@ requirements, preconditions and protected state remain closed. A reference is
 not approval. Respect the recorded target conversation when MCP association is
 unavailable. Inspect existing offers before proposing, stop on decline, and
 never broaden scope to avoid refusal. Use `session_grant_revoke` to end your
-grant early. Read `session-grants.md` through bundled docs for missing syntax.
+grant early.
 
 1. For recurring interruptions, inspect `suggestion_list` and relevant `history_list`, `rule_list` or
    `policy_show` evidence. Follow returned next actions. Respect incomplete
@@ -37,17 +44,21 @@ grant early. Read `session-grants.md` through bundled docs for missing syntax.
 4. For authorized custom rules, inspect command grammar and effects; preserve
    scope and deny boundaries. Use `policy_propose` schema examples and link
    returned review context. Batch related changes in `changes` (up to 16).
-   Read bundled guides only for missing rule syntax, not undeclared pack settings.
    For unreviewed file edits, propose `{"change":{"kind":"project_files_adopt"}}` alone, obtain approval,
    then prepare the original change. Changed files require fresh adoption.
-5. Review the proposal; use `policy_show` if more evidence is needed. Copy
+5. Prepare and immediately review the proposal; use `policy_show` if more evidence is needed. Copy
    `apply_arguments` unchanged into `policy_apply` through its returned approval
    route. Do not add a preliminary chat confirmation. Preparation and previews
    neither activate policy nor authorize execution.
 6. Stop on decline or cancellation. For uncertain completion, inspect current
    policy and `policy_receipt` before retrying. Stale proposals need fresh
    preparation; unavailable approval follows the returned user route. Retry only
-   while the task and authorization remain valid.
+   while the task and authorization remain valid. Closed attempts cannot resume:
+   prepare fresh with a new idempotency key. Never finish a task with an undecided
+   proposal; explicitly withdraw anything abandoned. Cancellation, expiry,
+   disconnect and task-end cleanup also close attempts automatically. Only when
+   the user explicitly asks to defer, save intent with `policy_defer`. Drafts
+   contain no candidate or approval; resume through fresh preparation and review.
 
 Never edit protected state, run the operator CLI as an agent, change permission
 modes, fabricate confirmation responses or impersonate another host adapter.

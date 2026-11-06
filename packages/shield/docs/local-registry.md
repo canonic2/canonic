@@ -36,6 +36,9 @@ Profile decisions depend on the pack: installing one does not allow every
 invocation, and Strict does not change Codex's Ask fallback. See
 [policy decisions](policy-decisions.md).
 
+For GitHub API queries, see [GitHub GraphQL reads](#github-graphql-reads) for
+the distinction between engine analysis and installed pack permissions.
+
 ## Change an installed pack
 
 Use `shield pack list` to find an installed selection. Copy its selector, using the
@@ -86,6 +89,20 @@ pack requires that selection; removing a root can also remove dependencies no
 longer needed by another selection. Inspect `shield pack list` after confirmation.
 The [dependency update and removal reference](#updating-and-removing-dependency-packs)
 explains these rules in detail.
+
+## GitHub GraphQL reads
+
+GraphQL analysis and permission are separate. The engine implements `graphql-v1`
+for custom rules and packs that declare it. The published GitHub 0.3.0 pack does
+not use that capability: unscoped raw API calls require review, and setting its
+optional `repository` boundary excludes raw API calls. Updating the binary alone
+does not add query permissions to the installed pack.
+
+Use `shield pack list` and `shield pack show PACK_SELECTOR` to inspect the
+installed version, profile, settings and rules. Review available permission
+changes through [the pack update workflow](#change-an-installed-pack). For
+authoring custom GraphQL rules, see the [GraphQL reference](rule-reference.md#graphql-requests);
+to investigate a refusal, see [troubleshooting](troubleshooting.md#a-read-only-github-graphql-query-is-blocked).
 
 ## Register a source
 

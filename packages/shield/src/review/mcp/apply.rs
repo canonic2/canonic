@@ -26,7 +26,14 @@ pub(super) fn apply(
             json!({"proposal_id":id,"status":"applied","policy_revision":proposal.receipt["policy_revision"],"receipt":proposal.receipt,"operator":proposal.operator}),
         );
     }
-    let mechanism = match crate::agents::review::resolve(context.agent.as_deref()).confirmation() {
+    let confirmation = crate::agents::review::resolve(context.agent.as_deref()).confirmation();
+    let connections_changed =
+        crate::review::publication::mcp_changed(&proposal.base_candidate, &proposal.candidate)?;
+    let mechanism = match confirmation {
+        Confirmation::ToolPermission if connections_changed && confirmed => {
+            HostConfirmation::Elicitation
+        }
+        Confirmation::ToolPermission if connections_changed => return Err(Error::ApprovalRequired),
         Confirmation::Form if confirmed => HostConfirmation::Elicitation,
         Confirmation::ToolPermission => HostConfirmation::ToolPermission,
         Confirmation::Form | Confirmation::Terminal => return Err(Error::ApprovalRequired),
@@ -48,10 +55,14 @@ pub(super) fn apply(
                 .transpose()?,
         },
     )?;
-    Ok(
-        json!({"proposal_id":id,"status":"applied","policy_revision":receipt["policy_revision"],"receipt":receipt,
-        "operator":{"operator_id":null,"display_name":null,"mechanism":mechanism.mechanism()}}),
-    )
+    let mut result = json!({"proposal_id":id,"status":"applied","policy_revision":receipt["policy_revision"],"receipt":receipt,
+        "operator":{"operator_id":null,"display_name":null,"mechanism":mechanism.mechanism()}});
+    if connections_changed {
+        result["next_action"] = json!(
+            "Connection configuration is active. Call mcp_setup with the intended agents for host-settings review and publication in this session."
+        );
+    }
+    Ok(result)
 }
 
 pub(super) fn validate(context: &Context, args: &Value) -> Result<(State, String), Error> {
@@ -155,18 +166,30 @@ fn validate_with_views(
         let id = proposal.id.clone();
         return Ok((before, id, source));
     }
-    if proposal.status != "pending" || proposal.policy_revision != before.policy_revision {
+    validate_live(proposal, context, &before.policy_revision)?;
+    let id = proposal.id.clone();
+    crate::review::publication::validate_proposal_base(&before, &id)?;
+    Ok((before, id, source))
+}
+
+fn validate_live(proposal: &Proposal, context: &Context, revision: &str) -> Result<(), Error> {
+    if proposal.status == "stale" {
         return Err(Error::StaleSnapshot);
     }
-    let id = proposal.id.clone();
-    let proposal = before
-        .proposals
-        .iter()
-        .find(|p| p.id == id)
-        .ok_or(Error::Missing)?;
-    crate::review::publication::validate_proposal_base(&before, &id)?;
-    crate::review::publication::validate_mcp_change(&before, &proposal.candidate)?;
-    Ok((before, id, source))
+    if proposal.status != "pending" {
+        return Err(Error::Invalid(
+            "this review is closed; inspect policy_receipt for its outcome and prepare a fresh change with a new idempotency_key if still authorized",
+        ));
+    }
+    if proposal.policy_revision != revision {
+        return Err(Error::StaleSnapshot);
+    }
+    if !crate::review::proposal_lifecycle::owns(proposal, context) {
+        return Err(Error::Invalid(
+            "this review belongs to another interaction; prepare a fresh change",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_active(before: &State, same_active: bool, revision: &str) -> Result<(), Error> {
@@ -221,6 +244,11 @@ fn present_arguments(adapter: &dyn ReviewAdapter, proposal: &Proposal, canonical
 }
 
 pub(super) fn present_proposal(context: &Context, proposal: &Proposal, data: &mut Value) {
+    if proposal.status != "pending" || !crate::review::proposal_lifecycle::owns(proposal, context) {
+        data.as_object_mut()
+            .map(|object| object.remove("apply_arguments"));
+        return;
+    }
     let canonical = data["apply_arguments"].take();
     data["apply_arguments"] = present_arguments(
         crate::agents::review::resolve(context.agent.as_deref()),
@@ -233,6 +261,14 @@ pub(super) fn present_proposal(context: &Context, proposal: &Proposal, data: &mu
 /// Formatting before persistence avoids a full project reload after saving it.
 pub(super) fn proposal_result(context: &Context, proposal: &Proposal) -> Value {
     let mut data = proposal.public(false);
+    if proposal.status != "pending" || !crate::review::proposal_lifecycle::owns(proposal, context) {
+        data.as_object_mut()
+            .map(|object| object.remove("apply_arguments"));
+        data["next_action"] = json!(
+            "This review is closed or belongs to another interaction. Inspect its outcome; if still authorized, prepare fresh with a new idempotency_key or supersedes_proposal_id. Never retry a declined offer without the user's request."
+        );
+        return data;
+    }
     let canonical = data["apply_arguments"].take();
     if let Some(headline) = confirmation::headline(&canonical["changes"]) {
         data["change_summary"] = json!(headline);

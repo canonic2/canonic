@@ -7,9 +7,8 @@ $ shield policy review
 Active policy · revision [SHORT-DIGEST]
   No packs or project rules. Add a pack with shield pack add.
 2 proposals are waiting for review.
-Policy → Review 2 pending proposals
+Policy → Select one of 2 live changes
+Live policy changes → rule_add
 rule add → Reject · Add rule status: allow git status
-rule add → Accept · Add rule log: allow git log
 Rejected: Add rule status: allow git status
-Added rule log
 --- exit 0

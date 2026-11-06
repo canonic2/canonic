@@ -306,6 +306,16 @@ impl Transport {
                 "MCP settings cannot contain credentials, NULs or host environment placeholders",
             ));
         }
+        self.validate_observed()
+    }
+
+    /// Observed settings may contain private environment credentials. They are
+    /// never copied into source or output; transport shape and budgets still apply.
+    pub(crate) fn validate_observed(&self) -> Result<(), Error> {
+        let value = serde_json::to_value(self).map_err(|_| Error::Syntax)?;
+        if crate::json::contains_nul(&value) {
+            return Err(Error::Contract("MCP settings cannot contain NULs"));
+        }
         match self {
             Self::Defaults { pack, integration } => {
                 if pack.is_empty() || pack.len() > 256 || !valid_name(integration) {

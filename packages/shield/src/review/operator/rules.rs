@@ -257,9 +257,9 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
         .filter(|p| p.status == "pending")
         .count();
     let waiting = if pending == 1 {
-        "Review the pending proposal".to_owned()
+        "Review the live change".to_owned()
     } else {
-        format!("Review {pending} pending proposals")
+        format!("Select one of {pending} live changes")
     };
     let mut choices = vec![
         ("inspect", "Finish inspection", "Make no changes"),
@@ -279,7 +279,7 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
             "Configure retention and optional history clearing",
         ),
     ];
-    // Waiting proposals come first and are the default.
+    // Live interactions are optional direct reviews, never a backlog default.
     if pending > 0 {
         choices.insert(
             0,
@@ -291,7 +291,7 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
         );
     }
     // Escape in the history settings returns to this menu; Escape here cancels.
-    let mut action = if pending > 0 { "review" } else { "inspect" }.to_owned();
+    let mut action = "inspect".to_owned();
     let mut history = History {
         enabled: before.history_enabled,
         limit: before.history_limit,
@@ -319,7 +319,7 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
                 receipt["restored_project_files"] = json!(true);
                 Ok(receipt)
             }
-            "review" => review_proposals(context, &mut tty),
+            "review" => review_live_change(context, &mut tty),
             "history" => match history_menu(&mut history, &mut tty)? {
                 Step::Done(()) => {
                     let History {
@@ -337,68 +337,82 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
     }
 }
 
-/// Each pending proposal in turn, oldest first. Accepting activates it at once,
-/// so later proposals made against the older policy show as stale.
-fn review_proposals(context: &Context, tty: &mut Terminal) -> Result<Value, Error> {
-    let ids: Vec<String> = crate::review::project::checkpoint(context)?
+/// Select one live interaction explicitly; closed history cannot be activated.
+fn review_live_change(context: &Context, tty: &mut Terminal) -> Result<Value, Error> {
+    let state = crate::review::project::checkpoint(context)?;
+    let mut choices = vec![("cancel", "Cancel review", "Make no changes")];
+    for row in state.proposals.iter().filter(|p| p.status == "pending") {
+        choices.push((
+            row.id.as_str(),
+            row.operation.as_str(),
+            "Review this live interaction",
+        ));
+    }
+    let id = tty.choose(
+        "Live policy changes",
+        "Select the current change you want to review.",
+        &choices,
+        "cancel",
+    )?;
+    if id == "cancel" {
+        return Ok(json!({"cancelled":true}));
+    }
+    let (mut before, base) = crate::review::project::load_prepared(context)?;
+    let Some(proposal) = before
+        .proposals
+        .iter_mut()
+        .find(|p| p.id == id && p.status == "pending")
+    else {
+        return Err(Error::StaleSnapshot);
+    };
+    crate::review::storage::Store::open(std::path::Path::new(&context.project_root))?
+        .hydrate_proposal(proposal)?;
+    let obsolete = proposal.policy_revision != before.policy_revision;
+    let proposal = before
         .proposals
         .iter()
-        .filter(|p| p.status == "pending")
-        .map(|p| p.id.clone())
-        .collect();
-    let mut reviewed = Vec::new();
-    for (index, id) in ids.iter().enumerate() {
-        let (mut before, base) = crate::review::project::load_prepared(context)?;
-        let Some(proposal) = before
-            .proposals
-            .iter_mut()
-            .find(|p| &p.id == id && p.status == "pending")
-        else {
-            continue;
-        };
-        crate::review::storage::Store::open(std::path::Path::new(&context.project_root))?
-            .hydrate_proposal(proposal)?;
-        let stale = proposal.policy_revision != before.policy_revision;
-        let proposal = before
-            .proposals
-            .iter()
-            .find(|p| &p.id == id)
-            .ok_or(Error::Missing)?;
-        let (mut change, plan) = crate::review::publication::prepare_review(
+        .find(|p| p.id == id)
+        .ok_or(Error::Missing)?;
+    let (mut change, plan) = crate::review::publication::prepare_review(
+        context,
+        &before,
+        &proposal.candidate,
+        &proposal.candidate_metadata,
+        Some(&base),
+    )?;
+    state::terminal_mcp_details(
+        &mut change["changes"],
+        &before.candidates["project"],
+        &proposal.candidate,
+    )?;
+    let row = proposal.public(false);
+    let requested = row["links"]["source_entry_id"].as_str().and_then(|entry| {
+        review::observations::requested(std::path::Path::new(&context.project_root), entry)
+    });
+    let card = super::presentation::card(&row, &change, requested.as_ref(), obsolete);
+    let choice = match tty.decide(&card, 0) {
+        Ok(choice) => choice,
+        Err(error) => {
+            let _ = review::transition(context, &id, "withdraw", None, &|| Ok(()));
+            return Err(error);
+        }
+    };
+    let result = match choice.as_str() {
+        "accept" if !obsolete => crate::review::publication::commit_prepared(
             context,
             &before,
-            &proposal.candidate,
-            &proposal.candidate_metadata,
-            Some(&base),
-        )?;
-        state::terminal_mcp_details(
-            &mut change["changes"],
-            &before.candidates["project"],
-            &proposal.candidate,
-        )?;
-        let row = proposal.public(false);
-        let requested = row["links"]["source_entry_id"].as_str().and_then(|entry| {
-            review::observations::requested(std::path::Path::new(&context.project_root), entry)
-        });
-        let card = super::presentation::card(&row, &change, requested.as_ref(), stale);
-        let choice = tty.decide(&card, ids.len() - index - 1)?;
-        let result = match choice.as_str() {
-            "accept" if !stale => crate::review::publication::commit_prepared(
-                context,
-                &before,
-                proposal.candidate.clone(),
-                proposal.candidate_metadata.clone(),
-                Some(id),
-                None,
-                &plan,
-            )?,
-            "reject" => review::transition(context, id, "reject", None, &|| Ok(()))?,
-            _ => json!({"proposal_id":id,"status":"pending"}),
-        };
-        reviewed
-            .push(json!({"proposal_id":id,"choice":choice,"summary":card.summary,"result":result}));
-    }
-    Ok(json!({"reviewed":reviewed}))
+            proposal.candidate.clone(),
+            proposal.candidate_metadata.clone(),
+            Some(&id),
+            None,
+            &plan,
+        )?,
+        "reject" => review::transition(context, &id, "reject", None, &|| Ok(()))?,
+        _ => review::transition(context, &id, "withdraw", None, &|| Ok(()))?,
+    };
+    Ok(
+        json!({"reviewed":[{"proposal_id":id,"choice":choice,"summary":card.summary,"result":result}]}),
+    )
 }
 
 /// Request history answers, kept while the operator goes back and forth.

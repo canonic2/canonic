@@ -12,9 +12,9 @@ impl ReviewAdapter for Generic {
 }
 
 static GUIDANCE: Guidance = Guidance {
-    instructions: "If this host cannot confirm changes, the user must review and activate pending proposals with shield policy review in their terminal. ",
-    unavailable: "Host confirmation unavailable. Ask the user to activate the pending proposal with shield policy review in their terminal.",
-    required: "User action required: review and activate the proposal with shield policy review in a terminal.",
-    proposed: "Policy proposal saved; inactive. Ask the user to review and activate it with shield policy review in their terminal.",
-    ask: "In your final reply, explain each optional rule with Keep asking and Allow without asking choices. Propose chosen rules together with changes; the user activates them with shield policy review.",
+    instructions: "This host has no supported in-session approval adapter. Report that capability gap; never send the user to a terminal for approvals. ",
+    unavailable: "This host cannot obtain in-session approval. Report the missing capability; do not ask the user to run terminal commands.",
+    required: "In-session approval is unavailable for this host. Report the missing capability and close the attempt.",
+    proposed: "Inactive change prepared. This host cannot obtain in-session approval; withdraw the attempt and report the missing capability. Do not send the user to a terminal.",
+    ask: "Explain optional rules without creating an undecided backlog. This host cannot obtain in-session approval; report the missing capability.",
 };

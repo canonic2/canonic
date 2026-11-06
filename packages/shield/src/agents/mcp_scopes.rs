@@ -1,10 +1,153 @@
 //! Bounded read-only observations for adapter-owned MCP scope checks.
 use crate::review::Error;
 use std::{
+    collections::BTreeMap,
     fs,
     io::Read,
     path::{Path, PathBuf},
 };
+
+/// Read-only, request-owned configuration evidence. Values never serialize into
+/// history or host output. A second bounded read guards the authorization handoff.
+pub(crate) struct Observation {
+    pub(crate) entries: BTreeMap<String, Observed>,
+    files: Vec<PathBuf>,
+    agent: &'static str,
+    root: PathBuf,
+    cwd: PathBuf,
+}
+
+#[derive(PartialEq, Eq)]
+pub(crate) struct Observed {
+    pub(crate) transport: Result<Option<crate::mcp_connections::Transport>, &'static str>,
+    pub(crate) source: &'static str,
+}
+
+impl Observation {
+    pub(super) fn new(agent: &'static str, root: &Path, cwd: &Path) -> Self {
+        Self {
+            entries: BTreeMap::new(),
+            files: Vec::new(),
+            agent,
+            root: root.into(),
+            cwd: cwd.into(),
+        }
+    }
+
+    pub(super) fn read(&mut self, path: &Path) -> Result<Option<String>, Error> {
+        if self.files.len() >= 196 {
+            return Err(Error::Invalid("MCP discovery scope limit exceeded"));
+        }
+        crate::diagnostics::trace::count("mcp.discovery.reads", 1);
+        let text = read(path)?;
+        self.files.push(path.to_owned());
+        Ok(text)
+    }
+
+    pub(super) fn add(
+        &mut self,
+        alias: &str,
+        transport: Result<Option<crate::mcp_connections::Transport>, Error>,
+        source: &'static str,
+    ) -> Result<(), Error> {
+        if alias == "shield" {
+            return Ok(());
+        }
+        if self.entries.len() >= 64 && !self.entries.contains_key(alias) {
+            return Err(Error::Invalid("MCP discovery server limit exceeded"));
+        }
+        let transport = transport
+            .and_then(|transport| {
+                if let Some(transport) = &transport {
+                    transport.validate_observed()?;
+                }
+                Ok(transport)
+            })
+            .map_err(|_| "unsupported or disabled MCP connection settings");
+        match self.entries.entry(alias.into()) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(Observed { transport, source });
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                entry.get_mut().transport =
+                    Err("ambiguous MCP server scopes; resolve duplicate aliases");
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn disable(&mut self, alias: &str) {
+        if let Some(entry) = self.entries.get_mut(alias) {
+            entry.transport = Err("MCP server is disabled in host settings");
+        }
+    }
+
+    pub(crate) fn get(&self, alias: &str) -> Result<Option<&Observed>, Error> {
+        super::unambiguous_mcp_alias(alias, self.entries.keys().map(String::as_str))?;
+        let Some(entry) = self.entries.get(alias) else {
+            return Ok(None);
+        };
+        entry
+            .transport
+            .as_ref()
+            .map_err(|reason| Error::Invalid(reason))?;
+        Ok(Some(entry))
+    }
+
+    pub(crate) fn verify(&self) -> Result<(), Error> {
+        crate::diagnostics::trace::count("mcp.discovery.revalidations", self.files.len() as u64);
+        // Reuse the adapter's projection so history, tips, unrelated projects and
+        // formatting changes do not invalidate a connection observation. Missing
+        // files are still read again, so new competing aliases are detected.
+        let current = super::find(self.agent)
+            .ok_or(Error::Invalid("unknown MCP discovery agent"))?
+            .discover_mcp(&self.root, &self.cwd)?
+            .ok_or(Error::Invalid("MCP discovery unavailable"))?;
+        if self.files != current.files || self.entries != current.entries {
+            return Err(Error::Invalid(
+                "MCP configuration changed during authorization",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn connections(
+        &self,
+        managed: &crate::mcp_connections::Connections,
+        agent: &str,
+    ) -> crate::mcp_connections::Connections {
+        let mut connections = managed.clone();
+        for connection in connections.values_mut() {
+            connection.enabled &= connection
+                .agents
+                .get(agent)
+                .is_some_and(|alias| !super::reserved_mcp_alias(alias));
+        }
+        for (alias, entry) in &self.entries {
+            if managed.values().any(|c| c.agents.get(agent) == Some(alias))
+                || self.get(alias).is_err()
+            {
+                continue;
+            }
+            let Ok(Some(transport)) = &entry.transport else {
+                continue;
+            };
+            connections.insert(
+                format!("host:{alias}"),
+                crate::mcp_connections::Connection {
+                    enabled: true,
+                    local: false,
+                    transport: transport.clone(),
+                    agents: BTreeMap::from([(agent.into(), alias.clone())]),
+                    packs: BTreeMap::new(),
+                    command_fields: BTreeMap::new(),
+                    effective_fields: BTreeMap::new(),
+                },
+            );
+        }
+        connections
+    }
+}
 
 pub(super) fn read(path: &Path) -> Result<Option<String>, Error> {
     let metadata = match fs::symlink_metadata(path) {

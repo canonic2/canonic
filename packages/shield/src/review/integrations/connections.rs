@@ -124,6 +124,62 @@ pub(super) fn diagnose(
                 rows.push(json!({"id":id,"agent":agent,"alias":alias,"configuration":configured,"source":if connection.local {"local"}else{"project"},"packs":connection.packs,"credential_readiness":"unverified","host_loading":"unverified","effective_connection_identity":"unverified"}));
             }
         }
+        if snapshot.has_mcp_integrations() {
+            automatic(root, snapshot, registered, diagnostics, &mut rows);
+        }
     }
     rows
+}
+
+fn automatic(
+    root: &Path,
+    snapshot: &review::runtime::consumer::Snapshot,
+    registered: Option<&Registration>,
+    diagnostics: &mut Vec<&'static str>,
+    rows: &mut Vec<Value>,
+) {
+    for agent in ["claude", "codex"] {
+        let adapter = crate::agents::find(agent).expect("supported discovery adapter");
+        let Ok(Some(observation)) = adapter.discover_mcp(root, root) else {
+            diagnostics.push("automatic MCP discovery unavailable; inspect host configuration");
+            rows.push(json!({"agent":agent,"mode":"automatic","configuration":"discovery unavailable","effective_connection_identity":"unverified"}));
+            continue;
+        };
+        let connections = observation.connections(snapshot.mcp_connections(), agent);
+        let hooks = if registered.is_some_and(|r| r.agents.contains_key(agent)) {
+            "registered; host loading unverified"
+        } else if registered.is_some_and(|r| r.box_definition.is_some()) {
+            "defined for Box; host loading unverified"
+        } else {
+            "not registered"
+        };
+        for (alias, entry) in &observation.entries {
+            if snapshot
+                .mcp_connections()
+                .values()
+                .any(|c| c.agents.get(agent) == Some(alias))
+            {
+                continue;
+            }
+            let resolution = observation.get(alias).and_then(|_| {
+                snapshot
+                    .resolve_mcp(&format!("host:{alias}"), &connections, entry.source)
+                    .map_err(|_| super::Error::Invalid("MCP predicates or mappings conflict"))
+            });
+            let (configuration, matches) = match resolution {
+                Ok(_) if entry.transport.as_ref().is_ok_and(Option::is_none) => (
+                    "unsupported discovery scope; host permissions apply",
+                    vec![],
+                ),
+                Ok(resolved) if resolved.matches.is_empty() => {
+                    ("no matching installed pack", vec![])
+                }
+                Ok(resolved) => ("matched pack criteria", resolved.matches),
+                Err(_) => ("ambiguous or unsupported configuration", vec![]),
+            };
+            rows.push(json!({"agent":agent,"alias":alias,"mode":"automatic","source":entry.source,
+                "configuration":configuration,"matches":matches,"hooks":hooks,
+                "credential_readiness":"unverified","host_loading":"unverified","effective_connection_identity":"unverified"}));
+        }
+    }
 }

@@ -2,6 +2,10 @@
 use super::{Error, argument_rules, selectors};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
+#[expect(
+    clippy::too_many_lines,
+    reason = "single closed domain/predicate inventory validates source without recursive dispatch"
+)]
 pub(super) fn validate_predicates(
     value: &Value,
     domain: &str,
@@ -11,7 +15,13 @@ pub(super) fn validate_predicates(
     let (identities, predicates): (&[&str], &[&str]) = match domain {
         "argv" => (
             &["executable"],
-            &["arguments", "targets", "possible_effects", "argument_paths"],
+            &[
+                "arguments",
+                "targets",
+                "possible_effects",
+                "argument_paths",
+                "graphql",
+            ],
         ),
         "shell" => (&["source", "dialect"], &["source", "dialect_version"]),
         "file" => (
@@ -78,6 +88,7 @@ pub(super) fn validate_predicates(
             "sources" => quantified(operand, allow)?,
             "targets" => targets(operand, allow)?,
             "argument_paths" => argument_paths(operand)?,
+            "graphql" => crate::graphql::validate(operand)?,
             "field_paths" => field_paths(operand)?,
             "recursive" => {
                 if !operand.is_boolean() {

@@ -145,6 +145,12 @@ pub(crate) struct Proposal {
     pub(crate) signature: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) reviewed_files: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) interaction: Option<super::proposal_lifecycle::Interaction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) closed_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) reviewed_paths: Option<BTreeMap<String, Option<String>>>,
 }
 impl Proposal {
     pub(crate) fn apply_arguments(&self) -> Value {
@@ -169,7 +175,7 @@ impl Proposal {
         value
     }
     fn metadata_view(&self) -> Value {
-        json!({"schema_version":1,"proposal_id":self.id,"created_at":self.created_at,
+        json!({"schema_version":1,"proposal_id":self.id,"created_at":self.created_at,"closed_reason":self.closed_reason,
             "status":self.status,"provenance":self.provenance,"links":self.links,"reasons":self.reasons,
             "policy_revision":self.policy_revision,"target_scope":self.target_scope,"operation":self.operation,
             "rule_id":self.rule_id,"operator":self.operator,
@@ -178,15 +184,17 @@ impl Proposal {
     pub(crate) fn public(&self, reveal: bool) -> Value {
         let mut value = self.metadata_view();
         value["comparison"] = self.comparison.clone();
-        value["apply_arguments"] = if self.candidate["kind"] == "candidate-bundle" {
-            self.arguments_with_digest(
-                value["candidate_digest"]
-                    .as_str()
-                    .expect("candidate digest"),
-            )
-        } else {
-            self.apply_arguments()
-        };
+        if self.status == "pending" {
+            value["apply_arguments"] = if self.candidate["kind"] == "candidate-bundle" {
+                self.arguments_with_digest(
+                    value["candidate_digest"]
+                        .as_str()
+                        .expect("candidate digest"),
+                )
+            } else {
+                self.apply_arguments()
+            };
+        }
         if reveal {
             value["candidate"] = self.candidate.clone();
         } else if let Some(source) = self.candidate["rules"].as_str() {
@@ -241,6 +249,8 @@ pub(crate) struct State {
     #[serde(default)]
     pub(crate) session_grants: super::session_grants::Registry,
     pub(crate) proposals: Vec<Proposal>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(super) policy_drafts: Vec<super::proposal_lifecycle::drafts::Draft>,
     /// Advisory session review suppression, never execution authorization.
     #[serde(default)]
     pub(crate) dismissed_reviews: Vec<String>,
@@ -276,6 +286,7 @@ impl State {
             || self.project_id != context.project_id
             || self.project_root != context.project_root
             || self.proposals.len() > 1024
+            || self.policy_drafts.len() > 128
             || self.dismissed_reviews.len() > 1024
             || self
                 .dismissed_reviews

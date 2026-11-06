@@ -144,7 +144,13 @@ impl Server {
                 .confirmations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .begin(request, &call, &message, review_binding);
+                .begin(
+                    request,
+                    &call,
+                    &message,
+                    review_binding,
+                    Some(PolicyWait::new(&review, &call)),
+                );
             return match interim {
                 Ok(result) => Outcome::InputRequired(result),
                 Err(_) => Outcome::Tool(reply(
@@ -163,7 +169,9 @@ impl Server {
         let waiting = trace
             .as_ref()
             .map(|trace| trace.wait("approval.wait", "approval.wait_us"));
+        let mut guard = PolicyWait::new(&review, &call);
         Outcome::Confirm(Confirm::new(message, move |decision, context| {
+            guard.disarm();
             let _scope = trace
                 .as_ref()
                 .map(crate::diagnostics::trace::Request::enter);
@@ -176,6 +184,14 @@ impl Server {
                     .map_or(Answer::Failed("approval_declined"), |id| {
                         Answer::AdminFailed(id, "approval_declined")
                     }),
+                Decision::Cancelled => review_binding.map_or(
+                    Answer::Failed(if call.name == "policy_apply" {
+                        "approval_cancelled"
+                    } else {
+                        "approval_declined"
+                    }),
+                    |id| Answer::AdminFailed(id, "approval_declined"),
+                ),
                 Decision::Unavailable => review_binding
                     .map_or(Answer::Failed("approval_unavailable"), |id| {
                         Answer::AdminFailed(id, "approval_unavailable")
@@ -233,6 +249,36 @@ impl Server {
         )
     }
 
+    fn policy_apply(
+        &self,
+        review: Arc<crate::review::Context>,
+        call: ToolCall,
+        context: &stdio::Context,
+    ) -> Outcome {
+        match crate::review::mcp::apply_confirmation(&review, &self.connection, &call.arguments) {
+            Ok(Some(message)) => self.confirm_apply(review, call, context, message),
+            Err(error) => {
+                let outcome =
+                    crate::review::mcp::settle_apply_failure(&review, &call.arguments, &error);
+                let committed = outcome.is_some();
+                Outcome::Tool(response::tool_result(
+                    &call.name,
+                    review.agent.as_deref(),
+                    outcome.unwrap_or_else(|| crate::review::mcp::question_error(&review, &error)),
+                    !committed,
+                    &|| Ok(()),
+                ))
+            }
+            Ok(None) => Outcome::Tool(reply(
+                &review,
+                &self.connection,
+                &call,
+                context,
+                Answer::None,
+            )),
+        }
+    }
+
     fn resume_confirmation(
         &self,
         review: &crate::review::Context,
@@ -265,10 +311,10 @@ impl Server {
                 if decision == Decision::Accepted {
                     binding.map_or(Answer::Accepted, Answer::AdminAccepted)
                 } else {
-                    let code = if decision == Decision::Declined {
-                        "approval_declined"
-                    } else {
-                        "approval_unavailable"
+                    let code = match decision {
+                        Decision::Cancelled if call.name == "policy_apply" => "approval_cancelled",
+                        Decision::Declined | Decision::Cancelled => "approval_declined",
+                        _ => "approval_unavailable",
                     };
                     binding.map_or(Answer::Failed(code), |id| Answer::AdminFailed(id, code))
                 },
@@ -373,14 +419,10 @@ impl stdio::Handler for Server {
             {
                 return self.confirm_apply(review, call, context, message);
             }
-            // The resolved adapter declares the host confirmation mechanism.
-            if call.name == "policy_apply"
-                && crate::agents::review::resolve(review.agent.as_deref()).confirmation()
-                    == crate::agents::review::Confirmation::Form
-                && let Ok(Some(message)) =
-                    crate::review::mcp::apply_confirmation(&review, &call.arguments)
-            {
-                return self.confirm_apply(review, call, context, message);
+            // Connection edits always show their private settings in a form;
+            // ordinary policy retains the adapter's existing approval mechanism.
+            if call.name == "policy_apply" {
+                return self.policy_apply(review, call, context);
             }
             Outcome::Tool(reply(
                 &review,
@@ -448,6 +490,38 @@ enum Answer {
     Failed(&'static str),
 }
 
+/// Dropping a legacy wait (RPC cancellation/expiry) closes its candidate even
+/// though the transport deliberately does not invoke its continuation.
+struct PolicyWait {
+    context: crate::review::Context,
+    arguments: serde_json::Value,
+    armed: bool,
+}
+impl PolicyWait {
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+    fn new(context: &crate::review::Context, call: &ToolCall) -> Self {
+        Self {
+            context: context.clone(),
+            arguments: call.arguments.clone(),
+            armed: call.name == "policy_apply",
+        }
+    }
+}
+impl Drop for PolicyWait {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = crate::review::proposal_lifecycle::settle(
+                &self.context,
+                &self.arguments,
+                "withdrawn",
+                "cancelled",
+            );
+        }
+    }
+}
+
 fn reply(
     review: &crate::review::Context,
     connection: &crate::review::mcp::Connection,
@@ -471,6 +545,15 @@ fn reply(
             .check()
             .map_err(|_| crate::policy::Error::Interrupted)
     };
+    if call.name == "policy_apply"
+        && let Answer::Failed(code) = answer
+    {
+        let value = crate::review::mcp::policy_outcome(review, &call.arguments, code);
+        let failed = !value["error"].is_null();
+        return response::tool_result(&call.name, review.agent.as_deref(), value, failed, &|| {
+            Ok(())
+        });
+    }
     let mut value = crate::review::mcp::call_with_bound_confirmation(
         review,
         connection,
@@ -493,30 +576,26 @@ fn reply(
     {
         let request = ["request_approve", "request_deny", "session_grant_approve"]
             .contains(&call.name.as_str());
-        let message = if let Some(route) = crate::review::mcp::admin_route(&call.name) {
+        let message = if crate::review::mcp::admin_route(&call.name).is_some() {
             if code == "approval_declined" {
                 "The administrative change was declined. Continue without it; do not repeat the offer unless the user requests it.".to_owned()
             } else if matches!(review.agent.as_deref(), Some("gemini" | "agy")) {
-                format!(
-                    "This host did not provide administrative confirmation. Ask the person to run {route} with the intended arguments in their terminal. The agent must not run that operator command."
-                )
+                "This host did not provide administrative confirmation. Report the missing in-session capability; no change was approved.".to_owned()
             } else {
-                format!(
-                    "Administrative confirmation is unavailable. Ask the person to run {route} with the intended arguments in their terminal, or enable confirmation forms and call {} again. The agent must not run that operator command.",
-                    call.name
-                )
+                messages::request_unavailable(review.agent.as_deref())
+                    .replace("request_approve", &call.name)
             }
         } else {
             match (code, request) {
-            (_, _) if call.name == "session_grant_approve" && matches!(review.agent.as_deref(), Some("gemini" | "agy")) => "This host did not provide confirmation. Ask the person to run shield session-grant approve PROPOSAL_ID in their terminal. The agent must not run that operator command.",
-            (_, _) if matches!(call.name.as_str(), "session_grant_approve") => "Session-grant confirmation is unavailable. Enable host confirmation forms, or ask the person to run shield session-grant approve PROPOSAL_ID in their terminal. The agent must not run that operator command.",
+            (_, _) if call.name == "session_grant_approve" && matches!(review.agent.as_deref(), Some("gemini" | "agy")) => "This host did not provide session-grant confirmation. Report the missing in-session capability; no permission was issued.",
+            (_, _) if matches!(call.name.as_str(), "session_grant_approve") => "Session-grant confirmation is unavailable. Enable host confirmation forms in this session or report the missing capability; no permission was issued.",
             ("approval_declined", true) => messages::REQUEST_DECLINED,
             ("approval_declined", false) => messages::APPROVAL_DECLINED,
             (_, true) => messages::request_unavailable(review.agent.as_deref()),
             (_, false) => messages::approval_unavailable(review.agent.as_deref()),
         }.replace("request_approve", &call.name)
         };
-        value["error"] = serde_json::json!({"code":code,"message":message,"operator_route":crate::review::mcp::admin_route(&call.name)});
+        value["error"] = serde_json::json!({"code":code,"message":message,"operator_route":null});
     }
     let failed = !value["error"].is_null();
     response::tool_result(&call.name, review.agent.as_deref(), value, failed, &|| {

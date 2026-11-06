@@ -173,8 +173,7 @@ fn commit_confirmed(
         &meta,
         &candidate,
     );
-    let mut candidates = BTreeMap::new();
-    candidates.insert("project".into(), candidate);
+    let candidates = BTreeMap::from([("project".into(), candidate)]);
     let owned;
     let evaluator = if let Some(evaluator) = prepared.and_then(|prepared| prepared.evaluator) {
         evaluator
@@ -182,8 +181,10 @@ fn commit_confirmed(
         owned = configuration::Evaluator::new(review::snapshots(&candidates)?)?;
         &owned
     };
-    if mechanism != "operator-cli" {
-        validate_mcp_change(before, &candidates["project"])?;
+    if mechanism == "host-tool-permission"
+        && mcp_changed(&before.candidates["project"], &candidates["project"])?
+    {
+        return Err(Error::ApprovalRequired);
     }
     let files = projections(&candidates["project"], &meta)?;
     meta["projection"] = json!(digest(&files));
@@ -219,6 +220,9 @@ fn commit_confirmed(
                 .iter_mut()
                 .find(|p| p.id == id)
                 .ok_or(Error::Missing)?;
+            if context.surface == "mcp" && !review::proposal_lifecycle::owns(row, context) {
+                return Err(Error::ApprovalRequired);
+            }
             mark_applied(
                 row,
                 &state.policy_revision,
@@ -238,18 +242,11 @@ fn commit_confirmed(
         state.operator = meta.clone();
         let receipt =
             review::runtime::publish_confirmed(state, context, proposal, compiled, mechanism);
-        if let Some(id) = proposal {
-            let row = state
-                .proposals
-                .iter_mut()
-                .find(|row| row.id == id)
-                .ok_or(Error::Missing)?;
-            row.receipt = receipt.clone();
-        }
+        retain_proposal_receipt(state, proposal, &receipt)?;
         attempted_activation = receipt["activation_id"].as_str().map(str::to_owned);
         Ok(receipt)
     });
-    let receipt = match result {
+    let mut receipt = match result {
         Ok(value) => value,
         Err(error) => recover_activation(
             error,
@@ -259,12 +256,27 @@ fn commit_confirmed(
             evaluator.revision(),
         )?,
     };
-    let mut receipt = receipt;
     let mut written = files;
     written.retain(|name, _| !preserved.contains(name));
     repair_after_commit(context, &store, evaluator, &written, &meta, &mut receipt);
     receipt["changes"] = changes;
     Ok(receipt)
+}
+
+fn retain_proposal_receipt(
+    state: &mut State,
+    proposal: Option<&str>,
+    receipt: &Value,
+) -> Result<(), Error> {
+    if let Some(id) = proposal {
+        state
+            .proposals
+            .iter_mut()
+            .find(|row| row.id == id)
+            .ok_or(Error::Missing)?
+            .receipt = receipt.clone();
+    }
+    Ok(())
 }
 
 /// Retain repair evidence without treating preserved edits as generated output.
@@ -398,18 +410,16 @@ fn recover_activation(
     Ok(json!({"committed":true,"policy_revision":recovered.policy_revision,"repair_needed":true}))
 }
 
-/// Host confirmation cannot activate connection or resolved-setting changes.
-pub(in crate::review) fn validate_mcp_change(
-    before: &State,
-    candidate: &Value,
-) -> Result<(), Error> {
-    let old = configuration::layers::merged(&before.candidates["project"])?;
+/// Connection changes need a form showing private settings, even on hosts that
+/// normally approve policy through the tool's model-visible arguments.
+pub(in crate::review) fn mcp_changed(before: &Value, candidate: &Value) -> Result<bool, Error> {
+    let old = configuration::layers::merged(before)?;
     let new = configuration::layers::merged(candidate)?;
     if ["mcp", "local_mcp"]
         .iter()
         .any(|key| old[*key] != new[*key])
     {
-        return Err(Error::McpSetupRequired);
+        return Ok(true);
     }
     let connections = |candidate: &Value| -> Result<crate::mcp_connections::Connections, Error> {
         serde_json::from_value(
@@ -420,7 +430,7 @@ pub(in crate::review) fn validate_mcp_change(
         )
         .map_err(|_| Error::Invalid("invalid retained MCP connection settings"))
     };
-    let old = connections(&before.candidates["project"])?;
+    let old = connections(before)?;
     let new = connections(candidate)?;
     if old.len() != new.len()
         || old.iter().any(|(id, c)| {
@@ -433,9 +443,9 @@ pub(in crate::review) fn validate_mcp_change(
             })
         })
     {
-        return Err(Error::McpSetupRequired);
+        return Ok(true);
     }
-    Ok(())
+    Ok(false)
 }
 
 /// Bring project files and agent prefix rules in line with the policy just

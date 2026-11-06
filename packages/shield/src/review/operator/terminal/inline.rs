@@ -143,7 +143,7 @@ pub(super) fn input(host: Host, title: &str) -> Result<String, Error> {
 pub(super) fn review(host: Host, card: &Card, waiting: usize) -> Result<String, Error> {
     Ok(match step(host.review(request(card), waiting)?)? {
         Step::Done(choice) => choice,
-        Step::Back => "leave".into(),
+        Step::Back => "cancel".into(),
     })
 }
 
@@ -178,9 +178,14 @@ fn request(card: &Card) -> permission_review::Request {
         choices: vec![
             accept,
             choice("reject", "Reject", "discard this proposal", Kind::Deny),
-            choice("leave", "Leave pending", "decide later", Kind::Skip),
+            choice(
+                "cancel",
+                "Cancel review",
+                "close without applying",
+                Kind::Skip,
+            ),
         ],
-        default: Some("leave".into()),
+        default: Some("cancel".into()),
     }
 }
 
@@ -233,7 +238,7 @@ mod tests {
     #[test]
     fn proposals_are_chosen_without_ids_and_accepting_takes_a_second_check() {
         let mut review = PermissionReview::new(request(&card(false))).unwrap();
-        assert_eq!(review.selected().map(|c| c.id.as_str()), Some("leave"));
+        assert_eq!(review.selected().map(|c| c.id.as_str()), Some("cancel"));
         assert_eq!(
             chosen(&mut review, &[KeyCode::Char('2'), KeyCode::Enter]),
             Some("reject".into())
@@ -287,7 +292,7 @@ mod tests {
             "git init",
             "Accept",
             "Reject",
-            "Leave pending",
+            "Cancel review",
         ] {
             assert!(text.contains(expected), "{expected}: {text}");
         }

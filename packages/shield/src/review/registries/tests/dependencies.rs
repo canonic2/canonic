@@ -97,7 +97,12 @@ impl Registry {
 }
 
 fn project(registry: &Registry) -> (assert_fs::TempDir, Context, Connection) {
-    let (root, mut context) = review::tests::enrolled();
+    let root = assert_fs::TempDir::new().unwrap();
+    let bundle =
+        crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
+    let mut context = review::mcp::initialize_fixture(root.path(), &bundle);
+    context.agent = Some("acme-agent".into());
+    context.session_id = Some("acme-session".into());
     context.fetcher = trusted();
     let source = enrollment(&context.fetcher, registry.server.url()).unwrap();
     Store::open(root.path())
@@ -110,7 +115,7 @@ fn project(registry: &Registry) -> (assert_fs::TempDir, Context, Connection) {
         .unwrap();
     context.surface = "mcp".into();
     context.connection_id = Some("tls-dependencies".into());
-    let connection = Connection::new("tls-dependencies".into());
+    let connection = Connection::enrolled(&context).unwrap();
     (root, context, connection)
 }
 

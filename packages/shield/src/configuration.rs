@@ -420,8 +420,8 @@ impl Candidate {
             captured.push(pack);
         }
         let mcp = connections::resolve(&self.mcp, &self.packs, &captured)?;
-        for pack in &mut captured {
-            pack.bind_mcp_connections(&mcp)?;
+        for pack in &captured {
+            pack.validate_mcp_connections(&mcp)?;
         }
         policy::dependencies::validate_packs(
             &captured

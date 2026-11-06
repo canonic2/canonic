@@ -317,8 +317,8 @@ pub(super) fn propose(
             candidate,
             metadata: meta,
             fingerprint,
+            paths,
         } = project_files::capture(context, &before)?;
-        super::publication::validate_mcp_change(&before, &candidate)?;
         signature = policy::fingerprint(
             json!([input, fingerprint, before.policy_revision])
                 .to_string()
@@ -327,7 +327,7 @@ pub(super) fn propose(
         if input.idempotency_key.is_none() {
             retry_key = format!("proposal-{}", &signature[..32]);
         }
-        Some((candidate, meta, fingerprint))
+        Some((candidate, meta, fingerprint, paths))
     } else {
         None
     };
@@ -362,8 +362,10 @@ pub(super) fn propose(
     checkpoint()?;
     let (mut before, base_plan, base_snapshots) = store.read_for_comparison(before)?;
     let mut reviewed_files = None;
-    let (candidate, meta, captured) = if let Some((candidate, meta, fingerprint)) = adopted {
+    let mut reviewed_paths = None;
+    let (candidate, meta, captured) = if let Some((candidate, meta, fingerprint, paths)) = adopted {
         reviewed_files = Some(fingerprint);
+        reviewed_paths = Some(paths);
         (candidate, meta, None)
     } else if let Some(prepared) = &input.prepared {
         if prepared.binding != prepared_binding(&before) {
@@ -454,6 +456,12 @@ pub(super) fn propose(
             } else { Err(Error::Invalid("idempotency key reused with changed input")) };
         }
         if input.supersedes_proposal_id.as_ref().is_some_and(|id| !state.proposals.iter().any(|p| p.id == *id)) { return Err(Error::Missing); }
+        for previous in &mut state.proposals {
+            if super::proposal_lifecycle::owns(previous, context) {
+                super::proposal_lifecycle::close(previous, "withdrawn", "superseded");
+            }
+        }
+        super::proposal_lifecycle::reclaim(state);
         capacity(&state.proposals)?;
         let id = state.id("proposal");
         let (kind, rule_id) = match changes.as_slice() {
@@ -463,7 +471,7 @@ pub(super) fn propose(
         let event = state.event("proposal_created", context, json!({"proposal_id":id,"source_entry_id":input.source_entry_id,"supersedes_proposal_id":input.supersedes_proposal_id}),json!({"agent_reason":input.agent_reason}),json!({"operation":kind,"policy_revision":state.policy_revision}));
         let mut event = event;
         event["links"]["review_ids"] = json!(input.review_ids);
-        let row = Proposal { id, created_at:event["recorded_at"].as_str().ok_or(Error::Invalid("timestamp unavailable"))?.into(), status:"pending".into(), provenance:context.provenance(), links:event["links"].clone(), reasons:event["reasons"].clone(), policy_revision:state.policy_revision.clone(),target_scope:"project".into(),operation:kind,rule_id,candidate,base_candidate:before.candidates["project"].clone(),base_metadata:before.operator.clone(),candidate_metadata:meta,receipt:Value::Null,comparison,operator:None,retry_key:retry_key.clone(),retry_owner:context.retry_owner(),signature,reviewed_files };
+        let row = Proposal { id, created_at:event["recorded_at"].as_str().ok_or(Error::Invalid("timestamp unavailable"))?.into(), status:"pending".into(), provenance:context.provenance(), links:event["links"].clone(), reasons:event["reasons"].clone(), policy_revision:state.policy_revision.clone(),target_scope:"project".into(),operation:kind,rule_id,candidate,base_candidate:before.candidates["project"].clone(),base_metadata:before.operator.clone(),candidate_metadata:meta,receipt:Value::Null,comparison,operator:None,retry_key:retry_key.clone(),retry_owner:context.retry_owner(),signature,reviewed_files, reviewed_paths, interaction:Some(super::proposal_lifecycle::Interaction::new(context)?), closed_reason:None };
         let result = {
             let _trace = crate::diagnostics::trace::span("proposal.present");
             present(&row)

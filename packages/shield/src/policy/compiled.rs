@@ -1,11 +1,13 @@
-//! Version-six scope postings and shared invocation dispatch; authority remains in the resolver.
+//! Indexed scope postings and invocation dispatch; authority remains in the resolver.
 mod invocations;
+mod mcp;
 use super::{
     CustomRules, Error, Pack, Profile, Request, index, model, normalized,
     patterns::{self, Provider},
     rules::{Facts, Rule},
     selectors,
 };
+pub(crate) use mcp::ResolvedMcp;
 use regex_automata::nfa::thompson::pikevm::PikeVM;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -15,7 +17,7 @@ use std::{
 /// The plan format this engine writes and loads. Change it whenever compiled
 /// bytes would decide differently, such as how patterns are prepared, so
 /// plans written before the change are rebuilt instead of loaded.
-pub(crate) const FORMAT: &str = "SHPLAN08";
+pub(crate) const FORMAT: &str = "SHPLAN10";
 const MAGIC: &[u8] = FORMAT.as_bytes();
 const HEADER: usize = 16;
 const ENTRY: usize = 16;
@@ -39,6 +41,11 @@ impl Metadata {
             pack.document.validate_schema()?;
             super::invocations::definitions(&pack.document)?;
             for precondition in &pack.document.preconditions {
+                let mut precondition = precondition.clone();
+                crate::graphql::descriptor(&mut precondition.conditions)?;
+                for alternative in &mut precondition.requires_any {
+                    crate::graphql::descriptor(alternative)?;
+                }
                 precondition.validate_bound()?;
             }
         }
@@ -108,10 +115,19 @@ fn codex_prefixes(
 }
 #[derive(Default)]
 struct Programs {
-    items: BTreeMap<String, Arc<PikeVM>>,
+    items: BTreeMap<String, Prepared>,
     bytes: usize,
 }
+#[derive(Clone)]
+enum Prepared {
+    Pattern(Arc<PikeVM>),
+    Graphql(Arc<serde_json::Value>),
+}
 impl Plan {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one encoding pass preserves common ownership and offsets for all prepared resources"
+    )]
     pub(crate) fn compile(
         packs: Vec<(Pack, Profile)>,
         custom: Option<CustomRules>,
@@ -133,7 +149,17 @@ impl Plan {
                     .iter()
                     .map(|(key, bytes)| (key.clone(), bytes.clone())),
             );
-            for rule in std::mem::take(&mut pack.document.rules) {
+            for gate in &mut pack.document.preconditions {
+                crate::graphql::detach(&mut gate.conditions, &mut images)?;
+                for alternative in &mut gate.requires_any {
+                    crate::graphql::detach(alternative, &mut images)?;
+                }
+            }
+            for mut rule in std::mem::take(&mut pack.document.rules) {
+                crate::graphql::detach(&mut rule.conditions, &mut images)?;
+                if let Some(requirements) = &mut rule.requirements {
+                    crate::graphql::detach(requirements, &mut images)?;
+                }
                 rows.push((key(&rule, owner), encode(&rule)?, owner));
             }
             metadata.packs.push(PackMetadata {
@@ -152,7 +178,11 @@ impl Plan {
                     .map(|(key, bytes)| (key.clone(), bytes.clone())),
             );
             let time_sensitive = super::has_expiration(&custom);
-            for rule in std::mem::take(&mut custom.document.rules) {
+            for mut rule in std::mem::take(&mut custom.document.rules) {
+                crate::graphql::detach(&mut rule.conditions, &mut images)?;
+                if let Some(requirements) = &mut rule.requirements {
+                    crate::graphql::detach(requirements, &mut images)?;
+                }
                 rows.push((
                     key(&rule, metadata.packs.len()),
                     encode(&rule)?,
@@ -303,9 +333,21 @@ impl Plan {
             if full {
                 let row = &self.bytes[entry.key_end..entry.end];
                 if entry.owner == PATTERN_OWNER {
-                    patterns::load(row)?;
+                    if key.get(1..).is_some_and(|k| k.starts_with(b"graphql:")) {
+                        let model: serde_json::Value =
+                            serde_json::from_slice(row).map_err(|_| Error::Syntax)?;
+                        crate::graphql::validate(
+                            &serde_json::json!({"carrier":"gh-api","operation":"query","selection":model}),
+                        )?;
+                    } else {
+                        patterns::load(row)?;
+                    }
                 } else {
-                    let rule: Rule = serde_json::from_slice(row).map_err(|_| Error::Syntax)?;
+                    let mut rule: Rule = serde_json::from_slice(row).map_err(|_| Error::Syntax)?;
+                    crate::graphql::descriptor(&mut rule.conditions)?;
+                    if let Some(requirements) = &mut rule.requirements {
+                        crate::graphql::descriptor(requirements)?;
+                    }
                     rule.validate_for(entry.owner < self.metadata.packs.len())?;
                     if let Some(pack) = self.metadata.packs.get(entry.owner) {
                         super::invocations::binding(&pack.document, &rule)?;
@@ -384,6 +426,16 @@ impl Plan {
         facts: &Facts<'_>,
         checkpoint: &dyn Fn() -> Result<(), Error>,
     ) -> Result<super::Evaluation, Error> {
+        self.evaluate_input_mcp(request, facts, None, checkpoint)
+    }
+
+    pub(crate) fn evaluate_input_mcp(
+        &self,
+        request: &Request,
+        facts: &Facts<'_>,
+        mcp: Option<&ResolvedMcp>,
+        checkpoint: &dyn Fn() -> Result<(), Error>,
+    ) -> Result<super::Evaluation, Error> {
         request.validate()?;
         let mut packs = self
             .metadata
@@ -392,7 +444,7 @@ impl Plan {
             .map(|p| {
                 (
                     Pack {
-                        document: p.document.descriptor(),
+                        document: p.document.descriptor(|gate| gate.candidate(facts)),
                         digest: p.digest.clone(),
                         semantic: p.semantic,
                         index: index::Index::new(std::iter::empty()),
@@ -433,6 +485,16 @@ impl Plan {
         };
         for domain in [domain, "exact_request"] {
             self.collect(&query(8, domain), &mut packs, &mut custom, checkpoint)?;
+        }
+        if matches!(facts.input, normalized::Input::Mcp { .. }) {
+            let empty = BTreeMap::new();
+            for (owner, (pack, _)) in packs.iter_mut().enumerate() {
+                pack.bind_mcp_scopes(
+                    mcp.and_then(|mcp| mcp.bindings.get(owner))
+                        .unwrap_or(&empty),
+                    self,
+                )?;
+            }
         }
         let selected: Vec<_> = packs.iter().map(|(p, profile)| (p, *profile)).collect();
         let customs: Vec<_> = custom.as_ref().into_iter().collect();
@@ -542,7 +604,7 @@ impl Plan {
             .items
             .get(key)
             .cloned();
-        let vm = if let Some(vm) = existing {
+        let vm = if let Some(Prepared::Pattern(vm)) = existing {
             vm
         } else {
             let q = query(9, key);
@@ -557,7 +619,7 @@ impl Plan {
                 .programs
                 .lock()
                 .map_err(|_| Error::Contract("pattern cache unavailable"))?;
-            if let Some(existing) = cache.items.get(key) {
+            if let Some(Prepared::Pattern(existing)) = cache.items.get(key) {
                 return Ok(existing.clone());
             }
             let bytes = cache
@@ -568,13 +630,57 @@ impl Plan {
                 return Err(Error::Limit);
             }
             cache.bytes = bytes;
-            cache.items.insert(key.into(), vm.clone());
+            cache
+                .items
+                .insert(key.into(), Prepared::Pattern(vm.clone()));
             vm
         };
         Ok(vm)
     }
 }
 impl Provider for Plan {
+    fn model(&self, key: &str) -> Result<Arc<serde_json::Value>, Error> {
+        if !key.starts_with("graphql:") {
+            return Err(Error::Contract("invalid GraphQL model key"));
+        }
+        if let Some(Prepared::Graphql(model)) = self
+            .programs
+            .lock()
+            .map_err(|_| Error::Contract("prepared cache unavailable"))?
+            .items
+            .get(key)
+        {
+            return Ok(model.clone());
+        }
+        let q = query(9, key);
+        let entry = self.entry(self.bound(&q, false)?)?;
+        if self.bytes[entry.start..entry.key_end] != q || entry.owner != PATTERN_OWNER {
+            return Err(Error::Contract("missing prepared GraphQL model"));
+        }
+        let row = &self.bytes[entry.key_end..entry.end];
+        let model: Arc<serde_json::Value> =
+            Arc::new(serde_json::from_slice(row).map_err(|_| Error::Syntax)?);
+        let mut cache = self
+            .programs
+            .lock()
+            .map_err(|_| Error::Contract("prepared cache unavailable"))?;
+        if let Some(Prepared::Graphql(existing)) = cache.items.get(key) {
+            return Ok(existing.clone());
+        }
+        let bytes = cache
+            .bytes
+            .checked_add(row.len().checked_mul(16).ok_or(Error::Limit)?)
+            .ok_or(Error::Limit)?;
+        if bytes > patterns::MAX_PREPARED_BYTES {
+            return Err(Error::Limit);
+        }
+        cache.bytes = bytes;
+        cache
+            .items
+            .insert(key.into(), Prepared::Graphql(model.clone()));
+        crate::graphql::record("graphql.model_loaded");
+        Ok(model)
+    }
     fn matches(&self, key: &str, value: &str) -> Result<bool, Error> {
         patterns::run(self.program(key)?.as_ref(), value)
     }

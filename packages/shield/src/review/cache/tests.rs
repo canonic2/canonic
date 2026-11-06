@@ -322,7 +322,7 @@ fn incompatible_plans_rebuild_on_demand_and_preserve_activation() {
     Project::open(root.path()).unwrap().snapshot().unwrap();
     let prepared = artifact(root.path());
     assert!(prepared.digest.starts_with("blake3-v1:"));
-    assert_eq!(&fs::read(prepared.path()).unwrap()[..8], b"SHPLAN08");
+    assert_eq!(&fs::read(prepared.path()).unwrap()[..8], b"SHPLAN10");
     let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
     assert!(state.authorization_events.iter().any(|event| {
         event["kind"] == "compiled_cache_prepared"

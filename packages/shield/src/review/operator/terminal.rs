@@ -102,7 +102,7 @@ impl Terminal {
             Err(Error::Cancelled)
         }
     }
-    /// The operator's proposal decision: `accept`, `reject` or `leave`.
+    /// The operator's live decision: `accept`, `reject` or `cancel`.
     /// Choosing never applies it; the caller confirms and applies.
     pub(super) fn decide(&mut self, card: &Card, waiting: usize) -> Result<String, Error> {
         inline::review(self.host(12)?, card, waiting)

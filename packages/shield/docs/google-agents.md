@@ -24,8 +24,8 @@ In a Box project, `shield mcp setup --agent box` publishes a shared definition
 and private binary pin. With the matching Box build, `box config sync --adopt`
 can take over existing identical Google registrations. Box publishes their hooks
 and MCP entries; native per-tool approvals in this definition apply to Claude
-and Codex. Google clients retain their native permissions and separate Shield
-confirmation forms.
+and Codex. Google clients retain their native permissions; in-session policy
+confirmation has the limitations described below.
 
 ## Request coverage
 
@@ -68,18 +68,17 @@ fully modeled policy Allow and `force_ask` for Ask. Its ordinary headless mode
 rejects unavailable approval, but `--dangerously-skip-permissions` bypasses
 `force_ask`. Native Deny still blocks in that mode.
 
-Use `shield policy review` to activate proposals on the current terminals.
-When the connection identifies Gemini 0.67.0 or Antigravity 1.5.1, Shield returns
-terminal guidance before sending a form. An unavailable UI does not mark the
-candidate declined. A form actually declined or cancelled by another client
-still suppresses that offer.
+These integrations support Shield's MCP confirmation forms when the client can
+present them. When confirmation is unavailable, the agent must close the
+unapplied attempt and report the missing capability; it must not direct the user
+to a terminal to accept a saved proposal. Closed reviews are retained for outcome
+inspection, not later activation.
 Gemini 0.67.0 does not advertise MCP forms. Antigravity CLI 1.5.1 advertises them
 but cancels them without an approval UI in both interactive and headless operation,
-including skip-permissions. Classic and modern checks confirm unchanged policy.
-The adapters support form confirmation for clients that actually present one;
-only acceptance activates the retained proposal. Ordinary native Ask dialogs
-are independent: Gemini's Enter/Escape checks verify acceptance/cancellation
-even in yolo mode, and Antigravity's Yes action releases the withheld read.
+including skip-permissions.
+Ordinary native Ask dialogs are independent: Gemini supports acceptance and
+cancellation even in yolo mode, and Antigravity's Yes action releases the
+withheld read.
 
 Gemini must trust the workspace before it loads project hooks. A successful
 setup or `--skip-trust` alone does not establish that the running CLI loaded them.
@@ -92,7 +91,7 @@ server entries and settings.
 | --- | --- | --- |
 | Shared policy, setup/repair/removal, explicit MCP identity | Implemented | Implemented |
 | Native Allow/Ask/Deny | Local provider and interactive Ask verified | Logged-in CLI and interactive Ask verified; skip-permissions bypasses Ask |
-| Policy confirmation | Native 0.67.0 lacks forms; terminal review | Native 1.5.1 cancels forms; terminal review |
+| Policy confirmation | Form adapter implemented; native 0.67.0 lacks forms | Form adapter implemented; native 1.5.1 cancels forms |
 | Skills and current-session outputs | Editable skills; read-only session outputs | Editable skills; read-only session outputs |
 | Session grant protocol | Shared implementation and transport fixtures | Shared implementation and transport fixtures |
 | Box-managed publication | Implemented; ownership fixtures | Implemented; ownership fixtures |

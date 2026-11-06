@@ -211,6 +211,19 @@ pub(super) fn dismiss(
                     state.dismissed_reviews.push(id.into());
                 }
             }
+            for proposal in &mut state.proposals {
+                if crate::review::proposal_lifecycle::owns(proposal, context)
+                    && proposal.links["review_ids"]
+                        .as_array()
+                        .is_some_and(|linked| ids.iter().any(|id| linked.contains(id)))
+                {
+                    crate::review::proposal_lifecycle::close(
+                        proposal,
+                        "withdrawn",
+                        "explicitly_deferred",
+                    );
+                }
+            }
             Ok(json!({}))
         },
     )?;

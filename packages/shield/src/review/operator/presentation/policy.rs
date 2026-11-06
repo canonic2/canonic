@@ -7,6 +7,13 @@ use std::{collections::BTreeMap, fmt::Write};
 /// Receipts list at most this many changes before summarizing them.
 const MAX_RECEIPT_CHANGES: usize = 3;
 
+fn automatic_mcp_notice(candidate: &Value) -> Option<&'static str> {
+    candidate["packs"].as_array().into_iter().flatten()
+        .filter_map(|source| crate::policy::parse::<Value>(source.as_str()?).ok())
+        .any(|pack| pack["mcp_integrations"].as_object().is_some_and(|integrations| !integrations.is_empty()))
+        .then_some("Pack profiles apply automatically to matching configured MCP servers, including servers configured later.")
+}
+
 pub(super) fn review(value: &Value) -> Option<String> {
     let mut output = String::new();
     match value["operation"].as_str()? {
@@ -27,6 +34,9 @@ pub(super) fn review(value: &Value) -> Option<String> {
             }
             for line in lines {
                 let _ = writeln!(output, "  {line}");
+            }
+            if let Some(notice) = automatic_mcp_notice(&value["candidate"]) {
+                let _ = writeln!(output, "  {notice}");
             }
             output.push_str(&permissions(&value["comparison"]));
             for line in value["comparison"]["formatting"]
@@ -154,6 +164,9 @@ pub(in crate::review::operator) fn card(
     // The card has no changes "above"; Details holds them.
     let permissions = permissions.replace("check the changes above", "check the details");
     resources.push(("permissions".into(), permissions));
+    if let Some(notice) = automatic_mcp_notice(&review_value["candidate"]) {
+        resources.push(("MCP scope".into(), notice.into()));
+    }
     let mut details = review(review_value).unwrap_or_default();
     for (id, rules) in pack_rules(&review_value["candidate"], &review_value["changes"]) {
         let _ = writeln!(details, "\nRules in {id}");

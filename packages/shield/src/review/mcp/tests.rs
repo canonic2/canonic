@@ -4,6 +4,7 @@ mod apply_cost;
 mod cross_source;
 mod documentation;
 mod file_editing;
+mod graphql;
 mod pack_acquisition;
 mod pack_identity;
 mod pack_info;
@@ -35,16 +36,6 @@ fn candidate_artifact_failure_does_not_blame_tool_arguments() {
     assert!(response["error"]["operator_route"].is_null());
 }
 
-#[test]
-fn mcp_connections_setup_refusal_always_names_terminal_review_even_for_supported_hosts() {
-    let (_root, mut context, _connection) = fixture();
-    for agent in ["claude", "codex"] {
-        context.agent = Some(agent.into());
-        let response = failure(&context, &Error::McpSetupRequired);
-        assert_eq!(response["error"]["code"], "mcp_setup_required");
-        assert_eq!(response["error"]["operator_route"], "shield policy review");
-    }
-}
 /// An enrolled project whose active policy is `candidate`.
 fn fixture_with(candidate: &Bundle) -> (assert_fs::TempDir, Context, Connection) {
     let root = assert_fs::TempDir::new().unwrap();
@@ -280,9 +271,12 @@ fn dependency_updates_capture_atomic_closures_preserve_rules_and_reject_stale_re
         assert_eq!(row["profile"], old["profile"]);
     }
     // A second proposal is stale once the complete update is committed.
+    let mut independent = context.clone();
+    independent.connection_id = Some("independent-review".into());
+    let independent_connection = Connection::new("independent-review".into());
     let stale = pack_change(
-        &context,
-        &connection,
+        &independent,
+        &independent_connection,
         json!({"kind":"pack_remove","reference":"acme/parent"}),
         "stale-remove",
     );
@@ -733,14 +727,14 @@ fn admin_reviews_use_tool_routes_and_prepare_outside_the_connection_lock() {
         )
         .is_err()
     );
-    for (tool, route) in [
-        ("protection_set", "shield protection set"),
-        ("registry_add", "shield registry add"),
-        ("mcp_setup", "shield mcp setup"),
-        ("history_configure", "shield history configure"),
+    for tool in [
+        "protection_set",
+        "registry_add",
+        "mcp_setup",
+        "history_configure",
     ] {
         let required = admin_error(&context, tool, &Error::ApprovalRequired);
-        assert_eq!(required["error"]["operator_route"], route);
+        assert!(required["error"]["operator_route"].is_null());
         assert!(
             !required["error"]["message"]
                 .as_str()
@@ -763,7 +757,7 @@ fn admin_reviews_use_tool_routes_and_prepare_outside_the_connection_lock() {
             Err(Error::ApprovalRequired)
         ));
         let result = call(&context, &connection, "registry_add", &args, &checkpoint);
-        assert_eq!(result["error"]["operator_route"], "shield registry add");
+        assert!(result["error"]["operator_route"].is_null());
         assert_eq!(result["error"]["code"], "operator_review_required");
     }
 }
@@ -803,6 +797,9 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
             "policy_show",
             "rule_list",
             "policy_propose",
+            "policy_defer",
+            "policy_draft_list",
+            "policy_draft_remove",
             "suggestion_list",
             "review_defer",
             "policy_withdraw",
@@ -842,6 +839,10 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
             "invalid_input"
         );
     }
+}
+
+#[test]
+fn inventory_annotations_and_pack_selection_schema_are_canonical() {
     for tool in tools()["tools"].as_array().unwrap() {
         assert!(tool["outputSchema"].is_object());
         assert_eq!(
@@ -1040,8 +1041,10 @@ fn rule_lookup_uses_retained_snapshots_for_exact_and_paged_inspection() {
     assert_eq!(next["data"]["rules"][0]["id"], "b");
     assert_eq!(next["data"]["candidate_id"], candidate);
     assert!(next["data"]["next_cursor"].is_null());
+    let mut foreign_context = context.clone();
+    foreign_context.connection_id = Some("foreign".into());
     let foreign = invoke(
-        &context,
+        &foreign_context,
         &Connection::new("foreign".into()),
         "rule_list",
         json!({
@@ -1101,15 +1104,9 @@ fn withdrawn_proposal_receipt_is_terminal_without_an_approval_route() {
         "policy_receipt",
         json!({"proposal_id":id}),
     );
-    assert_eq!(receipt["error"]["code"], "invalid_input", "{receipt}");
-    assert!(
-        receipt["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("terminal"),
-        "{receipt}"
-    );
-    assert!(receipt["error"]["operator_route"].is_null(), "{receipt}");
+    assert!(receipt["error"].is_null(), "{receipt}");
+    assert_eq!(receipt["data"]["status"], "withdrawn");
+    assert!(receipt["data"].get("apply_arguments").is_none());
 }
 
 #[test]
@@ -1118,29 +1115,25 @@ fn approval_required_messages_follow_the_enrolled_adapter() {
     for (agent, route, expected) in [
         (
             Some("codex"),
-            "policy_apply",
-            "If the approval policy is never",
+            Some("policy_apply"),
+            "Closed attempts require fresh preparation",
         ),
         (
             Some("claude"),
-            "policy_apply",
+            Some("policy_apply"),
             "copy its apply_arguments object unchanged into policy_apply",
         ),
-        (
-            None,
-            "shield policy review",
-            "shield policy review in a terminal",
-        ),
+        (None, None, "In-session approval is unavailable"),
         (
             Some("acme-agent"),
-            "shield policy review",
-            "shield policy review in a terminal",
+            None,
+            "In-session approval is unavailable",
         ),
     ] {
         context.agent = agent.map(str::to_owned);
         let error = &failure(&context, &Error::ApprovalRequired)["error"];
         assert_eq!(error["code"], "operator_review_required");
-        assert_eq!(error["operator_route"], route);
+        assert_eq!(error["operator_route"].as_str(), route);
         let message = error["message"].as_str().unwrap();
         assert!(message.contains(expected), "{message}");
     }
@@ -1277,7 +1270,7 @@ fn release_and_registry_refusals_name_the_user_step() {
 }
 
 #[test]
-fn receipts_route_pending_proposals_to_apply_and_failed_ones_to_operator_review() {
+fn receipts_route_live_proposals_to_apply_and_return_closed_failure_outcomes() {
     let (root, mut context, connection) = fixture();
     context.agent = Some("claude".into());
     let proposed = proposal(&context, &connection, "failed-receipt");
@@ -1302,11 +1295,9 @@ fn receipts_route_pending_proposals_to_apply_and_failed_ones_to_operator_review(
         })
         .unwrap();
     let failed = receipt();
-    assert_eq!(failed["error"]["code"], "operator_review_required");
-    assert_eq!(failed["error"]["operator_route"], "shield policy review");
-    let message = failed["error"]["message"].as_str().unwrap();
-    assert!(message.contains("shield policy review"), "{message}");
-    assert!(!message.contains("apply_arguments"), "{message}");
+    assert!(failed["error"].is_null(), "{failed}");
+    assert_eq!(failed["data"]["status"], "failed");
+    assert!(failed["data"].get("apply_arguments").is_none());
 }
 
 #[test]
@@ -1366,15 +1357,17 @@ fn full_pending_proposals_refuse_with_counts_and_a_review_route() {
                 let mut copy = seed.clone();
                 copy["proposal_id"] = json!(format!("acme-pending-{index}"));
                 copy["retry_key"] = json!(format!("acme-{index}"));
+                copy["retry_owner"] = json!("another-live-owner");
                 state.proposals.push(serde_json::from_value(copy).unwrap());
             }
+            state.proposals[0].retry_owner = "another-live-owner".into();
             Ok(json!({}))
         })
         .unwrap();
     let refused = proposal(&context, &connection, "overflow");
     let error = &refused["error"];
     assert_eq!(error["code"], "capacity_reached", "{refused}");
-    assert_eq!(error["operator_route"], "shield policy review", "{refused}");
+    assert!(error["operator_route"].is_null(), "{refused}");
     let message = error["message"].as_str().unwrap();
     assert!(message.contains("128 pending"), "{message}");
     assert!(message.contains("limit 128"), "{message}");
@@ -1413,14 +1406,14 @@ fn full_retained_proposals_refuse_without_a_review_and_retry_route() {
     assert!(error["operator_route"].is_null(), "{refused}");
     let message = error["message"].as_str().unwrap();
     for expected in [
-        "1 pending",
+        "0 pending",
         "1024 retained",
         "limit 1024",
-        "cannot be cleared",
+        "24-hour recovery window",
     ] {
         assert!(message.contains(expected), "{message}");
     }
-    assert!(!message.contains("retry"), "{message}");
+    assert!(!message.contains("shield policy review"), "{message}");
     assert_eq!(
         Store::open(root.path())
             .unwrap()
@@ -1485,9 +1478,9 @@ fn withdrawal_checks_registered_origin_and_reconnect_requires_new_handles() {
         let error = &refused["error"];
         assert_eq!(error["code"], "operator_review_required", "{refused}");
         // A foreign withdrawal is never routed to apply.
-        assert_eq!(error["operator_route"], "shield policy review", "{refused}");
+        assert_eq!(error["operator_route"], "policy_receipt", "{refused}");
         let message = error["message"].as_str().unwrap();
-        assert!(message.contains("shield policy review"), "{message}");
+        assert!(message.contains("interaction"), "{message}");
         assert!(!message.contains("policy_apply"), "{message}");
     }
     other.agent = context.agent.clone();
@@ -1518,19 +1511,34 @@ fn withdrawal_checks_registered_origin_and_reconnect_requires_new_handles() {
 #[test]
 fn cursors_keep_a_consistent_query_and_refuse_changed_filters_or_selectors() {
     let (_root, context, connection) = fixture();
+    let mut owners = Vec::new();
     for id in ["a", "b", "c"] {
-        assert!(proposal(&context, &connection, id)["error"].is_null());
+        let mut owner = context.clone();
+        owner.connection_id = Some(format!("page-{id}"));
+        let owner_connection = Connection::new(format!("page-{id}"));
+        let proposed = proposal(&owner, &owner_connection, id);
+        assert!(proposed["error"].is_null(), "{proposed}");
+        owners.push((
+            proposed["data"]["proposal_id"].clone(),
+            owner,
+            owner_connection,
+        ));
     }
     let first = invoke(&context, &connection, "policy_show", json!({"limit":1}));
     let cursor = first["data"]["next_cursor"].clone();
     assert!(cursor.is_string());
     let id = first["data"]["proposals"][0]["proposal_id"].clone();
-    invoke(
-        &context,
-        &connection,
+    let (_, owner, owner_connection) = owners
+        .iter()
+        .find(|(proposal, _, _)| proposal == &id)
+        .unwrap();
+    let withdrawn = invoke(
+        owner,
+        owner_connection,
         "policy_withdraw",
         json!({"proposal_id":id}),
     );
+    assert!(withdrawn["error"].is_null(), "{withdrawn}");
     let next = invoke(
         &context,
         &connection,

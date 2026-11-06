@@ -343,9 +343,21 @@ fn approvals_and_history_have_concise_human_output() {
     }
 }
 
-/// Submits one proposal through a real MCP session, as an agent would. Input
-/// stays open until the reply arrives: closing it refuses queued changes.
-fn propose(root: &Path, change: &Value) {
+struct Session {
+    child: std::process::Child,
+    input: Option<std::process::ChildStdin>,
+    proposal: String,
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        self.input.take();
+        assert!(self.child.wait().expect("MCP session ends").success());
+    }
+}
+
+/// Keep the proposing connection alive until its direct operator review ends.
+fn propose(root: &Path, change: &Value) -> Session {
     use std::io::{BufRead, Write as _};
     let messages = [
         json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"Acme","version":"1"}}}),
@@ -371,13 +383,19 @@ fn propose(root: &Path, change: &Value) {
         .map(|line| serde_json::from_str::<Value>(&line.expect("MCP output line")).expect("JSON"))
         .find(|reply| reply["id"] == 2)
         .expect("proposal reply");
-    drop(stdin);
-    assert!(child.wait().expect("MCP session ends").success());
-    assert!(replies.to_string().contains("proposal_id"), "{replies}");
+    let proposal = replies["result"]["structuredContent"]["data"]["proposal_id"]
+        .as_str()
+        .expect("proposal ID")
+        .to_owned();
+    Session {
+        child,
+        input: Some(stdin),
+        proposal,
+    }
 }
 
 #[test]
-fn pending_proposals_are_reviewed_from_shield_policy_review() {
+fn live_proposals_are_selected_explicitly_in_shield_policy_review() {
     let root = TempDir::new().expect("project");
     screen(
         root.path(),
@@ -388,17 +406,40 @@ fn pending_proposals_are_reviewed_from_shield_policy_review() {
         json!({"kind":"rule_add","rule":{"id":id,"decision":"allow","reason":"Acme repository state",
             "conditions":{"domain":"argv","executable":"git","arguments":{"kind":"exact","values":arguments}}}})
     };
-    propose(root.path(), &rule("status", &["status"]));
-    propose(root.path(), &rule("log", &["log"]));
+    let first = propose(root.path(), &rule("status", &["status"]));
+    let second = propose(root.path(), &rule("log", &["log"]));
     let filters = filters(&[(root.path(), "[PROJECT]")]);
-    // Enter opens the waiting proposals; each is answered by name, no IDs typed.
+    // Select review, then the live row after Cancel; no IDs are typed. Each
+    // direct review handles one interaction and leaves other live owners intact.
     for (name, answers) in [
-        ("policy-proposals", "\nreject\naccept\n"),
-        ("policy-proposals-done", "\n"),
+        (
+            "policy-proposals",
+            format!("@{}", json!([{"keys":"1\r"},{"keys":"2\r"},"reject"])),
+        ),
+        (
+            "policy-proposals-accepted",
+            format!("@{}", json!([{"keys":"1\r"},{"keys":"2\r"},"accept"])),
+        ),
+        ("policy-proposals-done", "\n".into()),
     ] {
-        let text = screen(root.path(), &["policy", "review"], answers);
+        let text = screen(root.path(), &["policy", "review"], &answers);
         insta::with_settings!({filters => filters.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect::<Vec<_>>(), prepend_module_to_snapshot => false}, {
             insta::assert_snapshot!(format!("human-{name}"), text);
         });
+    }
+    let state: Value = serde_json::from_slice(
+        &std::fs::read(root.path().join(".shield/review/state.json")).expect("checkpoint"),
+    )
+    .expect("checkpoint JSON");
+    for (session, expected) in [(&first, "rejected"), (&second, "applied")] {
+        assert_eq!(
+            state["proposals"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["proposal_id"] == session.proposal)
+                .unwrap()["status"],
+            expected
+        );
     }
 }

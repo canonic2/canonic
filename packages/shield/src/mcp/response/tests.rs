@@ -13,20 +13,18 @@ fn value(result: &ToolResult) -> Value {
     serde_json::to_value(result).unwrap()
 }
 
-fn assert_codex_terminal_fallback(summary: &str) {
+fn assert_codex_in_session_recovery(summary: &str) {
     assert!(
-        summary.contains("If the approval policy is never"),
+        summary.contains("Copy apply_arguments unchanged")
+            || summary.contains("copy apply_arguments unchanged"),
         "{summary}"
     );
-    assert!(summary.contains("leave the proposal pending"), "{summary}");
+    assert!(summary.contains("for Codex approval"), "{summary}");
     assert!(
-        summary.contains("ask the user to activate it with shield policy review in their terminal"),
+        summary.contains("withdraw an abandoned attempt"),
         "{summary}"
     );
-    assert!(
-        summary.contains("never bypass that restriction"),
-        "{summary}"
-    );
+    assert!(!summary.contains("shield policy review"), "{summary}");
 }
 
 #[test]
@@ -34,17 +32,17 @@ fn host_approval_guidance_matches_agent_without_changing_error_evidence() {
     for (agent, expected, absent) in [
         (
             Some("codex"),
-            "Codex tool approval is unavailable",
+            "Codex approval is unavailable",
             "enable MCP form elicitation",
         ),
         (
             Some("claude"),
-            "enable MCP form elicitation",
-            "Codex tool approval is unavailable",
+            "MCP confirmation unavailable",
+            "Codex approval is unavailable",
         ),
         (
             None,
-            "Host confirmation unavailable",
+            "This host cannot obtain in-session approval",
             "enable MCP form elicitation",
         ),
     ] {
@@ -60,7 +58,22 @@ fn host_approval_guidance_matches_agent_without_changing_error_evidence() {
         let summary = reply["content"][0]["text"].as_str().unwrap();
         assert!(summary.contains(expected), "{summary}");
         assert!(!summary.contains(absent), "{summary}");
-        assert!(summary.contains("shield policy review in their terminal"));
+        if agent == Some("codex") {
+            assert!(
+                summary.contains("/permissions in this session"),
+                "{summary}"
+            );
+            assert!(
+                summary.contains("Do not change approval settings yourself"),
+                "{summary}"
+            );
+        }
+        if agent.is_some() {
+            assert!(!summary.contains("shield policy review in their terminal"));
+            assert!(summary.contains("session"));
+        } else {
+            assert!(summary.contains("do not ask the user to run terminal commands"));
+        }
         assert_eq!(reply["structuredContent"], evidence);
         assert_eq!(reply["isError"], true);
     }
@@ -76,19 +89,16 @@ fn host_approval_guidance_matches_agent_without_changing_error_evidence() {
         Some("codex"),
         &json!({"data":{"status":"pending"}}),
     );
+    assert!(proposed.contains("Inactive change prepared"), "{proposed}");
     assert!(
-        proposed.contains("Policy proposal saved; inactive"),
+        proposed.contains("copy apply_arguments unchanged to policy_apply for Codex approval"),
         "{proposed}"
     );
     assert!(
-        proposed.contains("Copy apply_arguments unchanged to policy_apply for Codex approval"),
+        proposed.contains("Wait for its outcome before preparing another change"),
         "{proposed}"
     );
-    assert!(
-        proposed.contains("Wait before the next proposal"),
-        "{proposed}"
-    );
-    assert_codex_terminal_fallback(&proposed);
+    assert_codex_in_session_recovery(&proposed);
 }
 
 #[test]
@@ -124,15 +134,15 @@ fn proposal_text_preserves_present_null_selectors_and_full_structured_evidence()
     for (name, summary) in [
         (
             "policy_propose",
-            "Policy proposal saved; inactive. Ask the user to review and activate it with shield policy review in their terminal.",
+            "Inactive change prepared. This host cannot obtain in-session approval; withdraw the attempt and report the missing capability. Do not send the user to a terminal.",
         ),
         (
             "pack_add",
-            "Policy proposal saved; inactive. Ask the user to review and activate it with shield policy review in their terminal.",
+            "Inactive change prepared. This host cannot obtain in-session approval; withdraw the attempt and report the missing capability. Do not send the user to a terminal.",
         ),
         (
             "pack_configure",
-            "Policy proposal saved; inactive. Ask the user to review and activate it with shield policy review in their terminal.",
+            "Inactive change prepared. This host cannot obtain in-session approval; withdraw the attempt and report the missing capability. Do not send the user to a terminal.",
         ),
         (
             "policy_withdraw",

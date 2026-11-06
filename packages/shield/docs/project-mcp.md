@@ -42,7 +42,7 @@ For client implementation, see [transport details](#responses-and-transport-life
 | --- | --- |
 | Status | `status`, `doctor` |
 | Packs and registries | `pack_list`, `pack_show`, `registry_list`, `registry_add`, `registry_remove`, `registry_default`, `pack_search`, `pack_info`, `pack_add`, `pack_configure`, `pack_update`, `pack_remove` |
-| Policy and rules | `policy_show`, `rule_list`, `rule_add`, `rule_edit`, `rule_remove`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_apply`, `policy_withdraw`, `policy_receipt`, `policy_reject`, `policy_repair` |
+| Policy and rules | `policy_show`, `rule_list`, `rule_add`, `rule_edit`, `rule_remove`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_apply`, `policy_withdraw`, `policy_receipt`, `policy_defer`, `policy_draft_list`, `policy_draft_remove`, `policy_reject`, `policy_repair` |
 | Approvals and history | `request_list`, `request_show`, `request_approve`, `request_deny`, `history_list`, `history_show`, `history_configure` |
 | Session grants | `session_grant_list`, `session_grant_show`, `session_grant_propose`, `session_grant_approve`, `session_grant_revoke` |
 | Administration | `protection_set`, `cache_prepare`, `mcp_setup` |
@@ -71,9 +71,9 @@ refuse; inspect the result before requesting a fresh review.
   `agent_settings_read` (`ask`/`allow`), `agent_settings_change` (`block`/`allow`)
   and `shield_config_change` (`block`/`allow`). Shield's own review and cache
   state remain protected.
-- `registry_add` accepts `name` and `location` and returns the operator route
-  `shield registry add` without fetching that location. The person enrolls the
-  source in their terminal, where discovery and trust review are explicit.
+- `registry_add` accepts `name` and `location`, but in-session source enrollment
+  is unsupported. It reports that capability gap without fetching the location
+  or directing the user to a terminal.
   `registry_remove` and
   `registry_default` accept `name`. Optional `scope` defaults to `project`;
   `user` explicitly changes discovery for other projects too. Installed policy
@@ -329,8 +329,8 @@ form answers.
 Guided installation supports the same field types and protocol compatibility as
 the settings forms below, with at most 16 required/requested fields in total and 4 MiB of
 retained candidate source per interaction. Supply known values through `set`
-to avoid unsupported form fields or free-text lists. Larger guided interactions
-can use `shield pack add` in the user's terminal.
+to avoid unsupported form fields or free-text lists. Split larger guided
+interactions into separately reviewed changes within these bounds.
 
 Hosts supporting MCP prompts can also discover `install_pack` through
 `prompts/list` and retrieve it with `prompts/get`. Its string arguments are
@@ -388,8 +388,8 @@ tool approval. Declining or dismissing the settings form creates no proposal
 and ends the offer. A changed selection needs a new form and proposal.
 
 If the host cannot display the requested form, ask for the settings in the
-conversation and call `pack_configure` with direct `set` arguments,
-or use `shield pack configure` in your terminal. Never infer missing answers.
+conversation and call `pack_configure` with direct `set` arguments.
+Final approval still requires the host's confirmation. Never infer missing answers.
 A policy change while the form is open makes its answer stale; prepare a fresh
 settings review. Modern clients must support the form mode on each request and
 return the exact tool arguments, issued `requestState` and the `settings` input
@@ -439,7 +439,10 @@ approval; edits made while the prompt is open make the proposal stale. After
 approval, prepare the pack or rule change again. This uses the host's ordinary
 Shield approval flow and needs no terminal review. Existing verified pack bytes
 are required; new releases still use pack acquisition. Changes to MCP connection
-settings still require the setup review described below.
+settings use a host confirmation form on both Claude and Codex. The form shows
+captured before/after settings, keeping private local values out of public
+proposal arguments and receipts. After activation, call `mcp_setup` for the
+separate host-settings review and publication. Keep both steps in the conversation.
 Missing or linked policy files keep the `shield policy review` repair route;
 adoption requires regular files.
 
@@ -458,8 +461,8 @@ enroll sources or change trust keys. See
 
 Copy the returned `apply_arguments` object unchanged into `policy_apply`.
 Shield compares the complete object with the saved proposal; editing its text
-or reference cannot authorize another change. To recover from a mismatch,
-inspect `policy_show` with `proposal_id` and copy its `apply_arguments`.
+or reference cannot authorize another change. A failed attempt needs fresh
+preparation. `policy_show` recovers arguments only for your current live review.
 
 Claude receives the proposal ID, digest, change list, and review summary.
 Codex receives readable `change`, optional `details`, and a short `reference`.
@@ -472,10 +475,10 @@ shortened or omitted constraints are identified.
 
 | Host | Approval |
 | --- | --- |
-| Claude | An MCP confirmation form. Accept applies the proposal; decline, cancel, disconnect, or timeout leaves it pending. |
-| Gemini CLI / Antigravity CLI | The adapters support MCP form confirmation. Native Gemini 0.67.0 omits forms and Antigravity CLI 1.5.1 cancels them even interactively; use terminal policy review on those versions. |
-| Codex | The per-call tool prompt. Allow applies; Cancel leaves it pending. `never` approval policy cannot run apply. |
-| Other or unrecognized host | Review and activate with `shield policy review` in a terminal. |
+| Claude | An MCP confirmation form. Accept applies, decline rejects, and cancel withdraws the attempt. |
+| Gemini CLI / Antigravity CLI | MCP form confirmation when the client can present it. Unavailable forms close the attempt and report the missing in-session capability. |
+| Codex | The per-call tool prompt for ordinary policy; an additional Shield form for connection settings. If prompts are disabled, enable them with `/permissions`, then prepare fresh in the session. |
+| Other or unrecognized host | In-session approval is unsupported. Report that capability gap and withdraw the attempt. |
 
 Claude's form works in `default`, `auto`, and `bypassPermissions` modes and
 requires its own Accept response, independently of ordinary tool approval.
@@ -497,8 +500,8 @@ the host must discard the state or submit a decline/cancel response.
 
 Shield rechecks arguments and current policy before committing. Stale or changed
 candidates need a fresh proposal and approval. Success returns a receipt;
-repeating an applied proposal returns that receipt. Terminal review through
-`shield policy review` is also available.
+repeating an applied proposal returns that receipt. Agents keep approval inside
+the conversation; sending the user to a terminal is a product bug.
 
 Inspection and proposal preparation run without prompts by default; setup
 preserves any tool-permission choices you changed. Native hook messages keep
@@ -507,22 +510,44 @@ proposal payloads separate from their user-facing explanation.
 ### Replay and withdrawal
 
 Without an idempotency key, identical arguments return the same proposal;
-changed arguments create another. With a key, the same input returns the saved
-identity and candidate even after state changes; changed input is refused.
-A mapped host session permits reconnect replay. Otherwise the key is
-connection-scoped.
+changed arguments create another and close the prior live attempt. With a key,
+the same input recovers its saved identity or closed outcome; changed input is
+refused. Reconnect cannot take over a candidate. Closed attempts return no apply
+arguments. To try again while still authorized, prepare with a new
+`idempotency_key` or `supersedes_proposal_id` and obtain a fresh decision.
 
 If `policy_propose` reports a deadline error, its inactive proposal may
 already be saved. Retry the identical arguments on the same connection to
-recover the proposal and its approval arguments, or inspect pending proposals
-with `policy_show`. A timeout does not establish that the proposal was absent
-or that policy changed. Report an unresolved failure instead of silently
-dropping the offer.
+recover its current outcome. Only a live review owned by that interaction
+returns approval arguments. Use `policy_show` to inspect it or `policy_receipt`
+to retrieve a known review's outcome. A timeout does not establish that the
+proposal was absent or that policy changed. Report unresolved failures; if the
+attempt is closed, inspect its outcome before preparing fresh.
 
 Only the original registered proposer can withdraw a proposal. Repeating an
 owned withdrawal makes no further change. Unrecognized hosts can inspect and
 propose, but advertising form support does not grant activation authority or
-install native hooks.
+install native hooks. A prepared review expires after five minutes even before
+apply. Disconnect or process death closes its candidates; Stop hooks close
+unapplied reviews associated with that task's session; SessionEnd also closes
+them, as does Codex's Interrupt event. Updated hook registration
+requires `mcp_setup` through its in-session review. When the host supplies no
+session association, the connection lease and expiry still bound its lifetime.
+
+`policy_receipt` returns rejected, withdrawn, stale and failed outcomes as well
+as committed receipts. It never reopens them. Recovery evidence is retained
+through 24 hours after the review deadline, and the current activation's receipt
+is kept. Capacity is 128 live reviews and 1,024 retained outcomes. Older eligible
+outcomes are reclaimed when admitting new work; capacity never asks a person to
+clear an approval queue.
+
+Only explicit user deferral creates a draft: call `policy_defer` with `intent`,
+optional `constraints`, an `idempotency_key` and optionally the owned
+`proposal_id` to withdraw. Use `policy_draft_list` to retrieve intent and
+`policy_draft_remove` to discard a draft created by the current session. At most
+128 drafts are retained, and drafts expire after 30 days. Drafts hold
+no candidate, base revision or approval. Resuming requires current inspection,
+fresh preparation and immediate approval.
 
 ## Rule suggestions
 
@@ -648,10 +673,10 @@ is needed. Wait for each result before the next proposal. Declining or cancellin
 keeps the existing policy. Unique pack offers use the same flow, once per
 conversation.
 
-`policy_receipt` reads committed receipts; pending proposals return
+`policy_receipt` reads closed outcomes and committed receipts; live proposals return
 `operator_review_required`. It cannot apply a change. Stored action requests
-are separate: inspect `request_list`, then use `shield request approve` or
-`shield request deny` in an operator terminal.
+are separate: inspect `request_list`, then use `request_approve` or `request_deny`
+for in-session confirmation.
 
 ## Diagnostic input and snapshots
 

@@ -192,7 +192,7 @@ fn domains() -> Value {
         &["schemes", "hosts"],
     );
     let common = json!({"cwd":reference("path"),"environment":reference("environment")});
-    let argv = json!({"arguments":reference("arguments"),"targets":one_of(vec![reference("target"),list(reference("target"),1)]),"possible_effects":{"type":"array","minItems":1,"maxItems":11,"items":{"enum":["repository-write","worktree-write","data-removal","history-rewrite","network","code-execution","daemon-write","image-build","host-exposure","privileged-runtime","configuration"]}}});
+    let argv = json!({"arguments":reference("arguments"),"graphql":reference("graphql"),"targets":one_of(vec![reference("target"),list(reference("target"),1)]),"possible_effects":{"type":"array","minItems":1,"maxItems":11,"items":{"enum":["repository-write","worktree-write","data-removal","history-rewrite","network","code-execution","daemon-write","image-build","host-exposure","privileged-runtime","configuration"]}}});
     let shell = json!({"source":reference("text"),"dialect_version":one_of(vec![nonempty(4096),object(json!({"exact":nonempty(4096)}),&["exact"])])});
     let file = json!({"sources":reference("quantified"),"destination":reference("path"),"recursive":{"type":"boolean"},"targets":one_of(vec![reference("target"),list(reference("target"),1)])});
     let web = json!({"query":reference("text"),"url":reference("url"),"method":reference("method"),"request_fields":reference("field_map")});
@@ -270,5 +270,11 @@ pub(crate) fn definitions() -> Value {
             value.as_object_mut().expect("schema object").extend(fields);
         }
     }
+    value.as_object_mut().expect("schema object").extend(
+        crate::graphql::schema()
+            .as_object()
+            .expect("schema object")
+            .clone(),
+    );
     value
 }

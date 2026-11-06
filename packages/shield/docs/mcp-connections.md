@@ -1,12 +1,72 @@
 # Configure project MCP servers
 
-Shield can configure project MCP connections and evaluate their tool calls in
-Claude Code and Codex. Adding a permission pack never enables or launches a
-server. Connections and permission rules are reviewed separately.
+Shield automatically applies installed pack permissions to matching MCP servers
+configured in Claude Code and Codex. Choose a pack/profile, activate it, and its
+MCP rules apply without another association or per-tool host approval setup.
+Adding a permission pack never enables or launches a server.
+
+## Use an existing server
+
+Keep the server in your agent's existing configuration, including configuration
+published by another tool. Shield reads supported project and user scopes and
+matches command/arguments or the HTTP endpoint against the pack's integration
+criteria. You may choose any server alias the host supports; the name does not
+need to match the pack. Detection neither starts the server nor edits its settings.
+
+Claude discovery uses the stable project root's `.mcp.json` and the exact
+project entry in the user's `.claude.json`; changing the tool's working directory
+does not load descendant MCP or settings files. Project-file servers need an
+applicable `enabledMcpjsonServers` entry or `enableAllProjectMcpServers: true`.
+User settings can supply approval directly. Repository settings contribute
+approval only with recorded workspace trust in the user's project state;
+repository content cannot establish its own trust. Disabled lists still win.
+Unapproved servers do not supply pack matches or precondition alternatives.
+
+Codex discovery reads project `.codex/config.toml` layers only when its user
+configuration records the enrolled root as `trust_level = "trusted"`, with no
+explicitly untrusted layer on the path to the current directory. Missing or
+untrusted project trust leaves project files out of the observation; supported
+user servers remain eligible independently. Discovery never writes trust or
+approval settings. Host-only approvals or session overrides that these files
+cannot establish remain outside automatic identification.
+
+Once a pack update is reviewed and activated, new rules take effect under its
+selected profile. Existing host approval entries for old tool names do not limit
+Shield's current rules. A newly configured matching server or an alias rename
+needs no pack reinstallation or Shield configuration edit. A tool with no matching
+rule follows ordinary policy fallback; a new name does not inherit an old name's
+permission by similarity.
+
+Run `shield status` or `shield doctor` to inspect discovered aliases, matched
+packs/profiles and unsupported or ambiguous configuration. Shield's native hooks
+must be installed and loaded for decisions to reach the agent. Codex uses its
+PermissionRequest hook to allow a call that otherwise needs a generic tool prompt;
+Claude uses its native permission reply. Shell prefix rules do not decide MCP calls.
+
+Discovery supports ordinary stdio settings and endpoint-only HTTP entries.
+Unsupported headers/authentication fields or connection formats cannot establish
+a pack allowance. Duplicate aliases in competing scopes refuse rather than guess
+which server the host selected. SDK/session overrides whose effective connection
+is not observable remain outside automatic identification; matching a file entry
+does not attest the running server's identity.
+
+Aliases beginning `plugin_` or `claude_ai_`, and `codex_apps`, belong to host
+connector namespaces for this adapter boundary. They cannot establish a pack
+match from configuration files. Their native calls retain host permissions;
+an explicit Shield connection claiming such an alias is refused.
+
+When an active pack declares MCP integrations, discovery must read the relevant
+configuration files before it can classify an alias as external. An unreadable,
+malformed or oversized shared file blocks third-party MCP authorization, including
+otherwise unrelated servers: Shield cannot exclude a conflicting alias in that
+file. The current per-file limit is 1 MiB. Inspect `shield doctor` and repair the
+file. A malformed entry for a different, identifiable alias does not block the
+requested server; an unparseable whole file cannot provide that isolation.
 
 ## Declare and activate a connection
 
-Add `mcp` to `.shield/config.yml`. Each key is a stable project connection ID;
+Optionally add `mcp` to `.shield/config.yml` when Shield should publish a connection
+or project rules need a stable connection ID. Each key is a project connection ID;
 `agents` maps agent names to the server aliases those hosts use:
 
 ```yaml
@@ -23,10 +83,17 @@ mcp:
       codex: cloud
 ```
 
-Review the source edits with `shield policy review` in your terminal. Then run
-`shield mcp setup --dry-run --agent claude --agent codex` to inspect the host
-projection, followed by `shield mcp setup --agent claude --agent codex` to review
-and apply it. Restart the agents and review their project trust and MCP prompts.
+In an agent session, ask the agent to prepare
+`policy_propose` with `{"change":{"kind":"project_files_adopt"}}` and pass its
+returned `apply_arguments` unchanged to `policy_apply`. Shield shows the captured
+connection settings in a confirmation form. After approval, the agent calls
+`mcp_setup` with the selected `agents` (for example, `["claude","codex"]`) to
+review and publish host settings. `dry_run: true` previews without writing.
+The connection form masks sensitive values and labels them as added, changed,
+removed or unchanged, so a masked edit is still visible for review.
+Restart the affected connections after publication. The operator CLI offers the
+same reviews through `shield policy review` and `shield mcp setup` when you
+choose to work directly in a terminal.
 Setup does not install connectors or configure credentials.
 
 Supported host aliases start with a lowercase letter and contain lowercase
@@ -38,8 +105,9 @@ host alias restrictions.
 
 Stdio transports use `type: stdio`, a `command`, an `args` array and an optional
 string-valued `env` map. Argument boundaries are preserved. HTTP transports take
-a URL without embedded credentials. OAuth headers, secrets, user-wide server
-discovery and automatic credential setup are outside this projection.
+a URL without embedded credentials. OAuth headers, secrets, user-wide configuration
+writes and automatic credential setup are outside this projection. Automatic
+matching can read supported user-level entries without projecting them.
 
 The connection is independent of packs. A matching manual project entry can be
 bound without transferring ownership. A conflicting alias requires resolution;
@@ -49,8 +117,8 @@ review the change, then rerun setup to withdraw an owned projection.
 
 ## Bind a pack integration
 
-An associated pack contributes MCP rules only when the project connection is
-enabled, has an agent binding and matches the pack's transport predicates:
+A managed connection may explicitly name a pack integration for defaults or an
+additional constraint. This association is optional for automatic matching:
 
 ```yaml
 mcp:
@@ -63,7 +131,7 @@ mcp:
     packs: {acme/cloud: hosted}
 ```
 
-An MCP precondition alternative with no enabled association does not invalidate
+An MCP precondition alternative with no applicable enabled connection does not invalidate
 the pack's other integrations or CLI rules. Alternatives naming only unbound
 integrations are dropped. An active gate with no remaining alternatives still
 applies its Ask/Deny decision; removing an alternative cannot remove a restriction.
@@ -78,15 +146,17 @@ the independently configured server remains. Referenced defaults are retained as
 explicit connection settings when their pack is removed.
 
 Project rules address the stable ID (`cloud`), while pack rules address their
-declared integration (`hosted`). Host aliases route requests to those project
-connections. Unbound MCP servers keep their ordinary host behavior. Bound calls
-are checked against the current project host entry; drift blocks them pending
-terminal review.
+declared integration (`hosted`). Host aliases route requests to configured
+connections. Enabled servers matching installed pack criteria receive the current
+pack policy automatically. Reliably identified servers with no applicable pack
+or project policy retain host permissions. Managed calls are checked against
+their reviewed host entry; drift blocks them pending a new `mcp_setup` review
+in the session.
 Classification and enforcement share one loaded active snapshot per call.
 If that snapshot is unavailable, Shield cannot establish that a server is
-unbound, so all third-party MCP authorization calls fail closed, including calls
+external, so all third-party MCP authorization calls fail closed, including calls
 to otherwise external servers. The failure names unavailable MCP bindings and
-directs the operator to `shield doctor`. Shield does not infer an unbound server
+directs the operator to `shield doctor`. Shield does not infer an external server
 from a failed policy load.
 
 Shield also checks known competing file scopes read-only. Claude local/user
@@ -113,8 +183,9 @@ bindings; empty `args`, `env`, `agents` or `packs` explicitly clear those parts.
 You can disable a shared connection or add a local-only one this way.
 Local connection changes in proposal views, approval arguments and publication
 receipts contain the connection ID, layer and change kind, without before/after
-settings. The terminal review shows the full local change from the private
-candidates; those details are not copied into the public change record.
+settings. The human confirmation form compares the private candidates with
+sensitive values masked and hidden differences labelled; those details are not
+copied into the public change record.
 
 Local stdio settings use private indirection. Host files contain a Shield
 launcher, project path and opaque random token; the connection ID, transport
@@ -132,10 +203,14 @@ rules; keep these local host files out of commits.
 Local HTTP overrides refuse before any host write because private HTTP
 projection is unsupported. Shield never drops a local override as a fallback.
 
-Connection, association, binding and enablement changes require terminal review.
+Managed connection, association, binding and enablement edits use in-session
+confirmation forms, including on Codex. Ordinary tool permission alone does not
+approve private connection settings.
+Read-only automatic matching uses the activated pack's authority without an
+additional connection confirmation or configuration write.
 Permission-only MCP proposals retain the existing `policy_apply` workflow.
 Changing a pack variable or release that changes resolved connection settings
-also requires terminal review; a mixed proposal is not partially activated.
+also requires the connection-settings form; a mixed proposal is not partially activated.
 
 ## Write MCP permission rules
 
@@ -164,18 +239,21 @@ This custom document needs `structured-rules-v1` and `requirements-v1`.
 Put mandatory presence checks in requirements or a precondition with Deny on
 unmet evidence. A Deny condition using `not` does not match an omitted field.
 
-The `connection` predicate uses the same typed field-map grammar over reviewed
+The `connection` predicate uses the same typed field-map grammar over connection
 facts: `/transport/type`, `/transport/command`, `/transport/args`,
-`/transport/env`, `/transport/url` and `/source` (`project` or `local`). Declare
+`/transport/env`, `/transport/url` and `/source` (`project`, `local`,
+`host-project` or `host-user`). Declare
 `mcp-connection-facts-v1` when using it. These facts describe launch settings,
 not remote credentials, OAuth identity or every region used by a script.
 They are derived from the selected connection; tool input cannot supply them.
+Automatically discovered settings carry observed provenance, rather than reviewed
+connection provenance.
 There is no generic server-default inference or script analysis.
 
 An integration may declare `effective_fields` with `mcp-effective-fields-v1`.
 Each named fact supplies an `argument` pointer and a `default` pointer into the
-reviewed transport. A present argument wins, including null or a wrong type;
-only an omitted argument may use the reviewed setting. Rules read the result
+configured transport. A present argument wins, including null or a wrong type;
+only an omitted argument may use the configured setting. Rules read the result
 under `/effective/NAME`; `/evidence_sources/NAME` identifies its source and
 pointer. Use this declaration only where the verified connector/tool semantics
 support that precedence. Unknown defaults stay absent and cannot pass a required

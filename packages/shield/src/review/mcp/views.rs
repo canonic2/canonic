@@ -80,7 +80,7 @@ pub(super) struct Views {
     handles: BTreeMap<String, Arc<Captured>>,
     identities: BTreeMap<String, String>,
     cursors: BTreeMap<String, Cursor>,
-    approvals: BTreeMap<String, Arc<Value>>,
+    approvals: BTreeMap<String, (Arc<Value>, bool)>,
     approval_bytes: usize,
 }
 impl Views {
@@ -230,10 +230,22 @@ impl Views {
         Some(captured.clone())
     }
     pub(super) fn approval(&self, binding: &str) -> Option<&Value> {
-        self.approvals.get(binding).map(AsRef::as_ref)
+        self.approvals.get(binding).map(|(args, _)| args.as_ref())
+    }
+    /// Only a hint for form routing. Apply always verifies the retained proposal
+    /// and refuses connection changes without a trusted form answer.
+    pub(super) fn connection_review(&self, arguments: &Value) -> Option<bool> {
+        self.approvals
+            .values()
+            .find_map(|(args, changed)| (args.as_ref() == arguments).then_some(*changed))
     }
     /// Presentation is disposable: reaching its bound falls back to regeneration.
-    pub(super) fn remember_approval(&mut self, binding: String, arguments: Value) {
+    pub(super) fn remember_approval(
+        &mut self,
+        binding: String,
+        arguments: Value,
+        connection_review: bool,
+    ) {
         if self.approvals.contains_key(&binding) || self.approvals.len() >= 256 {
             return;
         }
@@ -242,7 +254,8 @@ impl Views {
         };
         if self.approval_bytes.saturating_add(length) <= 8 * 1024 * 1024 {
             self.approval_bytes += length;
-            self.approvals.insert(binding, Arc::new(arguments));
+            self.approvals
+                .insert(binding, (Arc::new(arguments), connection_review));
         }
     }
     pub(super) fn page(

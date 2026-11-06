@@ -53,7 +53,13 @@ struct Engines {
 }
 
 impl PackDocument {
-    pub(super) fn descriptor(&self) -> Self {
+    pub(super) fn descriptor(&self, keep: impl Fn(&Precondition) -> bool) -> Self {
+        let mut preconditions = Vec::new();
+        for precondition in &self.preconditions {
+            if keep(precondition) {
+                preconditions.push(precondition.clone());
+            }
+        }
         Self {
             schema_version: self.schema_version,
             kind: self.kind.clone(),
@@ -69,7 +75,7 @@ impl PackDocument {
             command_sets: BTreeMap::new(),
             dependencies: self.dependencies.clone(),
             variables: BTreeMap::new(),
-            preconditions: self.preconditions.clone(),
+            preconditions,
             directory_options: self.directory_options.clone(),
             mcp_integrations: self.mcp_integrations.clone(),
         }

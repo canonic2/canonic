@@ -16,6 +16,7 @@ pub(crate) mod operator;
 mod packs;
 pub(crate) mod path_access;
 mod project;
+pub(crate) mod proposal_lifecycle;
 mod publication;
 pub(crate) mod read_approval;
 mod registries;
@@ -91,10 +92,6 @@ pub(crate) enum Error {
     Missing,
     #[error("proposal requires operator approval")]
     ApprovalRequired,
-    #[error(
-        "MCP connection settings or resolved defaults changed; review with shield policy review in a terminal, then run shield mcp setup"
-    )]
-    McpSetupRequired,
     #[error("active snapshot changed; reload and evaluate the request again")]
     StaleSnapshot,
     #[error("diagnostic candidate is unavailable in this connection")]
@@ -146,10 +143,10 @@ impl CapacityKind {
     pub(crate) fn recovery(self) -> &'static str {
         match self {
             Self::Proposals => {
-                "review or reject pending proposals with shield policy review, then retry"
+                "finish or withdraw your live review in this session, or wait for other live interactions to finish or expire"
             }
             Self::RetainedProposals => {
-                "retained proposal storage is full and cannot be cleared yet, so new proposals cannot be saved"
+                "the retained outcome recovery window is full; retry after older closed outcomes leave their 24-hour recovery window"
             }
             Self::ReadRequests | Self::RunRequests => {
                 "review pending requests with shield request list or deny them with shield request deny, then retry"
@@ -159,8 +156,7 @@ impl CapacityKind {
     /// The operator command that frees capacity, or `None` when no command can.
     pub(crate) fn operator_route(self) -> Option<&'static str> {
         match self {
-            Self::Proposals => Some("shield policy review"),
-            Self::RetainedProposals => None,
+            Self::Proposals | Self::RetainedProposals => None,
             Self::ReadRequests | Self::RunRequests => Some("shield request list"),
         }
     }
@@ -186,7 +182,6 @@ impl Error {
             Self::Locked => "review-locked",
             Self::Missing => "not-found",
             Self::ApprovalRequired => "approval-required",
-            Self::McpSetupRequired => "mcp_setup_required",
             Self::StaleSnapshot => "stale-snapshot",
             Self::CandidateUnavailable => "candidate_unavailable",
             Self::CursorUnavailable => "cursor_unavailable",
@@ -415,7 +410,7 @@ pub(crate) fn transition(
         store.hydrate_proposal(&mut state.proposals[index])?;
         let proposal = &state.proposals[index];
         if action == "withdraw" && context.surface == "mcp" {
-            if proposal.retry_owner != context.retry_owner() { return Err(Error::ApprovalRequired); }
+            if !proposal_lifecycle::owns(proposal, context) { return Err(Error::ApprovalRequired); }
             if proposal.status == "withdrawn" { return Ok(proposal.public(false)); }
         }
         if proposal.status != "pending" { return Err(Error::Invalid("proposal is terminal or stale")); }

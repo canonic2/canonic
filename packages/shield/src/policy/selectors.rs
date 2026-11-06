@@ -3,7 +3,7 @@ use super::{Error, patterns::Provider};
 use serde_json::Value;
 use std::collections::BTreeSet;
 
-pub(super) fn fields(value: &Value, allowed: &[&str]) -> Result<(), Error> {
+pub(crate) fn fields(value: &Value, allowed: &[&str]) -> Result<(), Error> {
     if value
         .as_object()
         .is_none_or(|v| v.keys().any(|k| !allowed.contains(&k.as_str())))
@@ -35,7 +35,7 @@ pub(super) fn environment_selectors_mut(
         .flat_map(serde_json::Map::values_mut)
 }
 
-pub(super) fn text(value: &Value, nonempty: bool) -> Result<(), Error> {
+pub(crate) fn text(value: &Value, nonempty: bool) -> Result<(), Error> {
     if let Some(s) = value.as_str() {
         return literal(s, nonempty);
     }

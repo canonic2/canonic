@@ -176,6 +176,7 @@ impl Store {
             session_grants: super::session_grants::Registry::default(),
             hook_requests: vec![],
             proposals: vec![],
+            policy_drafts: vec![],
             dismissed_reviews: vec![],
             events: vec![],
             authorization_events: vec![],
@@ -392,7 +393,7 @@ impl Store {
             return Err(crate::policy::Error::Limit.into());
         }
         crate::diagnostics::trace::count("state.read_bytes", bytes.len() as u64);
-        let state: State = serde_json::from_slice(&bytes)
+        let mut state: State = serde_json::from_slice(&bytes)
             .map_err(|_| Error::Invalid("corrupt review state; preserve it for recovery"))?;
         if state.project_id.len() != 64
             || !state.project_id.bytes().all(|b| b.is_ascii_hexdigit())
@@ -412,6 +413,7 @@ impl Store {
         super::run_approval::validate(&state)?;
         super::hook_approval::validate(&state)?;
         super::session_grants::validate(&state)?;
+        super::proposal_lifecycle::refresh(&mut state);
         Ok(state)
     }
     /// Captures the history view under the lock, then verifies, correlates and
@@ -444,6 +446,15 @@ impl Store {
             history::mark_failure(self, &state);
             return Err(error);
         }
+        Ok(result)
+    }
+    pub(in crate::review) fn with_interaction_lock<T>(
+        &self,
+        operation: impl FnOnce() -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let lock = self.lock(&|| Ok(()))?;
+        let result = operation()?;
+        lock.release()?;
         Ok(result)
     }
     fn lock(&self, checkpoint: Checkpoint<'_>) -> Result<Lock, Error> {
@@ -526,6 +537,7 @@ impl Store {
         }
         checkpoint()?;
         state.compact_authorization();
+        super::proposal_lifecycle::refresh(&mut state);
         self.write(&state)?;
         lock.release()?;
         self.ignore_local_state();

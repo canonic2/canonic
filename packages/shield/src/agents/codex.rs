@@ -17,6 +17,9 @@ static SPEC: AgentSpec = AgentSpec {
         ("PreToolUse", Event::Before),
         ("PermissionRequest", Event::Permission),
         ("PostToolUse", Event::Completed),
+        ("Stop", Event::Ended),
+        ("SessionEnd", Event::Ended),
+        ("Interrupt", Event::Ended),
     ],
     hooks_path: ".codex/hooks.json",
     mcp_path: Some(".codex/config.toml"),
@@ -28,6 +31,13 @@ static SPEC: AgentSpec = AgentSpec {
     approval_action: "Codex cannot prompt here. Submit a revised request; for a recurring need, propose a narrow rule with policy_propose.",
 };
 impl AgentAdapter for Codex {
+    fn discover_mcp(
+        &self,
+        root: &Path,
+        cwd: &Path,
+    ) -> Result<Option<super::mcp_scopes::Observation>, Error> {
+        mcp_scopes::discover(root, cwd).map(Some)
+    }
     fn supports_box_permissions(&self) -> bool {
         true
     }

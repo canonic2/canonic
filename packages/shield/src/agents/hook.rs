@@ -148,6 +148,16 @@ pub(crate) fn translate_event(
             _ => deny("invalid-host-event"),
         };
     }
+    if event == Event::Ended {
+        if let Some(session) = host["session_id"]
+            .as_str()
+            .filter(|s| !s.is_empty() && s.len() <= 4096)
+        {
+            let _ =
+                crate::review::proposal_lifecycle::end_session(root, adapter.spec().id, session);
+        }
+        return json!({});
+    }
     let Some(mut request) = adapter.request_for_project(&host, event, root) else {
         return if event.post() {
             json!({})
@@ -331,34 +341,6 @@ fn shield_tool_reply(
     )
 }
 
-fn inactive_mcp(adapter: &dyn AgentAdapter, request: &Request<'_>) -> Value {
-    if request.event.post() {
-        json!({})
-    } else {
-        adapter.reply(request.event, &feedback::deny("mcp-binding-inactive"))
-    }
-}
-
-enum McpBinding {
-    Active,
-    Inactive,
-    External,
-}
-
-fn mcp_binding(snapshot: &crate::runtime::Snapshot, agent: &str, alias: &str) -> McpBinding {
-    if snapshot.mcp_connection(agent, alias).is_some() {
-        McpBinding::Active
-    } else if snapshot
-        .mcp_connections()
-        .values()
-        .any(|c| c.agents.get(agent).is_some_and(|a| a == alias))
-    {
-        McpBinding::Inactive
-    } else {
-        McpBinding::External
-    }
-}
-
 fn prepare_mcp(
     root: &Path,
     adapter: &dyn AgentAdapter,
@@ -366,7 +348,7 @@ fn prepare_mcp(
     alias: &str,
     log: &crate::diagnostics::Log,
 ) -> Result<protocol::Prepared, Value> {
-    let prepared = protocol::Prepared::load(root, &|stage| log.event("hook_stage",json!({"stage":stage})))
+    let mut prepared = protocol::Prepared::load(root, &|stage| log.event("hook_stage",json!({"stage":stage})))
         .map_err(|_| {
             if request.event.post() {
                 return json!({"systemMessage":"Shield completion history unavailable; MCP bindings could not be checked."});
@@ -376,10 +358,30 @@ fn prepare_mcp(
             reply.agent_context = Some("Shield could not determine whether this MCP server is bound to project policy. Authorization fails closed until the project snapshot is available; ask the user to run `shield doctor`.".into());
             adapter.reply(request.event, &reply)
         })?;
-    match mcp_binding(prepared.snapshot(), adapter.spec().id, alias) {
-        McpBinding::Active => Ok(prepared),
-        McpBinding::External => Err(json!({})),
-        McpBinding::Inactive => Err(inactive_mcp(adapter, request)),
+    match prepared.prepare_mcp(
+        root,
+        Path::new(request.cwd.as_ref()),
+        adapter.spec().id,
+        alias,
+    ) {
+        Ok(true) => Ok(prepared),
+        Ok(false) => {
+            log.event(
+                "hook_mcp_external",
+                json!({"alias":alias,"reason":"no matching configured MCP policy"}),
+            );
+            Err(json!({}))
+        }
+        Err(error) => {
+            if request.event.post() {
+                return Err(json!({"systemMessage":"Shield MCP completion mapping unavailable."}));
+            }
+            let mut reply = feedback::deny("mcp-binding-changed");
+            reply.reason = format!(
+                "Shield: blocked. {error}. Inspect the MCP configuration with shield doctor before retrying."
+            );
+            Err(adapter.reply(request.event, &reply))
+        }
     }
 }
 

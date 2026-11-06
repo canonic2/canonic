@@ -6,28 +6,29 @@ use std::fmt::Write as _;
 /// Initialization guidance uses the enrolled session agent, not client display metadata.
 pub(super) fn instructions(agent: Option<&str>) -> String {
     let common = "Shield manages project permissions. For requested reviews, start with suggestion_list; inspect relevant history_list, rule_list or policy_evaluate evidence. \
-Respect incomplete evidence, pending proposals and deferred reviews. For authorized custom rules, use policy_propose and its schema examples; preserve scope and deny boundaries. Read bundled docs only when rule syntax needs clarification. \
+Respect incomplete evidence, pending proposals and deferred reviews. For authorized custom rules, use policy_propose and its schema examples; preserve scope and deny boundaries. \
 For packs, use pack_list and pack_show to inspect installed selections, pack_update to update one reference or all tracking packs when omitted, and pack_remove to prepare removal; pack_configure accepts direct edits, named variables or bare guided settings and overrides. pack_add accepts known typed settings through set. \
-Previews and proposals grant no authority; activation requires user-approved policy_apply or the returned terminal route. \
+Previews and proposals grant no authority; activation requires user-approved policy_apply. Keep approval and setup in this conversation through Shield tools and host confirmation; sending the user to a terminal is a product bug, not a recovery solution. \
 Follow returned request_approve routes for one-time approval, then repeat the approved call once unchanged. For a planned batch of privileged native commands, inspect session_grant_list, propose a bounded exact batch or closed argv family with session_grant_propose, then copy apply_arguments to session_grant_approve for the user's form. Prefer temporary session permission for one task and persistent policy only for future sessions. Inspect existing grants first, never repeat a declined offer, and never bypass refusals. ";
     let host = crate::agents::review::resolve(agent)
         .guidance()
         .instructions;
     format!(
-        "{common}{} {host}Chat replies cannot replace host or terminal confirmation.",
+        "{common}{} {host}Chat replies cannot replace host confirmation.",
         crate::proposal_draft::PACK_SETUP_GUIDANCE
     )
 }
 
 pub(super) fn approval_unavailable(agent: Option<&str>) -> &'static str {
     if matches!(agent, Some("gemini" | "agy")) {
-        return "This host did not provide Shield's confirmation form. Gemini CLI 0.67.0 and Antigravity CLI 1.5.1 have no usable form UI. Ask the person to run shield policy review in their terminal; the agent must not run it.";
+        return "This host did not provide Shield's confirmation form. Report the missing in-session capability; do not ask the user to run terminal commands for approval.";
     }
     crate::agents::review::resolve(agent).guidance().unavailable
 }
 
 /// The structured message of a declined host confirmation.
-pub(super) const APPROVAL_DECLINED: &str = "The policy change was not approved and remains pending. Continue without it; do not retry unless the user requests it.";
+pub(super) const APPROVAL_DECLINED: &str =
+    "The change was not approved. Continue without it; do not retry unless the user requests it.";
 
 /// The user declined an in-session approval.
 pub(super) const REQUEST_DECLINED: &str = "The user declined this request. Do not retry it; continue without it or ask the user what they want instead.";
@@ -36,7 +37,7 @@ pub(super) const REQUEST_DECLINED: &str = "The user declined this request. Do no
 pub(super) fn request_unavailable(agent: Option<&str>) -> &'static str {
     match agent {
         Some("gemini" | "agy") => {
-            "This host did not provide a confirmation form. Ask the person to approve or deny the selected request with shield request approve or shield request deny in their terminal. The agent must not run those operator commands."
+            "This host did not provide a confirmation form. Report the missing in-session capability; do not ask the user to run terminal commands for approval."
         }
         Some("codex") => {
             "Shield could not ask the user: this session's approval settings reject confirmation forms. Ask the user to choose an approval policy that allows prompts with /permissions, then call request_approve again with the same arguments. Do not change approval settings yourself."
@@ -94,7 +95,7 @@ pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String 
             let guidance = data["next_action"].as_str().unwrap_or(crate::agents::review::resolve(agent).guidance().proposed);
             data["change_summary"].as_str().map_or_else(|| guidance.into(), |change| format!("Proposed: {change} {guidance}"))
         },
-        "policy_apply" => "Policy change active after host confirmation. Retry the original request only if still needed.".into(),
+        "policy_apply" => data["next_action"].as_str().unwrap_or("Policy change active after host confirmation. Retry the original request only if still needed.").into(),
         "request_approve" => match data["grants"].as_array() {
             Some(grants) => format!("The user approved these {} requests once each. Repeat each identical call now, in any order; any change to one needs a new approval.", grants.len()),
             None => "The user approved this request once. Repeat the identical call now; any change to it needs a new approval.".into(),
@@ -106,8 +107,8 @@ pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String 
             let eligible = rows.into_iter().flatten().filter(|row| row["eligible_for_offer"] == true).count();
             format!("{eligible} eligible review groups. Follow coverage and next_action; group reviews after the task and skip unchanged proposed/deferred items.")
         },
-        "docs_list" => "Bundled guides listed. Read a path with docs_read or find a topic with docs_search.".into(),
-        "docs_search" => "Matching guide lines returned. Use docs_read for context; next_offset continues the search.".into(),
+        "docs_list" => "Bundled guides listed.".into(),
+        "docs_search" => "Matching guide lines returned; next_offset continues the search.".into(),
         "docs_read" => "Guide text returned; next_start_line continues this page.".into(),
         "policy_withdraw" => "Policy proposal withdrawn. Active policy is unchanged.".into(),
         "policy_receipt" => "Policy change receipt returned. Inspect current policy and reevaluate the request before retrying.".into(),
@@ -335,7 +336,9 @@ mod tests {
             Some("codex"),
             &json!({"data":{"change_summary":"Add the runtime rule pack."},"error":null}),
         );
-        assert!(proposed.starts_with("Proposed: Add the runtime rule pack. Policy proposal saved"));
+        assert!(
+            proposed.starts_with("Proposed: Add the runtime rule pack. Inactive change prepared")
+        );
     }
 
     #[test]

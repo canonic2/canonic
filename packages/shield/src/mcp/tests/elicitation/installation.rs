@@ -386,15 +386,10 @@ fn pack_installation_batch_decline_cancel_and_stale_input_leave_no_pack_proposal
             let other = transport.call(json!(11), "policy_propose", &json!({"change":{"kind":"rule_add","rule":{"id":"other","decision":"ask","conditions":{"domain":"argv","executable":"other","arguments":{"kind":"any"}}}}}));
             // A separate operator/connection changes policy while this form owns
             // the connection's pending input slot.
-            let applied = crate::review::mcp::call_with_confirmation(
-                &project.review,
-                &crate::review::mcp::Connection::new("other".into()),
-                "policy_apply",
+            super::super::confirmation::commit_elsewhere(
+                &project,
                 &data(&other)["data"]["apply_arguments"],
-                &|| Ok(()),
-                true,
             );
-            assert!(applied["error"].is_null(), "{applied}");
         }
         let before = project.revision();
         let count = proposals(&project);
@@ -847,15 +842,10 @@ fn pack_installation_stale_policy_routes_to_fresh_user_input() {
         &json!({"reference":"fixture/acme/settings"}),
     );
     let proposal = transport.call(json!(11), "policy_propose", &json!({"change":{"kind":"rule_add","rule":{"id":"other","decision":"ask","conditions":{"domain":"argv","executable":"other","arguments":{"kind":"any"}}}}}));
-    let approved = crate::review::mcp::call_with_confirmation(
-        &project.review,
-        &crate::review::mcp::Connection::new("other".into()),
-        "policy_apply",
+    super::super::confirmation::commit_elsewhere(
+        &project,
         &data(&proposal)["data"]["apply_arguments"],
-        &|| Ok(()),
-        true,
     );
-    assert!(approved["error"].is_null());
     let count = proposals(&project);
     let result = transport.request(&answer(&form, "accept", form_values(&form)));
     assert_eq!(data(&result)["error"]["code"], "stale_revision", "{result}");

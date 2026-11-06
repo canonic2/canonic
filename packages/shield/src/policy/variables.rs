@@ -834,7 +834,11 @@ pub(crate) fn substitute(
     match value {
         Value::Object(fields) => {
             for (key, child) in fields {
-                if key == "environment" {
+                if key == "graphql" {
+                    for selector in crate::graphql::selectors_mut(child) {
+                        parts |= substitute(selector, domain, resolve, unset, sample)?;
+                    }
+                } else if key == "environment" {
                     for selector in selectors::environment_selectors_mut(child) {
                         parts |= substitute(selector, domain, resolve, unset, sample)?;
                     }
@@ -864,7 +868,11 @@ pub(crate) fn references(value: &Value, domain: &str, names: &mut BTreeSet<Strin
     match value {
         Value::Object(fields) => {
             for (key, child) in fields {
-                if key == "environment" {
+                if key == "graphql" {
+                    for selector in crate::graphql::selectors(child) {
+                        references(selector, domain, names);
+                    }
+                } else if key == "environment" {
                     for selector in selectors::environment_selectors(child) {
                         references(selector, domain, names);
                     }

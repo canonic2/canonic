@@ -7,6 +7,7 @@ pub(in crate::review) struct Capture {
     pub(in crate::review) candidate: Value,
     pub(in crate::review) metadata: Value,
     pub(in crate::review) fingerprint: String,
+    pub(in crate::review) paths: BTreeMap<String, Option<String>>,
 }
 
 type Reader<'a> = dyn FnMut(&str) -> Result<Option<String>, Error> + 'a;
@@ -149,10 +150,20 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
         &disabled_bytes,
     )?);
     let fingerprint = fingerprint_with(before, &candidate, &meta, &mut read)?;
+    let paths = files
+        .into_iter()
+        .map(|(name, source)| {
+            (
+                name,
+                source.map(|bytes| crate::policy::fingerprint(bytes.as_bytes())),
+            )
+        })
+        .collect();
     Ok(Capture {
         candidate,
         metadata: meta,
         fingerprint,
+        paths,
     })
 }
 
@@ -177,7 +188,7 @@ fn adopted_config(read: &mut Reader<'_>) -> Result<(String, Option<String>, Valu
 }
 
 /// Read one contained regular file, preserving absence as fingerprint evidence.
-fn read_file(directory: &Path, path: &str) -> Result<Option<String>, Error> {
+pub(in crate::review) fn read_file(directory: &Path, path: &str) -> Result<Option<String>, Error> {
     crate::configuration::portable_path(path)?;
     match std::fs::symlink_metadata(directory.join(path)) {
         Ok(metadata) if metadata.is_file() => {}

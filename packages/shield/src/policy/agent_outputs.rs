@@ -65,6 +65,16 @@ impl Agents {
     /// the rule's literal executable and argument prefix, so it never names a
     /// command family wider than the rule; later positions narrow it further.
     pub(super) fn validate(&self, rule: &Rule) -> Result<(), Error> {
+        if rule.conditions.get("graphql").is_some()
+            || rule
+                .requirements
+                .as_ref()
+                .is_some_and(|r| r.get("graphql").is_some())
+        {
+            return Err(Error::Contract(
+                "GraphQL predicates cannot be represented by agent prefixes",
+            ));
+        }
         // A written prefix would outlive the rule's expiry until the next activation.
         if rule.expires_at.is_some() {
             return Err(Error::Contract("agents cannot be set on an expiring rule"));

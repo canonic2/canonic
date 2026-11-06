@@ -201,21 +201,28 @@ Confirmation activates the validated candidate; cancellation leaves policy uncha
 ### Review an agent's proposal
 
 Agents can propose packs, rules, domain permissions, or folder access. Check
-whether a proposal covers one invocation or a broader set of requests. To
-review pending proposals yourself, run:
+whether a proposal covers one invocation or a broader set of requests. The agent
+prepares the exact change and immediately requests approval in the conversation.
+Accept applies it; decline rejects it; cancellation, timeout, disconnection or
+task completion closes an unapplied attempt. Changes to its base make it stale.
+Closed attempts cannot be accepted later.
+
+For a direct operator review of a live change, run:
 
 ```sh
 shield policy review
 ```
 
-Proposal review is the default when proposals are pending. They appear oldest
-first, with the change, agent's reason, originating command, and permission
-comparison. Tab opens the complete change, including pack rules. Choose Accept,
-Reject, or Leave pending; Accept asks for final confirmation.
+Choose the live change explicitly. The review shows the change, agent's reason,
+originating command, and permission comparison. Tab opens the complete change,
+including pack rules. Choose Accept, Reject, or Cancel review; cancellation
+withdraws that attempt. There is no oldest-first approval queue.
 
 Agents can also submit a proposal's exact `apply_arguments` to
 `policy_apply` for host approval. `policy_receipt` reads the
-committed receipt. See [MCP review](project-mcp.md#proposals-and-operator-review).
+committed receipt or closed outcome. Deferred work is saved as intent only when
+you request it, and needs fresh preparation and approval when resumed.
+See [MCP review](project-mcp.md#proposals-and-operator-review).
 If policy files already have unreviewed edits, an agent can prepare a separate
 `project_files_adopt` proposal for the same host approval flow. Approval covers
 the complete captured policy difference; further edits make that review stale.

@@ -187,6 +187,72 @@ the request context's working folder, or
 `relative_to: project` when a verified launcher starts the server at the
 enrolled project root.
 
+## GraphQL requests
+
+An argv predicate `graphql: {carrier: gh-api, operation: query}` verifies a
+supported inline `gh api graphql` query. It requires `graphql-v1` and the ordinary
+argument/executable selectors. Parsing does not itself allow the request: the
+rule's decision, requirements, other policy and host restrictions still apply.
+Custom rules and packs can declare this implemented capability and supply their
+own reviewed selection models. Engine support does not add query permissions to
+installed packs; inspect their actual rules before relying on an allowance.
+
+The carrier accepts inline `-f` strings and scalar `-F` fields, one selected
+query operation, scalar defaults, aliases and fragments. Optional `operationName`
+selects a named operation. `--paginate` requires a nullable `$endCursor: String`
+used only in cursor arguments. Supported output flags are `--silent`,
+`--include`/`-i` and paginated `--slurp`; explicit method/hostname are limited to
+`POST` and `github.com`. Known conflicting host context fails verification.
+
+File/stdin input, typed placeholders, object/list values, mutations,
+custom headers, alternate endpoints/hosts, `--jq`, templates and unknown syntax
+do not satisfy this predicate. A query classification without `selection` asserts
+no repository scope. Source names and related metadata checks do not attest the
+actual network destination or immutable repository identity.
+
+An optional `selection` has `root` and `states`. Each state declares accepted
+fragment `types` and a `fields` map. A field has either `leaf: true` or
+`select: STATE`, plus optional `arguments`. Each argument declares `match` as
+`{text: SELECTOR}`, `{exact: SCALAR}` or `{scalar: string|integer|number|boolean|enum}`,
+with optional `required`, `nullable` and `cursor` booleans defaulting to false.
+Every field and argument must be declared; aliases do not replace actual field
+names. Missing required scope values and unknown traversals fail. A cursor
+declaration must be optional, nullable and `{scalar: string}`. Pack text selectors
+can use prepared variable projections. Source models contain no executable code
+or live schema queries. Invalid models refuse activation; exhausted analysis
+limits block rather than falling back to an allowance.
+Rules using this predicate cannot export `agents.codex.prefixes`: a command
+prefix cannot represent query or selection constraints.
+
+For example, this requirement fragment admits name metadata only from the named
+repository; put it inside an argv rule's `requirements` and supply `on_unmet`:
+
+```yaml
+graphql:
+  carrier: gh-api
+  operation: query
+  selection:
+    root: query
+    states:
+      query:
+        types: [Query]
+        fields:
+          repository:
+            arguments:
+              owner: {required: true, match: {text: acme}}
+              name: {required: true, match: {text: web}}
+            select: repository
+      repository:
+        types: [Repository]
+        fields:
+          nameWithOwner: {leaf: true}
+```
+
+The query `{ repository(owner:"acme", name:"web") { nameWithOwner } }` satisfies
+this model; adding `parent { nameWithOwner }` does not. Use a Deny unmet branch
+when failure must block rather than follow Ask fallback. See
+[conditions and requirements](policy-rules.md#conditions-versus-requirements).
+
 ## Capabilities
 
 Typed JSON field maps (`fields`, `request_fields` and MCP `connection`) accept
@@ -204,6 +270,7 @@ Declare exactly the capabilities used anywhere in the document, once each.
 | `structured-rules-v1` | Every document. |
 | `argument-rules-v1` | Argument selectors in argv rules. |
 | `argument-paths-v1` | Explicit argument-path checks. |
+| `graphql-v1` | Parsed inline GitHub GraphQL query predicates and finite selection models. |
 | `field-paths-v1` | Explicit path checks on MCP JSON fields. |
 | `glob-v1`, `regex-v1` | Their respective text selectors. |
 | `location-v1` | Path references/predicates, cwd, file domains, or targets. |

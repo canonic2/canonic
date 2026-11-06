@@ -20,6 +20,55 @@ fn snapshot_fixture() -> (assert_fs::TempDir, review::Context) {
 }
 
 #[test]
+fn codex_mcp_permission_requests_follow_bound_policy_and_leave_external_servers_to_host() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let config = json!({"schema_version":1,"packs":[],"rules":"rules.json","mcp":{"cloud":{
+        "transport":{"type":"http","url":"https://cloud.example.com/mcp"},"agents":{"codex":"acme"}}}}).to_string();
+    let rules = json!({"schema_version":1,"kind":"custom","capabilities":["structured-rules-v1"],"rules":[
+        {"id":"docs","decision":"allow","conditions":{"domain":"mcp","server":"cloud","tool":"docs_search"}},
+        {"id":"review","decision":"ask","conditions":{"domain":"mcp","server":"cloud","tool":"review"}},
+        {"id":"delete","decision":"deny","conditions":{"domain":"mcp","server":"cloud","tool":"delete"}}
+    ]}).to_string();
+    let context = review::mcp::initialize_fixture(
+        root.path(),
+        &Bundle::capture(&config, &[], Some(&rules)).unwrap(),
+    );
+    let project = Path::new(&context.project_root);
+    review::operator::integrations::configure_fixture(
+        project,
+        crate::cli::public::IntegrationChoice::all(),
+        review::integrations::AskFallback::Block,
+    );
+    for (alias, name, expected) in [
+        ("acme", "docs_search", Some("allow")),
+        ("acme", "review", None),
+        ("acme", "delete", Some("deny")),
+        ("external", "docs_search", None),
+    ] {
+        let host = json!({"hook_event_name":"PermissionRequest","session_id":"acme-session",
+            "cwd":project,"tool_name":format!("mcp__{alias}__{name}"),"tool_input":{"query":"rename"}});
+        let response = translate_for(
+            project,
+            "codex",
+            Event::Permission,
+            &serde_json::to_vec(&host).unwrap(),
+        );
+        if let Some(expected) = expected {
+            assert_eq!(
+                response["hookSpecificOutput"]["hookEventName"],
+                "PermissionRequest"
+            );
+            assert_eq!(
+                response["hookSpecificOutput"]["decision"]["behavior"], expected,
+                "{response}"
+            );
+        } else {
+            assert_eq!(response, json!({}), "{alias}: {name}");
+        }
+    }
+}
+
+#[test]
 fn mcp_connections_classification_and_enforcement_share_one_snapshot_load() {
     use clap::Parser;
     let (root, context) = snapshot_fixture();

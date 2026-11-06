@@ -438,6 +438,7 @@ impl Rule {
             || self.conditions.get("environment").is_some()
             || self.conditions.get("targets").is_some()
             || self.conditions.get("argument_paths").is_some()
+            || self.conditions.get("graphql").is_some()
             || self.conditions.get("cwd").is_some()
         {
             return None;
@@ -547,6 +548,13 @@ pub(super) fn capabilities(value: &Value, domain: &str, result: &mut BTreeSet<St
                 result.insert(OPTION_ABBREVIATIONS.into());
             }
             for (key, v) in fields {
+                if key == "graphql" {
+                    result.insert("graphql-v1".into());
+                    for selector in crate::graphql::selectors(v) {
+                        capabilities(selector, domain, result);
+                    }
+                    continue;
+                }
                 if [
                     "cwd",
                     "sources",
@@ -880,6 +888,7 @@ fn rank(value: &Value) -> u8 {
         "environment",
         "targets",
         "argument_paths",
+        "graphql",
         "field_paths",
         "sources",
         "destination",

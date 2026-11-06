@@ -6,7 +6,7 @@ $ shield mcp setup --remove --agent claude
 --- terminal
 Agent integrations
   Remove Shield's hooks and MCP servers.
-  Claude Code removed · hooks PostToolUse, PostToolUseFailure, PreToolUse · MCP server shield
+  Claude Code removed · hooks PostToolUse, PostToolUseFailure, PreToolUse, SessionEnd, Stop · MCP server shield
 
   Files
     .mcp.json                    updated    Claude Code MCP server

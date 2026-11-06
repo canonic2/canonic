@@ -14,6 +14,10 @@ pub(super) fn collect(
     patterns: &dyn Provider,
 ) -> Result<Option<Value>, Error> {
     match (key, facts.input) {
+        ("graphql", _) => {
+            Ok(super::predicates::graphql(predicate, facts, patterns)?
+                .map(|failure| json!(failure)))
+        }
         ("targets" | "sources" | "destination", _) => Ok(facts
             .locations
             .and_then(|locations| locations.predicate_evidence(key))),

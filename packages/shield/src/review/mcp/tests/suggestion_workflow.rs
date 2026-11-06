@@ -137,7 +137,10 @@ fn suggestions_deferral_survives_reconnect_and_cannot_change_policy() {
     );
     assert!(deferred["error"].is_null(), "{deferred}");
     let reconnect = Connection::new("reconnected".into());
-    let result = listed(&context, &reconnect);
+    let mut reconnected = context.clone();
+    reconnected.connection_id = Some("reconnected".into());
+    let result = listed(&reconnected, &reconnect);
+    assert!(result["error"].is_null(), "{result}");
     assert_eq!(result["data"]["requests"][0]["review_status"], "deferred");
     assert_eq!(result["data"]["requests"][0]["eligible_for_offer"], false);
     assert_eq!(

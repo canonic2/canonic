@@ -46,8 +46,11 @@ pub(super) fn propose(
     )
 }
 pub(super) fn receipt(context: &Context, id: &str) -> Value {
+    let mut context = context.clone();
+    context.surface = "mcp".into();
+    context.connection_id = Some("receipt-test".into());
     mcp::call(
-        context,
+        &context,
         &mcp::Connection::new("receipt-test".into()),
         "policy_receipt",
         &json!({"proposal_id":id}),
@@ -154,22 +157,27 @@ fn a_prepared_proposal_refuses_a_concurrently_activated_base() {
 fn stale_rejected_changed_retries_and_cross_project_context_do_not_apply() {
     let (_root, context) = enrolled();
     let first = propose(&context, &input("one"), &|| Ok(())).unwrap();
-    let second = propose(&context, &input("two"), &|| Ok(())).unwrap();
+    let mut independent = context.clone();
+    independent.session_id = Some("independent-session".into());
+    let second = propose(&independent, &input("two"), &|| Ok(())).unwrap();
     let mut changed = input("one");
     changed.agent_reason = Some("different".into());
     assert!(propose(&context, &changed, &|| Ok(())).is_err());
     let id = first["proposal_id"].as_str().unwrap();
     operator::commit_proposal_fixture(&context, id).unwrap();
-    assert_eq!(
+    assert!(
         transition(
-            &context,
+            &independent,
             second["proposal_id"].as_str().unwrap(),
             "withdraw",
             None,
             &|| Ok(())
         )
-        .unwrap()["error"]["code"],
-        "stale-proposal"
+        .is_err()
+    );
+    assert_eq!(
+        receipt(&independent, second["proposal_id"].as_str().unwrap())["data"]["status"],
+        "stale"
     );
     let mut other = context.clone();
     other.project_id = "a".repeat(64);
@@ -177,7 +185,8 @@ fn stale_rejected_changed_retries_and_cross_project_context_do_not_apply() {
     let third = propose(&context, &input("three"), &|| Ok(())).unwrap();
     let id = third["proposal_id"].as_str().unwrap();
     transition(&context, id, "reject", None, &|| Ok(())).unwrap();
-    assert!(receipt(&context, id)["error"].is_object());
+    assert_eq!(receipt(&context, id)["data"]["status"], "rejected");
+    assert!(operator::commit_proposal_fixture(&context, id).is_err());
 }
 
 #[test]

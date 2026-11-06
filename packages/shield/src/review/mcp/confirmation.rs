@@ -185,6 +185,10 @@ fn change_lines(change: &Value) -> Vec<String> {
             )
         }
         Some("rule") => return scope::rule_lines(change, local),
+        Some("mcp") => format!(
+            "Change MCP connection {}{local}. Shield shows its captured settings in a separate confirmation form; host settings are published through mcp_setup.",
+            text(&change["id"])
+        ),
         Some("access_paths") => {
             let mut lines = Vec::new();
             for (access, label) in [
@@ -292,6 +296,7 @@ fn brief(change: &Value) -> String {
             }
         }
         Some("access_paths") => "change folder access".into(),
+        Some("mcp") => format!("change MCP connection {}", text(&change["id"])),
         _ => "change pack settings".into(),
     }
 }
@@ -313,6 +318,12 @@ fn pack_lines(pack: &Value, profile: &str) -> Vec<String> {
     let mut lines = Vec::new();
     if pack["description"].is_string() {
         lines.push(text(&pack["description"]));
+    }
+    if pack["mcp_integrations"]
+        .as_object()
+        .is_some_and(|integrations| !integrations.is_empty())
+    {
+        lines.push(format!("MCP: {profile} rules apply automatically to matching configured servers, including servers configured later."));
     }
     for (decision, label) in [
         ("allow", "Without asking"),

@@ -9,6 +9,7 @@ reported recovery command, or find your symptom below.
 | Old behavior after installing a new Shield | [Reload the new version](#the-agent-still-uses-the-previous-shield) |
 | A command proceeds despite a recorded Ask | [Codex Ask handling](#a-command-runs-even-though-policy-says-ask) |
 | An unexpected Allow or Deny | [Inspect the request and matching rule](#the-request-was-allowed-or-blocked-unexpectedly) |
+| A read-only GitHub GraphQL query is blocked | [Check versions, scope and query form](#a-read-only-github-graphql-query-is-blocked) |
 | A YAML edit has no effect | [Review and activate the edit](#i-edited-a-rule-but-behavior-did-not-change) |
 | An old proposal cannot be applied | [Stale proposals](#a-proposal-is-stale) |
 | A pack proposal reports `candidate_error` | [Inconsistent pack candidate](#a-pack-proposal-reports-candidate_error) |
@@ -98,6 +99,20 @@ If policy returns Deny, ordinary approval cannot override it. Review a narrower
 request or an appropriate policy change instead. See
 [policy decisions](policy-decisions.md) for precedence and Ask handling.
 
+## A read-only GitHub GraphQL query is blocked
+
+Inspect `shield pack list`, `shield pack show PACK_SELECTOR` and the request's
+`shield history show ENTRY` output. The published GitHub 0.3.0 pack asks for raw
+API access when unscoped; its `cli-scope` precondition rejects API calls when the
+optional `repository` setting is active. Read-only intent does not establish
+permission, and updating the engine alone does not change installed pack rules.
+
+Inspect the rule or precondition named in the recorded decision before proposing
+an appropriate policy change. Adding `-R` does not prove the repository scope of
+a GraphQL query. For custom rules using the implemented `graphql-v1` capability,
+see the [GraphQL reference](rule-reference.md#graphql-requests) for supported
+carriers, selection models and refusal conditions.
+
 ## A command runs even though policy says Ask
 
 Check the Ask fallback with `shield status`. New Codex setups let valid Ask
@@ -155,7 +170,7 @@ saved active policy. To prepare it explicitly, run:
 shield cache prepare
 ```
 
-This does not activate manual edits or pending proposals. If preparation still
+This does not activate manual edits or unapplied reviews. If preparation still
 fails, follow the reported cause: invalid retained source or an inaccessible
 cache directory prevents evaluation. `shield status --json` reports the chosen
 cache root. See [cache locations and overrides](compiled-cache.md).
@@ -177,6 +192,9 @@ input, JSON mode, and intercepted agent tool calls cannot provide CLI operator
 confirmation. Enlarge the terminal if a prompt cannot fit.
 
 Agents can prepare changes with `policy_propose` and request your host's
-approval with `policy_apply`. If the host cannot complete that approval,
-review pending proposals yourself with `shield policy review`.
+approval with `policy_apply`. If confirmation prompts are disabled, enable them
+for the session, then prepare a fresh change if it is still needed. If the host
+cannot present supported confirmation, the agent must close the attempt and
+report that missing capability. Closed reviews remain inspectable through
+`policy_receipt` and cannot be accepted later.
 See [terminal controls](operator-experience.md#controls-and-output).

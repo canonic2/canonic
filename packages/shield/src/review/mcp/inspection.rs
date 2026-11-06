@@ -1,7 +1,5 @@
 //! Shared project inspection, owner-qualified rule lookup and non-activating proposal transitions.
-use super::{
-    Checkpoint, Context, Error, FAILED_PROPOSAL, FOREIGN_WITHDRAWAL, Failure, text, views::Views,
-};
+use super::{Checkpoint, Context, Error, FOREIGN_WITHDRAWAL, Failure, text, views::Views};
 use crate::review::storage::Store;
 use serde_json::{Value, json};
 use std::path::Path;
@@ -105,7 +103,7 @@ pub(super) fn transition(
     checkpoint: Checkpoint<'_>,
 ) -> Result<Value, Failure> {
     let store = Store::open(Path::new(&context.project_root))?;
-    let mut state = store.read_checkpoint()?;
+    let state = store.read_checkpoint()?;
     state.check(context)?;
     let row = state
         .proposals
@@ -113,44 +111,28 @@ pub(super) fn transition(
         .find(|p| p.id == id)
         .ok_or(Error::Missing)?;
     if name == "policy_receipt" {
-        return match row.status.as_str() {
-            // Rejected and withdrawn proposals are terminal; review cannot revive them.
-            "rejected" | "withdrawn" => Err(Error::Invalid(
-                "proposal is terminal and cannot be applied; submit a new proposal",
-            )
-            .into()),
-            "stale" => Err(Error::StaleSnapshot.into()),
-            "failed" => Err(Failure::Refused(&FAILED_PROPOSAL)),
-            "applied" if row.receipt.is_null() => Err(Error::Missing.into()),
-            "applied" => Ok(
-                json!({"proposal_id":id,"status":row.status,"policy_revision":row.receipt["policy_revision"],"receipt":row.receipt,"provenance":row.provenance,"operator":row.operator}),
-            ),
-            // A pending proposal whose base changed cannot apply, so its
-            // receipt routes to a new proposal rather than to apply.
-            "pending"
-                if row.policy_revision != state.policy_revision
-                    || crate::review::publication::validate_proposal_base(&state, id).is_err() =>
-            {
-                Err(Error::StaleSnapshot.into())
+        if row.status != "pending" {
+            if row.status == "applied" && row.receipt.is_null() {
+                return Err(Error::Missing.into());
             }
-            _ => Err(Error::ApprovalRequired.into()),
-        };
+            return Ok(
+                json!({"proposal_id":row.id,"status":row.status,"closed_reason":row.closed_reason,
+                "receipt":row.receipt,"operator":row.operator,"provenance":row.provenance}),
+            );
+        }
+        if !crate::review::proposal_lifecycle::owns(row, context) {
+            return Err(Error::Invalid(
+                "review belongs to another interaction; inspect its outcome or prepare fresh",
+            )
+            .into());
+        }
+        return Err(Error::ApprovalRequired.into());
     }
-    if row.retry_owner != context.retry_owner() {
+    if !crate::review::proposal_lifecycle::owns(row, context) {
         return Err(Failure::Refused(&FOREIGN_WITHDRAWAL));
     }
-    match row.status.as_str() {
-        "withdrawn" => {
-            let row = state
-                .proposals
-                .iter_mut()
-                .find(|p| p.id == id)
-                .ok_or(Error::Missing)?;
-            store.hydrate_proposal(row)?;
-            return Ok(row.public(false));
-        }
-        "stale" => return Err(Error::StaleSnapshot.into()),
-        _ => {}
+    if row.status != "pending" {
+        return Ok(row.summary());
     }
     drop(state);
     match crate::review::transition(context, id, "withdraw", None, checkpoint) {

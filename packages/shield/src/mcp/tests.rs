@@ -20,7 +20,7 @@ mod skills;
 
 /// A fixture project. The temporary root lives as long as this value.
 pub(crate) struct Project {
-    _root: assert_fs::TempDir,
+    root: assert_fs::TempDir,
     pub(crate) review: Arc<crate::review::Context>,
 }
 
@@ -38,13 +38,7 @@ pub(crate) fn fixture(agent: Option<&str>) -> (Server, Project) {
     context.agent = agent.map(str::to_owned);
     let server = Server::for_review(context).unwrap();
     let review = server.review();
-    (
-        server,
-        Project {
-            _root: root,
-            review,
-        },
-    )
+    (server, Project { root, review })
 }
 
 pub(crate) fn initialize(capabilities: &Value, client: &str) -> [Value; 2] {
@@ -260,6 +254,8 @@ fn catalog_publishes_every_tool_and_marks_all_state_changes_as_mutations() {
             "pack_remove",
             "pack_update",
             "policy_apply",
+            "policy_defer",
+            "policy_draft_remove",
             "policy_propose",
             "policy_reject",
             "policy_repair",
@@ -518,31 +514,31 @@ fn guidance_uses_the_enrolled_agent_never_client_metadata() {
         (
             Some("codex"),
             "claude-code",
-            "approval policy is never",
+            "enable prompts with /permissions in this session",
             "MCP form elicitation",
         ),
         (
             Some("claude"),
             "codex",
-            "MCP confirmation form in default, auto and bypassPermissions modes",
+            "Wait for its MCP confirmation form",
             "for Codex tool approval",
         ),
         (
             Some("acme-host"),
             "codex",
-            "If this host cannot confirm",
+            "This host has no supported in-session approval adapter",
             "MCP confirmation form in default, auto and bypassPermissions modes",
         ),
         (
             None,
             "codex",
-            "If this host cannot confirm",
+            "This host has no supported in-session approval adapter",
             "approval policy is never",
         ),
         (
             None,
             "claude-code",
-            "If this host cannot confirm",
+            "This host has no supported in-session approval adapter",
             "MCP confirmation form in default, auto and bypassPermissions modes",
         ),
     ] {
@@ -554,9 +550,9 @@ fn guidance_uses_the_enrolled_agent_never_client_metadata() {
             .to_owned();
         assert!(instructions.contains(expected), "{instructions}");
         assert!(!instructions.contains(absent), "{instructions}");
-        assert_eq!(
-            instructions.contains("shield policy review"),
-            agent != Some("claude")
+        assert!(
+            !instructions.contains("shield policy review"),
+            "{instructions}"
         );
         let catalog = catalog(agent).unwrap();
         for name in instructions
@@ -867,7 +863,7 @@ fn proposals_put_the_adapter_activation_route_in_structured_data() {
         (Some("codex"), "policy_apply for Codex approval"),
         (Some("gemini"), "policy_apply for MCP form confirmation"),
         (Some("agy"), "policy_apply for MCP form confirmation"),
-        (None, "shield policy review in their terminal"),
+        (None, "withdraw the attempt"),
     ] {
         let (server, _project) = fixture(agent);
         let transport = Transport::start(server);

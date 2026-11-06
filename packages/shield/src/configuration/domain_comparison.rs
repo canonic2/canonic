@@ -218,6 +218,11 @@ fn has_normalized(first: &Prepared<'_>, second: &Prepared<'_>) -> bool {
     !first.effective.mcp_connections().is_empty()
         || !second.effective.mcp_connections().is_empty()
         || first
+            .packs
+            .iter()
+            .chain(&second.packs)
+            .any(|(pack, _)| pack.has_mcp_integrations())
+        || first
             .custom
             .iter()
             .chain(&second.custom)

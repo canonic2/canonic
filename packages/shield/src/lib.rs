@@ -10,6 +10,7 @@ pub mod effects;
 pub mod enforcement;
 mod evidence;
 mod execution;
+mod graphql;
 mod http_client;
 mod json;
 mod location;

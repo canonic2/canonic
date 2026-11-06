@@ -18,6 +18,8 @@ static SPEC: AgentSpec = AgentSpec {
         ("PreToolUse", Event::Before),
         ("PostToolUse", Event::Completed),
         ("PostToolUseFailure", Event::Failed),
+        ("Stop", Event::Ended),
+        ("SessionEnd", Event::Ended),
     ],
     hooks_path: ".claude/settings.local.json",
     mcp_path: None,
@@ -29,6 +31,13 @@ static SPEC: AgentSpec = AgentSpec {
     approval_action: "Allow this request?",
 };
 impl AgentAdapter for ClaudeCode {
+    fn discover_mcp(
+        &self,
+        root: &Path,
+        cwd: &Path,
+    ) -> Result<Option<super::mcp_scopes::Observation>, Error> {
+        mcp_scopes::discover(root, cwd).map(Some)
+    }
     fn supports_box_permissions(&self) -> bool {
         true
     }

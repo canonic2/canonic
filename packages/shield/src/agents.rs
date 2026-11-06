@@ -12,6 +12,7 @@ mod gemini;
 mod hook;
 mod json_mcp;
 mod mcp_scopes;
+pub(crate) use mcp_scopes::Observation as McpObservation;
 pub(crate) mod review;
 pub(crate) mod setup;
 mod working_files;
@@ -69,10 +70,11 @@ pub(crate) enum Event {
     Permission,
     Completed,
     Failed,
+    Ended,
 }
 impl Event {
     fn post(self) -> bool {
-        matches!(self, Self::Completed | Self::Failed)
+        matches!(self, Self::Completed | Self::Failed | Self::Ended)
     }
 }
 
@@ -173,6 +175,15 @@ pub(crate) trait AgentAdapter: Sync {
             "MCP connection mapping unsupported",
         ))
     }
+    /// Observe supported host MCP settings with source and freshness evidence.
+    fn discover_mcp(
+        &self,
+        _root: &Path,
+        _cwd: &Path,
+    ) -> Result<Option<mcp_scopes::Observation>, crate::review::Error> {
+        Ok(None)
+    }
+
     /// Reject known competing MCP aliases without modifying other host scopes.
     fn check_mcp_scopes(
         &self,
@@ -347,12 +358,23 @@ fn mcp_operation(tool: &str, input: &Value) -> Option<Value> {
     Some(serde_json::json!({"kind":"mcp","alias":alias,"tool":name,"arguments":input}))
 }
 
+/// Host-owned tool namespaces cannot be attributed to a file-configured server.
+pub(crate) fn reserved_mcp_alias(alias: &str) -> bool {
+    let alias = alias.to_ascii_lowercase();
+    alias.starts_with("plugin_") || alias.starts_with("claude_ai_") || alias == "codex_apps"
+}
+
 /// Refuse aliases that can collapse into the same encoded tool namespace or
 /// consume the `__` delimiter. Never pick a connection by a similar name.
 fn unambiguous_mcp_alias<'a>(
     alias: &str,
     aliases: impl Iterator<Item = &'a str>,
 ) -> Result<(), crate::review::Error> {
+    if reserved_mcp_alias(alias) {
+        return Err(crate::review::Error::Invalid(
+            "host-owned MCP namespace cannot be identified by a configured server alias",
+        ));
+    }
     for other in aliases.filter(|other| *other != alias) {
         let normalized = other
             .chars()

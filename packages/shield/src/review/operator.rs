@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 use std::{path::Path, process::ExitCode};
 
 #[cfg(test)]
-pub(super) fn commit_proposal_fixture(context: &Context, id: &str) -> Result<Value, Error> {
+pub(crate) fn commit_proposal_fixture(context: &Context, id: &str) -> Result<Value, Error> {
     let before = crate::review::project::load(context)?;
     let row = before
         .proposals

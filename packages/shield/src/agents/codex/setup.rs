@@ -3,6 +3,41 @@ use crate::{policy::agent_outputs::CodexPrefix, review::Error};
 use std::{fmt::Write as _, path::Path};
 use toml_edit::{DocumentMut, Item, Table, value};
 
+const CONNECTION_FIELDS: &[&str] = &[
+    "command",
+    "args",
+    "env",
+    "url",
+    "enabled",
+    "default_tools_approval_mode",
+    "tools",
+    "startup_timeout_sec",
+    "tool_timeout_sec",
+    "enabled_tools",
+    "disabled_tools",
+];
+
+pub(super) fn observe_connection(
+    server: &Item,
+) -> Result<Option<crate::mcp_connections::Transport>, Error> {
+    let table = server
+        .as_table_like()
+        .ok_or(Error::Invalid("MCP connection must be a table"))?;
+    if server
+        .get("enabled")
+        .is_some_and(|v| v.as_bool() != Some(true))
+    {
+        return Err(Error::Invalid("invalid or disabled MCP connection"));
+    }
+    if table
+        .iter()
+        .any(|(key, _)| !CONNECTION_FIELDS.contains(&key))
+    {
+        return Ok(None);
+    }
+    connection_entry(server).map(Some)
+}
+
 pub(super) fn connection(
     source: &str,
     alias: &str,
@@ -18,27 +53,19 @@ pub(super) fn connection(
     let Some(server) = doc.get("mcp_servers").and_then(|s| s.get(alias)) else {
         return Ok(None);
     };
+    connection_entry(server).map(Some)
+}
+
+pub(super) fn connection_entry(server: &Item) -> Result<crate::mcp_connections::Transport, Error> {
     let table = server
-        .as_table()
+        .as_table_like()
         .ok_or(Error::Invalid("MCP connection must be a table"))?;
-    if table.iter().any(|(key, _)| {
-        ![
-            "command",
-            "args",
-            "env",
-            "url",
-            "enabled",
-            "default_tools_approval_mode",
-            "tools",
-            "startup_timeout_sec",
-            "tool_timeout_sec",
-            "enabled_tools",
-            "disabled_tools",
-        ]
-        .contains(&key)
-    }) || server
-        .get("enabled")
-        .is_some_and(|v| v.as_bool() != Some(true))
+    if table
+        .iter()
+        .any(|(key, _)| !CONNECTION_FIELDS.contains(&key))
+        || server
+            .get("enabled")
+            .is_some_and(|v| v.as_bool() != Some(true))
     {
         return Err(Error::Invalid(
             "unsupported or disabled MCP connection settings",
@@ -51,9 +78,7 @@ pub(super) fn connection(
         {
             return Err(Error::Invalid("mixed MCP transport settings"));
         }
-        return Ok(Some(crate::mcp_connections::Transport::Http {
-            url: url.into(),
-        }));
+        return Ok(crate::mcp_connections::Transport::Http { url: url.into() });
     }
     let command = server
         .get("command")
@@ -86,11 +111,7 @@ pub(super) fn connection(
             })
             .collect::<Result<_, _>>()?,
     };
-    Ok(Some(crate::mcp_connections::Transport::Stdio {
-        command,
-        args,
-        env,
-    }))
+    Ok(crate::mcp_connections::Transport::Stdio { command, args, env })
 }
 
 #[cfg(test)]
