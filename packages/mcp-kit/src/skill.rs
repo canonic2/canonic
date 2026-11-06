@@ -198,6 +198,12 @@ pub struct BundledRead {
 }
 
 impl BundledRead {
+    pub(crate) fn prepared(uri: String, result: ReadResourceResult) -> Self {
+        Self {
+            uri,
+            result: Arc::new(result),
+        }
+    }
     /// The validated read result, ready for bounded serialization.
     #[must_use]
     pub fn result(&self) -> &ReadResourceResult {
@@ -678,6 +684,10 @@ impl SkillCatalog {
         }
         definitions.extend(self.descriptors.iter().cloned());
         Ok(ResourceCatalog::new(definitions, templates)?)
+    }
+
+    pub(crate) fn root_uris(&self) -> &[String] {
+        &self.roots
     }
 
     /// Whether the URI belongs to a reserved skill root namespace.

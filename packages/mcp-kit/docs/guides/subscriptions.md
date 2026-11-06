@@ -52,7 +52,7 @@ once per enabled connection and must return quickly. Send prepared changes:
 | --- | --- |
 | `Change::Tools(Arc<Catalog>)` | Replace tools before notifying tool-list subscribers |
 | `Change::Prompts(Arc<PromptCatalog>)` | Replace an enabled prompt catalog before notifying |
-| `Change::Resources(Arc<ResourceCatalog>)` | Replace enabled resources, preserving bundled Skills, before notifying |
+| `Change::Resources(Arc<ResourceCatalog>)` | Replace ordinary resources, preserving bundled Skills and Apps UI, before notifying |
 | `Change::ResourceUpdated(uri)` | Notify subscribers after your resource bytes change |
 
 The sender's `send` is nonblocking. `SendChangeError::Full`, `Closed` and

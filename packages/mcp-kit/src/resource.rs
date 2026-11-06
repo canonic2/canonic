@@ -403,6 +403,9 @@ enum Data {
 }
 
 impl ResourceContents {
+    pub(crate) fn set_metadata(&mut self, metadata: crate::Metadata) {
+        self.meta = Some(metadata);
+    }
     /// Builds bounded text contents.
     ///
     /// # Errors

@@ -113,3 +113,9 @@ Optional [Tasks](tasks.md) adds typed management events and
 `RequestContext::encode_task`. Capture the request context before settling its
 ID. Persistent task lifetime belongs to the consumer, separately from the
 RPC ID; cancelling a poll does not cancel its job.
+
+Optional [Apps](apps.md) reuses `Inbound::BundledResource` for prepared UI HTML.
+Capture `Session::supports_apps(Some(&id))` when admitting a tool and keep that
+value with its continuation. Direct tool paging uses `list_page_for_client`
+with validated request-local support. The producing `ResultSchema` also checks
+that successful UI-linked tools retain fallback content.

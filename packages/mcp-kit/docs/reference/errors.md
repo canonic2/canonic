@@ -13,6 +13,7 @@
 | `-32602` | Invalid resource parameters | An invalid URI, cursor, metadata or parameter shape | Use a concrete URI and pass the previous page's cursor unchanged to the same list method |
 | `-32602` | Resource not found | A modern read named an unknown or inaccessible URI | Check the address and authorization; use `Outcome::ResourceNotFound` for revision-aware replies |
 | `-32602` | Unknown tool, Invalid tool call parameters | A name outside the catalog or malformed parameters | Call `tools/list` |
+| `-32602` | Invalid Apps mimeTypes | Malformed Apps declaration on an Apps-enabled server using `2025-11-25` or modern requests | Supply a bounded string array containing `text/html;profile=mcp-app`, or omit the declaration |
 | `-32602` | Invalid tool listing parameters or cursor | Unsupported fields/revision or a malformed, foreign or out-of-range tool cursor | Restart listing without a cursor and forward each returned `nextCursor` unchanged |
 | `-32603` | Response exceeds output limit | A result larger than `Options::max_output_bytes` | Page or shorten the result |
 | `-32602` | Invalid subscription filter | Malformed, unknown or over-budget subscription parameters | Send only supported filters and bounded absolute resource URIs |
@@ -64,6 +65,11 @@ Schema resource refusals also dispatch no work. Catalog construction refuses
 invalid schemas, unsupported dialects, unresolved references, exceeded
 preparation limits and invalid `x-mcp-header` annotations; see
 [schemas](../guides/schemas.md) and [HTTP](../guides/http.md#mirror-arguments-into-headers).
+
+Apps construction returns `AppsError` for invalid documents or UI metadata;
+session configuration refuses missing links and reserved namespaces. Calls to
+app-only tools without support return "Unknown tool". A successful linked-tool
+result with no content fails the output contract; include useful fallback text.
 
 ## `ServeError`
 

@@ -433,6 +433,8 @@ const RESERVED_EXTENSION_NAMES: &[&str] = &[
     "prompts/acme",
     "completion/complete",
     "completion/acme",
+    "ui/initialize",
+    "ui/acme",
     "logging/setLevel",
     "roots/list",
     "sampling/createMessage",

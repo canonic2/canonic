@@ -265,6 +265,7 @@ impl ModernOptions {
 /// Immutable context captured for one admitted modern request.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RequestContext {
+    apps: Result<bool, RpcError>,
     metadata: crate::Metadata,
     trace: crate::TraceContext,
     /// The admitted operation, used to validate interim-result eligibility.
@@ -317,6 +318,9 @@ impl RequestContext {
     ) -> Result<Arc<Self>, RpcError> {
         let meta = &params["_meta"];
         let capabilities = capabilities(&meta[CAPABILITIES_KEY])?;
+        // An extension stays opaque when its server capability is disabled.
+        // Capture the check once; the session enforces it only with Apps enabled.
+        let apps = crate::apps::client_support(&meta[CAPABILITIES_KEY]);
         let metadata =
             crate::Metadata::request(meta).map_err(|error| invalid(&error.to_string()))?;
         let trace = crate::TraceContext::from_metadata(metadata.clone());
@@ -352,6 +356,7 @@ impl RequestContext {
             _ => None,
         };
         Ok(Arc::new(Self {
+            apps,
             metadata,
             trace,
             method: method.into(),
@@ -401,6 +406,16 @@ impl RequestContext {
     #[must_use]
     pub fn result_schema(&self) -> Option<&crate::ResultSchema> {
         self.result_schema.as_ref()
+    }
+
+    /// Whether this request's client declared Apps HTML support; grants no authority.
+    #[must_use]
+    pub fn supports_apps(&self) -> bool {
+        self.apps.as_ref().is_ok_and(|supported| *supported)
+    }
+
+    pub(crate) fn validate_apps(&self) -> Result<(), RpcError> {
+        self.apps.as_ref().map(|_| ()).map_err(Clone::clone)
     }
 
     /// Creates a bounded yes/no interim result using this call's capabilities.

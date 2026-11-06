@@ -124,7 +124,7 @@ fn pagination_refuses_bad_foreign_changed_and_cross_revision_cursors() {
             rpc::INVALID_PARAMS
         );
     }
-    let prefix = format!("tools:{}:{version}:", catalog.pages.digest);
+    let prefix = format!("tools:{}:{version}:model:", catalog.pages.digest);
     for offset in [
         "0",
         "1",
@@ -159,6 +159,10 @@ fn pagination_refuses_bad_foreign_changed_and_cross_revision_cursors() {
     );
     assert!(catalog.list_page(&json!({}), "future").is_err());
     let same = Catalog::new(definitions.clone()).unwrap();
+    assert!(
+        same.list_page_for_client(&json!({"cursor":cursor}), version, true)
+            .is_err()
+    );
     assert_eq!(
         same.list_page(&json!({"cursor":cursor}), version),
         catalog.list_page(&json!({"cursor":cursor}), version)

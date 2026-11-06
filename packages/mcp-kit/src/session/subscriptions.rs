@@ -75,6 +75,7 @@ impl Session {
         }
         let (method, uri) = match change {
             Change::Tools(catalog) => {
+                crate::apps::validate_configuration(&catalog, self.options.apps.as_deref())?;
                 self.catalog = catalog;
                 ("notifications/tools/list_changed", None)
             }
@@ -89,6 +90,12 @@ impl Session {
                 if self.options.resources.is_none() {
                     return Err(ConfigurationError("resource catalog is disabled".into()));
                 }
+                let catalog = match &self.options.apps {
+                    Some(apps) => {
+                        Arc::new(apps.compose(Some(&catalog), self.options.skills.as_deref())?)
+                    }
+                    None => catalog,
+                };
                 let catalog = match &self.options.skills {
                     Some(skills) => Arc::new(
                         skills
@@ -101,6 +108,9 @@ impl Session {
                 ("notifications/resources/list_changed", None)
             }
             Change::ResourceUpdated(uri) => {
+                if self.options.apps.is_some() && crate::apps::is_ui(&uri) {
+                    return Err(ConfigurationError("Apps UI resources are immutable".into()));
+                }
                 crate::resource::validate_uri(&uri)
                     .map_err(|error| ConfigurationError(error.to_string()))?;
                 ("notifications/resources/updated", Some(uri))

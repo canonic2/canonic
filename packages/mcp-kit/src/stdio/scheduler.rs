@@ -33,6 +33,7 @@ mod tests;
 /// What a queued or running request is, independent of its work.
 #[derive(Clone)]
 struct Meta {
+    apps: bool,
     trace: Trace,
     reply_kind: ReplyKind,
     result_schema: Option<crate::ResultSchema>,
@@ -98,16 +99,11 @@ impl ReplyKind {
 }
 
 struct Assignment {
+    context: Context,
     trace: Trace,
     reply_kind: ReplyKind,
-    result_schema: Option<crate::ResultSchema>,
-    request_context: Option<Arc<crate::RequestContext>>,
-    grant: Option<Arc<crate::http::Grant>>,
     sequence: u64,
-    id: Option<Value>,
     work: Work,
-    control: Arc<Control>,
-    progress: Option<Progress>,
 }
 
 enum Finish {
@@ -307,6 +303,7 @@ impl Scheduler {
         lane.queue.push_back(Job {
             queued: trace.span(Stage::Queue),
             meta: Meta {
+                apps: session.supports_apps(id.as_ref()),
                 trace,
                 reply_kind: ReplyKind::of(&request, session),
                 result_schema: match &request {
@@ -948,16 +945,19 @@ impl Scheduler {
                     dispatcher: self.dispatcher.clone(),
                 });
                 let assignment = Assignment {
+                    context: Context {
+                        apps: job.meta.apps,
+                        result_schema: job.meta.result_schema.clone(),
+                        protocol: job.meta.request_context.clone(),
+                        grant: job.meta.grant.clone(),
+                        id: job.meta.id.clone(),
+                        control: Arc::clone(&job.control),
+                        progress,
+                    },
                     trace: job.meta.trace.clone(),
                     reply_kind: job.meta.reply_kind.clone(),
-                    result_schema: job.meta.result_schema.clone(),
-                    request_context: job.meta.request_context.clone(),
-                    grant: job.meta.grant.clone(),
                     sequence,
-                    id: job.meta.id.clone(),
                     work: job.work,
-                    control: Arc::clone(&job.control),
-                    progress,
                 };
                 lane.idle.pop();
                 let sent = self.workers[worker]
@@ -1039,14 +1039,7 @@ fn work<H: Handler>(
     limit: usize,
 ) {
     while let Ok(assignment) = incoming.recv() {
-        let context = Context {
-            result_schema: assignment.result_schema,
-            protocol: assignment.request_context,
-            grant: assignment.grant,
-            id: assignment.id,
-            control: assignment.control,
-            progress: assignment.progress,
-        };
+        let context = assignment.context;
         let rich_resumed = matches!(assignment.work, Work::ElicitResume(..));
         let resumed = rich_resumed || matches!(assignment.work, Work::Resume(..));
         let outcome = panic::catch_unwind(AssertUnwindSafe(|| {

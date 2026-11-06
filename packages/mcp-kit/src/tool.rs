@@ -4,7 +4,7 @@ use crate::{
     rpc::{self, RpcError},
     schema,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeMap};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 mod headers;
@@ -45,33 +45,66 @@ impl Annotations {
 }
 
 /// One published tool.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Tool {
     /// Optional extension metadata.
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<crate::Metadata>,
+    /// Typed Apps linkage and visibility; requires an Apps catalog in the session.
+    pub ui: Option<crate::ToolUi>,
     /// Optional validated display icons.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub icons: Vec<crate::Icon>,
     /// The name callers use; see [`Catalog::new`] for the allowed characters.
     pub name: String,
     /// A display title.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// One short sentence on what the tool returns or changes.
     pub description: String,
     /// An object schema for arguments, checked and prepared at catalog construction.
     pub input_schema: Value,
     /// An optional JSON Schema object enforced on structured tool results.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<Value>,
     /// Behavior hints.
-    #[serde(skip_serializing_if = "Annotations::is_empty")]
     pub annotations: Annotations,
 }
 
+impl Serialize for Tool {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(None)?;
+        if self.meta.is_some() || self.ui.is_some() {
+            map.serialize_entry(
+                "_meta",
+                &crate::apps::WithUi {
+                    custom: self.meta.as_ref(),
+                    ui: self.ui.as_ref(),
+                },
+            )?;
+        }
+        if !self.icons.is_empty() {
+            map.serialize_entry("icons", &self.icons)?;
+        }
+        map.serialize_entry("name", &self.name)?;
+        if let Some(title) = &self.title {
+            map.serialize_entry("title", title)?;
+        }
+        map.serialize_entry("description", &self.description)?;
+        map.serialize_entry("inputSchema", &self.input_schema)?;
+        if let Some(schema) = &self.output_schema {
+            map.serialize_entry("outputSchema", schema)?;
+        }
+        if !self.annotations.is_empty() {
+            map.serialize_entry("annotations", &self.annotations)?;
+        }
+        map.end()
+    }
+}
+
 impl Tool {
+    /// Attaches typed Apps metadata, validated when constructing the catalog.
+    #[must_use]
+    pub fn with_ui(mut self, ui: crate::ToolUi) -> Self {
+        self.ui = Some(ui);
+        self
+    }
     /// A tool with no title, output schema or annotations.
     #[must_use]
     pub fn new(
@@ -82,6 +115,7 @@ impl Tool {
         Self {
             name: name.into(),
             meta: None,
+            ui: None,
             icons: vec![],
             title: None,
             description: description.into(),
@@ -160,6 +194,13 @@ impl Catalog {
         let mut headers = Vec::new();
         let mut outputs = Vec::new();
         for (index, tool) in tools.iter().enumerate() {
+            crate::apps::tool_metadata(tool.meta.as_ref(), tool.ui.as_ref()).map_err(
+                |problem| CatalogError::Schema {
+                    tool: tool.name.clone(),
+                    field: "_meta.ui",
+                    problem: problem.into(),
+                },
+            )?;
             crate::metadata::validate_icons(&tool.icons).map_err(|error| CatalogError::Schema {
                 tool: tool.name.clone(),
                 field: "icons",
@@ -202,6 +243,7 @@ impl Catalog {
                 })
                 .transpose()?;
             outputs.push(ResultSchema {
+                linked: tool.ui.as_ref().is_some_and(|ui| ui.resource_uri.is_some()),
                 schema: output,
                 legacy: tool
                     .output_schema
@@ -253,7 +295,29 @@ impl Catalog {
     /// Returns invalid parameters for unknown fields, unsupported revisions or
     /// malformed, foreign or out-of-range cursors.
     pub fn list_page(&self, params: &Value, protocol_version: &str) -> Result<Value, RpcError> {
-        self.pages.page(self, params, protocol_version)
+        self.list_page_for_client(params, protocol_version, false)
+    }
+
+    /// Lists one prepared visibility view, with cursors bound to the revision and view.
+    /// `apps` must come from the current client's validated Apps capability.
+    ///
+    /// # Errors
+    /// Returns invalid parameters for malformed, foreign or cross-view cursors.
+    pub fn list_page_for_client(
+        &self,
+        params: &Value,
+        protocol_version: &str,
+        apps: bool,
+    ) -> Result<Value, RpcError> {
+        self.pages.page(
+            self,
+            params,
+            protocol_version,
+            apps && matches!(
+                protocol_version,
+                crate::LATEST_PROTOCOL_VERSION | crate::modern::PROTOCOL_VERSION
+            ),
+        )
     }
 
     /// Captures an immutable output contract for ordinary calls and durable task settlement.
@@ -279,6 +343,7 @@ impl Catalog {
 pub struct ResultSchema {
     schema: Option<schema::PreparedSchema>,
     legacy: bool,
+    linked: bool,
 }
 
 impl ResultSchema {
@@ -326,6 +391,7 @@ impl ResultSchema {
         modern: bool,
         check: &dyn Fn() -> Result<(), crate::Interrupted>,
     ) -> Result<(), schema::ArgumentError> {
+        self.validate_content(result.is_error, result.content.len())?;
         if !modern
             && (!self.legacy
                 || result
@@ -366,6 +432,16 @@ impl ResultSchema {
         Ok(())
     }
 
+    fn validate_content(&self, is_error: bool, count: usize) -> Result<(), schema::ArgumentError> {
+        if self.linked && !is_error && count == 0 {
+            return Err(schema::ArgumentError::new(
+                "content",
+                "UI-linked tools require fallback content".into(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Checks a completed task snapshot before persistence or after restore.
     /// The consumer binds this contract to the task's producing tool; management
     /// requests alone cannot identify that tool.
@@ -377,6 +453,10 @@ impl ResultSchema {
         snapshot: &crate::task::Snapshot,
     ) -> Result<(), schema::ArgumentError> {
         if let Some(result) = snapshot.completed_result() {
+            self.validate_content(
+                result["isError"] == true,
+                result["content"].as_array().map_or(0, Vec::len),
+            )?;
             self.validate_fields(
                 result.get("structuredContent"),
                 result["isError"] == true,

@@ -12,6 +12,8 @@ pub const MAX_CURSOR_BYTES: usize = 128;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Pages {
     legacy: Vec<usize>,
+    model: Vec<usize>,
+    legacy_model: Vec<usize>,
     digest: String,
 }
 
@@ -22,6 +24,21 @@ impl Pages {
         serde_json::to_writer(&mut digest, tools)
             .expect("Tool fields are JSON-safe and the SHA-256 writer is infallible");
         Self {
+            model: tools
+                .iter()
+                .enumerate()
+                .filter_map(|(i, tool)| {
+                    (!tool.ui.as_ref().is_some_and(crate::ToolUi::app_only)).then_some(i)
+                })
+                .collect(),
+            legacy_model: outputs
+                .iter()
+                .enumerate()
+                .filter_map(|(i, output)| {
+                    (output.legacy && !tools[i].ui.as_ref().is_some_and(crate::ToolUi::app_only))
+                        .then_some(i)
+                })
+                .collect(),
             legacy: outputs
                 .iter()
                 .enumerate()
@@ -36,6 +53,7 @@ impl Pages {
         catalog: &Catalog,
         params: &Value,
         version: &str,
+        apps: bool,
     ) -> Result<Value, RpcError> {
         if !rpc::only(params, &["cursor", "_meta"]) {
             return Err(invalid());
@@ -47,12 +65,15 @@ impl Pages {
         } else {
             return Err(invalid());
         };
-        let count = if legacy {
-            self.legacy.len()
-        } else {
-            catalog.tools.len()
+        let view = match (legacy, apps) {
+            (true, true) => Some(&self.legacy),
+            (true, false) => Some(&self.legacy_model),
+            (false, false) => Some(&self.model),
+            (false, true) => None,
         };
-        let prefix = format!("tools:{}:{version}:", self.digest);
+        let count = view.map_or(catalog.tools.len(), Vec::len);
+        let scope = if apps { "apps:" } else { "model:" };
+        let prefix = format!("tools:{}:{version}:{scope}", self.digest);
         let start = match params.get("cursor") {
             None => 0,
             Some(Value::String(cursor)) if cursor.len() <= MAX_CURSOR_BYTES => {
@@ -74,7 +95,7 @@ impl Pages {
             .map(|index| {
                 #[cfg(test)]
                 crate::test_work::record(|counts| counts.page_definitions += 1);
-                &catalog.tools[if legacy { self.legacy[index] } else { index }]
+                &catalog.tools[view.map_or(index, |view| view[index])]
             })
             .collect();
         let mut result = json!({"tools":tools});

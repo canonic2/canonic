@@ -15,6 +15,10 @@ test-focus: ## Run matching library tests; FILTER is required, TEST_TARGET selec
 	"$(CARGO)" nextest run --locked --all-features $(TEST_TARGET) $(CARGO_FLAGS) "$(FILTER)"
 
 .DEFAULT_GOAL := help
+.PHONY: test-app-ui
+test-app-ui: ## Exercise the compiled example's inline UI with an in-process host stub
+	node --test examples/apps/status.test.mjs
+
 .PHONY: help build coverage
 
 help: ## List local targets

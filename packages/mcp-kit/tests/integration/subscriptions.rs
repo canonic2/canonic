@@ -74,6 +74,61 @@ fn listen(host: &Host, id: Value, filters: Value) -> Value {
 }
 
 #[test]
+fn subscriptions_apps_only_replacement_preserves_ui_and_notifies_the_host() {
+    let mut options = options();
+    options.session.resources = None;
+    options
+        .session
+        .subscriptions
+        .as_mut()
+        .unwrap()
+        .resource_uris
+        .clear();
+    options.session.apps = Some(Arc::new(
+        canonic_mcp_kit::AppsCatalog::new(vec![canonic_mcp_kit::UiResource::new(
+            "ui://acme/status",
+            "Status",
+            "<p>Healthy</p>",
+        )])
+        .unwrap(),
+    ));
+    let (host, changes) = start(
+        Script::new(|_, _| panic!("UI reads bypass the handler")),
+        options,
+    );
+    let ack = listen(&host, json!("stream"), json!({"resourcesListChanged":true}));
+    assert_eq!(ack["params"]["notifications"]["resourcesListChanged"], true);
+    changes
+        .send(Change::Resources(Arc::new(
+            ResourceCatalog::new(vec![Resource::new("acme://report", "Report")], vec![]).unwrap(),
+        )))
+        .unwrap();
+    assert_eq!(
+        host.recv()["method"],
+        "notifications/resources/list_changed"
+    );
+    host.send(&request(json!(1), "resources/list", json!({})));
+    let list = host.recv();
+    let uris: Vec<_> = list["result"]["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|resource| resource["uri"].as_str().unwrap())
+        .collect();
+    assert_eq!(uris, vec!["acme://report", "ui://acme/status"]);
+    host.send(&request(
+        json!(2),
+        "resources/read",
+        json!({"uri":"ui://acme/status"}),
+    ));
+    assert_eq!(
+        host.recv()["result"]["contents"][0]["text"],
+        "<p>Healthy</p>"
+    );
+    host.finish().0.unwrap();
+}
+
+#[test]
 fn subscriptions_driver_delivers_while_busy_and_keeps_progress_on_its_rpc() {
     use canonic_mcp_kit::stdio::{FrameKind, ObservationKind as Kind, Settlement};
     let (observation, observed) = canonic_mcp_kit::stdio::observation_channel(4096).unwrap();

@@ -116,7 +116,7 @@ per-request metadata and require no handshake. Return `Outcome::Method` for a re
 Configuration rejects protocol-owned request and notification names in either
 list, even for disabled capabilities. This includes `server/discover`,
 `tools/call`, `resources/read`, `ping`, standard notifications and the entire
-`skills/*`, `tasks/*`, `subscriptions/*`, `prompts/*` and `completion/*`
+`skills/*`, `tasks/*`, `subscriptions/*`, `prompts/*`, `completion/*` and `ui/*`
 namespaces. The error identifies the conflicting name. Requests cannot use
 `notifications/*`; register `notifications/acme/changed` in
 `extension_notifications` instead.
@@ -142,7 +142,7 @@ options.extensions.insert("com.acme/widgets".into(), json!({"version": 2}));
 ```
 
 Declarations require modern protocol support, and their settings are at most
-64 KiB. The library adds the Skills and Tasks identifiers itself when those
+64 KiB. The library adds the Skills, Tasks and Apps identifiers itself when those
 features are enabled, so declaring them is refused. A declaration only
 advertises: implement what the extension requires, such as its methods in
 `extension_methods`.

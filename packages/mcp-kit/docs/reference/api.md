@@ -3,6 +3,9 @@
 | You want to | Use |
 | --- | --- |
 | Publish tools | `Tool`, `Annotations`, `Catalog::new` |
+| Publish interactive Apps | `AppsCatalog`, `UiResource`, `ToolUi`, `UiVisibility`, `SessionOptions::apps`; see [Apps](../guides/apps.md) |
+| Request a host sandbox policy | `UiMetadata`, `UiCsp`, `UiPermissions`, `UiPermission` |
+| Inspect Apps support or page another runtime's view | `Context::supports_apps`, `RequestContext::supports_apps`, `Session::supports_apps`, `apps::client_support`, `Catalog::list_page_for_client` |
 | Publish bundled workflows | `SkillCatalog`, `SkillDefinition`, `SkillFile`, `SessionOptions::skills` |
 | Publish generated workflows | `DynamicSkill`, `SkillCatalog::with_dynamic`; serve their files from `Request::Method`; see [generated skills](../guides/skills.md#publish-generated-skills) |
 | Serve skill directory reads | `SkillCatalog::with_directory_reads`, `ReadDirectoryResult`, `resource::DIRECTORY_MIME_TYPE`, `stdio::Outcome::Directory` |

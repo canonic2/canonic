@@ -62,7 +62,9 @@ pub(crate) fn channel(options: &crate::SessionOptions) -> (ChangeSender, mpsc::R
             sender,
             dispatcher: thread::current(),
             prompts: options.prompts.is_some(),
-            resources: options.resources.is_some() || options.skills.is_some(),
+            resources: options.resources.is_some()
+                || options.skills.is_some()
+                || options.apps.is_some(),
         },
         receiver,
     )
@@ -134,5 +136,33 @@ mod tests {
             .send(Change::ResourceUpdated("acme://report".into()))
             .unwrap();
         assert_eq!(receiver.try_iter().count(), 3);
+    }
+
+    #[test]
+    fn subscriptions_apps_only_sender_accepts_resource_replacements() {
+        let options = crate::SessionOptions {
+            apps: Some(Arc::new(
+                crate::AppsCatalog::new(vec![crate::UiResource::new(
+                    "ui://acme/status",
+                    "Status",
+                    "<p>Healthy</p>",
+                )])
+                .unwrap(),
+            )),
+            ..crate::SessionOptions::default()
+        };
+        let (sender, receiver) = channel(&options);
+        let resources = Arc::new(
+            crate::ResourceCatalog::new(
+                vec![crate::Resource::new("acme://report", "Report")],
+                vec![],
+            )
+            .unwrap(),
+        );
+        sender.send(Change::Resources(resources.clone())).unwrap();
+        let Change::Resources(queued) = receiver.try_recv().unwrap() else {
+            panic!("resource replacement")
+        };
+        assert!(Arc::ptr_eq(&resources, &queued));
     }
 }

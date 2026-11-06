@@ -44,19 +44,20 @@ and the `ModernOptions::tools_cache` hints, defaulting to zero TTL/private scope
   that another server uses the same page size.
 - Stop when `nextCursor` is absent; clients must support opaque strings,
   including empty strings from servers that issue them.
-- Keep the protocol revision consistent throughout traversal. A cursor from
-  another revision, catalog or listing kind is invalid.
+- Keep the protocol revision and Apps support consistent throughout traversal.
+  A cursor from another revision, visibility view, catalog or listing kind is invalid.
 
 MCP Kit emits nonempty cursors of at most 128 bytes. Malformed, foreign and
 out-of-range tool cursors return `-32602`. Restart listing without a cursor
 after a catalog change or an invalid-cursor error. Cursors are stable across
-reconnects when catalog content/order and protocol revision are identical.
+reconnects when catalog content/order, protocol revision and Apps view are identical.
 They carry no authority or retained server-side session state.
 
 Each page preserves the declaration order in `Catalog::new`. Legacy pages
 exclude tools whose output schema is incompatible with legacy clients before
 applying the page boundary. Hidden tools therefore do not create empty pages.
-Modern pages include the entire published catalog over the full traversal.
+With [Apps](apps.md), clients without support also exclude app-only tools before
+paging. Supported hosts receive those tools and enforce frame/model visibility.
 
 ## Runtime and output limits
 
@@ -78,6 +79,8 @@ page. The supported version strings are `2025-06-18`, `2025-11-25` and
 `2026-07-28`; unknown revisions fail. `Catalog::listing()` retains the full
 unfiltered catalog payload, and `Catalog::tools()` returns the full slice.
 See [driving a session](session.md) for transport and ID ownership.
+For Apps-aware direct paging, use `list_page_for_client` with validated
+request-local support; `list_page` selects the view without Apps support.
 
 [Resources](resources.md), [prompts](prompts.md) and [Skills](skills.md) have
 their own cursor contracts. Enable [subscriptions](subscriptions.md) to publish

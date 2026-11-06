@@ -35,6 +35,7 @@
 //! # Ok::<(), canonic_mcp_kit::CatalogError>(())
 //! ```
 
+pub mod apps;
 pub mod completion;
 pub mod content;
 pub mod control;
@@ -59,6 +60,10 @@ pub mod task;
 mod test_work;
 pub mod tool;
 
+pub use apps::{
+    AppsCatalog, AppsError, ToolUi, UiCsp, UiMetadata, UiPermission, UiPermissions, UiResource,
+    UiVisibility,
+};
 pub use completion::{
     CompleteRequest, CompleteResult, CompletionArgument, CompletionError, CompletionReference,
 };

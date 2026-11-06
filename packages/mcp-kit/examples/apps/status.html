@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme status</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; padding: 24px; }
+  h1 { margin: 0 0 12px; font-size: 1.25rem; }
+  output { display: block; margin-bottom: 16px; }
+  button { padding: 8px 16px; font: inherit; cursor: pointer; }
+</style>
+<h1>Acme status</h1>
+<output id="status" aria-live="polite">Connecting to the host…</output>
+<button id="refresh" type="button" disabled>Refresh status</button>
+<script>
+(() => {
+  const status = document.getElementById("status");
+  const refresh = document.getElementById("refresh");
+  const pending = new Map();
+  let nextId = 1;
+  let hostOrigin = "*";
+  const send = message => window.parent.postMessage({ jsonrpc: "2.0", ...message }, hostOrigin);
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    send({ id, method, params });
+  });
+  const render = result => {
+    const data = result?.structuredContent;
+    status.textContent = data ? `${data.service}: ${data.status}` :
+      (result?.content ?? []).filter(block => block.type === "text").map(block => block.text).join("\n");
+  };
+  window.addEventListener("message", event => {
+    if (event.source !== window.parent || !event.data || event.data.jsonrpc !== "2.0") return;
+    if (hostOrigin !== "*" && event.origin !== hostOrigin) return;
+    const message = event.data;
+    if (Object.hasOwn(message, "method")) {
+      if (message.method === "ui/notifications/tool-result") render(message.params);
+      else if (message.method === "ui/notifications/tool-cancelled") status.textContent = "Status request cancelled.";
+      else if (message.method === "ping" && message.id !== undefined) send({ id: message.id, result: {} });
+      return;
+    }
+    const hasResult = Object.hasOwn(message, "result");
+    const hasError = Object.hasOwn(message, "error");
+    if (hasResult === hasError || !pending.has(message.id)) return;
+    if (hasError && (!message.error || !Number.isInteger(message.error.code) || typeof message.error.message !== "string")) return;
+    const response = pending.get(message.id);
+    pending.delete(message.id);
+    if (hasError) response.reject(new Error(message.error.message));
+    else response.resolve({ result: message.result, origin: event.origin });
+  });
+  refresh.addEventListener("click", async () => {
+    refresh.disabled = true;
+    try {
+      const response = await request("tools/call", { name: "acme_refresh_status", arguments: {} });
+      render(response.result);
+    } catch (error) { status.textContent = error.message; }
+    finally { refresh.disabled = false; }
+  });
+  request("ui/initialize", {
+    appInfo: { name: "Acme status", version: "1" },
+    appCapabilities: { availableDisplayModes: ["inline"] },
+    protocolVersion: "2026-01-26"
+  }).then(({ result, origin }) => {
+    if (result?.protocolVersion !== "2026-01-26") throw new Error("Unsupported host UI protocol.");
+    hostOrigin = origin === "null" ? "*" : origin;
+    send({ method: "ui/notifications/initialized", params: {} });
+    status.textContent = "Waiting for the status result…";
+    refresh.disabled = !result.hostCapabilities?.serverTools;
+  }).catch(error => { status.textContent = error.message; });
+})();
+</script>
+</html>

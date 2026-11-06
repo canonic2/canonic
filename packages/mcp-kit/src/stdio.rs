@@ -344,6 +344,7 @@ pub enum ServeError {
 
 /// The context of one running request.
 pub struct Context {
+    apps: bool,
     protocol: Option<Arc<crate::RequestContext>>,
     grant: Option<Arc<crate::http::Grant>>,
     id: Option<Value>,
@@ -360,6 +361,11 @@ struct Progress {
 }
 
 impl Context {
+    /// Whether this RPC's client supports Apps. Visibility never grants authority.
+    #[must_use]
+    pub fn supports_apps(&self) -> bool {
+        self.apps
+    }
     /// Captured tool output contract; retain it with the producer of durable tasks.
     #[must_use]
     pub fn result_schema(&self) -> Option<&crate::ResultSchema> {

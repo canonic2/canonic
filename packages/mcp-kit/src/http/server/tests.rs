@@ -12,6 +12,7 @@ use std::{
     sync::mpsc::Sender,
 };
 
+mod apps;
 mod auth;
 #[cfg(feature = "authorization-server")]
 mod oauth;
@@ -32,6 +33,12 @@ impl Handler for Acme {
         let keyed = matches!(request, Request::Tool(call) if call.name == "acme_keyed");
         crate::stdio::Admission {
             key: keyed.then(|| "acme".to_owned()),
+            timeout: match request {
+                Request::Tool(call) => call.arguments["timeoutMs"]
+                    .as_u64()
+                    .map(Duration::from_millis),
+                _ => None,
+            },
             ..crate::stdio::Admission::default()
         }
     }
@@ -58,6 +65,9 @@ impl Handler for Acme {
         let text =
             |text: &str| Outcome::Tool(ToolResult::success(vec![crate::Content::text(text)]));
         match call.name.as_str() {
+            "acme_echo" if call.arguments["empty"] == true => {
+                Outcome::Tool(ToolResult::success(vec![]))
+            }
             "acme_echo" => text(call.arguments["text"].as_str().unwrap_or_default()),
             "acme_whoami" => text(
                 context
@@ -118,6 +128,10 @@ fn tool(name: &str) -> Tool {
 }
 
 fn catalog() -> Arc<Catalog> {
+    catalog_with_apps(false)
+}
+
+fn catalog_with_apps(apps: bool) -> Arc<Catalog> {
     Arc::new(
         Catalog::new(
             [
@@ -129,7 +143,19 @@ fn catalog() -> Arc<Catalog> {
                 "acme_whoami",
             ]
             .into_iter()
-            .map(tool)
+            .map(|name| {
+                let mut tool = tool(name);
+                if apps {
+                    tool.ui = Some(crate::ToolUi::new(self::apps::URI));
+                }
+                if apps && name == "acme_whoami" {
+                    tool.ui = Some(crate::ToolUi {
+                        visibility: Some(vec![crate::UiVisibility::App]),
+                        ..crate::ToolUi::new(self::apps::URI)
+                    });
+                }
+                tool
+            })
             .collect(),
         )
         .unwrap(),
@@ -146,16 +172,6 @@ struct Server {
 
 impl Server {
     fn start(http: HttpOptions, subscriptions: Option<SubscriptionOptions>) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = listener.local_addr().unwrap();
-        let (sender, events) = mpsc::channel();
-        let handler = Arc::new(Acme {
-            changes: Mutex::new(None),
-            events: Mutex::new(sender),
-            started: AtomicUsize::new(0),
-            keyed: AtomicUsize::new(0),
-            keyed_peak: AtomicUsize::new(0),
-        });
         let options = Options {
             session: SessionOptions {
                 modern: Some(ModernOptions::new(ServerInfo::new("acme", "1.0.0"))),
@@ -166,10 +182,25 @@ impl Server {
             lanes: vec![Lane::new("tools", 4, 16)],
             ..Options::default()
         };
+        Self::configured(http, options)
+    }
+
+    fn configured(http: HttpOptions, options: Options) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (sender, events) = mpsc::channel();
+        let handler = Arc::new(Acme {
+            changes: Mutex::new(None),
+            events: Mutex::new(sender),
+            started: AtomicUsize::new(0),
+            keyed: AtomicUsize::new(0),
+            keyed_peak: AtomicUsize::new(0),
+        });
+        let catalog = catalog_with_apps(options.session.apps.is_some());
         let shutdown = Shutdown::new();
         let serving = {
             let (handler, shutdown) = (Arc::clone(&handler), shutdown.clone());
-            thread::spawn(move || serve(handler, catalog(), listener, &http, &options, &shutdown))
+            thread::spawn(move || serve(handler, catalog, listener, &http, &options, &shutdown))
         };
         Self {
             address,

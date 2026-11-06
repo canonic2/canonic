@@ -16,6 +16,7 @@ nextest, doctests, rustdoc and cargo-deny.
 | API docs | `cargo doc --locked --all-features --no-deps --document-private-items` |
 | Dependencies | `cargo deny check` |
 | Coverage report | `make coverage` (writes `target/llvm-cov/`) |
+| Apps example's inline script and host bridge | `make test-app-ui` (Node built-in tests; no browser or network) |
 | Release build | `make build` |
 
 `CARGO_FLAGS=--offline` uses cached dependencies. Make prefers

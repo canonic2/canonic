@@ -26,6 +26,9 @@ from your own runtime.
   URI, with paginated catalogs and parameterized addresses.
 - **Optional prompts.** Publish user-selected conversation starters with checked
   string arguments, paginated discovery and typed messages.
+- **Optional MCP Apps.** Link tools to bundled HTML dashboards, with typed UI
+  metadata, app-only actions and text fallback. Compatible hosts render them;
+  the library serves immutable documents through the existing drivers.
 - **Optional completion.** Suggest prompt arguments and resource-template
   variables using validated references and contextual string inputs.
 - **Bundled skills.** Publish workflows alongside their tools, with parsed
@@ -137,6 +140,7 @@ authority by itself.
 - [Subscriptions and change notifications](docs/guides/subscriptions.md)
 - [User confirmation](docs/guides/confirmation.md)
 - [Resources and templates](docs/guides/resources.md)
+- [Interactive MCP Apps](docs/guides/apps.md)
 - [Reusable prompts](docs/guides/prompts.md)
 - [Argument completion](docs/guides/completion.md)
 - [Audio and content hints](docs/guides/audio.md)

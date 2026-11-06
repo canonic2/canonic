@@ -1,6 +1,7 @@
 //! Drives the stdio server through in-memory pipes, as a host would, and the
 //! HTTP exchange from an independent runtime without sockets.
 
+mod apps;
 mod completion;
 mod confirmation;
 mod contention;

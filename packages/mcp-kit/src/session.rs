@@ -35,6 +35,10 @@ pub const DEFAULT_MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 /// Connection limits and product extension methods.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionOptions {
+    /// Optional immutable MCP Apps documents and typed tool UI integration.
+    pub apps: Option<Arc<crate::AppsCatalog>>,
+    /// Cache policy for modern immutable UI reads.
+    pub apps_cache: crate::CachePolicy,
     /// Enable both initialization-based revisions; disabling requires modern support.
     /// The HTTP driver always disables legacy protocols in its session.
     pub legacy_protocols: bool,
@@ -71,6 +75,8 @@ pub struct SessionOptions {
 impl Default for SessionOptions {
     fn default() -> Self {
         Self {
+            apps: None,
+            apps_cache: crate::CachePolicy::default(),
             legacy_protocols: true,
             subscriptions: None,
             modern: None,
@@ -347,6 +353,7 @@ pub struct Session {
     options: SessionOptions,
     phase: Phase,
     client: Option<Client>,
+    legacy_apps: bool,
     received: u64,
     outstanding: HashSet<String>,
     confirmation: Option<Value>,
@@ -383,7 +390,9 @@ impl Session {
     /// Use [`Self::try_new`] to report configuration errors before accepting input.
     #[must_use]
     pub fn new(catalog: Arc<Catalog>, mut options: SessionOptions) -> Self {
-        let configuration_error = configure(&mut options).err();
+        let configuration_error = configure(&mut options)
+            .and_then(|()| crate::apps::validate_configuration(&catalog, options.apps.as_deref()))
+            .err();
         let identity = Arc::new(
             options
                 .modern
@@ -397,6 +406,7 @@ impl Session {
             options,
             phase: Phase::New,
             client: None,
+            legacy_apps: false,
             received: 0,
             outstanding: HashSet::new(),
             confirmation: None,
@@ -439,6 +449,18 @@ impl Session {
     #[must_use]
     pub fn client(&self) -> Option<&Client> {
         self.client.as_ref()
+    }
+
+    /// Whether an admitted RPC's client declared Apps support. This grants no authority.
+    /// Modern calls use their captured context; legacy calls use the negotiated client.
+    #[must_use]
+    pub fn supports_apps(&self, id: Option<&Value>) -> bool {
+        id.and_then(|id| self.request_context(id))
+            .map_or_else(|| self.legacy_apps(), |context| context.supports_apps())
+    }
+
+    fn legacy_apps(&self) -> bool {
+        self.legacy_apps
     }
 
     /// Whether the client sent `notifications/initialized` after initialization.
@@ -562,7 +584,12 @@ impl Session {
         if self.options.completions {
             result["capabilities"]["completions"] = json!({});
         }
+        if self.options.apps.is_some() && client.protocol_version == LATEST_PROTOCOL_VERSION {
+            result["capabilities"]["extensions"] = json!({crate::apps::EXTENSION:{}});
+        }
         self.phase = Phase::Negotiated;
+        self.legacy_apps = client.protocol_version == LATEST_PROTOCOL_VERSION
+            && crate::apps::client_support(&client.capabilities).unwrap_or(false);
         self.client = Some(client);
         rpc::success(id, result)
     }
@@ -777,7 +804,7 @@ impl Session {
                 "Invalid ping parameters",
             )),
             "initialize" => match self.phase {
-                Phase::New => match client(&params) {
+                Phase::New => match client(&params, self.options.apps.is_some()) {
                     Ok(client) => {
                         self.phase = Phase::Initializing {
                             id: id.clone(),
@@ -804,12 +831,16 @@ impl Session {
                 let Some(client) = &self.client else {
                     return reply(RpcError::new(rpc::SERVER_ERROR, "Server not initialized"));
                 };
-                match self.catalog.list_page(&params, &client.protocol_version) {
+                match self.catalog.list_page_for_client(
+                    &params,
+                    &client.protocol_version,
+                    self.legacy_apps(),
+                ) {
                     Ok(result) => Inbound::Reply(rpc::success(id, result)),
                     Err(error) => reply(error),
                 }
             }
-            "tools/call" => self.tool_call(id, &params, false),
+            "tools/call" => self.tool_call(id, &params, false, self.legacy_apps()),
             _ if method.starts_with("completion/") => self.completion_request(id, method, &params),
             _ if method.starts_with("prompts/") => self.prompt_request(id, method, &params),
             "resources/list" | "resources/templates/list" | "resources/read" => {
@@ -832,16 +863,20 @@ impl Session {
         }
     }
 
-    fn tool_call(&mut self, id: Value, params: &Value, modern: bool) -> Inbound {
+    fn tool_call(&mut self, id: Value, params: &Value, modern: bool, apps: bool) -> Inbound {
         let call = match ToolCall::from_params(params) {
             Ok(call) => call,
             Err(error) => return Inbound::Reply(rpc::failure(id, &error)),
         };
-        let Some(_) = self
-            .catalog
-            .result_schema(&call.name)
-            .filter(|output| modern || output.legacy_compatible())
-        else {
+        let Some(_) = self.catalog.result_schema(&call.name).filter(|output| {
+            (modern || output.legacy_compatible())
+                && (apps
+                    || !self
+                        .catalog
+                        .get(&call.name)
+                        .and_then(|tool| tool.ui.as_ref())
+                        .is_some_and(crate::ToolUi::app_only))
+        }) else {
             return Inbound::Reply(rpc::failure(
                 id,
                 &RpcError::new(rpc::INVALID_PARAMS, "Unknown tool"),
@@ -874,6 +909,21 @@ impl Session {
             return Inbound::Reply(rpc::failure(id, &error));
         }
         let uri = params["uri"].as_str().unwrap_or_default();
+        if let Some(apps) = &self.options.apps
+            && crate::apps::is_ui(uri)
+        {
+            return match apps.read(uri) {
+                Some(read) => {
+                    self.outstanding.insert(id.to_string());
+                    Inbound::BundledResource {
+                        id,
+                        read,
+                        progress_token: params["_meta"].get("progressToken").cloned(),
+                    }
+                }
+                None => Inbound::Reply(rpc::failure(id, &crate::resource::not_found(uri))),
+            };
+        }
         match self
             .options
             .skills
@@ -995,6 +1045,9 @@ impl Session {
         let skills = self.options.skills.as_ref();
         let generated = skills.is_some_and(|skills| skills.dynamic_namespace(uri));
         let cache_override = match method {
+            "resources/read" if self.options.apps.is_some() && crate::apps::is_ui(uri) => {
+                Some(self.options.apps_cache)
+            }
             "resources/list" if skills.is_some() => {
                 Some(options.resources_cache.merged(options.skills_cache))
             }
@@ -1022,6 +1075,11 @@ impl Session {
             Ok(context) => context,
             Err(error) => return failure(error),
         };
+        if self.options.apps.is_some()
+            && let Err(error) = context.validate_apps()
+        {
+            return failure(error);
+        }
         let event = if method.starts_with("subscriptions/") {
             self.listen(id.clone(), method, &params)
         } else {
@@ -1093,10 +1151,12 @@ impl Session {
             }
             // Bundled files never ask for input; dynamic skill files are consumer reads.
             if method == "resources/read"
-                && self.options.skills.as_ref().is_some_and(|skills| {
-                    let uri = params["uri"].as_str().unwrap_or_default();
-                    skills.owns(uri) && !skills.dynamic_namespace(uri)
-                })
+                && ((self.options.apps.is_some()
+                    && crate::apps::is_ui(params["uri"].as_str().unwrap_or_default()))
+                    || self.options.skills.as_ref().is_some_and(|skills| {
+                        let uri = params["uri"].as_str().unwrap_or_default();
+                        skills.owns(uri) && !skills.dynamic_namespace(uri)
+                    }))
                 && (context.request_state.is_some() || context.input_responses.is_some())
             {
                 return failure(crate::modern::invalid(
@@ -1109,14 +1169,15 @@ impl Session {
             }
         }
         match method {
-            "tools/list" => match self
-                .catalog
-                .list_page(&params, crate::modern::PROTOCOL_VERSION)
-            {
+            "tools/list" => match self.catalog.list_page_for_client(
+                &params,
+                crate::modern::PROTOCOL_VERSION,
+                context.supports_apps(),
+            ) {
                 Ok(result) => Inbound::Reply(rpc::success(id, result)),
                 Err(error) => failure(error),
             },
-            "tools/call" => self.tool_call(id, &params, true),
+            "tools/call" => self.tool_call(id, &params, true, context.supports_apps()),
             "resources/list" | "resources/templates/list" | "resources/read" => {
                 let event = self.resource_request(id, method, params);
                 match event {
@@ -1194,6 +1255,9 @@ impl Session {
             }
         }
         let mut extensions = self.options.extensions.clone();
+        if self.options.apps.is_some() {
+            extensions.insert(crate::apps::EXTENSION.into(), json!({}));
+        }
         if let Some(skills) = &self.options.skills {
             extensions.insert(
                 crate::skill::EXTENSION.into(),
@@ -1232,6 +1296,7 @@ fn reserved_extension_name(method: &str) -> bool {
         "subscriptions/",
         "prompts/",
         "completion/",
+        "ui/",
     ]
     .iter()
     .any(|prefix| method.starts_with(prefix))
@@ -1320,6 +1385,7 @@ fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
             !crate::metadata::extension_identifier(identifier)
                 || identifier == crate::skill::EXTENSION
                 || identifier == crate::task::EXTENSION
+                || identifier == crate::apps::EXTENSION
                 || !settings.is_object()
         });
         let declarations = Value::Object(options.extensions.clone());
@@ -1328,7 +1394,7 @@ fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
                 .is_err()
         {
             return Err(ConfigurationError(
-                "extensions need valid identifiers other than Skills and Tasks, with bounded settings objects".into(),
+                "extensions need valid identifiers other than Skills, Tasks and Apps, with bounded settings objects".into(),
             ));
         }
     }
@@ -1339,6 +1405,7 @@ fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
             "modern server metadata is invalid or exceeds its budget".into(),
         ));
     }
+    crate::apps::configure(options)?;
     if let Some(skills) = &options.skills {
         if options.modern.is_none() {
             return Err(ConfigurationError(
@@ -1354,7 +1421,7 @@ fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
     Ok(())
 }
 
-fn client(params: &Value) -> Result<Client, RpcError> {
+fn client(params: &Value, apps: bool) -> Result<Client, RpcError> {
     let invalid = || RpcError::new(rpc::INVALID_PARAMS, "Invalid initialization parameters");
     if !rpc::only(
         params,
@@ -1388,6 +1455,9 @@ fn client(params: &Value) -> Result<Client, RpcError> {
     } else {
         LATEST_PROTOCOL_VERSION
     };
+    if apps && protocol_version == LATEST_PROTOCOL_VERSION {
+        crate::apps::client_support(capabilities)?;
+    }
     let form_elicitation = capabilities["elicitation"]
         .as_object()
         .is_some_and(|elicitation| {
