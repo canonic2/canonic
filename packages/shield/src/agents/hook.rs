@@ -117,7 +117,7 @@ fn translate_logged(
     )
 }
 
-fn translate_event(
+pub(crate) fn translate_event(
     root: &Path,
     adapter: &dyn AgentAdapter,
     bytes: &[u8],
@@ -135,7 +135,7 @@ fn translate_event(
             deny("invalid-host-input")
         };
     };
-    let actual = adapter.input_event(&host);
+    let actual = adapter.input_event_for(&host, event);
     if actual != Some(event) {
         return match actual {
             // The host awaits a reply in the supplied authorization event's format.
@@ -148,11 +148,15 @@ fn translate_event(
             _ => deny("invalid-host-event"),
         };
     }
-    let Some(mut request) = adapter.request(&host) else {
+    let Some(mut request) = adapter.request_for_project(&host, event, root) else {
         return if event.post() {
             json!({})
         } else {
-            deny("invalid-host-input")
+            let mut reply = feedback::deny("invalid-host-input");
+            if let Some(guidance) = adapter.invalid_input_guidance() {
+                reply.agent_context = Some(guidance.into());
+            }
+            adapter.reply(event, &reply)
         };
     };
     if !request.event.post() {
@@ -186,9 +190,7 @@ fn handle(
     let context = crate::review::open(root).ok()?;
     log.event("hook_stage", json!({"stage":"project_open_ready"}));
     log.event("hook_stage", json!({"stage":"registration_ready"}));
-    if let Some(name) = request.tool.strip_prefix("mcp__shield__")
-        && crate::review::mcp::is_tool(name)
-    {
+    if let Some(name) = request.shield_tool {
         return Some(shield_tool_reply(adapter, request, name, log));
     }
     if request.operation.is_none() && request.harmless && request.event == Event::Permission {

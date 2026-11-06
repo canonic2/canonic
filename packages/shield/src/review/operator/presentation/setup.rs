@@ -358,7 +358,7 @@ fn tool_permissions(output: &mut String, value: &Value) {
         );
         let _ = writeln!(
             output,
-            "  Agents can read and write system temporary folders. Session files use each agent's supported mappings."
+            "  Agents can read/write their skill folders and system temporary folders. Session files use each agent's supported mappings."
         );
     }
 }

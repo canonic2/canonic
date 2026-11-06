@@ -95,22 +95,31 @@ pub(in crate::review) fn edit(
     name: &str,
     transform: impl FnOnce(Option<&str>) -> Result<String, Error>,
 ) -> Result<(), Error> {
+    edit_optional(root, changes, name, |source| transform(source).map(Some))
+}
+
+pub(in crate::review) fn edit_optional(
+    root: &Path,
+    changes: &mut Vec<Change>,
+    name: &str,
+    transform: impl FnOnce(Option<&str>) -> Result<Option<String>, Error>,
+) -> Result<(), Error> {
     let index = changes.iter().position(|change| change.path == name);
     let before = match index {
         Some(index) => changes[index].after.clone(),
         None => read(root, name)?,
     };
     let after = transform(before.as_deref())?;
-    if after.len() as u64 > MAX_CONFIG {
+    if after.as_ref().is_some_and(|s| s.len() as u64 > MAX_CONFIG) {
         return Err(Error::Invalid("native configuration exceeds limit"));
     }
     if let Some(index) = index {
-        changes[index].after = Some(after);
+        changes[index].after = after;
     } else {
         changes.push(Change {
             path: name.into(),
             before,
-            after: Some(after),
+            after,
         });
     }
     Ok(())

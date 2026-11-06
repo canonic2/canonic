@@ -2,6 +2,31 @@
 use super::{Context, Error};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+
+/// This owner appoints only the normalized receipt and stored decision slots.
+pub(super) fn redact_result(value: &mut Value) -> bool {
+    let mut paths = Vec::new();
+    let mut entry_paths = Vec::new();
+    if let Some(entries) = value["entries"].as_array() {
+        entry_paths.extend((0..entries.len()).map(|i| format!("/entries/{i}")));
+    } else if value.get("entry_id").is_some() {
+        entry_paths.push(String::new());
+    }
+    for prefix in entry_paths {
+        paths.push(format!("{prefix}/authorization"));
+        if let Some(observations) = value
+            .pointer(&format!("{prefix}/observations"))
+            .and_then(Value::as_array)
+        {
+            paths.extend(
+                (0..observations.len())
+                    .map(|i| format!("{prefix}/observations/{i}/details/authorization")),
+            );
+        }
+    }
+    crate::evidence::redact_with_receipts(value, &paths)
+}
+
 #[derive(Default)]
 pub(super) struct Query<'a> {
     pub entry: Option<&'a str>,
@@ -10,7 +35,20 @@ pub(super) struct Query<'a> {
     pub agent: Option<&'a str>,
 }
 
+#[cfg(test)]
 pub(super) fn inspect(context: &Context, input: &Query<'_>) -> Result<Value, Error> {
+    inspect_filtered(context, input, None, None)
+}
+
+pub(super) fn inspect_filtered(
+    context: &Context,
+    input: &Query<'_>,
+    authorization_kind: Option<&str>,
+    grant_id: Option<&str>,
+) -> Result<Value, Error> {
+    if authorization_kind.is_some_and(|k| k != "session_grant") {
+        return Err(Error::Invalid("authorization_kind must be session_grant"));
+    }
     let state = crate::review::storage::Store::open(std::path::Path::new(&context.project_root))?
         .read_history()?;
     state.check(context)?;
@@ -21,6 +59,14 @@ pub(super) fn inspect(context: &Context, input: &Query<'_>) -> Result<Value, Err
             (!input.denied || row["denied"] == true)
                 && (!input.approved || row["approved"] == true)
                 && input.agent.is_none_or(|a| agent_matches(row, a))
+                && authorization_kind.is_none_or(|k| row["authorization"]["kind"] == k)
+                && grant_id.is_none_or(|id| {
+                    row["authorization"]["grants"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .any(|g| g["grant_id"] == id)
+                })
         })
         .collect();
     rows.sort_by(|a, b| {
@@ -128,6 +174,7 @@ fn retain_decision(entry: &mut Value, details: &Value) {
         "code",
         "ask_fallback",
         "integration",
+        "authorization",
     ] {
         entry[field] = details[field].clone();
     }
@@ -193,6 +240,28 @@ fn mark_missing(row: &mut Value, field: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn history_redaction_exempts_only_core_owned_receipt_slots() {
+        let receipt = json!({"kind":"session_grant","grants":[{"grant_id":"grant-acme","approval_id":"approval-acme","operation_refs":[],"override_denies":[]}]});
+        let mut value = json!({"entries":[{"entry_id":"acme","authorization":receipt,
+            "command":{"original_input":{"authorization":receipt}},
+            "observations":[{"details":{"authorization":receipt,"original_input":{"authorization":receipt}}}]}]});
+        assert!(redact_result(&mut value));
+        assert_eq!(value["entries"][0]["authorization"], receipt);
+        assert_eq!(
+            value["entries"][0]["observations"][0]["details"]["authorization"],
+            receipt
+        );
+        assert_eq!(
+            value["entries"][0]["command"]["original_input"]["authorization"],
+            "[REDACTED]"
+        );
+        assert_eq!(
+            value["entries"][0]["observations"][0]["details"]["original_input"]["authorization"],
+            "[REDACTED]"
+        );
+    }
 
     fn decision(id: &str, host: &str, tool: &Value, outcome: &str) -> Value {
         json!({"kind":"decision","links":{"request_id":id},

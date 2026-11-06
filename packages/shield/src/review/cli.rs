@@ -49,8 +49,5 @@ fn recorded(context: &Context, agent: &str) -> bool {
         })
         .ok()
         .flatten()
-        .is_some_and(|registration| {
-            registration.agents.contains_key(adapter.spec().id)
-                || registration.box_definition.is_some()
-        })
+        .is_some_and(|registration| registration.covers(adapter.spec().id))
 }

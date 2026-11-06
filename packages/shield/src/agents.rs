@@ -3,21 +3,46 @@ use crate::enforcement::protocol::NativeApproval;
 use serde_json::Value;
 use std::path::Path;
 
+mod antigravity;
 mod claude_code;
 mod codex;
 pub(crate) mod detection;
 mod feedback;
+mod gemini;
 mod hook;
+mod json_mcp;
 mod mcp_scopes;
 pub(crate) mod review;
 pub(crate) mod setup;
 mod working_files;
 pub(crate) use hook::run;
+#[cfg(test)]
+pub(crate) use hook::translate_event;
 
-pub(crate) static ADAPTERS: &[&dyn AgentAdapter] = &[&claude_code::ClaudeCode, &codex::Codex];
+pub(crate) static ADAPTERS: &[&dyn AgentAdapter] = &[
+    &claude_code::ClaudeCode,
+    &codex::Codex,
+    &gemini::Gemini,
+    &antigravity::Antigravity,
+];
 
 pub(crate) fn find(name: &str) -> Option<&'static dyn AgentAdapter> {
     ADAPTERS.iter().copied().find(|a| a.spec().id == name)
+}
+
+/// A valid vendor tool either maps to an operation or needs no operation check.
+pub(crate) enum ToolMapping {
+    Operation(Value),
+    Unmapped,
+}
+
+impl ToolMapping {
+    fn into_operation(self) -> Option<Value> {
+        match self {
+            Self::Operation(value) => Some(value),
+            Self::Unmapped => None,
+        }
+    }
 }
 
 /// The folders a portable rule must not name, discovered the way every adapter
@@ -91,8 +116,10 @@ pub(crate) struct Request<'a> {
     pub tool: &'a str,
     pub input: &'a Value,
     pub tool_id: Option<&'a str>,
+    /// Verified native identity of a tool served by Shield itself.
+    pub shield_tool: Option<&'a str>,
     pub session: &'a str,
-    pub cwd: &'a str,
+    pub cwd: std::borrow::Cow<'a, str>,
     pub operation: Option<Value>,
     pub context_complete: bool,
     pub working_files: Option<crate::location::WorkingFiles>,
@@ -163,14 +190,61 @@ pub(crate) trait AgentAdapter: Sync {
     fn is_installed(&self, _search_path: &[std::path::PathBuf]) -> bool {
         false
     }
+    /// The host's hook schema is representable by the current Box publisher.
+    fn supports_box_hooks(&self) -> bool {
+        false
+    }
+    /// Whether Box can publish this host's native MCP tool approval settings.
+    fn supports_box_permissions(&self) -> bool {
+        false
+    }
+    /// Portable Box hook settings, with timeout measured in seconds.
+    fn box_hook(&self, command: &str) -> Option<Value> {
+        let group = self.hook_group(command);
+        let (matcher, settings) = (&group["matcher"], &group["hooks"][0]);
+        (matcher.is_string()
+            && settings["timeout"].is_u64()
+            && settings["statusMessage"].is_string()
+            && group
+                == serde_json::json!({"matcher":matcher,"hooks":[{
+                "type":"command","command":command,"timeout":settings["timeout"],
+                "statusMessage":settings["statusMessage"]}]}))
+        .then(|| {
+            serde_json::json!({"matcher":matcher,"command":command,
+                "timeout":settings["timeout"],"status_message":settings["statusMessage"]})
+        })
+    }
+    /// Known native releases that advertise forms without a human-facing UI.
+    fn native_forms_unavailable(&self, _version: Option<&str>) -> bool {
+        false
+    }
     fn review(&self) -> &'static dyn review::ReviewAdapter {
         review::resolve(None)
+    }
+    /// Vendor-emitted MCP session metadata, never client display-name inference.
+    fn mcp_session<'a>(&self, _metadata: &'a serde_json::Map<String, Value>) -> Option<&'a str> {
+        None
     }
     fn spec(&self) -> &'static AgentSpec;
     /// Normalize modeled operations and reject malformed mapped input. Shared
     /// native dispatch delegates unmodeled internal tools to host permissions;
     /// encoded MCP calls must retain their connection mapping and validation.
     fn request<'a>(&self, host: &'a Value) -> Option<Request<'a>>;
+    /// Hosts without an event field use the event pinned in the installed command.
+    fn request_for_event<'a>(&self, host: &'a Value, _event: Event) -> Option<Request<'a>> {
+        self.request(host)
+    }
+    fn request_for_project<'a>(
+        &self,
+        host: &'a Value,
+        event: Event,
+        _project: &Path,
+    ) -> Option<Request<'a>> {
+        self.request_for_event(host, event)
+    }
+    fn invalid_input_guidance(&self) -> Option<&'static str> {
+        None
+    }
     fn working_files(&self, host: &Value, project: &Path) -> crate::location::WorkingFiles;
     fn working_file_categories(&self) -> &'static [&'static str] {
         &[]
@@ -256,6 +330,9 @@ pub(crate) trait AgentAdapter: Sync {
     fn input_event(&self, host: &Value) -> Option<Event> {
         self.event(text(&host["hook_event_name"], 128)?)
     }
+    fn input_event_for(&self, host: &Value, _expected: Event) -> Option<Event> {
+        self.input_event(host)
+    }
 }
 
 fn mcp_operation(tool: &str, input: &Value) -> Option<Value> {
@@ -322,8 +399,11 @@ fn envelope<'a>(host: &'a Value, adapter: &dyn AgentAdapter) -> Option<Request<'
         tool: text(&host["tool_name"], 128)?,
         input: &host["tool_input"],
         tool_id,
+        shield_tool: text(&host["tool_name"], 128)?
+            .strip_prefix("mcp__shield__")
+            .filter(|name| crate::review::mcp::is_tool(name)),
         session: text(&host["session_id"], 4096)?,
-        cwd,
+        cwd: cwd.into(),
         operation: None,
         context_complete: true,
         working_files: None,

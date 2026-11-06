@@ -23,11 +23,15 @@ For an existing project, choose a task below or go to
 
 - [Manage policy, approvals, and history](project-review.md): review changes,
   manage protected files, add access paths, and inspect requests.
+- [Approve a batch for one conversation](session-grants.md): reuse a bounded,
+  temporary approval while keeping project policy unchanged.
 - [Find and manage permission packs](local-registry.md): search, inspect, install,
   configure, update, and remove packs; register your own sources.
 - [Connect Claude and Codex](claude-project.md): load hooks and MCP directly or
   through Box, understand request coverage, and check the limits of native
   interception.
+- [Connect Gemini and Antigravity](google-agents.md): set up native integrations,
+  understand confirmation and session access, and check verification limits.
 - [Configure project MCP servers](mcp-connections.md): bind connections and pack
   permissions, review host projections, and keep local stdio settings private.
 - [Troubleshoot Shield](troubleshooting.md): investigate unexpected decisions,

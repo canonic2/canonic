@@ -106,6 +106,14 @@ fn hash(value: &Value) -> String {
 }
 
 impl HookRequest {
+    /// Retain a short terminal receipt for idempotent denial, never permission.
+    pub(super) fn retained_id(&self, time: u64) -> Option<&str> {
+        self.live_id(time).or_else(|| {
+            (self.status == "revoked"
+                && time < self.pending_expires_at_ms.saturating_add(PENDING_MS))
+            .then_some(self.request_id.as_str())
+        })
+    }
     pub(super) fn live_id(&self, time: u64) -> Option<&str> {
         let live = match (self.status.as_str(), &self.grant) {
             ("pending", None) => time < self.pending_expires_at_ms,
@@ -186,8 +194,12 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
             || [&row.agent, &row.session_id, &row.cwd, &row.tool]
                 .iter()
                 .any(|field| field.is_empty() || field.len() > 4096)
-            || !matches!(row.status.as_str(), "pending" | "approved" | "consumed")
-            || (row.status == "pending") != row.grant.is_none();
+            || !matches!(
+                row.status.as_str(),
+                "pending" | "approved" | "consumed" | "revoked"
+            )
+            || (row.status == "pending" && row.grant.is_some())
+            || (matches!(row.status.as_str(), "approved" | "consumed") && row.grant.is_none());
         if invalid {
             return Err(Error::Invalid("in-session request binding differs"));
         }
@@ -219,6 +231,83 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+pub(super) fn pending_count(state: &State, time: u64) -> usize {
+    state
+        .hook_requests
+        .iter()
+        .filter(|row| row.status == "pending" && time < row.pending_expires_at_ms)
+        .count()
+}
+
+/// Inspect retained records without exposing private grant/binding material.
+/// Terminal records stay selectable so repeated denial can return its receipt.
+pub(super) fn inspect_from(state: &State, id: Option<&str>, time: u64) -> Result<Value, Error> {
+    let view = |row: &HookRequest| {
+        let status = if matches!(row.status.as_str(), "pending" | "approved") {
+            if !row.current(state)? {
+                "stale"
+            } else if row.live_id(time).is_none() {
+                "expired"
+            } else {
+                row.status.as_str()
+            }
+        } else {
+            row.status.as_str()
+        };
+        let mut value = json!({"request_id":row.request_id,"type":"hook","status":status,
+            "request":{"action":row.summary.action,"tool":row.tool,"cwd":row.cwd},
+            "provenance":{"agent":row.agent,"session_id":row.session_id},
+            "policy":{"reason":row.summary.reason,"overrides_deny":row.summary.overrides_deny,"rules":row.summary.deny_rules},
+            "settings_change":row.summary.settings_change,"created_at_ms":row.created_at_ms,
+            "pending_expires_at_ms":row.pending_expires_at_ms,
+            "grant_expires_at_ms":row.grant.as_ref().map(|g|g.expires_at_ms),
+            "approval_id":row.grant.as_ref().map(|g|&g.approval_id)});
+        let redacted = super::model::redact(&mut value);
+        value["redacted"] = json!(redacted);
+        Ok::<_, Error>(value)
+    };
+    if let Some(id) = id {
+        return view(
+            state
+                .hook_requests
+                .iter()
+                .find(|row| row.request_id == id)
+                .ok_or(Error::Missing)?,
+        );
+    }
+    let rows = state
+        .hook_requests
+        .iter()
+        .map(view)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(json!({"schema_version":1,"requests":rows}))
+}
+
+/// Revoke only after confirmation, restricting agent calls to their recorded
+/// consumer/conversation. The operator may revoke any request in the project.
+pub(super) fn deny(context: &Context, id: &str, confirmed: bool) -> Result<Value, Error> {
+    Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
+        let index = state.hook_requests.iter().position(|row| row.request_id == id).ok_or(Error::Missing)?;
+        let row = &state.hook_requests[index];
+        if context.surface != "cli" && (context.surface != "mcp" || !agent_matches(context, row)
+            || context.session_id.as_ref().is_some_and(|session| *session != row.session_id)) {
+            return Err(Error::Missing);
+        }
+        if !confirmed { return Err(Error::ApprovalRequired); }
+        if row.status == "revoked" { return Ok(json!({"request_id":id,"status":"revoked"})); }
+        if row.status == "consumed" { return Err(Error::Invalid("request was consumed; execution cannot be revoked")); }
+        let binding = row.binding.clone();
+        let approval = row.grant.as_ref().map(|g|g.approval_id.clone());
+        state.hook_requests[index].status = "revoked".into();
+        let mut event = state.event("hook_grant_revoked", context,
+            json!({"request_id":id,"approval_id":approval}),json!({}),json!({"request_binding":binding}));
+        event["operator"] = json!({"operator_id":null,"display_name":null,
+            "mechanism":if context.surface == "cli" { "operator-cli" } else { "host-elicitation" }});
+        state.record(event);
+        Ok(json!({"request_id":id,"status":"revoked"}))
+    })
 }
 
 /// What state already holds for one exact refused request.
@@ -313,11 +402,18 @@ pub(crate) fn refused(
         }
         let access = access(state)?;
         if state.hook_requests.len() >= MAX_REQUESTS {
-            // A pending request holds no authority; the oldest makes room.
+            // Terminal receipts and pending requests hold no authority. Prefer
+            // reclaiming a receipt so revocations cannot exhaust the store.
             let Some(oldest) = state
                 .hook_requests
                 .iter()
-                .position(|r| r.status == "pending")
+                .position(|r| r.status == "revoked")
+                .or_else(|| {
+                    state
+                        .hook_requests
+                        .iter()
+                        .position(|r| r.status == "pending")
+                })
             else {
                 return Err(Error::Invalid(
                     "in-session approvals are at capacity; wait for live grants to expire",

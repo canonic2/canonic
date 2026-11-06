@@ -5,6 +5,7 @@ mod diagnostics;
 mod documentation;
 mod elicitation;
 mod inspection;
+mod operator;
 mod pack_info;
 mod schemas;
 mod suggestions;
@@ -14,9 +15,11 @@ mod views;
 use super::{CapacityKind, Checkpoint, Context, Error, approvals, changes, history, project};
 use super::{packs, registries};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 pub(crate) use elicitation::PackQuestion;
+pub(super) use operator::{Diagnostic, diagnostic as operator_diagnostic, docs as operator_docs};
 
 pub(crate) fn question_error(context: &Context, error: &Error) -> Value {
     failure(context, error)
@@ -30,6 +33,23 @@ pub(crate) fn apply_confirmation(context: &Context, args: &Value) -> Result<Opti
         .iter()
         .find(|p| p.id == id && p.status == "pending")
         .map(|proposal| confirmation::message(proposal, &proposal.apply_arguments())))
+}
+
+/// Present the exact stored request whose pending decision or unused grant is revoked.
+pub(crate) fn deny_confirmation(context: &Context, args: &Value) -> Result<String, Error> {
+    fields(args, &["request_id"])?;
+    let (_, request) = approvals::request_view(context, required(args, "request_id")?)?;
+    let message = format!(
+        "Deny this pending request or revoke its unused grant?\n{}",
+        serde_json::to_string_pretty(&request)
+            .map_err(|_| Error::Invalid("request review encoding"))?
+    );
+    if message.len() > 48 * 1024 {
+        return Err(Error::Invalid(
+            "request review exceeds form bound; use operator terminal",
+        ));
+    }
+    Ok(message)
 }
 
 #[cfg(test)]
@@ -92,6 +112,12 @@ const REQUEST_CONFIRMATION: Refusal = Refusal {
     route: None,
 };
 
+const SESSION_CONFIRMATION: Refusal = Refusal {
+    code: "operator_review_required",
+    message: "The user must accept Shield's session-grant confirmation form. Enable confirmation prompts and retry with unchanged apply_arguments, or ask the person to run shield session-grant approve PROPOSAL_ID in their terminal. The agent must not run that operator command",
+    route: None,
+};
+
 /// A shared review error, or an MCP refusal with its own recovery.
 enum Failure {
     Review(Error),
@@ -113,6 +139,10 @@ impl From<crate::policy::Error> for Failure {
 
 pub(crate) struct Connection {
     views: Mutex<views::Views>,
+    admin: Mutex<
+        std::collections::BTreeMap<u64, (std::time::Instant, String, super::admin::Prepared)>,
+    >,
+    admin_sequence: std::sync::atomic::AtomicU64,
 }
 impl Connection {
     pub(crate) fn enrolled(context: &Context) -> Result<Self, Error> {
@@ -125,14 +155,125 @@ impl Connection {
         views.active(context)?;
         Ok(Self {
             views: Mutex::new(views),
+            admin: Mutex::new(BTreeMap::default()),
+            admin_sequence: std::sync::atomic::AtomicU64::new(0),
         })
     }
     #[cfg(test)]
     pub(crate) fn new(seed: String) -> Self {
         Self {
             views: Mutex::new(views::Views::new(seed)),
+            admin: Mutex::new(BTreeMap::default()),
+            admin_sequence: std::sync::atomic::AtomicU64::new(0),
         }
     }
+}
+
+fn admin_key(name: &str, args: &Value) -> String {
+    crate::policy::fingerprint(json!([name, args]).to_string().as_bytes())
+}
+
+pub(crate) fn discard_admin(connection: &Connection, binding: u64) {
+    if let Ok(mut pending) = connection.admin.lock() {
+        pending.remove(&binding);
+    }
+}
+
+/// Retain the exact administrative plan while the host obtains the person's answer.
+pub(crate) fn admin_confirmation(
+    context: &Context,
+    connection: &Connection,
+    name: &str,
+    args: &Value,
+    checkpoint: Checkpoint<'_>,
+) -> Result<Option<(String, u64)>, Error> {
+    if !super::admin::supports(name) || name == "cache_prepare" {
+        return Ok(None);
+    }
+    if name == "registry_add" {
+        // Enrollment discovers a trust key at an agent-selected location.
+        // Do not perform that I/O before the person's terminal workflow.
+        return Err(Error::ApprovalRequired);
+    }
+    if (name == "mcp_setup" && args["dry_run"] == true)
+        || crate::agents::review::resolve(context.agent.as_deref()).confirmation()
+            == crate::agents::review::Confirmation::Terminal
+    {
+        return Ok(None);
+    }
+    checkpoint()?;
+    let prepared = super::admin::prepare(context, name, args, checkpoint)?;
+    checkpoint()?;
+    let key = admin_key(name, args);
+    let mut pending = connection
+        .admin
+        .lock()
+        .map_err(|_| Error::Invalid("administrative review state invalid"))?;
+    pending.retain(|_, (created, _, _)| created.elapsed() < std::time::Duration::from_mins(5));
+    if pending.len() >= 8 {
+        return Err(Error::Overloaded);
+    }
+    let message = format!(
+        "Confirm this Shield administrative change?\n{}",
+        serde_json::to_string_pretty(&prepared.review())
+            .map_err(|_| Error::Invalid("administrative review encoding"))?
+    );
+    if message.len() > 48 * 1024 {
+        return Err(Error::Invalid(
+            "administrative review exceeds form bound; use operator terminal",
+        ));
+    }
+    let id = connection
+        .admin_sequence
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    pending.insert(id, (std::time::Instant::now(), key, prepared));
+    Ok(Some((message, id)))
+}
+
+fn admin_call(
+    context: &Context,
+    connection: &Connection,
+    name: &str,
+    args: &Value,
+    checkpoint: Checkpoint<'_>,
+    confirmed: bool,
+    binding: Option<u64>,
+) -> Result<Value, Error> {
+    if name == "cache_prepare" {
+        return super::admin::prepare(context, name, args, checkpoint)?.commit(context, checkpoint);
+    }
+    if name == "registry_add" {
+        return Err(Error::ApprovalRequired);
+    }
+    let retained = if let Some(binding) = binding {
+        connection
+            .admin
+            .lock()
+            .map_err(|_| Error::Invalid("administrative review state invalid"))?
+            .remove(&binding)
+    } else {
+        None
+    };
+    if let Some((created, key, prepared)) = retained {
+        if !confirmed {
+            return Err(Error::ApprovalRequired);
+        }
+        if key != admin_key(name, args) {
+            return Err(Error::StaleSnapshot);
+        }
+        if created.elapsed() >= std::time::Duration::from_mins(5) {
+            return Err(Error::StaleSnapshot);
+        }
+        return prepared.commit(context, checkpoint);
+    }
+    if name == "mcp_setup" && args["dry_run"] == true {
+        return Ok(super::admin::prepare(context, name, args, checkpoint)?.public_review());
+    }
+    Err(if confirmed {
+        Error::StaleSnapshot
+    } else {
+        Error::ApprovalRequired
+    })
 }
 #[cfg(test)]
 pub(crate) fn call(
@@ -145,6 +286,7 @@ pub(crate) fn call(
     call_with_confirmation(context, connection, name, args, checkpoint, false)
 }
 
+#[cfg(test)]
 pub(crate) fn call_with_confirmation(
     context: &Context,
     connection: &Connection,
@@ -153,23 +295,54 @@ pub(crate) fn call_with_confirmation(
     checkpoint: Checkpoint<'_>,
     confirmed: bool,
 ) -> Value {
+    call_with_bound_confirmation(context, connection, name, args, checkpoint, confirmed, None)
+}
+
+pub(crate) fn call_with_bound_confirmation(
+    context: &Context,
+    connection: &Connection,
+    name: &str,
+    args: &Value,
+    checkpoint: Checkpoint<'_>,
+    confirmed: bool,
+    binding: Option<u64>,
+) -> Value {
     let result = (|| -> Result<Value, Failure> {
         checkpoint()?;
         // Documentation never waits for connection state held by other calls.
         if documentation::handles(name) {
             return documentation::call(name, args, checkpoint).map_err(Failure::Documentation);
         }
+        if super::admin::supports(name) {
+            return Ok(admin_call(
+                context, connection, name, args, checkpoint, confirmed, binding,
+            )?);
+        }
         let mut views = connection
             .views
             .lock()
             .map_err(|_| Error::Invalid("connection state invalid"))?;
         let mut data = dispatch(context, &mut views, name, args, checkpoint, confirmed)?;
-        if !matches!(name, "policy_propose" | "policy_show") {
+        if !matches!(
+            name,
+            "policy_propose"
+                | "policy_show"
+                | "pack_update"
+                | "pack_remove"
+                | "pack_configure"
+                | "rule_add"
+                | "rule_edit"
+                | "rule_remove"
+        ) && !name.starts_with("session_grant_")
+        {
             apply::present(context, &mut data)?;
         }
         if [
             "policy_show",
             "policy_propose",
+            "pack_update",
+            "pack_remove",
+            "pack_configure",
             "policy_withdraw",
             "policy_receipt",
         ]
@@ -187,7 +360,11 @@ fn result_envelope(context: &Context, name: &str, result: Result<Value, Failure>
         Ok(mut data) => {
             // Bundled public docs contain no runtime input. Redacting example
             // flags would corrupt their syntax and Markdown line structure.
-            let redacted = !documentation::handles(name) && super::model::redact(&mut data);
+            let redacted = if ["history_list", "history_show"].contains(&name) {
+                super::history::redact_result(&mut data)
+            } else {
+                !documentation::handles(name) && super::model::redact(&mut data)
+            };
             let revision = data.get("policy_revision").cloned().unwrap_or(Value::Null);
             let missing = data.get("missing").cloned().unwrap_or_else(|| json!([]));
             let truncated = data
@@ -196,7 +373,16 @@ fn result_envelope(context: &Context, name: &str, result: Result<Value, Failure>
                 .unwrap_or(false);
             json!({"schema_version":1,"project_id":context.project_id,"policy_revision":revision,"data":data,"missing":missing,"truncated":truncated,"redacted":redacted,"error":null})
         }
-        Err(Failure::Review(error)) => failure(context, &error),
+        Err(Failure::Review(error)) => {
+            let mut value = admin_error(context, name, &error);
+            if name.starts_with("session_grant_") && matches!(error, Error::StaleSnapshot) {
+                value["error"]["operator_route"] = json!("session_grant_show");
+                value["error"]["message"] = json!(
+                    "This session candidate is no longer pending or current. Inspect session_grant_show; obtain fresh confirmation only while the task remains authorized. Do not retry a declined offer."
+                );
+            }
+            value
+        }
         Err(Failure::Documentation(error)) => {
             let (code, message) = documentation::error_fields(&error);
             refused(context, code, &message, None)
@@ -242,6 +428,39 @@ pub(crate) fn invalid_arguments(context: &Context, tool: &str, path: &str, detai
     value["error"]["message"] = json!(format!(
         "Tool arguments do not match the input schema: {detail}{hint}"
     ));
+    value
+}
+
+pub(crate) fn admin_route(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "protection_set" => "shield protection set",
+        "cache_prepare" => "shield cache prepare",
+        "registry_add" => "shield registry add",
+        "registry_remove" => "shield registry remove",
+        "registry_default" => "shield registry default",
+        "policy_repair" => "shield policy repair",
+        "policy_reject" => "shield policy reject",
+        "history_configure" => "shield history configure",
+        "mcp_setup" => "shield mcp setup",
+        _ => return None,
+    })
+}
+
+pub(crate) fn admin_error(context: &Context, name: &str, error: &Error) -> Value {
+    let mut value = failure(context, error);
+    if let Some(route) = admin_route(name) {
+        if matches!(error, Error::ApprovalRequired) {
+            value["error"]["operator_route"] = json!(route);
+            value["error"]["message"] = json!(format!(
+                "This administrative change needs human confirmation. Ask the person to run {route} with the intended arguments in their terminal. The agent must not run that operator command."
+            ));
+        } else if matches!(error, Error::StaleSnapshot) {
+            value["error"]["operator_route"] = json!(name);
+            value["error"]["message"] = json!(format!(
+                "This administrative review expired or its inputs changed. Call {name} again to prepare a fresh review; the person must confirm it."
+            ));
+        }
+    }
     value
 }
 
@@ -331,6 +550,23 @@ fn bound_policy_result(data: &mut Value) -> Result<(), Error> {
 }
 /// The code and recovery-bearing message of a shared review error.
 fn error_fields(error: &Error) -> (&'static str, String) {
+    if let Error::Invalid(message) = error {
+        for code in [
+            "session_unavailable",
+            "unsupported_scope",
+            "idempotency_conflict",
+            "capacity_exceeded",
+            "operator_review_required",
+            "authorization_unavailable",
+        ] {
+            if let Some(detail) = message
+                .strip_prefix(code)
+                .and_then(|m| m.strip_prefix(": "))
+            {
+                return (code, detail.into());
+            }
+        }
+    }
     if let Some((code, message)) = static_fields(error) {
         return (code, message.to_owned());
     }
@@ -525,6 +761,17 @@ fn dispatch(
     confirmed: bool,
 ) -> Result<Value, Failure> {
     match name {
+        "session_grant_show" | "session_grant_list" => {
+            Ok(super::session_grants::show(context, args)?)
+        }
+        "session_grant_propose" => Ok(super::session_grants::propose(context, args)?),
+        "session_grant_revoke" => Ok(super::session_grants::revoke(context, args)?),
+        "session_grant_approve" => {
+            super::session_grants::apply(context, args, confirmed).map_err(|error| match error {
+                Error::ApprovalRequired => Failure::Refused(&SESSION_CONFIRMATION),
+                error => error.into(),
+            })
+        }
         "policy_withdraw" | "policy_receipt" => {
             fields(args, &["proposal_id"])?;
             inspection::transition(context, name, required(args, "proposal_id")?, checkpoint)
@@ -549,6 +796,14 @@ fn dispatch(
                 Error::ApprovalRequired => Failure::Refused(&REQUEST_CONFIRMATION),
                 error => error.into(),
             })
+        }
+        "request_deny" => {
+            fields(args, &["request_id"])?;
+            Ok(approvals::deny(
+                context,
+                required(args, "request_id")?,
+                confirmed,
+            )?)
         }
         _ => Ok(review_tool(
             context, views, name, args, checkpoint, confirmed,
@@ -583,6 +838,58 @@ fn review_tool(
     match name {
         "policy_apply" => apply::apply(context, args, checkpoint, confirmed, views),
         "policy_propose" => propose(context, views, args, checkpoint),
+        "pack_update" | "pack_remove" | "pack_configure" | "rule_add" | "rule_edit"
+        | "rule_remove" => {
+            fields(
+                args,
+                if name.starts_with("rule_") {
+                    &[
+                        "rule",
+                        "rule_id",
+                        "layer",
+                        "idempotency_key",
+                        "agent_reason",
+                    ]
+                } else if name == "pack_configure" {
+                    &[
+                        "reference",
+                        "set",
+                        "unset",
+                        "override",
+                        "clear_override",
+                        "layer",
+                        "idempotency_key",
+                        "agent_reason",
+                    ]
+                } else {
+                    &["reference", "idempotency_key", "agent_reason"]
+                },
+            )?;
+            if !name.starts_with("rule_") && name != "pack_update" {
+                required(args, "reference")?;
+            } else if name == "pack_update" {
+                text(args, "reference")?;
+            }
+            if name == "pack_configure"
+                && !["set", "unset", "override", "clear_override"]
+                    .iter()
+                    .any(|key| args.get(key).is_some())
+            {
+                return Err(Error::Invalid(
+                    "supply variables for a settings form, or set, unset, override or clear_override",
+                ));
+            }
+            let mut change = args.clone();
+            let mut proposal = json!({});
+            for key in ["idempotency_key", "agent_reason"] {
+                if let Some(value) = change.as_object_mut().and_then(|fields| fields.remove(key)) {
+                    proposal[key] = value;
+                }
+            }
+            change["kind"] = json!(name);
+            proposal["change"] = change;
+            propose(context, views, &proposal, checkpoint)
+        }
         "policy_evaluate" => diagnostics::evaluate(context, views, args, checkpoint),
         "policy_compare" => diagnostics::compare(context, views, args, checkpoint),
         "pack_search" | "pack_info" => discovery(context, views, name, args),
@@ -610,6 +917,10 @@ fn inspection_tool(
                 None => packs::list(context)?,
             };
             views.page(name, args, data, "packs")
+        }
+        "pack_show" => {
+            fields(args, &["reference"])?;
+            packs::show(context, required(args, "reference")?)
         }
         "registry_list" => {
             fields(args, &["scope"])?;
@@ -647,29 +958,17 @@ fn inspection_tool(
             selector(args, "proposal_id")?;
             inspection::policy(context, views, args)
         }
-        "request_list" => {
+        "request_list" | "request_show" => {
             fields(args, &["request_id", "cursor", "limit"])?;
+            if name == "request_show" {
+                fields(args, &["request_id"])?;
+                required(args, "request_id")?;
+            }
             selector(args, "request_id")?;
             let data = approvals::inspect(context, text(args, "request_id")?)?;
             views.page(name, args, data, "requests")
         }
-        "history_list" => {
-            fields(
-                args,
-                &["entry_id", "denied", "approved", "agent", "cursor", "limit"],
-            )?;
-            selector(args, "entry_id")?;
-            let data = history::inspect(
-                context,
-                &history::Query {
-                    entry: text(args, "entry_id")?,
-                    denied: boolean(args, "denied")?,
-                    approved: boolean(args, "approved")?,
-                    agent: text(args, "agent")?,
-                },
-            )?;
-            views.page(name, args, data, "entries")
-        }
+        "history_list" | "history_show" => history_tool(context, views, name, args),
         "suggestion_list" => {
             fields(args, &["session_id", "cursor", "limit"])?;
             let session = text(args, "session_id")?.or(context.session_id.as_deref());
@@ -677,6 +976,44 @@ fn inspection_tool(
         }
         _ => Err(Error::Invalid("unknown tool")),
     }
+}
+
+fn history_tool(
+    context: &Context,
+    views: &mut views::Views,
+    name: &str,
+    args: &Value,
+) -> Result<Value, Error> {
+    if name == "history_show" {
+        fields(args, &["entry_id"])?;
+        required(args, "entry_id")?;
+    }
+    fields(
+        args,
+        &[
+            "entry_id",
+            "denied",
+            "approved",
+            "agent",
+            "authorization_kind",
+            "grant_id",
+            "cursor",
+            "limit",
+        ],
+    )?;
+    selector(args, "entry_id")?;
+    let data = history::inspect_filtered(
+        context,
+        &history::Query {
+            entry: text(args, "entry_id")?,
+            denied: boolean(args, "denied")?,
+            approved: boolean(args, "approved")?,
+            agent: text(args, "agent")?,
+        },
+        text(args, "authorization_kind")?,
+        text(args, "grant_id")?,
+    )?;
+    views.page(name, args, data, "entries")
 }
 fn cursor_fields(name: &str, args: &Value) -> Result<(), Error> {
     fields(
@@ -687,7 +1024,15 @@ fn cursor_fields(name: &str, args: &Value) -> Result<(), Error> {
             "pack_search" => &["query", "cursor", "limit"],
             "pack_info" => &["reference", "view", "query", "cursor", "limit"],
             "policy_show" => &["agent", "session_id", "status", "cursor", "limit"],
-            "history_list" => &["denied", "approved", "agent", "cursor", "limit"],
+            "history_list" => &[
+                "denied",
+                "approved",
+                "agent",
+                "authorization_kind",
+                "grant_id",
+                "cursor",
+                "limit",
+            ],
             "suggestion_list" => &["session_id", "cursor", "limit"],
             _ => return Err(Error::Invalid("tool does not support paging")),
         },

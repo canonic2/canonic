@@ -173,6 +173,7 @@ impl Store {
             active: None,
             read_requests: vec![],
             run_requests: vec![],
+            session_grants: super::session_grants::Registry::default(),
             hook_requests: vec![],
             proposals: vec![],
             dismissed_reviews: vec![],
@@ -410,6 +411,7 @@ impl Store {
         super::read_approval::validate(&state)?;
         super::run_approval::validate(&state)?;
         super::hook_approval::validate(&state)?;
+        super::session_grants::validate(&state)?;
         Ok(state)
     }
     /// Captures the history view under the lock, then verifies, correlates and
@@ -482,6 +484,25 @@ impl Store {
         operation: impl FnOnce(&mut State) -> Result<Value, Error>,
     ) -> Result<Value, Error> {
         self.update_inner(context, checkpoint, operation, Self::read_checkpoint)
+    }
+    /// Optional observational capture may discover under lock that nothing changed.
+    pub(in crate::review) fn update_checkpoint_if_changed(
+        &self,
+        context: &Context,
+        checkpoint: Checkpoint<'_>,
+        operation: impl FnOnce(&mut State) -> Result<bool, Error>,
+    ) -> Result<(), Error> {
+        let lock = self.lock(checkpoint)?;
+        let mut state = self.read_checkpoint()?;
+        state.check(context)?;
+        checkpoint()?;
+        if operation(&mut state)? {
+            checkpoint()?;
+            state.compact_authorization();
+            self.write(&state)?;
+        }
+        lock.release()?;
+        Ok(())
     }
     fn update_inner(
         &self,

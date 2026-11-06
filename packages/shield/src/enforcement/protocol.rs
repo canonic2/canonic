@@ -270,6 +270,23 @@ fn evaluate_with_original(
         code = 2;
     }
     stage("native_handoff_ready");
+    if let (Some(_), Some(input)) = (native, input.as_ref())
+        && matches!(input.operation, Operation::Shell { .. })
+        && code == 0
+        && let Some(host) = &input.host
+    {
+        let result = observations::context(
+            root,
+            input.expected_project_id.as_deref().unwrap_or_default(),
+            &input.cwd,
+            host,
+        )
+        .and_then(|context| crate::review::session_grants::handoff(&context, &mut value, original));
+        if result.is_err() && value["decision"] != "allow" {
+            value = failure(Some(&input.request_id), "handoff-failed");
+            code = 2;
+        }
+    }
     if let Some(fields) = value.as_object_mut() {
         fields.remove("_shell_analysis");
         fields.remove("_codex_covered");
@@ -365,7 +382,7 @@ fn record(
         json!({"operation":input.operation,"original_input":original,"request":observed["request"],
         "evaluation":observed["evaluation"],"policy_revision":value["identity"]["policy_revision"],
         "activation_id":value["identity"]["activation_id"],"candidate_digest":value["identity"]["candidate_digest"],
-        "decision":policy,"host_decision":host_decision,"disposition":value["disposition"],"ask_fallback":value["ask_fallback"],"integration":value["integration"],"host_context_complete":value["host_context_complete"],"code":value["code"],"approval":value["approval"],"execution":"unobserved"}),
+        "decision":policy,"host_decision":host_decision,"disposition":value["disposition"],"ask_fallback":value["ask_fallback"],"integration":value["integration"],"host_context_complete":value["host_context_complete"],"code":value["code"],"approval":value["approval"],"authorization":value["authorization"],"execution":"unobserved"}),
     )
 }
 

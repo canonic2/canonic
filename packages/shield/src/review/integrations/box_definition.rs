@@ -74,6 +74,12 @@ pub(in crate::review) fn box_project(root: &Path) -> bool {
 /// Box's portable name for a native event: `PreToolUse` becomes `pre_tool_use`.
 #[cfg(not(windows))]
 fn portable(event: &str) -> Result<String, Error> {
+    if event == "BeforeTool" {
+        return Ok("pre_tool_use".into());
+    }
+    if event == "AfterTool" {
+        return Ok("post_tool_use".into());
+    }
     let mut name = String::new();
     for (index, c) in event.chars().enumerate() {
         if c.is_ascii_uppercase() && index > 0 {
@@ -89,40 +95,33 @@ fn portable(event: &str) -> Result<String, Error> {
     Ok(name)
 }
 
-/// One adapter's hooks as a Box hook entry. Box publishes each event as
-/// `{"matcher", "hooks": [{"type": "command", "command", "timeout",
-/// "statusMessage"}]}`; an adapter group with any other shape is refused.
+/// One adapter's portable hook settings, preserving its native metadata and
+/// timeout units through Box's host projection. Direct executable hooks cannot
+/// be represented by this POSIX command entry.
 #[cfg(not(windows))]
 fn hook(adapter: &dyn AgentAdapter, binary: &Path) -> Result<Value, Error> {
     let spec = adapter.spec();
-    let command = super::native::posix_hook_command("{command}", "{project}", "{agent}", "{event}");
-    let group = adapter.hook_group(&command);
-    let (matcher, settings) = (&group["matcher"], &group["hooks"][0]);
-    let expressible = matcher.is_string()
-        && settings["timeout"].is_u64()
-        && settings["statusMessage"].is_string()
-        && group
-            == json!({"matcher":matcher,"hooks":[{"type":"command","command":command,
-                "timeout":settings["timeout"],"statusMessage":settings["statusMessage"]}]})
-        && spec.events.iter().all(|(event, _)| {
-            adapter
-                .direct_hook_group(binary, Path::new("/"), event)
-                .is_none()
-        });
-    if !expressible {
+    if spec.events.iter().any(|(event, _)| {
+        adapter
+            .direct_hook_group(binary, Path::new("/"), event)
+            .is_some()
+    }) {
         return Err(Error::Invalid(
-            "an agent's hook settings have no Box equivalent; set the agent up directly",
+            "an agent's direct executable hooks have no Box equivalent; set the agent up directly",
         ));
     }
+    let command = super::native::posix_hook_command("{command}", "{project}", "{agent}", "{event}");
+    let mut settings = adapter.box_hook(&command).ok_or(Error::Invalid(
+        "an agent's hook settings have no Box equivalent; set the agent up directly",
+    ))?;
     let events = spec
         .events
         .iter()
         .map(|(event, _)| portable(event))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(
-        json!({"agents":[spec.id],"events":events,"matcher":matcher,"command":command,
-        "timeout":settings["timeout"],"status_message":settings["statusMessage"]}),
-    )
+    settings["agents"] = json!([spec.id]);
+    settings["events"] = json!(events);
+    Ok(settings)
 }
 
 /// The definition texts: the shared file with Shield's server for each agent,
@@ -145,6 +144,7 @@ pub(in crate::review) fn render(binary: &Path, approved: &[String]) -> Result<De
         super::native::quoted(binary)?;
         let hooks = agents::ADAPTERS
             .iter()
+            .filter(|adapter| adapter.supports_box_hooks())
             .map(|adapter| hook(*adapter, binary))
             .collect::<Result<Vec<_>, _>>()?;
         let mut shared = json!({"schema_version":1,
@@ -159,7 +159,12 @@ pub(in crate::review) fn render(binary: &Path, approved: &[String]) -> Result<De
                 (name, json!(if allow { "allow" } else { "ask" }))
             })
             .collect();
-        shared["permissions"] = json!({"tools": tools});
+        let permission_agents: Vec<_> = agents::ADAPTERS
+            .iter()
+            .filter(|adapter| adapter.supports_box_permissions())
+            .map(|adapter| adapter.spec().id)
+            .collect();
+        shared["permissions"] = json!({"agents":permission_agents,"tools": tools});
         let local = json!({"schema_version":1,
             "connection":{"transport":"stdio","command":text,"args":ARGS}});
         let encode = |value: &Value| {

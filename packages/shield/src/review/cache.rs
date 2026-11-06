@@ -449,6 +449,15 @@ pub(super) fn prepare(context: &Context, directory: Option<&Path>) -> Result<Val
     rebuild(context, directory, &|| Ok(()), "operator-cli")
 }
 
+/// Rebuild the enrolled project's committed cache in its already approved
+/// location. This restores disposable data without changing policy authority.
+pub(super) fn prepare_committed(
+    context: &Context,
+    checkpoint: super::Checkpoint<'_>,
+) -> Result<Value, Error> {
+    rebuild(context, None, checkpoint, "derived-cache")
+}
+
 /// Reconstruct disposable data from the committed source, never editable projections.
 pub(super) fn recover(context: &Context, checkpoint: super::Checkpoint<'_>) -> Result<(), Error> {
     rebuild(context, None, checkpoint, "derived-cache").map(|_| ())

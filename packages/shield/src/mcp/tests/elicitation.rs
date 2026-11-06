@@ -110,6 +110,41 @@ fn pack_forms_prepare_only_then_require_separate_adapter_approval() {
 }
 
 #[test]
+fn pack_verbs_direct_configure_prepares_without_a_settings_form() {
+    for agent in ["claude", "codex"] {
+        let (transport, project) = prepared(agent, &json!({}));
+        let before = project.revision();
+        let count = proposals(&project);
+        let response = transport.call(
+            json!(10),
+            "pack_configure",
+            &json!({
+                "reference":"acme/settings", "set":values()
+            }),
+        );
+        assert!(response["result"].is_object(), "{response}");
+        assert!(data(&response)["error"].is_null(), "{response}");
+        assert!(data(&response)["data"]["apply_arguments"].is_object());
+        assert_eq!(project.revision(), before);
+        assert_eq!(proposals(&project), count + 1);
+        let invalid = transport.call(
+            json!(11),
+            "pack_configure",
+            &json!({
+                "reference":"acme/settings", "variables":["manager"], "set":{"manager":"just"}
+            }),
+        );
+        assert_eq!(
+            data(&invalid)["error"]["code"],
+            "invalid_input",
+            "{invalid}"
+        );
+        assert_eq!(invalid["result"]["isError"], true);
+        assert_eq!(proposals(&project), count + 1);
+    }
+}
+
+#[test]
 fn pack_forms_unknown_variables_refuse_before_asking_or_preparing() {
     let (transport, project) = prepared("claude", &json!({"elicitation":{"form":{}}}));
     let before = project.revision();

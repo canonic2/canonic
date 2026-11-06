@@ -19,7 +19,10 @@ pub(super) fn validate_predicates(
             &["sources", "destination", "recursive", "targets"],
         ),
         "web" => (&["action"], &["url", "query", "method", "request_fields"]),
-        "mcp" => (&["server", "tool"], &["arguments", "fields", "connection"]),
+        "mcp" => (
+            &["server", "tool"],
+            &["arguments", "fields", "connection", "field_paths"],
+        ),
         _ => return Err(Error::Contract("unsupported rule domain")),
     };
     let mut allowed = vec!["cwd", "environment"];
@@ -75,6 +78,7 @@ pub(super) fn validate_predicates(
             "sources" => quantified(operand, allow)?,
             "targets" => targets(operand, allow)?,
             "argument_paths" => argument_paths(operand)?,
+            "field_paths" => field_paths(operand)?,
             "recursive" => {
                 if !operand.is_boolean() {
                     return Err(Error::Syntax);
@@ -99,6 +103,30 @@ pub(super) fn validate_predicates(
         return Err(Error::Contract(
             "source patterns cannot grant whole-shell Allow",
         ));
+    }
+    Ok(())
+}
+
+fn field_paths(operand: &Value) -> Result<(), Error> {
+    let fields = operand.as_object().ok_or(Error::Syntax)?;
+    if fields.is_empty() || fields.len() > 256 {
+        return Err(Error::Limit);
+    }
+    for (pointer, selection) in fields {
+        selectors::pointer_validate(pointer)?;
+        selectors::fields(selection, &["path", "recursive", "absolute", "relative_to"])?;
+        path_predicate(&selection["path"])?;
+        for key in ["recursive", "absolute"] {
+            if selection.get(key).is_some_and(|value| !value.is_boolean()) {
+                return Err(Error::Syntax);
+            }
+        }
+        if selection
+            .get("relative_to")
+            .is_some_and(|value| !matches!(value.as_str(), Some("cwd" | "project")))
+        {
+            return Err(Error::Syntax);
+        }
     }
     Ok(())
 }

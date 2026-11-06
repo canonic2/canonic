@@ -1,4 +1,5 @@
 //! Canonical operator orchestration over project-owned policy, grants and state.
+mod diagnostics;
 pub(crate) mod integrations;
 mod packs;
 mod path_access;
@@ -6,6 +7,7 @@ mod presentation;
 mod project_files;
 mod registries;
 mod rules;
+mod session_grants;
 mod state;
 mod terminal;
 #[cfg(test)]
@@ -37,7 +39,11 @@ pub(super) fn commit_proposal_fixture(context: &Context, id: &str) -> Result<Val
 pub(crate) fn run(input: &Cli) -> ExitCode {
     match dispatch(input) {
         Ok(mut value) => {
-            super::model::redact(&mut value);
+            if matches!(input.command, PublicCommand::History(_)) {
+                super::history::redact_result(&mut value);
+            } else if !matches!(input.command, PublicCommand::Docs(_)) {
+                super::model::redact(&mut value);
+            }
             // Every public operator result carries the schema it follows.
             if input.json
                 && let Some(object) = value.as_object_mut()
@@ -90,6 +96,7 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
     };
     let start = input.project.clone().unwrap_or(std::env::current_dir()?);
     match &input.command {
+        PublicCommand::Docs(docs) => return diagnostics::docs(&docs.command),
         PublicCommand::Init {
             agents,
             no_setup,
@@ -163,11 +170,26 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
         }
         PublicCommand::Cache { .. } => super::cache::prepare(&context, input.cache_dir.as_deref()),
         PublicCommand::Protection(_) => path_access::configure(&context, input.json),
+        PublicCommand::SessionGrant(command) => {
+            session_grants::run(&context, &command.command, input.json)
+        }
         PublicCommand::Status => project::status(&context),
         PublicCommand::Doctor => project::doctor(&context),
-        PublicCommand::Policy(policy) => match policy.command {
+        PublicCommand::Policy(policy) => match &policy.command {
             PolicyCommand::Show => project::policy(&context),
             PolicyCommand::Review => rules::policy(&context, input.json),
+            PolicyCommand::Repair => administer(&context, "policy_repair", &json!({}), input.json),
+            PolicyCommand::Reject {
+                proposal_id,
+                reason,
+            } => {
+                let mut args = json!({"proposal_id":proposal_id});
+                if let Some(reason) = reason {
+                    args["reason"] = json!(reason);
+                }
+                administer(&context, "policy_reject", &args, input.json)
+            }
+            command => diagnostics::diagnostic(&context, command),
         },
         PublicCommand::Rule(rule) => match &rule.command {
             RuleCommand::List => super::inspection::rules(&context, None),
@@ -218,13 +240,31 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
             RequestCommand::Approve { request } => decide(&context, request, false, input.json),
             RequestCommand::Deny { request } => decide(&context, request, true, input.json),
         },
-        PublicCommand::History(history) => history::inspect(
+        PublicCommand::History(crate::cli::public::History {
+            command:
+                HistoryCommand::Configure {
+                    enabled,
+                    limit,
+                    purge,
+                },
+        }) => {
+            let mut args = json!({"purge":purge});
+            if let Some(enabled) = enabled {
+                args["enabled"] = json!(enabled);
+            }
+            if let Some(limit) = limit {
+                args["limit"] = json!(limit);
+            }
+            administer(&context, "history_configure", &args, input.json)
+        }
+        PublicCommand::History(history) => history::inspect_filtered(
             &context,
             &match &history.command {
                 HistoryCommand::List {
                     denied,
                     approved,
                     agent,
+                    ..
                 } => history::Query {
                     entry: None,
                     denied: *denied,
@@ -237,10 +277,33 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
                     approved: false,
                     agent: None,
                 },
+                HistoryCommand::Configure { .. } => unreachable!("handled above"),
+            },
+            match &history.command {
+                HistoryCommand::List {
+                    authorization_kind, ..
+                } => authorization_kind.as_deref(),
+                _ => None,
+            },
+            match &history.command {
+                HistoryCommand::List { grant_id, .. } => grant_id.as_deref(),
+                _ => None,
             },
         ),
         _ => Err(Error::Invalid("invalid operator command")),
     }
+}
+
+fn administer(
+    context: &Context,
+    name: &str,
+    args: &Value,
+    json_mode: bool,
+) -> Result<Value, Error> {
+    let mut tty = terminal::Terminal::required(json_mode)?;
+    let prepared = super::admin::prepare(context, name, args, &|| Ok(()))?;
+    tty.confirm(&prepared.review())?;
+    prepared.commit(context, &|| Ok(()))
 }
 
 pub(super) fn project(start: &Path) -> Result<Context, Error> {
@@ -255,13 +318,9 @@ pub(super) fn project(start: &Path) -> Result<Context, Error> {
 
 fn decide(context: &Context, id: &str, deny: bool, json_mode: bool) -> Result<Value, Error> {
     let mut tty = terminal::Terminal::required(json_mode)?;
-    let (read, value) = approvals::request_view(context, id)?;
+    let (_, value) = approvals::request_view(context, id)?;
     tty.confirm(
         &json!({"operation":if deny {"deny/revoke"} else {"approve once"},"request":value,"scope":if deny {"Deny the pending request or revoke an unused grant"} else {"One use; five-minute expiry; the exact stored request and resource binding"}}),
     )?;
-    if read {
-        super::read_approval::authorize(context, id, 300, None, deny)
-    } else {
-        super::run_approval::authorize(context, id, 300, None, deny)
-    }
+    approvals::authorize(context, id, deny)
 }

@@ -3,84 +3,74 @@ use super::{
     state,
     terminal::{Step, Terminal},
 };
-use crate::review::packs;
 use crate::{
     cli::public::RuleCommand,
     review::{self, Context, Error},
 };
 use serde_json::{Value, json};
-fn rules(candidate: &Value, context: &Context) -> Result<Value, Error> {
-    candidate["rules"].as_str().map_or_else(
-        || Ok(crate::policy::rules::document(&[])?),
-        |s| review::inspection::project_rules(s, &context.project_root),
-    )
+fn rules(candidate: &Value, context: &Context, local: bool) -> Result<Value, Error> {
+    candidate[if local { "local_rules" } else { "rules" }]
+        .as_str()
+        .map_or_else(
+            || Ok(crate::policy::rules::document(&[])?),
+            |s| review::inspection::project_rules(s, &context.project_root),
+        )
 }
 pub(super) fn mutate(
     context: &Context,
     input: &RuleCommand,
     json_mode: bool,
 ) -> Result<Value, Error> {
+    use crate::review::changes::{Change, Layer};
     let mut tty = Terminal::required(json_mode)?;
     let (before, base) = crate::review::project::load_prepared(context)?;
-    let candidate = &before.candidates["project"];
-    let mut document = rules(candidate, context)?;
-    let rows = document["rules"]
-        .as_array_mut()
-        .ok_or(Error::Invalid("custom rules missing"))?;
-    match input {
+    let local = match input {
+        RuleCommand::Add { local }
+        | RuleCommand::Edit { local, .. }
+        | RuleCommand::Remove { local, .. } => *local,
         RuleCommand::List => return Err(Error::Invalid("invalid operator command")),
-        RuleCommand::Remove { id } => {
-            let index = rows
-                .iter()
-                .position(|r| r["id"] == *id)
-                .ok_or(Error::Missing)?;
-            rows.remove(index);
-        }
-        RuleCommand::Add | RuleCommand::Edit { .. } => {
+    };
+    let layer = Some(if local { Layer::Local } else { Layer::Project });
+    let document = rules(&before.candidates["project"], context, local)?;
+    let rows = document["rules"]
+        .as_array()
+        .ok_or(Error::Invalid("custom rules missing"))?;
+    let change = match input {
+        RuleCommand::Remove { id, .. } => Change::RuleRemove {
+            rule_id: id.clone(),
+            layer,
+        },
+        RuleCommand::Add { .. } | RuleCommand::Edit { .. } => {
             let id = match input {
-                RuleCommand::Edit { id } => id.clone(),
+                RuleCommand::Edit { id, .. } => id.clone(),
                 _ => tty.prompt("Rule id")?,
             };
-            let index = rows.iter().position(|r| r["id"] == id);
-            if matches!(input, RuleCommand::Edit { .. }) && index.is_none() {
+            let existing = rows.iter().find(|r| r["id"] == id);
+            if matches!(input, RuleCommand::Edit { .. }) && existing.is_none() {
                 return Err(Error::Missing);
             }
-            if matches!(input, RuleCommand::Add) && index.is_some() {
+            if matches!(input, RuleCommand::Add { .. }) && existing.is_some() {
                 return Err(Error::Invalid("rule id already exists"));
             }
-            let row = guided_rule(&id, index.map(|i| &rows[i]), &mut tty)?;
-            super::super::changes::portable_edit(context, index.map(|i| &rows[i]), &row)?;
-            if let Some(index) = index {
-                rows[index] = row;
+            let row = guided_rule(&id, existing, &mut tty)?;
+            let rule =
+                serde_json::from_value(row).map_err(|_| Error::Invalid("invalid custom rule"))?;
+            if matches!(input, RuleCommand::Edit { .. }) {
+                Change::RuleEdit {
+                    rule_id: id,
+                    rule,
+                    layer,
+                }
             } else {
-                rows.push(row);
+                Change::RuleAdd { rule, layer }
             }
         }
-    }
-    document = crate::policy::rules::document_with(
-        document["rules"]
-            .as_array()
-            .ok_or(Error::Invalid("custom rules missing"))?,
-        document["directory_options"]
-            .as_array()
-            .map_or(&[][..], Vec::as_slice),
-    )?;
-    crate::policy::CustomRules::from_yaml(&document.to_string())?;
-    let mut meta = crate::review::project::metadata(&before);
-    let bytes: Vec<String> = serde_json::from_value(candidate["packs"].clone())
-        .map_err(|_| Error::Invalid("pack bytes missing"))?;
-    let next = packs::rebuild(
-        candidate,
-        meta["installed"]
-            .as_array_mut()
-            .ok_or(Error::Invalid("installed packs missing"))?,
-        &bytes,
-        Some(&document.to_string()),
-    )?;
+        RuleCommand::List => return Err(Error::Invalid("invalid operator command")),
+    };
+    let (next, meta, _) = crate::review::changes::custom_rule(context, &before, &change, None)?;
     let plan = state::review_candidate(context, &before, &next, &meta, &mut tty, &base)?;
     crate::review::publication::commit_prepared(context, &before, next, meta, None, None, &plan)
 }
-
 fn guided_rule(id: &str, existing: Option<&Value>, tty: &mut Terminal) -> Result<Value, Error> {
     if existing.is_none() {
         return create_rule(id, tty);

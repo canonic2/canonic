@@ -10,9 +10,12 @@ use std::{
     sync::mpsc,
     thread::{self, JoinHandle},
 };
+mod admin_parity;
 mod confirmation;
 mod elicitation;
 mod prompts;
+mod request_parity;
+mod session_grants;
 mod skills;
 
 /// A fixture project. The temporary root lives as long as this value.
@@ -233,28 +236,47 @@ impl Drop for Transport {
 }
 
 #[test]
-fn catalog_publishes_every_tool_and_marks_only_policy_changes_as_mutations() {
+fn catalog_publishes_every_tool_and_marks_all_state_changes_as_mutations() {
     let catalog = catalog(None).unwrap();
     assert_eq!(
         catalog.listing()["tools"],
         crate::review::mcp::tools()["tools"]
     );
-    let mutations: Vec<_> = catalog
+    let mut mutations: Vec<_> = catalog
         .tools()
         .iter()
         .filter(|tool| !tool.read_only())
         .map(|tool| tool.name.as_str())
         .collect();
+    mutations.sort_unstable();
     assert_eq!(
         mutations,
         [
+            "cache_prepare",
+            "history_configure",
+            "mcp_setup",
             "pack_add",
             "pack_configure",
-            "policy_propose",
-            "review_defer",
-            "policy_withdraw",
+            "pack_remove",
+            "pack_update",
             "policy_apply",
-            "request_approve"
+            "policy_propose",
+            "policy_reject",
+            "policy_repair",
+            "policy_withdraw",
+            "protection_set",
+            "registry_add",
+            "registry_default",
+            "registry_remove",
+            "request_approve",
+            "request_deny",
+            "review_defer",
+            "rule_add",
+            "rule_edit",
+            "rule_remove",
+            "session_grant_approve",
+            "session_grant_propose",
+            "session_grant_revoke"
         ]
     );
 }
@@ -289,7 +311,7 @@ fn legacy_skills_methods_are_refused_but_bundled_resources_remain_readable() {
                 json!({"jsonrpc":"2.0","id":3,"method":"skills/get","params":{"name":"policy-review"}}),
                 json!({"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"skill://shield/policy-review/SKILL.md"}}),
                 json!({"jsonrpc":"2.0","id":5,"method":"server/discover","params":{}}),
-                tool(json!(6), "shield_docs_list", &json!({"limit":1})),
+                tool(json!(6), "docs_list", &json!({"limit":1})),
                 tool(json!(7), "policy_show", &json!({"status":"pending"})),
                 tool(json!(8), "history_list", &json!({})),
             ]);
@@ -330,31 +352,31 @@ fn documentation_tools_deliver_bundled_text_and_validate_page_arguments() {
     let (server, _project) = fixture(None);
     let mut messages = initialize(&json!({}), "Acme").to_vec();
     messages.extend([
-        tool(json!(2), "shield_docs_list", &json!({"limit":1})),
+        tool(json!(2), "docs_list", &json!({"limit":1})),
         tool(
             json!(3),
-            "shield_docs_search",
+            "docs_search",
             &json!({"query":"operands","path":"policy-rules.md","limit":1}),
         ),
         tool(
             json!(4),
-            "shield_docs_read",
+            "docs_read",
             &json!({"path":"policy-rules.md","limit":1}),
         ),
         tool(
             json!(5),
-            "shield_docs_read",
+            "docs_read",
             &json!({"path":"policy-rules.md","start_line":0}),
         ),
         tool(
             json!(6),
-            "shield_docs_search",
+            "docs_search",
             &json!({"query":"rule","limit":101}),
         ),
-        tool(json!(7), "shield_docs_read", &json!({"path":"missing.md"})),
+        tool(json!(7), "docs_read", &json!({"path":"missing.md"})),
         tool(
             json!(8),
-            "shield_docs_search",
+            "docs_search",
             &json!({"query":"rule","path":"missing.md"}),
         ),
     ]);
@@ -398,7 +420,7 @@ fn documentation_tools_deliver_bundled_text_and_validate_page_arguments() {
         );
         assert_eq!(
             result["result"]["content"][0]["text"],
-            "Unknown documentation page; call shield_docs_list."
+            "Unknown documentation page; call docs_list."
         );
         assert_eq!(
             result["result"]["content"][0]["text"],
@@ -409,7 +431,12 @@ fn documentation_tools_deliver_bundled_text_and_validate_page_arguments() {
 
 #[test]
 fn enrolled_adapters_publish_their_own_apply_schema_and_claude_keeps_its_contract() {
-    for agent in [Some("claude"), Some("acme-agent")] {
+    for agent in [
+        Some("claude"),
+        Some("gemini"),
+        Some("agy"),
+        Some("acme-agent"),
+    ] {
         let listing = catalog(agent).unwrap().listing().clone();
         let apply = listing["tools"]
             .as_array()
@@ -458,7 +485,10 @@ fn evaluation_is_connection_local_and_never_executes_input() {
                 .as_array()
                 .unwrap()
                 .len(),
-            24
+            crate::review::mcp::tools()["tools"]
+                .as_array()
+                .unwrap()
+                .len()
         );
         let report = reply(&outputs, &json!("λ"));
         let envelope = &report["result"]["structuredContent"];
@@ -835,6 +865,8 @@ fn proposals_put_the_adapter_activation_route_in_structured_data() {
     for (agent, route) in [
         (Some("claude"), "policy_apply for MCP confirmation"),
         (Some("codex"), "policy_apply for Codex approval"),
+        (Some("gemini"), "policy_apply for MCP form confirmation"),
+        (Some("agy"), "policy_apply for MCP form confirmation"),
         (None, "shield policy review in their terminal"),
     ] {
         let (server, _project) = fixture(agent);

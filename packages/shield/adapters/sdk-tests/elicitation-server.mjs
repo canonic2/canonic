@@ -11,7 +11,9 @@ for await (const line of createInterface({ input: process.stdin })) {
   const message = JSON.parse(line);
   trace.push(message);
   await writeFile(traceFile, JSON.stringify(trace));
-  if (message.method === 'initialize') {
+  if (message.method === 'server/discover') {
+    send({ id: message.id, error: { code: -32601, message: 'Acme fixture supports the classic MCP transport.' } });
+  } else if (message.method === 'initialize') {
     send({ id: message.id, result: { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'acme-forms', version: '1' } } });
   } else if (message.method === 'tools/list') {
     send({ id: message.id, result: { tools: [{ name: 'acme_form', description: 'Choose Acme settings', inputSchema: { type: 'object', properties: {}, additionalProperties: false } }] } });

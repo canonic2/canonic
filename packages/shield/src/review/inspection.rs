@@ -131,6 +131,9 @@ pub(super) fn captured_rules(
             rows.push(rule);
         }
     }
+    for row in &mut rows {
+        row["rule_digest"] = json!(crate::policy::fingerprint(row.to_string().as_bytes()));
+    }
     if let Some(selector) = selected {
         return rows
             .into_iter()

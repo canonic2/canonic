@@ -2,12 +2,11 @@
 use super::terminal::{Step, Terminal};
 use crate::review::{
     Context, Error,
+    admin::protection::Prepared,
     path_access::{Change, PathAccess, Read, load},
-    storage::Store,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::path::Path;
 
 fn word<T: Serialize>(value: T) -> String {
     json!(value).as_str().unwrap_or_default().to_owned()
@@ -31,26 +30,11 @@ pub(super) fn configure(context: &Context, json_mode: bool) -> Result<Value, Err
         ".shield/review, compiled caches, the .shield folder and .shield/.gitignore stay protected whatever you choose here.",
     )?;
     let after = chosen(before, ask(&mut tty, before)?)?;
-    if after == before && !invalid {
-        return Ok(receipt(after, false));
+    let prepared = Prepared::from_metadata(context, &meta, after);
+    if after != before || invalid {
+        tty.confirm(&prepared.review())?;
     }
-    tty.confirm(
-        &json!({"operation":"change protected file access","before":before,"after":after}),
-    )?;
-    Store::open(Path::new(&context.project_root))?.update_checkpoint(
-        context,
-        &|| Ok(()),
-        |state| {
-            if state.operator.get("path_access") != meta.get("path_access") {
-                return Err(Error::Invalid(
-                    "protected file access changed during confirmation; review again",
-                ));
-            }
-            state.operator["path_access"] = json!(after);
-            Ok(json!({}))
-        },
-    )?;
-    Ok(receipt(after, true))
+    prepared.commit(context, &|| Ok(()))
 }
 
 /// The three access questions, starting from the current answers. Escape goes
@@ -151,10 +135,6 @@ fn agent_settings() -> Vec<&'static str> {
         }
     }
     paths
-}
-
-fn receipt(access: PathAccess, changed: bool) -> Value {
-    json!({"schema_version":1,"operation":"protected file access","path_access":access,"changed":changed})
 }
 
 #[cfg(test)]

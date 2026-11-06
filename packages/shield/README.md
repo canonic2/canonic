@@ -118,6 +118,8 @@ describes. See [permission packs](docs/local-registry.md).
 ```sh
 shield mcp setup --agent claude
 shield mcp setup --agent codex
+shield mcp setup --agent gemini
+shield mcp setup --agent agy
 shield mcp setup --remove --agent codex
 shield mcp setup --dry-run
 shield mcp setup --agent box
@@ -130,7 +132,8 @@ the review shows this setting, and Deny still blocks. In a Box project,
 `--agent box` writes the shared `.box/mcp/shield.yml` and the private
 `.box/local/mcp/shield.yml` that pins this binary instead, and
 `box config sync` publishes Shield to each developer's agents. See
-[connecting Claude and Codex](docs/claude-project.md) and
+[connecting Claude and Codex](docs/claude-project.md),
+[connecting Gemini and Antigravity](docs/google-agents.md), and
 [setting up through Box](docs/claude-project.md#set-up-through-box).
 
 ## What Shield does not do

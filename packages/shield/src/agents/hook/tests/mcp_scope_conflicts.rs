@@ -6,6 +6,7 @@ fn mcp_connections_scope_conflicts_are_blocked() {
     for fixture in [
         "claude_scope_conflicts_fixture",
         "codex_scope_conflicts_fixture",
+        "gemini_scope_conflicts_fixture",
     ] {
         let environment = assert_fs::TempDir::new().unwrap();
         let home = environment.path().join("home");
@@ -22,8 +23,13 @@ fn mcp_connections_scope_conflicts_are_blocked() {
             ])
             .env_clear()
             .env("HOME", &home)
+            .env("USERPROFILE", &home)
             .env("CLAUDE_CONFIG_DIR", &claude)
             .env("CODEX_HOME", &codex)
+            .env(
+                "GEMINI_CLI_SYSTEM_SETTINGS_PATH",
+                environment.path().join("system/settings.json"),
+            )
             .output()
             .unwrap();
         assert!(
@@ -66,6 +72,56 @@ fn assert_blocked(root: &Path, cwd: &Path, agent: &str) {
         "{response}"
     );
     assert!(!response.to_string().contains("other.example.com"));
+}
+
+#[test]
+#[ignore = "run by parent with isolated native configuration homes"]
+fn gemini_scope_conflicts_fixture() {
+    // Gemini project bindings are not admitted by the connection validator.
+    // Exercise its adapter scope guard without inventing an active binding.
+    let root = assert_fs::TempDir::new().unwrap();
+    let adapter = find("gemini").unwrap();
+    let path =
+        std::path::PathBuf::from(std::env::var_os("GEMINI_CLI_SYSTEM_SETTINGS_PATH").unwrap());
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    assert!(
+        adapter
+            .check_mcp_scopes(root.path(), root.path(), "acme")
+            .is_ok()
+    );
+    for source in [
+        json!({"mcpServers":{"acme":{"type":"http","url":"https://other.example.com/mcp"}}})
+            .to_string(),
+        json!({"mcpServers":{"acme":{"type":"http","url":"https://cloud.example.com/mcp"}}})
+            .to_string(),
+        "{".into(),
+    ] {
+        fs::write(&path, &source).unwrap();
+        assert!(
+            adapter
+                .check_mcp_scopes(root.path(), root.path(), "acme")
+                .is_err(),
+            "system alias conflict must be rejected"
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), source);
+    }
+    fs::write(
+        &path,
+        json!({"mcpServers":{"unrelated":{"type":"http","url":"https://other.example.com/mcp"}}})
+            .to_string(),
+    )
+    .unwrap();
+    assert!(
+        adapter
+            .check_mcp_scopes(root.path(), root.path(), "acme")
+            .is_ok()
+    );
+    fs::remove_file(&path).unwrap();
+    assert!(
+        adapter
+            .check_mcp_scopes(root.path(), root.path(), "acme")
+            .is_ok()
+    );
 }
 
 #[test]

@@ -24,6 +24,9 @@ struct Parsed {
 }
 
 impl Parsed {
+    fn read_only(&self) -> bool {
+        self.complete && self.in_place.is_none() && self.writes.is_empty() && self.reads.is_empty()
+    }
     /// Each named file with whether the filter writes it, operands first,
     /// then the files only the alternative reading names.
     fn files(&self) -> Vec<(bool, String)> {
@@ -96,6 +99,9 @@ impl Parsed {
 /// operation that could create a file first, so an in-place input that is
 /// certainly absent names no target. Otherwise, as for any other lstat
 /// failure or a present non-regular input, the footprint is incomplete.
+/// Read-only filters retain missing operands as read targets: the shared path
+/// resolver still checks their ancestors, links, read roots and exclusions.
+/// This requires a standalone request: another operation could create the input.
 pub(super) fn collect(
     executable: &str,
     arguments: &[String],
@@ -113,10 +119,16 @@ pub(super) fn collect(
             && fs::symlink_metadata(cwd.join(operand))
                 .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
     };
-    complete &= parsed
-        .inputs(&missing)
-        .iter()
-        .all(|operand| fs::metadata(cwd.join(operand)).is_ok_and(|m| m.is_file()));
+    complete &=
+        parsed
+            .inputs(&missing)
+            .iter()
+            .all(|operand| match fs::metadata(cwd.join(operand)) {
+                Ok(metadata) => metadata.is_file(),
+                Err(error) => {
+                    alone && parsed.read_only() && error.kind() == std::io::ErrorKind::NotFound
+                }
+            });
     let items = parsed
         .entries(&missing)
         .into_iter()
@@ -129,17 +141,16 @@ pub(super) fn collect(
             follow,
         })
         .collect();
-    Some(Targets { items, complete })
+    Some(Targets {
+        items,
+        complete,
+        ..Targets::default()
+    })
 }
 
 /// Whether the filter only reads its operands and names no other file.
 pub(super) fn read_only(executable: &str, arguments: &[String]) -> bool {
-    parse(executable, arguments).is_some_and(|parsed| {
-        parsed.complete
-            && parsed.in_place.is_none()
-            && parsed.writes.is_empty()
-            && parsed.reads.is_empty()
-    })
+    parse(executable, arguments).is_some_and(|parsed| parsed.read_only())
 }
 
 /// Every file a modeled filter names, with whether it writes it; None when its
@@ -546,6 +557,28 @@ fn jq_path(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_filter_inputs_require_a_standalone_request() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let arguments = vec!["missing.txt".into()];
+        assert!(
+            collect("sort", &arguments, root.path(), true)
+                .unwrap()
+                .complete
+        );
+        assert!(
+            !collect("sort", &arguments, root.path(), false)
+                .unwrap()
+                .complete
+        );
+        std::fs::write(root.path().join("missing.txt"), "Acme").unwrap();
+        assert!(
+            collect("sort", &arguments, root.path(), false)
+                .unwrap()
+                .complete
+        );
+    }
 
     #[test]
     fn fixed_programs_admit_reads_and_reject_file_helpers_and_environment_access() {

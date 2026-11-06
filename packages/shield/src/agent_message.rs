@@ -16,6 +16,9 @@ pub(crate) fn cache_repair(project: &str) -> Option<String> {
 }
 
 pub(crate) fn failure(explanation: &Value) -> Option<String> {
+    if let Some(message) = resource_failure(explanation) {
+        return Some(message);
+    }
     let check = explanation["requirement_checks"].as_array()?.first()?;
     if let Some(field) = check["evidence"]["fields"]
         .as_array()
@@ -103,6 +106,35 @@ pub(crate) fn failure(explanation: &Value) -> Option<String> {
     )
 }
 
+/// A short recovery step that remains useful when a host shows only its tool
+/// error. Structured evidence retains the operand; raw OS errors are not echoed.
+pub(crate) fn resource_failure(explanation: &Value) -> Option<String> {
+    let check = explanation["requirement_checks"].as_array()?.first()?;
+    if check["code"] != "evidence_unavailable" {
+        return None;
+    }
+    let resource = &check["evidence"]["resource"];
+    let path = resource["path"].as_str()?;
+    if path.is_empty() || path.len() > 512 || path.chars().any(|c| c.is_control() || c == '`') {
+        return None;
+    }
+    let detail = match resource["code"].as_str()? {
+        "not_found" => "does not exist. Remove it from the search and retry.",
+        "permission_denied" => {
+            "cannot be inspected because filesystem access was denied. Use an accessible path."
+        }
+        "not_directory" => {
+            "contains a component that is not a directory. Correct the path and retry."
+        }
+        "unsupported_file_type" => {
+            "is not a regular file or directory. Use regular files or directories."
+        }
+        "unresolved" => "could not be resolved. Check its path and links before retrying.",
+        _ => return None,
+    };
+    Some(format!("Search operand `{path}` {detail}"))
+}
+
 /// The alternative sharing the most options with the request, so `rg --files`
 /// is offered the `--files` form; the rule's own order breaks ties.
 fn closest<'a>(explanation: &Value, guidance: &'a Value) -> Option<&'a str> {
@@ -183,9 +215,12 @@ pub(crate) fn detail(explanation: &Value) -> Option<String> {
 
 fn detail_from(explanation: &Value, rule_fallback: bool) -> Option<String> {
     let guidance = explanation["guidance"].as_array().and_then(|v| v.first());
-    let message = guidance
-        .and_then(|g| g["message"].as_str())
-        .map(str::to_owned)
+    let message = resource_failure(explanation)
+        .or_else(|| {
+            guidance
+                .and_then(|g| g["message"].as_str())
+                .map(str::to_owned)
+        })
         .or_else(|| failure(explanation))
         .or_else(|| rule_fallback.then(|| denying_rule(explanation)).flatten());
     let alternative = guidance.and_then(|g| closest(explanation, g));
@@ -303,6 +338,44 @@ pub(crate) fn rewrite_detail(diagnostics: &Value) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_operand_failures_give_bounded_recovery_without_raw_errors() {
+        let mut explanation = json!({"requirement_checks":[{
+            "code":"evidence_unavailable", "status":"unknown",
+            "evidence":{"resource":{"path":".agents", "code":"not_found"}}
+        }],"guidance":[{"message":"Use approved paths."}]});
+        assert_eq!(
+            resource_failure(&explanation).as_deref(),
+            Some("Search operand `.agents` does not exist. Remove it from the search and retry.")
+        );
+        assert!(
+            detail(&explanation)
+                .unwrap()
+                .starts_with("Search operand `.agents`")
+        );
+        for (code, expected) in [
+            ("permission_denied", "filesystem access was denied"),
+            ("not_directory", "not a directory"),
+            ("unsupported_file_type", "not a regular file or directory"),
+            ("unresolved", "Check its path and links"),
+        ] {
+            explanation["requirement_checks"][0]["evidence"]["resource"]["code"] = json!(code);
+            let message = resource_failure(&explanation).unwrap();
+            assert!(message.contains(expected), "{message}");
+            assert!(!message.contains("does not exist"), "{message}");
+        }
+        for path in ["\nforged", "`forged`", ""] {
+            explanation["requirement_checks"][0]["evidence"]["resource"]["path"] = json!(path);
+            assert!(resource_failure(&explanation).is_none());
+        }
+        explanation["requirement_checks"][0]["evidence"]["resource"]["path"] =
+            json!("x".repeat(513));
+        assert!(resource_failure(&explanation).is_none());
+        explanation["requirement_checks"][0]["evidence"]["resource"]["path"] = json!(".agents");
+        explanation["requirement_checks"][0]["code"] = json!("location_outside");
+        assert!(resource_failure(&explanation).is_none());
+    }
 
     #[test]
     fn a_plain_deny_names_its_rule_and_reason() {

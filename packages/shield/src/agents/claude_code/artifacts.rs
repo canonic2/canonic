@@ -96,6 +96,7 @@ mod tests {
         let scope = crate::location::WorkingFiles {
             read: vec![root(&host, &project, &config).unwrap()],
             write: vec![],
+            skills: vec![],
             home: None,
             protected: vec![config.clone()],
             http_environment: false,

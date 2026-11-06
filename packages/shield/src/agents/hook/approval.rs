@@ -57,7 +57,7 @@ pub(super) fn in_session(
     let key = Key {
         agent: adapter.spec().id,
         session: request.session,
-        cwd: request.cwd,
+        cwd: request.cwd.as_ref(),
         tool: request.tool,
         input_digest: input_digest(request),
     };
@@ -182,7 +182,7 @@ fn summary(request: &Request<'_>, refusals: &[Value]) -> Option<Summary> {
         deny_rules,
         settings_change: refusals.iter().any(settings),
     };
-    hook_approval::fits(&summary, request.cwd).then_some(summary)
+    hook_approval::fits(&summary, request.cwd.as_ref()).then_some(summary)
 }
 
 fn reason(refusal: &Value) -> String {

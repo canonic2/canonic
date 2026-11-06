@@ -1,4 +1,4 @@
-//! Noninteractive inspection of text-read and native execution approval requests.
+//! Shared inspection and dispatch for stored action requests.
 use super::{Context, Error};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -78,6 +78,10 @@ pub(super) fn inspect(context: &Context, id: Option<&str>) -> Result<Value, Erro
             "execution",
             super::run_approval::inspect_from(&state, None, time)?,
         ),
+        (
+            "hook",
+            super::hook_approval::inspect_from(&state, None, time)?,
+        ),
     ] {
         let Value::Array(rows) = value["requests"].take() else {
             continue;
@@ -99,7 +103,7 @@ pub(super) fn inspect(context: &Context, id: Option<&str>) -> Result<Value, Erro
     Ok(json!({"schema_version":1,"project_id":context.project_id,"requests":requests}))
 }
 
-/// Count unexpired read and execution requests that wait for an operator decision.
+/// Count unexpired requests that wait for an operator decision.
 pub(super) fn pending_count(state: &super::model::State, time: u64) -> usize {
     state
         .read_requests
@@ -111,16 +115,56 @@ pub(super) fn pending_count(state: &super::model::State, time: u64) -> usize {
             .iter()
             .filter(|r| r.awaits_decision(time))
             .count()
+        + super::hook_approval::pending_count(state, time)
 }
 
-pub(super) fn request_view(context: &Context, id: &str) -> Result<(bool, Value), Error> {
+pub(super) enum RequestKind {
+    Read,
+    Execution,
+    Hook,
+}
+
+pub(super) fn request_view(context: &Context, id: &str) -> Result<(RequestKind, Value), Error> {
     let state = super::project::checkpoint(context)?;
     let time = super::clock::now_ms()?;
     match super::read_approval::inspect_from(&state, Some(id), time) {
-        Ok(value) => Ok((true, value)),
-        Err(Error::Missing) => {
-            super::run_approval::inspect_from(&state, Some(id), time).map(|v| (false, v))
-        }
+        Ok(value) => Ok((RequestKind::Read, value)),
+        Err(Error::Missing) => match super::run_approval::inspect_from(&state, Some(id), time) {
+            Ok(value) => Ok((RequestKind::Execution, value)),
+            Err(Error::Missing) => super::hook_approval::inspect_from(&state, Some(id), time)
+                .map(|v| (RequestKind::Hook, v)),
+            Err(error) => Err(error),
+        },
         Err(error) => Err(error),
     }
+}
+
+/// The terminal has confirmed this exact request; native issuance still needs
+/// its host's explicit refusal/override review rather than the Ask-only CLI.
+pub(super) fn authorize(context: &Context, id: &str, deny: bool) -> Result<Value, Error> {
+    match request_view(context, id)?.0 {
+        RequestKind::Read => super::read_approval::authorize(context, id, 300, None, deny),
+        RequestKind::Execution => super::run_approval::authorize(context, id, 300, None, deny),
+        RequestKind::Hook if deny => super::hook_approval::deny(context, id, true),
+        RequestKind::Hook => Err(Error::Invalid(
+            "request host confirmation through request_approve",
+        )),
+    }
+}
+
+/// Human-confirmed MCP revocation never issues or broadens an approval.
+pub(super) fn deny(context: &Context, id: &str, confirmed: bool) -> Result<Value, Error> {
+    match request_view(context, id)?.0 {
+        RequestKind::Read => super::read_approval::deny(context, id, confirmed),
+        RequestKind::Execution => super::run_approval::deny(context, id, confirmed),
+        RequestKind::Hook => super::hook_approval::deny(context, id, confirmed),
+    }
+}
+
+pub(super) fn owns_request(context: &Context, agent: Option<&str>, session: Option<&str>) -> bool {
+    context.surface == "cli"
+        || (context.surface == "mcp"
+            && agent.is_some()
+            && context.agent.as_deref() == agent
+            && session.is_none_or(|session| context.session_id.as_deref() == Some(session)))
 }

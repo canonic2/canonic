@@ -70,7 +70,10 @@ writes two files and changes no other Box or agent file:
   the Tool permissions page except `policy_apply`, which always asks, and to
   install Shield's hooks for Claude Code (`pre_tool_use`, `post_tool_use`,
   `post_tool_use_failure`) and Codex (`pre_tool_use`, `permission_request`,
-  `post_tool_use`). The hooks start with `{command}`, which Box replaces with
+  `post_tool_use`), Gemini and Antigravity (`pre_tool_use`, `post_tool_use`).
+  Native tool approvals are scoped to Claude and Codex; Google hosts retain
+  native permissions and use separate Shield confirmation. The hooks start
+  with `{command}`, which Box replaces with
   the command it launches for the server.
 - `.box/local/mcp/shield.yml` is in Box's private local layer. It pins the
   Shield binary you ran setup with, so Box launches that binary and its hooks
@@ -239,6 +242,29 @@ Ask/Deny rules retain precedence.
 Pagers such as `less` and `more` require command approval or a command rule;
 permission to read their input files does not authorize their execution.
 
+### Skill folders
+
+Each native adapter automatically includes its own skill folders in the read/write
+location union. Agents can create, edit, list, search and read skill instructions and supporting
+files without a folder proposal. Codex includes `skills/` under `CODEX_HOME`
+(default `~/.codex`), `~/.agents/skills`, the project's `.codex/skills` and
+`.agents/skills`, and `/etc/codex/skills` on Unix. Claude includes `skills/` under
+`CLAUDE_CONFIG_DIR` (default `~/.claude`) and the project's `.claude/skills`.
+
+Skill editing follows ordinary file and command policy without settings-change
+approval. Claude skills can contain hooks, tool pre-approvals and shell templating;
+Shield does not inspect that content or mediate every host-internal execution
+path. A user-library edit can affect other projects. Codex's `/etc/codex/skills`
+can affect other users when OS permissions permit writing there. Keeping skills
+editable leaves this execution boundary outside Shield's settings protection.
+
+These roots open neither the enclosing configuration
+folder nor another agent's user-level libraries. Existing project permissions
+and explicit command denials still apply. Shield verifies existing ancestors
+on each request, so new skill folders work without setup or a policy edit.
+A symlink in the relative skill path cannot redirect this access to another folder;
+links inside a library retain ordinary containment and protected-file checks.
+
 ### Temporary and session files
 
 Claude and Codex native adapters include the system temporary folders in the
@@ -264,8 +290,8 @@ this session scope. Directory or operand symlinks
 cannot redirect this scope outside the verified artifact directory. The scope is
 observed afresh for each callback and is unavailable to MCP diagnostic input.
 
-Status lists supported working-file categories. Runtime assets and scratch
-folders outside temporary roots are not automatically discovered.
+Status lists `skills` among the supported working-file categories. Other runtime
+assets and scratch folders outside temporary roots are not automatically discovered.
 
 ### Shell analysis
 
@@ -415,7 +441,8 @@ literal invocation of a supported native program. See the
 [Windows development limits](development.md#native-windows-development) for
 the supported names and quoting. Other PowerShell syntax and cmd requests block
 even when Ask fallback is set to allow.
-Other agents have no installed native integration. Native hooks cannot consume
+Gemini and Antigravity also have [native integrations](google-agents.md), with
+their own tool mappings and host limits. Native hooks cannot consume
 the separate runner's stored approval grants.
 
 Claude evaluates policy before showing the prompt; Shield cannot revalidate a

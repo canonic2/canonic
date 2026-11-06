@@ -455,7 +455,7 @@ fn missing(command: &PublicCommand) -> Report {
             Some(entry),
         ),
         PublicCommand::Rule(Rule {
-            command: RuleCommand::Edit { id } | RuleCommand::Remove { id },
+            command: RuleCommand::Edit { id, .. } | RuleCommand::Remove { id, .. },
         }) => (
             "Rule was not found",
             "No current project rule has this identifier.",

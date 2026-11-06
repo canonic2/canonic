@@ -478,6 +478,35 @@ fn capture(
     Ok(value)
 }
 
+/// Explicit denial-only entry point; MCP cannot use it to issue a grant.
+pub(super) fn deny(context: &Context, id: &str, confirmed: bool) -> Result<Value, Error> {
+    Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
+        let index = state
+            .run_requests
+            .iter()
+            .position(|row| row.request_id == id)
+            .ok_or(Error::Missing)?;
+        let row = &state.run_requests[index];
+        if !super::approvals::owns_request(
+            context,
+            row.origin.agent.as_deref(),
+            row.origin.session_id.as_deref(),
+        ) {
+            return Err(Error::Missing);
+        }
+        if !confirmed {
+            return Err(Error::ApprovalRequired);
+        }
+        if row.status == "consumed" {
+            return Err(Error::Invalid("request is terminal"));
+        }
+        if row.status == "revoked" {
+            return Ok(json!({"request_id":id,"status":"revoked"}));
+        }
+        Ok(revoke_request(state, context, index, None))
+    })
+}
+
 pub(crate) fn authorize(
     context: &Context,
     id: &str,
@@ -580,6 +609,6 @@ fn operator_event(
         json!({"operator_reason":reason}),
         details,
     );
-    event["operator"] = json!({"operator_id":null,"display_name":null,"mechanism":"operator-cli"});
+    event["operator"] = json!({"operator_id":null,"display_name":null,"mechanism":if context.surface == "cli" {"operator-cli"} else {"host-elicitation"}});
     event
 }

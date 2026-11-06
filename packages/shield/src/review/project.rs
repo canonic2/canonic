@@ -67,6 +67,7 @@ pub(super) fn status_from(context: &Context, state: &State) -> Result<Value, Err
         state,
         super::clock::best_effort_ms()
     ));
+    value["session_grants"] = super::session_grants::summary(state);
     value["coverage"] = integrations::status(context, state);
     value["path_access"] = path_access::load(&metadata(state)).map_or_else(
         |error| json!({"error":error.to_string()}),

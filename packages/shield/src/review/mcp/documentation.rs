@@ -10,7 +10,7 @@ use std::sync::LazyLock;
 
 static GUIDES: Bundle = canonic_mcp_kit::include_docs!();
 static DOCS: LazyLock<Documentation> =
-    LazyLock::new(|| Documentation::new(&GUIDES, "shield", "Shield", env!("CARGO_PKG_VERSION")));
+    LazyLock::new(|| Documentation::new(&GUIDES, "Shield", env!("CARGO_PKG_VERSION")));
 
 /// Whether `name` is one of the documentation tools.
 pub(super) fn handles(name: &str) -> bool {

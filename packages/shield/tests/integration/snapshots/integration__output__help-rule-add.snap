@@ -7,6 +7,7 @@ Create a project rule through guided input, after confirmation
 Usage: shield rule add [OPTIONS]
 
 Options:
+      --local
       --project <PROJECT>              Select a project; otherwise discover the nearest enrolled ancestor
       --json                           Print one JSON result; commands that change policy refuse JSON mode
       --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)

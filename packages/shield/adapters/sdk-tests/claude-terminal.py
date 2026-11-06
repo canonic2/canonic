@@ -1,4 +1,4 @@
-"""Owned interactive Claude terminal; JSON frames carry output and keyboard input."""
+"""Owned agent terminal; JSON frames carry output and keyboard input."""
 import fcntl
 import json
 import os
@@ -22,6 +22,7 @@ child = subprocess.Popen(options["argv"], cwd=options["cwd"], env=options["env"]
                          stdin=slave, stdout=slave, stderr=slave, preexec_fn=terminal)
 os.close(slave)
 running = True
+input_buffer = b""
 
 def stop(*_):
     global running
@@ -43,21 +44,26 @@ try:
                 os.write(master, b"\x1b[1;1R")
             print(json.dumps({"text": data.decode("utf8", errors="replace")}), flush=True)
         if sys.stdin in ready:
-            line = sys.stdin.readline()
-            if not line:
+            data = os.read(sys.stdin.fileno(), 65536)
+            if not data:
                 break
-            message = json.loads(line)
-            if message.get("stop"):
-                break
-            os.write(master, message["input"].encode())
+            input_buffer += data
+            while b"\n" in input_buffer:
+                line, input_buffer = input_buffer.split(b"\n", 1)
+                message = json.loads(line)
+                if message.get("stop"):
+                    running = False
+                    break
+                os.write(master, message["input"].encode())
         if child.poll() is not None:
             break
 finally:
     # Only this retained session leader and its fixture-owned descendants.
-    try:
-        os.killpg(child.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
+    if child.poll() is None:
+        try:
+            os.killpg(child.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
     try:
         child.wait(timeout=2)
     except subprocess.TimeoutExpired:

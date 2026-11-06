@@ -368,7 +368,13 @@ impl Evaluator {
         checkpoint: &dyn Fn() -> Result<(), Error>,
         known_cwd: bool,
     ) -> Result<CandidateEvaluation, Error> {
-        self.evaluate_known(request, checkpoint, known_cwd, true, None)
+        // This API evaluates one argv invocation. Shell components use the
+        // working-files API with the analyzer's explicit solitary marker.
+        let scope = crate::location::WorkingFiles {
+            sole_operation: true,
+            ..Default::default()
+        };
+        self.evaluate_known(request, checkpoint, known_cwd, true, Some(&scope))
     }
 
     pub(crate) fn evaluate_context_with_working_files(

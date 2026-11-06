@@ -547,13 +547,20 @@ pub(super) fn capabilities(value: &Value, domain: &str, result: &mut BTreeSet<St
                 result.insert(OPTION_ABBREVIATIONS.into());
             }
             for (key, v) in fields {
-                if ["cwd", "sources", "destination", "targets", "argument_paths"]
-                    .contains(&key.as_str())
+                if [
+                    "cwd",
+                    "sources",
+                    "destination",
+                    "targets",
+                    "argument_paths",
+                    "field_paths",
+                ]
+                .contains(&key.as_str())
                     && access_reference(v)
                 {
                     result.insert("access-paths-v1".into());
                 }
-                if key == "argument_paths" {
+                if key == "argument_paths" || key == "field_paths" {
                     result.insert("location-v1".into());
                 }
                 if ["fields", "request_fields", "connection"].contains(&key.as_str())
@@ -577,6 +584,7 @@ pub(super) fn capabilities(value: &Value, domain: &str, result: &mut BTreeSet<St
                 let capability = match key.as_str() {
                     "connection" if domain == "mcp" => Some("mcp-connection-facts-v1"),
                     "argument_paths" => Some("argument-paths-v1"),
+                    "field_paths" => Some("field-paths-v1"),
                     "glob" => Some("glob-v1"),
                     "regex" => Some("regex-v1"),
                     "not" => Some(NEGATED_SELECTORS),
@@ -872,6 +880,7 @@ fn rank(value: &Value) -> u8 {
         "environment",
         "targets",
         "argument_paths",
+        "field_paths",
         "sources",
         "destination",
         "fields",

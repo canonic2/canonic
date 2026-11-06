@@ -35,7 +35,7 @@ pub(super) fn prepare_connections(
         // ordinary candidate validation still runs before the plan is applied.
         let path = root.join(".shield/config.yml");
         if path.exists() {
-            let captured = super::super::project_files::capture(&path)
+            let captured = super::super::project_sources::capture(&path)
                 .map_err(|_| Error::Invalid("invalid project MCP configuration"))?;
             let evaluator = crate::configuration::Evaluator::new(vec![(
                 crate::policy::Scope::Project,

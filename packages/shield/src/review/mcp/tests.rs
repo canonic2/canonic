@@ -7,6 +7,8 @@ mod file_editing;
 mod pack_acquisition;
 mod pack_identity;
 mod pack_info;
+mod pack_verbs;
+mod parity;
 mod rule_proposals;
 mod suggestion_workflow;
 mod sweep_cost;
@@ -156,6 +158,11 @@ fn pack_change(context: &Context, connection: &Connection, change: Value, key: &
 fn commit_pack_change(context: &Context, connection: &Connection, change: Value, key: &str) {
     let proposed = pack_change(context, connection, change, key);
     assert_eq!(proposed["error"], Value::Null, "{proposed}");
+    if proposed["data"]["unchanged"] == true {
+        assert_eq!(proposed["data"]["committed"], false, "{proposed}");
+        assert!(proposed["data"].get("proposal_id").is_none(), "{proposed}");
+        return;
+    }
     review::operator::commit_proposal_fixture(
         context,
         proposed["data"]["proposal_id"].as_str().unwrap(),
@@ -696,6 +703,72 @@ fn oversized_policy_evidence_keeps_identity_and_marks_missing_details() {
 }
 
 #[test]
+fn admin_reviews_use_tool_routes_and_prepare_outside_the_connection_lock() {
+    let (_root, mut context, connection) = fixture();
+    context.agent = Some("claude".into());
+    let checkpoint = || {
+        assert!(
+            connection.admin.try_lock().is_ok(),
+            "preparation held the connection lock"
+        );
+        Ok(())
+    };
+    let (_, binding) = admin_confirmation(
+        &context,
+        &connection,
+        "history_configure",
+        &json!({"enabled":false}),
+        &checkpoint,
+    )
+    .unwrap()
+    .unwrap();
+    discard_admin(&connection, binding);
+    assert!(
+        admin_confirmation(
+            &context,
+            &connection,
+            "history_configure",
+            &json!({"enabled":false}),
+            &|| Err(crate::policy::Error::Interrupted)
+        )
+        .is_err()
+    );
+    for (tool, route) in [
+        ("protection_set", "shield protection set"),
+        ("registry_add", "shield registry add"),
+        ("mcp_setup", "shield mcp setup"),
+        ("history_configure", "shield history configure"),
+    ] {
+        let required = admin_error(&context, tool, &Error::ApprovalRequired);
+        assert_eq!(required["error"]["operator_route"], route);
+        assert!(
+            !required["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("policy review")
+        );
+        let stale = admin_error(&context, tool, &Error::StaleSnapshot);
+        assert_eq!(stale["error"]["operator_route"], tool);
+        assert!(
+            stale["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains(&format!("Call {tool} again"))
+        );
+    }
+    for location in ["https://127.0.0.1:1/registry", "/nonexistent/acme-registry"] {
+        let args = json!({"name":"acme","location":location});
+        assert!(matches!(
+            admin_confirmation(&context, &connection, "registry_add", &args, &checkpoint),
+            Err(Error::ApprovalRequired)
+        ));
+        let result = call(&context, &connection, "registry_add", &args, &checkpoint);
+        assert_eq!(result["error"]["operator_route"], "shield registry add");
+        assert_eq!(result["error"]["code"], "operator_review_required");
+    }
+}
+
+#[test]
 fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() {
     let (_root, context, connection) = fixture();
     let names: Vec<_> = tools()["tools"]
@@ -707,14 +780,26 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
     assert_eq!(
         names,
         vec![
+            "cache_prepare",
+            "protection_set",
+            "registry_add",
+            "registry_remove",
+            "registry_default",
+            "policy_repair",
+            "history_configure",
+            "policy_reject",
+            "mcp_setup",
             "status",
             "doctor",
             "pack_list",
+            "pack_show",
             "registry_list",
             "pack_search",
             "pack_info",
             "pack_add",
             "pack_configure",
+            "pack_update",
+            "pack_remove",
             "policy_show",
             "rule_list",
             "policy_propose",
@@ -725,12 +810,23 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
             "policy_receipt",
             "request_list",
             "request_approve",
+            "request_show",
+            "request_deny",
+            "history_show",
+            "session_grant_list",
+            "session_grant_show",
+            "session_grant_propose",
+            "session_grant_approve",
+            "rule_add",
+            "rule_edit",
+            "rule_remove",
+            "session_grant_revoke",
             "history_list",
             "policy_evaluate",
             "policy_compare",
-            "shield_docs_list",
-            "shield_docs_search",
-            "shield_docs_read"
+            "docs_list",
+            "docs_search",
+            "docs_read"
         ]
     );
     for name in [
@@ -750,13 +846,28 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
         assert!(tool["outputSchema"].is_object());
         assert_eq!(
             tool["annotations"]["destructiveHint"],
-            ["policy_withdraw", "policy_apply"]
-                .iter()
-                .any(|name| tool["name"] == *name)
+            [
+                "policy_withdraw",
+                "policy_apply",
+                "protection_set",
+                "registry_remove",
+                "history_configure",
+                "policy_reject",
+                "mcp_setup"
+            ]
+            .iter()
+            .any(|name| tool["name"] == *name)
         );
     }
+    let listing = tools();
+    let pack_list = listing["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "pack_list")
+        .unwrap();
     assert_eq!(
-        tools()["tools"][2]["inputSchema"]["properties"]["reference"]["type"],
+        pack_list["inputSchema"]["properties"]["reference"]["type"],
         "string"
     );
 }

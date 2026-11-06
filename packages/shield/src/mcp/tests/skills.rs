@@ -50,8 +50,9 @@ fn static_discovery_get_and_read_need_no_project_or_handshake() {
             .unwrap();
         } else if reference.contains('_') && reference != "apply_arguments" {
             assert!(
-                tools.tools().iter().any(|tool| tool.name == reference),
-                "unknown bundled tool reference: {reference}"
+                tools.tools().iter().any(|tool| tool.name == reference
+                    || tool.input_schema["properties"].get(reference).is_some()),
+                "unknown bundled tool or argument reference: {reference}"
             );
         }
     }

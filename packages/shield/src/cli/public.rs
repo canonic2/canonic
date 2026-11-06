@@ -55,6 +55,8 @@ pub enum PublicCommand {
     Status,
     /// Check configuration and installation prerequisites; changes nothing.
     Doctor,
+    /// Read and search the documentation bundled with this version, without enrollment.
+    Docs(Docs),
     /// Set up agent hooks and MCP, or serve Shield's MCP tools.
     Mcp(Mcp),
     /// Change whether agents may read or change protected settings and policy files.
@@ -69,6 +71,8 @@ pub enum PublicCommand {
     Rule(Rule),
     /// List, inspect, approve or deny stored agent requests.
     Request(Request),
+    /// Inspect or revoke temporary conversation grants, or approve a retained candidate.
+    SessionGrant(SessionGrant),
     /// List or inspect agent request decisions and outcomes.
     History(History),
     /// Prepare disposable compiled data from the currently committed policy.
@@ -92,6 +96,48 @@ impl PublicCommand {
             _ => None,
         }
     }
+}
+
+/// Reusable, private authorization for one native agent conversation.
+#[derive(Args)]
+pub struct SessionGrant {
+    /// Session-grant operation.
+    #[command(subcommand)]
+    pub command: SessionGrantCommand,
+}
+
+/// Inspection is read-only; mutations require an operator terminal.
+#[derive(Subcommand)]
+pub enum SessionGrantCommand {
+    /// Prepare an inactive conversation-grant candidate from a JSON object.
+    Propose { input: PathBuf },
+    /// List this project's retained grants and pending candidates.
+    List {
+        /// Select one hook-issued session reference.
+        #[arg(long)]
+        session_ref: Option<String>,
+        /// Continue the selected immutable page.
+        #[arg(long)]
+        cursor: Option<String>,
+        /// Maximum rows, from 1 to 64.
+        #[arg(long, default_value_t = 16)]
+        limit: u64,
+    },
+    /// Inspect a proposal or grant.
+    Show {
+        /// Retained proposal or grant ID.
+        id: String,
+    },
+    /// Review and confirm a retained session-grant candidate.
+    Approve {
+        /// Retained proposal ID.
+        proposal_id: String,
+    },
+    /// Revoke a grant or withdraw a pending candidate.
+    Revoke {
+        /// Retained proposal or grant ID.
+        id: String,
+    },
 }
 
 /// Maintenance of derived policy data; never activates pending source edits.
@@ -152,83 +198,7 @@ pub(crate) fn integration_names() -> clap::builder::PossibleValuesParser {
     )
 }
 
-/// The selection bit of the Box integration, apart from the adapter indexes.
-const BOX_BIT: u64 = 1 << 63;
-
-/// Plan-engine selection; no selection authorizes tool execution.
-#[derive(Clone, Copy)]
-pub(crate) enum IntegrationChoice {
-    /// Preserve existing registration, resuming any confirmed repair plan.
-    Keep,
-    /// Install the agents in this set, indexed by the immutable adapter
-    /// registry, with Box as the highest bit.
-    Agents(u64),
-    /// Remove selected adapters while preserving the others; zero opens selection.
-    RemoveAgents(u64),
-}
-
-#[cfg(test)]
-impl IntegrationChoice {
-    /// Install one registered agent.
-    pub(crate) fn agent(id: &str) -> Self {
-        Self::Agents(Self::bits(&[id]).expect("registered agent"))
-    }
-    /// Install every registered agent.
-    pub(crate) fn all() -> Self {
-        Self::Agents(Self::every())
-    }
-    /// Remove every Shield-owned agent registration.
-    pub(crate) fn remove_all() -> Self {
-        Self::RemoveAgents(Self::every())
-    }
-    fn every() -> u64 {
-        let ids: Vec<_> = crate::agents::ADAPTERS
-            .iter()
-            .map(|a| a.spec().id)
-            .collect();
-        Self::bits(&ids).expect("registered agents")
-    }
-}
-
-impl IntegrationChoice {
-    pub(crate) fn contains(self, agent: &str) -> bool {
-        match self {
-            Self::Agents(bits) | Self::RemoveAgents(bits)
-                if agent == crate::review::integrations::box_definition::ID =>
-            {
-                bits & BOX_BIT != 0
-            }
-            Self::Agents(bits) | Self::RemoveAgents(bits) => crate::agents::ADAPTERS
-                .iter()
-                .position(|a| a.spec().id == agent)
-                .is_some_and(|i| i < 63 && bits & (1 << i) != 0),
-            Self::Keep => false,
-        }
-    }
-
-    /// The registry-indexed set of `agents`.
-    pub(crate) fn bits(agents: &[impl AsRef<str>]) -> Result<u64, crate::review::Error> {
-        use crate::review::Error;
-        let mut bits = 0u64;
-        for id in agents {
-            if id.as_ref() == crate::review::integrations::box_definition::ID {
-                bits |= BOX_BIT;
-                continue;
-            }
-            let index = crate::agents::ADAPTERS
-                .iter()
-                .position(|a| a.spec().id == id.as_ref())
-                .filter(|index| *index < 63)
-                .ok_or(Error::Invalid("Shield supports Box, Claude and Codex only"))?;
-            bits |= 1u64
-                .checked_shl(
-                    u32::try_from(index).map_err(|_| Error::Invalid("too many agent adapters"))?,
-                )
-                .ok_or(Error::Invalid("too many agent adapters"))?;
-        }
-        Ok(bits)
-    }
-}
+pub(crate) use crate::review::integrations::IntegrationChoice;
 
 impl Setup {
     /// The plan selection: explicit agents, removal, or `None` for the guided flow.
@@ -279,6 +249,72 @@ pub enum PolicyCommand {
     Show,
     /// Review pending proposals, edited files, projection repair or history settings in a terminal.
     Review,
+    /// Restore managed project files from committed policy after confirmation.
+    Repair,
+    /// Reject a retained pending proposal after confirmation.
+    Reject {
+        proposal_id: String,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Preview a normalized request from a JSON input/context object; never executes it.
+    Evaluate {
+        input: PathBuf,
+        /// Active policy by default; select a retained proposal's candidate instead.
+        #[arg(long)]
+        proposal_id: Option<String>,
+    },
+    /// Compare active policy or retained proposal snapshots without activating them.
+    Compare {
+        /// active, proposal:ID, or proposal:ID:before.
+        #[arg(long, default_value = "active")]
+        before: String,
+        /// active, proposal:ID, or proposal:ID:before.
+        #[arg(long)]
+        after: String,
+        #[arg(long, default_value = "literal_argv", value_parser = ["sample", "literal_argv", "supported_semantic"])]
+        domain: String,
+        /// JSON input/context object, required for the sample domain.
+        #[arg(long)]
+        input: Option<PathBuf>,
+    },
+}
+
+/// Embedded documentation, independent of project enrollment.
+#[derive(Args)]
+pub struct Docs {
+    #[command(subcommand)]
+    pub command: DocsCommand,
+}
+
+/// The same selectors and bounds as the documentation MCP tools.
+#[derive(Subcommand)]
+pub enum DocsCommand {
+    /// List bundled page paths, titles and line counts.
+    List {
+        #[arg(long, default_value_t = 0)]
+        offset: u64,
+        #[arg(long, default_value_t = 50)]
+        limit: u64,
+    },
+    /// Search for case-insensitive literal text.
+    Search {
+        query: String,
+        #[arg(long)]
+        path: Option<String>,
+        #[arg(long, default_value_t = 0)]
+        offset: u64,
+        #[arg(long, default_value_t = 50)]
+        limit: u64,
+    },
+    /// Read a page's lines.
+    Read {
+        path: String,
+        #[arg(long, default_value_t = 1)]
+        start_line: u64,
+        #[arg(long, default_value_t = 100)]
+        limit: u64,
+    },
 }
 
 /// Permission pack operations.
@@ -378,11 +414,22 @@ pub enum RuleCommand {
     /// List pack and custom rules.
     List,
     /// Create a project rule through guided input, after confirmation.
-    Add,
+    Add {
+        #[arg(long)]
+        local: bool,
+    },
     /// Edit the selected project rule through guided input, after confirmation.
-    Edit { id: String },
+    Edit {
+        id: String,
+        #[arg(long)]
+        local: bool,
+    },
     /// Remove a selected project custom rule, after confirmation.
-    Remove { id: String },
+    Remove {
+        id: String,
+        #[arg(long)]
+        local: bool,
+    },
 }
 
 /// Stored agent requests that wait for, or hold, an operator decision.
@@ -417,6 +464,15 @@ pub struct History {
 /// Request history operations.
 #[derive(Subcommand)]
 pub enum HistoryCommand {
+    /// Review changes to history collection, retention or clearing.
+    Configure {
+        #[arg(long)]
+        enabled: Option<bool>,
+        #[arg(long)]
+        limit: Option<usize>,
+        #[arg(long)]
+        purge: bool,
+    },
     /// List request decisions, newest first.
     List {
         /// Show requests denied by policy or an operator.
@@ -428,6 +484,12 @@ pub enum HistoryCommand {
         /// Filter the requesting agent.
         #[arg(long)]
         agent: Option<String>,
+        /// Show requests authorized by a reusable session grant.
+        #[arg(long, value_parser=["session_grant"])]
+        authorization_kind: Option<String>,
+        /// Filter uses of one reusable grant.
+        #[arg(long)]
+        grant_id: Option<String>,
     },
     /// Explain the request and its decision/approval/completion observations.
     Show { entry: String },
@@ -437,6 +499,12 @@ pub enum HistoryCommand {
 mod mcp_setup_tests {
     use super::*;
     use clap::Parser;
+
+    #[test]
+    fn session_grant_approval_has_one_cli_name() {
+        assert!(Cli::try_parse_from(["shield", "session-grant", "approve", "acme"]).is_ok());
+        assert!(Cli::try_parse_from(["shield", "session-grant", "apply", "acme"]).is_err());
+    }
 
     fn setup(args: &[&str]) -> Setup {
         let cli = Cli::try_parse_from(["shield", "mcp", "setup"].iter().chain(args)).unwrap();
@@ -457,7 +525,10 @@ mod mcp_setup_tests {
             .unwrap();
         assert!(matches!(choice, IntegrationChoice::Agents(_)));
         for adapter in crate::agents::ADAPTERS {
-            assert!(choice.contains(adapter.spec().id));
+            assert_eq!(
+                choice.contains(adapter.spec().id),
+                ["claude", "codex"].contains(&adapter.spec().id)
+            );
         }
         assert!(!choice.contains("unregistered-agent"));
         assert!(setup(&[]).choice().unwrap().is_none());

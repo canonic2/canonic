@@ -159,9 +159,9 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
                 schema = json!({"type":"object","oneOf":variants});
             }
         }
-        if name == "policy_propose" { let mut definitions = crate::policy::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
-        let mutation=["policy_propose","pack_configure","pack_add","policy_withdraw","policy_apply","review_defer","request_approve"].contains(&name);
-        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","policy_propose"].contains(&name))}})
+        if ["policy_propose","rule_add","rule_edit","session_grant_propose"].contains(&name) { let mut definitions = crate::policy::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
+        let mutation=super::super::admin::supports(name) || ["policy_propose","rule_add","rule_edit","rule_remove","pack_configure","pack_add","pack_update","pack_remove","policy_withdraw","policy_apply","review_defer","request_approve","request_deny","session_grant_propose","session_grant_approve","session_grant_revoke"].contains(&name);
+        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply","protection_set","registry_remove","history_configure","policy_reject","mcp_setup"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","pack_update","policy_propose","registry_add","mcp_setup"].contains(&name))}})
     }).chain(super::documentation::tools().into_iter().map(|mut tool| {
         // The shared definitions carry their own schemas and annotations;
         // results arrive in Shield's envelope.
@@ -238,6 +238,103 @@ pub(super) fn metadata() -> impl Iterator<Item = (&'static str, &'static str)> {
 }
 
 fn inventory() -> Vec<Definition> {
+    [
+        admin_inventory(),
+        policy_inventory(),
+        request_inventory(),
+        rule_inventory(),
+    ]
+    .concat()
+}
+
+fn admin_inventory() -> Vec<Definition> {
+    vec![
+        (
+            "cache_prepare",
+            "Prepare derived cache from committed policy; changes no policy authority",
+            || object(json!({}), &[]),
+        ),
+        (
+            "protection_set",
+            "Ask the user to change protected file access after an exact before/after review",
+            || {
+                let mut schema = object(
+                    json!({"agent_settings_read":{"enum":["ask","allow"]},"agent_settings_change":{"enum":["block","allow"]},"shield_config_change":{"enum":["block","allow"]}}),
+                    &[],
+                );
+                schema["minProperties"] = json!(1);
+                schema
+            },
+        ),
+        (
+            "registry_add",
+            "Return the terminal enrollment route without fetching the supplied location; the person runs shield registry add",
+            || {
+                object(
+                    json!({"name":string(),"location":string(),"scope":{"enum":["project","user"],"default":"project"}}),
+                    &["name", "location"],
+                )
+            },
+        ),
+        (
+            "registry_remove",
+            "Ask the user to remove a registry registration while preserving installed policy",
+            || {
+                object(
+                    json!({"name":string(),"scope":{"enum":["project","user"],"default":"project"}}),
+                    &["name"],
+                )
+            },
+        ),
+        (
+            "registry_default",
+            "Ask the user to select the default registry for future discovery and installation",
+            || {
+                object(
+                    json!({"name":string(),"scope":{"enum":["project","user"],"default":"project"}}),
+                    &["name"],
+                )
+            },
+        ),
+        (
+            "policy_repair",
+            "Ask the user to restore managed projections from committed active policy",
+            || object(json!({}), &[]),
+        ),
+        (
+            "history_configure",
+            "Ask the user to change history retention or clear retained history",
+            || {
+                object(
+                    json!({"enabled":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":10000},"purge":{"type":"boolean","default":false}}),
+                    &[],
+                )
+            },
+        ),
+        (
+            "policy_reject",
+            "Ask the user to reject a pending proposal; distinct from withdrawing your own proposal",
+            || {
+                object(
+                    json!({"proposal_id":id(),"reason":string()}),
+                    &["proposal_id"],
+                )
+            },
+        ),
+        (
+            "mcp_setup",
+            "Review agent registration changes; dry_run shows the plan, otherwise the user confirms it",
+            || {
+                object(
+                    json!({"agents":{"type":"array","maxItems":64,"uniqueItems":true,"items":string()},"remove":{"type":"boolean","default":false},"dry_run":{"type":"boolean","default":false},"scope":{"enum":["project"],"default":"project"}}),
+                    &[],
+                )
+            },
+        ),
+    ]
+}
+
+fn policy_inventory() -> Vec<Definition> {
     vec![
         (
             "status",
@@ -250,6 +347,11 @@ fn inventory() -> Vec<Definition> {
         ("pack_list", "List installed packs, or show one", || {
             selectable("reference", json!({}), string())
         }),
+        (
+            "pack_show",
+            "Show one installed pack's selection, rules and source",
+            || object(json!({"reference":string()}), &["reference"]),
+        ),
         (
             "registry_list",
             "List the project's effective pack registries, or with scope user the user's own",
@@ -266,6 +368,26 @@ fn inventory() -> Vec<Definition> {
         pack_info(),
         pack_add(),
         pack_configure(),
+        (
+            "pack_update",
+            "Prepare an inactive update of one installed pack, or all tracking packs when reference is omitted; pinned packs stay fixed. Copy returned apply_arguments unchanged to policy_apply for user approval.",
+            || {
+                object(
+                    json!({"reference":string(),"idempotency_key":id(),"agent_reason":string()}),
+                    &[],
+                )
+            },
+        ),
+        (
+            "pack_remove",
+            "Prepare an inactive removal of one installed pack using the CLI's dependency checks. Copy returned apply_arguments unchanged to policy_apply for user approval.",
+            || {
+                object(
+                    json!({"reference":string(),"idempotency_key":id(),"agent_reason":string()}),
+                    &["reference"],
+                )
+            },
+        ),
         (
             "policy_show",
             "Show active policy, or select a proposal by proposal_id to retrieve its status and apply_arguments",
@@ -305,6 +427,11 @@ fn inventory() -> Vec<Definition> {
             "Show a proposal's status and application receipt, if any",
             || object(json!({"proposal_id":id()}), &["proposal_id"]),
         ),
+    ]
+}
+
+fn request_inventory() -> Vec<Definition> {
+    vec![
         (
             "request_list",
             "List or show pending action requests; only the user can grant them",
@@ -312,12 +439,92 @@ fn inventory() -> Vec<Definition> {
         ),
         request_approve(),
         (
+            "request_show",
+            "Inspect one stored request without changing its authority",
+            || object(json!({"request_id":id()}), &["request_id"]),
+        ),
+        (
+            "request_deny",
+            "Ask the user to deny a pending request or revoke its unused grant",
+            || object(json!({"request_id":id()}), &["request_id"]),
+        ),
+        ("history_show", "Inspect one retained history entry", || {
+            object(json!({"entry_id":id()}), &["entry_id"])
+        }),
+        (
+            "session_grant_list",
+            "List retained session grants and candidates",
+            || {
+                object(
+                    json!({"session_ref":id(),"cursor":id(),"limit":{"type":"integer","minimum":1,"maximum":64,"default":16}}),
+                    &[],
+                )
+            },
+        ),
+        session_grant_show(),
+        session_grant_propose(),
+        (
+            "session_grant_approve",
+            "Ask the user to issue a retained conversation grant; copy apply_arguments unchanged",
+            || {
+                object(
+                    json!({"proposal_id":id(),"candidate_digest":string()}),
+                    &["proposal_id", "candidate_digest"],
+                )
+            },
+        ),
+    ]
+}
+
+fn rule_inventory() -> Vec<Definition> {
+    vec![
+        (
+            "rule_add",
+            "Prepare an inactive custom rule addition; apply with policy_apply after review",
+            || {
+                object(
+                    json!({"rule":rule(),"layer":layer(),"idempotency_key":id(),"agent_reason":string()}),
+                    &["rule"],
+                )
+            },
+        ),
+        (
+            "rule_edit",
+            "Prepare an inactive custom rule edit; apply with policy_apply after review",
+            || {
+                object(
+                    json!({"rule_id":id(),"rule":rule(),"layer":layer(),"idempotency_key":id(),"agent_reason":string()}),
+                    &["rule_id", "rule"],
+                )
+            },
+        ),
+        (
+            "rule_remove",
+            "Prepare an inactive custom rule removal; apply with policy_apply after review",
+            || {
+                object(
+                    json!({"rule_id":id(),"layer":layer(),"idempotency_key":id(),"agent_reason":string()}),
+                    &["rule_id"],
+                )
+            },
+        ),
+        (
+            "session_grant_revoke",
+            "Revoke your session grant or withdraw its pending proposal. Reduces authority only; another connection's grant needs the operator route.",
+            || {
+                let mut schema = object(json!({"grant_id":id(),"proposal_id":id()}), &[]);
+                schema["minProperties"] = json!(1);
+                schema["maxProperties"] = json!(1);
+                schema
+            },
+        ),
+        (
             "history_list",
             "List or show past requests and their decisions",
             || {
                 selectable(
                     "entry_id",
-                    json!({"denied":{"type":"boolean"},"approved":{"type":"boolean"},"agent":string()}),
+                    json!({"denied":{"type":"boolean"},"approved":{"type":"boolean"},"agent":string(),"authorization_kind":{"enum":["session_grant"]},"grant_id":id()}),
                     id(),
                 )
             },
@@ -343,11 +550,11 @@ fn inventory() -> Vec<Definition> {
 fn pack_add() -> Definition {
     (
         "pack_add",
-        "Prepare 1-16 packs and dependencies as one inactive proposal. Inspect pack_info; request declared variables needed for the user's restrictions, otherwise keep defaults. Report unsupported restrictions instead of broadening scope. A form collects required/requested values; never invent answers or retry cancellation. Copy apply_arguments unchanged to policy_apply for approval. Unsupported forms require shield pack add in the user's terminal.",
+        "Prepare 1-16 packs and dependencies as one inactive proposal. Inspect pack_info; supply known typed settings through set or collect declared required/requested values through a form. Preserve the user's restrictions and defaults; never invent answers or retry cancellation. Copy apply_arguments unchanged to policy_apply for approval. Forms have bounded supported fields; supplied values share CLI validation.",
         || {
             let variables =
                 json!({"type":"array","minItems":1,"maxItems":16,"uniqueItems":true,"items":id()});
-            let selection = json!({"reference":string(),"profile":{"enum":["loose","recommended","strict"],"description":"New selections default to recommended; installed selections keep their profile."},"variables":variables});
+            let selection = json!({"reference":string(),"profile":{"enum":["loose","recommended","strict"],"description":"New selections default to recommended; installed selections keep their profile."},"variables":variables,"set":{"type":"object","maxProperties":64}});
             let mut properties = selection.clone();
             properties["layer"] = layer();
             properties["layer"]["description"] = json!(
@@ -356,7 +563,7 @@ fn pack_add() -> Definition {
             properties["packs"] = json!({"type":"array","minItems":1,"maxItems":16,"items":object(selection, &["reference"])});
             let mut schema = object(properties, &[]);
             schema["if"] = json!({"required":["packs"]});
-            schema["then"] = json!({"not":{"anyOf":[{"required":["reference"]},{"required":["profile"]},{"required":["variables"]}]}});
+            schema["then"] = json!({"not":{"anyOf":[{"required":["reference"]},{"required":["profile"]},{"required":["variables"]},{"required":["set"]}]}});
             schema["else"] = json!({"required":["reference"]});
             schema["examples"] = json!([{"packs":[{"reference":"acme/git"},{"reference":"acme/node","variables":["manager"]}],"layer":"local"}]);
             schema
@@ -364,15 +571,66 @@ fn pack_add() -> Definition {
     )
 }
 
+fn session_grant_show() -> Definition {
+    (
+        "session_grant_show",
+        "Inspect reusable session grants, pending proposals, expiry and capability. A native hook supplies session_ref; a supplied conversation name grants no authority.",
+        || {
+            let mut schema = object(
+                json!({"session_ref":id(),"proposal_id":id(),"grant_id":id(),"cursor":id(),"limit":{"type":"integer","minimum":1,"maximum":64,"default":16}}),
+                &[],
+            );
+            schema["if"] =
+                json!({"anyOf":[{"required":["proposal_id"]},{"required":["grant_id"]}]});
+            schema["then"] = json!({"maxProperties":1});
+            schema
+        },
+    )
+}
+
+fn session_grant_propose() -> Definition {
+    (
+        "session_grant_propose",
+        "Prepare temporary permission for a known batch or constrained argv family before repeated privileged operations. Inspect session_grant_show first. Default duration is two hours; project policy stays unchanged. Named Deny overrides are explicit, and the user confirms session_grant_approve. Do not repeat declined offers.",
+        || {
+            let definitions = crate::policy::schema::definitions();
+            let conditions = definitions["rule_custom"]["properties"]["conditions"].clone();
+            let requirements = definitions["rule_custom"]["properties"]["requirements"].clone();
+            let selector = object(
+                json!({"conditions":{"allOf":[conditions,{"type":"object","properties":{"domain":{"const":"argv"}}}]},"requirements":requirements}),
+                &["conditions"],
+            );
+            object(
+                json!({"session_ref":id(),"idempotency_key":id(),"scope":{"type":"array","minItems":1,"maxItems":32,"items":selector},
+            "duration_seconds":{"type":"integer","minimum":60,"maximum":28800,"default":7200},"reason":{"type":"string","maxLength":1024},
+            "override_denies":{"type":"array","maxItems":32,"uniqueItems":true,"items":object(json!({"rule_ref":rule_ref(),"branch":{"const":"met"},"rule_digest":string()}),&["rule_ref","branch","rule_digest"])}}),
+                &["session_ref", "idempotency_key", "scope"],
+            )
+        },
+    )
+}
+
 fn pack_configure() -> Definition {
     (
         "pack_configure",
-        "Collect 1-16 installed-pack settings through a form; prepare an inactive proposal. Inspect pack_list for names. Copy apply_arguments unchanged to policy_apply for approval. If forms are unavailable, collect values in chat and use policy_propose with pack_configure. Never invent answers or retry cancellation.",
+        "Configure an installed pack with set, unset, override and clear_override, or collect 1-16 variables through a form. Omit edits and variables for guided settings and rule overrides. Form and direct modes cannot be mixed. Prepare an inactive proposal; copy apply_arguments unchanged to policy_apply for approval. Never invent form answers or retry cancellation.",
         || {
-            object(
-                json!({"reference":string(),"variables":{"type":"array","minItems":1,"maxItems":16,"items":id()},"layer":layer()}),
-                &["reference", "variables"],
-            )
+            let mut schema = object(
+                json!({"reference":string(),"variables":{"type":"array","minItems":1,"maxItems":16,"items":id()},"set":{"type":"object","maxProperties":64},"unset":{"type":"array","maxItems":64,"items":string()},"override":{"type":"object","maxProperties":1024},"clear_override":{"type":"array","maxItems":1024,"items":string()},"layer":layer(),"idempotency_key":id(),"agent_reason":string()}),
+                &["reference"],
+            );
+            schema["if"] = json!({"required":["variables"]});
+            let direct = [
+                "set",
+                "unset",
+                "override",
+                "clear_override",
+                "idempotency_key",
+                "agent_reason",
+            ]
+            .map(|key| json!({"required":[key]}));
+            schema["then"] = json!({"not":{"anyOf":direct}});
+            schema
         },
     )
 }
@@ -457,7 +715,7 @@ mod metadata_tests {
                 .collect();
             assert_eq!(summaries, listed);
         }
-        for unknown in ["unknown", "policy_apply_extra", "shield_docs_unknown"] {
+        for unknown in ["unknown", "policy_apply_extra", "docs_unknown"] {
             assert!(!crate::review::mcp::is_tool(unknown));
         }
     }

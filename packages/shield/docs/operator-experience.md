@@ -86,14 +86,39 @@ interfaces never acquire this operator UI or emit human presentation.
 | `pack list`, `pack show` | List retained selections or inspect their exact source and artifact |
 | `pack configure` | Set a selection's variable values and rule overrides, guided or with `--set`, `--unset`, `--override` and `--clear-override` |
 | `registry list/add/remove/default [--scope user]` | Inspect or confirm project or user discovery changes independently of installed policy |
-| `policy show`, `policy review` | Inspect policy; or review a proposal/manual edit, repair projections or configure history |
-| `rule list`, `rule add/edit/remove` | Inspect rules or build/edit a validated rule and confirm the resulting policy |
+| `policy show`, `policy review`, `policy repair`, `policy reject ID` | Inspect policy; review a proposal/manual edit; restore projections or reject a pending proposal |
+| `policy evaluate INPUT`, `policy compare --after SELECTOR` | Preview normalized requests or compare immutable policy snapshots without execution |
+| `rule list`, `rule add/edit/remove [--local]` | Inspect rules or build/edit a validated shared or local rule and confirm the resulting policy |
 | `request list`, `request show` | Inspect pending or unused grants and an exact request's scope |
 | `request approve`, `request deny` | Review one exact stored request before one-time approval, denial or revocation |
-| `history list`, `history show` | Inspect filtered observations and available decision/completion details |
+| `session-grant list/show/propose/approve/revoke` | Inspect, prepare, confirm or revoke [temporary conversation grants](session-grants.md); `apply` aliases `approve` |
+| `history list`, `history show`, `history configure` | Inspect observations; configure collection and retention or clear history with confirmation |
+| `docs list/search/read` | Read the binary's embedded guides without project enrollment |
 | `protection set` | Choose agent access to protected settings and policy files |
 | `cache prepare` | Prepare only the committed generation's compiled data |
 
 Use `--help` for command arguments and `--project PATH` for another project.
 Project commands require enrollment; user-scope registry commands do not. See
 [troubleshooting](troubleshooting.md) for recovery by symptom.
+
+## Documentation and diagnostic inputs
+
+`shield docs list --json` returns bundled paths. `shield docs search "pack update"`
+searches literal text; `shield docs read project-mcp.md --start-line 1 --limit 100`
+reads a page. Listing and searching accept `--offset` and `--limit`; reading
+accepts `--start-line` and `--limit`, with the same defaults and bounds as MCP.
+
+`shield policy evaluate request.json --json` reads a JSON object containing
+normalized `input` and `context`, as described in
+[diagnostic input](project-mcp.md#diagnostic-input-and-snapshots). It uses active
+policy by default; `--proposal-id ID` evaluates a retained proposal's candidate.
+JSON input files are limited to 1 MiB.
+
+`shield policy compare --before active --after proposal:ID --json` compares
+active policy with a retained candidate. `proposal:ID:before` selects that
+proposal's captured base. `--domain sample --input request.json` compares one
+request; `literal_argv` is the default domain and `supported_semantic` reports
+its supported coverage. Results never authorize or execute a request.
+
+`shield history configure --enabled false --limit 1000` reviews collection and
+retention changes; `--purge` clears retained history after confirmation.

@@ -9,6 +9,40 @@ use crate::review::{
 use std::collections::BTreeMap;
 
 #[test]
+fn antigravity_doctor_reports_disabled_hooks_and_removal_deletes_empty_mcp_settings() {
+    let (root, context) = fixture();
+    let before = meta(&context);
+    let plan = prepare(root.path(), &before, IntegrationChoice::agent("agy"))
+        .unwrap()
+        .unwrap();
+    apply(&context, &before, &plan).unwrap();
+    let hooks_path = root.path().join(".agents/hooks.json");
+    let original = fs::read_to_string(&hooks_path).unwrap();
+    let mut hooks: Value = serde_json::from_str(&original).unwrap();
+    hooks["shield-project-enforcement"]["enabled"] = json!(false);
+    fs::write(&hooks_path, hooks.to_string()).unwrap();
+    let report = status(
+        &context,
+        &crate::review::project::checkpoint(&context).unwrap(),
+    );
+    assert!(
+        report["diagnostics"].to_string().contains("disabled"),
+        "{report}"
+    );
+    fs::write(&hooks_path, original).unwrap();
+    let before = meta(&context);
+    let plan = prepare(
+        root.path(),
+        &before,
+        IntegrationChoice::RemoveAgents(IntegrationChoice::bits(&["agy"]).unwrap()),
+    )
+    .unwrap()
+    .unwrap();
+    apply(&context, &before, &plan).unwrap();
+    assert!(!root.path().join(".agents/mcp_config.json").exists());
+}
+
+#[test]
 fn retained_setup_records_require_current_registration_and_repair_fields() {
     let (root, context) = fixture();
     let plan = prepare(root.path(), &meta(&context), IntegrationChoice::all())
@@ -80,9 +114,24 @@ fn mcp_setup_targeted_removal_keeps_other_agents_hooks_and_mcp() {
     )
     .unwrap()
     .unwrap();
-    assert!(plan.desired.is_none());
+    assert_eq!(
+        plan.desired
+            .as_ref()
+            .unwrap()
+            .agents
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["agy", "gemini"]
+    );
     apply(&context, &before, &plan).unwrap();
     assert!(config(root.path())["mcpServers"].get("shield").is_none());
+    let before = meta(&context);
+    let plan = prepare(root.path(), &before, IntegrationChoice::remove_all())
+        .unwrap()
+        .unwrap();
+    assert!(plan.desired.is_none());
+    apply(&context, &before, &plan).unwrap();
 }
 
 #[test]
@@ -186,7 +235,10 @@ fn initial_review_reclaims_only_exact_generated_entries_without_writes() {
     let captured = prepare_initial(root.path(), IntegrationChoice::all())
         .unwrap()
         .unwrap();
-    assert_eq!(captured.previous.as_ref().unwrap().agents.len(), 2);
+    assert_eq!(
+        captured.previous.as_ref().unwrap().agents.len(),
+        crate::agents::ADAPTERS.len()
+    );
     assert_eq!(
         fs::read_to_string(root.path().join(".mcp.json")).unwrap(),
         original.after

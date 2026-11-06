@@ -3,6 +3,25 @@ use super::{Error, patterns::Provider};
 use serde_json::Value;
 
 pub(crate) trait Resources {
+    /// Check an MCP path in the declared server coordinate system. A caller
+    /// without project-relative observations cannot infer that base.
+    fn field_path(
+        &self,
+        path: &str,
+        predicate: &Value,
+        recursive: bool,
+        relative_to: &str,
+        patterns: &dyn Provider,
+    ) -> Result<Option<&'static str>, Error> {
+        if relative_to != "cwd" {
+            return Ok(Some("evidence_unavailable"));
+        }
+        self.argument_path(path, predicate, recursive, patterns)
+    }
+    /// Bounded facts retained by the resource owner, never raw OS errors.
+    fn predicate_evidence(&self, _key: &str) -> Option<Value> {
+        None
+    }
     /// Check one explicitly parsed argument path, without claiming a complete
     /// runtime filesystem footprint for the executable.
     fn argument_path(

@@ -111,6 +111,7 @@ fn box_definition_renders_the_hooks_and_server_shield_installs_directly() {
     let allowed: Vec<_> = crate::review::mcp::default_approved();
     // Every tool has a decision; unapproved tools and policy_apply ask.
     let decisions = written["permissions"]["tools"].as_object().unwrap();
+    assert_eq!(written["permissions"]["agents"], json!(["claude", "codex"]));
     assert_eq!(decisions.len(), crate::review::mcp::tool_summaries().len());
     for (tool, _) in crate::review::mcp::tool_summaries() {
         let allow = tool != "policy_apply" && allowed.contains(&tool);
@@ -143,8 +144,12 @@ fn matches_direct_installation(
     let direct = direct.desired.unwrap();
     let project = native::quoted(root).unwrap();
     let hooks = written["hooks"].as_array().unwrap();
-    assert_eq!(hooks.len(), agents::ADAPTERS.len());
-    for (hook, adapter) in hooks.iter().zip(agents::ADAPTERS) {
+    let supported: Vec<_> = agents::ADAPTERS
+        .iter()
+        .filter(|adapter| adapter.supports_box_hooks())
+        .collect();
+    assert_eq!(hooks.len(), supported.len());
+    for (hook, adapter) in hooks.iter().zip(supported) {
         let spec = adapter.spec();
         assert_eq!(hook["agents"], json!([spec.id]));
         let events = hook["events"].as_array().unwrap();
@@ -152,7 +157,11 @@ fn matches_direct_installation(
         for ((event, _), portable) in spec.events.iter().zip(events) {
             assert_eq!(
                 portable.as_str().unwrap().replace('_', ""),
-                event.to_ascii_lowercase()
+                match *event {
+                    "BeforeTool" => "pretooluse".into(),
+                    "AfterTool" => "posttooluse".into(),
+                    _ => event.to_ascii_lowercase(),
+                }
             );
             let template = hook["command"].as_str().unwrap();
             assert!(template.starts_with("{command} "), "{template}");
@@ -165,8 +174,15 @@ fn matches_direct_installation(
                 command,
                 native::hook_command(&registered.binary, root, spec.id, event).unwrap()
             );
-            let published = json!({"matcher":hook["matcher"],"hooks":[{"type":"command",
-                "command":command,"timeout":hook["timeout"],"statusMessage":hook["status_message"]}]});
+            let mut handler = json!({"type":"command","command":command,"timeout":hook["timeout"]});
+            if spec.id == "gemini" {
+                handler["timeout"] = json!(hook["timeout"].as_u64().unwrap() * 1000);
+                handler["name"] = hook["name"].clone();
+                handler["description"] = hook["description"].clone();
+            } else if !hook["status_message"].is_null() {
+                handler["statusMessage"] = hook["status_message"].clone();
+            }
+            let published = json!({"matcher":hook["matcher"],"hooks":[handler]});
             assert_eq!(published, direct.agents[spec.id].groups[*event]);
         }
         let expanded: Vec<String> = written["connection"]["args"]
@@ -205,6 +221,7 @@ fn matches_direct_installation(
                     })
                     .collect();
             }
+            "gemini" | "agy" => {}
             other => panic!("no Box projection modelled for {other}"),
         }
         assert_eq!(direct_entry, projected, "{}", spec.id);
@@ -450,7 +467,8 @@ fn box_carries_the_codex_ask_fallback_used_at_hook_time() {
     let mut plan = prepare(root.path(), &before, choice(&["box"]))
         .unwrap()
         .unwrap();
-    workflow::with_fallbacks(&before, choice(&["box"]), Some(&mut plan)).unwrap();
+    crate::review::integrations::setup::with_fallbacks(&before, choice(&["box"]), Some(&mut plan))
+        .unwrap();
     apply(&context, &before, &plan).unwrap();
     let registered = registration(&meta(&context)).unwrap().unwrap();
     assert!(registered.agents.is_empty());
@@ -476,7 +494,7 @@ fn box_carries_the_codex_ask_fallback_used_at_hook_time() {
 fn box_install_hands_direct_installations_over_without_touching_their_files() {
     let (root, context) = fixture();
     box_project(root.path());
-    setup(&context, IntegrationChoice::all()).unwrap();
+    setup(&context, choice(&["claude", "codex"])).unwrap();
     let native = [
         ".mcp.json",
         ".claude/settings.local.json",
@@ -530,6 +548,38 @@ fn box_install_hands_direct_installations_over_without_touching_their_files() {
     let settings =
         fs::read_to_string(root.path().join(".claude/settings.local.json")).unwrap_or_default();
     assert!(!settings.contains("native-hook"), "{settings}");
+}
+
+#[test]
+fn google_adapters_hand_over_to_box_with_native_hooks() {
+    let (root, context) = fixture();
+    box_project(root.path());
+    setup(&context, IntegrationChoice::all()).unwrap();
+    let before = fs::read(root.path().join(".gemini/settings.json")).unwrap();
+    let plan = setup(&context, choice(&["box"])).unwrap();
+    assert_eq!(plan.handed_over, ["agy", "claude", "codex", "gemini"]);
+    let registered = registration(&meta(&context)).unwrap().unwrap();
+    assert_eq!(
+        registered
+            .agents
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        Vec::<&str>::new()
+    );
+    assert_eq!(
+        fs::read(root.path().join(".gemini/settings.json")).unwrap(),
+        before
+    );
+    let config: Value = crate::policy::parse(&definition(root.path()).unwrap()).unwrap();
+    assert_eq!(config["hooks"].as_array().unwrap().len(), 4);
+    let (root, context) = fixture();
+    box_project(root.path());
+    setup(&context, choice(&["box"])).unwrap();
+    let registered = registration(&meta(&context)).unwrap().unwrap();
+    assert!(registered.covers("gemini"));
+    assert!(registered.covers("agy"));
+    assert!(registered.covers("claude"));
 }
 
 #[test]

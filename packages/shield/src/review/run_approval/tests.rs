@@ -71,11 +71,38 @@ fn pending(context: &Context, evidence: &EvaluatedRequest, resource: &Value) -> 
 }
 
 #[test]
+fn mcp_denial_is_confirmed_owned_and_never_issues_a_grant() {
+    let (_root, mut context, evidence, resource) = fixture();
+    context.agent = Some("codex".into());
+    context.session_id = Some("acme-session".into());
+    let id = pending(&context, &evidence, &resource);
+    context.surface = "mcp".into();
+    assert!(matches!(
+        review::approvals::deny(&context, &id, false),
+        Err(Error::ApprovalRequired)
+    ));
+    let mut other = context.clone();
+    other.agent = Some("claude-code".into());
+    assert!(matches!(
+        review::approvals::deny(&other, &id, true),
+        Err(Error::Missing)
+    ));
+    assert!(matches!(
+        authorize(&context, &id, 300, None, false),
+        Err(Error::ApprovalRequired)
+    ));
+    assert_eq!(
+        review::approvals::deny(&context, &id, true).unwrap()["status"],
+        "revoked"
+    );
+}
+
+#[test]
 fn shown_requests_carry_their_creation_time_and_policy_basis_without_operands() {
     let (_root, context, evidence, resource) = fixture();
     let id = pending(&context, &evidence, &resource);
-    let (read, shown) = review::approvals::request_view(&context, &id).unwrap();
-    assert!(!read);
+    let (kind, shown) = review::approvals::request_view(&context, &id).unwrap();
+    assert!(matches!(kind, review::approvals::RequestKind::Execution));
     let state = Store::open(Path::new(&context.project_root))
         .unwrap()
         .read_checkpoint()

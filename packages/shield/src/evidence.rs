@@ -79,6 +79,71 @@ pub(crate) fn redact(value: &mut Value) -> bool {
     }
 }
 
+/// Preserve only receipt slots selected by the core owner of this projection.
+/// Callers must never derive these JSON pointers from submitted agent input.
+pub(crate) fn redact_with_receipts(value: &mut Value, paths: &[String]) -> bool {
+    let mut receipts = Vec::new();
+    let mut changed = false;
+    for path in paths {
+        if let Some(slot) = value.pointer_mut(path)
+            && session_authorization(slot)
+        {
+            let mut receipt = slot.take();
+            changed |= redact(&mut receipt);
+            receipts.push((path, receipt));
+        }
+    }
+    changed |= redact(value);
+    for (path, receipt) in receipts {
+        if let Some(slot) = value.pointer_mut(path) {
+            *slot = receipt;
+        }
+    }
+    changed
+}
+
+// This field is a bounded receipt, not a credential-bearing header. Require
+// its complete metadata shape; ordinary Authorization values stay secret.
+fn session_authorization(value: &Value) -> bool {
+    let Some(fields) = value.as_object() else {
+        return false;
+    };
+    if fields
+        .keys()
+        .any(|k| !["kind", "grants", "truncated", "missing"].contains(&k.as_str()))
+        || value["kind"] != "session_grant"
+    {
+        return false;
+    }
+    value["grants"].as_array().is_some_and(|grants| {
+        grants.len() <= 16
+            && grants.iter().all(|grant| {
+                grant.as_object().is_some_and(|o| {
+                    o.keys().all(|k| {
+                        [
+                            "grant_id",
+                            "approval_id",
+                            "operation_refs",
+                            "override_denies",
+                        ]
+                        .contains(&k.as_str())
+                    })
+                }) && ["grant_id", "approval_id"]
+                    .iter()
+                    .all(|k| grant[*k].as_str().is_some_and(|s| s.len() <= 128))
+                    && grant.get("operation_refs").is_none_or(|v| {
+                        v.as_array().is_some_and(|a| {
+                            a.len() <= 256
+                                && a.iter().all(|s| s.as_str().is_some_and(|s| s.len() <= 128))
+                        })
+                    })
+                    && grant
+                        .get("override_denies")
+                        .is_none_or(|v| v.as_array().is_some_and(|a| a.len() <= 32))
+            })
+    })
+}
+
 pub(crate) fn sensitive_key(key: &str) -> bool {
     // Compare the normalized suffix in place: rule validation visits every
     // option name, so allocating normalized keys and suffixes repeats per flag.
@@ -125,6 +190,29 @@ pub(crate) fn now() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn session_grants_metadata_survives_redaction_but_authorization_credentials_do_not() {
+        let receipt = json!({"kind":"session_grant","grants":[{"grant_id":"session-grant-acme-1","approval_id":"approval-acme-2","operation_refs":["shell:0:0-10"],"override_denies":[]}]});
+        let mut value =
+            json!({"authorization":receipt,"headers":{"Authorization":"Bearer private"}});
+        assert!(redact_with_receipts(&mut value, &["/authorization".into()]));
+        assert_eq!(value["authorization"], receipt);
+        assert_eq!(value["headers"]["Authorization"], "[REDACTED]");
+        let mut fake =
+            json!({"authorization":{"kind":"session_grant","grants":[],"password":"private"}});
+        redact(&mut fake);
+        assert_eq!(fake["authorization"], "[REDACTED]");
+        let mut submitted = json!({"original_input":{"authorization":receipt}});
+        assert!(redact_with_receipts(
+            &mut submitted,
+            &["/authorization".into()]
+        ));
+        assert_eq!(submitted["original_input"]["authorization"], "[REDACTED]");
+        let mut untrusted = json!({"authorization":receipt});
+        assert!(redact(&mut untrusted));
+        assert_eq!(untrusted["authorization"], "[REDACTED]");
+    }
 
     #[test]
     fn text_redaction_preserves_safe_whitespace_and_existing_secret_projection() {

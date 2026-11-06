@@ -714,6 +714,127 @@ fn typed_mcp_fields_distinguish_missing_null_and_unlisted_fields() {
 }
 
 #[test]
+fn mcp_field_paths_check_physical_roots_and_require_observation() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    let outside = assert_fs::TempDir::new().unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(outside.path(), root.join("escape")).unwrap();
+    let row = json!({"id":"paths","decision":"allow",
+        "conditions":{"domain":"mcp","server":"acme","tool":"create"},
+        "requirements":{"field_paths":{"/path":{"path":{"within":{"root":"write"},"exclude":[{"root":"project","path":".shield"}]}}}},
+        "on_unmet":{"decision":"ask"}});
+    let source = document(std::slice::from_ref(&row)).unwrap();
+    assert!(
+        source["capabilities"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("field-paths-v1"))
+    );
+    let evaluator = prepared(vec![row.clone()]);
+    let restored =
+        configuration::Evaluator::from_authenticated_compiled(evaluator.compiled_bytes().to_vec())
+            .unwrap();
+    let context = Context {
+        cwd: root.to_string_lossy().into_owned(),
+        environment: None,
+        working_files: None,
+    };
+    for (arguments, expected) in [
+        (json!({"path":"new/file"}), "ask"),
+        (json!({"path":root.join("new/file")}), "allow"),
+        (json!({"path":outside.path().join("file")}), "ask"),
+        (json!({"path":"../outside"}), "ask"),
+        (json!({"path":".shield/config.yml"}), "ask"),
+        (json!({"path":null}), "ask"),
+        (json!({}), "ask"),
+        (json!({"path":""}), "ask"),
+        #[cfg(unix)]
+        (json!({"path":"escape/new"}), "ask"),
+        #[cfg(unix)]
+        (json!({"path":"escape/../new"}), "ask"),
+    ] {
+        let input = Input::Mcp {
+            server: "acme".into(),
+            tool: "create".into(),
+            arguments,
+            connection: None,
+            original_input: json!({}),
+        };
+        for candidate in [&evaluator, &restored] {
+            let result = candidate
+                .evaluate_normalized(
+                    &input,
+                    &context,
+                    &context.cwd,
+                    None,
+                    &crate::evidence::now(),
+                    &|| Ok(()),
+                )
+                .unwrap();
+            assert_eq!(result["decision"], expected);
+        }
+    }
+    for pointer in ["bad", "/bad~2pointer"] {
+        let mut invalid = row.clone();
+        invalid["requirements"]["field_paths"] =
+            json!({pointer:{"path":{"within":{"root":"write"}}}});
+        assert!(document(&[invalid]).is_err());
+    }
+    check_project_relative_field_paths(&root, &row);
+    let mut missing = source;
+    missing["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|cap| cap != "field-paths-v1");
+    assert!(CustomRules::from_yaml(&missing.to_string()).is_err());
+}
+
+fn check_project_relative_field_paths(root: &std::path::Path, row: &Value) {
+    // A server launched at the project root does not follow the agent into
+    // its current subfolder. Preserve that coordinate system explicitly.
+    let child = root.join("child");
+    std::fs::create_dir(&child).unwrap();
+    let child_context = Context {
+        cwd: child.to_string_lossy().into_owned(),
+        environment: None,
+        working_files: None,
+    };
+    for absolute in [false, true] {
+        let mut anchored = row.clone();
+        anchored["requirements"]["field_paths"]["/path"]["relative_to"] = json!("project");
+        anchored["requirements"]["field_paths"]["/path"]["absolute"] = json!(absolute);
+        let evaluator = prepared(vec![anchored]);
+        for (path, expected) in [
+            (json!("new/file"), if absolute { "ask" } else { "allow" }),
+            (json!(root.join("new/file")), "allow"),
+            (json!("../file"), "ask"),
+            #[cfg(unix)]
+            (json!("escape/file"), "ask"),
+        ] {
+            let input = Input::Mcp {
+                server: "acme".into(),
+                tool: "create".into(),
+                arguments: json!({"path":path}),
+                connection: None,
+                original_input: json!({}),
+            };
+            let result = evaluator
+                .evaluate_normalized(
+                    &input,
+                    &child_context,
+                    root.to_str().unwrap(),
+                    None,
+                    &crate::evidence::now(),
+                    &|| Ok(()),
+                )
+                .unwrap();
+            assert_eq!(result["decision"], expected);
+        }
+    }
+}
+
+#[test]
 fn mcp_field_evidence_omits_sensitive_expected_values() {
     let expected = "tok-acme-sensitive-fixture";
     let context = Context {
@@ -2168,7 +2289,7 @@ fn fixed_text_filters_bind_each_file_and_reject_effectful_programs() {
         ("uniq", vec!["item", "output"], Decision::Deny),
         ("sed", vec!["p", "escape"], Decision::Deny),
         ("awk", vec!["{print $1}", ".aws/config"], Decision::Deny),
-        ("jq", vec![".", "missing"], Decision::Deny),
+        ("jq", vec![".", "missing"], Decision::Allow),
         ("diff", vec!["-u", "item", "escape"], Decision::Deny),
     ] {
         let request = Request {
@@ -2182,5 +2303,95 @@ fn fixed_text_filters_bind_each_file_and_reject_effectful_programs() {
             expected,
             "{request:?}"
         );
+    }
+}
+
+#[test]
+fn missing_text_filter_inputs_keep_read_boundaries() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let outside = assert_fs::TempDir::new().unwrap();
+    std::fs::write(root.path().join("item"), "{}").unwrap();
+    std::fs::create_dir(root.path().join(".aws")).unwrap();
+    std::fs::create_dir(root.path().join("directory")).unwrap();
+    let outside_missing = outside
+        .path()
+        .join("missing.json")
+        .to_string_lossy()
+        .into_owned();
+    let evaluator = prepared(vec![
+        json!({"id":"read","decision":"allow","conditions":{"domain":"argv","executable":{"one_of":["sed","awk","jq","sort","uniq","cut","diff","cmp"]},"arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"project"},"exclude":[{"root":"project","path":".aws"}]}}},"on_unmet":{"decision":"deny"}}),
+    ]);
+    for (executable, arguments, expected) in [
+        (
+            "jq",
+            vec![
+                ".version",
+                "packages/backend/node_modules/acme/package.json",
+            ],
+            Decision::Allow,
+        ),
+        (
+            "jq",
+            vec![".version", "item", "missing.json"],
+            Decision::Allow,
+        ),
+        ("sed", vec!["-n", "1p", "missing"], Decision::Allow),
+        ("awk", vec!["{print $1}", "missing"], Decision::Allow),
+        ("sort", vec!["missing"], Decision::Allow),
+        ("uniq", vec!["missing"], Decision::Allow),
+        ("cut", vec!["-f1", "missing"], Decision::Allow),
+        ("diff", vec!["item", "missing"], Decision::Allow),
+        ("cmp", vec!["item", "missing"], Decision::Allow),
+        ("jq", vec![".version", ".aws/missing.json"], Decision::Deny),
+        (
+            "jq",
+            vec![".version", outside_missing.as_str()],
+            Decision::Deny,
+        ),
+        (
+            "jq",
+            vec![".version", "item", outside_missing.as_str()],
+            Decision::Deny,
+        ),
+        ("jq", vec![".version", "directory"], Decision::Deny),
+        ("jq", vec!["env", "missing"], Decision::Deny),
+        ("jq", vec!["-f", "missing", "item"], Decision::Deny),
+        ("sed", vec!["-i", "s/a/b/", "missing"], Decision::Deny),
+    ] {
+        let request = Request {
+            executable: executable.into(),
+            arguments: arguments.into_iter().map(str::to_owned).collect(),
+            cwd: root.path().to_string_lossy().into_owned(),
+            project: root.path().to_string_lossy().into_owned(),
+        };
+        assert_eq!(
+            evaluator.evaluate(&request).unwrap().decision,
+            expected,
+            "{request:?}"
+        );
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(root.path().join("absent"), root.path().join("dangling"))
+            .unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.path().join("outside-link")).unwrap();
+        std::os::unix::fs::symlink("absent-parent", root.path().join("dangling-parent")).unwrap();
+        for operand in [
+            "dangling",
+            "outside-link/missing.json",
+            "dangling-parent/missing.json",
+        ] {
+            let request = Request {
+                executable: "jq".into(),
+                arguments: vec![".version".into(), operand.into()],
+                cwd: root.path().to_string_lossy().into_owned(),
+                project: root.path().to_string_lossy().into_owned(),
+            };
+            assert_eq!(
+                evaluator.evaluate(&request).unwrap().decision,
+                Decision::Deny,
+                "{operand}"
+            );
+        }
     }
 }

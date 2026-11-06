@@ -10,7 +10,7 @@ Options:
       --agent <AGENTS>
           Agent to set up or remove, or box for a Box MCP definition; repeat for several. Omission asks
 
-          [possible values: box, claude, codex]
+          [possible values: box, claude, codex, gemini, agy]
 
       --project <PROJECT>
           Select a project; otherwise discover the nearest enrolled ancestor

@@ -28,6 +28,12 @@ static SPEC: AgentSpec = AgentSpec {
     approval_action: "Codex cannot prompt here. Submit a revised request; for a recurring need, propose a narrow rule with policy_propose.",
 };
 impl AgentAdapter for Codex {
+    fn supports_box_permissions(&self) -> bool {
+        true
+    }
+    fn supports_box_hooks(&self) -> bool {
+        true
+    }
     fn check_mcp_scopes(&self, root: &Path, cwd: &Path, alias: &str) -> Result<(), Error> {
         mcp_scopes::check(root, cwd, alias)
     }
@@ -53,11 +59,28 @@ impl AgentAdapter for Codex {
         &Codex
     }
     fn working_file_categories(&self) -> &'static [&'static str] {
-        &["temporary"]
+        &["temporary", "skills"]
     }
-    fn working_files(&self, _: &Value, _: &Path) -> crate::location::WorkingFiles {
+    fn working_files(&self, _: &Value, project: &Path) -> crate::location::WorkingFiles {
         let config = super::working_files::configuration("CODEX_HOME", ".codex");
-        super::working_files::temporary(config.as_deref())
+        let mut scope = super::working_files::temporary(config.as_deref());
+        let mut candidates = vec![
+            (project.to_path_buf(), ".codex/skills"),
+            (project.to_path_buf(), ".agents/skills"),
+        ];
+        candidates.extend(config.map(|config| (config, "skills")));
+        candidates.extend(
+            scope
+                .home
+                .as_ref()
+                .map(|home| (home.clone(), ".agents/skills")),
+        );
+        #[cfg(unix)]
+        candidates.push((std::path::PathBuf::from("/etc/codex"), "skills"));
+        scope
+            .skills
+            .extend(super::working_files::skill_directories(candidates));
+        scope
     }
     fn spec(&self) -> &'static AgentSpec {
         &SPEC
@@ -86,8 +109,8 @@ impl AgentAdapter for Codex {
         if tool == "Bash"
             && let Some(w) = host["tool_input"].get("workdir")
         {
-            r.cwd = text(w, 4096)?;
-            Path::new(r.cwd).is_absolute().then_some(())?;
+            r.cwd = text(w, 4096)?.into();
+            Path::new(r.cwd.as_ref()).is_absolute().then_some(())?;
         }
         // Encoded MCP calls always require a valid mapping. An invalid MCP
         // namespace must not become an unknown internal tool and bypass policy.

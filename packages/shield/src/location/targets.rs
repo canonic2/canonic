@@ -30,6 +30,7 @@ pub(super) fn collect(input: &Input, cwd: &Path, alone: bool) -> Targets {
         _ => Targets {
             items: vec![],
             complete: false,
+            ..Targets::default()
         },
     }
 }
@@ -92,6 +93,7 @@ fn destructive_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
             return Targets {
                 items: vec![],
                 complete: false,
+                ..Targets::default()
             };
         }
     };
@@ -235,6 +237,7 @@ fn read_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
             })
             .collect(),
         complete,
+        ..Targets::default()
     }
 }
 
@@ -274,7 +277,11 @@ fn grep_argv(arguments: &[String], cwd: &Path) -> Targets {
             }
         })
         .collect();
-    Targets { items, complete }
+    Targets {
+        items,
+        complete,
+        ..Targets::default()
+    }
 }
 
 // Ambient ripgrep configuration is trusted; --no-config is optional. Explicit
@@ -377,12 +384,17 @@ pub(super) fn rg_model(arguments: &[String], cwd: &Path) -> (Targets, bool) {
     } else {
         paths
     };
+    let mut unavailable = None;
     let items = paths
         .into_iter()
         .map(|operand| {
             let path = super::join_operand(cwd, operand, &mut complete);
             let metadata = fs::metadata(&path);
             let directory = metadata.as_ref().is_ok_and(std::fs::Metadata::is_dir);
+            let issue = rg_metadata_issue(&metadata);
+            if let Some(code) = issue {
+                unavailable.get_or_insert_with(|| (path.clone(), code));
+            }
             complete &= operand != "-" && (directory || metadata.is_ok_and(|m| m.is_file()));
             Target {
                 action: "read",
@@ -398,7 +410,27 @@ pub(super) fn rg_model(arguments: &[String], cwd: &Path) -> (Targets, bool) {
             }
         })
         .collect();
-    (Targets { items, complete }, files)
+    (
+        Targets {
+            items,
+            complete,
+            unavailable,
+        },
+        files,
+    )
+}
+
+fn rg_metadata_issue(metadata: &std::io::Result<fs::Metadata>) -> Option<&'static str> {
+    match metadata {
+        Ok(m) if m.is_dir() || m.is_file() => None,
+        Ok(_) => Some("unsupported_file_type"),
+        Err(error) => Some(match error.kind() {
+            std::io::ErrorKind::NotFound => "not_found",
+            std::io::ErrorKind::PermissionDenied => "permission_denied",
+            std::io::ErrorKind::NotADirectory => "not_directory",
+            _ => "unresolved",
+        }),
+    }
 }
 
 // find's default physical walk lists existing entries without following
@@ -452,6 +484,7 @@ fn find_argv(arguments: &[String], cwd: &Path) -> Targets {
             })
             .collect(),
         complete,
+        ..Targets::default()
     }
 }
 
@@ -487,7 +520,11 @@ fn write_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
         }
     }
     complete &= !items.is_empty();
-    Targets { items, complete }
+    Targets {
+        items,
+        complete,
+        ..Targets::default()
+    }
 }
 
 fn portable_flags(argument: &str, flags: &str) -> bool {
@@ -509,6 +546,7 @@ fn resources(
     let mut result = Targets {
         items: vec![],
         complete: cfg!(any(unix, windows)),
+        ..Targets::default()
     };
     let destination = destination.map(|p| super::join_operand(cwd, p, &mut result.complete));
     let directory = destination

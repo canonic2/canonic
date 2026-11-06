@@ -1,4 +1,5 @@
 //! Project-owned proposals and observational history, shared by CLI and MCP.
+pub(crate) mod admin;
 mod approvals;
 mod cache;
 mod changes;
@@ -20,6 +21,7 @@ pub(crate) mod read_approval;
 mod registries;
 pub(crate) mod run_approval;
 pub(crate) mod runtime;
+pub(crate) mod session_grants;
 mod storage;
 #[cfg(test)]
 mod tests;
@@ -405,8 +407,8 @@ pub(crate) fn transition(
     if !matches!(action, "reject" | "withdraw") {
         return Err(Error::Invalid("invalid proposal transition"));
     }
-    if action == "reject" && context.surface != "cli" {
-        return Err(Error::ApprovalRequired);
+    if action == "reject" {
+        return admin::policy::Reject::new(context, id, reason)?.commit(context, checkpoint);
     }
     store.update_checkpoint(context, checkpoint, |state| {
         let index = state.proposals.iter().position(|p| p.id == id).ok_or(Error::Missing)?;
@@ -446,20 +448,5 @@ pub(crate) fn history_settings(
     purge: bool,
     checkpoint: Checkpoint<'_>,
 ) -> Result<Value, Error> {
-    if limit.is_some_and(|v| !(1..=10000).contains(&v)) {
-        return Err(Error::Invalid("history limit must be 1..10000"));
-    }
-    Store::open(Path::new(&context.project_root))?.update_checkpoint(context, checkpoint, |state| {
-        if let Some(enabled) = enabled { state.history_enabled = enabled; }
-        if let Some(limit) = limit { state.history_limit = limit; }
-        if purge { state.events.clear(); }
-        state.trim();
-        state.history_control = true;
-        if purge || limit.is_some() {
-            // A new generation prevents stale writers and late callbacks from reviving pruned data.
-            state.history_generation = storage::history::generation()?;
-            state.history_rewrite = Some(purge);
-        }
-        Ok(json!({"schema_version":1,"enabled":state.history_enabled,"limit":state.history_limit,"purged":purge}))
-    })
+    admin::policy::History::new(context, enabled, limit, purge)?.commit(context, checkpoint)
 }

@@ -13,6 +13,8 @@ pub(in crate::review) struct Selection {
     pub(in crate::review) profile: Option<policy::Profile>,
     #[serde(default)]
     pub(in crate::review) variables: Vec<String>,
+    #[serde(default)]
+    pub(in crate::review) set: BTreeMap<String, Value>,
 }
 
 pub(in crate::review) struct Setting {
@@ -21,6 +23,21 @@ pub(in crate::review) struct Setting {
     pub(in crate::review) pack: String,
     pub(in crate::review) declaration: Value,
     index: usize,
+}
+
+fn requested_variables(selection: &Selection) -> Result<BTreeSet<String>, Error> {
+    let mut names = BTreeSet::new();
+    for name in &selection.variables {
+        if selection.set.contains_key(name) {
+            return Err(Error::Invalid(
+                "a supplied variable cannot also be requested",
+            ));
+        }
+        if !names.insert(name.clone()) {
+            return Err(Error::Invalid("select each variable only once"));
+        }
+    }
+    Ok(names)
 }
 
 pub(in crate::review) struct Installation {
@@ -48,6 +65,7 @@ impl Installation {
         let original = before.candidates["project"].clone();
         let original_meta = before.operator.clone();
         let mut requested = BTreeMap::new();
+        let mut supplied = Vec::new();
         let mut changes = Vec::new();
         for selection in selections {
             let (candidate, metadata) = super::prepare_add(
@@ -78,15 +96,11 @@ impl Installation {
                     "the pack is already installed; a local installation cannot change its profile",
                 ));
             }
-            let mut names = BTreeSet::new();
-            for name in &selection.variables {
-                if !names.insert(name.clone()) {
-                    return Err(Error::Invalid("select each variable only once"));
-                }
-            }
-            if requested.insert(selector, names).is_some() {
+            let names = requested_variables(selection)?;
+            if requested.insert(selector.clone(), names).is_some() {
                 return Err(Error::Invalid("select each pack only once"));
             }
+            supplied.push((selector, &selection.set));
             let mut change = json!({"kind":"pack_add","reference":selection.reference});
             if let Some(profile) = selection.profile {
                 change["profile"] = json!(profile);
@@ -104,6 +118,26 @@ impl Installation {
             .ok_or(Error::Invalid("project candidate missing"))?;
         let metadata = std::mem::replace(&mut before.operator, original_meta);
         let (candidate, metadata) = super::add_layer(&before, candidate, metadata, local)?;
+        before.candidates.insert("project".into(), candidate);
+        before.operator = metadata;
+        for (selector, values) in supplied {
+            if values.is_empty() {
+                continue;
+            }
+            let (candidate, metadata) =
+                super::prepare_configure(&before, &selector, |artifact, settings| {
+                    settings.edit(local, |binding| {
+                        super::settings::assign(artifact, binding, values, &[])
+                    })
+                })?;
+            before.candidates.insert("project".into(), candidate);
+            before.operator = metadata;
+        }
+        let candidate = before
+            .candidates
+            .remove("project")
+            .ok_or(Error::Invalid("project candidate missing"))?;
+        let metadata = before.operator;
         let settings = collect_settings(&candidate, &metadata, &requested)?;
         Ok(Self {
             settings,
@@ -113,6 +147,29 @@ impl Installation {
             candidate,
             metadata,
             local,
+        })
+    }
+
+    /// Capture an update before asking for settings introduced by its closure.
+    pub(in crate::review) fn update(
+        context: &Context,
+        reference: Option<&str>,
+    ) -> Result<Self, Error> {
+        let before = crate::review::project::load(context)?;
+        let (candidate, metadata) = super::prepare_update(context, &before, reference)?;
+        let settings = collect_settings(&candidate, &metadata, &BTreeMap::new())?;
+        let mut change = json!({"kind":"pack_update"});
+        if let Some(reference) = reference {
+            change["reference"] = json!(reference);
+        }
+        Ok(Self {
+            settings,
+            revision: before.policy_revision.clone(),
+            changes: vec![change],
+            binding: changes::prepared_binding(&before),
+            candidate,
+            metadata,
+            local: false,
         })
     }
 

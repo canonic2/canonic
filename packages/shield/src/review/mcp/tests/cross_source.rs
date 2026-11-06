@@ -351,12 +351,10 @@ fn cross_source_updates_refresh_foreign_dependencies_and_preserve_pins_and_share
         "renamed-add",
     );
     assert_eq!(readded["error"], Value::Null, "{readded}");
-    let proposal = read(&context)
-        .proposals
-        .into_iter()
-        .find(|p| readded["data"]["proposal_id"] == p.id)
-        .unwrap();
-    let rows = proposal.candidate_metadata["installed"].as_array().unwrap();
+    assert_eq!(readded["data"]["unchanged"], true, "{readded}");
+    assert_eq!(readded["data"]["committed"], false, "{readded}");
+    let state = read(&context);
+    let rows = state.operator["installed"].as_array().unwrap();
     let kept = rows
         .iter()
         .find(|r| r["selector"] == child["selector"])
@@ -405,13 +403,10 @@ fn cross_source_bare_add_acquires_from_the_default_source_beside_another_sources
         "same-source",
     );
     assert_eq!(readded["error"], Value::Null, "{readded}");
-    let proposal = read(&context)
-        .proposals
-        .into_iter()
-        .find(|p| readded["data"]["proposal_id"] == p.id)
-        .unwrap();
+    assert_eq!(readded["data"]["unchanged"], true, "{readded}");
+    assert_eq!(readded["data"]["committed"], false, "{readded}");
     assert_eq!(
-        proposal.candidate_metadata["installed"]
+        read(&context).operator["installed"]
             .as_array()
             .unwrap()
             .len(),

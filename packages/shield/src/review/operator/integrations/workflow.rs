@@ -1,9 +1,12 @@
 //! Shared onboarding and later confirmed integration configuration.
 use super::super::terminal::Step;
 use super::{
-    AskFallback, Context, Error, IntegrationChoice, Path, Plan, Terminal, Value, apply,
-    approved_tools, confirmed_fallback, json, pending, prepare_approving, review, state,
+    Context, Error, IntegrationChoice, Path, Plan, Terminal, Value, approved_tools, json, pending,
+    prepare_approving, review, state,
 };
+pub(super) use crate::review::integrations::setup::preview;
+pub(super) use crate::review::integrations::setup::with_fallbacks;
+use crate::review::integrations::setup::{finish, setup_preview};
 
 /// The agent page rows: Box first, then each native agent adapter.
 pub(super) fn rows(
@@ -221,42 +224,6 @@ fn handover(tty: &mut Terminal, meta: &Value, selected: IntegrationChoice) -> Re
     Ok(answer == "handover")
 }
 
-/// Preserve confirmed Ask fallbacks of the selected agents; default new ones
-/// to Allow so the final review includes their scope.
-pub(super) fn with_fallbacks(
-    meta: &Value,
-    selected: IntegrationChoice,
-    plan: Option<&mut Plan>,
-) -> Result<(), Error> {
-    let Some(desired) = plan.and_then(|plan| plan.desired.as_mut()) else {
-        return Ok(());
-    };
-    if matches!(selected, IntegrationChoice::RemoveAgents(_)) {
-        return Ok(());
-    }
-    for adapter in crate::agents::ADAPTERS {
-        let spec = adapter.spec();
-        // Box publishes every adapter's hooks, so it carries their fallbacks.
-        let covered = selected.contains(spec.id) || selected.contains(super::box_definition::ID);
-        if covered && spec.needs_ask_fallback {
-            desired.ask_fallback.insert(
-                spec.id.into(),
-                confirmed_fallback(meta, spec.id)?.unwrap_or(AskFallback::Allow),
-            );
-        }
-    }
-    Ok(())
-}
-
-/// The review of a setup plan, including the agents' prefix rules.
-fn setup_preview(root: &Path, plan: Option<&Plan>) -> Value {
-    let mut review = preview(root, plan);
-    let prefixes = super::prefix_rules::active(root).unwrap_or_default();
-    let desired = plan.and_then(|plan| plan.desired.as_ref());
-    super::prefix_rules::preview(root, &mut review, desired, &prefixes);
-    review
-}
-
 /// The review `setup` would confirm, without writing. New installations use
 /// the saved or default tool approvals instead of asking.
 pub(super) fn review(
@@ -288,106 +255,6 @@ pub(super) fn review(
     let mut review = setup_preview(root, plan.as_ref());
     review["dry_run"] = json!(true);
     Ok(review)
-}
-
-/// The operator review of an integration plan: each agent's hooks and MCP
-/// server, the Codex Ask fallback and every owned file's exact before/after.
-pub(super) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
-    let Some(p) = plan else {
-        return json!({"operation":"keep integrations"});
-    };
-    let box_row = match (
-        p.previous.as_ref().and_then(|r| r.box_definition.as_ref()),
-        p.desired.as_ref().and_then(|r| r.box_definition.as_ref()),
-    ) {
-        (None, None) => None,
-        (None, Some(_)) => Some("added"),
-        (Some(_), None) => Some("removed"),
-        (Some(b), Some(a)) if b == a => Some("unchanged"),
-        _ => Some("updated"),
-    }
-    .map(|change| json!({"agent":super::box_definition::ID,"change":change,"mcp_server":"shield"}));
-    let direct = p.desired.as_ref().is_some_and(|r| !r.agents.is_empty());
-    let native = crate::agents::ADAPTERS
-        .iter()
-        .map(|a| a.spec().id)
-        .filter_map(|agent| {
-            let before = p
-                .previous
-                .as_ref()
-                .and_then(|r| r.agents.get(agent))
-                .map(|i| json!(i));
-            let after = p
-                .desired
-                .as_ref()
-                .and_then(|r| r.agents.get(agent))
-                .map(|i| json!(i));
-            let change = match (&before, &after) {
-                (None, None) => return None,
-                (None, Some(_)) => "added",
-                (Some(_), None) if p.handed_over.iter().any(|id| id == agent) => "handed over",
-                (Some(_), None) => "removed",
-                (Some(b), Some(a)) if b == a => "unchanged",
-                _ => "updated",
-            };
-            let shown = after.as_ref().or(before.as_ref())?;
-            let hooks: Vec<_> = shown["groups"]
-                .as_object()
-                .into_iter()
-                .flatten()
-                .map(|(event, _)| event.clone())
-                .collect();
-            Some(json!({"agent":agent,"change":change,"hooks":hooks,"mcp_server":"shield"}))
-        });
-    let agents: Vec<_> = box_row.iter().cloned().chain(native).collect();
-    let box_next = box_row
-        .as_ref()
-        .filter(|row| row["change"] != "removed")
-        .map(|_| {
-            json!({"publish":"box setup (first time) or box config sync",
-            "direct_installations":direct,"handed_over":p.handed_over})
-        });
-    let fallbacks: Value = crate::agents::ADAPTERS
-        .iter()
-        .filter(|a| a.spec().needs_ask_fallback)
-        .map(|a| {
-            let id = a.spec().id;
-            let before = p.previous.as_ref().and_then(|r| r.ask_fallback.get(id));
-            let after = p.desired.as_ref().and_then(|r| r.ask_fallback.get(id));
-            (id.to_owned(), json!({"before":before,"after":after}))
-        })
-        .collect::<serde_json::Map<String, Value>>()
-        .into();
-    // Publication leaves an absent shared MCP file absent when nothing goes in it.
-    let mut files: Vec<_> = (p.before.is_some() || !p.after.is_empty())
-        .then(|| json!({"path":".mcp.json","before":p.before,"after":p.after}))
-        .into_iter()
-        .collect();
-    files.extend(p.files.iter().map(|change| json!(change)));
-    let tool_approvals = p
-        .desired
-        .as_ref()
-        .and_then(|r| r.approved_tools.as_ref())
-        .map(|approved| {
-            let ask: Vec<_> = crate::review::mcp::tool_summaries()
-                .into_iter()
-                .map(|(name, _)| name)
-                .filter(|name| !approved.contains(name))
-                .collect();
-            json!({"approved":approved,"ask":ask})
-        });
-    json!({
-        "tool_approvals":tool_approvals,
-        "operation":if p.desired.is_some() {"set up agent integrations"} else {"remove Shield integrations"},
-        "project":root,
-        "binary":p.desired.as_ref().or(p.previous.as_ref()).map(|r| &r.binary),
-        "agents":agents,
-        "box":box_next,
-        "connections":p.desired.as_ref().map(|r|r.connections.iter().flat_map(|(agent,value)|value["review"].as_array().into_iter().flatten().map(move |row| {let mut row=row.clone();row["agent"]=json!(agent);row})).collect::<Vec<_>>()).unwrap_or_default(),
-        "ask_fallbacks":fallbacks,
-        "adopt_existing_entries":p.previous.is_some() && !root.join(".shield/review/state.json").exists(),
-        "files":files,
-    })
 }
 
 /// Where `shield init` is before its pack setup.
@@ -588,53 +455,4 @@ fn management_action(
             Some(IntegrationChoice::RemoveAgents(0))
         }
     })
-}
-
-/// Apply a confirmed plan, then bring prefix rules in line with the active
-/// policy. `receipt` replaces the status receipt only when nothing was applied.
-fn finish(
-    context: &Context,
-    meta: &Value,
-    plan: Option<&Plan>,
-    receipt: Option<Value>,
-) -> Result<Value, Error> {
-    if let Some(plan) = plan
-        && let Err(error) = apply(context, meta, plan)
-    {
-        if pending(&crate::review::project::metadata(
-            &crate::review::project::checkpoint(context)?,
-        ))?
-        .is_none()
-        {
-            return Err(error);
-        }
-        let mut receipt = crate::review::project::status(context)?;
-        receipt["setup_error"] = json!(error.to_string());
-        receipt["repair_route"] = json!("shield mcp setup");
-        return Ok(receipt);
-    }
-    let synced = sync_prefix_rules(context);
-    let mut receipt = match receipt {
-        Some(receipt) if plan.is_none() => receipt,
-        _ => crate::review::project::status(context)?,
-    };
-    if let Err(error) = synced {
-        receipt["setup_error"] = json!(error.to_string());
-        receipt["repair_route"] = json!("shield mcp setup");
-    }
-    Ok(receipt)
-}
-
-/// Write the active policy's prefix rules for installed agents, or remove them
-/// with the agent. Without a readable activation they wait for the next one.
-fn sync_prefix_rules(context: &Context) -> Result<(), Error> {
-    let root = Path::new(&context.project_root);
-    let Ok(prefixes) = super::prefix_rules::active(root) else {
-        return Ok(());
-    };
-    super::prefix_rules::sync(
-        root,
-        &crate::review::project::metadata(&crate::review::project::checkpoint(context)?),
-        &prefixes,
-    )
 }

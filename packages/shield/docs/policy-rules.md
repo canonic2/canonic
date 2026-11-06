@@ -399,7 +399,10 @@ are outside these checks. Use `--no-config` when config-free execution is desire
 ### Read and transform file content
 
 Fixed `sed`, `awk`, `jq`, `sort`, `uniq`, `cut`, `diff` and `cmp` forms model
-explicit regular-file inputs, including contained symlink targets. Sed supports
+explicit regular-file inputs, including contained symlink targets. Read-only
+forms accept missing inputs too: Shield checks their paths and lets the
+tool return its normal file-not-found error. Outside or excluded paths,
+dangling symlinks and other unverifiable inputs remain restricted. Sed supports
 scripts of `p`, `d`, `s`, `y`, `w`, `W`, `r` and `R` commands separated by `;` or
 newlines, each with an optional numeric or `$` address or range; `s` accepts the
 `g`, `p`, number, `i`/`I`, `m`/`M` and `w` flags. Files a script writes (`w`,

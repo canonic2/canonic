@@ -237,6 +237,9 @@ pub(crate) struct State {
     /// Refused native requests awaiting, or holding, in-session approval.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) hook_requests: Vec<super::hook_approval::HookRequest>,
+    /// Reusable, human-confirmed conversation authority; independent of history.
+    #[serde(default)]
+    pub(crate) session_grants: super::session_grants::Registry,
     pub(crate) proposals: Vec<Proposal>,
     /// Advisory session review suppression, never execution authorization.
     #[serde(default)]
@@ -317,7 +320,11 @@ impl State {
         let mut value = json!({"schema_version":1,"event_id":self.id("event"),"kind":kind,"recorded_at":now(),"occurred_at":context.occurred_at,
             "provenance":context.provenance(),"links":all_links,"reasons":all_reasons,"operator":null});
         value["details"] = details;
-        let changed = redact(&mut value);
+        let changed = if kind == "decision" {
+            crate::evidence::redact_with_receipts(&mut value, &["/details/authorization".into()])
+        } else {
+            redact(&mut value)
+        };
         value["redacted"] = json!(changed);
         value
     }
@@ -372,15 +379,20 @@ impl State {
         self.compact_authorization_at(time);
     }
     pub(crate) fn compact_authorization_at(&mut self, time: u64) {
+        super::session_grants::compact(self, time);
         self.read_requests.retain(|r| r.live_id(time).is_some());
         self.run_requests.retain(|r| r.live_id(time).is_some());
-        self.hook_requests.retain(|r| r.live_id(time).is_some());
+        self.hook_requests.retain(|r| r.retained_id(time).is_some());
         let ids: std::collections::BTreeSet<_> = self
             .read_requests
             .iter()
             .filter_map(|r| r.live_id(time))
             .chain(self.run_requests.iter().filter_map(|r| r.live_id(time)))
-            .chain(self.hook_requests.iter().filter_map(|r| r.live_id(time)))
+            .chain(
+                self.hook_requests
+                    .iter()
+                    .filter_map(|r| r.retained_id(time)),
+            )
             .collect();
         self.authorization_events.retain(|event| {
             event["links"]["request_id"]

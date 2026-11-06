@@ -82,6 +82,13 @@ failed requirements can select its Ask or Deny branch.
 
 Check the host action too: Codex's Allow fallback can let a policy Ask proceed.
 
+For a blocked `rg` search, a message such as “Search operand `.agents` does not
+exist” identifies the path Shield could not inspect. Remove an unintended missing
+operand and retry the search with the intended existing paths. If the path is
+needed, correct it first. Filesystem access failures, invalid directory components
+and unresolved links have separate messages; they do not establish that a path is
+absent. Correcting one operand does not approve other paths or unsupported options.
+
 If the message asks for a rewrite, submit the supported literal form it names.
 If it identifies an unsupported tool, a policy change cannot add that support.
 Native Claude and Codex hooks defer unmodeled internal tools to host permissions;

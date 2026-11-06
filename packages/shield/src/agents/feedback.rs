@@ -6,7 +6,7 @@ use std::path::Path;
 mod packs;
 mod presentation;
 // Agents change policy only by proposal; the user reviews and activates it.
-const PROPOSE: &str = "If the user requests an allowance, read the rule grammar with shield_docs_search and shield_docs_read, then propose a bounded reusable rule or outside-folder access with policy_propose; copy the returned apply_arguments object unchanged into policy_apply for approval.";
+const PROPOSE: &str = "If the user requests an allowance, read the rule grammar with docs_search and docs_read, then propose a bounded reusable rule or outside-folder access with policy_propose; copy the returned apply_arguments object unchanged into policy_apply for approval.";
 // Stable marker for protected-access feedback across groups.
 const PROTECTED_ACCESS: &str = "Shield: protected path.";
 
@@ -279,7 +279,26 @@ pub(super) fn respond(
     operation: &Value,
     session: &str,
 ) -> Option<Reply> {
-    let reply = response(root, adapter, event, receipt, operation, session)?;
+    let mut reply = if receipt["authorization"]["kind"] == "session_grant"
+        && receipt["disposition"] == "allowed"
+    {
+        permitted("Shield: allowed by the active session grant; project policy is unchanged.")
+    } else {
+        response(root, adapter, event, receipt, operation, session)?
+    };
+    if receipt["session_context"]["offer_hint"] == true
+        && receipt["authorization"]["kind"] != "session_grant"
+        && let Some(reference) = receipt["session_context"]["session_ref"].as_str()
+    {
+        let hint = format!(
+            "Session reference: {reference}. For planned repeated privileged operations, inspect session_grant_show, then session_grant_propose for a bounded batch/family and session_grant_approve for the user's form. Do not repeat a declined offer or broaden scope to avoid a refusal."
+        );
+        reply.agent_context = Some(
+            reply
+                .agent_context
+                .map_or_else(|| hint.clone(), |s| format!("{s} {hint}")),
+        );
+    }
     Some(if reply.decision == Decision::Deny {
         presentation::denial(reply, receipt)
     } else {

@@ -10,6 +10,34 @@ pub(super) fn configuration(override_name: &str, default: &str) -> Option<PathBu
         .or_else(|| std::env::home_dir().map(|home| home.join(default)))
 }
 
+/// Skill roots may be created by the agent. Verify each existing component
+/// below the trusted base; a project marker or skills link cannot redirect it.
+pub(super) fn skill_directories(
+    candidates: impl IntoIterator<Item = (PathBuf, &'static str)>,
+) -> Vec<PathBuf> {
+    let mut roots = candidates
+        .into_iter()
+        .filter_map(|(base, suffix)| {
+            let mut path = base.canonicalize().ok()?;
+            for part in Path::new(suffix).components() {
+                if !matches!(part, std::path::Component::Normal(_)) {
+                    return None;
+                }
+                path.push(part);
+                match std::fs::symlink_metadata(&path) {
+                    Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    _ => return None,
+                }
+            }
+            Some(path)
+        })
+        .collect::<Vec<_>>();
+    roots.sort();
+    roots.dedup();
+    roots
+}
+
 /// The native temporary folders, as the platform names them.
 fn temporary_candidates() -> Vec<PathBuf> {
     #[cfg(unix)]
@@ -43,7 +71,7 @@ pub(super) fn machine_roots(scopes: &[WorkingFiles], project: &Path) -> Vec<Root
     };
     let mut temporary: Vec<PathBuf> = scopes
         .iter()
-        .flat_map(|scope| scope.roots(false).cloned())
+        .flat_map(|scope| scope.write.iter().cloned())
         .collect();
     for candidate in temporary_candidates() {
         if candidate
@@ -110,6 +138,7 @@ fn temporary_in(candidates: Vec<PathBuf>, home: Option<&Path>) -> WorkingFiles {
     WorkingFiles {
         read: vec![],
         write,
+        skills: vec![],
         home,
         protected: vec![],
         http_environment: false,
@@ -136,6 +165,44 @@ fn profile_temporary(path: &Path, home: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn skill_directories_allow_creation_and_reject_redirected_roots() {
+        let temp = assert_fs::TempDir::new().unwrap();
+        let config = temp.path().canonicalize().unwrap().join("config");
+        let skills = config.join("skills");
+        let candidates = vec![
+            (config.clone(), "skills"),
+            (config.clone(), "skills"),
+            (config.clone(), "missing"),
+        ];
+        std::fs::create_dir_all(&config).unwrap();
+        assert_eq!(
+            skill_directories(candidates.clone()),
+            vec![config.join("missing"), skills.clone()]
+        );
+        std::fs::create_dir(&skills).unwrap();
+        std::fs::write(config.join("file"), "Acme").unwrap();
+        assert_eq!(
+            skill_directories(candidates),
+            vec![config.join("missing"), skills.clone()]
+        );
+        assert!(skill_directories([(config.clone(), "file")]).is_empty());
+        #[cfg(unix)]
+        {
+            let redirected = config.join("redirected-skills");
+            std::os::unix::fs::symlink(&config, &redirected).unwrap();
+            assert!(skill_directories([(config.clone(), "redirected-skills")]).is_empty());
+            let alias = temp.path().join("config-alias");
+            std::os::unix::fs::symlink(&config, &alias).unwrap();
+            assert_eq!(skill_directories([(alias, "skills")]), vec![skills]);
+            // A project-local marker cannot appoint a foreign skill library.
+            let project = temp.path().join("project");
+            std::fs::create_dir(&project).unwrap();
+            std::os::unix::fs::symlink(&config, project.join("marker")).unwrap();
+            assert!(skill_directories([(project, "marker/skills")]).is_empty());
+        }
+    }
 
     #[cfg(windows)]
     #[test]

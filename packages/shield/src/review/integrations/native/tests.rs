@@ -246,3 +246,65 @@ fn adapter_toml_codec_composes_shared_file_install_repair_and_removal() {
     assert!(prepare_adapter(root.path(), &Acme, None, Some(binary), &[], &mut Vec::new()).is_err());
     assert_eq!(fs::read_to_string(&path).unwrap(), before);
 }
+
+#[test]
+fn google_adapters_install_repair_remove_preserve_settings_and_shared_files() {
+    for agent in ["gemini", "agy"] {
+        let root = assert_fs::TempDir::new().unwrap();
+        let adapter = crate::agents::find(agent).unwrap();
+        let path = root.path().join(adapter.spec().hooks_path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let original = if agent == "gemini" {
+            json!({"ui":{"theme":"acme"},"mcpServers":{"acme":{"command":"acme-mcp"}}})
+        } else {
+            json!({"acme-audit":{"PreToolUse":[{"matcher":"*","hooks":[{"command":"acme-audit"}]}]}})
+        };
+        fs::write(&path, original.to_string()).unwrap();
+        let binary = std::env::current_exe().unwrap();
+        let mut changes = Vec::new();
+        let installed =
+            prepare_adapter(root.path(), adapter, None, Some(&binary), &[], &mut changes)
+                .unwrap()
+                .unwrap();
+        assert_eq!(changes.len(), if agent == "gemini" { 1 } else { 2 });
+        files::publish(root.path(), &changes).unwrap();
+        let source = fs::read_to_string(&path).unwrap();
+        let mut repair = Vec::new();
+        prepare_adapter(
+            root.path(),
+            adapter,
+            Some(&installed),
+            Some(&binary),
+            &[],
+            &mut repair,
+        )
+        .unwrap();
+        files::publish(root.path(), &repair).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), source);
+        let mut removal = Vec::new();
+        prepare_adapter(
+            root.path(),
+            adapter,
+            Some(&installed),
+            None,
+            &[],
+            &mut removal,
+        )
+        .unwrap();
+        files::publish(root.path(), &removal).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&fs::read_to_string(&path).unwrap()).unwrap(),
+            original
+        );
+        let mcp_path = root.path().join(adapter.spec().mcp_path.unwrap());
+        if agent == "agy" {
+            assert!(
+                !mcp_path.exists(),
+                "Remove the empty, Shield-created MCP file"
+            );
+        } else {
+            let mcp = fs::read_to_string(mcp_path).unwrap();
+            assert!(!adapter.has_mcp_entry(&mcp).unwrap());
+        }
+    }
+}

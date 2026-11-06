@@ -68,6 +68,10 @@ To update unpinned selections, run:
 shield pack update
 ```
 
+From an agent, the matching MCP tool is `pack_update`: `{}` selects all
+tracking packs and `{"reference":"gate"}` selects one. It prepares the same
+candidate and returns `apply_arguments` for `policy_apply` approval.
+
 Review version and permission changes before confirming. Pins are skipped;
 resolution or verification failure leaves policy unchanged.
 

@@ -1,12 +1,26 @@
 ---
 name: policy-review
-description: Review recurring Shield permission interruptions when the user asks, interpret retained evidence, and prepare a narrow lasting policy change through Shield's supported approval route.
+description: Prepare bounded session grants before repeated privileged operations, review exact approvals and recurring interruptions, and propose lasting policy changes through Shield's supported human approval routes.
 ---
 
 # Review Shield permissions
 
 Review permissions when requested or when `suggestion_list` marks recurring
 groups eligible. Avoid reviews after every task or decision.
+
+Before a known batch of repeated privileged operations, inspect
+`session_grant_show`. Use the native hook's `session_ref` to propose a bounded
+temporary batch or constrained argv family with `session_grant_propose`; prefer
+an exact batch when all requests are known. Copy `apply_arguments` unchanged
+into `session_grant_approve` for the person's form. Do this before the batch,
+without first attempting every command or adding a preliminary chat approval.
+An ordinary grant covers Ask. Named Deny overrides require current owner-qualified
+rule references, `branch: met`, and body digests from `rule_list`; failed
+requirements, preconditions and protected state remain closed. A reference is
+not approval. Respect the recorded target conversation when MCP association is
+unavailable. Inspect existing offers before proposing, stop on decline, and
+never broaden scope to avoid refusal. Use `session_grant_revoke` to end your
+grant early. Read `session-grants.md` through bundled docs for missing syntax.
 
 1. For recurring interruptions, inspect `suggestion_list` and relevant `history_list`, `rule_list` or
    `policy_show` evidence. Follow returned next actions. Respect incomplete

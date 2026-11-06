@@ -788,6 +788,19 @@ pub(in crate::review) fn cleanup(store: &Store, state: &State) {
     }
 }
 pub(in crate::review) fn bound_event(mut event: Value) -> Value {
+    if event["details"]["authorization"]["kind"] == "session_grant"
+        && !crate::json::fits(&event["details"]["authorization"], 4096)
+    {
+        let grants = event["details"]["authorization"]["grants"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .take(16)
+            .map(|g| json!({"grant_id":g["grant_id"],"approval_id":g["approval_id"]}))
+            .collect::<Vec<_>>();
+        event["details"]["authorization"] = json!({"kind":"session_grant","grants":grants,"truncated":true,"missing":["operation_refs","override_denies"]});
+        event["truncated"] = json!(true);
+    }
     if crate::json::fits(&event, 8192) {
         return event;
     }
@@ -862,7 +875,7 @@ pub(in crate::review) fn bound_event(mut event: Value) -> Value {
     }
     if !crate::json::fits(&event, 8192) {
         let d = &event["details"];
-        event["details"] = json!({"evaluation":d["evaluation"],"decision":d["decision"],"policy_revision":d["policy_revision"],"disposition":d["disposition"],"ask_fallback":d["ask_fallback"],"host_decision":d["host_decision"],"status":d["status"],"exit_code":d["exit_code"],"missing":["detail_fields"]});
+        event["details"] = json!({"evaluation":d["evaluation"],"decision":d["decision"],"policy_revision":d["policy_revision"],"disposition":d["disposition"],"ask_fallback":d["ask_fallback"],"host_decision":d["host_decision"],"status":d["status"],"exit_code":d["exit_code"],"authorization":d["authorization"],"missing":["detail_fields"]});
     }
     event["truncated"] = json!(true);
     if omitted_guidance && let Some(missing) = event["details"]["missing"].as_array_mut() {

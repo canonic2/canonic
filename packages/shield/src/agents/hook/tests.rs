@@ -2,6 +2,7 @@
 use super::*;
 use crate::{configuration::Bundle, review};
 use std::fs;
+mod google;
 mod mcp_connections;
 #[cfg(unix)]
 mod mcp_local_stdio;
@@ -223,6 +224,87 @@ fn journal(root: &Path) -> String {
         .collect()
 }
 
+#[test]
+#[cfg(unix)]
+fn native_missing_filter_input_after_a_link_requires_review() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let foreign = assert_fs::TempDir::new().unwrap();
+    fs::write(foreign.path().join("credentials"), "Acme secret").unwrap();
+    let rules = json!({"schema_version":1,"kind":"custom","capabilities":["argument-rules-v1","location-v1","requirements-v1","structured-rules-v1"],"rules":[
+        {"id":"link","decision":"allow","reason":"Acme link fixture","conditions":{"domain":"argv","executable":"ln","arguments":{"kind":"any"}}},
+        {"id":"sort","decision":"allow","reason":"Acme project filter","conditions":{"domain":"argv","executable":"sort","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"project"}}}},"on_unmet":{"decision":"deny","message":"Filter only known project inputs."}}
+    ]}).to_string();
+    let bundle = Bundle::capture(
+        "schema_version: 1\npacks: []\nrules: custom.json\n",
+        &[],
+        Some(&rules),
+    )
+    .unwrap();
+    review::mcp::initialize_fixture(root.path(), &bundle);
+    let link = root.path().join("missing-link");
+    let sort = format!("sort '{}'", link.display());
+    let create = format!(
+        "ln -s '{}' '{}'",
+        foreign.path().join("credentials").display(),
+        link.display()
+    );
+    for agent in ["claude", "codex"] {
+        assert_permitted(&call(root.path(), agent, &sort), agent);
+        assert_permitted(&call(root.path(), agent, &create), agent);
+        let result = call(root.path(), agent, &format!("{create}; {sort}"));
+        assert_eq!(
+            result["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{result}"
+        );
+    }
+    assert!(
+        !link.exists(),
+        "Policy evaluation must not execute the link command"
+    );
+}
+
+#[test]
+fn allowed_native_shell_survives_session_capture_failures() {
+    for fault in ["busy-lock", "corrupt-store"] {
+        let (_root, context) = fixture();
+        let root = Path::new(&context.project_root);
+        let lock = root.join(".shield/review/state.lock");
+        let state_path = root.join(".shield/review/state.json");
+        let state = fs::read(&state_path).unwrap();
+        let input = json!({"protocol_version":1,"request_id":"acme-lock","expected_project_id":context.project_id,
+        "cwd":root,"operation":{"kind":"shell","source":"git status","dialect":"posix"},
+        "host":{"agent":"claude","session_id":"acme-session","tool_use_id":"acme-call","event":"PreToolUse","consumer_id":null}});
+        let (receipt, exit) = crate::enforcement::protocol::evaluate_native(
+            root,
+            &serde_json::to_vec(&input).unwrap(),
+            &json!({"command":"git status"}),
+            crate::enforcement::protocol::NativeContext {
+                integration: "claude",
+                approval: crate::enforcement::protocol::NativeApproval::Prompt,
+                context_complete: true,
+                working_files: None,
+            },
+            None,
+            &|stage| {
+                if stage == "native_handoff_ready" {
+                    if fault == "busy-lock" {
+                        fs::write(&lock, "fixture writer").unwrap();
+                    } else {
+                        fs::write(&state_path, "{").unwrap();
+                    }
+                }
+            },
+        );
+        if fault == "busy-lock" {
+            fs::remove_file(lock).unwrap();
+        }
+        fs::write(state_path, state).unwrap();
+        assert_eq!(exit, 0, "{fault}: {receipt}");
+        assert_eq!(receipt["decision"], "allow", "{fault}: {receipt}");
+        assert_eq!(receipt["disposition"], "allowed", "{fault}: {receipt}");
+    }
+}
+
 fn call(root: &Path, agent: &str, source: &str) -> Value {
     translate(root,agent,&serde_json::to_vec(&json!({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_use_id":"acme-call","session_id":"acme-session","cwd":root,"tool_input":{"command":source}})).unwrap())
 }
@@ -437,6 +519,115 @@ fn git_permission_accepts_reported_cwd_and_keeps_policy_ask_and_deny() {
                 "{policy} {command}: {value}"
             );
         }
+    }
+}
+
+#[test]
+fn ripgrep_missing_operand_names_the_path_and_recovery_in_both_hook_channels() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let outside = assert_fs::TempDir::new().unwrap();
+    let rules = json!({"schema_version":1,"kind":"custom",
+        "capabilities":["argument-rules-v1","location-v1","requirements-v1","structured-rules-v1"],
+        "rules":[{"id":"search","decision":"allow",
+            "conditions":{"domain":"argv","executable":"rg","arguments":{"kind":"any"}},
+            "requirements":{"targets":{"action":"read","all":{"within":{"root":"project"},"exclude":[{"root":"project","path":"secret"}]}}},
+            "on_unmet":{"decision":"deny","message":"Use approved paths."}}]}).to_string();
+    let bundle = Bundle::capture(
+        "schema_version: 1\npacks: []\nrules: custom.json\n",
+        &[],
+        Some(&rules),
+    )
+    .unwrap();
+    review::mcp::initialize_fixture(root.path(), &bundle);
+    fs::create_dir_all(root.path().join(".codex/skills/fix-pr")).unwrap();
+    fs::create_dir(root.path().join("workflows")).unwrap();
+    fs::create_dir(root.path().join("secret")).unwrap();
+    fs::write(
+        root.path().join(".codex/skills/fix-pr/SKILL.md"),
+        "Acme workflow",
+    )
+    .unwrap();
+    fs::write(root.path().join("file.txt"), "Acme").unwrap();
+    for agent in ["codex", "claude"] {
+        let source = "rg --files --hidden -g '*fix-pr*' .codex workflows .agents";
+        let value = call(root.path(), agent, source);
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{value}"
+        );
+        for field in ["permissionDecisionReason", "additionalContext"] {
+            let text = value["hookSpecificOutput"][field].as_str().unwrap();
+            assert!(
+                text.contains("Search operand `.agents` does not exist"),
+                "{text}"
+            );
+            assert!(
+                text.contains("Remove it from the search and retry"),
+                "{text}"
+            );
+            assert!(!text.contains("policy_propose"), "{text}");
+        }
+        // The corrected request retains filename listing and approved roots.
+        assert_permitted(
+            &call(root.path(), agent, "rg --files --hidden .codex workflows"),
+            agent,
+        );
+        let value = call(root.path(), agent, "rg --files file.txt/child");
+        assert!(reason(&value).contains("not a directory"), "{value}");
+        for source in [
+            format!("rg --files .agents '{}'", outside.path().display()),
+            "rg --files .agents secret".into(),
+            "rg --files --follow .codex".into(),
+            "rg Acme .shield/review/state.json".into(),
+        ] {
+            let value = call(root.path(), agent, &source);
+            assert_eq!(
+                value["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{source}: {value}"
+            );
+            let summary = value["hookSpecificOutput"]["permissionDecisionReason"]
+                .as_str()
+                .unwrap();
+            assert!(
+                !summary.contains("Remove it from the search"),
+                "{source}: {value}"
+            );
+        }
+        let compound = call(
+            root.path(),
+            agent,
+            "mkdir .agents && rg --files .codex .agents",
+        );
+        assert_eq!(
+            compound["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{compound}"
+        );
+    }
+    assert!(!root.path().join(".agents").exists());
+}
+
+#[test]
+#[cfg(unix)]
+fn ripgrep_unresolved_links_are_not_reported_as_missing_operands() {
+    use std::os::unix::fs::symlink;
+    let root = assert_fs::TempDir::new().unwrap();
+    symlink("absent", root.path().join("dangling")).unwrap();
+    symlink("loop", root.path().join("loop")).unwrap();
+    for operand in ["dangling", "dangling/child", "loop"] {
+        let input = crate::policy::normalized::Input::Argv {
+            executable: "rg".into(),
+            arguments: vec!["--files".into(), operand.into()],
+            original_input: json!({}),
+        };
+        let path = root.path().to_str().unwrap();
+        let observer = crate::location::Observer::new(&input, path, path, None);
+        let evidence =
+            crate::policy::resources::Resources::predicate_evidence(&observer, "targets").unwrap();
+        assert_eq!(
+            evidence["resource"]["code"], "unresolved",
+            "{operand}: {evidence}"
+        );
+        assert_eq!(evidence["resource"]["path"], operand);
     }
 }
 
@@ -928,7 +1119,39 @@ fn diagnostic_evaluation_records_core_decision_without_command_source() {
 }
 
 fn tool(root: &Path, agent: &str, name: &str, input: &Value) -> Value {
-    translate(root,agent,&serde_json::to_vec(&json!({"hook_event_name":"PreToolUse","tool_name":name,"tool_use_id":"acme-tool","session_id":"acme-session","cwd":root,"tool_input":input})).unwrap())
+    let event = find(agent)
+        .unwrap()
+        .spec()
+        .events
+        .iter()
+        .find(|(_, event)| *event == Event::Before)
+        .unwrap()
+        .0;
+    translate(
+        root,
+        agent,
+        &serde_json::to_vec(&native_host(root, agent, event, name, input)).unwrap(),
+    )
+}
+
+fn native_host(root: &Path, agent: &str, event: &str, name: &str, input: &Value) -> Value {
+    match agent {
+        "agy" => {
+            json!({"conversationId":"acme-session","workspacePaths":[root],"stepIdx":2,"toolCall":{"name":name,"args":input}})
+        }
+        "gemini" => {
+            json!({"hook_event_name":event,"tool_name":name,"session_id":"acme-session","cwd":root,"tool_input":input,"tool_response":{}})
+        }
+        _ => {
+            json!({"hook_event_name":event,"tool_name":name,"tool_use_id":"acme-tool","session_id":"acme-session","cwd":root,"tool_input":input})
+        }
+    }
+}
+
+fn denial_decision(value: &Value) -> &Value {
+    value
+        .get("decision")
+        .unwrap_or(&value["hookSpecificOutput"]["permissionDecision"])
 }
 
 fn reason(value: &Value) -> &str {
@@ -1552,8 +1775,7 @@ fn every_native_adapter_delegates_unknown_internal_tools_without_policy_history(
                 "{agent}: {name}"
             );
             for (event_name, event) in adapter.spec().events.iter().copied() {
-                let host = json!({"hook_event_name":event_name,"tool_name":name,
-                    "tool_input":input,"tool_use_id":"acme-delegated","session_id":"acme-session","cwd":root.path()});
+                let host = native_host(root.path(), agent, event_name, name, &input);
                 assert_eq!(
                     translate_for(
                         root.path(),
@@ -1568,10 +1790,7 @@ fn every_native_adapter_delegates_unknown_internal_tools_without_policy_history(
         }
         for name in ["mcp__acme", "mcp____tool", "mcp__acme__"] {
             let value = tool(root.path(), agent, name, &json!({}));
-            assert_eq!(
-                value["hookSpecificOutput"]["permissionDecision"], "deny",
-                "{agent}: {name}"
-            );
+            assert_eq!(denial_decision(&value), "deny", "{agent}: {name}");
         }
     }
     assert_eq!(journal(root.path()), before);
@@ -1655,6 +1874,32 @@ fn host_fetches_are_the_agent_client_for_web_rules() {
         value["hookSpecificOutput"]["permissionDecision"], "ask",
         "{value}"
     );
+}
+
+#[test]
+fn gemini_web_fetch_mixed_fields_cannot_hide_a_denied_target() {
+    let (root, _context) = fixture();
+    for input in [
+        json!({"url":"https://docs.example.com/","prompt":"Fetch https://blocked.example.com/"}),
+        json!({"url":"https://blocked.example.com/","prompt":"Fetch https://docs.example.com/"}),
+    ] {
+        let value = tool(root.path(), "gemini", "web_fetch", &input);
+        assert_eq!(value["decision"], "deny", "{value}");
+    }
+    for input in [
+        json!({"url":"https://docs.example.com/"}),
+        json!({"prompt":"Fetch https://docs.example.com/"}),
+    ] {
+        let value = tool(root.path(), "gemini", "web_fetch", &input);
+        assert_eq!(value["decision"], "allow", "{value}");
+    }
+    let value = tool(
+        root.path(),
+        "gemini",
+        "web_fetch",
+        &json!({"prompt":"Fetch https://docs.example.com/ and https://blocked.example.com/"}),
+    );
+    assert_eq!(value["decision"], "deny", "{value}");
 }
 
 #[test]
@@ -2260,7 +2505,13 @@ fn canonical_mcp_inspection_remains_usable_and_unknown_server_tools_block() {
     let (_fixture, context) = fixture();
     let root = Path::new(&context.project_root);
     let mut host = json!({"hook_event_name":"PreToolUse","tool_name":"mcp__shield__status","tool_use_id":"acme-status","session_id":"acme-session","cwd":root,"tool_input":{}});
-    for tool in ["status", "policy_propose"] {
+    for tool in [
+        "status",
+        "policy_propose",
+        "docs_list",
+        "docs_search",
+        "docs_read",
+    ] {
         host["tool_name"] = json!(format!("mcp__shield__{tool}"));
         let allowed = translate(root, "claude", &serde_json::to_vec(&host).unwrap());
         assert_permitted(&allowed, "claude");
@@ -2429,7 +2680,7 @@ fn malformed_completion_input_is_quiet_unless_it_names_an_authorization_event() 
                 &serde_json::to_vec(&pre).unwrap(),
             );
             assert_eq!(
-                value["hookSpecificOutput"]["permissionDecision"],
+                denial_decision(&value),
                 "deny",
                 "{} {name}: {value}",
                 adapter.spec().id
@@ -2443,7 +2694,7 @@ fn malformed_completion_input_is_quiet_unless_it_names_an_authorization_event() 
             ] {
                 let value = translate_for(root.path(), adapter.spec().id, *event, bytes);
                 assert_eq!(
-                    value["hookSpecificOutput"]["permissionDecision"],
+                    denial_decision(&value),
                     "deny",
                     "{} {name}: {value}",
                     adapter.spec().id
@@ -3225,7 +3476,8 @@ fn operator_path_access_opens_settings_and_policy_files_but_never_review_state()
         ("cat acme.txt > .shield/config.yml", false),
         ("cat acme.txt > .codex/config.toml", false),
         ("rm .codex/hooks.json", false),
-        ("rm -rf .claude", false),
+        // Removing an ancestor also removes the protected skill-library root.
+        ("rm -rf .claude", true),
         ("rm -rf .shield", true),
         ("mv .shield/review acme", true),
         ("cat acme.txt > .shield/.gitignore", true),

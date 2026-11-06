@@ -124,8 +124,8 @@ test('Claude receives proposal context after its first native Ask', { timeout: 6
   // Inspect what the real host sends to the model, not just the hook's JSON.
   const context = JSON.stringify(provider.requests.at(-1).messages);
   assert.match(context, /Shield: policy asks for approval for this request/);
-  assert.match(context, /shield_docs_search/);
-  assert.match(context, /shield_docs_read/);
+  assert.match(context, /docs_search/);
+  assert.match(context, /docs_read/);
   assert.match(context, /policy_propose/);
   assert.match(context, /policy_apply/);
   assert.match(context, /source_entry_id/);

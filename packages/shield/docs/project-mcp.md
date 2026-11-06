@@ -16,6 +16,7 @@ For third-party servers and pack-contributed MCP permissions, see
 | Understand an existing rule | `rule_list` with its owner-qualified reference. |
 | Learn to write a rule | [Read the bundled guides](#reading-shields-documentation). |
 | Change policy | [Propose and review a change](#proposals-and-operator-review). |
+| Approve repeated operations for this conversation | [Session grants](session-grants.md). |
 | Evaluate a hypothetical request | [Use diagnostic input](#diagnostic-input-and-snapshots); this does not execute it. |
 
 For a pack walkthrough, see [reviewing an available pack](#reviewing-an-available-pack).
@@ -40,11 +41,13 @@ For client implementation, see [transport details](#responses-and-transport-life
 | Category | Tools |
 | --- | --- |
 | Status | `status`, `doctor` |
-| Packs and registries | `pack_list`, `registry_list`, `pack_search`, `pack_info`, `pack_add`, `pack_configure` |
-| Policy and rules | `policy_show`, `rule_list`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_apply`, `policy_withdraw`, `policy_receipt` |
-| Approvals and history | `request_list`, `history_list` |
+| Packs and registries | `pack_list`, `pack_show`, `registry_list`, `registry_add`, `registry_remove`, `registry_default`, `pack_search`, `pack_info`, `pack_add`, `pack_configure`, `pack_update`, `pack_remove` |
+| Policy and rules | `policy_show`, `rule_list`, `rule_add`, `rule_edit`, `rule_remove`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_apply`, `policy_withdraw`, `policy_receipt`, `policy_reject`, `policy_repair` |
+| Approvals and history | `request_list`, `request_show`, `request_approve`, `request_deny`, `history_list`, `history_show`, `history_configure` |
+| Session grants | `session_grant_list`, `session_grant_show`, `session_grant_propose`, `session_grant_approve`, `session_grant_revoke` |
+| Administration | `protection_set`, `cache_prepare`, `mcp_setup` |
 | Diagnostics | `policy_evaluate`, `policy_compare` |
-| Documentation | `shield_docs_list`, `shield_docs_search`, `shield_docs_read` |
+| Documentation | `docs_list`, `docs_search`, `docs_read` |
 
 Packs, rules, policy, approvals and history support list/show through optional
 selectors (`reference`, `rule_ref`, `proposal_id`, `request_id`, `entry_id`). A
@@ -57,6 +60,44 @@ Retained cursor results remain stable while project data changes. Rules use
 owner-qualified references: custom rule ID, or installed pack selector plus rule ID.
 History returns joined request entries; configuration proposals and diagnostics
 create no request entries or action requests.
+
+## Administration and recovery
+
+Administrative tools show the person an exact captured review through the host.
+Tool permission and a chat response cannot confirm the change. Stale reviews
+refuse; inspect the result before requesting a fresh review.
+
+- `protection_set` changes protected-file access choices. Supply one or more of
+  `agent_settings_read` (`ask`/`allow`), `agent_settings_change` (`block`/`allow`)
+  and `shield_config_change` (`block`/`allow`). Shield's own review and cache
+  state remain protected.
+- `registry_add` accepts `name` and `location` and returns the operator route
+  `shield registry add` without fetching that location. The person enrolls the
+  source in their terminal, where discovery and trust review are explicit.
+  `registry_remove` and
+  `registry_default` accept `name`. Optional `scope` defaults to `project`;
+  `user` explicitly changes discovery for other projects too. Installed policy
+  is preserved.
+- `policy_repair` restores managed projections from committed policy.
+  `policy_reject` asks the user to reject a pending `proposal_id`.
+- `history_configure` accepts `enabled`, retention `limit` (1–10000) and
+  `purge`. Clearing history requires confirmation.
+- `mcp_setup` accepts registered `agents`, optional `remove` and `dry_run`.
+  Dry runs return the captured review without writing. Setup is project scoped;
+  restart the affected connection after changing its registration.
+- `cache_prepare {}` rebuilds disposable compiled data from committed policy.
+  It changes no authority and needs no confirmation.
+
+`request_list` and `request_show` include native hook requests as well as read
+and execution requests. `request_deny` asks the user to deny a pending request
+or revoke its unused grant; consumption and revocation are mutually exclusive.
+
+Pack installation accepts known typed settings through a `set` object, also
+inside each batch selection. Forms collect remaining required or requested
+values. `pack_update` collects settings introduced by a release; an unchanged
+update returns `unchanged` without asking for approval. Bare `pack_configure`
+guides settings and rule overrides; explicit edits support values or larger
+configurations that cannot fit the bounded form.
 
 ## Reading Shield's documentation
 
@@ -72,16 +113,16 @@ with additional tools, rerun `shield mcp setup --agent codex` or `shield mcp set
 mark the documentation tools on the Tool permissions page, then restart the
 agent session. Rerunning setup preserves saved selections until you change them.
 
-- `shield_docs_list`: list page paths, titles and line counts. Optional `offset`
+- `docs_list`: list page paths, titles and line counts. Optional `offset`
   starts at zero; `limit` is 1–100, default 50. Continue with `next_offset`.
-- `shield_docs_search`: find case-insensitive literal `query` text in the guides.
+- `docs_search`: find case-insensitive literal `query` text in the guides.
   The query matches within one line: `.*` and `[` match themselves, surrounding
   spaces are significant, and a query must be 1–1024 bytes, not only whitespace
   and without line breaks. Optional `path` selects one listed page. Results
   contain `path`, one-based `line` and the matching line's `text` without its
   line break, in path and line order. Use `offset` and `limit` as for listing;
   continue with `next_offset` and the same query and path.
-- `shield_docs_read`: read a listed `path`, optionally starting at `start_line`
+- `docs_read`: read a listed `path`, optionally starting at `start_line`
   (one-based, default 1). `limit` is 1–400 lines, default 100. The result includes
   `content`, `total_lines` and `next_start_line` for continuation. `content`
   holds the lines exactly as stored, line breaks included, so joining the
@@ -92,7 +133,7 @@ so continue from `next_offset` or `next_start_line` until it is null.
 Every result includes `version`, the Shield version whose guides it returns.
 Unknown arguments are refused.
 
-An unknown page returns `not_found` and directs the agent to `shield_docs_list`;
+An unknown page returns `not_found` and directs the agent to `docs_list`;
 these are exact catalog paths, not filesystem paths, so `../README.md` or a
 differently cased name is not found. Searches with no matches return an empty
 list, and a read past the last line returns empty content. Pagination is stable
@@ -104,7 +145,7 @@ grammar and read its explanation and examples. Inspect the current rules with
 
 ### Example: find the argument-matching guide
 
-Call `shield_docs_search` with these arguments:
+Call `docs_search` with these arguments:
 
 ```json
 {"query":"operands"}
@@ -112,7 +153,7 @@ Call `shield_docs_search` with these arguments:
 
 The result includes matching page paths, line numbers, and text. Choose a
 relevant match in `policy-rules.md`. To read that guide from its beginning,
-call `shield_docs_read` with:
+call `docs_read` with:
 
 ```json
 {"path":"policy-rules.md","start_line":1,"limit":100}
@@ -176,7 +217,8 @@ installation arguments, and a `settings_arguments_template` for requesting
 settings with `pack_add.variables`. Replace the placeholder with only declared
 names needed for the user's request. Missing required values are collected
 automatically; unrequested optional values stay unchanged. Inspect each variable's
-type and constraints; unsupported form types need terminal installation.
+type and constraints; known values unsupported by forms can be supplied through
+the selection's typed `set` object.
 If a release has no settings, installation cannot add a requested
 target restriction. Do not offer an unrestricted pack as a scoped installation.
 The `local` layer chooses storage on this machine; it does not restrict remote
@@ -286,8 +328,9 @@ form answers.
 
 Guided installation supports the same field types and protocol compatibility as
 the settings forms below, with at most 16 required/requested fields in total and 4 MiB of
-retained candidate source per interaction. Unsupported forms, free-text lists or
-larger installations use `shield pack add` in the user's terminal.
+retained candidate source per interaction. Supply known values through `set`
+to avoid unsupported form fields or free-text lists. Larger guided interactions
+can use `shield pack add` in the user's terminal.
 
 Hosts supporting MCP prompts can also discover `install_pack` through
 `prompts/list` and retrieve it with `prompts/get`. Its string arguments are
@@ -297,11 +340,24 @@ discovery-only connection can retrieve the prompt but cannot install a pack.
 Retrieving it performs no acquisition, proposal creation or approval; the
 `pack_add` tool remains available without prompts.
 
+## Update or remove installed packs
+
+The CLI and MCP use the same pack verbs. Call `pack_update` with `{}` to
+update all tracking packs, or with `{"reference":"gate"}` to update one
+selection and its dependencies. Pinned versions stay fixed and are listed in
+`skipped_pinned`. Call `pack_remove` with `{"reference":"gate"}` to remove
+one selection using the same dependency checks as `shield pack remove`.
+
+These tools prepare an inactive candidate. Inspect the returned changes, then
+copy `apply_arguments` unchanged to `policy_apply` for user approval. Preparing
+an update or removal does not change active policy. Use `pack_show` with a
+`reference` to inspect one installed selection, its source and retained rules.
+
 ## Choose installed pack settings
 
 When settings need your input, an agent can call the `pack_configure` tool to
 show a form and prepare an inactive proposal from your answers. First inspect
-the installed pack with `pack_list` and its `reference` selector to find its
+the installed pack with `pack_show` and its `reference` selector to find its
 variable definitions. For an installed Acme pack declaring these variables,
 the tool arguments look like:
 
@@ -314,7 +370,7 @@ default; `local` writes personal configuration when the proposal is approved.
 An unknown variable returns `invalid_input`; inspect the installed selection
 with `pack_list` to find its declared names before retrying.
 Forms support text/path values, booleans, single choices and lists of choices.
-Free-text lists use the `policy_propose` change described below instead.
+Free-text lists use the direct settings arguments described below instead.
 Every selected field needs an explicit answer; omitted fields do not inherit
 defaults. Pack constraints and credential checks still apply to submitted values.
 Do not enter credentials.
@@ -332,7 +388,7 @@ tool approval. Declining or dismissing the settings form creates no proposal
 and ends the offer. A changed selection needs a new form and proposal.
 
 If the host cannot display the requested form, ask for the settings in the
-conversation and prepare a `policy_propose` change with `kind: "pack_configure"`,
+conversation and call `pack_configure` with direct `set` arguments,
 or use `shield pack configure` in your terminal. Never infer missing answers.
 A policy change while the form is open makes its answer stale; prepare a fresh
 settings review. Modern clients must support the form mode on each request and
@@ -341,6 +397,18 @@ answer on retry. Pending modern forms expire after five minutes, allow at most
 eight rounds and are private to the connection. Replaying a consumed form refuses.
 
 ## Proposals and operator review
+
+Known settings can be passed directly to `pack_configure` without a form, using
+the CLI's operations as JSON fields: `set`, `unset`, `override` and
+`clear_override`, with optional `layer`. For example:
+
+```json
+{"reference":"acme/settings","set":{"manager":"pnpm"},"override":{"build":"ask"}}
+```
+
+To remove those choices, use `{"reference":"acme/settings","unset":["manager"],"clear_override":["build"]}`.
+Do not mix direct settings with `variables`, which selects a user-input form.
+Both modes return an inactive proposal and require `policy_apply` approval.
 
 `policy_propose` accepts one tagged `change` or a `changes` array of
 1–16 changes. A batch applies in order to one candidate; approval activates all
@@ -405,6 +473,7 @@ shortened or omitted constraints are identified.
 | Host | Approval |
 | --- | --- |
 | Claude | An MCP confirmation form. Accept applies the proposal; decline, cancel, disconnect, or timeout leaves it pending. |
+| Gemini CLI / Antigravity CLI | The adapters support MCP form confirmation. Native Gemini 0.67.0 omits forms and Antigravity CLI 1.5.1 cancels them even interactively; use terminal policy review on those versions. |
 | Codex | The per-call tool prompt. Allow applies; Cancel leaves it pending. `never` approval policy cannot run apply. |
 | Other or unrecognized host | Review and activate with `shield policy review` in a terminal. |
 
@@ -502,7 +571,7 @@ Offer rules for recurring tasks, skipping one-off lookups such as help output.
 Start from `authoring_examples` or the complete examples in
 `policy_propose`'s `inputSchema`.
 The schema describes argument and path predicates at their definitions. Use
-`shield_docs_search` and `shield_docs_read` for additional grammar details.
+`docs_search` and `docs_read` for additional grammar details.
 Inspect scripts, lifecycle hooks, and option effects before proposing. Group
 reviewed variants in one rule, and inspect `rule_list` before adding a
 duplicate. If effects are unknown, investigate or skip the offer.
@@ -725,7 +794,7 @@ before retrying, even if no form opened. Consumed form state cannot be replayed
 and private answers must not be reconstructed.
 
 Keep stdin open until you have the replies you need. When it closes, queued
-`policy_propose`, `pack_add`, `pack_configure`, `policy_withdraw` and `policy_apply`
+`policy_propose`, `pack_add`, `pack_configure`, `pack_update`, `pack_remove`, `policy_withdraw` and `policy_apply`
 calls are refused with `-32800` and never run, a pending confirmation is
 withdrawn, and read-only tools still finish.
 

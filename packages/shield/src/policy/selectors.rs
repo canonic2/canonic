@@ -150,7 +150,7 @@ pub(super) fn field_map(value: &Value) -> Result<(), Error> {
     Ok(())
 }
 
-fn pointer_validate(pointer: &str) -> Result<(), Error> {
+pub(super) fn pointer_validate(pointer: &str) -> Result<(), Error> {
     if pointer.len() > 1024 {
         return Err(Error::Limit);
     }

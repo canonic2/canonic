@@ -236,12 +236,16 @@ fn prepare_adapter(
         Ok(settings.source)
     })?;
     if let Some(path) = adapter.spec().mcp_path {
-        files::edit(root, changes, path, |source| {
-            adapter.merge_mcp(
+        files::edit_optional(root, changes, path, |source| {
+            let merged = adapter.merge_mcp(
                 source,
                 previous.and_then(|p| p.mcp.as_deref()),
                 desired.as_ref().and_then(|p| p.mcp.as_deref()),
-            )
+            )?;
+            let empty = crate::json::parse(merged.as_bytes())
+                .ok()
+                .is_some_and(|value| value.as_object().is_some_and(serde_json::Map::is_empty));
+            Ok((desired.is_some() || !empty).then_some(merged))
         })?;
     }
     Ok(desired)
@@ -255,7 +259,13 @@ pub(in crate::review) fn diagnose(
 ) -> Result<(), Error> {
     let adapter = lookup(agent)?;
     let mut changes = Vec::new();
-    prepare_adapter(root, adapter, Some(installation), None, &[], &mut changes)?;
+    if let Err(error) = prepare_adapter(root, adapter, Some(installation), None, &[], &mut changes)
+    {
+        match error {
+            Error::Invalid(reason) => diagnostics.push(reason),
+            other => return Err(other),
+        }
+    }
     if changes.iter().any(|f| f.before.is_none()) {
         diagnostics.push("owned native hook configuration is missing");
     }

@@ -8,50 +8,26 @@ pub(super) fn merge(
     previous: &Value,
     desired: &BTreeMap<String, Transport>,
 ) -> Result<SettingsUpdate, Error> {
-    let mut document =
-        crate::json::parse(source.as_bytes()).map_err(|_| Error::Invalid("invalid MCP JSON"))?;
-    let servers = document
-        .as_object_mut()
-        .ok_or(Error::Invalid("MCP configuration must be an object"))?
-        .entry("mcpServers")
-        .or_insert_with(|| json!({}))
-        .as_object_mut()
-        .ok_or(Error::Invalid("mcpServers must be an object"))?;
-    for (alias, entry) in previous.as_object().into_iter().flatten() {
-        if servers.get(alias).is_some_and(|actual| actual != entry) {
-            return Err(Error::Invalid(
-                "owned MCP connection was changed; resolve before setup",
-            ));
-        }
-        servers.remove(alias);
+    super::super::json_mcp::connections_with(
+        source,
+        previous,
+        desired,
+        decode,
+        |transport| {
+            serde_json::to_value(transport).map_err(|_| Error::Invalid("MCP connection encoding"))
+        },
+        |alias, servers| {
+            super::super::unambiguous_mcp_alias(alias, servers.keys().map(String::as_str))
+        },
+    )
+}
+
+pub(super) fn decode(entry: &Value) -> Result<Transport, Error> {
+    let mut entry = entry.clone();
+    if entry.get("type").is_none() {
+        entry["type"] = json!("stdio");
     }
-    let mut owned = serde_json::Map::new();
-    for (alias, transport) in desired {
-        super::super::unambiguous_mcp_alias(alias, servers.keys().map(String::as_str))?;
-        let entry = serde_json::to_value(transport)
-            .map_err(|_| Error::Invalid("MCP connection encoding"))?;
-        if let Some(existing) = servers.get(alias) {
-            let mut existing = existing.clone();
-            if existing.get("type").is_none() {
-                existing["type"] = json!("stdio");
-            }
-            if serde_json::from_value::<Transport>(existing).ok().as_ref() != Some(transport) {
-                return Err(Error::Invalid(
-                    "MCP alias is already configured differently; resolve before setup",
-                ));
-            }
-        } else {
-            servers.insert(alias.clone(), entry.clone());
-            owned.insert(alias.clone(), entry);
-        }
-    }
-    Ok(SettingsUpdate {
-        source: format!(
-            "{}\n",
-            serde_json::to_string_pretty(&document).map_err(|_| Error::Invalid("MCP encoding"))?
-        ),
-        ownership: Some(Value::Object(owned)),
-    })
+    serde_json::from_value(entry).map_err(|_| Error::Invalid("unsupported MCP connection settings"))
 }
 
 pub(super) fn settings(

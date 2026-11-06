@@ -3,7 +3,9 @@
 //! outcome and summarize, following the CLI output contract.
 use crate::cli::{
     PublicCommand,
-    public::{HistoryCommand, PackCommand, RegistryCommand, RequestCommand, RuleCommand},
+    public::{
+        HistoryCommand, PackCommand, PolicyCommand, RegistryCommand, RequestCommand, RuleCommand,
+    },
 };
 use serde_json::Value;
 use std::fmt::Write;
@@ -88,6 +90,16 @@ fn plural(count: usize, one: &str, many: &str) -> String {
 
 /// The review shown in the operator terminal before a change is confirmed.
 pub(super) fn review(value: &Value) -> String {
+    if let Some(message) = value["session_grant_review"].as_str() {
+        return format!(
+            "{}\n",
+            message
+                .lines()
+                .map(|line| label(&Value::String(line.into())))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
     let mut value = value.clone();
     crate::review::model::redact(&mut value);
     setup::review(&value)
@@ -136,10 +148,24 @@ fn result(command: &PublicCommand, value: &Value) -> String {
         }
         PublicCommand::Mcp(_) => setup::configured(value),
         PublicCommand::Protection(_) => setup::protection(value),
+        PublicCommand::SessionGrant(_) => session_grant(value),
         PublicCommand::Status => activity::status(value, false),
         PublicCommand::Doctor => activity::status(value, true),
+        PublicCommand::Docs(_) => documentation(value),
         PublicCommand::Cache { .. } => activity::cache(value),
-        PublicCommand::Policy(_) => policy::policy(value),
+        PublicCommand::Policy(input) => match input.command {
+            PolicyCommand::Evaluate { .. } => format!(
+                "Decision: {}\nPolicy: {}\nPreview only; no action authorized.",
+                label(&value["decision"]),
+                short(&value["policy_revision"])
+            ),
+            PolicyCommand::Compare { .. } => format!(
+                "Policy comparison: {}\n{}\nPreview only; no action authorized.",
+                label(&value["relation"]),
+                label(&value["coverage"])
+            ),
+            _ => policy::policy(value),
+        },
         PublicCommand::Rule(rule) => match rule.command {
             RuleCommand::List => policy::rules(value),
             _ => policy::receipt(value),
@@ -177,9 +203,52 @@ fn result(command: &PublicCommand, value: &Value) -> String {
         PublicCommand::History(history) => match history.command {
             HistoryCommand::List { .. } => activity::history(value),
             HistoryCommand::Show { .. } => activity::entry(value),
+            HistoryCommand::Configure { .. } => fallback(value),
         },
         PublicCommand::Internal(_) => fallback(value),
     }
+}
+
+fn documentation(value: &Value) -> String {
+    if let Some(content) = value["content"].as_str() {
+        return content
+            .lines()
+            .map(|line| label(&Value::String(line.into())))
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    if let Some(rows) = value["documents"].as_array() {
+        return rows
+            .iter()
+            .map(|row| {
+                format!(
+                    "{} · {} · {} lines",
+                    label(&row["path"]),
+                    label(&row["title"]),
+                    label(&row["total_lines"])
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    if let Some(rows) = value["matches"].as_array() {
+        if rows.is_empty() {
+            return "No documentation matches.".into();
+        }
+        return rows
+            .iter()
+            .map(|row| {
+                format!(
+                    "{}:{}  {}",
+                    label(&row["path"]),
+                    label(&row["line"]),
+                    label(&row["text"])
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    fallback(value)
 }
 
 /// Top-level facts of a result without a dedicated view. Nested data stays in
@@ -206,6 +275,49 @@ fn fallback(value: &Value) -> String {
         output.push_str("Use --json for the complete result.\n");
     }
     output
+}
+
+fn session_grant(value: &Value) -> String {
+    let status = |row: &Value| {
+        label(if row["grant_status"].is_null() {
+            &row["proposal_status"]
+        } else {
+            &row["grant_status"]
+        })
+    };
+    if let Some(rows) = value["records"].as_array() {
+        let mut text = format!("{} session grant records\n", rows.len());
+        for row in rows {
+            let id = if row["grant_id"].is_null() {
+                &row["proposal_id"]
+            } else {
+                &row["grant_id"]
+            };
+            let _ = writeln!(
+                text,
+                "{} · {} · {}",
+                label(id),
+                status(row),
+                label(&row["target"]["agent"])
+            );
+        }
+        text
+    } else {
+        format!(
+            "Session grant: {}\nProposal: {}\nGrant: {}\nIssued: {}\nExpires: {}\n{}\n{}\n",
+            status(value),
+            label(&value["proposal_id"]),
+            label(&value["grant_id"]),
+            label(&value["issued_at"]),
+            label(&value["expires_at"]),
+            value["review"].as_str().map_or_else(String::new, |s| s
+                .lines()
+                .map(|line| label(&Value::String(line.into())))
+                .collect::<Vec<_>>()
+                .join("\n")),
+            label(&value["next_action"])
+        )
+    }
 }
 
 #[cfg(test)]

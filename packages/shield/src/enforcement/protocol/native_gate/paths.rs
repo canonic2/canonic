@@ -669,9 +669,13 @@ fn search_protection(
 // review state, the cache, the .shield folder itself or its ignore file.
 fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
     if access == Access::Write
-        && guard
-            .working_files
-            .is_some_and(|scope| scope.write.iter().any(|root| root == path))
+        && guard.working_files.is_some_and(|scope| {
+            scope
+                .write
+                .iter()
+                .chain(&scope.skills)
+                .any(|root| root == path)
+        })
     {
         return Protection::Blocked;
     }
@@ -688,6 +692,16 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
         .iter()
         .position(|p| native_name(p, std::ffi::OsStr::new(".shield")))
     else {
+        if configuration
+            && guard.working_files.is_some_and(|scope| {
+                scope
+                    .skills
+                    .iter()
+                    .any(|root| resolve_existing(root) == *root && path.starts_with(root))
+            })
+        {
+            return Protection::None;
+        }
         if configuration
             && access != Access::Write
             && guard.working_files.is_some_and(|scope| {
@@ -824,9 +838,13 @@ pub(super) fn removal(path: &Path, root: &Path, guard: Guard<'_>) -> bool {
     let path = resolve_existing(path);
     let locked = |path: &Path| classify(path, guard, Access::Write) == Protection::Blocked;
     locked(&path)
-        || guard
-            .working_files
-            .is_some_and(|scope| scope.write.iter().any(|root| root.starts_with(&path)))
+        || guard.working_files.is_some_and(|scope| {
+            scope
+                .write
+                .iter()
+                .chain(&scope.skills)
+                .any(|root| root.starts_with(&path))
+        })
         || guard.working_files.is_some_and(|scope| {
             scope.protected.iter().any(|root| {
                 let root = resolve_existing(root);
@@ -907,6 +925,46 @@ fn destructive(value: &Value, root: &Path, cwd: &Path, cwd_known: bool, guard: G
         };
         removal(&source, root, guard) || removal(&destination, root, guard)
     })
+}
+
+#[cfg(all(test, unix))]
+mod editable_skills {
+    use super::*;
+    #[test]
+    fn skill_write_scope_preserves_configuration_and_state_guards() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let config = root.path().canonicalize().unwrap().join(".codex");
+        let skills = config.join("skills");
+        std::fs::create_dir_all(&skills).unwrap();
+        let scope = crate::location::WorkingFiles {
+            skills: vec![skills.clone()],
+            protected: vec![config.clone()],
+            ..Default::default()
+        };
+        let guard = Guard {
+            cache: None,
+            allow: PathAccess::default(),
+            working_files: Some(&scope),
+        };
+        assert!(classify(&skills.join("new/SKILL.md"), guard, Access::Write) == Protection::None);
+        assert!(classify(&skills, guard, Access::Write) == Protection::Blocked);
+        assert!(removal(&skills, root.path(), guard));
+        assert!(removal(&config, root.path(), guard));
+        assert!(!removal(&skills.join("new/SKILL.md"), root.path(), guard));
+        assert!(classify(&config.join("config.toml"), guard, Access::Write) == Protection::Blocked);
+        assert!(
+            classify(
+                &skills.join(".shield/review/state.json"),
+                guard,
+                Access::Write
+            ) == Protection::Blocked
+        );
+        std::fs::remove_dir(&skills).unwrap();
+        std::os::unix::fs::symlink(&config, &skills).unwrap();
+        assert!(
+            classify(&config.join("credentials.json"), guard, Access::Write) == Protection::Blocked
+        );
+    }
 }
 
 #[cfg(all(test, windows))]

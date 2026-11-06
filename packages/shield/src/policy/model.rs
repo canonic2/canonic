@@ -366,6 +366,16 @@ impl PackDocument {
     }
 }
 impl CustomDocument {
+    pub(super) fn from_rules(mut rules: Vec<Rule>) -> Result<Self, Error> {
+        let capabilities = validate_rules(&mut rules, false)?.into_iter().collect();
+        Ok(Self {
+            schema_version: 1,
+            kind: "custom".into(),
+            capabilities,
+            rules,
+            directory_options: vec![],
+        })
+    }
     pub(super) fn validate_schema(&self) -> Result<(), Error> {
         schema(self.schema_version, &self.kind, "custom")
     }

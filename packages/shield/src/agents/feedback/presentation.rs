@@ -3,12 +3,14 @@ use super::{Reply, Value};
 
 pub(super) fn denial(mut reply: Reply, receipt: &Value) -> Reply {
     let code = receipt["code"].as_str().unwrap_or_default();
+    let resource_failure = crate::agent_message::resource_failure(&receipt["diagnostics"]);
     let explanation = match code {
         _ if crate::agent_message::rewrite_detail(&receipt["diagnostics"]).is_some() => "The command could not be checked in this form. The agent has instructions to revise it.".into(),
         "policy-deny" if receipt["outside_path"]["path"].is_string() => format!(
             "`{}` is outside the approved folders. Additional folder access requires your approval.",
             receipt["outside_path"]["path"].as_str().unwrap_or_default()
         ),
+        "policy-deny" if resource_failure.is_some() => resource_failure.unwrap_or_default(),
         "policy-deny" if receipt["diagnostics"]["requirement_checks"]
             .as_array()
             .is_some_and(|checks| checks.first().is_some_and(|check| check["status"] != "met")) => format!(

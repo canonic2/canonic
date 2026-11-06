@@ -1,5 +1,6 @@
 //! Guided installation retains artifacts and user input across separate approval.
 use super::*;
+mod parity;
 
 fn fresh(
     required: bool,

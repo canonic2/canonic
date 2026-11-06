@@ -57,6 +57,7 @@ pub(crate) const CAPABILITIES: &[&str] = &[
     "structured-rules-v1",
     "argument-rules-v1",
     "argument-paths-v1",
+    "field-paths-v1",
     "glob-v1",
     "regex-v1",
     "location-v1",
@@ -802,6 +803,56 @@ pub(crate) fn retain_declared(source: &str, binding: &mut Binding) -> Result<(),
 }
 
 impl CustomRules {
+    pub(crate) fn from_rule_values(values: &[serde_json::Value]) -> Result<Self, Error> {
+        let rules = values
+            .iter()
+            .cloned()
+            .map(serde_json::from_value)
+            .collect::<Result<Vec<rules::Rule>, _>>()
+            .map_err(|_| Error::Contract("invalid session selector"))?;
+        let document = CustomDocument::from_rules(rules)?;
+        let index = index::Index::new(document.rules.iter().map(rules::Rule::executable));
+        let semantic = document.rules.iter().any(rules::Rule::semantic);
+        let patterns = model::prepare_patterns(&document.rules, &[])?.into();
+        Ok(Self {
+            document,
+            digest: fingerprint(
+                serde_json::to_string(values)
+                    .map_err(|_| Error::Contract("invalid selector encoding"))?
+                    .as_bytes(),
+            ),
+            index,
+            semantic,
+            patterns,
+        })
+    }
+    /// Evaluate retained session selectors through the ordinary prepared resolver.
+    pub(crate) fn evaluate_observed(&self, request: &Request) -> Result<Evaluation, Error> {
+        let input = normalized::Input::Argv {
+            executable: request.executable.clone(),
+            arguments: request.arguments.clone(),
+            original_input: serde_json::json!({}),
+        };
+        let context = normalized::Context {
+            cwd: request.cwd.clone(),
+            environment: None,
+            working_files: None,
+        };
+        let observer = crate::location::Observer::new(&input, &request.project, &request.cwd, None);
+        let now = crate::evidence::now();
+        let facts = rules::Facts {
+            input: &input,
+            context: &context,
+            executable: None,
+            now: &now,
+            known_cwd: true,
+            known_arguments: true,
+            locations: Some(&observer),
+            effects: None,
+        };
+        evaluate_facts(&[], &[self], request, &facts, true, &|| Ok(()), None, None)
+    }
+
     /// Parse and validate custom rules for preview.
     ///
     /// # Errors

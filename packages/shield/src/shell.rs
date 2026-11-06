@@ -120,15 +120,12 @@ pub(crate) fn analyze_with_working_files(
         Dialect::Powershell => powershell::parse(source, checkpoint)?.unwrap_or_else(opaque),
         Dialect::Cmd => opaque(),
     };
-    // A missing in-place sed input is inert only when nothing else in the
-    // request could create it, as a link to another file, before sed runs.
-    let sole =
-        working_files
-            .filter(|_| sole_sed(&tree))
-            .map(|scope| crate::location::WorkingFiles {
-                sole_operation: true,
-                ..scope.clone()
-            });
+    // Missing inputs are inert only when nothing else in the request can
+    // create them first. This observation adds no adapter file permissions.
+    let sole = sole_filter(&tree).then(|| crate::location::WorkingFiles {
+        sole_operation: true,
+        ..working_files.cloned().unwrap_or_default()
+    });
     let working_files = sole.as_ref().or(working_files);
     let mut analysis = Analysis {
         evaluator,
@@ -1419,9 +1416,9 @@ fn positional_words(
     Ok(result)
 }
 
-/// Whether the whole request is one literal sed invocation without
+/// Whether the whole request is one literal text-filter invocation without
 /// redirections or assignments, so it runs no other operation.
-fn sole_sed(tree: &Node) -> bool {
+fn sole_filter(tree: &Node) -> bool {
     let Node::Command {
         words,
         redirections,
@@ -1435,7 +1432,12 @@ fn sole_sed(tree: &Node) -> bool {
         && words
             .first()
             .and_then(|word| word.literal.as_deref())
-            .is_some_and(|name| matches!(name, "sed" | "/bin/sed" | "/usr/bin/sed"))
+            .is_some_and(|name| {
+                matches!(
+                    name.rsplit('/').next(),
+                    Some("sed" | "awk" | "jq" | "sort" | "uniq" | "cut" | "diff" | "cmp")
+                )
+            })
 }
 
 // An interpreter asked only for its version prints it and runs no code.

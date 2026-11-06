@@ -14,6 +14,9 @@ pub(super) fn collect(
     patterns: &dyn Provider,
 ) -> Result<Option<Value>, Error> {
     match (key, facts.input) {
+        ("targets" | "sources" | "destination", _) => Ok(facts
+            .locations
+            .and_then(|locations| locations.predicate_evidence(key))),
         ("arguments", Input::Argv { arguments, .. }) if facts.known_arguments => Ok(Some(
             argument_rules::matches(predicate, arguments, patterns)?.evidence(predicate),
         )),

@@ -2,6 +2,7 @@
 use super::*;
 use crate::enforcement::protocol::{self, NativeApproval, NativeContext};
 use crate::location::WorkingFiles;
+use std::path::PathBuf;
 
 fn scoped_project(root: &Path) -> review::Context {
     let rules = json!({"schema_version":1,"kind":"custom",
@@ -11,6 +12,7 @@ fn scoped_project(root: &Path) -> review::Context {
             {"id":"write","decision":"allow","conditions":{"domain":"file","action":"write"},"requirements":{"destination":{"within":{"root":"write"}}},"on_unmet":{"decision":"deny"}},
             {"id":"remove","decision":"allow","conditions":{"domain":"file","action":"remove"},"requirements":{"targets":{"action":"remove","all":{"within":{"root":"write"}}}},"on_unmet":{"decision":"deny"}},
             {"id":"cat","decision":"allow","conditions":{"domain":"argv","executable":"cat","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"read"}}}},"on_unmet":{"decision":"deny"}},
+            {"id":"rg","decision":"allow","conditions":{"domain":"argv","executable":"rg","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"read"}}}},"on_unmet":{"decision":"deny"}},
             {"id":"printf","decision":"allow","conditions":{"domain":"argv","executable":"printf","arguments":{"kind":"any"}}},
             {"id":"explicit-deny","decision":"deny","conditions":{"domain":"argv","executable":"acme-denied","arguments":{"kind":"any"}}}
         ]}).to_string();
@@ -24,45 +26,63 @@ fn scoped_project(root: &Path) -> review::Context {
 }
 
 #[test]
-fn working_files_default_temporary_access_reaches_both_native_adapters() {
+fn working_files_default_temporary_and_skill_access_reaches_all_native_adapters() {
     let environment = assert_fs::TempDir::new().unwrap();
     let root = environment.path().canonicalize().unwrap();
-    let home = root.join("home");
-    let scratch = if cfg!(windows) {
-        home.join("AppData/Local/Temp")
-    } else {
-        root.join("scratch")
-    };
-    let claude = home.join("claude-config");
-    let codex = home.join("codex-config");
-    for path in [&home, &scratch, &claude, &codex] {
-        fs::create_dir_all(path).unwrap();
+    // Each child owns fresh home/configuration state, including its symlinks.
+    for overrides in [true, false] {
+        let home = root.join(if overrides {
+            "overridden-home"
+        } else {
+            "default-home"
+        });
+        let scratch = if cfg!(windows) {
+            home.join("AppData/Local/Temp")
+        } else {
+            root.join("scratch")
+        };
+        let claude = home.join("claude-config");
+        let codex = home.join("codex-config");
+        for path in [
+            &home,
+            &scratch,
+            &claude,
+            &codex,
+            &home.join(".codex"),
+            &home.join(".claude"),
+        ] {
+            fs::create_dir_all(path).unwrap();
+        }
+        // Do not mutate process-wide environment while other Rust tests run.
+        let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                "agents::hook::tests::working_files::default_temporary_access_fixture",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env_clear()
+            .env("HOME", &home)
+            .env("USERPROFILE", &home)
+            .env("TMPDIR", &scratch)
+            .env("TMP", &scratch)
+            .env("TEMP", &scratch);
+        if overrides {
+            command
+                .env("CLAUDE_CONFIG_DIR", &claude)
+                .env("CODEX_HOME", &codex)
+                .env("GEMINI_CLI_HOME", scratch.join("gemini-home"));
+        }
+        let output = command.output().unwrap();
+        assert!(
+            output.status.success(),
+            "overrides={overrides}: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
     }
-    // Do not mutate process-wide environment while other Rust tests run.
-    let output = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--exact",
-            "agents::hook::tests::working_files::default_temporary_access_fixture",
-            "--ignored",
-            "--nocapture",
-        ])
-        .env_clear()
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("CLAUDE_CONFIG_DIR", &claude)
-        .env("CODEX_HOME", &codex)
-        .env("TMPDIR", &scratch)
-        .env("TMP", &scratch)
-        .env("TEMP", &scratch)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
 }
 
 #[test]
@@ -148,6 +168,357 @@ fn default_temporary_access_fixture() {
         without_requests(&state)
     );
     assert!(!temp.path().join("new-unowned-name").exists());
+    check_skill_access(root);
+    check_google_skill_access(root);
+    check_google_session_access(root);
+}
+
+fn check_google_session_access(project: &Path) {
+    let session = "12345678-acme";
+    let home = PathBuf::from(std::env::var_os("HOME").unwrap());
+    let gemini = crate::agents::working_files::configuration("GEMINI_CLI_HOME", "")
+        .unwrap()
+        .join(".gemini");
+    let temporary = gemini.join("tmp/acme");
+    let agy = home.join(".gemini/antigravity-cli/brain").join(session);
+    let transcript = temporary.join("chats/session-2026-11-05T00-00-12345678.jsonl");
+    let agy_transcript = agy.join(".system_generated/logs/transcript_full.jsonl");
+    for path in [
+        temporary.join(session),
+        temporary.join("chats"),
+        temporary.join("other-session"),
+        agy.join(".system_generated/logs"),
+        agy.parent().unwrap().join("other-session"),
+    ] {
+        fs::create_dir_all(path).unwrap();
+    }
+    fs::write(temporary.join(".project_root"), project.to_str().unwrap()).unwrap();
+    for path in [&transcript, &agy_transcript] {
+        fs::write(path, "Acme transcript").unwrap();
+    }
+    for (agent, own, sibling) in [
+        (
+            "gemini",
+            temporary.join(session),
+            temporary.join("other-session"),
+        ),
+        (
+            "agy",
+            agy.clone(),
+            agy.parent().unwrap().join("other-session"),
+        ),
+    ] {
+        let file = own.join("output.txt");
+        let foreign = sibling.join("output.txt");
+        fs::write(&file, "Acme output").unwrap();
+        fs::write(&foreign, "Other output").unwrap();
+        let read = |path: &Path, write: bool, spoof: bool| {
+            let host = if agent == "gemini" {
+                json!({"hook_event_name":"BeforeTool","session_id":if spoof {"87654321-other"} else {session},"cwd":project,"transcript_path":transcript,"tool_name":if write {"write_file"} else {"read_file"},"tool_input":{"file_path":path,"content":"Acme"}})
+            } else {
+                json!({"conversationId":if spoof {"87654321-other"} else {session},"workspacePaths":[project],"stepIdx":2,"artifactDirectoryPath":agy,"transcriptPath":agy_transcript,"toolCall":{"name":if write {"write_file"} else {"read_file"},"args":{"Path":path,"Content":"Acme"}}})
+            };
+            if !spoof {
+                let scope = find(agent).unwrap().working_files(&host, project);
+                assert!(
+                    scope.read.contains(&own),
+                    "{agent}: missing session scope: {scope:?}"
+                );
+            }
+            translate_for(
+                project,
+                agent,
+                Event::Before,
+                &serde_json::to_vec(&host).unwrap(),
+            )
+        };
+        let allowed = if agent == "agy" {
+            "auto_approve"
+        } else {
+            "allow"
+        };
+        let value = read(&file, false, false);
+        assert_eq!(value["decision"], allowed, "{agent}: {value}");
+        assert_ne!(read(&foreign, false, false)["decision"], allowed, "{agent}");
+        assert_eq!(read(&file, true, false)["decision"], "deny", "{agent}");
+        assert_ne!(read(&file, false, true)["decision"], allowed, "{agent}");
+        #[cfg(unix)]
+        {
+            let link = own.join("foreign-link");
+            std::os::unix::fs::symlink(&foreign, &link).unwrap();
+            assert_ne!(read(&link, false, false)["decision"], allowed, "{agent}");
+        }
+    }
+}
+
+fn check_google_skill_access(project: &Path) {
+    let home = PathBuf::from(std::env::var_os("HOME").unwrap());
+    let gemini_home = crate::agents::working_files::configuration("GEMINI_CLI_HOME", "").unwrap();
+    let gemini = gemini_home.join(".gemini");
+    let agy = home.join(".gemini");
+    for config in [&gemini, &agy] {
+        fs::create_dir_all(config).unwrap();
+        fs::write(config.join("credentials.json"), "Acme fixture").unwrap();
+    }
+    let candidates = [
+        ("gemini", gemini.join("skills")),
+        ("gemini", gemini_home.join(".agents/skills")),
+        ("gemini", project.join(".gemini/skills")),
+        ("agy", agy.join("config/skills")),
+        ("agy", agy.join("antigravity-cli/skills")),
+        ("agy", agy.join("skills")),
+        ("agy", project.join(".agents/skills")),
+    ];
+    for (agent, library) in candidates {
+        let allowed = if agent == "agy" {
+            "auto_approve"
+        } else {
+            "allow"
+        };
+        fs::create_dir_all(library.join("acme")).unwrap();
+        let skill = library.join("acme/SKILL.md");
+        fs::write(&skill, "Acme skill fixture").unwrap();
+        let native = |path: &Path, write: bool| {
+            let host = if agent == "gemini" {
+                json!({"hook_event_name":"BeforeTool","session_id":"acme-session","cwd":project,
+                    "tool_name":if write {"write_file"} else {"read_file"},"tool_input":{"file_path":path,"content":"Acme"}})
+            } else {
+                json!({"conversationId":"acme-session","workspacePaths":[project],"stepIdx":2,
+                    "toolCall":{"name":if write {"write_to_file"} else {"read_file"},"args":if write {json!({"TargetFile":path,"CodeContent":"Acme"})} else {json!({"Path":path})}}})
+            };
+            translate_for(
+                project,
+                agent,
+                Event::Before,
+                &serde_json::to_vec(&host).unwrap(),
+            )
+        };
+        let read = native(&skill, false);
+        assert_eq!(read["decision"], allowed, "{agent} {library:?}: {read}");
+        if !cfg!(windows) {
+            for source in [
+                format!("cat '{}'", skill.display()),
+                format!("rg --files '{}'", library.display()),
+            ] {
+                let host = if agent == "gemini" {
+                    json!({"hook_event_name":"BeforeTool","session_id":"acme-session","cwd":project,"tool_name":"run_shell_command","tool_input":{"command":source,"dir_path":project}})
+                } else {
+                    json!({"conversationId":"acme-session","workspacePaths":[project],"stepIdx":2,"toolCall":{"name":"run_command","args":{"CommandLine":source}}})
+                };
+                let value = translate_for(
+                    project,
+                    agent,
+                    Event::Before,
+                    &serde_json::to_vec(&host).unwrap(),
+                );
+                assert_eq!(value["decision"], allowed, "{agent} {library:?}: {value}");
+            }
+        }
+        let write = native(&skill, true);
+        assert_eq!(write["decision"], allowed, "{agent} {library:?}: {write}");
+        let config = if agent == "gemini" { &gemini } else { &agy };
+        assert_eq!(
+            native(&config.join("credentials.json"), false)["decision"],
+            if config.starts_with(std::env::temp_dir()) {
+                "ask"
+            } else {
+                "deny"
+            }
+        );
+        let foreign = crate::agents::working_files::configuration("CLAUDE_CONFIG_DIR", ".claude")
+            .unwrap()
+            .join("skills/acme/SKILL.md");
+        assert_eq!(native(&foreign, false)["decision"], "deny");
+    }
+}
+
+/// Runs only in the child with isolated HOME and agent configuration overrides.
+fn check_skill_access(project: &Path) {
+    let codex = crate::agents::working_files::configuration("CODEX_HOME", ".codex").unwrap();
+    let claude =
+        crate::agents::working_files::configuration("CLAUDE_CONFIG_DIR", ".claude").unwrap();
+    let shared = PathBuf::from(std::env::var_os("HOME").unwrap()).join(".agents/skills");
+    for config in [&codex, &claude] {
+        fs::write(config.join("credentials.json"), "Acme fixture").unwrap();
+    }
+    for (agent, config) in [("codex", &codex), ("claude", &claude)] {
+        let path = config.join("skills/new/SKILL.md");
+        let value = if agent == "codex" {
+            tool(
+                project,
+                agent,
+                "apply_patch",
+                &json!({"command":format!("*** Begin Patch\n*** Add File: {}\n+Acme workflow\n*** End Patch",path.display())}),
+            )
+        } else {
+            tool(
+                project,
+                agent,
+                "Write",
+                &json!({"file_path":path,"content":"Acme workflow"}),
+            )
+        };
+        assert_permitted(&value, agent);
+    }
+    let roots = [
+        codex.join("skills"),
+        claude.join("skills"),
+        shared.clone(),
+        project.join(".codex/skills"),
+        project.join(".claude/skills"),
+        project.join(".agents/skills"),
+    ];
+    for (agent, config) in [("codex", &codex), ("claude", &claude)] {
+        let scope = find(agent).unwrap().working_files(&Value::Null, project);
+        assert!(!scope.read.contains(&config.join("skills")));
+    }
+    for root in &roots {
+        fs::create_dir_all(root.join("acme")).unwrap();
+        fs::write(root.join("acme/SKILL.md"), "Acme workflow").unwrap();
+    }
+    for (agent, own, foreign, local) in [
+        ("codex", &codex, &claude, ".codex/skills"),
+        ("claude", &claude, &codex, ".claude/skills"),
+    ] {
+        check_agent_skills(project, agent, own, foreign, local, &shared);
+    }
+}
+
+fn read_skill(project: &Path, agent: &str, file: &Path) -> Value {
+    let (name, arguments) = if agent == "codex" {
+        ("view_image", json!({"path":file}))
+    } else {
+        ("Read", json!({"file_path":file}))
+    };
+    tool(project, agent, name, &arguments)
+}
+
+fn write_skill(project: &Path, agent: &str, file: &Path) -> Value {
+    if agent == "codex" {
+        tool(
+            project,
+            agent,
+            "apply_patch",
+            &json!({"command":format!("*** Begin Patch\n*** Add File: {}\n+Acme workflow\n*** End Patch",file.display())}),
+        )
+    } else {
+        tool(
+            project,
+            agent,
+            "Write",
+            &json!({"file_path":file,"content":"Acme workflow"}),
+        )
+    }
+}
+
+fn check_agent_skills(
+    project: &Path,
+    agent: &str,
+    own: &Path,
+    foreign: &Path,
+    local: &str,
+    shared: &Path,
+) {
+    assert!(
+        find(agent)
+            .unwrap()
+            .working_file_categories()
+            .contains(&"skills")
+    );
+    let read = |file: &Path| read_skill(project, agent, file);
+    let write = |file: &Path| write_skill(project, agent, file);
+    for folder in [own.join("skills"), project.join(local)] {
+        let file = folder.join("acme/SKILL.md");
+        assert_permitted(&read(&file), agent);
+        assert_permitted(&write(&file), agent);
+        assert_permitted(&write(&folder.join("new-skill/SKILL.md")), agent);
+        for source in [
+            format!("cat '{}'", file.display()),
+            format!("rg --files --hidden '{}'", folder.display()),
+            format!("rg -n Acme '{}'", folder.display()),
+        ] {
+            let value = call(project, agent, &source);
+            if cfg!(windows) && agent == "codex" {
+                assert_unsupported_shell(&value);
+            } else {
+                assert_permitted(&value, agent);
+            }
+        }
+    }
+    // Each adapter adds only its own external roots. Existing project and
+    // explicit operator permissions continue to apply independently.
+    for path in [
+        foreign.join("skills/acme/SKILL.md"),
+        own.join("credentials.json"),
+    ] {
+        let value = read(&path);
+        assert!(!reason(&value).is_empty(), "{agent}: {value}");
+    }
+    let value = read(&shared.join("acme/SKILL.md"));
+    if agent == "codex" {
+        assert_permitted(&value, agent);
+    } else {
+        assert!(!reason(&value).is_empty(), "{value}");
+    }
+    for source in [
+        format!("cat '{}'", shared.join("acme/SKILL.md").display()),
+        format!("rg --files '{}'", shared.display()),
+    ] {
+        let value = call(project, agent, &source);
+        if cfg!(windows) && agent == "codex" {
+            assert_unsupported_shell(&value);
+        } else if agent == "codex" {
+            assert_permitted(&value, agent);
+        } else {
+            assert!(!reason(&value).is_empty(), "{value}");
+        }
+    }
+    if !cfg!(windows) {
+        let source = format!(
+            "printf Acme > '{}'",
+            own.join("skills/acme/SKILL.md").display()
+        );
+        assert_permitted(&call(project, agent, &source), agent);
+    }
+    if agent == "codex" {
+        assert_permitted(&write(&shared.join("acme/SKILL.md")), agent);
+    } else {
+        assert!(!reason(&write(&shared.join("acme/SKILL.md"))).is_empty());
+    }
+    assert!(
+        !reason(&write(&own.join("credentials.json"))).is_empty(),
+        "skill write access must not open configuration siblings"
+    );
+    for source in [
+        format!(
+            "rg --files '{}' '{}'",
+            own.join("skills").display(),
+            foreign.join("skills").display()
+        ),
+        format!("rg --files '{}'", own.display()),
+    ] {
+        assert!(
+            !reason(&call(project, agent, &source)).is_empty(),
+            "{agent}: {source}"
+        );
+    }
+    #[cfg(unix)]
+    {
+        let escape = own.join("skills/acme/escape.md");
+        std::os::unix::fs::symlink(own.join("credentials.json"), &escape).unwrap();
+        assert!(
+            !reason(&call(
+                project,
+                agent,
+                &format!("cat '{}'", escape.display())
+            ))
+            .is_empty()
+        );
+        assert!(
+            !reason(&write(&escape)).is_empty(),
+            "skill symlink must not open credentials"
+        );
+    }
 }
 
 #[test]
@@ -166,6 +537,7 @@ fn working_files_resource_scope_covers_writes_but_not_read_only_or_foreign_paths
     let scope = WorkingFiles {
         read: vec![output.clone()],
         write: vec![scratch.clone()],
+        skills: vec![],
         home: None,
         protected: vec![],
         http_environment: false,
@@ -234,6 +606,7 @@ fn working_files_relocated_configuration_remains_protected_inside_temporary_root
         let scope = WorkingFiles {
             write: vec![scratch.clone()],
             read: vec![outputs.clone()],
+            skills: vec![],
             protected: vec![config.clone()],
             http_environment: false,
             home: None,

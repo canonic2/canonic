@@ -29,6 +29,12 @@ static SPEC: AgentSpec = AgentSpec {
     approval_action: "Allow this request?",
 };
 impl AgentAdapter for ClaudeCode {
+    fn supports_box_permissions(&self) -> bool {
+        true
+    }
+    fn supports_box_hooks(&self) -> bool {
+        true
+    }
     fn check_mcp_scopes(&self, root: &Path, cwd: &Path, alias: &str) -> Result<(), Error> {
         mcp_scopes::check(root, cwd, alias)
     }
@@ -66,13 +72,7 @@ impl AgentAdapter for ClaudeCode {
         let Some(entry) = document.get("mcpServers").and_then(|s| s.get(alias)) else {
             return Ok(None);
         };
-        let mut entry = entry.clone();
-        if entry.get("type").is_none() {
-            entry["type"] = json!("stdio");
-        }
-        serde_json::from_value(entry)
-            .map(Some)
-            .map_err(|_| Error::Invalid("unsupported MCP connection settings"))
+        connections::decode(entry).map(Some)
     }
     fn is_installed(&self, search_path: &[std::path::PathBuf]) -> bool {
         super::detection::on_path("claude", search_path)
@@ -81,11 +81,16 @@ impl AgentAdapter for ClaudeCode {
         &ClaudeCode
     }
     fn working_file_categories(&self) -> &'static [&'static str] {
-        &["temporary", "session_tool_results"]
+        &["temporary", "session_tool_results", "skills"]
     }
     fn working_files(&self, host: &Value, project: &Path) -> crate::location::WorkingFiles {
         let config = super::working_files::configuration("CLAUDE_CONFIG_DIR", ".claude");
         let mut scope = super::working_files::temporary(config.as_deref());
+        let mut candidates = vec![(project.to_path_buf(), ".claude/skills")];
+        candidates.extend(config.as_ref().map(|config| (config.clone(), "skills")));
+        scope
+            .skills
+            .extend(super::working_files::skill_directories(candidates));
         if let Some(config) = config
             && let Some(root) = artifacts::root(host, project, &config)
         {

@@ -209,7 +209,7 @@ fn capacity(proposals: &[Proposal]) -> Result<(), Error> {
 }
 
 type PreparedPair = (configuration::Evaluator, configuration::Evaluator);
-type CandidateChange = (Value, Value, Option<configuration::Snapshot>);
+pub(super) type CandidateChange = (Value, Value, Option<configuration::Snapshot>);
 /// An installation candidate whose exact artifacts were captured before user input.
 pub(super) struct Prepared {
     pub(super) binding: String,
@@ -226,6 +226,27 @@ pub(super) fn prepared_binding(state: &super::model::State) -> String {
 }
 type Reservation<'a> =
     &'a mut dyn FnMut(&Value, &Value, &Value, &Value, Option<PreparedPair>) -> Result<(), Error>;
+
+/// An explicitly keyed completed captured operation can replay without acquiring
+/// its inputs again. Pending operations still bind the complete captured image.
+pub(super) fn applied_retry(context: &Context, input: &Input) -> Result<bool, Error> {
+    validate_input(input)?;
+    let Some(key) = &input.idempotency_key else {
+        return Ok(false);
+    };
+    let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
+    state.check(context)?;
+    let request = policy::fingerprint(json!(input).to_string().as_bytes());
+    Ok(state.proposals.iter().any(|row| {
+        row.retry_owner == context.retry_owner()
+            && row.retry_key == *key
+            && row.status == "applied"
+            && row
+                .signature
+                .split_once(':')
+                .is_some_and(|(original, _)| original == request)
+    }))
+}
 
 #[expect(
     clippy::too_many_lines,
@@ -249,8 +270,28 @@ pub(super) fn propose(
             "project_files_adopt must be reviewed separately from other changes",
         ));
     }
-    let mut signature = policy::fingerprint(json!(input).to_string().as_bytes());
+    let request_signature = policy::fingerprint(json!(input).to_string().as_bytes());
+    let mut signature = request_signature.clone();
+    if let Some(prepared) = &input.prepared {
+        let captured = policy::fingerprint(
+            json!([
+                input,
+                prepared.binding,
+                prepared.candidate,
+                prepared.metadata
+            ])
+            .to_string()
+            .as_bytes(),
+        );
+        signature = format!("{request_signature}:{captured}");
+    }
     let mut retry_key = input.retry_key();
+    if input.idempotency_key.is_none() && input.prepared.is_some() {
+        retry_key = format!(
+            "proposal-{}",
+            &policy::fingerprint(signature.as_bytes())[..32]
+        );
+    }
     let store = Store::open(Path::new(&context.project_root))?;
     let mut before = store.read_checkpoint()?;
     before.check(context)?;
@@ -295,7 +336,13 @@ pub(super) fn propose(
         .iter_mut()
         .find(|p| p.retry_owner == context.retry_owner() && p.retry_key == retry_key)
     {
-        if row.signature != signature {
+        let applied_replay = input.idempotency_key.is_some()
+            && row.status == "applied"
+            && row
+                .signature
+                .split_once(':')
+                .is_some_and(|(original, _)| original == request_signature);
+        if row.signature != signature && !applied_replay {
             return Err(if adopt_files && row.operation == "project_files_adopt" {
                 Error::StaleSnapshot
             } else {
@@ -312,7 +359,6 @@ pub(super) fn propose(
         )?;
         return Ok(present(row));
     }
-    capacity(&before.proposals)?;
     checkpoint()?;
     let (mut before, base_plan, base_snapshots) = store.read_for_comparison(before)?;
     let mut reviewed_files = None;
@@ -366,6 +412,22 @@ pub(super) fn propose(
         )?;
     }
     checkpoint()?;
+    if candidate == before.candidates["project"] && meta == before.operator {
+        let mut result =
+            json!({"unchanged":true,"committed":false,"policy_revision":before.policy_revision});
+        let mut skipped = Vec::new();
+        for change in &changes {
+            if let Change::PackUpdate { reference } = change {
+                for row in super::packs::update_skipped(&before.operator, reference.as_deref())? {
+                    if !skipped.contains(&row) {
+                        skipped.push(row);
+                    }
+                }
+                result["skipped_pinned"] = json!(skipped);
+            }
+        }
+        return Ok(result);
+    }
     // The complete base was validated above. Under the writer lock, bind to
     // those exact source bytes and metadata instead of hydrating every retained
     // proposal and preparing the same active policy again.
@@ -378,7 +440,9 @@ pub(super) fn propose(
             return Err(Error::StaleSnapshot);
         }
         if let Some(row) = state.proposals.iter_mut().find(|p| p.retry_owner == context.retry_owner() && p.retry_key == retry_key) {
-            return if row.signature == signature {
+            let applied_replay = input.idempotency_key.is_some() && row.status == "applied"
+                && row.signature.split_once(':').is_some_and(|(original, _)| original == request_signature);
+            return if row.signature == signature || applied_replay {
                 // A concurrent identical request may have won after our first
                 // read. Reserve that retained row, not this request's candidate.
                 row.base_candidate = store.captured_candidate(&row.base_candidate)?;
@@ -500,7 +564,7 @@ fn prepare(
 }
 
 /// A candidate with one custom rule added, edited or removed in its layer.
-fn custom_rule(
+pub(super) fn custom_rule(
     context: &Context,
     before: &super::model::State,
     change: &Change,
@@ -685,7 +749,7 @@ fn access_path(
     Ok((json!(bundle), before.operator.clone(), Some(snapshot)))
 }
 
-fn validate_input(input: &Input) -> Result<(), Error> {
+pub(super) fn validate_input(input: &Input) -> Result<(), Error> {
     if input.review_ids.len() > 16
         || input
             .review_ids

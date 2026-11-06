@@ -4,6 +4,55 @@ use super::*;
 
 const FORM: &str = r#"{"elicitation":{"form":{}}}"#;
 
+#[test]
+fn google_confirmation_forms_require_acceptance_and_refuse_missing_capability() {
+    for agent in ["gemini", "agy"] {
+        for action in ["accept", "decline", "cancel"] {
+            let (transport, project, args) = prepared(Some(agent), &capabilities(FORM));
+            let before = project.revision();
+            let form = transport.call(json!(3), "policy_apply", &args);
+            assert_eq!(form["method"], "elicitation/create", "{agent}: {form}");
+            assert_eq!(project.revision(), before);
+            let result = transport.request(&answer(&form, &json!({"action":action,"content":{}})));
+            assert_eq!(
+                project.revision() != before,
+                action == "accept",
+                "{agent}: {result}"
+            );
+            if action != "accept" {
+                assert_eq!(error_code(&result), "approval_declined");
+            }
+            let (transport, project, args) = prepared(Some(agent), &capabilities(FORM));
+            let before = project.revision();
+            let interim = transport.request(&modern_apply(10, &args, None, None, true));
+            assert_eq!(interim["result"]["resultType"], "input_required");
+            assert_eq!(project.revision(), before);
+            let request = modern_apply(
+                11,
+                &args,
+                Some(&interim["result"]["requestState"]),
+                Some(action),
+                true,
+            );
+            let result = transport.request(&request);
+            assert_eq!(
+                project.revision() != before,
+                action == "accept",
+                "{agent}: {result}"
+            );
+        }
+        let (transport, project, args) = prepared(Some(agent), &json!({}));
+        let before = project.revision();
+        let result = transport.call(json!(3), "policy_apply", &args);
+        assert_eq!(
+            error_code(&result),
+            "approval_unavailable",
+            "{agent}: {result}"
+        );
+        assert_eq!(project.revision(), before);
+    }
+}
+
 fn capabilities(text: &str) -> Value {
     serde_json::from_str(text).unwrap()
 }

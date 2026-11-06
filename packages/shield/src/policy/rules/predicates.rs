@@ -109,6 +109,7 @@ fn predicate_codes(
             _ => codes.push("evidence_unavailable"),
         },
         "argument_paths" => codes.extend(argument_paths(predicate, facts, patterns)?),
+        "field_paths" => codes.extend(field_paths(predicate, facts, patterns)?),
         "targets" | "sources" | "destination" if !facts.known_arguments => {
             codes.push("evidence_unavailable");
         }
@@ -134,6 +135,44 @@ fn predicate_codes(
             }
         }
         _ => return typed_codes(key, predicate, facts, patterns),
+    }
+    Ok(codes)
+}
+
+fn field_paths(
+    predicate: &Value,
+    facts: &Facts<'_>,
+    patterns: &dyn Provider,
+) -> Result<Vec<&'static str>, Error> {
+    let mut codes = Vec::new();
+    let Input::Mcp { arguments, .. } = facts.input else {
+        return Ok(vec!["evidence_unavailable"]);
+    };
+    let Some(locations) = facts.locations.filter(|_| facts.known_cwd) else {
+        return Ok(vec!["evidence_unavailable"]);
+    };
+    for (pointer, selection) in predicate.as_object().ok_or(Error::Syntax)? {
+        let Some(value) = arguments.pointer(pointer) else {
+            codes.push("field_missing");
+            continue;
+        };
+        let Some(path) = value.as_str() else {
+            codes.push("predicate_mismatch");
+            continue;
+        };
+        if !std::path::Path::new(path).is_absolute()
+            && (selection["absolute"] == true || selection.get("relative_to").is_none())
+        {
+            codes.push("predicate_mismatch");
+            continue;
+        }
+        codes.extend(locations.field_path(
+            path,
+            &selection["path"],
+            selection["recursive"] == true,
+            selection["relative_to"].as_str().unwrap_or("cwd"),
+            patterns,
+        )?);
     }
     Ok(codes)
 }

@@ -131,6 +131,11 @@ fn propose(context: &Context, connection: &Connection, kind: &str, key: &str) ->
 
 fn commit(context: &Context, proposal: &Value) {
     assert_eq!(proposal["error"], Value::Null, "{proposal}");
+    if proposal["data"]["unchanged"] == true {
+        assert_eq!(proposal["data"]["committed"], false, "{proposal}");
+        assert!(proposal["data"].get("proposal_id").is_none(), "{proposal}");
+        return;
+    }
     review::operator::commit_proposal_fixture(
         context,
         proposal["data"]["proposal_id"].as_str().unwrap(),

@@ -36,7 +36,7 @@ fn bundled_documentation_pages_round_trip_through_list_and_read() {
         let result = invoke(
             &context,
             &connection,
-            "shield_docs_list",
+            "docs_list",
             json!({"offset":offset,"limit":2}),
         );
         assert!(result["error"].is_null(), "{result}");
@@ -66,7 +66,7 @@ fn bundled_documentation_pages_round_trip_through_list_and_read() {
             let result = invoke(
                 &context,
                 &connection,
-                "shield_docs_read",
+                "docs_read",
                 json!({"path":path,"start_line":start,"limit":limit}),
             );
             assert!(result["error"].is_null(), "{result}");
@@ -104,13 +104,13 @@ fn paginated_reads_reproduce_crlf_final_newlines_and_chunk_boundaries() {
     }
     let bytes = canonic_mcp_kit::docs::build::bundle(guides.path()).unwrap();
     let bundle: &'static DocsBundle = Box::leak(Box::new(DocsBundle::new(bytes.leak())));
-    let docs = Documentation::new(bundle, "shield", "Shield", env!("CARGO_PKG_VERSION"));
+    let docs = Documentation::new(bundle, "Shield", env!("CARGO_PKG_VERSION"));
     let open = || Ok(());
     for (path, text) in pages {
         let read = |start: u64, limit: u64| {
             bundled::call_with(
                 &docs,
-                "shield_docs_read",
+                "docs_read",
                 &json!({"path":path,"start_line":start,"limit":limit}),
                 &open,
             )
@@ -124,7 +124,7 @@ fn paginated_reads_reproduce_crlf_final_newlines_and_chunk_boundaries() {
     }
     let search = bundled::call_with(
         &docs,
-        "shield_docs_search",
+        "docs_search",
         &json!({"query":"CAFÉ","path":"crlf.md"}),
         &open,
     )
@@ -140,13 +140,13 @@ fn paginated_reads_reproduce_crlf_final_newlines_and_chunk_boundaries() {
 fn documentation_failures_map_to_shield_codes_with_recovery() {
     static CORRUPT: DocsBundle = DocsBundle::new(b"not an Acme bundle");
     let not_found = DocsError::NotFound {
-        list_tool: "shield_docs_list".into(),
+        list_tool: "docs_list".into(),
     };
     assert_eq!(
         bundled::error_fields(&not_found),
         (
             "not_found",
-            "Unknown documentation page; call shield_docs_list.".into()
+            "Unknown documentation page; call docs_list.".into()
         )
     );
     let (code, message) =
@@ -160,10 +160,10 @@ fn documentation_failures_map_to_shield_codes_with_recovery() {
         error_fields(&Error::Cancelled)
     );
     // A corrupt bundle fails every documentation call the same way.
-    let docs = Documentation::new(&CORRUPT, "shield", "Shield", env!("CARGO_PKG_VERSION"));
+    let docs = Documentation::new(&CORRUPT, "Shield", env!("CARGO_PKG_VERSION"));
     for (name, args) in [
-        ("shield_docs_list", json!({})),
-        ("shield_docs_read", json!({"path":"policy-rules.md"})),
+        ("docs_list", json!({})),
+        ("docs_read", json!({"path":"policy-rules.md"})),
     ] {
         let error = bundled::call_with(&docs, name, &args, &|| Ok(())).unwrap_err();
         assert_eq!(bundled::error_fields(&error).0, "documentation_unavailable");
@@ -173,7 +173,7 @@ fn documentation_failures_map_to_shield_codes_with_recovery() {
 #[test]
 fn catalog_publishes_the_shared_documentation_tools_in_shields_envelope() {
     static NONE: DocsBundle = DocsBundle::new(b"");
-    let shared = Documentation::new(&NONE, "shield", "Shield", env!("CARGO_PKG_VERSION")).tools();
+    let shared = Documentation::new(&NONE, "Shield", env!("CARGO_PKG_VERSION")).tools();
     let listing = tools();
     let listed = listing["tools"].as_array().unwrap();
     let envelope = &listed[0]["outputSchema"];
@@ -189,7 +189,7 @@ fn catalog_publishes_the_shared_documentation_tools_in_shields_envelope() {
     }
     // The published catalog validates the shared schemas.
     let catalog = crate::mcp::catalog(None).unwrap();
-    assert!(catalog.get("shield_docs_read").unwrap().read_only());
+    assert!(catalog.get("docs_read").unwrap().read_only());
 }
 
 #[test]
@@ -198,7 +198,7 @@ fn documentation_search_returns_page_line_references_and_continuation() {
     let search = invoke(
         &context,
         &connection,
-        "shield_docs_search",
+        "docs_search",
         json!({"query":"--WATCH","path":"project-mcp.md","limit":1}),
     );
     assert!(search["error"].is_null(), "{search}");
@@ -207,7 +207,7 @@ fn documentation_search_returns_page_line_references_and_continuation() {
     let read = invoke(
         &context,
         &connection,
-        "shield_docs_read",
+        "docs_read",
         json!({"path":row["path"],"start_line":row["line"],"limit":1}),
     );
     assert_eq!(
@@ -221,7 +221,7 @@ fn documentation_search_returns_page_line_references_and_continuation() {
     let next = invoke(
         &context,
         &connection,
-        "shield_docs_search",
+        "docs_search",
         json!({"query":"--WATCH","path":"project-mcp.md","limit":1,"offset":search["data"]["next_offset"]}),
     );
     assert_ne!(next["data"]["matches"][0]["line"], row["line"]);
@@ -233,7 +233,7 @@ fn documentation_search_preserves_surrounding_spaces() {
     let read = invoke(
         &context,
         &connection,
-        "shield_docs_read",
+        "docs_read",
         json!({"path":"project-mcp.md","limit":1}),
     );
     let heading = read["data"]["content"]
@@ -243,7 +243,7 @@ fn documentation_search_preserves_surrounding_spaces() {
     let exact = invoke(
         &context,
         &connection,
-        "shield_docs_search",
+        "docs_search",
         json!({"path":"project-mcp.md","query":heading}),
     );
     assert!(exact["error"].is_null(), "{exact}");
@@ -252,7 +252,7 @@ fn documentation_search_preserves_surrounding_spaces() {
         let result = invoke(
             &context,
             &connection,
-            "shield_docs_search",
+            "docs_search",
             json!({"path":"project-mcp.md","query":query}),
         );
         assert!(result["error"].is_null(), "{result}");
@@ -269,8 +269,8 @@ fn documentation_refuses_invalid_pages_bounds_and_cancellation() {
         "missing.md",
         "POLICY-RULES.md",
     ] {
-        for name in ["shield_docs_read", "shield_docs_search"] {
-            let args = if name == "shield_docs_read" {
+        for name in ["docs_read", "docs_search"] {
+            let args = if name == "docs_read" {
                 json!({"path":path})
             } else {
                 json!({"path":path,"query":"rule"})
@@ -279,25 +279,22 @@ fn documentation_refuses_invalid_pages_bounds_and_cancellation() {
             assert_eq!(result["error"]["code"], "not_found");
             assert_eq!(
                 result["error"]["message"],
-                "Unknown documentation page; call shield_docs_list."
+                "Unknown documentation page; call docs_list."
             );
         }
     }
     for (name, args) in [
-        ("shield_docs_list", json!({"offset":-1})),
-        ("shield_docs_list", json!({"limit":101})),
+        ("docs_list", json!({"offset":-1})),
+        ("docs_list", json!({"limit":101})),
         (
-            "shield_docs_read",
+            "docs_read",
             json!({"path":"policy-rules.md","start_line":0}),
         ),
-        (
-            "shield_docs_read",
-            json!({"path":"policy-rules.md","limit":401}),
-        ),
-        ("shield_docs_search", json!({"query":"  "})),
-        ("shield_docs_search", json!({"query":"rule\nline"})),
-        ("shield_docs_search", json!({"query":"rule","limit":0})),
-        ("shield_docs_list", json!({"project":"other"})),
+        ("docs_read", json!({"path":"policy-rules.md","limit":401})),
+        ("docs_search", json!({"query":"  "})),
+        ("docs_search", json!({"query":"rule\nline"})),
+        ("docs_search", json!({"query":"rule","limit":0})),
+        ("docs_list", json!({"project":"other"})),
     ] {
         let result = invoke(&context, &connection, name, args);
         assert_eq!(result["error"]["code"], "invalid_input", "{result}");
@@ -306,14 +303,14 @@ fn documentation_refuses_invalid_pages_bounds_and_cancellation() {
     let empty = invoke(
         &context,
         &connection,
-        "shield_docs_search",
+        "docs_search",
         json!({"query":"acme-no-such-documentation-term"}),
     );
     assert_eq!(empty["data"]["matches"], json!([]));
     let beyond = invoke(
         &context,
         &connection,
-        "shield_docs_read",
+        "docs_read",
         json!({"path":"policy-rules.md","start_line":1_000_000}),
     );
     assert_eq!(beyond["data"]["content"], "");
@@ -322,7 +319,7 @@ fn documentation_refuses_invalid_pages_bounds_and_cancellation() {
     let cancelled = call(
         &context,
         &connection,
-        "shield_docs_search",
+        "docs_search",
         &json!({"query":"rule"}),
         &|| {
             ticks.set(ticks.get() + 1);
@@ -339,7 +336,7 @@ fn documentation_refuses_invalid_pages_bounds_and_cancellation() {
     let after = invoke(
         &context,
         &connection,
-        "shield_docs_search",
+        "docs_search",
         json!({"query":"rule","limit":1}),
     );
     assert!(after["error"].is_null(), "{after}");

@@ -1,6 +1,12 @@
 //! The host-approved tool applies exact proposals through the shared atomic commit.
 use super::*;
 
+fn edit_rules_before_adoption(root: &Path) {
+    let path = root.join(".shield/rules.yml");
+    let source = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(path, format!("{source}\n# Acme manual edit to adopt\n")).unwrap();
+}
+
 #[test]
 fn project_files_adopt_recovers_hand_edits_through_both_host_approvals() {
     for agent in ["claude", "codex"] {
@@ -105,6 +111,9 @@ fn project_files_adopt_rejects_edits_during_confirmation_including_new_local_fil
             )
             .unwrap();
         }
+        if !local {
+            edit_rules_before_adoption(root.path());
+        }
         let args = prepare(
             &context,
             &connection,
@@ -171,6 +180,7 @@ fn project_files_adopt_refuses_local_file_created_after_review() {
         &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
     );
     apply(&context, &connection, &first);
+    edit_rules_before_adoption(root.path());
     let args = prepare(
         &context,
         &connection,
@@ -216,6 +226,7 @@ fn project_files_adopt_explicit_retry_reports_stale_files() {
         &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
     );
     apply(&context, &connection, &first);
+    edit_rules_before_adoption(root.path());
     let input = json!({"change":{"kind":"project_files_adopt"},"idempotency_key":"adopt-acme"});
     let proposed = invoke(&context, &connection, "policy_propose", input.clone());
     assert!(proposed["error"].is_null(), "{proposed}");

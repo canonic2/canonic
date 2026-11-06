@@ -127,9 +127,12 @@ enum Descendants {
     /// Only entries that exist now, as in a walk that lists without creating.
     Present,
 }
+#[derive(Default)]
 struct Targets {
     items: Vec<Target>,
     complete: bool,
+    /// First failed search observation, retained without raw OS error text.
+    unavailable: Option<(PathBuf, &'static str)>,
 }
 
 pub(crate) struct Observer {
@@ -309,7 +312,10 @@ impl Observer {
                     for root in scope.roots(reference["root"] == "read") {
                         let base = self.observed(root, true)?;
                         let path = self.observed(&root.join(suffix), follow)?;
-                        if base != *root || !self.directory(&base) || !path.starts_with(root) {
+                        let directory = scope.skills.contains(root)
+                            && self.present(&base) == Ok(false)
+                            || self.directory(&base);
+                        if base != *root || !directory || !path.starts_with(root) {
                             self.unverified.set(true);
                             return None;
                         }
@@ -655,6 +661,44 @@ impl Observer {
 }
 
 impl crate::policy::resources::Resources for Observer {
+    fn field_path(
+        &self,
+        path: &str,
+        predicate: &Value,
+        recursive: bool,
+        relative_to: &str,
+        patterns: &dyn Provider,
+    ) -> Result<Option<&'static str>, Error> {
+        if relative_to == "project" && !Path::new(path).is_absolute() {
+            if path.is_empty() || path == "-" || path.contains('\0') {
+                return Ok(Some("evidence_unavailable"));
+            }
+            let path = self.project.join(path);
+            let Some(path) = path.to_str() else {
+                return Ok(Some("evidence_unavailable"));
+            };
+            return self.argument_path(path, predicate, recursive, patterns);
+        }
+        self.argument_path(path, predicate, recursive, patterns)
+    }
+    fn predicate_evidence(&self, key: &str) -> Option<Value> {
+        if !matches!(key, "targets" | "sources") {
+            return None;
+        }
+        let targets = self.targets.get_or_init(|| self.collect());
+        let (path, code) = targets.unavailable.as_ref()?;
+        // ENOENT alone cannot distinguish an absent operand from a dangling
+        // ancestor link. Reuse the physical resolver's request-scoped result.
+        let code = if *code == "not_found" && self.observed(path, true).is_none() {
+            "unresolved"
+        } else {
+            code
+        };
+        let path = path.strip_prefix(&self.cwd).unwrap_or(path).to_str()?;
+        let evidence = serde_json::json!({"resource":{"path":path,"code":code}});
+        crate::json::fits(&evidence, 1024).then_some(evidence)
+    }
+
     fn argument_path(
         &self,
         path: &str,
@@ -784,6 +828,42 @@ fn resolve(
 #[cfg(all(test, any(unix, windows)))]
 mod tests {
     use super::*;
+    use crate::policy::resources::Resources;
+
+    #[test]
+    fn ripgrep_failure_evidence_reuses_observations_without_granting_coverage() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let input = Input::Argv {
+            executable: "rg".into(),
+            arguments: vec!["--files".into(), ".agents".into()],
+            original_input: serde_json::json!({}),
+        };
+        let path = root.path().to_str().unwrap();
+        let request = Observer::new(&input, path, path, None);
+        let expected = serde_json::json!({"resource":{"path":".agents","code":"not_found"}});
+        assert_eq!(
+            request.predicate_evidence("targets"),
+            Some(expected.clone())
+        );
+        let observations = request.observations.get();
+        assert!(observations > 0);
+        for _ in 0..100 {
+            assert_eq!(
+                request.predicate_evidence("sources"),
+                Some(expected.clone())
+            );
+        }
+        assert_eq!(request.observations.get(), observations);
+        assert!(!request.targets.get().unwrap().complete);
+        assert!(request.predicate_evidence("destination").is_none());
+
+        // A new request sees the corrected operand, without retaining the old
+        // absence or turning a diagnostic observation into lasting authority.
+        fs::create_dir(root.path().join(".agents")).unwrap();
+        let request = Observer::new(&input, path, path, None);
+        assert!(request.predicate_evidence("targets").is_none());
+        assert!(request.targets.get().unwrap().complete);
+    }
 
     fn observer(root: &Path) -> Observer {
         let root_text = root.to_str().expect("UTF-8 temporary fixture path");

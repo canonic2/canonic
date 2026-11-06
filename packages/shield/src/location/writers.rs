@@ -88,7 +88,11 @@ fn tee(arguments: &[String], cwd: &Path) -> Targets {
             )
         })
         .collect();
-    Targets { items, complete }
+    Targets {
+        items,
+        complete,
+        ..Targets::default()
+    }
 }
 
 /// ln creates links: `ln SOURCE`, `ln SOURCE DEST` or `ln SOURCE... DIRECTORY`.
@@ -154,7 +158,11 @@ fn link(arguments: &[String], cwd: &Path) -> Targets {
         }
         items.push(write(effective, false, false));
     }
-    Targets { items, complete }
+    Targets {
+        items,
+        complete,
+        ..Targets::default()
+    }
 }
 
 /// `chmod MODE FILE...` and `chown OWNER[:GROUP] FILE...` change each file's
@@ -189,7 +197,11 @@ fn change(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
             )
         })
         .collect();
-    Targets { items, complete }
+    Targets {
+        items,
+        complete,
+        ..Targets::default()
+    }
 }
 
 #[cfg(test)]

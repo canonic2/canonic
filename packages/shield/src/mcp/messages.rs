@@ -7,8 +7,9 @@ use std::fmt::Write as _;
 pub(super) fn instructions(agent: Option<&str>) -> String {
     let common = "Shield manages project permissions. For requested reviews, start with suggestion_list; inspect relevant history_list, rule_list or policy_evaluate evidence. \
 Respect incomplete evidence, pending proposals and deferred reviews. For authorized custom rules, use policy_propose and its schema examples; preserve scope and deny boundaries. Read bundled docs only when rule syntax needs clarification. \
+For packs, use pack_list and pack_show to inspect installed selections, pack_update to update one reference or all tracking packs when omitted, and pack_remove to prepare removal; pack_configure accepts direct edits, named variables or bare guided settings and overrides. pack_add accepts known typed settings through set. \
 Previews and proposals grant no authority; activation requires user-approved policy_apply or the returned terminal route. \
-Follow returned request_approve routes for one-time approval, then repeat the approved call once unchanged. Do not bypass refusals or interrupt unrelated work with reviews. ";
+Follow returned request_approve routes for one-time approval, then repeat the approved call once unchanged. For a planned batch of privileged native commands, inspect session_grant_list, propose a bounded exact batch or closed argv family with session_grant_propose, then copy apply_arguments to session_grant_approve for the user's form. Prefer temporary session permission for one task and persistent policy only for future sessions. Inspect existing grants first, never repeat a declined offer, and never bypass refusals. ";
     let host = crate::agents::review::resolve(agent)
         .guidance()
         .instructions;
@@ -19,6 +20,9 @@ Follow returned request_approve routes for one-time approval, then repeat the ap
 }
 
 pub(super) fn approval_unavailable(agent: Option<&str>) -> &'static str {
+    if matches!(agent, Some("gemini" | "agy")) {
+        return "This host did not provide Shield's confirmation form. Gemini CLI 0.67.0 and Antigravity CLI 1.5.1 have no usable form UI. Ask the person to run shield policy review in their terminal; the agent must not run it.";
+    }
     crate::agents::review::resolve(agent).guidance().unavailable
 }
 
@@ -31,6 +35,9 @@ pub(super) const REQUEST_DECLINED: &str = "The user declined this request. Do no
 /// The host could not show Shield's form; the remedy stays in the session.
 pub(super) fn request_unavailable(agent: Option<&str>) -> &'static str {
     match agent {
+        Some("gemini" | "agy") => {
+            "This host did not provide a confirmation form. Ask the person to approve or deny the selected request with shield request approve or shield request deny in their terminal. The agent must not run those operator commands."
+        }
         Some("codex") => {
             "Shield could not ask the user: this session's approval settings reject confirmation forms. Ask the user to choose an approval policy that allows prompts with /permissions, then call request_approve again with the same arguments. Do not change approval settings yourself."
         }
@@ -72,14 +79,18 @@ pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String 
         };
     }
     let data = &value["data"];
+    if data["unchanged"] == true {
+        return "Already up to date; no proposal or approval is needed.".into();
+    }
     match name {
+        "session_grant_list"|"session_grant_show"|"session_grant_propose"|"session_grant_approve"|"session_grant_revoke"=>data["next_action"].as_str().unwrap_or("Session grant inspection only; no command was executed.").into(),
         "pack_info" => format!("{} Inspection only; nothing is installed. {}", pack_lead(data), data["setup"]["message"].as_str().unwrap_or_default()).trim_end().to_owned(),
         "policy_evaluate" => {
             let prefix = format!("Policy preview: {}.", data["decision"].as_str().unwrap_or("unknown"));
             if data["decision"] != "allow" && let Some(detail) = crate::agent_message::detail(&data["explanation"]) { format!("{prefix} {detail}") }
             else { format!("{prefix} This result does not authorize execution.") }
         },
-        "policy_propose" | "pack_configure" | "pack_add" => {
+        "policy_propose" | "rule_add" | "rule_edit" | "rule_remove" | "pack_configure" | "pack_add" | "pack_update" | "pack_remove" => {
             let guidance = data["next_action"].as_str().unwrap_or(crate::agents::review::resolve(agent).guidance().proposed);
             data["change_summary"].as_str().map_or_else(|| guidance.into(), |change| format!("Proposed: {change} {guidance}"))
         },
@@ -88,14 +99,16 @@ pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String 
             Some(grants) => format!("The user approved these {} requests once each. Repeat each identical call now, in any order; any change to one needs a new approval.", grants.len()),
             None => "The user approved this request once. Repeat the identical call now; any change to it needs a new approval.".into(),
         },
+        "request_deny" => "The user denied this request or revoked its unused grant. No action was authorized.".into(),
+        "cache_prepare" => "Committed policy cache prepared. Policy authority is unchanged.".into(),
         "suggestion_list" => {
             let rows = data["requests"].as_array();
             let eligible = rows.into_iter().flatten().filter(|row| row["eligible_for_offer"] == true).count();
             format!("{eligible} eligible review groups. Follow coverage and next_action; group reviews after the task and skip unchanged proposed/deferred items.")
         },
-        "shield_docs_list" => "Bundled guides listed. Read a path with shield_docs_read or find a topic with shield_docs_search.".into(),
-        "shield_docs_search" => "Matching guide lines returned. Use shield_docs_read for context; next_offset continues the search.".into(),
-        "shield_docs_read" => "Guide text returned; next_start_line continues this page.".into(),
+        "docs_list" => "Bundled guides listed. Read a path with docs_read or find a topic with docs_search.".into(),
+        "docs_search" => "Matching guide lines returned. Use docs_read for context; next_offset continues the search.".into(),
+        "docs_read" => "Guide text returned; next_start_line continues this page.".into(),
         "policy_withdraw" => "Policy proposal withdrawn. Active policy is unchanged.".into(),
         "policy_receipt" => "Policy change receipt returned. Inspect current policy and reevaluate the request before retrying.".into(),
         "policy_compare" => "Policy comparison returned. Check coverage and unknowns; this preview grants no execution permission.".into(),
@@ -215,6 +228,9 @@ impl Serialize for Projection<'_> {
                     "policy_revision",
                     "proposal_id",
                     "status",
+                    "unchanged",
+                    "committed",
+                    "skipped_pinned",
                 ] {
                     if let Some(field) = data.get(key) {
                         map.serialize_entry(key, field)?;
@@ -230,8 +246,13 @@ pub(super) fn text_data<'a>(name: &str, value: &'a Value) -> TextData<'a> {
     TextData {
         data: if [
             "policy_propose",
+            "rule_add",
+            "rule_edit",
+            "rule_remove",
             "pack_configure",
             "pack_add",
+            "pack_update",
+            "pack_remove",
             "policy_withdraw",
         ]
         .contains(&name)

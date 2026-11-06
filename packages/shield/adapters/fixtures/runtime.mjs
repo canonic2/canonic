@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-export const binary = fileURLToPath(new URL('../../target/release/shield', import.meta.url));
+export const binary = process.env.SHIELD_TEST_BINARY || fileURLToPath(new URL('../../target/release/shield', import.meta.url));
 const exec = promisify(execFile);
 const terminal = fileURLToPath(new URL('../../tests/fixtures/operator_prompts.py', import.meta.url));
 

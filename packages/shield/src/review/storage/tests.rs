@@ -56,6 +56,21 @@ fn current_policy_cache_reuse_preserves_source_integrity_and_read_only_fallback(
 }
 
 #[test]
+fn optional_session_capture_skips_unchanged_publication() {
+    let (root, context) = enrolled();
+    let store = Store::open(root.path()).unwrap();
+    let before = fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    OBSERVER.with(|slot| slot.set(Some(|stage| panic!("unexpected publication: {stage:?}"))));
+    let result = store.update_checkpoint_if_changed(&context, &|| Ok(()), |_| Ok(false));
+    OBSERVER.with(|slot| slot.set(None));
+    result.unwrap();
+    assert_eq!(
+        fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        before
+    );
+}
+
+#[test]
 fn updates_append_missing_local_state_ignores_to_an_existing_file() {
     let (root, context) = enrolled();
     let path = root.path().join(".shield/.gitignore");

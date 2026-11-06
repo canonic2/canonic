@@ -176,6 +176,17 @@ path operands without claiming a complete model of the tool's effects.
 See [path restrictions and supported operations](policy-rules.md#restrict-paths)
 and [web rules](policy-rules.md#allow-searches-and-documentation-fetches).
 
+MCP rules can check explicit path arguments with `field_paths`, for example
+`field_paths: {/project: {path: {within: {root: write}}, absolute: true}}`.
+This requires `field-paths-v1`, `location-v1` and `access-paths-v1`. Paths use
+filesystem observations, including symlink resolution; unavailable evidence
+does not establish permission. `absolute: true` requires an absolute path.
+Without `relative_to`, relative paths fail the predicate. Use absolute paths
+when the server's path base is unknown, `relative_to: cwd` only when it shares
+the request context's working folder, or
+`relative_to: project` when a verified launcher starts the server at the
+enrolled project root.
+
 ## Capabilities
 
 Typed JSON field maps (`fields`, `request_fields` and MCP `connection`) accept
@@ -193,6 +204,7 @@ Declare exactly the capabilities used anywhere in the document, once each.
 | `structured-rules-v1` | Every document. |
 | `argument-rules-v1` | Argument selectors in argv rules. |
 | `argument-paths-v1` | Explicit argument-path checks. |
+| `field-paths-v1` | Explicit path checks on MCP JSON fields. |
 | `glob-v1`, `regex-v1` | Their respective text selectors. |
 | `location-v1` | Path references/predicates, cwd, file domains, or targets. |
 | `access-paths-v1` | `read` or `write` root unions. |

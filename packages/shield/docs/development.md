@@ -291,7 +291,7 @@ acquisition, checkpoints, resolution, and UTC timestamps. Shield owns pack
 declarations and the review that activates acquired artifacts. `canonic-mcp-kit`
 handles framing, lifecycle, validation, cancellation, deadlines, and confirmation
 requests; Shield's handler supplies its tools and limits. Its documentation
-module also supplies the `shield_docs_*` tool definitions and queries;
+module also supplies the `docs_*` tool definitions and queries;
 `src/review/mcp/documentation.rs` embeds the bundle and maps the library's
 failures into Shield's result envelope.
 
@@ -503,6 +503,25 @@ production code. CLI policy changes retain prepared evidence across review and
 commit, with fresh authority and file checks at publication.
 
 ## Adapter and host checks
+
+`adapters/sdk-tests/google-interactive.test.mjs` drives the installed terminal
+UIs through the owned PTY helper. Gemini uses a local provider to verify ordinary
+Ask acceptance/cancellation and interactive form-unavailable policy refusal.
+Antigravity cases require `SHIELD_LIVE_AGY=1`, real account access, workspace trust
+and native MCP readiness before submitting a prompt. Run individual cases through
+`--test-name-pattern`; these fixtures need host PTYs, loopback access and signals.
+
+`adapters/sdk-tests/google-native.test.mjs` runs installed Gemini CLI 0.67.0
+against a local scripted provider in an isolated trusted workspace. It checks
+Allow, Ask and Deny plus headless policy-activation refusal without using a cloud
+account. `SHIELD_TEST_BINARY` can select an already-built development executable;
+the default is the package release executable. Run this file independently with
+`node --test packages/shield/adapters/sdk-tests/google-native.test.mjs`.
+It needs loopback access and signals for its owned CLI children. The Antigravity
+case is opt-in through `SHIELD_LIVE_AGY=1`: it uses installed, logged-in CLI 1.5.1
+with bounded print requests and therefore consumes real account access. Select
+that case explicitly when authorizing live cloud acceptance. Interactive prompts
+and other platforms need separate acceptance; the test is not evidence for them.
 
 The dependency-free adapter suite requires the actual package release executable.
 The SDK runner executes one test file at a time; each file retains its own

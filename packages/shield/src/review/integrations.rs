@@ -61,7 +61,11 @@ pub(crate) fn protected_files() -> &'static [&'static str] {
     })
 }
 pub(crate) mod box_definition;
+mod choice;
+pub(crate) use choice::IntegrationChoice;
 mod connections;
+pub(in crate::review) mod project_sources;
+pub(in crate::review) mod setup;
 pub(crate) use connections::{mcp_projection, resolve_mcp_token};
 mod privacy;
 pub(crate) use privacy::private_mcp_destination;
@@ -227,9 +231,11 @@ pub(in crate::review) fn confirmed_fallback(
 
 impl Registration {
     /// Whether this record installs `agent`'s hooks, directly or through the
-    /// Box definition, which publishes every adapter's hooks.
+    /// Box definition, for adapters its publisher supports.
     pub(in crate::review) fn covers(&self, agent: &str) -> bool {
-        self.agents.contains_key(agent) || self.box_definition.is_some()
+        self.agents.contains_key(agent)
+            || (self.box_definition.is_some()
+                && agents::find(agent).is_some_and(agents::AgentAdapter::supports_box_hooks))
     }
 }
 

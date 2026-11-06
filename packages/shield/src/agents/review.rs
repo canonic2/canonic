@@ -2,7 +2,9 @@
 //! receive inspection/proposal guidance and must activate policy in a terminal.
 use serde_json::Value;
 
+mod form;
 mod generic;
+pub(super) static FORM: form::Form = form::Form;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Confirmation {

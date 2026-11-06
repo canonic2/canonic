@@ -80,6 +80,14 @@ impl Server {
             return review;
         };
         let mut review = (*review).clone();
+        if let Some(session) = review
+            .agent
+            .as_deref()
+            .and_then(crate::agents::find)
+            .and_then(|adapter| adapter.mcp_session(request.metadata().as_map()))
+        {
+            review.session_id = Some(session.into());
+        }
         review.client = request
             .client_info
             .as_ref()
@@ -100,12 +108,43 @@ impl Server {
         context: &stdio::Context,
         message: String,
     ) -> Outcome {
+        self.confirm_bound(review, call, context, message, None)
+    }
+
+    fn confirm_bound(
+        &self,
+        review: Arc<crate::review::Context>,
+        call: ToolCall,
+        context: &stdio::Context,
+        message: String,
+        review_binding: Option<u64>,
+    ) -> Outcome {
+        if crate::agents::review::resolve(review.agent.as_deref()).confirmation()
+            == crate::agents::review::Confirmation::Terminal
+            || review
+                .agent
+                .as_deref()
+                .and_then(crate::agents::find)
+                .is_some_and(|adapter| {
+                    adapter.native_forms_unavailable(review.host_version.as_deref())
+                })
+        {
+            return Outcome::Tool(reply(
+                &review,
+                &self.connection,
+                &call,
+                context,
+                review_binding.map_or(Answer::Failed("approval_unavailable"), |id| {
+                    Answer::AdminFailed(id, "approval_unavailable")
+                }),
+            ));
+        }
         if let Some(request) = context.request_context() {
             let interim = self
                 .confirmations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .begin(request, &call, &message);
+                .begin(request, &call, &message, review_binding);
             return match interim {
                 Ok(result) => Outcome::InputRequired(result),
                 Err(_) => Outcome::Tool(reply(
@@ -113,7 +152,9 @@ impl Server {
                     &self.connection,
                     &call,
                     context,
-                    Answer::Failed("approval_unavailable"),
+                    review_binding.map_or(Answer::Failed("approval_unavailable"), |id| {
+                        Answer::AdminFailed(id, "approval_unavailable")
+                    }),
                 )),
             };
         }
@@ -128,9 +169,17 @@ impl Server {
                 .map(crate::diagnostics::trace::Request::enter);
             drop(waiting);
             let answer = match decision {
-                Decision::Accepted => Answer::Accepted,
-                Decision::Declined => Answer::Failed("approval_declined"),
-                Decision::Unavailable => Answer::Failed("approval_unavailable"),
+                Decision::Accepted => {
+                    review_binding.map_or(Answer::Accepted, Answer::AdminAccepted)
+                }
+                Decision::Declined => review_binding
+                    .map_or(Answer::Failed("approval_declined"), |id| {
+                        Answer::AdminFailed(id, "approval_declined")
+                    }),
+                Decision::Unavailable => review_binding
+                    .map_or(Answer::Failed("approval_unavailable"), |id| {
+                        Answer::AdminFailed(id, "approval_unavailable")
+                    }),
             };
             let result = reply(&review, &connection, &call, context, answer);
             if let Some(trace) = &trace {
@@ -183,6 +232,50 @@ impl Server {
             self.review().connection_id.as_deref(),
         )
     }
+
+    fn resume_confirmation(
+        &self,
+        review: &crate::review::Context,
+        call: &ToolCall,
+        context: &stdio::Context,
+    ) -> Option<Outcome> {
+        let request = context.request_context()?;
+        if request.request_state.is_none() && request.input_responses.is_none() {
+            return None;
+        }
+        let (decision, cleanup) = {
+            let mut confirmations = self
+                .confirmations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let cleanup = confirmations.review_binding(request);
+            (confirmations.resume(request, call), cleanup)
+        };
+        if decision.is_err()
+            && let Some(binding) = cleanup
+        {
+            crate::review::mcp::discard_admin(&self.connection, binding);
+        }
+        Some(match decision {
+            Ok((decision, binding)) => Outcome::Tool(reply(
+                review,
+                &self.connection,
+                call,
+                context,
+                if decision == Decision::Accepted {
+                    binding.map_or(Answer::Accepted, Answer::AdminAccepted)
+                } else {
+                    let code = if decision == Decision::Declined {
+                        "approval_declined"
+                    } else {
+                        "approval_unavailable"
+                    };
+                    binding.map_or(Answer::Failed(code), |id| Answer::AdminFailed(id, code))
+                },
+            )),
+            Err(error) => Outcome::Method(Err(error)),
+        })
+    }
 }
 
 impl stdio::Handler for Server {
@@ -230,53 +323,55 @@ impl stdio::Handler for Server {
                 )));
             };
             let review = self.review_for_request(context);
-            if !["pack_configure", "pack_add"].contains(&call.name.as_str())
-                && let Some(request) = context.request_context()
-            {
-                let retry = request.request_state.is_some() || request.input_responses.is_some();
-                if retry {
-                    let decision = self
-                        .confirmations
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .resume(request, &call);
-                    return match decision {
-                        Ok(decision) => Outcome::Tool(reply(
-                            &review,
-                            &self.connection,
-                            &call,
-                            context,
-                            if decision == Decision::Accepted {
-                                Answer::Accepted
-                            } else {
-                                Answer::Failed("approval_declined")
-                            },
-                        )),
-                        Err(error) => Outcome::Method(Err(error)),
-                    };
-                }
+            let pack_form = needs_pack_form(&call);
+            if !pack_form && let Some(outcome) = self.resume_confirmation(&review, &call, context) {
+                return outcome;
             }
             // NULs are refused before dispatch or confirmation, so no tool stores one.
             if crate::json::contains_nul(&call.arguments) {
-                let value = crate::review::mcp::invalid_arguments(
-                    &review,
-                    &call.name,
-                    "",
-                    "argument names and strings must not contain NUL characters",
-                );
-                return Outcome::Tool(response::tool_result(
-                    &call.name,
-                    review.agent.as_deref(),
-                    value,
-                    true,
-                    &|| Ok(()),
-                ));
+                return nul_arguments(&review, &call);
             }
-            if ["pack_configure", "pack_add"].contains(&call.name.as_str()) {
+            if pack_form {
                 return elicitation::call(self, review, call, context);
+            }
+            match crate::review::mcp::admin_confirmation(
+                &review,
+                &self.connection,
+                &call.name,
+                &call.arguments,
+                &|| {
+                    context
+                        .check()
+                        .map_err(|_| crate::policy::Error::Interrupted)
+                },
+            ) {
+                Ok(Some((message, binding))) => {
+                    return self.confirm_bound(review, call, context, message, Some(binding));
+                }
+                Err(error) => {
+                    return Outcome::Tool(response::tool_result(
+                        &call.name,
+                        review.agent.as_deref(),
+                        crate::review::mcp::admin_error(&review, &call.name, &error),
+                        true,
+                        &|| Ok(()),
+                    ));
+                }
+                Ok(None) => {}
             }
             if call.name == "request_approve" {
                 return self.confirm_request(review, call, context);
+            }
+            if call.name == "request_deny"
+                && let Ok(message) = crate::review::mcp::deny_confirmation(&review, &call.arguments)
+            {
+                return self.confirm_apply(review, call, context, message);
+            }
+            if matches!(call.name.as_str(), "session_grant_approve")
+                && let Ok(Some(message)) =
+                    crate::review::session_grants::confirmation(&review, &call.arguments)
+            {
+                return self.confirm_apply(review, call, context, message);
             }
             // The resolved adapter declares the host confirmation mechanism.
             if call.name == "policy_apply"
@@ -318,11 +413,38 @@ impl stdio::Handler for Server {
     }
 }
 
+fn needs_pack_form(call: &ToolCall) -> bool {
+    matches!(call.name.as_str(), "pack_add" | "pack_update")
+        || (call.name == "pack_configure"
+            && (call.arguments.get("variables").is_some()
+                || !["set", "unset", "override", "clear_override"]
+                    .iter()
+                    .any(|key| call.arguments.get(key).is_some())))
+}
+
+fn nul_arguments(review: &crate::review::Context, call: &ToolCall) -> Outcome {
+    let value = crate::review::mcp::invalid_arguments(
+        review,
+        &call.name,
+        "",
+        "argument names and strings must not contain NUL characters",
+    );
+    Outcome::Tool(response::tool_result(
+        &call.name,
+        review.agent.as_deref(),
+        value,
+        true,
+        &|| Ok(()),
+    ))
+}
+
 /// What the host's user answered before the call runs.
 #[derive(Clone, Copy)]
 enum Answer {
     None,
     Accepted,
+    AdminAccepted(u64),
+    AdminFailed(u64, &'static str),
     Failed(&'static str),
 }
 
@@ -333,29 +455,68 @@ fn reply(
     context: &stdio::Context,
     answer: Answer,
 ) -> ToolResult {
+    let answer = if let Answer::AdminFailed(binding, code) = answer {
+        crate::review::mcp::discard_admin(connection, binding);
+        Answer::Failed(code)
+    } else {
+        answer
+    };
+    let declined = matches!(call.name.as_str(), "session_grant_approve")
+        && matches!(answer, Answer::Failed("approval_declined"));
+    if declined {
+        let _ = crate::review::session_grants::decline(review, &call.arguments);
+    }
     let checkpoint = || {
         context
             .check()
             .map_err(|_| crate::policy::Error::Interrupted)
     };
-    let mut value = crate::review::mcp::call_with_confirmation(
+    let mut value = crate::review::mcp::call_with_bound_confirmation(
         review,
         connection,
         &call.name,
         &call.arguments,
         &checkpoint,
-        matches!(answer, Answer::Accepted),
+        matches!(answer, Answer::Accepted | Answer::AdminAccepted(_)),
+        if let Answer::AdminAccepted(binding) = answer {
+            Some(binding)
+        } else {
+            None
+        },
     );
+    if declined && value["data"]["proposal_status"] != "issued" {
+        value["data"] = serde_json::Value::Null;
+        value["error"] = serde_json::json!({"code":"approval_declined","message":"The session-grant form was declined or cancelled. No permission was issued. Continue under ordinary policy and do not repeat the offer.","operator_route":null});
+    }
     if let Answer::Failed(code) = answer
         && value["error"]["code"] == "operator_review_required"
     {
-        let request = call.name == "request_approve";
-        value["error"] = serde_json::json!({"code":code,"message":match (code, request) {
+        let request = ["request_approve", "request_deny", "session_grant_approve"]
+            .contains(&call.name.as_str());
+        let message = if let Some(route) = crate::review::mcp::admin_route(&call.name) {
+            if code == "approval_declined" {
+                "The administrative change was declined. Continue without it; do not repeat the offer unless the user requests it.".to_owned()
+            } else if matches!(review.agent.as_deref(), Some("gemini" | "agy")) {
+                format!(
+                    "This host did not provide administrative confirmation. Ask the person to run {route} with the intended arguments in their terminal. The agent must not run that operator command."
+                )
+            } else {
+                format!(
+                    "Administrative confirmation is unavailable. Ask the person to run {route} with the intended arguments in their terminal, or enable confirmation forms and call {} again. The agent must not run that operator command.",
+                    call.name
+                )
+            }
+        } else {
+            match (code, request) {
+            (_, _) if call.name == "session_grant_approve" && matches!(review.agent.as_deref(), Some("gemini" | "agy")) => "This host did not provide confirmation. Ask the person to run shield session-grant approve PROPOSAL_ID in their terminal. The agent must not run that operator command.",
+            (_, _) if matches!(call.name.as_str(), "session_grant_approve") => "Session-grant confirmation is unavailable. Enable host confirmation forms, or ask the person to run shield session-grant approve PROPOSAL_ID in their terminal. The agent must not run that operator command.",
             ("approval_declined", true) => messages::REQUEST_DECLINED,
             ("approval_declined", false) => messages::APPROVAL_DECLINED,
             (_, true) => messages::request_unavailable(review.agent.as_deref()),
             (_, false) => messages::approval_unavailable(review.agent.as_deref()),
-        },"operator_route":null});
+        }.replace("request_approve", &call.name)
+        };
+        value["error"] = serde_json::json!({"code":code,"message":message,"operator_route":crate::review::mcp::admin_route(&call.name)});
     }
     let failed = !value["error"].is_null();
     response::tool_result(&call.name, review.agent.as_deref(), value, failed, &|| {

@@ -10,7 +10,7 @@ Options:
       --agent <AGENTS>
           Agent to set up with project hooks and MCP, or box for Box; repeat for several. Omission asks
 
-          [possible values: box, claude, codex]
+          [possible values: box, claude, codex, gemini, agy]
 
       --project <PROJECT>
           Select a project; otherwise discover the nearest enrolled ancestor

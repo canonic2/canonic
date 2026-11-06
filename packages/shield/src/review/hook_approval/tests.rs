@@ -78,6 +78,71 @@ fn deny_summary(branch: &str) -> Summary {
 }
 
 #[test]
+fn native_request_inspection_and_operator_revocation_share_the_request_family() {
+    let fixture = fixture();
+    let id = pending(fixture.refuse("acme-revocation"));
+    let listed = review::approvals::inspect(&fixture.context, None).unwrap();
+    assert!(listed["requests"].as_array().unwrap().iter().any(|row| {
+        row["request_id"] == id && row["type"] == "hook" && row["status"] == "pending"
+    }));
+    let (kind, shown) = review::approvals::request_view(&fixture.context, &id).unwrap();
+    assert!(matches!(kind, review::approvals::RequestKind::Hook));
+    assert_eq!(shown["provenance"]["session_id"], "acme-session");
+    assert_eq!(shown["request"]["cwd"], "/workspace/acme");
+    assert!(shown.get("input_digest").is_none());
+    let mcp = fixture.connection("codex");
+    approve(&mcp, &json!({"request_id":id}), true).unwrap();
+    let mut operator = fixture.context.clone();
+    operator.surface = "cli".into();
+    let revoked = review::approvals::authorize(&operator, &id, true).unwrap();
+    assert_eq!(revoked["status"], "revoked");
+    let replay = review::approvals::authorize(&operator, &id, true).unwrap();
+    assert_eq!(replay["status"], "revoked");
+    let (_, receipt) = review::approvals::request_view(&operator, &id).unwrap();
+    assert_eq!(receipt["status"], "revoked");
+    assert!(matches!(
+        fixture.refuse("acme-revocation"),
+        Outcome::Pending(..)
+    ));
+}
+
+#[test]
+fn native_denial_requires_confirmation_and_preserves_consumer_session_ownership() {
+    let fixture = fixture();
+    let id = pending(fixture.refuse("acme-denial"));
+    let mcp = fixture.connection("codex");
+    assert!(matches!(
+        deny(&mcp, &id, false),
+        Err(Error::ApprovalRequired)
+    ));
+    assert!(matches!(
+        deny(&fixture.connection("claude-code"), &id, true),
+        Err(Error::Missing)
+    ));
+    let mut other_session = mcp.clone();
+    other_session.session_id = Some("another-session".into());
+    assert!(matches!(
+        deny(&other_session, &id, true),
+        Err(Error::Missing)
+    ));
+    approve(&mcp, &json!({"request_id":id}), true).unwrap();
+    assert!(matches!(fixture.refuse("acme-denial"), Outcome::Allowed));
+    assert!(matches!(deny(&mcp, &id, true), Err(Error::Invalid(_))));
+}
+
+#[test]
+fn denying_one_native_request_leaves_other_group_grants_usable() {
+    let fixture = fixture();
+    let first = pending(fixture.refuse("acme-first"));
+    let second = pending(fixture.refuse("acme-second"));
+    let mcp = fixture.connection("codex");
+    approve(&mcp, &json!({"request_ids":[first,second]}), true).unwrap();
+    deny(&mcp, &first, true).unwrap();
+    assert!(matches!(fixture.refuse("acme-first"), Outcome::Pending(..)));
+    assert!(matches!(fixture.refuse("acme-second"), Outcome::Allowed));
+}
+
+#[test]
 fn a_group_accepted_in_one_form_allows_each_identical_retry_once() {
     let fixture = fixture();
     let settings = fixture.refuse("acme-discard");
