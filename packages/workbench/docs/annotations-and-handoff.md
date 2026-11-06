@@ -4,6 +4,11 @@ Draw on any page, through any lens, then save a screenshot or hand the whole
 thing to an agent: a screenshot with your annotations plus a written account of
 every annotation and the element under it.
 
+An agent can also read the current drawings and notes through
+`annotation_list` or `workbench annotation list --json`, without taking a
+screenshot or clearing them. See [Agent tools](agent-tools.md#change-the-canvas)
+for snapshot availability and publication limits.
+
 ## The toolbar
 
 The toolbar floats at the bottom of the canvas.

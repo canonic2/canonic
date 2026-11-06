@@ -1,5 +1,10 @@
 # Using the canvas
 
+Coding agents can read the current view and change its selected artboard
+through `view_show` and `view_set`, or `workbench view show|set` on the CLI.
+Changing the view does not reveal or focus the editor tab. See
+[Agent tools](agent-tools.md#change-the-canvas).
+
 The canvas shows the selected page on a surface you can zoom and pan like a
 design tool. A page can explicitly declare multiple artboards, each with its
 own dimensions and inputs. Click an artboard's label to select it. Size, preview controls,

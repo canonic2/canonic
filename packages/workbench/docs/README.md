@@ -24,6 +24,7 @@ collections you edit with **Configure pages**. See
 | [Using the canvas](canvas.md) | Find your way around the sidebar, the top bar, artboard sizes, zoom, and links |
 | [Annotations and handoff](annotations-and-handoff.md) | Annotate a page with the toolbar, save screenshots, and hand the result to an agent |
 | [Several spaces](spaces.md) | Switch between spaces in one window, add spaces from elsewhere on disk, and serve several from the command line |
+| [Agent tools](agent-tools.md) | Capture, check, inspect and compare pages through MCP or the CLI, and change the selected canvas artboard |
 
 ## Previews
 
