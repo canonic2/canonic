@@ -2,6 +2,8 @@
 mod agents;
 mod detection;
 pub mod document;
+mod inputs;
+mod preflight;
 pub mod storage;
 mod workflow;
 

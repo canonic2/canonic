@@ -19,6 +19,11 @@ The host catalog covers Claude Code, Codex, Copilot in VS Code and its CLI,
 Cursor, Gemini, Kilo, Kiro, Kimi, OpenCode, Qwen, Amp, Droid, Windsurf,
 Cline, Augment and Goose. Unsupported automatic scopes return a manual-setup
 reason. Box definitions are available when the selected scope has a Box config.
+Install/repair checks the trusted executable's catalog before publication. The
+child has a 30-second deadline and a 16 MiB stdout limit; timeout kills and reaps
+the direct child and reports an error without changing agent configuration.
+Catalog stderr is discarded. The check must not start detached workers; this
+does not provide process-tree containment.
 Agent trust and reload requirements still apply after publication; writing
 configuration does not prove a live MCP connection.
 

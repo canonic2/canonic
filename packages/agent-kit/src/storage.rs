@@ -250,9 +250,7 @@ impl Staged {
         let temporary = self.temporary.as_ref().expect("unpublished staging file");
         fs::rename(temporary, &self.path)?;
         self.temporary.take();
-        if let Some(parent) = self.path.parent() {
-            sync(&File::open(parent)?)?;
-        }
+        sync_parent(&self.path)?;
         Ok(())
     }
     /// Revalidate the destination after the slow write and flush, immediately
@@ -282,10 +280,7 @@ impl Staged {
             let _ = fs::remove_file(temporary);
             return Err(error.into());
         }
-        // Flush the folder too, so the rename itself survives a crash.
-        if let Some(parent) = self.path.parent() {
-            sync(&File::open(parent)?)?;
-        }
+        sync_parent(&self.path)?;
         Ok(())
     }
 }
@@ -349,6 +344,32 @@ pub fn stage_bytes(path: &Path, contents: &[u8], private: bool) -> Result<Staged
     Ok(staged)
 }
 
+/// Remove an already reviewed owned file and persist the Unix directory change.
+pub(crate) fn remove(path: &Path) -> Result<()> {
+    safe(path)?;
+    fs::remove_file(path)?;
+    sync_parent(path)
+}
+
+#[cfg_attr(
+    not(unix),
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "Unix directory flushing is fallible"
+    )
+)]
+fn sync_parent(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    if let Some(parent) = path.parent() {
+        sync(&File::open(parent)?)?;
+    }
+    // Ordinary File::open cannot open a Windows directory. The staged file
+    // itself is flushed before rename; no directory-durability claim is made.
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
+}
+
 /// Durable flush without macOS's drive-wide `F_FULLFSYNC` barrier.
 fn sync(file: &File) -> std::io::Result<()> {
     #[cfg(target_os = "macos")]
@@ -363,6 +384,25 @@ fn sync(file: &File) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn text_and_binary_replacement_and_removal_finish_without_partial_failure() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let path = root.join("owned");
+        super::write(&path, "before", false, None).unwrap();
+        super::write(&path, "after", false, Some("before")).unwrap();
+        assert_eq!(super::read(&path).unwrap().as_deref(), Some("after"));
+        let previous = super::read_file(&path).unwrap();
+        super::stage_bytes(&path, &[0, 255], false)
+            .unwrap()
+            .replace_file(previous.as_ref())
+            .unwrap();
+        assert_eq!(super::read_file(&path).unwrap().unwrap().0, [0, 255]);
+        super::remove(&path).unwrap();
+        assert!(!path.exists());
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+    }
+
     #[test]
     fn ending_a_lock_scope_releases_it_even_while_a_duplicate_descriptor_survives() {
         let temp = tempfile::tempdir().unwrap();

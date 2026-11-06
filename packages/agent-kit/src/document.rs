@@ -1,7 +1,80 @@
 //! Surgical JSON/JSONC entry editing and TOML's formatting-preserving codec.
 use super::{Error, Format, Result};
+use serde::Serialize;
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::ops::Range;
+
+pub(crate) struct Prepared {
+    source: String,
+    parsed: Parsed,
+}
+
+enum Parsed {
+    Json(Node),
+    Toml(toml_edit::DocumentMut),
+    Yaml(Value),
+}
+
+impl Prepared {
+    pub(crate) fn parse(source: String, format: Format) -> Result<Self> {
+        let parsed = match format {
+            Format::Json | Format::Jsonc => {
+                Parsed::Json(Parser::parse(&source, format == Format::Json)?)
+            }
+            Format::Toml => Parsed::Toml(
+                source
+                    .parse()
+                    .map_err(|_| Error::invalid("Invalid TOML configuration"))?,
+            ),
+            Format::Yaml => Parsed::Yaml(
+                serde_saphyr::from_str(&source)
+                    .map_err(|_| Error::invalid("Invalid YAML configuration"))?,
+            ),
+        };
+        Ok(Self { source, parsed })
+    }
+
+    pub(crate) fn edit(
+        &self,
+        key: &str,
+        name: &str,
+        desired: Option<&Value>,
+    ) -> Result<(Option<Value>, String)> {
+        self.edit_path(&[key], name, desired)
+    }
+
+    fn edit_path(
+        &self,
+        path: &[&str],
+        name: &str,
+        desired: Option<&Value>,
+    ) -> Result<(Option<Value>, String)> {
+        match (&self.parsed, path) {
+            (Parsed::Json(root), _) => json_edit(&self.source, root, path, name, desired),
+            (Parsed::Toml(document), [key]) => {
+                toml_edit(&self.source, document, key, name, desired)
+            }
+            (Parsed::Yaml(root), [key]) => yaml_edit(&self.source, root, key, name, desired),
+            _ => Err(Error::invalid(
+                "Nested entry paths are supported only in JSON configuration",
+            )),
+        }
+    }
+
+    pub(crate) fn allow_list(
+        &self,
+        remove: &[String],
+        add: &[String],
+    ) -> Result<(Vec<String>, String)> {
+        let Parsed::Json(root) = &self.parsed else {
+            return Err(Error::invalid(
+                "Permission rules require JSON configuration",
+            ));
+        };
+        edit_allow_list(&self.source, root, remove, add)
+    }
+}
 
 /// Replace or remove one named entry, returning its previous value and edited text.
 ///
@@ -31,26 +104,17 @@ pub fn edit(
     name: &str,
     desired: Option<&Value>,
 ) -> Result<(Option<Value>, String)> {
-    match format {
-        Format::Json => {
-            serde_json::from_str::<Value>(source)
-                .map_err(|_| Error::invalid("Invalid JSON configuration"))?;
-            json_edit(source, &[key], name, desired)
-        }
-        Format::Jsonc => json_edit(source, &[key], name, desired),
-        Format::Toml => toml_edit(source, key, name, desired),
-        Format::Yaml => yaml_edit(source, key, name, desired),
-    }
+    Prepared::parse(source.to_owned(), format)?.edit(key, name, desired)
 }
 
 fn yaml_edit(
     source: &str,
+    root: &Value,
     key: &str,
     name: &str,
     desired: Option<&Value>,
 ) -> Result<(Option<Value>, String)> {
-    let mut root: Value =
-        serde_saphyr::from_str(source).map_err(|_| Error::invalid("Invalid YAML configuration"))?;
+    let mut root = root.clone();
     let object = root
         .as_object_mut()
         .ok_or_else(|| Error::invalid("YAML configuration must be an object"))?;
@@ -82,6 +146,23 @@ struct Node {
     value: Value,
     range: Range<usize>,
     members: Vec<Member>,
+    elements: Vec<Node>,
+    depth: usize,
+}
+
+impl Node {
+    fn to_value(&self) -> Value {
+        match &self.value {
+            Value::Object(_) => self
+                .members
+                .iter()
+                .map(|m| (m.key.clone(), m.node.to_value()))
+                .collect::<serde_json::Map<_, _>>()
+                .into(),
+            Value::Array(_) => Value::Array(self.elements.iter().map(Self::to_value).collect()),
+            value => value.clone(),
+        }
+    }
 }
 struct Member {
     key: String,
@@ -92,21 +173,45 @@ struct Member {
 struct Parser<'a> {
     source: &'a str,
     position: usize,
+    strict: bool,
 }
 impl Parser<'_> {
+    fn parse(source: &str, strict: bool) -> Result<Node> {
+        let mut parser = Parser {
+            source,
+            position: 0,
+            strict,
+        };
+        let root = parser.node(0)?;
+        parser.skip()?;
+        if parser.position != source.len() || !root.value.is_object() {
+            return Err(Error::invalid("Host configuration must be one JSON object"));
+        }
+        Ok(root)
+    }
+
     fn byte(&self) -> Option<u8> {
         self.source.as_bytes().get(self.position).copied()
     }
     fn skip(&mut self) -> Result<()> {
         loop {
             while self.byte().is_some_and(|b| b.is_ascii_whitespace()) {
+                if self.strict && !self.byte().is_some_and(|b| b" \t\r\n".contains(&b)) {
+                    return Err(Error::invalid("Invalid JSON whitespace"));
+                }
                 self.position += 1;
             }
             if self.source[self.position..].starts_with("//") {
+                if self.strict {
+                    return Err(Error::invalid("Comments require JSONC"));
+                }
                 while self.byte().is_some_and(|b| b != b'\n') {
                     self.position += 1;
                 }
             } else if self.source[self.position..].starts_with("/*") {
+                if self.strict {
+                    return Err(Error::invalid("Comments require JSONC"));
+                }
                 let end = self.source[self.position + 2..]
                     .find("*/")
                     .ok_or_else(|| Error::invalid("Unclosed JSON comment"))?;
@@ -140,11 +245,12 @@ impl Parser<'_> {
         self.skip()?;
         let start = self.position;
         let mut members = Vec::new();
+        let mut elements = Vec::new();
         let value = match self.byte() {
             Some(b'{') => {
                 self.position += 1;
                 self.skip()?;
-                let mut map = serde_json::Map::new();
+                let mut keys = BTreeSet::new();
                 while self.byte() != Some(b'}') {
                     if self.byte() != Some(b'"') {
                         return Err(Error::invalid("Expected JSON object key"));
@@ -157,7 +263,7 @@ impl Parser<'_> {
                     }
                     self.position += 1;
                     let node = self.node(depth + 1)?;
-                    if map.insert(key.clone(), node.value.clone()).is_some() {
+                    if !keys.insert(key.clone()) {
                         return Err(Error::invalid("Duplicate JSON key"));
                     }
                     self.skip()?;
@@ -165,6 +271,9 @@ impl Parser<'_> {
                         let index = self.position;
                         self.position += 1;
                         self.skip()?;
+                        if self.strict && self.byte() == Some(b'}') {
+                            return Err(Error::invalid("Trailing commas require JSONC"));
+                        }
                         Some(index)
                     } else {
                         None
@@ -180,24 +289,26 @@ impl Parser<'_> {
                     }
                 }
                 self.position += 1;
-                Value::Object(map)
+                Value::Object(serde_json::Map::new())
             }
             Some(b'[') => {
                 self.position += 1;
                 self.skip()?;
-                let mut values = Vec::new();
                 while self.byte() != Some(b']') {
-                    values.push(self.node(depth + 1)?.value);
+                    elements.push(self.node(depth + 1)?);
                     self.skip()?;
                     if self.byte() == Some(b',') {
                         self.position += 1;
                         self.skip()?;
+                        if self.strict && self.byte() == Some(b']') {
+                            return Err(Error::invalid("Trailing commas require JSONC"));
+                        }
                     } else if self.byte() != Some(b']') {
                         return Err(Error::invalid("Expected JSON array comma"));
                     }
                 }
                 self.position += 1;
-                Value::Array(values)
+                Value::Array(Vec::new())
             }
             Some(b'"') => Value::String(self.string()?),
             Some(_) => {
@@ -216,6 +327,8 @@ impl Parser<'_> {
             value,
             range: start..self.position,
             members,
+            elements,
+            depth,
         })
     }
 }
@@ -224,13 +337,51 @@ fn insert(source: &str, object: &Node, name: &str, value: &Value) -> Result<Stri
     if !object.value.is_object() {
         return Err(Error::invalid("MCP server collection must be an object"));
     }
-    let mut result = source.to_owned();
-    let new = format!(
-        "\n  {}: {}\n",
-        serde_json::to_string(name).expect("serializing a string cannot fail"),
-        serde_json::to_string_pretty(value).expect("serializing a JSON value cannot fail")
+    let unit = source
+        .lines()
+        .filter_map(|line| {
+            let indent = &line[..line.len() - line.trim_start_matches([' ', '\t']).len()];
+            (!indent.is_empty() && line.trim_start().starts_with('"')).then_some(indent)
+        })
+        .min_by_key(|indent| indent.len())
+        .unwrap_or("  ");
+    let parent_indent = unit.repeat(object.depth);
+    let child_indent = object
+        .members
+        .iter()
+        .find_map(|member| {
+            let line = source[..member.start].rsplit('\n').next()?;
+            (line.chars().all(|c| c == ' ' || c == '\t') && !line.is_empty()).then_some(line)
+        })
+        .map_or_else(|| format!("{parent_indent}{unit}"), str::to_owned);
+    let mut bytes = Vec::new();
+    let mut serializer = serde_json::Serializer::with_formatter(
+        &mut bytes,
+        serde_json::ser::PrettyFormatter::with_indent(unit.as_bytes()),
     );
-    result.insert_str(object.range.end - 1, &new);
+    value
+        .serialize(&mut serializer)
+        .map_err(|e| Error::invalid(e.to_string()))?;
+    let encoded = String::from_utf8(bytes).map_err(|e| Error::invalid(e.to_string()))?;
+    let encoded = encoded.replace('\n', &format!("\n{child_indent}"));
+    let closing = object.range.end - 1;
+    let line_start = source[..closing].rfind('\n').map_or(0, |index| index + 1);
+    let own_line = source[line_start..closing]
+        .chars()
+        .all(|c| c == ' ' || c == '\t');
+    let position = if own_line { line_start } else { closing };
+    let prefix = if position > 0 && source.as_bytes()[position - 1] == b'\n' {
+        ""
+    } else {
+        "\n"
+    };
+    let suffix = if own_line { "" } else { &parent_indent };
+    let new = format!(
+        "{prefix}{child_indent}{}: {encoded}\n{suffix}",
+        serde_json::to_string(name).expect("serializing a string cannot fail"),
+    );
+    let mut result = source.to_owned();
+    result.insert_str(position, &new);
     if let Some(last) = object.members.last()
         && last.comma.is_none()
     {
@@ -252,18 +403,7 @@ pub fn edit_path(
     name: &str,
     desired: Option<&Value>,
 ) -> Result<(Option<Value>, String)> {
-    match (format, path) {
-        (Format::Json, _) => {
-            serde_json::from_str::<Value>(source)
-                .map_err(|_| Error::invalid("Invalid JSON configuration"))?;
-            json_edit(source, path, name, desired)
-        }
-        (Format::Jsonc, _) => json_edit(source, path, name, desired),
-        (_, [key]) => edit(source, format, key, name, desired),
-        _ => Err(Error::invalid(
-            "Nested entry paths are supported only in JSON configuration",
-        )),
-    }
+    Prepared::parse(source.to_owned(), format)?.edit_path(path, name, desired)
 }
 
 /// Add or remove `item` in the top-level string list `key` of a JSON object.
@@ -273,19 +413,10 @@ pub fn edit_path(
 /// Returns an error for malformed or ambiguous JSON, a non-object root, or a
 /// selected member that is not a list of strings.
 pub fn list_item(source: &str, key: &str, item: &str, present: bool) -> Result<(bool, String)> {
-    serde_json::from_str::<Value>(source)
-        .map_err(|_| Error::invalid("Invalid JSON configuration"))?;
-    let mut parser = Parser {
-        source,
-        position: 0,
-    };
-    let root = parser.node(0)?;
-    if !root.value.is_object() {
-        return Err(Error::invalid("Host configuration must be one JSON object"));
-    }
+    let root = Parser::parse(source, true)?;
     let member = root.members.iter().find(|m| m.key == key);
     let current: Vec<String> = match member {
-        Some(member) => serde_json::from_value(member.node.value.clone())
+        Some(member) => serde_json::from_value(member.node.to_value())
             .map_err(|_| Error::invalid(format!("{key} must be a list of strings")))?,
         None => Vec::new(),
     };
@@ -315,20 +446,12 @@ pub fn list_item(source: &str, key: &str, item: &str, present: bool) -> Result<(
 
 fn json_edit(
     source: &str,
+    root: &Node,
     path: &[&str],
     name: &str,
     desired: Option<&Value>,
 ) -> Result<(Option<Value>, String)> {
-    let mut parser = Parser {
-        source,
-        position: 0,
-    };
-    let root = parser.node(0)?;
-    parser.skip()?;
-    if parser.position != source.len() || !root.value.is_object() {
-        return Err(Error::invalid("Host configuration must be one JSON object"));
-    }
-    let mut group = &root;
+    let mut group = root;
     for (depth, key) in path.iter().enumerate() {
         let Some(member) = group.members.iter().find(|m| m.key == *key) else {
             // Create the missing levels around the new entry.
@@ -360,7 +483,7 @@ fn json_edit(
             },
         ));
     };
-    let before = entry.node.value.clone();
+    let before = entry.node.to_value();
     if desired == Some(&before) {
         return Ok((Some(before), source.into()));
     }
@@ -387,14 +510,12 @@ fn json_edit(
 
 fn toml_edit(
     source: &str,
+    document: &toml_edit::DocumentMut,
     key: &str,
     name: &str,
     desired: Option<&Value>,
 ) -> Result<(Option<Value>, String)> {
-    use toml_edit::{DocumentMut, Item, Table, value};
-    let mut document = source
-        .parse::<DocumentMut>()
-        .map_err(|_| Error::invalid("Invalid TOML configuration"))?;
+    use toml_edit::{Item, Table, value};
     let before = document
         .get(key)
         .and_then(|g| g.get(name))
@@ -413,6 +534,7 @@ fn toml_edit(
     if document.get(key).is_some_and(|g| !g.is_table_like()) {
         return Err(Error::invalid("MCP collection must be a TOML table"));
     }
+    let mut document = document.clone();
     if let Some(desired) = desired {
         if document.get(key).is_none() {
             document[key] = Item::Table(Table::new());
@@ -538,28 +660,20 @@ pub fn hook_group(
     group: &Value,
     present: bool,
 ) -> Result<(bool, String)> {
-    serde_json::from_str::<Value>(source)
-        .map_err(|_| Error::invalid("Invalid JSON configuration"))?;
-    let mut parser = Parser {
-        source,
-        position: 0,
-    };
-    let root = parser.node(0)?;
-    if !root.value.is_object() {
-        return Err(Error::invalid("Host configuration must be one JSON object"));
-    }
+    let root = Parser::parse(source, true)?;
     let hooks = root.members.iter().find(|m| m.key == "hooks");
     if hooks.is_some_and(|h| !h.node.value.is_object()) {
         return Err(Error::invalid("Hooks must be an object of event lists"));
     }
     let list = hooks.and_then(|h| h.node.members.iter().find(|m| m.key == event));
-    let current: &[Value] = match list {
+    let current: Vec<Value> = match list {
         Some(list) => list
             .node
-            .value
+            .to_value()
             .as_array()
+            .cloned()
             .ok_or_else(|| Error::invalid(format!("Hooks for {event} must be a list")))?,
-        None => &[],
+        None => Vec::new(),
     };
     let was = current.contains(group);
     if was == present {
@@ -597,23 +711,22 @@ pub fn allow_list(
     remove: &[String],
     add: &[String],
 ) -> Result<(Vec<String>, String)> {
-    serde_json::from_str::<Value>(source)
-        .map_err(|_| Error::invalid("Invalid JSON configuration"))?;
-    let mut parser = Parser {
-        source,
-        position: 0,
-    };
-    let root = parser.node(0)?;
-    if !root.value.is_object() {
-        return Err(Error::invalid("Host configuration must be one JSON object"));
-    }
+    Prepared::parse(source.to_owned(), Format::Json)?.allow_list(remove, add)
+}
+
+fn edit_allow_list(
+    source: &str,
+    root: &Node,
+    remove: &[String],
+    add: &[String],
+) -> Result<(Vec<String>, String)> {
     let permissions = root.members.iter().find(|m| m.key == "permissions");
     let allow = permissions.and_then(|p| p.node.members.iter().find(|m| m.key == "allow"));
     if permissions.is_some_and(|p| !p.node.value.is_object()) {
         return Err(Error::invalid("Permissions must be an object"));
     }
     let current: Vec<String> = match allow {
-        Some(allow) => serde_json::from_value(allow.node.value.clone())
+        Some(allow) => serde_json::from_value(allow.node.to_value())
             .map_err(|_| Error::invalid("Permission rules must be a list of strings"))?,
         None => Vec::new(),
     };
@@ -643,10 +756,128 @@ pub fn allow_list(
         (Some(permissions), None) => insert(source, &permissions.node, "allow", &list)?,
         (None, None) => insert(
             source,
-            &root,
+            root,
             "permissions",
             &serde_json::json!({"allow":list}),
         )?,
     };
     Ok((current, edited))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inserted_json_entries_follow_nested_space_and_tab_indentation() {
+        for unit in ["  ", "    ", "\t"] {
+            let source = format!(
+                "{{\n{unit}\"mcpServers\": {{\n{unit}{unit}\"other\": {{\"command\":\"other\"}}\n{unit}}},\n{unit}\"keep\": true\n}}\n"
+            );
+            let desired = serde_json::json!({"command":"acme", "args":["mcp", "serve"]});
+            let (_, edited) =
+                edit(&source, Format::Json, "mcpServers", "acme", Some(&desired)).unwrap();
+            assert!(
+                edited.contains(&format!(
+                    "\n{unit}{unit}\"acme\": {{\n{unit}{unit}{unit}\"args\": ["
+                )),
+                "{edited}"
+            );
+            assert!(edited.contains(&format!(
+                "\n{unit}{unit}\"other\": {{\"command\":\"other\"}},"
+            )));
+            let parsed: Value = serde_json::from_str(&edited).unwrap();
+            assert_eq!(parsed["mcpServers"]["acme"], desired);
+            assert_eq!(parsed["keep"], true);
+        }
+        let compact = "{\"mcpServers\":{}}";
+        let (_, edited) = edit(
+            compact,
+            Format::Json,
+            "mcpServers",
+            "acme",
+            Some(&serde_json::json!({"command":"acme"})),
+        )
+        .unwrap();
+        assert!(
+            edited.contains("\n    \"acme\": {\n      \"command\": \"acme\"\n    }\n  }"),
+            "{edited}"
+        );
+        assert!(serde_json::from_str::<Value>(&edited).is_ok());
+    }
+
+    #[test]
+    fn prepared_json_retains_each_payload_once_and_preserves_nested_arrays() {
+        fn payload_bytes(node: &Node) -> usize {
+            fn value_bytes(value: &Value) -> usize {
+                match value {
+                    Value::String(text) => text.len(),
+                    Value::Object(map) => map.values().map(value_bytes).sum(),
+                    Value::Array(values) => values.iter().map(value_bytes).sum(),
+                    _ => 0,
+                }
+            }
+            value_bytes(&node.value)
+                + node
+                    .members
+                    .iter()
+                    .map(|m| payload_bytes(&m.node))
+                    .sum::<usize>()
+                + node.elements.iter().map(payload_bytes).sum::<usize>()
+        }
+        for depth in [1, 32] {
+            let payload = "x".repeat(256 * 1024);
+            let mut history = serde_json::json!([{"payload": payload}]);
+            for _ in 0..depth {
+                history = serde_json::json!({"nested": history});
+            }
+            let value = serde_json::json!({"history": history, "mcpServers": {"acme": {"args": ["serve", "with space"]}}});
+            let prepared = Prepared::parse(value.to_string(), Format::Json).unwrap();
+            let Parsed::Json(root) = &prepared.parsed else {
+                panic!("JSON tree expected");
+            };
+            assert_eq!(
+                payload_bytes(root),
+                256 * 1024 + "serve".len() + "with space".len()
+            );
+            assert_eq!(root.to_value(), value);
+            let (previous, edited) = prepared
+                .edit(
+                    "mcpServers",
+                    "acme",
+                    Some(&serde_json::json!({"command":"acme"})),
+                )
+                .unwrap();
+            assert_eq!(previous, Some(value["mcpServers"]["acme"].clone()));
+            let edited: Value = serde_json::from_str(&edited).unwrap();
+            assert_eq!(edited["history"], value["history"]);
+        }
+    }
+
+    #[test]
+    fn prepared_strict_json_rejects_jsonc_and_invalid_syntax() {
+        for text in [
+            "{\"x\":1,}",
+            "{\"x\":[1,]}",
+            "{/* comment */}",
+            "{\"x\":1 // comment\n}",
+            "{\"x\":1,\"x\":2}",
+            "{} trailing",
+            "{\"x\":NaN}",
+            "{\"x\":01}",
+            "{\"x\":\"\\q\"}",
+            "{\u{b}\"x\":1}",
+        ] {
+            assert!(
+                Prepared::parse(text.into(), Format::Json).is_err(),
+                "{text}"
+            );
+        }
+        for text in ["{\"x\":1,}", "{\"x\":[1,]}", "{/* comment */}"] {
+            assert!(
+                Prepared::parse(text.into(), Format::Jsonc).is_ok(),
+                "{text}"
+            );
+        }
+    }
 }

@@ -1,5 +1,5 @@
 //! Review and confirmation compose pure codecs with owned host-file publication.
-use super::{Context, Error, Options, Result, Scope, agents, document, storage};
+use super::{Context, Error, Options, Result, Scope, agents, inputs::Inputs, storage};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeSet,
@@ -152,8 +152,7 @@ impl Plan {
                 }
                 // Only a whole owned file is removed rather than edited.
                 None if change.kind == Kind::Definition => {
-                    storage::safe(&change.path)?;
-                    std::fs::remove_file(&change.path)?;
+                    storage::remove(&change.path)?;
                 }
                 None => {}
             }
@@ -167,8 +166,7 @@ impl Plan {
             ));
         }
         if self.remove {
-            storage::safe(&change.ledger)?;
-            std::fs::remove_file(&change.ledger)?;
+            storage::remove(&change.ledger)?;
             return Ok(());
         }
         record.previous = record.desired.clone();
@@ -188,6 +186,14 @@ impl Plan {
 /// Returns an error for invalid product or agent selections, unsupported scopes,
 /// malformed host configuration, filesystem failures or ownership conflicts.
 pub fn prepare(context: &Context, options: &Options) -> Result<Plan> {
+    prepare_with_inputs(context, options, &Inputs::default())
+}
+
+pub(crate) fn prepare_with_inputs(
+    context: &Context,
+    options: &Options,
+    inputs: &Inputs,
+) -> Result<Plan> {
     if context.product.is_empty()
         || context.product.len() > 64
         || !context
@@ -204,7 +210,7 @@ pub fn prepare(context: &Context, options: &Options) -> Result<Plan> {
             "Select agents with --agent, or run mcp setup in a terminal",
         ));
     }
-    let approved = approved(context, options);
+    let approved = approved(context, options, inputs);
     let mut plan = Plan {
         context: context.clone(),
         scope: options.scope,
@@ -227,7 +233,7 @@ pub fn prepare(context: &Context, options: &Options) -> Result<Plan> {
     for id in &options.agents {
         if id == agents::BOX {
             plan.changes
-                .extend(definition_change(context, options, &plan.approved)?);
+                .extend(definition_change(context, options, &plan.approved, inputs)?);
             continue;
         }
         let mut destination = agents::destination(context, id, options.scope)?;
@@ -235,7 +241,7 @@ pub fn prepare(context: &Context, options: &Options) -> Result<Plan> {
             agents::codex_approvals(&mut destination.entry, &context.tools, &plan.approved);
         }
         plan.other_scopes
-            .extend(other_scope(context, id, options.scope));
+            .extend(other_scope(context, id, options.scope, inputs));
         if let Some(existing) = plan.changes.iter_mut().find(|c| c.path == destination.path) {
             if !existing.agents.contains(id) {
                 existing.agents.push(id.clone());
@@ -243,12 +249,12 @@ pub fn prepare(context: &Context, options: &Options) -> Result<Plan> {
             continue;
         }
         plan.changes
-            .extend(server_change(context, options, destination)?);
+            .extend(server_change(context, options, destination, inputs)?);
     }
     if plan.approval_agents.iter().any(|id| id == "claude") {
         (plan.kept_by_other_rules, plan.other_rules) =
-            claude_other_rules(context, options, &plan.approved)?;
-        if let Some(change) = claude_approvals(context, options, &plan.approved)? {
+            claude_other_rules(context, options, &plan.approved, inputs)?;
+        if let Some(change) = claude_approvals(context, options, &plan.approved, inputs)? {
             plan.changes.push(change);
         }
     }
@@ -257,16 +263,19 @@ pub fn prepare(context: &Context, options: &Options) -> Result<Plan> {
 
 /// The agent's registration in the scope not being configured, which the host
 /// may load alongside or instead of this one. `None` when that file is absent.
-fn other_scope(context: &Context, id: &str, scope: Scope) -> Option<Value> {
+fn other_scope(context: &Context, id: &str, scope: Scope, inputs: &Inputs) -> Option<Value> {
     let other_scope = if scope == Scope::Project {
         Scope::User
     } else {
         Scope::Project
     };
     let other = agents::destination(context, id, other_scope).ok()?;
-    let status = match storage::read(&other.path) {
-        Ok(Some(text)) => {
-            match document::edit(&text, other.format, other.key, &context.product, None) {
+    let status = match inputs.read(&other.path) {
+        Ok(Some(_)) => {
+            match inputs
+                .document(&other.path, other.format)
+                .and_then(|doc| doc.edit(other.key, &context.product, None))
+            {
                 Ok((Some(_), _)) => "registration exists; host scope precedence applies",
                 Ok(_) => "no registration",
                 Err(_) => "invalid configuration; host loading may fail",
@@ -284,21 +293,13 @@ fn server_change(
     context: &Context,
     options: &Options,
     destination: agents::Destination,
+    inputs: &Inputs,
 ) -> Result<Option<Change>> {
-    let before = storage::read(&destination.path)?;
-    let source = before.as_deref().unwrap_or(match destination.format {
-        agents::Format::Json | agents::Format::Jsonc | agents::Format::Yaml => "{}\n",
-        agents::Format::Toml => "",
-    });
-    let (current, _) = document::edit(
-        source,
-        destination.format,
-        destination.key,
-        &context.product,
-        None,
-    )?;
+    let before = inputs.read(&destination.path)?;
+    let document = inputs.document(&destination.path, destination.format)?;
+    let (current, _) = document.edit(destination.key, &context.product, None)?;
     let ledger = ledger(context, &destination.path);
-    let ledger_before = storage::read(&ledger)?;
+    let ledger_before = inputs.read(&ledger)?;
     let owned = ownership(context, &destination.path, ledger_before.as_deref())?;
     if let Some(record) = &owned {
         if current.is_some()
@@ -319,13 +320,7 @@ fn server_change(
         )));
     }
     let desired = (!options.remove).then_some(destination.entry);
-    let (_, after) = document::edit(
-        source,
-        destination.format,
-        destination.key,
-        &context.product,
-        desired.as_ref(),
-    )?;
+    let (_, after) = document.edit(destination.key, &context.product, desired.as_ref())?;
     // An absent removal is a genuine no-op, including no ownership file.
     if options.remove && current.is_none() && owned.is_none() {
         return Ok(None);
@@ -366,11 +361,12 @@ fn definition_change(
     context: &Context,
     options: &Options,
     approved: &[String],
+    inputs: &Inputs,
 ) -> Result<Option<Change>> {
     let path = agents::box_definition_path(context, options.scope)?;
-    let before = storage::read(&path)?;
+    let before = inputs.read(&path)?;
     let ledger = ledger(context, &path);
-    let ledger_before = storage::read(&ledger)?;
+    let ledger_before = inputs.read(&ledger)?;
     let owned = ownership(context, &path, ledger_before.as_deref())?;
     let current = before.clone().map(Value::String);
     let after = if options.remove {
@@ -431,13 +427,16 @@ fn claude_other_rules(
     context: &Context,
     options: &Options,
     approved: &[String],
+    inputs: &Inputs,
 ) -> Result<(Vec<String>, Vec<String>)> {
     let path = agents::claude_settings(context, options.scope);
-    let Some(source) = storage::read(&path)? else {
+    let Some(_) = inputs.read(&path)? else {
         return Ok((Vec::new(), Vec::new()));
     };
-    let (current, _) = document::allow_list(&source, &[], &[])?;
-    let ledger_before = storage::read(&ledger(context, &path))?;
+    let (current, _) = inputs
+        .document(&path, agents::Format::Json)?
+        .allow_list(&[], &[])?;
+    let ledger_before = inputs.read(&ledger(context, &path))?;
     // As in claude_approvals: an interrupted publication may own either side.
     let owned: Vec<String> = ownership(context, &path, ledger_before.as_deref())?
         .into_iter()
@@ -501,11 +500,11 @@ fn ownership(
 
 /// The tools to approve: an explicit selection, else the current approvals of
 /// an earlier setup, else each tool's default.
-fn approved(context: &Context, options: &Options) -> Vec<String> {
+fn approved(context: &Context, options: &Options, inputs: &Inputs) -> Vec<String> {
     let selected = options
         .approved
         .clone()
-        .or_else(|| current_approvals(context, options));
+        .or_else(|| current_approvals(context, options, inputs));
     // Catalog order, so the review reads the same however the set was found.
     context
         .tools
@@ -521,14 +520,15 @@ fn approved(context: &Context, options: &Options) -> Vec<String> {
 
 /// Approvals an earlier setup left for the selected agents: Codex's owned
 /// entry, or Claude Code's rules once setup owns any of them.
-fn current_approvals(context: &Context, options: &Options) -> Option<Vec<String>> {
+fn current_approvals(context: &Context, options: &Options, inputs: &Inputs) -> Option<Vec<String>> {
     if options.agents.iter().any(|a| a == agents::BOX)
         && let Ok(path) = agents::box_definition_path(context, options.scope)
-        && storage::read(&ledger(context, &path))
+        && inputs
+            .read(&ledger(context, &path))
             .ok()
             .flatten()
             .is_some()
-        && let Ok(Some(source)) = storage::read(&path)
+        && let Ok(Some(source)) = inputs.read(&path)
     {
         // Setup's own format: one `    "tool": allow` line per approved tool.
         return Some(
@@ -541,14 +541,10 @@ fn current_approvals(context: &Context, options: &Options) -> Option<Vec<String>
     }
     if options.agents.iter().any(|a| a == "codex")
         && let Ok(destination) = agents::destination(context, "codex", options.scope)
-        && let Ok(Some(source)) = storage::read(&destination.path)
-        && let Ok((Some(entry), _)) = document::edit(
-            &source,
-            destination.format,
-            destination.key,
-            &context.product,
-            None,
-        )
+        && let Ok(Some(_)) = inputs.read(&destination.path)
+        && let Ok((Some(entry), _)) = inputs
+            .document(&destination.path, destination.format)
+            .and_then(|doc| doc.edit(destination.key, &context.product, None))
         && let Some(tools) = entry["tools"].as_object()
     {
         return Some(
@@ -561,9 +557,13 @@ fn current_approvals(context: &Context, options: &Options) -> Option<Vec<String>
     }
     if options.agents.iter().any(|a| a == "claude") {
         let path = agents::claude_settings(context, options.scope);
-        storage::read(&ledger(context, &path)).ok().flatten()?;
-        let source = storage::read(&path).ok()??;
-        let (rules, _) = document::allow_list(&source, &[], &[]).ok()?;
+        inputs.read(&ledger(context, &path)).ok().flatten()?;
+        inputs.read(&path).ok()??;
+        let (rules, _) = inputs
+            .document(&path, agents::Format::Json)
+            .ok()?
+            .allow_list(&[], &[])
+            .ok()?;
         return Some(
             context
                 .tools
@@ -582,11 +582,12 @@ fn claude_approvals(
     context: &Context,
     options: &Options,
     approved: &[String],
+    inputs: &Inputs,
 ) -> Result<Option<Change>> {
     let path = agents::claude_settings(context, options.scope);
-    let before = storage::read(&path)?;
+    let before = inputs.read(&path)?;
     let ledger = ledger(context, &path);
-    let ledger_before = storage::read(&ledger)?;
+    let ledger_before = inputs.read(&ledger)?;
     let record = ownership(context, &path, ledger_before.as_deref())?;
     let rules = |value: Option<&Value>| -> Vec<String> {
         value
@@ -621,7 +622,9 @@ fn claude_approvals(
         .filter(|rule| !desired.contains(rule))
         .cloned()
         .collect();
-    let (current, edited) = document::allow_list(source, &stale, &desired)?;
+    let (current, edited) = inputs
+        .document(&path, agents::Format::Json)?
+        .allow_list(&stale, &desired)?;
     let now_owned: Vec<String> = desired
         .iter()
         .filter(|rule| owned.contains(rule) || !current.contains(rule))
@@ -804,8 +807,12 @@ fn approval_lines(approvals: &Value, lines: &mut Vec<String>) {
 
 /// The permissions page: every tool, with the current or default approvals
 /// marked. `None` means the user cancelled.
-fn permissions(context: &Context, options: &Options) -> Result<Option<Vec<String>>> {
-    let marked = approved(context, options);
+fn permissions(
+    context: &Context,
+    options: &Options,
+    inputs: &Inputs,
+) -> Result<Option<Vec<String>>> {
+    let marked = approved(context, options, inputs);
     let marked: Vec<&str> = marked.iter().map(String::as_str).collect();
     let choices = context
         .tools
@@ -829,7 +836,11 @@ fn permissions(context: &Context, options: &Options) -> Result<Option<Vec<String
 
 /// One multiple-choice list of agents with each one's registration status.
 /// Space marks, Enter continues once one is marked; `None` changes nothing.
-fn select_agents(context: &Context, options: &Options) -> Result<Option<Vec<String>>> {
+fn select_agents(
+    context: &Context,
+    options: &Options,
+    inputs: &Inputs,
+) -> Result<Option<Vec<String>>> {
     let choices = agents::CATALOG
         .iter()
         .map(|(id, _)| {
@@ -837,7 +848,7 @@ fn select_agents(context: &Context, options: &Options) -> Result<Option<Vec<Stri
             if *id == agents::BOX {
                 match agents::box_definition_path(context, options.scope) {
                     Ok(path) => {
-                        choice.detail = match storage::read(&path) {
+                        choice.detail = match inputs.read(&path) {
                             Ok(Some(_)) => "defined for Box; ownership checked on review",
                             Ok(None) => "Box publishes it to each developer's agents",
                             Err(_) => "unreadable definition",
@@ -850,14 +861,11 @@ fn select_agents(context: &Context, options: &Options) -> Result<Option<Vec<Stri
             }
             match agents::destination(context, id, options.scope) {
                 Ok(dest) => {
-                    choice.detail = match storage::read(&dest.path) {
-                        Ok(Some(source)) => match document::edit(
-                            &source,
-                            dest.format,
-                            dest.key,
-                            &context.product,
-                            None,
-                        ) {
+                    choice.detail = match inputs.read(&dest.path) {
+                        Ok(Some(_)) => match inputs
+                            .document(&dest.path, dest.format)
+                            .and_then(|doc| doc.edit(dest.key, &context.product, None))
+                        {
                             Ok((Some(_), _)) => "configured; ownership checked on review",
                             Ok(_) => "not registered",
                             Err(_) => "invalid configuration",
@@ -888,6 +896,7 @@ fn select_agents(context: &Context, options: &Options) -> Result<Option<Vec<Stri
 /// Returns an error for invalid selections, unavailable confirmation, failed
 /// catalog checks, terminal I/O, preparation conflicts or publication failures.
 pub fn run(context: &Context, mut options: Options, machine: bool) -> Result<Value> {
+    let inputs = Inputs::default();
     if options.yes && options.agents.is_empty() {
         return Err(Error::selection(
             "--yes requires explicit --agent selections",
@@ -909,7 +918,7 @@ pub fn run(context: &Context, mut options: Options, machine: bool) -> Result<Val
                 None => return Ok(json!({"cancelled_by_user":true})),
             }
         }
-        match select_agents(context, &options)? {
+        match select_agents(context, &options, &inputs)? {
             Some(agents) => options.agents = agents,
             None => return Ok(json!({"cancelled_by_user":true})),
         }
@@ -923,12 +932,13 @@ pub fn run(context: &Context, mut options: Options, machine: bool) -> Result<Val
             .iter()
             .any(|id| options.agents.iter().any(|a| a == id))
     {
-        match permissions(context, &options)? {
+        match permissions(context, &options, &inputs)? {
             Some(selected) => options.approved = Some(selected),
             None => return Ok(json!({"cancelled_by_user":true})),
         }
     }
-    let plan = prepare(context, &options)?;
+    let plan = prepare_with_inputs(context, &options, &inputs)?;
+    drop(inputs);
     let review = plan.review();
     if options.dry_run {
         return Ok(review);
@@ -941,18 +951,7 @@ pub fn run(context: &Context, mut options: Options, machine: bool) -> Result<Val
     // Only a product's known check entry point is run; host settings cannot
     // select the executable used by this probe.
     if !options.remove {
-        let mut command = std::process::Command::new(&context.program);
-        command
-            .args(&context.arguments)
-            .args(&context.check_arguments);
-        let output = command.current_dir(&context.root).output().map_err(|error| {
-            Error::CatalogCheck(format!("Installed MCP catalog check could not run: {error}; no agent configuration changed"))
-        })?;
-        if !output.status.success() || serde_json::from_slice::<Value>(&output.stdout).is_err() {
-            return Err(Error::CatalogCheck(
-                "Installed MCP catalog check failed; no agent configuration changed".into(),
-            ));
-        }
+        super::preflight::check(context)?;
     }
     if options.yes {
         return plan.apply();
