@@ -52,9 +52,7 @@ pub(super) fn prepare_connections(
         let old = previous
             .and_then(|r| r.connections.get(agent))
             .unwrap_or(&Value::Null);
-        let retained = desired
-            .as_ref()
-            .is_some_and(|r| r.agents.contains_key(agent));
+        let retained = desired.as_ref().is_some_and(|r| r.covers(agent));
         let mut entries = BTreeMap::new();
         let mut launches = BTreeMap::new();
         if retained {
@@ -101,7 +99,11 @@ pub(super) fn prepare_connections(
             })?;
             ownership = captured.unwrap_or(Value::Null);
         } else {
-            let update = adapter.merge_connections(&shared, &old["entries"], &entries)?;
+            let update = adapter.merge_connections(
+                if shared.is_empty() { "{}" } else { &shared },
+                &old["entries"],
+                &entries,
+            )?;
             shared = update.source;
             ownership = update.ownership.unwrap_or(Value::Null);
         }

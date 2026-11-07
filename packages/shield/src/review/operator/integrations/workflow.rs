@@ -140,22 +140,47 @@ fn detected() -> Vec<String> {
 /// The permissions page: every Shield tool, with the saved or default
 /// approvals marked. Marked tools run without asking. `back` says whether an
 /// earlier step exists for Escape to return to.
-fn permissions(tty: &mut Terminal, meta: &Value, back: bool) -> Result<Step<Vec<String>>, Error> {
+fn permissions(
+    tty: &mut Terminal,
+    meta: &Value,
+    back: bool,
+    reset: bool,
+) -> Result<Step<Vec<String>>, Error> {
     let tools = crate::review::mcp::tool_summaries();
     let rows: Vec<_> = tools
         .iter()
         .map(|(name, description)| (name.as_str(), name.as_str(), description.as_str()))
         .collect();
-    let approved = approved_tools(meta)?;
+    let approved = tool_permissions(meta, reset)?;
     let marked: Vec<&str> = approved.iter().map(String::as_str).collect();
+    let source = if !reset && super::registration(meta)?.is_some_and(|r| r.approved_tools.is_some())
+    {
+        "Saved selection. Use --reset-tool-permissions to restore current defaults."
+    } else {
+        "Current defaults: every tool except policy_apply is marked."
+    };
     tty.choose_many_step(
         "Tool permissions",
-        "Marked tools run without asking; unmarked tools ask each time. Applying a policy change always asks for your approval.",
+        &format!("{source} Marked tools run without asking; unmarked tools ask each time. Applying a policy change always asks for your approval."),
         &rows,
         &marked,
         "Every tool asks",
         back,
     )
+}
+
+/// Reset only a new reviewed setup, never an already confirmed pending plan.
+fn tool_permissions(meta: &Value, reset: bool) -> Result<Vec<String>, Error> {
+    if reset {
+        if pending(meta)?.is_some() {
+            return Err(Error::Invalid(
+                "finish the confirmed setup before resetting tool permissions",
+            ));
+        }
+        Ok(crate::review::mcp::default_approved())
+    } else {
+        approved_tools(meta)
+    }
 }
 
 /// The plan for `selected`, asking tool permissions for a new installation.
@@ -167,11 +192,12 @@ fn plan(
     tty: &mut Terminal,
     initial: bool,
     back: bool,
+    reset: bool,
 ) -> Result<Step<Option<Plan>>, Error> {
     let installs = matches!(selected, IntegrationChoice::Agents(_));
     // A pending plan resumes as confirmed; only a new installation asks.
     let approved = if installs && pending(meta)?.is_none() {
-        match permissions(tty, meta, back)? {
+        match permissions(tty, meta, back, reset)? {
             Step::Done(approved) => Some(approved),
             Step::Back => return Ok(Step::Back),
         }
@@ -230,8 +256,10 @@ pub(super) fn review(
     context: &Context,
     selected: Option<IntegrationChoice>,
     json_mode: bool,
+    reset: bool,
 ) -> Result<Value, Error> {
     let meta = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
+    let approved = tool_permissions(&meta, reset)?;
     let root = Path::new(&context.project_root);
     let resumable = pending(&meta)?.is_some();
     let selected = match selected {
@@ -250,9 +278,9 @@ pub(super) fn review(
         Some(selected) => selected,
         None => IntegrationChoice::Keep,
     };
-    let mut plan = prepare_approving(root, &meta, selected, false, None, true)?;
+    let mut plan = prepare_approving(root, &meta, selected, false, Some(approved), true)?;
     with_fallbacks(&meta, selected, plan.as_mut())?;
-    let mut review = setup_preview(root, plan.as_ref());
+    let mut review = setup_preview(root, plan.as_ref())?;
     review["dry_run"] = json!(true);
     Ok(review)
 }
@@ -390,7 +418,7 @@ fn onboarding_answers(
                     None => agent_choice(&agents)?,
                 };
                 let earlier = fixed.is_none() || asks_profile;
-                match plan(root, meta, selected, tty, true, earlier)? {
+                match plan(root, meta, selected, tty, true, earlier, false)? {
                     Step::Done(plan) => return Ok((profile, plan)),
                     Step::Back if fixed.is_none() => Stage::Agents,
                     Step::Back if asks_profile => Stage::Profile,
@@ -405,9 +433,11 @@ pub(super) fn setup(
     context: &Context,
     selected: Option<IntegrationChoice>,
     json_mode: bool,
+    reset: bool,
 ) -> Result<Value, Error> {
-    let mut tty = Terminal::required(json_mode)?;
     let meta = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
+    tool_permissions(&meta, reset)?;
+    let mut tty = Terminal::required(json_mode)?;
     let root = Path::new(&context.project_root);
     let resumable = pending(&meta)?.is_some();
     // Escape on the agent page returns to the action page when it was shown,
@@ -428,14 +458,14 @@ pub(super) fn setup(
             }
         };
         let asked = action.is_none() && !resumable;
-        match plan(root, &meta, choice, &mut tty, false, asked)? {
+        match plan(root, &meta, choice, &mut tty, false, asked, reset)? {
             Step::Done(plan) => break plan,
             Step::Back if asked => {}
             Step::Back => return Err(Error::Cancelled),
         }
     };
     if plan.is_some() {
-        tty.confirm_mcp(&setup_preview(root, plan.as_ref()))?;
+        tty.confirm_mcp(&setup_preview(root, plan.as_ref())?)?;
     }
     finish(context, &meta, plan.as_ref(), None)
 }
@@ -455,4 +485,31 @@ fn management_action(
             Some(IntegrationChoice::RemoveAgents(0))
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reset_tool_permissions_refuses_a_pending_confirmed_plan() {
+        let (root, context) = super::super::tests::fixture();
+        let plan = prepare_approving(
+            root.path(),
+            &json!({}),
+            IntegrationChoice::agent("codex"),
+            false,
+            None,
+            true,
+        )
+        .unwrap()
+        .unwrap();
+        let meta = json!({"integration_pending": plan});
+        let error = tool_permissions(&meta, true).unwrap_err();
+        assert!(error.to_string().contains("finish the confirmed setup"));
+        // The ordinary recovery path can still use the recorded plan.
+        assert!(tool_permissions(&meta, false).is_ok());
+        assert!(review::project::metadata(&review::project::checkpoint(&context).unwrap())
+            ["integration_pending"].is_null());
+    }
 }

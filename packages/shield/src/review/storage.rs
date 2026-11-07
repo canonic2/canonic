@@ -181,6 +181,7 @@ impl Store {
             events: vec![],
             authorization_events: vec![],
             history_enabled: true,
+            enforcement: super::mode::Mode::default(),
             history_limit: if activate { 5000 } else { 500 },
         };
         if activate {
@@ -378,6 +379,7 @@ impl Store {
     // Current enrollment, authorization and source identities, without preparing policy.
     pub(in crate::review) fn read_checkpoint(&self) -> Result<State, Error> {
         let _trace = crate::diagnostics::trace::span("state.checkpoint");
+        crate::diagnostics::trace::count("state.checkpoint_reads", 1);
         let file = self.directory.join("state.json");
         #[cfg(windows)]
         crate::windows_security::check_private(&file)?;

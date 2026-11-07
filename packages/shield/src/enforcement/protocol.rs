@@ -25,6 +25,7 @@ pub(crate) struct NativeContext<'a> {
 }
 mod mcp;
 mod native_gate;
+pub(crate) use native_gate::paused as paused_protection;
 
 #[cfg(test)]
 mod tests;

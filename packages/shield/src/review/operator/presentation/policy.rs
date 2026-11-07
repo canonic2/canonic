@@ -553,6 +553,9 @@ pub(super) fn codex_prefixes(changes: &Value) -> String {
 
 /// `shield policy show` or `review`: the active policy view, or the result of a menu action.
 pub(super) fn policy(value: &Value) -> String {
+    if value["no_project_edits"] == true {
+        return "No project file edits to review; nothing changed.\nUpdate installed packs with shield pack update.\n".into();
+    }
     if value["inspected"] == true {
         return String::new();
     }
@@ -609,6 +612,10 @@ pub(super) fn policy(value: &Value) -> String {
     if value.get("effective").is_none() {
         return receipt(value);
     }
+    active_policy(value)
+}
+
+fn active_policy(value: &Value) -> String {
     let mut output = format!(
         "Active policy · revision {}\n",
         short(&value["policy_revision"])

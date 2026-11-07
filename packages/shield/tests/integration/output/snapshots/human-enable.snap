@@ -1,0 +1,16 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield enable
+--- terminal
+enable Shield in [PROJECT]
+Currently disabled.
+Native hooks resume active policy checks.
+Policy, packs, history, grants and agent registrations are retained. Shield MCP remains available and administrative changes still require human confirmation. Explicit checked execution and SDK consumers continue to enforce policy.
+Restart connected agents to refresh cached permission rules. Native hooks read the setting on their next invocation.
+
+Resuming trusts the saved local policy and authority state, including any edits made while paused outside intercepted requests. Hooks do not authenticate those edits or isolate same-user processes.
+Review and confirm → Apply change
+Shield is enabled for this project.
+--- exit 0

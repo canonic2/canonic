@@ -20,6 +20,10 @@ pub(in crate::review) mod registries;
 #[derive(Deserialize)]
 #[serde(tag = "operation", deny_unknown_fields)]
 enum Input {
+    #[serde(rename = "enable")]
+    Enable {},
+    #[serde(rename = "disable")]
+    Disable {},
     #[serde(rename = "protection_set")]
     Protection {
         agent_settings_read: Option<super::path_access::Read>,
@@ -83,6 +87,7 @@ enum Scope {
 }
 
 enum Operation {
+    Mode(super::mode::Prepared),
     Protection(protection::Prepared),
     Cache,
     Registry(registries::Prepared, Scope),
@@ -179,6 +184,7 @@ impl Prepared {
             return Ok(self.public_review());
         }
         match self.operation {
+            Operation::Mode(plan) => plan.commit(context, checkpoint),
             Operation::Protection(plan) => plan.commit(context, checkpoint),
             Operation::Cache => super::cache::prepare_committed(context, checkpoint),
             Operation::Registry(plan, scope) => {
@@ -198,6 +204,8 @@ pub(super) fn supports(name: &str) -> bool {
     matches!(
         name,
         "protection_set"
+            | "enable"
+            | "disable"
             | "cache_prepare"
             | "registry_add"
             | "registry_remove"
@@ -223,33 +231,21 @@ pub(super) fn prepare(
     let input = decode(name, args)?;
     let mut dry_run = false;
     let (operation, review) = match input {
+        Input::Enable {} | Input::Disable {} => {
+            let plan = super::mode::Prepared::new(context, matches!(input, Input::Enable {}))?;
+            let review = plan.review();
+            (Operation::Mode(plan), review)
+        }
         Input::Protection {
             agent_settings_read,
             agent_settings_change,
             shield_config_change,
-        } => {
-            if agent_settings_read.is_none()
-                && agent_settings_change.is_none()
-                && shield_config_change.is_none()
-            {
-                return Err(Error::Invalid("choose at least one protected file setting"));
-            }
-            let mut access =
-                super::path_access::load(&project::metadata(&project::checkpoint(context)?))
-                    .unwrap_or_default();
-            if let Some(value) = agent_settings_read {
-                access.agent_settings_read = value;
-            }
-            if let Some(value) = agent_settings_change {
-                access.agent_settings_change = value;
-            }
-            if let Some(value) = shield_config_change {
-                access.shield_config_change = value;
-            }
-            let plan = protection::Prepared::new(context, access)?;
-            let review = plan.review();
-            (Operation::Protection(plan), review)
-        }
+        } => protection(
+            context,
+            agent_settings_read,
+            agent_settings_change,
+            shield_config_change,
+        )?,
         Input::Cache {} => (
             Operation::Cache,
             json!({"operation":"prepare committed policy cache","project":context.project_root,"policy_authority":"unchanged"}),
@@ -328,6 +324,34 @@ fn decode(name: &str, args: &Value) -> Result<Input, Error> {
         .map_err(|_| Error::Invalid("invalid administrative arguments"))
 }
 
+fn protection(
+    context: &Context,
+    agent_settings_read: Option<super::path_access::Read>,
+    agent_settings_change: Option<super::path_access::Change>,
+    shield_config_change: Option<super::path_access::Change>,
+) -> Result<(Operation, Value), Error> {
+    if agent_settings_read.is_none()
+        && agent_settings_change.is_none()
+        && shield_config_change.is_none()
+    {
+        return Err(Error::Invalid("choose at least one protected file setting"));
+    }
+    let mut access = super::path_access::load(&project::metadata(&project::checkpoint(context)?))
+        .unwrap_or_default();
+    if let Some(value) = agent_settings_read {
+        access.agent_settings_read = value;
+    }
+    if let Some(value) = agent_settings_change {
+        access.agent_settings_change = value;
+    }
+    if let Some(value) = shield_config_change {
+        access.shield_config_change = value;
+    }
+    let plan = protection::Prepared::new(context, access)?;
+    let review = plan.review();
+    Ok((Operation::Protection(plan), review))
+}
+
 fn setup(
     context: &Context,
     agents: &[String],
@@ -362,7 +386,7 @@ fn setup(
     let mut plan =
         integrations::setup::prepare_approving(root, &metadata, choice, false, None, true)?;
     integrations::setup::with_fallbacks(&metadata, choice, plan.as_mut())?;
-    let mut review = integrations::setup::setup_preview(root, plan.as_ref());
+    let mut review = integrations::setup::setup_preview(root, plan.as_ref())?;
     review["dry_run"] = json!(dry_run);
     review["connection_lifecycle"] =
         json!("Restart the agent connection after changing its Shield registration.");

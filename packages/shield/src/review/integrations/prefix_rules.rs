@@ -16,7 +16,11 @@ fn installed(registration: Option<&Registration>, agent: &str) -> bool {
 }
 
 /// Each registered adapter's file with its desired contents; None removes it.
-fn plan(root: &Path, meta: &Value, prefixes: &[CodexPrefix]) -> Result<Vec<files::Change>, Error> {
+pub(in crate::review) fn plan(
+    root: &Path,
+    meta: &Value,
+    prefixes: &[CodexPrefix],
+) -> Result<Vec<files::Change>, Error> {
     let registered = registration(meta)?;
     let mut changes = Vec::new();
     for adapter in agents::ADAPTERS {
@@ -47,7 +51,14 @@ fn plan(root: &Path, meta: &Value, prefixes: &[CodexPrefix]) -> Result<Vec<files
 }
 
 /// Write, update or remove each adapter's prefix rules for the given policy.
-pub(crate) fn sync(root: &Path, meta: &Value, prefixes: &[CodexPrefix]) -> Result<(), Error> {
+/// The caller holds the writer lock and supplies that checkpoint's mode.
+pub(crate) fn sync(
+    root: &Path,
+    meta: &Value,
+    prefixes: &[CodexPrefix],
+    enabled: bool,
+) -> Result<(), Error> {
+    let prefixes = if enabled { prefixes } else { &[] };
     files::publish(root, &plan(root, meta, prefixes)?)
 }
 
@@ -62,12 +73,15 @@ pub(in crate::review) fn active(root: &Path) -> Result<Vec<CodexPrefix>, Error> 
 /// Add the prefix rules files an integration review leads to, and the prefixes
 /// they hold, to its preview. They are written after the confirmed plan
 /// applies, from `prefixes`, for each agent its `desired` registration covers.
+/// The caller validates the mode; first enrollment explicitly starts enabled.
 pub(in crate::review) fn preview(
     root: &Path,
     review: &mut Value,
     desired: Option<&Registration>,
     prefixes: &[CodexPrefix],
+    enabled: bool,
 ) {
+    let prefixes = if enabled { prefixes } else { &[] };
     for adapter in agents::ADAPTERS {
         let Some(path) = adapter.spec().prefix_rules_path else {
             continue;
@@ -113,13 +127,98 @@ pub(in crate::review) fn diagnose(
     root: &Path,
     meta: &Value,
     prefixes: &[CodexPrefix],
+    enabled: bool,
     diagnostics: &mut Vec<&'static str>,
 ) {
+    let prefixes = if enabled { prefixes } else { &[] };
     match plan(root, meta, prefixes) {
         Ok(changes) if changes.is_empty() => {}
         Ok(_) => diagnostics
             .push("agent prefix rules differ from the active policy; run shield mcp setup"),
         Err(Error::Invalid(message)) => diagnostics.push(message),
         Err(_) => diagnostics.push("agent prefix rules file is unreadable"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser as _;
+
+    #[test]
+    fn shield_mode_initial_prefix_preview_requires_no_enrollment() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let plan = super::super::setup::prepare_initial(
+            root.path(),
+            super::super::IntegrationChoice::agent("codex"),
+        )
+        .unwrap()
+        .unwrap();
+        let prefixes = vec![CodexPrefix {
+            owner: "custom".into(),
+            rule: "logs".into(),
+            pattern: vec![vec!["acme".into()], vec!["logs".into()]],
+        }];
+        for enabled in [true, false] {
+            let mut review = super::super::setup::preview(root.path(), Some(&plan));
+            preview(
+                root.path(),
+                &mut review,
+                plan.desired.as_ref(),
+                &prefixes,
+                enabled,
+            );
+            let file = review["files"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|file| file["path"] == ".codex/rules/shield.rules");
+            if enabled {
+                assert!(file.unwrap()["after"].as_str().unwrap().contains("acme"));
+            } else {
+                assert!(file.is_none());
+            }
+        }
+        assert!(!root.path().join(".shield/review").exists());
+        assert!(!root.path().join(".codex/rules/shield.rules").exists());
+    }
+
+    #[test]
+    fn shield_mode_prefix_sync_reuses_the_locked_checkpoint() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let bundle =
+            crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None)
+                .unwrap();
+        let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
+        let logs = assert_fs::TempDir::new().unwrap();
+        let cli = crate::cli::Cli::parse_from([
+            "shield",
+            "--debug-log-dir",
+            logs.path().to_str().unwrap(),
+            "status",
+        ]);
+        let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+        for enabled in [true, false] {
+            crate::review::mode::Prepared::new(&context, enabled)
+                .unwrap()
+                .commit(&context, &|| Ok(()))
+                .unwrap();
+            let request = log.request("command", "mcp_setup", None, None).unwrap();
+            {
+                let _scope = request.enter();
+                crate::review::storage::Store::open(root.path())
+                    .unwrap()
+                    .inspect_checkpoint(&context, &|| Ok(()), |state| {
+                        sync(root.path(), &state.operator, &[], state.enforcement.enabled)
+                    })
+                    .unwrap();
+                assert_eq!(
+                    request.recorded_count("state.checkpoint_reads"),
+                    1,
+                    "enabled={enabled}"
+                );
+            }
+            request.finish("success");
+        }
     }
 }

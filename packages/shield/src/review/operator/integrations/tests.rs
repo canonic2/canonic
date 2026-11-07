@@ -341,6 +341,72 @@ fn mcp_connections_setup_repair_and_removal_preserve_manual_servers() {
     );
 }
 
+#[cfg(not(windows))]
+#[test]
+fn mcp_connections_box_setup_repairs_bindings_and_retains_handover_ownership() {
+    for handover in [false, true] {
+        let (root, context) = cloud_fixture(false);
+        let state = crate::review::project::load(&context).unwrap();
+        let policy_revision = state.policy_revision.clone();
+        let report = crate::review::integrations::status(&context, &state);
+        assert_eq!(
+            report["diagnostics"],
+            json!(["project MCP binding needs reviewed setup"])
+        );
+        assert_eq!(report["mcp_connections"].as_array().unwrap().len(), 2);
+        fs::create_dir_all(root.path().join(".box")).unwrap();
+        fs::write(root.path().join(".box/config.yml"), "schema_version: 1\n").unwrap();
+        if handover {
+            let before = meta(&context);
+            let plan = prepare(root.path(), &before, IntegrationChoice::all())
+                .unwrap()
+                .unwrap();
+            apply(&context, &before, &plan).unwrap();
+        }
+        let choice = IntegrationChoice::Agents(IntegrationChoice::bits(&["box"]).unwrap());
+        for repair in [false, true] {
+            if repair {
+                fs::write(root.path().join(".mcp.json"), "{\"mcpServers\":{}}").unwrap();
+                let doctor = crate::review::project::doctor(&context).unwrap();
+                assert_eq!(doctor["repair_needed"], true, "{doctor}");
+                assert_eq!(doctor["repair_route"], "shield mcp setup --agent box");
+                let preview = workflow::review(&context, Some(choice), true, false).unwrap();
+                assert!(
+                    preview["files"].as_array().unwrap().iter().any(|file| {
+                        file["path"] == ".mcp.json" && file["before"] != file["after"]
+                    }),
+                    "{preview}"
+                );
+            }
+            let before = meta(&context);
+            let plan = prepare(root.path(), &before, choice)
+                .unwrap_or_else(|error| panic!("handover={handover} repair={repair}: {error}"))
+                .unwrap();
+            apply(&context, &before, &plan).unwrap();
+            let state = crate::review::project::load(&context).unwrap();
+            let report = crate::review::integrations::status(&context, &state);
+            assert_eq!(report["repair_needed"], false, "{report}");
+            let doctor = crate::review::project::doctor(&context).unwrap();
+            assert_eq!(doctor["repair_needed"], false, "{doctor}");
+            assert_eq!(doctor["checks"], json!([]), "{doctor}");
+            assert_eq!(doctor["policy_revision"], policy_revision);
+            for agent in ["claude", "codex"] {
+                assert!(!meta(&context)["integration"]["connections"][agent]["entries"].is_null());
+            }
+        }
+        let before = meta(&context);
+        let plan = prepare(
+            root.path(),
+            &before,
+            IntegrationChoice::RemoveAgents(IntegrationChoice::bits(&["box"]).unwrap()),
+        )
+        .unwrap()
+        .unwrap();
+        apply(&context, &before, &plan).unwrap();
+        assert!(config(root.path())["mcpServers"].get("acme").is_none());
+    }
+}
+
 #[test]
 fn mcp_connections_local_settings_refuse_before_any_host_write() {
     let (root, context) = cloud_fixture(true);
@@ -1432,6 +1498,7 @@ fn codex_prefix_rules_follow_the_active_policy_and_the_agent() {
             root.path(),
             &meta(&context),
             &prefix_rules::active(root.path()).unwrap(),
+            crate::review::mode::current(root.path()).unwrap(),
         )
     };
 
@@ -1442,6 +1509,24 @@ fn codex_prefix_rules_follow_the_active_policy_and_the_agent() {
     assert!(text.contains(r#"pattern = ["acme", "logs"]"#), "{text}");
     assert!(text.contains("custom logs"), "{text}");
     assert_eq!(repair(), false);
+
+    // Pausing clears derived host permissions while retaining registration.
+    // Setup and policy publication must not restore them until resumed.
+    let toggle = |enabled| {
+        crate::review::mode::Prepared::new(&context, enabled)
+            .unwrap()
+            .commit(&context, &|| Ok(()))
+            .unwrap()
+    };
+    assert_eq!(toggle(false)["enabled"], false);
+    assert!(!path.exists());
+    resync().unwrap();
+    assert!(!path.exists());
+    assert_eq!(activate("allow")["repair_needed"], false);
+    assert!(!path.exists());
+    assert_eq!(repair(), false);
+    assert_eq!(toggle(true)["enabled"], true);
+    assert_eq!(fs::read_to_string(&path).unwrap(), text);
 
     // A hand edit is drift that setup repairs.
     fs::write(&path, format!("{text}prefix_rule(pattern = [\"rm\"])\n")).unwrap();
@@ -1541,6 +1626,7 @@ fn reviews_list_the_codex_prefixes_a_change_adds_or_removes() {
         &mut preview,
         plan.desired.as_ref(),
         &prefix_rules::active(root.path()).unwrap(),
+        crate::review::mode::current(root.path()).unwrap(),
     );
     let text = super::super::presentation::review(&preview);
     assert!(text.contains("acme logs (custom logs)"), "{text}");

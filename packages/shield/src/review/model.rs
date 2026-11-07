@@ -257,6 +257,9 @@ pub(crate) struct State {
     pub(crate) events: Vec<Value>,
     pub(crate) authorization_events: Vec<Value>,
     pub(crate) history_enabled: bool,
+    /// Local human-controlled native interception; independent of policy activation.
+    #[serde(default)]
+    pub(crate) enforcement: super::mode::Mode,
     pub(crate) history_limit: usize,
 }
 impl State {

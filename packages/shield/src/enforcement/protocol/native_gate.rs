@@ -6,6 +6,113 @@ use crate::review::{
 };
 mod paths;
 
+/// Retain the ordinary native path and operator checks without consulting the
+/// project's policy, grants, Ask fallback, or compiled cache. An empty policy
+/// supplies only the existing shell analyzer's structural operation evidence;
+/// none of its decisions authorize the request.
+pub(crate) fn paused(
+    cwd: &Path,
+    operation: &Value,
+    paused: &crate::review::mode::Paused,
+    working_files: Option<&crate::location::WorkingFiles>,
+) -> Result<(), &'static str> {
+    let root = paused.root.as_path();
+    let cwd = cwd.canonicalize().map_err(|_| "invalid-context")?;
+    if !cwd.is_dir() || !cwd.starts_with(root) {
+        return Err("invalid-context");
+    }
+    let guard = paths::Guard {
+        cache: paused.cache.as_deref(),
+        allow: *paused.access.as_ref().map_err(|_| "protection-failure")?,
+        working_files,
+    };
+    let mut value = json!({});
+    match operation["kind"].as_str() {
+        Some("batch") => {
+            let operations = operation["operations"]
+                .as_array()
+                .ok_or("invalid-host-input")?;
+            for operation in operations {
+                self::paused(&cwd, operation, paused, working_files)?;
+            }
+            if operation["unmodeled"] == true {
+                return Err("unsupported-operation");
+            }
+            return Ok(());
+        }
+        Some("shell") => {
+            value["_shell_analysis"] = paused_shell(root, &cwd, operation, working_files)?;
+        }
+        Some("file" | "read-text") => {
+            let path = operation["path"].as_str().ok_or("invalid-host-input")?;
+            let action = if operation["kind"] == "read-text" {
+                "read"
+            } else {
+                operation["action"].as_str().ok_or("invalid-host-input")?
+            };
+            if !matches!(action, "read" | "write" | "remove") {
+                return Err("invalid-host-input");
+            }
+            value["_file_targets"] = json!([path]);
+            value["_file_access"] = json!(action);
+            if operation["recursive"] == true {
+                value["_file_search"] = operation
+                    .get("search")
+                    .filter(|search| search.is_object())
+                    .cloned()
+                    .unwrap_or_else(|| json!({"names_only":false,"globs":[],"types":[]}));
+            }
+        }
+        Some("web" | "mcp") => return Ok(()),
+        _ => return Err("unsupported-operation"),
+    }
+    if paths::operator_cli(&value["_shell_analysis"], &cwd) {
+        return Err("operator-cli");
+    }
+    if opaque_shell(&value)
+        || protected_removal(&value, &cwd, root, guard)
+        || footprint(&value, root, &cwd, guard).0 != paths::Protection::None
+    {
+        return Err("protected-access");
+    }
+    Ok(())
+}
+
+fn paused_shell(
+    root: &Path,
+    cwd: &Path,
+    operation: &Value,
+    working_files: Option<&crate::location::WorkingFiles>,
+) -> Result<Value, &'static str> {
+    let source = operation["source"].as_str().ok_or("invalid-host-input")?;
+    let dialect =
+        serde_json::from_value(operation["dialect"].clone()).map_err(|_| "unsupported-shell")?;
+    let snapshot = crate::configuration::Candidate::from_yaml("schema_version: 1\npacks: []\n")
+        .and_then(|candidate| candidate.capture(&[], None))
+        .map_err(|_| "protection-failure")?;
+    let evaluator =
+        crate::configuration::Evaluator::new(vec![(crate::policy::Scope::Project, snapshot)])
+            .map_err(|_| "protection-failure")?;
+    let analysis = crate::shell::analyze_with_working_files(
+        source,
+        dialect,
+        cwd.to_str().ok_or("invalid-context")?,
+        None,
+        root.to_str().ok_or("invalid-context")?,
+        &evaluator,
+        &|| Ok(()),
+        working_files,
+    )
+    .map_err(|_| "protection-failure")?;
+    if !matches!(
+        analysis["coverage"].as_str(),
+        Some("single-literal-invocation" | "structured-literal-operations")
+    ) {
+        return Err("unsupported-shell");
+    }
+    Ok(analysis)
+}
+
 pub(super) fn resolve(
     root: &Path,
     native: NativeContext<'_>,

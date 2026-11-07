@@ -53,6 +53,10 @@ pub enum PublicCommand {
     },
     /// Show policy, integrations and pending requests.
     Status,
+    /// Resume this project's native Shield checks after confirmation.
+    Enable,
+    /// Pause this project's native Shield checks after confirmation, preserving policy and setup.
+    Disable,
     /// Check configuration and installation prerequisites; changes nothing.
     Doctor,
     /// Read and search the documentation bundled with this version, without enrollment.
@@ -185,6 +189,9 @@ pub struct Setup {
     /// Remove the selected agents' hooks, MCP server and permission settings.
     #[arg(long)]
     pub remove: bool,
+    /// Start from current tool permission defaults instead of the saved selection.
+    #[arg(long, conflicts_with = "remove")]
+    pub reset_tool_permissions: bool,
     /// Show the review without writing anything.
     #[arg(long)]
     pub dry_run: bool,
@@ -501,6 +508,15 @@ mod mcp_setup_tests {
     use clap::Parser;
 
     #[test]
+    fn shield_mode_commands_select_a_project_without_auto_confirmation_flags() {
+        for name in ["enable", "disable"] {
+            assert!(Cli::try_parse_from(["shield", name]).is_ok());
+            assert!(Cli::try_parse_from(["shield", name, "--project", "/path/to/acme"]).is_ok());
+            assert!(Cli::try_parse_from(["shield", name, "--yes"]).is_err());
+        }
+    }
+
+    #[test]
     fn session_grant_approval_has_one_cli_name() {
         assert!(Cli::try_parse_from(["shield", "session-grant", "approve", "acme"]).is_ok());
         assert!(Cli::try_parse_from(["shield", "session-grant", "apply", "acme"]).is_err());
@@ -515,6 +531,22 @@ mod mcp_setup_tests {
             panic!("Expected setup")
         };
         setup
+    }
+
+    #[test]
+    fn reset_tool_permissions_flags_allow_preview_and_refuse_removal() {
+        assert!(!setup(&[]).reset_tool_permissions);
+        assert!(setup(&["--reset-tool-permissions", "--dry-run"]).reset_tool_permissions);
+        assert!(
+            Cli::try_parse_from([
+                "shield",
+                "mcp",
+                "setup",
+                "--reset-tool-permissions",
+                "--remove"
+            ])
+            .is_err()
+        );
     }
 
     #[test]

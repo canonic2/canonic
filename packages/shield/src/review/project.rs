@@ -53,6 +53,7 @@ pub(super) fn status(context: &Context) -> Result<Value, Error> {
 pub(super) fn status_from(context: &Context, state: &State) -> Result<Value, Error> {
     let mut value = review::runtime::status_from(state);
     value["policy_revision"] = json!(state.policy_revision);
+    value["enabled"] = json!(state.enforcement.enabled);
     value["installed_packs"] = crate::review::packs::summaries(&metadata(state));
     value["pending_configuration"] = json!(
         state

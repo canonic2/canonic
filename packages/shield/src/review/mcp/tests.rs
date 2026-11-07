@@ -25,6 +25,76 @@ fn fixture() -> (assert_fs::TempDir, Context, Connection) {
 }
 
 #[test]
+fn shield_mode_mcp_requires_the_exact_human_confirmation_even_while_disabled() {
+    for agent in ["claude", "codex"] {
+        let (root, mut context, connection) = fixture();
+        context.agent = Some(agent.into());
+        for (name, enabled) in [("disable", false), ("enable", true)] {
+            let before = crate::review::mode::current(root.path()).unwrap();
+            let unconfirmed = call(&context, &connection, name, &json!({}), &|| Ok(()));
+            assert!(unconfirmed["error"].is_object(), "{unconfirmed}");
+            let fabricated =
+                call_with_confirmation(&context, &connection, name, &json!({}), &|| Ok(()), true);
+            assert!(fabricated["error"].is_object(), "{fabricated}");
+            assert!(
+                admin_confirmation(
+                    &context,
+                    &connection,
+                    name,
+                    &json!({"confirmed":true}),
+                    &|| Ok(())
+                )
+                .is_err()
+            );
+            assert_eq!(crate::review::mode::current(root.path()).unwrap(), before);
+            let (_, declined) =
+                admin_confirmation(&context, &connection, name, &json!({}), &|| Ok(()))
+                    .unwrap()
+                    .unwrap();
+            discard_admin(&connection, declined);
+            let (_, binding) =
+                admin_confirmation(&context, &connection, name, &json!({}), &|| Ok(()))
+                    .unwrap()
+                    .unwrap();
+            let foreign = Connection::new("acme-foreign".into());
+            let rejected = call_with_bound_confirmation(
+                &context,
+                &foreign,
+                name,
+                &json!({}),
+                &|| Ok(()),
+                true,
+                Some(binding),
+            );
+            assert!(rejected["error"].is_object());
+            assert_eq!(crate::review::mode::current(root.path()).unwrap(), before);
+            let result = call_with_bound_confirmation(
+                &context,
+                &connection,
+                name,
+                &json!({}),
+                &|| Ok(()),
+                true,
+                Some(binding),
+            );
+            assert!(result["error"].is_null(), "{agent}: {result}");
+            assert_eq!(result["data"]["enabled"], enabled);
+            assert_eq!(crate::review::mode::current(root.path()).unwrap(), enabled);
+            let replay = call_with_bound_confirmation(
+                &context,
+                &connection,
+                name,
+                &json!({}),
+                &|| Ok(()),
+                true,
+                Some(binding),
+            );
+            assert!(replay["error"].is_object());
+        }
+    }
+}
+
+#[test]
 fn candidate_artifact_failure_does_not_blame_tool_arguments() {
     let (_root, context, _connection) = fixture();
     let response = failure(&context, &crate::policy::Error::ArtifactMismatch.into());
@@ -774,6 +844,8 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
     assert_eq!(
         names,
         vec![
+            "enable",
+            "disable",
             "cache_prepare",
             "protection_set",
             "registry_add",
@@ -848,6 +920,7 @@ fn inventory_annotations_and_pack_selection_schema_are_canonical() {
         assert_eq!(
             tool["annotations"]["destructiveHint"],
             [
+                "disable",
                 "policy_withdraw",
                 "policy_apply",
                 "protection_set",

@@ -33,14 +33,17 @@ Options:
       --remove
           Remove the selected agents' hooks, MCP server and permission settings
 
-      --dry-run
-          Show the review without writing anything
-
       --no-debug-log
           Disable diagnostic logging, including automatic debug-build logs
 
+      --reset-tool-permissions
+          Start from current tool permission defaults instead of the saved selection
+
       --cache-dir <CACHE_DIR>
           Compiled cache location for init, MCP setup or cache preparation
+
+      --dry-run
+          Show the review without writing anything
 
   -h, --help
           Print help (see a summary with '-h')

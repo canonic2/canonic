@@ -2,6 +2,52 @@
 use super::*;
 
 #[test]
+fn shield_mode_transport_forms_require_acceptance_to_disable_and_reenable() {
+    for modern in [false, true] {
+        let (server, _project) = fixture(Some("codex"));
+        let transport = connect(server);
+        let mut enabled = true;
+        for (name, target) in [("disable", false), ("enable", true)] {
+            for action in ["decline", "accept"] {
+                let form = if modern {
+                    transport.request(&super::skills::modern(
+                        10,
+                        "tools/call",
+                        json!({"name":name,"arguments":{}}),
+                        json!({"elicitation":{"form":{}}}),
+                    ))
+                } else {
+                    transport.call(json!(10), name, &json!({}))
+                };
+                let result = if modern {
+                    assert_eq!(form["result"]["resultType"], "input_required", "{form}");
+                    transport.request(&super::skills::modern(11, "tools/call",
+                        json!({"name":name,"arguments":{},"requestState":form["result"]["requestState"],
+                            "inputResponses":{"confirmation":{"action":action}}}),
+                        json!({"elicitation":{"form":{}}})))
+                } else {
+                    assert_eq!(form["method"], "elicitation/create", "{form}");
+                    transport.request(&json!({"jsonrpc":"2.0","id":form["id"],"result":{"action":action,"content":{}}}))
+                };
+                let data = &result["result"]["structuredContent"];
+                if action == "accept" {
+                    assert!(data["error"].is_null(), "{result}");
+                    enabled = target;
+                    assert_eq!(data["data"]["enabled"], enabled);
+                } else {
+                    assert_eq!(data["error"]["code"], "approval_declined", "{result}");
+                }
+                let status = transport.call(json!(12), "status", &json!({}));
+                assert_eq!(
+                    status["result"]["structuredContent"]["data"]["enabled"], enabled,
+                    "{status}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn admin_parity_unavailable_and_cancelled_forms_preserve_settings_and_tool_recovery() {
     for modern in [false, true] {
         for action in ["unavailable", "cancel"] {
@@ -98,6 +144,8 @@ fn admin_parity_unknown_hosts_cannot_receive_confirmation_forms() {
         }
         assert!(transport.receive()["result"].is_object());
         for (name, args) in [
+            ("disable", json!({})),
+            ("enable", json!({})),
             ("history_configure", json!({"purge":true})),
             ("protection_set", json!({"agent_settings_change":"allow"})),
         ] {

@@ -148,6 +148,23 @@ fn result(command: &PublicCommand, value: &Value) -> String {
         }
         PublicCommand::Mcp(_) => setup::configured(value),
         PublicCommand::Protection(_) => setup::protection(value),
+        PublicCommand::Enable | PublicCommand::Disable => {
+            let mut output = format!(
+                "Shield is {} for this project.\n",
+                if value["enabled"] == true {
+                    "enabled"
+                } else {
+                    "disabled; protected controls remain guarded"
+                }
+            );
+            if value["restart_required"] == true {
+                output.push_str("Restart connected agents to refresh cached permission rules.\n");
+            }
+            if value["repair_needed"] == true {
+                output.push_str("Permission rules need repair: run shield mcp setup.\n");
+            }
+            output
+        }
         PublicCommand::SessionGrant(_) => session_grant(value),
         PublicCommand::Status => activity::status(value, false),
         PublicCommand::Doctor => activity::status(value, true),

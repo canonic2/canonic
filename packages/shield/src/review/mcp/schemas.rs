@@ -161,7 +161,7 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
         }
         if ["policy_propose","rule_add","rule_edit","session_grant_propose"].contains(&name) { let mut definitions = crate::policy::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
         let mutation=super::super::admin::supports(name) || ["policy_propose","policy_defer","policy_draft_remove","rule_add","rule_edit","rule_remove","pack_configure","pack_add","pack_update","pack_remove","policy_withdraw","policy_apply","review_defer","request_approve","request_deny","session_grant_propose","session_grant_approve","session_grant_revoke"].contains(&name);
-        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply","protection_set","registry_remove","history_configure","policy_reject","mcp_setup"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","pack_update","policy_propose","registry_add","mcp_setup"].contains(&name))}})
+        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply","protection_set","disable","registry_remove","history_configure","policy_reject","mcp_setup"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","pack_update","policy_propose","registry_add","mcp_setup"].contains(&name))}})
     }).chain(super::documentation::tools().into_iter().map(|mut tool| {
         // The shared definitions carry their own schemas and annotations;
         // results arrive in Shield's envelope.
@@ -249,6 +249,16 @@ fn inventory() -> Vec<Definition> {
 
 fn admin_inventory() -> Vec<Definition> {
     vec![
+        (
+            "enable",
+            "Ask the user to resume this project's native Shield checks; requires human confirmation",
+            || object(json!({}), &[]),
+        ),
+        (
+            "disable",
+            "Ask the user to pause project policy checks while retaining protected-file and operator guards; requires human confirmation",
+            || object(json!({}), &[]),
+        ),
         (
             "cache_prepare",
             "Prepare derived cache from committed policy; changes no policy authority",
@@ -720,6 +730,27 @@ fn defer_tool() -> Definition {
 
 #[cfg(test)]
 mod metadata_tests {
+    #[test]
+    fn shield_mode_tools_use_cli_words_without_repeating_the_binary_name() {
+        let catalog = crate::review::mcp::tools_for(Some("claude"));
+        for (name, route) in [("enable", "shield enable"), ("disable", "shield disable")] {
+            assert_eq!(crate::review::mcp::admin_route(name), Some(route));
+            assert!(crate::review::admin::supports(name));
+            let tool = catalog["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|tool| tool["name"] == name)
+                .unwrap();
+            assert_eq!(tool["annotations"]["readOnlyHint"], false);
+        }
+        for unknown in ["shield_enable", "shield_disable"] {
+            assert!(!crate::review::mcp::is_tool(unknown));
+            assert!(!crate::review::admin::supports(unknown));
+            assert_eq!(crate::review::mcp::admin_route(unknown), None);
+        }
+    }
+
     #[test]
     fn metadata_and_recognition_match_every_negotiated_catalog() {
         let summaries = crate::review::mcp::tool_summaries();

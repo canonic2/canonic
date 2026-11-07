@@ -12,6 +12,8 @@ fn help_text_for_every_command() {
         ("help", vec!["--help"]),
         ("help-init", vec!["init", "--help"]),
         ("help-status", vec!["status", "--help"]),
+        ("help-enable", vec!["enable", "--help"]),
+        ("help-disable", vec!["disable", "--help"]),
         ("help-doctor", vec!["doctor", "--help"]),
         ("help-mcp", vec!["mcp", "--help"]),
         ("help-mcp-setup", vec!["mcp", "setup", "--help"]),

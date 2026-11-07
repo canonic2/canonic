@@ -76,6 +76,13 @@ shield history show ENTRY
 
 [Your first project](docs/getting-started.md) walks through each step.
 
+Pause or resume Shield for this project with `shield disable` and `shield enable`.
+Both require confirmation. Policy and agent setup stay in place; while disabled,
+native hooks retain protected-file and operator-command guards and leave other
+decisions to the agent's own permissions and sandbox.
+The MCP tools `disable` and `enable` offer the same controls with
+a human confirmation form. See [pausing Shield](docs/project-review.md#pause-or-resume-shield).
+
 ## Writing a rule
 
 Run `shield rule add` for a guided form, or write the rule in YAML. This rule

@@ -498,9 +498,9 @@ fn manual(
     tty: &mut Terminal,
     base: &crate::configuration::Evaluator,
 ) -> Result<Value, Error> {
-    let fingerprint =
-        crate::review::publication::projections::projection_fingerprint(context, before)?;
-    let captured = crate::review::changes::project_files::capture(context, before)?;
+    let Some((fingerprint, captured)) = manual_edits(context, before)? else {
+        return Ok(json!({"no_project_edits":true,"policy_revision":before.policy_revision}));
+    };
     let candidate = captured.candidate;
     let meta = captured.metadata;
     let candidates = std::collections::BTreeMap::from([("project".into(), candidate.clone())]);
@@ -523,4 +523,56 @@ fn manual(
         Some(&fingerprint),
         &plan,
     )
+}
+
+/// Avoid preparing or publishing an unchanged policy just to review its files.
+fn manual_edits(
+    context: &Context,
+    before: &crate::review::model::State,
+) -> Result<Option<(String, crate::review::changes::project_files::Capture)>, Error> {
+    if !crate::review::publication::projections::projection_changed(context, before)? {
+        return Ok(None);
+    }
+    let fingerprint =
+        crate::review::publication::projections::projection_fingerprint(context, before)?;
+    let captured = crate::review::changes::project_files::capture(context, before)?;
+    Ok(Some((fingerprint, captured)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manual_review_only_prepares_edited_project_files() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let bundle =
+            crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None)
+                .unwrap();
+        let context = review::mcp::initialize_fixture(root.path(), &bundle);
+        let initial = review::project::load(&context).unwrap();
+        review::publication::commit(
+            &context,
+            &initial,
+            initial.candidates["project"].clone(),
+            review::project::metadata(&initial),
+            None,
+        )
+        .unwrap();
+        let before = review::project::load(&context).unwrap();
+        let state_path = root.path().join(".shield/review/state.json");
+        let original = std::fs::read(&state_path).unwrap();
+        assert!(manual_edits(&context, &before).unwrap().is_none());
+        let rules_path = root.path().join(".shield/rules.yml");
+        let rules = std::fs::read_to_string(&rules_path).unwrap();
+        std::fs::write(&rules_path, format!("{rules}\n# Acme policy comment\n")).unwrap();
+        let (_, edited) = manual_edits(&context, &before).unwrap().unwrap();
+        assert!(
+            edited.candidate["rules"]
+                .as_str()
+                .unwrap()
+                .contains("Acme policy comment")
+        );
+        assert_eq!(std::fs::read(&state_path).unwrap(), original);
+    }
 }

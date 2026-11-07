@@ -95,6 +95,7 @@ pub(super) fn initialize(
         &mut setup,
         desired,
         evaluator.codex_prefixes(),
+        true, // First enrollment has no saved mode and starts enabled.
     );
     tty.confirm(&json!({"operation":"initialize project","project":project,
         "policy":candidate,"registry_verification":if checkpoints.contains_key("main") {"signed by the main registry and verified against Shield's pinned key"} else {"project files captured for review; the main registry stays available for discovery"},

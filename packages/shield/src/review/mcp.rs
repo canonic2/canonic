@@ -544,6 +544,8 @@ pub(crate) fn invalid_arguments(context: &Context, tool: &str, path: &str, detai
 
 pub(crate) fn admin_route(name: &str) -> Option<&'static str> {
     Some(match name {
+        "enable" => "shield enable",
+        "disable" => "shield disable",
         "protection_set" => "shield protection set",
         "cache_prepare" => "shield cache prepare",
         "registry_add" => "shield registry add",

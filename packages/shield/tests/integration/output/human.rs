@@ -228,6 +228,9 @@ fn public_command_steps(source: &str) -> Vec<(&'static str, Vec<&str>, &'static 
             "\nyes\n",
         ),
         ("status-integrated", vec!["status"], ""),
+        ("disable", vec!["disable"], "yes\n"),
+        ("status-disabled", vec!["status"], ""),
+        ("enable", vec!["enable"], "yes\n"),
         (
             "mcp-setup-remove",
             vec!["mcp", "setup", "--remove", "--agent", "claude"],

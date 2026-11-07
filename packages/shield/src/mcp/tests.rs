@@ -247,6 +247,8 @@ fn catalog_publishes_every_tool_and_marks_all_state_changes_as_mutations() {
         mutations,
         [
             "cache_prepare",
+            "disable",
+            "enable",
             "history_configure",
             "mcp_setup",
             "pack_add",

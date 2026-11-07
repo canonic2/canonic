@@ -62,7 +62,7 @@ box config sync
 
 `box` is the first row on the agent page, and in a folder with
 `.box/config.yml` it is the only row marked until you set something up. Setup
-writes two files and changes no other Box or agent file:
+writes two Box files:
 
 - `.box/mcp/shield.yml` is shared with everyone who uses the project. It names
   the bare `shield` command, so it holds no path from your machine. It tells Box
@@ -111,10 +111,13 @@ installation. A kept direct installation can still be removed with
 then uses. Box does not publish Codex's prefix rules file, so Shield keeps
 writing it from your active policy while Codex is set up through Box.
 
-Some direct settings have no Box form: Shield does not publish
-[project MCP connections](mcp-connections.md) through Box, and Claude Code
-cannot pre-approve `policy_apply`. Set an agent up directly
-when you need these.
+Shield manages declared [project MCP connections](mcp-connections.md) in the
+native agent files, including when Box supplies the hooks. Box setup reviews
+and repairs those entries, and retains their ownership during hand-over.
+Removing Box removes these Shield-owned connections when no direct integration
+still covers the agent. Entries published by Box remain managed by Box.
+Claude Code cannot pre-approve `policy_apply` through Box; use direct setup
+when you need that setting.
 
 ## Load the hooks
 
@@ -124,7 +127,11 @@ override host trust or administrator restrictions.
 
 Setup's Tool permissions page marks tools that can run without prompting.
 All except `policy_apply` are marked by default; later setup preserves
-your choices. Codex uses a `prompt` server setting with `approve` for marked
+your choices and labels them as a saved selection. To start from the current
+defaults, run `shield mcp setup --reset-tool-permissions` (add `--agent box`
+for Box). Add `--dry-run` to inspect the reset without changing files. Setup
+still reviews the changes before confirmation.
+Codex uses a `prompt` server setting with `approve` for marked
 tools. Claude adds `mcp__shield__<tool>` entries to `permissions.allow` and
 `shield` to `enabledMcpjsonServers` in `.claude/settings.local.json`.
 

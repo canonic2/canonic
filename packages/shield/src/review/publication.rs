@@ -472,6 +472,7 @@ fn repair_after_commit(
             root(context).as_path(),
             &metadata(current),
             evaluator.codex_prefixes(),
+            current.enforcement.enabled,
         )
         .err();
         projection_changed(context, current)

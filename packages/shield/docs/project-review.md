@@ -10,6 +10,7 @@ and Deny, read [policy decisions](policy-decisions.md).
 | You want to… | Start with |
 | --- | --- |
 | See what is active | `shield status`; use `shield doctor` for a problem. |
+| Pause or resume native checks | [Pause or resume Shield](#pause-or-resume-shield) |
 | Connect or repair an agent | [Native hooks and MCP setup](#native-hooks-and-mcp-setup) |
 | Add a reusable permission pack | [Find and install a pack](local-registry.md#find-and-install-a-pack) |
 | Change one project-specific permission | [Custom rules](#custom-rules-and-proposed-changes) |
@@ -38,11 +39,58 @@ checks policy loading, registry checkpoints, retained pack sources, and the
 binary your agents run, and gives repair commands when needed. JSON output
 provides full structured details for scripts and agents.
 
+Doctor distinguishes agent integration repair (`shield mcp setup`) from policy
+file review (`shield policy review`). Reviewing unchanged policy files does not
+repair an integration; follow the command for the reported problem.
+
 If the complete status report cannot be read, doctor returns partial metadata
 with `missing: [complete_status]` and a `status` check. Unreadable retained policy
 source appears as a `policy_source` check. These reports require a valid authority
 checkpoint; they do not repair or replace damaged source. Restore lost retained
 source before using policy changes to recover the project.
+
+## Pause or resume Shield
+
+```sh
+shield disable
+shield enable
+shield status
+```
+
+Each change shows a review and requires confirmation in your terminal. Agents
+can request the same change with `disable {}` or `enable {}`;
+Shield shows you a confirmation form and changes the setting only if you accept.
+JSON mode and redirected input cannot confirm it.
+
+The setting applies to this checkout's enrolled project and is kept in private
+review state. Other projects and developers keep their own settings. Policy,
+packs, history, grants and agent registrations remain in place, and policy edits
+or setup repairs preserve the setting. `status` and `doctor` report whether
+Shield is enabled.
+
+While disabled, native hooks retain protected-file and operator-command guards.
+Agents cannot use the pause to edit review state, forge grants or invoke the
+operator CLI. Saved protected-file Allow choices remain in force; other
+protected accesses are blocked during the pause. Shell requests
+must have a verifiable protected footprint; unsupported or incomplete analysis
+is blocked. Other requests return no permission decision and follow your
+agent's own permissions and sandbox. Active project rules are not applied, and
+Shield records no native request history during this pause.
+Its MCP tools remain available, with human confirmation still required for
+administrative changes. Explicit checked runs and SDK consumers continue to
+enforce policy.
+
+Hooks inspect submitted requests; they do not isolate same-user processes or
+authenticate edits made outside interception. The enable review makes explicit
+that resuming trusts the saved local policy and authority state, including any
+such edits made while paused.
+
+Disabling removes Shield-generated Codex permission rules; enabling restores
+them from active policy. Restart connected agents when the result requests it,
+so they refresh cached rules. Native hooks read the setting on their next
+invocation; a toggle does not cancel requests already underway. Enabling
+requires readable active policy. If restoring permission rules needs repair,
+checks are already enabled and the result names `shield mcp setup`.
 
 ## Initialize or revisit setup
 
@@ -93,8 +141,9 @@ See [Ask handling](policy-decisions.md#what-happens-after-ask) and the
 shield protection set
 ```
 
-By default, native hooks ask before agents read `.mcp.json` and agent hook
-settings (`.claude/settings.local.json`, `.claude/settings.json`, `.codex/hooks.json`, `.codex/config.toml`),
+When policy checks are enabled, native hooks ask by default before agents read
+`.mcp.json` and agent hook settings (`.claude/settings.local.json`,
+`.claude/settings.json`, `.codex/hooks.json`, `.codex/config.toml`),
 which may hold credentials, and block agents from changing them or the `.shield`
 policy files.
 
@@ -239,6 +288,10 @@ or rules, run `shield policy review`, choose `manual`, and confirm the reviewed 
 Inspect `shield rule list --json` for the active result. Changes during confirmation
 abort publication. Use `shield pack add` to acquire releases rather than editing
 cached pack artifacts.
+
+When the project files are unchanged, manual review reports that there are no
+edits and finishes without confirmation or saving. To fetch newer installed
+pack releases, run `shield pack update`; policy review adopts local file edits.
 
 Shield preserves comments, blank lines, and layout outside changed entries.
 Removing a rule or pack also removes its preceding comments. If a change cannot

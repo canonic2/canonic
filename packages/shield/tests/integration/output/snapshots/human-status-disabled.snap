@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield status
+--- terminal
+Shield policy is disabled in [PROJECT]; protected controls remain guarded. Other requests use the agent's permissions. Resume with shield enable.
+Policy: no packs · revision [SHORT-DIGEST]
+History: on, keeping up to 1000 entries
+--- exit 0

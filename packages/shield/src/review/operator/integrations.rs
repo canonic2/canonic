@@ -57,16 +57,18 @@ pub(super) fn setup(
     context: &Context,
     choice: Option<IntegrationChoice>,
     json_mode: bool,
+    reset_tool_permissions: bool,
 ) -> Result<Value, Error> {
-    workflow::setup(context, choice, json_mode)
+    workflow::setup(context, choice, json_mode, reset_tool_permissions)
 }
 
 pub(super) fn setup_review(
     context: &Context,
     choice: Option<IntegrationChoice>,
     json_mode: bool,
+    reset_tool_permissions: bool,
 ) -> Result<Value, Error> {
-    workflow::review(context, choice, json_mode)
+    workflow::review(context, choice, json_mode, reset_tool_permissions)
 }
 
 #[cfg(test)]

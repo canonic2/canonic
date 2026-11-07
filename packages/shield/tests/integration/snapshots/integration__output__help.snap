@@ -9,6 +9,8 @@ Usage: shield [OPTIONS] <COMMAND>
 Commands:
   init           Create this project's Shield policy and optionally set up agents, after confirmation
   status         Show policy, integrations and pending requests
+  enable         Resume this project's native Shield checks after confirmation
+  disable        Pause this project's native Shield checks after confirmation, preserving policy and setup
   doctor         Check configuration and installation prerequisites; changes nothing
   docs           Read and search the documentation bundled with this version, without enrollment
   mcp            Set up agent hooks and MCP, or serve Shield's MCP tools

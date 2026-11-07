@@ -141,7 +141,6 @@ pub(in crate::review) fn prepare_with(
     let planned = previous.clone().map(|mut registration| {
         for agent in &handed_over {
             registration.agents.remove(agent);
-            registration.connections.remove(agent);
         }
         registration
     });
@@ -372,12 +371,13 @@ pub(in crate::review) fn with_fallbacks(
 }
 
 /// The review of a setup plan, including the agents' prefix rules.
-pub(in crate::review) fn setup_preview(root: &Path, plan: Option<&Plan>) -> Value {
+pub(in crate::review) fn setup_preview(root: &Path, plan: Option<&Plan>) -> Result<Value, Error> {
+    let enabled = crate::review::mode::current(root)?;
     let mut review = preview(root, plan);
     let prefixes = super::prefix_rules::active(root).unwrap_or_default();
     let desired = plan.and_then(|plan| plan.desired.as_ref());
-    super::prefix_rules::preview(root, &mut review, desired, &prefixes);
-    review
+    super::prefix_rules::preview(root, &mut review, desired, &prefixes, enabled);
+    Ok(review)
 }
 
 /// The operator review of an integration plan: each agent's hooks and MCP
@@ -519,19 +519,64 @@ pub(in crate::review) fn finish(
 /// with the agent. Without a readable activation they wait for the next one.
 pub(in crate::review) fn sync_prefix_rules(context: &Context) -> Result<(), Error> {
     let root = Path::new(&context.project_root);
-    let Ok(prefixes) = super::prefix_rules::active(root) else {
+    let Ok(snapshot) = crate::runtime::Project::open(root).and_then(|project| project.snapshot())
+    else {
         return Ok(());
     };
-    super::prefix_rules::sync(
-        root,
-        &crate::review::project::metadata(&crate::review::project::checkpoint(context)?),
-        &prefixes,
-    )
+    super::Store::open(root)?.inspect_checkpoint(context, &|| Ok(()), |state| {
+        if state.policy_revision != snapshot.identity().policy_revision() {
+            return Err(Error::StaleSnapshot);
+        }
+        super::prefix_rules::sync(
+            root,
+            &crate::review::project::metadata(state),
+            snapshot.codex_prefixes(),
+            state.enforcement.enabled,
+        )
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shield_mode_setup_preview_refuses_unreadable_or_invalid_enrolled_state() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let rules = json!({"schema_version":1,"kind":"custom",
+            "capabilities":["agent-outputs-v1","argument-rules-v1","structured-rules-v1"],
+            "rules":[{"id":"logs","decision":"allow","agents":{"codex":{"prefixes":[["acme","logs"]]}},
+                "conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"prefix","values":["logs"]}}}]}).to_string();
+        let bundle = crate::configuration::Bundle::capture(
+            "schema_version: 1\npacks: []\nrules: rules.yml\n",
+            &[],
+            Some(&rules),
+        )
+        .unwrap();
+        let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
+        let metadata = crate::review::project::metadata(
+            &crate::review::project::checkpoint(&context).unwrap(),
+        );
+        let plan = prepare(root.path(), &metadata, IntegrationChoice::agent("codex")).unwrap();
+        let shown = setup_preview(root.path(), plan.as_ref()).unwrap();
+        assert!(!shown["codex_prefixes"].as_array().unwrap().is_empty());
+        let path = root.path().join(".shield/review/state.json");
+        let mut state: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        state["enforcement"] = json!({"enabled":"unreadable-mode","generation":0});
+        let damaged = state.to_string();
+        std::fs::write(&path, &damaged).unwrap();
+        assert!(matches!(
+            setup_preview(root.path(), plan.as_ref()),
+            Err(Error::Invalid(_))
+        ));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), damaged);
+        std::fs::remove_file(&path).unwrap();
+        assert!(matches!(
+            setup_preview(root.path(), plan.as_ref()),
+            Err(Error::Io(_))
+        ));
+        assert!(!root.path().join(".codex/rules/shield.rules").exists());
+    }
 
     #[test]
     fn box_handover_preserves_adapters_without_box_hooks() {

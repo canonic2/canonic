@@ -14,6 +14,8 @@ pub(super) const CONFIRMED_TOOLS: &[&str] = &[
     "request_deny",
     "session_grant_approve",
     "protection_set",
+    "enable",
+    "disable",
     "registry_add",
     "registry_remove",
     "registry_default",

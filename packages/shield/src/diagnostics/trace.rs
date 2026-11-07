@@ -149,6 +149,7 @@ impl Default for State {
                 ("source.hydrated", 0),
                 ("source.read_bytes", 0),
                 ("state.read_bytes", 0),
+                ("state.checkpoint_reads", 0),
                 ("storage.sync_calls", 0),
                 ("projection.files_written", 0),
             ]),
@@ -197,6 +198,17 @@ impl Drop for Scope {
     }
 }
 impl Request {
+    #[cfg(test)]
+    pub(crate) fn recorded_count(&self, name: &str) -> u64 {
+        self.0
+            .state
+            .lock()
+            .unwrap()
+            .counts
+            .get(name)
+            .copied()
+            .unwrap_or(0)
+    }
     /// An interval may cross a continuation boundary without attaching thread state.
     pub(crate) fn wait(&self, stage: &'static str, counter: &'static str) -> Wait {
         let mut request_state = self

@@ -10,6 +10,7 @@ pub(crate) mod hook_approval;
 mod inspection;
 pub(crate) mod integrations;
 pub(crate) mod mcp;
+pub(crate) mod mode;
 mod model;
 pub(crate) mod observations;
 pub(crate) mod operator;
@@ -303,6 +304,15 @@ pub(crate) fn open(project: &Path) -> Result<Context, Error> {
     let store = Store::open(project)?;
     let state = store.read_checkpoint()?;
     Ok(Context::new(state.project_id, state.project_root, "cli"))
+}
+
+/// Derive caller context and pause guards from one validated checkpoint.
+/// Later authority handoff still performs its locked freshness check.
+pub(crate) fn open_native(project: &Path) -> Result<(Context, Option<mode::Paused>), Error> {
+    let store = Store::open(project)?;
+    let state = store.read_checkpoint()?;
+    let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
+    Ok((context, mode::paused(state)))
 }
 
 /// The history reader's event view: verified records with reader-derived

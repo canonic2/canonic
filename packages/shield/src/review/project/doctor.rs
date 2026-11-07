@@ -34,6 +34,7 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
             partial
         }
     };
+    value["enabled"] = json!(current.enforcement.enabled);
     let mut problem = |check: &str, detail: String, repair: &str| {
         checks.push(json!({"check":check,"detail":detail,"repair":repair}));
     };

@@ -1,0 +1,15 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield disable
+--- terminal
+disable Shield in [PROJECT]
+Currently enabled.
+Native hooks pause policy decisions while retaining protected-file and operator-command guards. Other requests defer to the agent's own permissions and sandbox; Shield does not approve them.
+Policy, packs, history, grants and agent registrations are retained. Shield MCP remains available and administrative changes still require human confirmation. Explicit checked execution and SDK consumers continue to enforce policy.
+Restart connected agents to refresh cached permission rules. Native hooks read the setting on their next invocation.
+
+Review and confirm → Apply change
+Shield is disabled; protected controls remain guarded for this project.
+--- exit 0

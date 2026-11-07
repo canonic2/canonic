@@ -197,8 +197,11 @@ fn handle(
     log: &crate::diagnostics::Log,
 ) -> Option<Value> {
     log.event("hook_stage", json!({"stage":"project_open_start"}));
-    let context = crate::review::open(root).ok()?;
+    let (context, paused) = crate::review::open_native(root).ok()?;
     log.event("hook_stage", json!({"stage":"project_open_ready"}));
+    if let Some(paused) = paused {
+        return Some(paused_reply(adapter, request, &paused));
+    }
     log.event("hook_stage", json!({"stage":"registration_ready"}));
     if let Some(name) = request.shield_tool {
         return Some(shield_tool_reply(adapter, request, name, log));
@@ -296,6 +299,35 @@ fn handle(
             return Some(json!({}));
         }
         Some(adapter.reply(request.event, &reply))
+    }
+}
+
+fn paused_reply(
+    adapter: &dyn AgentAdapter,
+    request: &Request<'_>,
+    paused: &crate::review::mode::Paused,
+) -> Value {
+    if request.event.post()
+        || request.shield_tool.is_some()
+        || (request.operation.is_none() && request.harmless)
+    {
+        return json!({});
+    }
+    let result = request
+        .operation
+        .as_ref()
+        .ok_or("unsupported-operation")
+        .and_then(|operation| {
+            protocol::paused_protection(
+                Path::new(request.cwd.as_ref()),
+                operation,
+                paused,
+                request.working_files.as_ref(),
+            )
+        });
+    match result {
+        Ok(()) => json!({}),
+        Err(code) => adapter.reply(request.event, &feedback::deny(code)),
     }
 }
 

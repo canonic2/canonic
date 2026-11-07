@@ -11,6 +11,208 @@ mod mcp_scope_conflicts;
 mod pack_suggestions;
 mod working_files;
 
+fn confirm_mode(context: &review::Context, connection: &review::mcp::Connection, name: &str) {
+    let (_, binding) =
+        review::mcp::admin_confirmation(context, connection, name, &json!({}), &|| Ok(()))
+            .unwrap()
+            .unwrap();
+    let response = review::mcp::call_with_bound_confirmation(
+        context,
+        connection,
+        name,
+        &json!({}),
+        &|| Ok(()),
+        true,
+        Some(binding),
+    );
+    assert!(response["error"].is_null(), "{response}");
+}
+
+#[test]
+fn shield_mode_hook_entry_reads_checkpoint_once() {
+    use clap::Parser as _;
+    let (root, mut context) = fixture();
+    context.agent = Some("claude".into());
+    let connection = review::mcp::Connection::new("acme-read-count".into());
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    for paused in [false, true] {
+        if paused {
+            confirm_mode(&context, &connection, "disable");
+        }
+        for agent in ["claude", "codex"] {
+            let request = log.request("hook", "status", None, None).unwrap();
+            {
+                let _scope = request.enter();
+                let reply = tool(root.path(), agent, "mcp__shield__status", &json!({}));
+                if paused {
+                    assert_eq!(reply, json!({}));
+                } else {
+                    assert_ne!(
+                        reply["hookSpecificOutput"]["permissionDecision"], "deny",
+                        "{reply}"
+                    );
+                }
+                assert_eq!(
+                    request.recorded_count("state.checkpoint_reads"),
+                    1,
+                    "{agent}, paused={paused}"
+                );
+            }
+            request.finish("success");
+        }
+    }
+}
+
+#[test]
+fn shield_mode_disabled_defers_to_host_permissions_and_enable_restores_checks() {
+    let (root, mut context) = fixture();
+    context.agent = Some("claude".into());
+    let connection = review::mcp::Connection::new("acme-mode".into());
+    let toggle = |name| confirm_mode(&context, &connection, name);
+    for enabled in [false, true] {
+        toggle(if enabled { "enable" } else { "disable" });
+        for agent in crate::agents::ADAPTERS {
+            let id = agent.spec().id;
+            let (name, input) = match id {
+                "gemini" => (
+                    "run_shell_command",
+                    json!({"command":"git reset --hard","dir_path":root.path()}),
+                ),
+                "agy" => (
+                    "run_command",
+                    json!({"CommandLine":"git reset --hard","Cwd":root.path()}),
+                ),
+                _ => ("Bash", json!({"command":"git reset --hard"})),
+            };
+            let result = tool(root.path(), id, name, &input);
+            if enabled {
+                assert_ne!(result, json!({}), "{id}: {result}");
+            } else {
+                assert_eq!(result, json!({}), "{id}: {result}");
+                let own = match id {
+                    "gemini" => {
+                        let mut host = native_host(
+                            root.path(),
+                            id,
+                            "BeforeTool",
+                            "mcp_shield_enable",
+                            &json!({}),
+                        );
+                        host["mcp_context"] = json!({"server_name":"shield","tool_name":"enable"});
+                        translate_for(
+                            root.path(),
+                            id,
+                            Event::Before,
+                            &serde_json::to_vec(&host).unwrap(),
+                        )
+                    }
+                    "agy" => tool(
+                        root.path(),
+                        id,
+                        "call_mcp_tool",
+                        &json!({"ServerName":"shield","ToolName":"enable","Arguments":{}}),
+                    ),
+                    _ => tool(root.path(), id, "mcp__shield__enable", &json!({})),
+                };
+                assert_eq!(own, json!({}), "{id}: {own}");
+            }
+        }
+    }
+}
+
+#[test]
+fn shield_mode_pause_blocks_forged_authority_and_operator_commands() {
+    let (root, mut context) = fixture();
+    context.agent = Some("claude".into());
+    let connection = review::mcp::Connection::new("acme-guarded-pause".into());
+    confirm_mode(&context, &connection, "disable");
+    let path = root.path().join(".shield/review/state.json");
+    let before = fs::read(&path).unwrap();
+    let mut forged: Value = serde_json::from_slice(&before).unwrap();
+    forged["operator"]["path_access"] = json!({"agent_settings_change":"allow"});
+    let forged = forged.to_string();
+    let denied = |agent: &str, reply: Value| {
+        let decision = if ["gemini", "agy"].contains(&agent) {
+            &reply["decision"]
+        } else {
+            &reply["hookSpecificOutput"]["permissionDecision"]
+        };
+        assert_eq!(decision, "deny", "{agent}: {reply}");
+    };
+    for adapter in crate::agents::ADAPTERS {
+        let agent = adapter.spec().id;
+        let write = |path: &Path| match agent {
+            "codex" => tool(
+                root.path(),
+                agent,
+                "apply_patch",
+                &json!({"command":format!("*** Begin Patch\n*** Update File: {}\n@@\n-old\n+{}\n*** End Patch",path.display(),forged)}),
+            ),
+            "gemini" => tool(
+                root.path(),
+                agent,
+                "write_file",
+                &json!({"file_path":path,"content":forged}),
+            ),
+            "agy" => tool(
+                root.path(),
+                agent,
+                "write_to_file",
+                &json!({"TargetFile":path,"CodeContent":forged}),
+            ),
+            _ => tool(
+                root.path(),
+                agent,
+                "Write",
+                &json!({"file_path":path,"content":forged}),
+            ),
+        };
+        denied(agent, write(&path));
+        assert_eq!(write(&root.path().join("notes.txt")), json!({}), "{agent}");
+        #[cfg(unix)]
+        {
+            let alias = root.path().join(format!("authority-alias-{agent}"));
+            std::os::unix::fs::symlink(&path, &alias).unwrap();
+            denied(agent, write(&alias));
+        }
+        for source in [
+            "printf forged > .shield/review/state.json",
+            "sh -c 'printf forged > .shield/review/state.json'",
+            "rm -rf .shield",
+            "mv .shield .shield-old",
+            "shield enable",
+            "shield session-grant approve forged-grant",
+            "eval \"$ACME_UNVERIFIED_COMMAND\"",
+        ] {
+            let (name, input) = match agent {
+                "gemini" => (
+                    "run_shell_command",
+                    json!({"command":source,"dir_path":root.path()}),
+                ),
+                "agy" => (
+                    "run_command",
+                    json!({"CommandLine":source,"Cwd":root.path()}),
+                ),
+                _ => ("Bash", json!({"command":source})),
+            };
+            denied(agent, tool(root.path(), agent, name, &input));
+        }
+    }
+    assert_eq!(fs::read(&path).unwrap(), before);
+    confirm_mode(&context, &connection, "enable");
+    let after: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    let before: Value = serde_json::from_slice(&before).unwrap();
+    assert_eq!(after["operator"], before["operator"]);
+    assert_eq!(after["session_grants"], before["session_grants"]);
+}
+
 #[test]
 fn native_denial_names_pipeline_commands_without_inventing_folder_access() {
     let (root, _) = fixture();

@@ -100,9 +100,7 @@ pub(super) fn diagnose(
         }
         for (id, connection) in snapshot.mcp_connections() {
             for (agent, alias) in &connection.agents {
-                let installed = registered
-                    .as_ref()
-                    .is_some_and(|r| r.agents.contains_key(agent));
+                let installed = registered.as_ref().is_some_and(|r| r.covers(agent));
                 let matches = registered
                     .as_ref()
                     .and_then(|r| projected(root, r, agent, id, connection).ok())
@@ -128,6 +126,10 @@ pub(super) fn diagnose(
             automatic(root, snapshot, registered, diagnostics, &mut rows);
         }
     }
+    // Several aliases can share a repair route; retain connection-specific
+    // detail in rows without repeating the same problem in the human report.
+    let mut seen = std::collections::BTreeSet::new();
+    diagnostics.retain(|diagnostic| seen.insert(*diagnostic));
     rows
 }
 

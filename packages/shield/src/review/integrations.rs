@@ -461,7 +461,13 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
         } else {
             Some([].as_slice())
         } {
-            prefix_rules::diagnose(root, &meta, prefixes, &mut diagnostics);
+            prefix_rules::diagnose(
+                root,
+                &meta,
+                prefixes,
+                state.enforcement.enabled,
+                &mut diagnostics,
+            );
         }
         let connections = connections::diagnose(
             root,

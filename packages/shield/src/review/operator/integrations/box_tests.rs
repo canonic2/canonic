@@ -252,10 +252,57 @@ fn toml_json(item: &toml_edit::Item) -> Value {
 }
 
 #[test]
+fn reset_tool_permissions_previews_current_defaults_and_preserves_saved_choices() {
+    for saved in [vec![], vec!["status".to_owned()]] {
+        let (root, context) = fixture();
+        box_project(root.path());
+        let before = meta(&context);
+        let plan = prepare_approving(
+            root.path(),
+            &before,
+            choice(&["box"]),
+            false,
+            Some(saved.clone()),
+            true,
+        )
+        .unwrap()
+        .unwrap();
+        apply(&context, &before, &plan).unwrap();
+        let saved_meta = meta(&context);
+        let saved_definition = definition(root.path()).unwrap();
+
+        let kept = workflow::review(&context, Some(choice(&["box"])), true, false).unwrap();
+        assert_eq!(kept["tool_approvals"]["approved"], json!(saved));
+        let reset = workflow::review(&context, Some(choice(&["box"])), true, true).unwrap();
+        assert_eq!(reset["tool_approvals"]["ask"], json!(["policy_apply"]));
+        let file = reset["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|file| file["path"] == box_definition::PATH)
+            .unwrap();
+        let projected: Value = crate::policy::parse(file["after"].as_str().unwrap()).unwrap();
+        for (tool, _) in crate::review::mcp::tool_summaries() {
+            assert_eq!(
+                projected["permissions"]["tools"][&tool],
+                if tool == "policy_apply" {
+                    "ask"
+                } else {
+                    "allow"
+                },
+                "{tool}"
+            );
+        }
+        assert_eq!(meta(&context), saved_meta);
+        assert_eq!(definition(root.path()).unwrap(), saved_definition);
+    }
+}
+
+#[test]
 fn box_dry_run_reviews_the_definition_without_writing() {
     let (root, context) = fixture();
     box_project(root.path());
-    let review = workflow::review(&context, Some(choice(&["box", "claude"])), true).unwrap();
+    let review = workflow::review(&context, Some(choice(&["box", "claude"])), true, false).unwrap();
     assert_eq!(review["dry_run"], true);
     assert_eq!(review["agents"][0]["agent"], "box");
     assert_eq!(review["agents"][0]["change"], "added");
@@ -456,7 +503,7 @@ fn box_carries_the_codex_ask_fallback_used_at_hook_time() {
         AskFallback::Block
     ));
     // Setup offers Box the same Allow default it offers a direct Codex.
-    let review = workflow::review(&context, Some(choice(&["box"])), true).unwrap();
+    let review = workflow::review(&context, Some(choice(&["box"])), true, false).unwrap();
     assert_eq!(review["ask_fallbacks"]["codex"]["after"], "allow");
     let text = super::super::presentation::review(&review);
     assert!(
@@ -522,7 +569,7 @@ fn box_install_hands_direct_installations_over_without_touching_their_files() {
     assert_eq!(kept.handed_over, Vec::<String>::new());
     assert_eq!(kept.desired.as_ref().unwrap().agents.len(), 2);
     // The default hand-over is part of the reviewed plan.
-    let review = workflow::review(&context, Some(choice(&["box"])), true).unwrap();
+    let review = workflow::review(&context, Some(choice(&["box"])), true, false).unwrap();
     assert_eq!(review["box"]["handed_over"], json!(["claude", "codex"]));
     assert_eq!(review["agents"][1]["change"], "handed over");
     let text = super::super::presentation::review(&review);
@@ -695,7 +742,7 @@ fn setup_previews_codex_prefix_rules_box_writes_or_keeps() {
     box_project(root.path());
     allow_acme_logs(&context);
     assert!(!root.path().join(PREFIX_RULES).exists());
-    let review = workflow::review(&context, Some(choice(&["box"])), true).unwrap();
+    let review = workflow::review(&context, Some(choice(&["box"])), true, false).unwrap();
     let (before, after) = previewed_prefix_rules(&review);
     assert!(before.is_null());
     assert!(after.as_str().unwrap().contains("acme"), "{after}");
@@ -713,7 +760,7 @@ fn setup_previews_codex_prefix_rules_box_writes_or_keeps() {
     setup(&context, choice(&["codex"])).unwrap();
     allow_acme_logs(&context);
     let existing = fs::read_to_string(root.path().join(PREFIX_RULES)).unwrap();
-    let review = workflow::review(&context, Some(choice(&["box"])), true).unwrap();
+    let review = workflow::review(&context, Some(choice(&["box"])), true, false).unwrap();
     assert_eq!(review["box"]["handed_over"], json!(["codex"]));
     assert_eq!(
         previewed_prefix_rules(&review),
@@ -730,5 +777,11 @@ fn setup_previews_codex_prefix_rules_box_writes_or_keeps() {
 fn setup_and_publish_prefix_rules(context: &Context) {
     setup(context, choice(&["box"])).unwrap();
     let root = Path::new(&context.project_root);
-    prefix_rules::sync(root, &meta(context), &prefix_rules::active(root).unwrap()).unwrap();
+    prefix_rules::sync(
+        root,
+        &meta(context),
+        &prefix_rules::active(root).unwrap(),
+        crate::review::mode::current(root).unwrap(),
+    )
+    .unwrap();
 }

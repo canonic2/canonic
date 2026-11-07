@@ -252,6 +252,10 @@ fn doctor_reports_unloadable_source_without_requiring_policy_preparation() {
         })
         .unwrap();
     std::fs::write(root.path().join(".shield/config.yml"), [0xff]).unwrap();
+    review::mode::Prepared::new(&context, false)
+        .unwrap()
+        .commit(&context, &|| Ok(()))
+        .unwrap();
     let state_path = root.path().join(".shield/review/state.json");
     let before = std::fs::read(&state_path).unwrap();
     for source in std::fs::read_dir(root.path().join(".shield/review/sources")).unwrap() {
@@ -259,6 +263,7 @@ fn doctor_reports_unloadable_source_without_requiring_policy_preparation() {
     }
     let report = crate::review::project::doctor(&context).unwrap();
     assert_eq!(report["missing"], json!(["complete_status"]));
+    assert_eq!(report["enabled"], false);
     assert!(
         report["checks"]
             .as_array()

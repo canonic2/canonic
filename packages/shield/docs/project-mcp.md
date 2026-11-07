@@ -45,7 +45,7 @@ For client implementation, see [transport details](#responses-and-transport-life
 | Policy and rules | `policy_show`, `rule_list`, `rule_add`, `rule_edit`, `rule_remove`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_apply`, `policy_withdraw`, `policy_receipt`, `policy_defer`, `policy_draft_list`, `policy_draft_remove`, `policy_reject`, `policy_repair` |
 | Approvals and history | `request_list`, `request_show`, `request_approve`, `request_deny`, `history_list`, `history_show`, `history_configure` |
 | Session grants | `session_grant_list`, `session_grant_show`, `session_grant_propose`, `session_grant_approve`, `session_grant_revoke` |
-| Administration | `protection_set`, `cache_prepare`, `mcp_setup` |
+| Administration | `enable`, `disable`, `protection_set`, `cache_prepare`, `mcp_setup` |
 | Diagnostics | `policy_evaluate`, `policy_compare` |
 | Documentation | `docs_list`, `docs_search`, `docs_read` |
 
@@ -71,6 +71,13 @@ refuse; inspect the result before requesting a fresh review.
   `agent_settings_read` (`ask`/`allow`), `agent_settings_change` (`block`/`allow`)
   and `shield_config_change` (`block`/`allow`). Shield's own review and cache
   state remain protected.
+- `disable {}` pauses native interception for this project;
+  `enable {}` resumes it. Each requires Shield's human confirmation form,
+  including while disabled. Policy and registration are preserved. Disabled
+  hooks retain protected-file and operator-command guards, then defer other
+  requests to host permissions. MCP remains available. Restart agents when
+  requested to refresh generated permission rules.
+  See [pause or resume Shield](project-review.md#pause-or-resume-shield).
 - `registry_add` accepts `name` and `location`, but in-session source enrollment
   is unsupported. It reports that capability gap without fetching the location
   or directing the user to a terminal.

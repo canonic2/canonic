@@ -158,9 +158,15 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
         }) => {
             let choice = setup.choice()?;
             if setup.dry_run {
-                return integrations::setup_review(&context, choice, input.json);
+                return integrations::setup_review(
+                    &context,
+                    choice,
+                    input.json,
+                    setup.reset_tool_permissions,
+                );
             }
-            let mut receipt = integrations::setup(&context, choice, input.json)?;
+            let mut receipt =
+                integrations::setup(&context, choice, input.json, setup.reset_tool_permissions)?;
             if receipt.get("setup_error").is_none()
                 && let Some(directory) = input.cache_dir.as_deref()
             {
@@ -174,6 +180,8 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
             session_grants::run(&context, &command.command, input.json)
         }
         PublicCommand::Status => project::status(&context),
+        PublicCommand::Enable => administer(&context, "enable", &json!({}), input.json),
+        PublicCommand::Disable => administer(&context, "disable", &json!({}), input.json),
         PublicCommand::Doctor => project::doctor(&context),
         PublicCommand::Policy(policy) => match &policy.command {
             PolicyCommand::Show => project::policy(&context),

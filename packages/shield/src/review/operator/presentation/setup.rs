@@ -10,6 +10,33 @@ use std::fmt::Write;
 pub(super) fn review(value: &Value) -> Option<String> {
     let mut output = String::new();
     match value["operation"].as_str()? {
+        "enable Shield" | "disable Shield" => {
+            let _ = writeln!(
+                output,
+                "{} in {}\nCurrently {}.\n{}\n{}\n{}\n",
+                label(&value["operation"]),
+                label(&value["project"]),
+                if value["before"] == true {
+                    "enabled"
+                } else {
+                    "disabled"
+                },
+                label(&value["effect"]),
+                label(&value["preserved"]),
+                label(&value["restart"])
+            );
+            for file in value["files"].as_array().into_iter().flatten() {
+                let _ = writeln!(
+                    output,
+                    "  {}: {}",
+                    label(&file["path"]),
+                    label(&file["change"])
+                );
+            }
+            if let Some(trust) = value["state_trust"].as_str() {
+                let _ = writeln!(output, "{}", label(&Value::String(trust.into())));
+            }
+        }
         "initialize project" => {
             let _ = writeln!(
                 output,

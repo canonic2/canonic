@@ -40,7 +40,11 @@ fn integrations(coverage: &Value) -> Vec<String> {
 pub(super) fn status(value: &Value, doctor: bool) -> String {
     let agents = integrations(&value["coverage"]);
     let root = label(&value["project_root"]);
-    let mut output = if agents.is_empty() {
+    let mut output = if value["enabled"] == false {
+        format!(
+            "Shield policy is disabled in {root}; protected controls remain guarded. Other requests use the agent's permissions. Resume with shield enable.\n"
+        )
+    } else if agents.is_empty() {
         format!(
             "Shield policy is active in {root}, but no agent is connected. Connect one with shield mcp setup.\n"
         )
@@ -104,7 +108,12 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
     if value["repair_needed"] == true {
         let _ = writeln!(
             output,
-            "Project files need repair: {}.",
+            "{} need repair: {}.",
+            if value["coverage"]["repair_needed"] == true {
+                "Agent integrations"
+            } else {
+                "Project files"
+            },
             if doctor {
                 format!("run {}", label(&value["repair_route"]))
             } else {
@@ -515,6 +524,21 @@ mod tests {
         assert_eq!(
             text,
             "Shield policy is active in /srv/acme, but no agent is connected. Connect one with shield mcp setup.\nPolicy: 1 pack · revision 0123456789ab\nHistory: on, keeping up to 5000 entries\n"
+        );
+    }
+
+    #[test]
+    fn doctor_distinguishes_integration_repair_from_project_file_review() {
+        let mut value = json!({"project_root":"/srv/acme","repair_needed":true,
+            "repair_route":"shield mcp setup --agent box",
+            "coverage":{"repair_needed":true,"installed_integrations":[]}});
+        let text = status(&value, true);
+        assert!(text.contains("Agent integrations need repair: run shield mcp setup --agent box."));
+        assert!(!text.contains("Project files need repair"));
+        value["coverage"]["repair_needed"] = json!(false);
+        value["repair_route"] = json!("shield policy review");
+        assert!(
+            status(&value, true).contains("Project files need repair: run shield policy review.")
         );
     }
 
