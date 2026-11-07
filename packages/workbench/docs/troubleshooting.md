@@ -16,6 +16,14 @@ disable it and reload when finished.
 server milliseconds. Docs requests also show catalog readiness, Markdown,
 highlighting, startup warm-up wait and bundle work when those phases run.
 The docs document and its examples bundle are separate requests.
+Preview timings separate entry preparation and compiler waits. For content
+delivered over the canvas stream, `preview.stream.item.completed` reports each
+page or docs lens separately; match its `client` and `requestId` fields.
+`preview.evaluator.completed` separates waiting for the evaluator, acquiring
+and starting Node, writing the request, and waiting for its answer. Reply time
+includes project execution and communication. These elapsed intervals can
+overlap; do not add them or treat them as CPU time.
+
 `preview.browser.phase` lines show selection, renderer/document loading,
 bundle loading, example mounting, readiness and frame promotion. Match their
 `selection` IDs, page, scenario and lens; the final `visible` phase's `totalMs`
@@ -81,7 +89,7 @@ curl -s "http://127.0.0.1:3579/_workbench/stories?implementation=storybook&title
 - **The Workbench log.** Run **Workbench: Show Log** for screenshot, server,
   handoff, and preview compiler errors. For slow
   TypeScript previews, `preview.request.completed` events give the time the
-  server spent compiling and serving each request (`workMs`), and
+  server spent answering each request (`elapsedMs`), and
   `preview.browser.phase` events time setup, mounting,
   fonts, images, and readiness.
 - **The canvas's developer tools.** In VS Code, run
