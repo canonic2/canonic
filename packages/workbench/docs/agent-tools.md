@@ -6,12 +6,52 @@ browser pages. `view set` is the command that changes the user's canvas.
 
 ## Connect an agent
 
+Run setup from a project containing `workbench.yaml`:
+
+```sh
+workbench mcp setup
+```
+
+Choose the agents to configure and review the paths, launch command and tool
+approvals before applying. Project scope is the default. A Box-configured project
+offers a Box server definition; Box publishes it to the agents each developer
+selects. Direct host choices include `claude`, `codex`, `copilot-vscode`,
+`copilot-cli`, `cursor`, `gemini`, `kiro`, `kilo`, `kimi`, `opencode`, `qwen`,
+`amp` and `droid`. Other surfaces have user-only or manual setup routes, shown
+by the picker when automatic configuration is unavailable.
+
+For an explicit, noninteractive workflow, inspect first:
+
+```sh
+workbench mcp setup --agent claude --agent codex --dry-run --json
+workbench mcp setup --agent claude --agent codex --yes --json
+```
+
+Setup edits only Workbench's server entry and owned approval rules, keeping
+other servers and settings. Rerun it to repair an owned entry. `--remove`
+removes the selected owned registration; it refuses entries edited outside
+setup. `--scope user` explicitly chooses personal configuration, and `--project`
+selects another project. The launch command is `workbench mcp serve` in both
+scopes, so agents must find `workbench` on `PATH`.
+
+Read-only tools are selected for approval by default where the host supports
+per-tool settings. Canvas-changing and interactive tools are left to ask.
+Existing saved choices remain in effect on repair and are labeled in the picker.
+Run `workbench mcp setup --agent codex --reset-tool-permissions` to restore current
+defaults; add `--dry-run --json` to preview without writes. Reset conflicts with
+`--remove` and retains normal setup authorization. Host trust/reload may be
+needed after setup; a successful file write does not prove a live connection.
+No runtime pages or project manager start during setup.
+
 Configure your MCP client to run `workbench mcp serve` from a folder inside
 the project. The server finds `workbench.yaml` in that folder or an ancestor.
 To choose a project explicitly, pass `--project /path/to/project`.
 The `workbench` command must be on `PATH`. Page rendering requires the
 Workbench browser runtime on the host; `capture_unavailable` explains a
 missing runtime or unsupported host.
+
+Run `workbench mcp serve --check` to validate and print the installed tool
+catalog as JSON without opening the MCP transport or starting a project manager.
 
 Every MCP tool has a CLI command that runs the same operation. Add `--json`
 for its structured result. Commands below run from your project root; replace
