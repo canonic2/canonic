@@ -39,12 +39,32 @@ pub(super) fn policy(context: &Context, views: &mut Views, args: &Value) -> Resu
             .iter_mut()
             .find(|row| row.id == id)
             .ok_or(Error::Missing)?;
+        if row.status != "pending" && row.reasons["historical_capture"].is_object() {
+            row.candidate = store.captured_candidate(&row.candidate)?;
+            let mut value = row.public(false);
+            value["before_candidate_id"] = Value::Null;
+            value["after_candidate_id"] = Value::Null;
+            value["capture_availability"] = json!("historical_capture_unavailable");
+            value["authorization_events"] = json!(
+                state
+                    .authorization_events
+                    .iter()
+                    .filter(|event| event["links"]["proposal_id"] == id)
+                    .collect::<Vec<_>>()
+            );
+            return Ok(value);
+        }
         store.hydrate_proposal(row)?;
         let mut value = row.public(false);
         super::apply::present_proposal(context, row, &mut value);
-        value["before_candidate_id"] =
-            json!(views.retain(&row.base_candidate, &row.base_metadata)?);
-        value["after_candidate_id"] = json!(views.retain(&row.candidate, &row.candidate_metadata)?);
+        let (before, after) = views.retain_pair(
+            context,
+            (&row.base_candidate, &row.base_metadata),
+            (&row.candidate, &row.candidate_metadata),
+            None,
+        )?;
+        value["before_candidate_id"] = json!(before);
+        value["after_candidate_id"] = json!(after);
         value["authorization_events"] = json!(
             state
                 .authorization_events
@@ -113,6 +133,13 @@ pub(super) fn transition(
     if name == "policy_receipt" {
         if row.status != "pending" {
             if row.status == "applied" && row.receipt.is_null() {
+                if row.reasons["historical_receipt_unavailable"] == true {
+                    return Ok(
+                        json!({"proposal_id":row.id,"status":row.status,"closed_reason":row.closed_reason,
+                        "receipt":null,"receipt_availability":"historical_receipt_unavailable",
+                        "operator":row.operator,"provenance":row.provenance}),
+                    );
+                }
                 return Err(Error::Missing.into());
             }
             return Ok(

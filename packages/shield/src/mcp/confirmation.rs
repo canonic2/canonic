@@ -9,6 +9,7 @@ use std::{
 
 /// Tools whose call waits for the person's answer to Shield's form.
 pub(super) const CONFIRMED_TOOLS: &[&str] = &[
+    "project_enroll",
     "policy_apply",
     "request_approve",
     "request_deny",
@@ -23,6 +24,7 @@ pub(super) const CONFIRMED_TOOLS: &[&str] = &[
     "history_configure",
     "policy_reject",
     "mcp_setup",
+    "cache_prepare",
 ];
 
 #[derive(Default)]

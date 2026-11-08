@@ -32,7 +32,7 @@ pub(crate) fn apply_confirmation(
     connection: &Connection,
     args: &Value,
 ) -> Result<Option<String>, Error> {
-    if crate::agents::review::resolve(context.agent.as_deref()).confirmation()
+    if crate::agents::review::for_context(context).confirmation()
         == crate::agents::review::Confirmation::ToolPermission
         && connection
             .views
@@ -53,7 +53,7 @@ pub(crate) fn apply_confirmation(
     };
     let changed = super::publication::mcp_changed(&proposal.base_candidate, &proposal.candidate)?;
     if !changed
-        && crate::agents::review::resolve(context.agent.as_deref()).confirmation()
+        && crate::agents::review::for_context(context).confirmation()
             != crate::agents::review::Confirmation::Form
     {
         return Ok(None);
@@ -69,7 +69,7 @@ pub(crate) fn apply_confirmation(
             &serde_json::to_string_pretty(&review)
                 .map_err(|_| Error::Invalid("connection review encoding"))?,
         );
-        message.push_str("\nThis approves the connection configuration. Use mcp_setup for a separate host-settings review and publication.");
+        message.push_str("\nThis approves the connection configuration and publication of its owned connection entries for registered agents. Unrelated settings and native hooks are preserved. Interrupted publication resumes automatically; a conflicting owned edit requires a fresh in-session review.");
     }
     if message.len() > 48 * 1024 {
         return Err(Error::Invalid(
@@ -128,6 +128,28 @@ pub(crate) fn register_fixture(context: &Context, source: &std::path::Path) {
         .unwrap();
 }
 
+#[cfg(test)]
+pub(crate) fn interrupted_setup_fixture(context: &Context, agent: &str) {
+    let root = std::path::Path::new(&context.project_root);
+    let metadata =
+        super::project::metadata(&super::project::checkpoint(context).expect("fixture checkpoint"));
+    let plan = super::integrations::setup::prepare(
+        root,
+        &metadata,
+        super::integrations::IntegrationChoice::agent(agent),
+    )
+    .expect("fixture setup")
+    .expect("setup plan");
+    super::storage::Store::open(root)
+        .expect("fixture store")
+        .update_checkpoint(context, &|| Ok(()), |state| {
+            state.operator["integration_pending"] = json!(plan);
+            Ok(json!({}))
+        })
+        .expect("confirmed pending setup");
+    super::integrations::publish(root, &plan).expect("partial shared publication");
+}
+
 /// An MCP refusal whose recovery differs from the shared review error's.
 struct Refusal {
     code: &'static str,
@@ -184,15 +206,17 @@ pub(crate) struct Connection {
 }
 impl Connection {
     pub(crate) fn enrolled(context: &Context) -> Result<Self, Error> {
-        let mut views = views::Views::new(
+        let views = views::Views::new(
             context
                 .connection_id
                 .clone()
                 .ok_or(Error::Invalid("connection identity required"))?,
         );
-        views.active(context)?;
+        let (state, _) = super::storage::Store::open(std::path::Path::new(&context.project_root))?
+            .read_diagnostic_checkpoint()?;
+        state.check(context)?;
         Ok(Self {
-            owner: Mutex::new(Some(super::proposal_lifecycle::Lease::new(context)?)),
+            owner: Mutex::new(None),
             views: Mutex::new(views),
             admin: Mutex::new(BTreeMap::default()),
             admin_sequence: std::sync::atomic::AtomicU64::new(0),
@@ -229,6 +253,46 @@ fn admin_key(name: &str, args: &Value) -> String {
     crate::policy::fingerprint(json!([name, args]).to_string().as_bytes())
 }
 
+/// Mutating calls resume only a previously human-confirmed plan.
+/// Explicit conflict review/cancellation must inspect that plan before writes.
+pub(crate) fn resume_setup(context: &Context, name: &str, args: &Value) -> Result<bool, Error> {
+    if !schemas::mutates(name)
+        || (name == "mcp_setup" && (!args["pending"].is_null() || args["dry_run"] == true))
+    {
+        return Ok(false);
+    }
+    super::integrations::setup::resume_for(context, setup_resume_only(name, args))
+}
+
+pub(crate) fn setup_resume_only(name: &str, args: &Value) -> bool {
+    name == "mcp_setup" && args == &json!({})
+}
+
+pub(crate) fn setup_resume_status(
+    context: &Context,
+    connection: &Connection,
+    error: Option<&Error>,
+    checkpoint: Checkpoint<'_>,
+) -> Value {
+    let mut value = call_with_bound_confirmation(
+        context,
+        connection,
+        "status",
+        &json!({}),
+        checkpoint,
+        false,
+        None,
+    );
+    if let Some(error) = error {
+        value["data"]["setup_error"] = json!(error.to_string());
+    }
+    value
+}
+
+fn unconfirmed_cache_rebuild(name: &str, args: &Value) -> bool {
+    name == "cache_prepare" && args.get("cache_dir").is_none_or(Value::is_null)
+}
+
 pub(crate) fn discard_admin(connection: &Connection, binding: u64) {
     if let Ok(mut pending) = connection.admin.lock() {
         pending.remove(&binding);
@@ -243,7 +307,7 @@ pub(crate) fn admin_confirmation(
     args: &Value,
     checkpoint: Checkpoint<'_>,
 ) -> Result<Option<(String, u64)>, Error> {
-    if !super::admin::supports(name) || name == "cache_prepare" {
+    if !super::admin::supports(name) || unconfirmed_cache_rebuild(name, args) {
         return Ok(None);
     }
     if name == "registry_add" {
@@ -253,7 +317,7 @@ pub(crate) fn admin_confirmation(
         return Err(Error::ApprovalRequired);
     }
     if (name == "mcp_setup" && args["dry_run"] == true)
-        || crate::agents::review::resolve(context.agent.as_deref()).confirmation()
+        || crate::agents::review::for_context(context).confirmation()
             == crate::agents::review::Confirmation::Terminal
     {
         return Ok(None);
@@ -296,7 +360,7 @@ fn admin_call(
     confirmed: bool,
     binding: Option<u64>,
 ) -> Result<Value, Error> {
-    if name == "cache_prepare" {
+    if unconfirmed_cache_rebuild(name, args) {
         return super::admin::prepare(context, name, args, checkpoint)?.commit(context, checkpoint);
     }
     if name == "registry_add" {
@@ -370,7 +434,9 @@ pub(crate) fn call_with_bound_confirmation(
         if documentation::handles(name) {
             return documentation::call(name, args, checkpoint).map_err(Failure::Documentation);
         }
-        connection.ensure_owner(context)?;
+        if !matches!(name, "status" | "doctor") {
+            connection.ensure_owner(context)?;
+        }
         if super::admin::supports(name) {
             return Ok(admin_call(
                 context, connection, name, args, checkpoint, confirmed, binding,
@@ -426,7 +492,7 @@ pub(crate) fn settle_apply_failure(
     args: &Value,
     error: &Error,
 ) -> Option<Value> {
-    let unsupported = crate::agents::review::resolve(context.agent.as_deref()).confirmation()
+    let unsupported = crate::agents::review::for_context(context).confirmation()
         == crate::agents::review::Confirmation::Terminal;
     if matches!(error, Error::Missing | Error::Locked | Error::Io(_))
         || matches!(error, Error::ApprovalRequired) && !unsupported
@@ -476,6 +542,7 @@ fn result_envelope(context: &Context, name: &str, result: Result<Value, Failure>
             } else {
                 !documentation::handles(name) && super::model::redact(&mut data)
             };
+            let redacted = redacted || data["redacted"] == true;
             let revision = data.get("policy_revision").cloned().unwrap_or(Value::Null);
             let missing = data.get("missing").cloned().unwrap_or_else(|| json!([]));
             let truncated = data
@@ -572,6 +639,23 @@ pub(crate) fn admin_error(context: &Context, name: &str, error: &Error) -> Value
             value["error"]["message"] = json!(format!(
                 "This administrative review expired or its inputs changed. Call {name} again to prepare a fresh review; the person must confirm it."
             ));
+        } else if name == "mcp_setup"
+            && matches!(context.agent.as_deref(), Some("claude" | "codex"))
+            && matches!(
+                error,
+                Error::Invalid(
+                    "Shield hook group is unowned or manually changed"
+                        | "unowned Codex Shield MCP table"
+                        | "Codex Shield MCP table was manually changed"
+                        | "shield MCP entry is unowned or manually changed; resolve the conflict before setup"
+                )
+            )
+        {
+            value["error"]["operator_route"] = json!("mcp_setup");
+            value["error"]["retry_arguments"] = json!({"agents":[context.agent],"repair":true});
+            value["error"]["message"] = json!(
+                "Shield's native registration conflicts with the current files. Call mcp_setup with the returned retry_arguments to review an exact reconciliation in this session. The user must approve it; unrelated hooks and servers are preserved."
+            );
         }
     }
     value
@@ -579,10 +663,10 @@ pub(crate) fn admin_error(context: &Context, name: &str, error: &Error) -> Value
 
 fn failure(context: &Context, error: &Error) -> Value {
     let (code, mut message) = error_fields(error);
-    let route = match error {
+    let route: Option<String> = match error {
         Error::ApprovalRequired => {
             // The adapter's guidance is the recovery in both structured and text results.
-            let adapter = crate::agents::review::resolve(context.agent.as_deref());
+            let adapter = crate::agents::review::for_context(context);
             message = adapter.guidance().required.into();
             if adapter.confirmation() == crate::agents::review::Confirmation::Terminal {
                 None
@@ -591,9 +675,12 @@ fn failure(context: &Context, error: &Error) -> Value {
             }
         }
         Error::StaleSnapshot => Some("policy_propose".into()),
-        Error::Io(_) => Some("shield doctor".into()),
+        Error::Io(_) => Some("doctor".into()),
         Error::Capacity { kind, .. } => kind.operator_route().map(Into::into),
-        Error::CacheUnavailable => crate::agent_message::cache_repair(&context.project_root),
+        Error::CacheUnavailable => {
+            message = "Compiled policy cache is unavailable. Call cache_prepare to rebuild committed policy. If its saved location is unusable, supply an absolute cache_dir for a new private location and obtain in-session user confirmation, then retry the original request.".into();
+            Some("cache_prepare".into())
+        }
         Error::Dependency(canonic_registry_kit::resolution::Error::Unenrolled(_)) => {
             Some("shield registry add".into())
         }
@@ -750,6 +837,7 @@ fn capacity_message(kind: CapacityKind, pending: usize, retained: usize, limit: 
 /// Invalid-input messages; each names what to correct without submitted values.
 fn invalid_input_message(error: &Error) -> String {
     match error {
+        Error::StateFormat { .. } | Error::StateCorrupt { .. } => error.to_string(),
         Error::Policy(error @ crate::policy::Error::McpDefaults { .. }) => {
             format!("Invalid input: {error}")
         }
@@ -837,12 +925,19 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
 /// Status, bound to the active captured policy, or the doctor report.
 fn status(context: &Context, views: &mut views::Views, doctor: bool) -> Result<Value, Error> {
     if doctor {
-        return project::doctor(context);
+        let mut data = project::doctor(context)?;
+        integration_recovery(context, &mut data);
+        return Ok(data);
     }
     let mut data = project::status(context)?;
+    integration_recovery(context, &mut data);
+    if data["checkpoint_upgrade_pending"] == true {
+        data["active_candidate_id"] = Value::Null;
+        return Ok(data);
+    }
     if data["repair_needed"] == true
         && data["coverage"]["repair_needed"] != true
-        && crate::agents::review::resolve(context.agent.as_deref()).confirmation()
+        && crate::agents::review::for_context(context).confirmation()
             != crate::agents::review::Confirmation::Terminal
         && changes::project_files::adoption_available(context)?
     {
@@ -857,6 +952,58 @@ fn status(context: &Context, views: &mut views::Views, doctor: bool) -> Result<V
     data["policy_revision"] = json!(captured.revision()?);
     data["active_candidate_id"] = json!(id);
     Ok(data)
+}
+
+fn integration_recovery(context: &Context, data: &mut Value) {
+    if crate::agents::review::for_context(context).confirmation()
+        == crate::agents::review::Confirmation::Terminal
+        || !data["repair_route"]
+            .as_str()
+            .is_some_and(|route| route.starts_with("shield mcp setup"))
+    {
+        return;
+    }
+    let resume = data["coverage"]["diagnostics"]
+        .as_array()
+        .is_some_and(|rows| {
+            rows.iter()
+                .any(|row| row == "confirmed setup requires repair")
+        });
+    let args = if resume {
+        json!({"pending":"review"})
+    } else {
+        let mut affected = ["installed_integrations", "registered_integrations"]
+            .into_iter()
+            .flat_map(|key| data["coverage"][key].as_array().into_iter().flatten())
+            .filter(|row| row["status"] == "degraded")
+            .filter_map(|row| row["agent"].as_str())
+            .filter(|agent| crate::agents::find(agent).is_some())
+            .collect::<std::collections::BTreeSet<_>>();
+        let box_status = data["coverage"]["box_integration"]["status"].as_str();
+        if matches!(box_status, Some("degraded" | "missing" | "changed"))
+            || (box_status.is_some()
+                && data["coverage"]["diagnostics"]
+                    .as_array()
+                    .is_some_and(|rows| {
+                        rows.iter()
+                            .any(|row| row.as_str().is_some_and(|text| text.contains("Box ")))
+                    }))
+        {
+            affected.insert("box");
+        }
+        if data["coverage"]["legacy_interceptor"]["status"] == "degraded" {
+            affected.insert("claude");
+        }
+        if affected.is_empty() {
+            return;
+        }
+        json!({"agents":affected})
+    };
+    data["repair_route"] = json!("mcp_setup");
+    data["repair_arguments"] = args;
+    if resume {
+        data["pending_setup"] = json!({"review":{"tool":"mcp_setup","arguments":{"pending":"review"}},"cancel":{"tool":"mcp_setup","arguments":{"pending":"cancel"}},"authority":"Both actions require a fresh human confirmation; unrelated settings are preserved."});
+    }
 }
 
 /// Tools with MCP-specific refusals first, then the shared review tools.
@@ -1211,12 +1358,7 @@ fn propose_input(
         input,
         checkpoint,
         &mut |base, base_meta, after, meta, plans| {
-            let (base_plan, next_plan) =
-                plans.map_or((None, None), |(base, next)| (Some(base), Some(next)));
-            handles = Some((
-                views.retain_prepared(base, base_meta, base_plan)?,
-                views.retain_prepared(after, meta, next_plan)?,
-            ));
+            handles = Some(views.retain_pair(context, (base, base_meta), (after, meta), plans)?);
             Ok(())
         },
         &|proposal| {

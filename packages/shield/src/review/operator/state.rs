@@ -43,8 +43,9 @@ pub(super) fn initialize(
         configuration::Bundle::capture(r#"{"schema_version":1,"packs":[]}"#, &[], None)?
     };
     let candidate = json!(candidate);
+    review::changes::historical::validate(&Value::Null, &candidate)?;
     let config = configuration::layers::merged(&candidate)?;
-    let installed = project_file_rows(&config, &candidate)?;
+    let installed = review::integrations::project_sources::installed(&config, &candidate)?;
     let mut meta = json!({"sources":{},"default":null,"installed":installed,"projection":null});
     let existing = json!({"installed":meta["installed"].clone()});
     if let Some(cache_dir) = cache_dir {
@@ -113,21 +114,6 @@ pub(super) fn initialize(
     receipt["committed"] = json!(true);
     receipt["repair_needed"] = json!(repair || receipt["repair_needed"] == true);
     Ok(receipt)
-}
-
-/// Installed rows for packs captured from existing project files. They are
-/// written to the portable lock, so their source identity and location name
-/// the project's own `.shield` folder, never this machine's path to it.
-fn project_file_rows(config: &Value, candidate: &Value) -> Result<Vec<Value>, Error> {
-    let source_identity = policy::fingerprint(b"shield-project-files");
-    let rows = config["packs"]
-        .as_array()
-        .ok_or(Error::Invalid("packs missing"))?;
-    Ok(rows.iter().enumerate().map(|(index, row)| {
-        let digest = policy::fingerprint(candidate["packs"][index].as_str().unwrap_or_default().as_bytes());
-        let seed = policy::fingerprint(format!("{source_identity}:{digest}:{index}").as_bytes());
-        json!({"selector":format!("pack:{}-{}-{}-{}-{}",&seed[..8],&seed[8..12],&seed[12..16],&seed[16..20],&seed[20..32]),"id":row["id"],"version":row["version"],"profile":row["profile"],"digest":digest,"source_identity":source_identity,"source_alias":"project-files","source":{"identity":source_identity,"location":".shield","key":null},"pinned":true,"direct":true})
-    }).collect())
 }
 
 pub(super) fn review_candidate(

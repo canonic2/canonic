@@ -1,7 +1,39 @@
 //! Real file bindings reject replacement and malformed normalized authority claims.
 use super::*;
+mod bootstrap;
 #[cfg(unix)]
 use assert_fs::prelude::*;
+
+#[test]
+fn legacy_receipt_requires_retained_interceptor_evidence_not_a_caller_label() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let bundle =
+        crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
+    let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
+    let path = root.path().join("acme.txt");
+    fs::write(&path, "Acme text").unwrap();
+    for (id, host, operation) in [
+        ("register-1", Value::Null, json!({"kind":"register"})),
+        (
+            "read-1",
+            json!({"agent":"claude-mod","session_id":"acme-session",
+            "tool_use_id":"read-1","consumer_id":"acme-session","event":"PreToolUse"}),
+            json!({"kind":"read-text","path":path,"offset":null,"limit":null}),
+        ),
+    ] {
+        let (receipt, code) = evaluate(
+            root.path(),
+            &serde_json::to_vec(&json!({
+                "protocol_version":1,"request_id":id,"expected_project_id":context.project_id,
+                "cwd":root.path(),"operation":operation,"host":host,"approval_request_id":null,
+            }))
+            .unwrap(),
+        );
+        assert_eq!(code, 0, "{receipt}");
+        assert_eq!(receipt.as_object().unwrap().len(), 9, "{receipt}");
+        assert!(receipt.get("diagnostics").is_some());
+    }
+}
 
 #[test]
 #[cfg(unix)]

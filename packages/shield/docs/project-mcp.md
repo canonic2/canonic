@@ -92,8 +92,29 @@ refuse; inspect the result before requesting a fresh review.
 - `mcp_setup` accepts registered `agents`, optional `remove` and `dry_run`.
   Dry runs return the captured review without writing. Setup is project scoped;
   restart the affected connection after changing its registration.
+  For conflicting or duplicate Shield hooks or a conflicting native Shield MCP
+  registration, pass `repair: true` with explicit `claude` or `codex` targets.
+  The user reviews the exact replacement before publication. Other hooks,
+  including entries in the same group, and other servers survive.
+  Interrupted confirmed setup resumes automatically on the next mutating MCP request,
+  including `mcp_setup {}`, preserving unrelated settings added since confirmation.
+  Status, doctor and documentation calls preserve pending setup and host files.
+  If an owned fragment conflicts, use `mcp_setup {"pending":"review"}` for a new human review of
+  its replacement, or `mcp_setup {"pending":"cancel"}` to review cancellation.
+  Cancellation preserves manual edits and policy, approvals and history.
+  Declining or dismissing the confirmation leaves pending work available for
+  another decision. Unchanged committed private connections remain usable while other
+  setup work is pending.
+  Selecting agents updates only those integrations; omitted agents keep their
+  settings and registrations, even when their files need attention. Status
+  reports each agent separately. Changes to a shared launcher location or the
+  saved tool permissions include the affected integrations in a broader review
+  with an explanation before anything is published.
 - `cache_prepare {}` rebuilds disposable compiled data from committed policy.
   It changes no authority and needs no confirmation.
+  If the saved cache location is unusable, supply an absolute `cache_dir` for
+  a new private location. This location change requires in-session confirmation;
+  it preserves the active policy and does not delete the old location.
 
 `request_list` and `request_show` include native hook requests as well as read
 and execution requests. `request_deny` asks the user to deny a pending request
@@ -448,8 +469,13 @@ Shield approval flow and needs no terminal review. Existing verified pack bytes
 are required; new releases still use pack acquisition. Changes to MCP connection
 settings use a host confirmation form on both Claude and Codex. The form shows
 captured before/after settings, keeping private local values out of public
-proposal arguments and receipts. After activation, call `mcp_setup` for the
-separate host-settings review and publication. Keep both steps in the conversation.
+proposal arguments, comparisons and receipts. Approval also publishes the
+owned connection entries for registered agents. Interrupted publication resumes
+automatically on a subsequent mutating MCP request or cached launcher invocation; unchanged
+connections remain usable. Conflicting owned settings can be reviewed through
+`mcp_setup {"pending":"review"}` or cancelled in the same session. New agent
+registration uses `mcp_setup`. Host connection reload behavior determines
+when an already running connector is replaced.
 Missing or linked policy files keep the `shield policy review` repair route;
 adoption requires regular files.
 
@@ -513,6 +539,10 @@ the conversation; sending the user to a terminal is a product bug.
 Inspection and proposal preparation run without prompts by default; setup
 preserves any tool-permission choices you changed. Native hook messages keep
 proposal payloads separate from their user-facing explanation.
+Native hooks leave Shield's own MCP tools reachable even when the hook's
+project state is missing or unreadable. The MCP server still checks its own
+project authority and requires approval for changes; ordinary tools remain blocked
+when the hook cannot verify their authorization.
 
 ### Replay and withdrawal
 
@@ -689,9 +719,11 @@ for in-session confirmation.
 
 `status` and `policy_show` expose `active_candidate_id`. Submission or
 inspection of a proposal exposes `before_candidate_id` and `after_candidate_id`.
-Handles retain immutable bytes until the connection closes; policy activation
-cannot retarget them. Reconnect requires new handles. Unknown/foreign handles return
-`candidate_unavailable`. Each connection retains at most 256 distinct snapshots;
+Handles identify immutable bytes; policy activation cannot retarget them.
+Pending reviews preserve their exact captures. Under storage pressure, old
+inspection handles may expire; `candidate_unavailable` means to request fresh
+handles through `status` or `policy_show` on the same connection. Unknown and
+foreign handles also refuse. Each connection retains at most 256 snapshots;
 capacity is reserved before persisting a proposal that needs new handles.
 
 `policy_evaluate` accepts typed input, its preserved vendor `original_input`, cwd
@@ -753,6 +785,9 @@ evaluation over stdio using MCP `2025-06-18`, `2025-11-25`, and per-request
 launch `shield mcp serve --project /workspace/acme` explicitly, replacing
 the example path with an initialized project. Startup failure exits 1 with a
 fixed stderr diagnostic and empty stdout.
+Launch from the selected project's directory. When the working directory is
+inside a different configured project, Shield refuses the conflicting selection
+unless a reviewed move/copy launch binding resolves it.
 
 A launch may supply an agent and an explicitly mapped host session through
 internal registration arguments; tool input cannot appoint either. Client names
@@ -803,10 +838,12 @@ an `invalid_input` tool result. Frames are limited to 524,288 bytes plus the
 newline; responses to 4 MiB plus newline; pages to 1 MiB. Each connection's snapshot handles
 may pin up to 1 GiB of source and compiled bytes, enough for the largest bundle and
 plan that policy limits allow; retained cursor views have a 64 MiB budget and at
-most 256 continuation cursors. Used cursors remain until disconnection; replaying
-one can allocate another continuation. Exhaustion returns `overloaded`; reconnect
-and start a new list to release the old views. No capacity limit silently evicts a
-live handle. A session accepts at most 1,024 inbound messages; the next one
+most 256 continuations and page receipts. Retrying a retained cursor returns the
+same page and successor. Completed traversals release their full lists. Old page
+receipts and abandoned continuations are reclaimed automatically; if a cursor
+expires, restart that list without `cursor` on the same connection. A view that
+cannot fit alongside its replay receipt returns `overloaded`. Pending-review captures
+remain protected. A session accepts at most 1,024 inbound messages; the next one
 ends it with `-32000` "Session message limit reached".
 
 One worker processes tools while the dispatcher handles input and ping. At most

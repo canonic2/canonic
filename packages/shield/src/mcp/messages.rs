@@ -5,14 +5,24 @@ use std::fmt::Write as _;
 
 /// Initialization guidance uses the enrolled session agent, not client display metadata.
 pub(super) fn instructions(agent: Option<&str>) -> String {
+    instructions_with(crate::agents::review::resolve(agent))
+}
+
+pub(super) fn instructions_for(context: &crate::review::Context) -> String {
+    if context.confirmed_mcp_forms && context.surface == "mcp" {
+        instructions_with(crate::agents::review::for_context(context))
+    } else {
+        instructions(context.agent.as_deref())
+    }
+}
+
+fn instructions_with(adapter: &dyn crate::agents::review::ReviewAdapter) -> String {
     let common = "Shield manages project permissions. For requested reviews, start with suggestion_list; inspect relevant history_list, rule_list or policy_evaluate evidence. \
 Respect incomplete evidence, pending proposals and deferred reviews. For authorized custom rules, use policy_propose and its schema examples; preserve scope and deny boundaries. \
 For packs, use pack_list and pack_show to inspect installed selections, pack_update to update one reference or all tracking packs when omitted, and pack_remove to prepare removal; pack_configure accepts direct edits, named variables or bare guided settings and overrides. pack_add accepts known typed settings through set. \
 Previews and proposals grant no authority; activation requires user-approved policy_apply. Keep approval and setup in this conversation through Shield tools and host confirmation; sending the user to a terminal is a product bug, not a recovery solution. \
 Follow returned request_approve routes for one-time approval, then repeat the approved call once unchanged. For a planned batch of privileged native commands, inspect session_grant_list, propose a bounded exact batch or closed argv family with session_grant_propose, then copy apply_arguments to session_grant_approve for the user's form. Prefer temporary session permission for one task and persistent policy only for future sessions. Inspect existing grants first, never repeat a declined offer, and never bypass refusals. ";
-    let host = crate::agents::review::resolve(agent)
-        .guidance()
-        .instructions;
+    let host = adapter.guidance().instructions;
     format!(
         "{common}{} {host}Chat replies cannot replace host confirmation.",
         crate::proposal_draft::PACK_SETUP_GUIDANCE

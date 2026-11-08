@@ -398,7 +398,7 @@ impl Candidate {
         }
         let mut retained = Vec::new();
         for (selection, bytes) in self.disabled.iter().zip(disabled) {
-            let pack = Pack::from_yaml(bytes)?;
+            let pack = Pack::from_retained_yaml(bytes)?;
             if selection.id != pack.id() || selection.version != pack.version() {
                 return Err(Error::ArtifactMismatch);
             }
@@ -410,8 +410,11 @@ impl Candidate {
             let entry = selection.locked(bytes);
             let previous = previous
                 .and_then(|snapshot| snapshot.packs.iter().find(|pack| pack.id() == entry.id));
-            let mut pack = Pack::from_yaml_reusing(bytes, &selection.binding(), false, previous)
-                .map_err(|error| error.in_selection(&selection.id))?;
+            // Candidate capture is an untrusted source preview. Acquisition
+            // establishes pack trust separately using the strict current codec.
+            let mut pack =
+                Pack::from_retained_yaml_reusing(bytes, &selection.binding(), false, previous)
+                    .map_err(|error| error.in_selection(&selection.id))?;
             if selection.id != pack.id() || selection.version != pack.version() {
                 return Err(Error::ArtifactMismatch);
             }
@@ -476,21 +479,19 @@ impl Candidate {
 /// shared rule with its ID.
 fn custom_rules(shared: Option<&str>, local: Option<&str>) -> Result<Option<CustomRules>, Error> {
     let Some(local) = local else {
-        return shared.map(CustomRules::from_yaml).transpose();
+        return shared.map(CustomRules::from_retained_yaml).transpose();
     };
-    CustomRules::from_yaml(local)?;
-    let field = |source: &str, name: &str| -> Result<Vec<serde_json::Value>, Error> {
-        let document: serde_json::Value = policy::parse(source)?;
-        Ok(document[name].as_array().cloned().unwrap_or_default())
+    let normalized = |source: &str| CustomRules::from_retained_yaml(source)?.normalized_document();
+    let local = normalized(local)?;
+    let shared = shared.map(normalized).transpose()?;
+    let field = |document: &serde_json::Value, name: &str| -> Vec<serde_json::Value> {
+        document[name].as_array().cloned().unwrap_or_default()
     };
-    let (mut merged, directory_options) = match shared {
-        Some(shared) => {
-            CustomRules::from_yaml(shared)?;
-            (field(shared, "rules")?, field(shared, "directory_options")?)
-        }
+    let (mut merged, directory_options) = match shared.as_ref() {
+        Some(shared) => (field(shared, "rules"), field(shared, "directory_options")),
         None => (Vec::new(), Vec::new()),
     };
-    for rule in field(local, "rules")? {
+    for rule in field(&local, "rules") {
         match merged.iter_mut().find(|r| r["id"] == rule["id"]) {
             Some(existing) => *existing = rule,
             None => merged.push(rule),
@@ -503,7 +504,7 @@ fn custom_rules(shared: Option<&str>, local: Option<&str>) -> Result<Option<Cust
     };
     let directory_options = policy::directories::join(
         &declarations(directory_options)?,
-        &declarations(field(local, "directory_options")?)?,
+        &declarations(field(&local, "directory_options"))?,
     )?;
     let directory_options = serde_json::to_value(directory_options)
         .ok()

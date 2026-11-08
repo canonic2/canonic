@@ -29,6 +29,26 @@ struct ContributingScope {
 struct EffectivePack {
     scope: Scope,
     selection: LockedPack,
+    /// The original single-project composition encoded an empty shadow list.
+    /// Retain it only when reconstructing that exact recorded identity.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "unshadowed"
+    )]
+    shadowed: Option<Vec<serde_json::Value>>,
+}
+
+fn unshadowed<'de, D: serde::Deserializer<'de>>(
+    input: D,
+) -> Result<Option<Vec<serde_json::Value>>, D::Error> {
+    let values = Vec::<serde_json::Value>::deserialize(input)?;
+    if !values.is_empty() {
+        return Err(serde::de::Error::custom(
+            "historical shadowed scopes require separate review",
+        ));
+    }
+    Ok(Some(values))
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -60,6 +80,7 @@ pub fn compose(inputs: &[(Scope, Lock)]) -> Result<Effective, Error> {
             .map(|selection| EffectivePack {
                 scope: *scope,
                 selection: selection.clone(),
+                shadowed: None,
             })
             .collect(),
         custom_rules: lock
@@ -75,6 +96,28 @@ pub fn compose(inputs: &[(Scope, Lock)]) -> Result<Effective, Error> {
 }
 
 impl Effective {
+    /// Select only a known canonical encoding whose digest already matches the
+    /// recorded revision. This does not reinterpret or drop another scope.
+    pub(super) fn for_revision(mut self, expected: &str) -> Result<Self, Error> {
+        if self.revision()? == expected {
+            return Ok(self);
+        }
+        if self.scopes.len() != 1 || self.scopes[0].scope != Scope::Project {
+            return Err(Error::Contract(
+                "historical composition requires one project scope",
+            ));
+        }
+        for pack in &mut self.packs {
+            pack.shadowed = Some(Vec::new());
+        }
+        if self.revision()? != expected {
+            return Err(Error::Contract(
+                "recorded revision differs from retained source",
+            ));
+        }
+        Ok(self)
+    }
+
     pub(crate) fn mcp_connections(&self) -> &crate::mcp_connections::Connections {
         &self.scopes[0].lock.document.mcp
     }

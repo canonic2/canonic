@@ -236,6 +236,68 @@ pub(super) fn build_candidate(
         Some(evaluator),
     )
 }
+
+/// Bind validated compiled bytes without accessing their disposable destination.
+pub(super) fn describe_candidate(
+    context: &Context,
+    candidates: &std::collections::BTreeMap<String, Value>,
+    revision: &str,
+    operator: &Value,
+    evaluator: &Evaluator,
+) -> Result<Artifact, Error> {
+    let directory = selected_directory(operator, None)?;
+    let directory = if directory.is_absolute() {
+        directory
+    } else {
+        std::env::current_dir()?.join(directory)
+    };
+    if !operator["compiled_cache_root"].is_string() && directory.starts_with(&context.project_root)
+    {
+        return Err(Error::Invalid(
+            "compiled cache must be an absolute directory outside the project",
+        ));
+    }
+    describe(
+        Source {
+            project_root: &context.project_root,
+            project_id: &context.project_id,
+            candidates,
+            policy_revision: revision,
+            operator,
+        },
+        directory,
+        evaluator,
+    )
+}
+
+fn selected_directory(operator: &Value, directory: Option<&Path>) -> Result<PathBuf, Error> {
+    directory
+        .map(Path::to_path_buf)
+        .or_else(|| operator["compiled_cache_root"].as_str().map(PathBuf::from))
+        .map_or_else(default_directory, Ok)
+}
+
+fn describe(
+    state: Source<'_>,
+    directory: PathBuf,
+    evaluator: &Evaluator,
+) -> Result<Artifact, Error> {
+    if evaluator.revision() != state.policy_revision {
+        return Err(Error::StaleSnapshot);
+    }
+    let bytes = evaluator.compiled_bytes();
+    Ok(Artifact {
+        directory,
+        project_key: project_key(state.project_root, state.project_id),
+        plan_key: plan_key(
+            &super::storage::sources::map_digest(state.candidates),
+            state.policy_revision,
+        ),
+        digest: compiled_digest(bytes),
+        length: bytes.len() as u64,
+    })
+}
+
 #[derive(Clone, Copy)]
 struct Source<'a> {
     project_root: &'a str,
@@ -251,14 +313,7 @@ fn build_source(
 ) -> Result<Artifact, Error> {
     let _trace = crate::diagnostics::trace::span("cache.build");
     let explicit = directory.is_some() || state.operator["compiled_cache_root"].is_string();
-    let directory = directory
-        .map(Path::to_path_buf)
-        .or_else(|| {
-            state.operator["compiled_cache_root"]
-                .as_str()
-                .map(PathBuf::from)
-        })
-        .map_or_else(default_directory, Ok)?;
+    let directory = selected_directory(state.operator, directory)?;
     let directory = normalize(&directory)?;
     if !explicit && directory.starts_with(state.project_root) {
         return Err(Error::Invalid(
@@ -270,27 +325,17 @@ fn build_source(
     if directory.starts_with(state.project_root) {
         atomic_write(&directory.join(".gitignore"), b"*\n!.gitignore\n")?;
     }
-    let project_key = project_key(state.project_root, state.project_id);
     let candidate_digest = super::storage::sources::map_digest(state.candidates);
-    let plan_key = plan_key(&candidate_digest, state.policy_revision);
     let built_evaluator;
     let evaluator = if let Some(evaluator) = prepared {
         evaluator
     } else {
-        built_evaluator = Evaluator::new(snapshots(state.candidates)?)?;
+        built_evaluator =
+            Evaluator::new_for_revision(snapshots(state.candidates)?, state.policy_revision)?;
         &built_evaluator
     };
-    if evaluator.revision() != state.policy_revision {
-        return Err(Error::StaleSnapshot);
-    }
+    let artifact = describe(state, directory, evaluator)?;
     let bytes = evaluator.compiled_bytes();
-    let artifact = Artifact {
-        directory,
-        project_key,
-        plan_key,
-        digest: compiled_digest(bytes),
-        length: bytes.len() as u64,
-    };
     let partition = artifact
         .directory
         .join("compiled")
@@ -458,6 +503,16 @@ pub(super) fn prepare_committed(
     rebuild(context, None, checkpoint, "derived-cache")
 }
 
+/// An in-session reviewed location change can recover an unusable cache root.
+/// Source and activation still come exclusively from the committed checkpoint.
+pub(super) fn relocate_committed(
+    context: &Context,
+    directory: &Path,
+    checkpoint: super::Checkpoint<'_>,
+) -> Result<Value, Error> {
+    rebuild(context, Some(directory), checkpoint, "derived-cache")
+}
+
 /// Reconstruct disposable data from the committed source, never editable projections.
 pub(super) fn recover(context: &Context, checkpoint: super::Checkpoint<'_>) -> Result<(), Error> {
     rebuild(context, None, checkpoint, "derived-cache").map(|_| ())
@@ -487,7 +542,12 @@ fn rebuild(
     // Recovery must keep the active cache location, even if projections changed.
     let directory = directory.unwrap_or(&active.compiled.directory);
     checkpoint()?;
-    let artifact = build(&state, Some(directory))?;
+    let artifact = build(&state, Some(directory)).map_err(|error| match error {
+        // Only this build touches the disposable cache. Authoritative source
+        // reads above and checkpoint publication below keep their own errors.
+        Error::Io(_) => Error::CacheUnavailable,
+        other => other,
+    })?;
     store.update_checkpoint(context, checkpoint, |current| {
         let active = current.active.as_mut().ok_or(Error::StaleSnapshot)?;
         if active.activation_id() != activation {

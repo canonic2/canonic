@@ -3,7 +3,24 @@ use crate::{
     application::{self, Error},
     configuration::{self, Candidate},
 };
+use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
+
+/// Local project artifacts acquire no registry trust during initial review.
+pub(in crate::review) fn installed(
+    config: &Value,
+    candidate: &Value,
+) -> Result<Vec<Value>, crate::review::Error> {
+    let source_identity = crate::policy::fingerprint(b"shield-project-files");
+    let rows = config["packs"]
+        .as_array()
+        .ok_or(crate::review::Error::Invalid("packs missing"))?;
+    Ok(rows.iter().enumerate().map(|(index, row)| {
+        let digest = crate::policy::fingerprint(candidate["packs"][index].as_str().unwrap_or_default().as_bytes());
+        let seed = crate::policy::fingerprint(format!("{source_identity}:{digest}:{index}").as_bytes());
+        json!({"selector":format!("pack:{}-{}-{}-{}-{}",&seed[..8],&seed[8..12],&seed[12..16],&seed[16..20],&seed[20..32]),"id":row["id"],"version":row["version"],"profile":row["profile"],"digest":digest,"source_identity":source_identity,"source_alias":"project-files","source":{"identity":source_identity,"location":".shield","key":null},"pinned":true,"direct":true})
+    }).collect())
+}
 
 /// Capture config.yml with the optional uncommitted config.local.yml beside it,
 /// each file's bytes as read, with every artifact either layer names.

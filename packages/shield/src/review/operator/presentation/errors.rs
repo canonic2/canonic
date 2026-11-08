@@ -144,6 +144,20 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             r
         }
         Error::UnsupportedReleases(pack) => unsupported_releases(pack),
+        Error::StateCorrupt { path } => corrupt_state(path),
+        Error::StateFormat { path, observed } => {
+            let mut report = Report::new(
+                "Shield cannot read this checkpoint format",
+                "This CLI supports schema 1 and retained historical formats.",
+                &[
+                    "Keep the checkpoint unchanged; do not delete it or re-enroll the project.",
+                    "Use a Shield version that supports this format.",
+                ],
+            );
+            report.field("Checkpoint", path.display().to_string());
+            report.field("Observed schema", observed.clone());
+            report
+        }
         Error::NotPortable(_) => not_portable(),
         // Only the agent's MCP group approval refuses this way.
         Error::Grouped { reason, .. } => Report::new(
@@ -183,6 +197,16 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             limit,
         } => capacity(*kind, *pending, *retained, *limit),
     }
+}
+
+fn corrupt_state(path: &std::path::Path) -> Report {
+    let mut report = Report::new(
+        "Corrupt review state",
+        "The checkpoint could not be decoded as a valid review state.",
+        &["Preserve the checkpoint for recovery; do not delete it or re-enroll the project."],
+    );
+    report.field("Checkpoint", path.display().to_string());
+    report
 }
 
 fn dependency(error: &canonic_registry_kit::resolution::Error) -> Report {

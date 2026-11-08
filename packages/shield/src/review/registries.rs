@@ -50,6 +50,42 @@ pub(super) fn main_source() -> Result<Source, Error> {
 /// Authenticates a source's catalog and admits it to the project's retained checkpoints.
 pub(super) fn checked_catalog(context: &Context, source: &Source) -> Result<Catalog, Error> {
     let catalog = catalog(&context.fetcher, source)?;
+    retain_catalog(context, &catalog)?;
+    Ok(catalog)
+}
+
+/// Load only the selected pack's version metadata and retain its observed digests.
+pub(super) fn checked_history(
+    context: &Context,
+    source: &Source,
+    catalog: &mut Catalog,
+    id: &names::PackId,
+    version: Option<&semver::Version>,
+) -> Result<(), Error> {
+    let before = catalog.entries().len();
+    context
+        .fetcher
+        .history(source, catalog, id, version)
+        .map_err(|error| acquisition_error(error, source.is_signed()))?;
+    if catalog.entries().len() == before {
+        Ok(())
+    } else {
+        retain_catalog(context, catalog)
+    }
+}
+
+pub(super) fn history(
+    fetcher: &Fetcher,
+    source: &Source,
+    catalog: &mut Catalog,
+    id: &names::PackId,
+) -> Result<(), Error> {
+    fetcher
+        .history(source, catalog, id, None)
+        .map_err(|error| acquisition_error(error, source.is_signed()))
+}
+
+fn retain_catalog(context: &Context, catalog: &Catalog) -> Result<(), Error> {
     // Catalog admission changes only anti-rollback checkpoints, never policy or
     // grants. The checkpoint transaction verifies enrollment without compiling
     // the same active policy again during acquisition.
@@ -60,19 +96,39 @@ pub(super) fn checked_catalog(context: &Context, source: &Source) -> Result<Cata
             let mut checkpoints: Checkpoints =
                 serde_json::from_value(json!(state.registry_checkpoints))
                     .map_err(|_| Error::Invalid("invalid registry checkpoints"))?;
-            admit(&mut checkpoints, &catalog)?;
+            let installed = state.operator["installed"]
+                .as_array()
+                .map_or(&[][..], Vec::as_slice);
+            let protected = protected_releases(installed, catalog.source_identity())?;
+            checkpoints
+                .admit_retaining(catalog, &protected)
+                .map_err(|error| checkpoint_error(&error))?;
             state.registry_checkpoints = retained(&checkpoints)?;
             Ok(json!({}))
         },
     )?;
-    Ok(catalog)
+    Ok(())
 }
 
-/// Admits an authenticated catalog, refusing rollback and release replacement.
-pub(super) fn admit(checkpoints: &mut Checkpoints, catalog: &Catalog) -> Result<(), Error> {
-    checkpoints
-        .admit(catalog)
-        .map_err(|error| checkpoint_error(&error))
+pub(super) fn protected_releases(
+    rows: &[Value],
+    source: &str,
+) -> Result<BTreeMap<String, String>, Error> {
+    rows.iter()
+        .filter(|row| row["source_identity"] == source)
+        .map(|row| {
+            let id = row["id"]
+                .as_str()
+                .ok_or(Error::Invalid("installed pack identity missing"))?;
+            let version = row["version"]
+                .as_str()
+                .ok_or(Error::Invalid("installed pack version missing"))?;
+            let digest = row["digest"]
+                .as_str()
+                .ok_or(Error::Invalid("installed pack digest missing"))?;
+            Ok((format!("{id}@{version}"), digest.to_owned()))
+        })
+        .collect()
 }
 
 /// Checkpoints in the stored state's shape.
@@ -230,6 +286,7 @@ fn acquisition_error(error: AcquisitionError, signed: bool) -> Error {
         AcquisitionError::LocalIdentityChanged => "local registry identity changed",
         AcquisitionError::Escapes => "registry artifact escapes source",
         AcquisitionError::Transport => "registry HTTPS acquisition failed",
+        AcquisitionError::Timeout => "registry acquisition timed out",
         AcquisitionError::Response => "registry requires an unencoded HTTP 200 response",
         AcquisitionError::TooLarge if signed => "registry response exceeds limits",
         AcquisitionError::TooLarge => "registry artifact unreadable or oversized",
@@ -267,7 +324,7 @@ fn catalog_error(error: &CatalogError) -> Error {
     })
 }
 
-fn checkpoint_error(error: &CheckpointError) -> Error {
+pub(super) fn checkpoint_error(error: &CheckpointError) -> Error {
     match error {
         CheckpointError::Rollback => {
             Error::Invalid("registry rollback or same-sequence replacement")
@@ -276,5 +333,6 @@ fn checkpoint_error(error: &CheckpointError) -> Error {
             Error::Invalid("registry replaced bytes for a retained release")
         }
         CheckpointError::Limit => policy::Error::Limit.into(),
+        CheckpointError::InvalidRetention => Error::Invalid("invalid installed registry release"),
     }
 }

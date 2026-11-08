@@ -39,6 +39,12 @@ checks policy loading, registry checkpoints, retained pack sources, and the
 binary your agents run, and gives repair commands when needed. JSON output
 provides full structured details for scripts and agents.
 
+Status and doctor can inspect a validated historical checkpoint without saving
+its conversion. `checkpoint_upgrade_pending: true` reports that the upgrade is
+still unsaved. If the review directory is read-only or the disk is full, restore
+write access or free space before retrying the operation. Hooks and changes
+require the conversion to be saved before proceeding.
+
 Doctor distinguishes agent integration repair (`shield mcp setup`) from policy
 file review (`shield policy review`). Reviewing unchanged policy files does not
 repair an integration; follow the command for the reported problem.

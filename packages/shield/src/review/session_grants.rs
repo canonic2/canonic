@@ -1,5 +1,6 @@
 //! Private reusable conversation authorization, distinct from policy and exact grants.
 mod native;
+mod registration;
 mod scope;
 #[cfg(test)]
 mod tests;
@@ -16,6 +17,7 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path};
 
 pub(crate) use native::handoff;
+pub(super) use registration::preserve_integration;
 pub(crate) use view::{confirmation, show};
 
 const PENDING: u64 = 600_000;
@@ -29,6 +31,8 @@ pub(crate) struct Registry {
     records: BTreeMap<String, Record>,
     /// Only issued grants are indexed; inspection/preparation never uses this as authority.
     sessions: BTreeMap<String, Vec<String>>,
+    #[serde(default, skip_serializing_if = "registration::Compatibility::is_empty")]
+    compatibility: registration::Compatibility,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -100,7 +104,9 @@ fn registration(state: &State, agent: &str) -> Result<String, Error> {
             "session_unavailable: integration is not enrolled",
         ));
     }
-    Ok(hash(&json!(registration)))
+    registration::scoped(&registration, agent).ok_or(Error::Invalid(
+        "session_unavailable: integration is not enrolled",
+    ))
 }
 
 fn protection(state: &State) -> Result<Value, Error> {
@@ -117,6 +123,8 @@ struct Authority {
     activation: Option<Value>,
     protection: Option<Value>,
     registrations: BTreeMap<String, String>,
+    legacy_registration: Option<String>,
+    compatibility: registration::Compatibility,
 }
 impl Authority {
     fn capture(state: &State) -> Self {
@@ -127,18 +135,37 @@ impl Authority {
         Self {
             activation: activation(state).ok(),
             protection: protection(state).ok(),
+            legacy_registration: fingerprint,
+            compatibility: state.session_grants.compatibility.clone(),
             registrations: crate::agents::ADAPTERS
                 .iter()
                 .filter_map(|adapter| {
                     let agent = adapter.spec().id;
                     registration
                         .as_ref()
-                        .filter(|r| r.covers(agent))
-                        .and_then(|_| fingerprint.clone())
+                        .and_then(|r| registration::scoped(r, agent))
                         .map(|r| (agent.into(), r))
                 })
                 .collect(),
         }
+    }
+
+    fn context_matches(&self, key: &str, context: &Conversation) -> bool {
+        self.direct(&context.agent, &context.registration)
+            || self
+                .compatibility
+                .context_matches(key, context, &self.registrations)
+    }
+
+    fn direct(&self, agent: &str, binding: &str) -> bool {
+        self.registrations.get(agent).is_some_and(|current| {
+            current == binding || self.legacy_registration.as_deref() == Some(binding)
+        })
+    }
+
+    fn matches(&self, row: &Record) -> bool {
+        self.direct(&row.session.agent, &row.session.registration)
+            || self.compatibility.record_matches(row, &self.registrations)
     }
 }
 
@@ -164,7 +191,7 @@ impl Record {
     fn current_with(&self, authority: &Authority) -> bool {
         authority.activation.as_ref() == Some(&self.activation)
             && authority.protection.as_ref() == Some(&self.protection)
-            && authority.registrations.get(&self.session.agent) == Some(&self.session.registration)
+            && authority.matches(self)
     }
     fn effective(&self, state: &State, now: u64) -> &'static str {
         self.effective_with(&Authority::capture(state), now)
@@ -231,12 +258,16 @@ impl Registry {
                 .or_default()
                 .push(row.id.clone());
         }
+        self.compatibility.prune(&self.contexts, &self.records);
     }
 }
 
 /// Integrity checks run with the shared required authorization checkpoint.
 pub(super) fn validate(state: &State) -> Result<(), Error> {
     let registry = &state.session_grants;
+    registry
+        .compatibility
+        .validate(&registry.contexts, &registry.records)?;
     if registry.contexts.len() > 256
         || registry.records.len() > 1024
         || registry.sessions.len() > 64
@@ -349,7 +380,7 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
             return Err(Error::StaleSnapshot);
         }
         state.session_grants.compact(now);
-        let (session_key, session) = state
+        let (session_key, mut session) = state
             .session_grants
             .contexts
             .iter()
@@ -358,7 +389,7 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
             .ok_or(Error::Invalid(
                 "session_unavailable: run a native request to obtain session_ref",
             ))?;
-        if registration(state, &session.agent)? != session.registration
+        if !authority.context_matches(&session_key, &session)
             || (context.surface != "cli"
                 && (context.agent.as_deref().is_none_or(|a| a != session.agent)
                     || context
@@ -413,6 +444,7 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
                 "capacity_exceeded: inspect session_grant_show before proposing more",
             ));
         }
+        session.registration = registration(state, &session.agent)?;
         let mut row = Record {
             id: state.id("session-proposal"),
             session_key,

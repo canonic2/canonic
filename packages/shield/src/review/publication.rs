@@ -73,6 +73,9 @@ pub(super) fn initialize(
     meta: &Value,
     checkpoints: BTreeMap<String, Value>,
 ) -> Result<(), Error> {
+    if let Some(candidate) = candidates.get("project") {
+        super::changes::historical::validate(&Value::Null, candidate)?;
+    }
     let initialization = Store::initialize_verified(
         project,
         candidates.clone(),
@@ -151,7 +154,8 @@ pub(in crate::review) fn commit_mcp(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "Publication keeps the reviewed base, approval provenance and verified source/plan explicit"
+    clippy::too_many_lines,
+    reason = "Keep reviewed source, approval provenance and the atomic activation/publication handoff in one transaction"
 )]
 fn commit_confirmed(
     context: &Context,
@@ -167,6 +171,7 @@ fn commit_confirmed(
     if let Some(id) = proposal {
         validate_proposal_base(before, id)?;
     }
+    super::changes::historical::validate(&before.candidates["project"], &candidate)?;
     let changes = super::changes::diff::between(
         &before.operator,
         &before.candidates["project"],
@@ -185,6 +190,10 @@ fn commit_confirmed(
         && mcp_changed(&before.candidates["project"], &candidates["project"])?
     {
         return Err(Error::ApprovalRequired);
+    }
+    let connection_plan = prepare_connections(context, before, &candidates["project"], evaluator)?;
+    if let Some(plan) = &connection_plan {
+        super::integrations::activation::stage(&mut meta, plan, proposal)?;
     }
     let files = projections(&candidates["project"], &meta)?;
     meta["projection"] = json!(digest(&files));
@@ -242,6 +251,7 @@ fn commit_confirmed(
         state.operator = meta.clone();
         let receipt =
             review::runtime::publish_confirmed(state, context, proposal, compiled, mechanism);
+        super::integrations::activation::bind(state, &mut meta, &receipt);
         retain_proposal_receipt(state, proposal, &receipt)?;
         attempted_activation = receipt["activation_id"].as_str().map(str::to_owned);
         Ok(receipt)
@@ -261,6 +271,61 @@ fn commit_confirmed(
     repair_after_commit(context, &store, evaluator, &written, &meta, &mut receipt);
     receipt["changes"] = changes;
     Ok(receipt)
+}
+
+fn prepare_connections(
+    context: &Context,
+    before: &State,
+    candidate: &Value,
+    evaluator: &configuration::Evaluator,
+) -> Result<Option<super::integrations::Plan>, Error> {
+    if before.operator["integration"].is_null()
+        || before.candidates["project"]["lock"].get("mcp") == candidate["lock"].get("mcp")
+    {
+        return Ok(None);
+    }
+    let previous = serde_json::from_value(
+        before.candidates["project"]["lock"]
+            .get("mcp")
+            .cloned()
+            .unwrap_or_else(|| json!({})),
+    )
+    .map_err(|_| Error::Invalid("invalid retained MCP connection settings"))?;
+    super::integrations::activation::prepare(
+        Path::new(&context.project_root),
+        &before.operator,
+        &previous,
+        evaluator.effective().mcp_connections(),
+        evaluator.revision(),
+    )
+}
+
+pub(in crate::review) fn resume_connections(
+    context: &Context,
+    proposal: Option<&str>,
+    activation: &str,
+    receipt: &mut Value,
+) {
+    match super::integrations::activation::resume(context, proposal, activation) {
+        Ok(published) => {
+            receipt["connection_publication"] =
+                json!(if published { "published" } else { "superseded" });
+            if !published {
+                receipt["next_action"] = json!(
+                    "Another activation or setup superseded this publication. Inspect status for its current registered bindings."
+                );
+            }
+        }
+        Err(error) => {
+            receipt["connection_publication"] = json!("pending");
+            receipt["setup_error"] = json!(error.to_string());
+            receipt["repair_route"] = json!("mcp_setup");
+            receipt["repair_arguments"] = json!({"pending":"review"});
+            receipt["next_action"] = json!(
+                "Confirmed connection publication will resume automatically. Conflicting owned settings can be reviewed or cancelled in this session through mcp_setup."
+            );
+        }
+    }
 }
 
 fn retain_proposal_receipt(
@@ -407,7 +472,14 @@ fn recover_activation(
     {
         return Err(error);
     }
-    Ok(json!({"committed":true,"policy_revision":recovered.policy_revision,"repair_needed":true}))
+    let mut receipt = recovered
+        .active
+        .as_ref()
+        .expect("recovered activation checked")
+        .metadata();
+    receipt["committed"] = json!(true);
+    receipt["repair_needed"] = json!(true);
+    Ok(receipt)
 }
 
 /// Connection changes need a form showing private settings, even on hosts that
@@ -481,6 +553,16 @@ fn repair_after_commit(
     if let Some(error) = prefix_error {
         receipt["setup_error"] = json!(error.to_string());
         receipt["repair_route"] = json!("shield mcp setup");
+    }
+    if meta["integration_publication"]["activation_id"] == receipt["activation_id"]
+        && let Some(activation) = receipt["activation_id"].as_str().map(str::to_owned)
+    {
+        resume_connections(
+            context,
+            meta["integration_publication"]["proposal_id"].as_str(),
+            &activation,
+            receipt,
+        );
     }
 }
 

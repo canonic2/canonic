@@ -14,6 +14,8 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct PackDocument {
+    #[serde(skip)]
+    pub(super) retained_legacy: bool,
     schema_version: u8,
     kind: String,
     pub(super) id: String,
@@ -61,6 +63,7 @@ impl PackDocument {
             }
         }
         Self {
+            retained_legacy: self.retained_legacy,
             schema_version: self.schema_version,
             kind: self.kind.clone(),
             id: self.id.clone(),
@@ -145,8 +148,11 @@ impl Matcher {
         self.matches_evidence(request, crate::effects::classify(request).as_ref())
     }
 
-    #[cfg(test)]
-    fn matches_evidence(&self, request: &Request, hints: Option<&crate::effects::Hints>) -> bool {
+    pub(super) fn matches_evidence(
+        &self,
+        request: &super::Request,
+        hints: Option<&crate::effects::Hints>,
+    ) -> bool {
         self.executable == request.executable
             && self.context_matches(&request.cwd, &request.project)
             && self.possible_effects.as_ref().is_none_or(|effects| {
@@ -161,6 +167,15 @@ impl Matcher {
 
     pub(super) fn semantic(&self) -> bool {
         self.possible_effects.is_some()
+    }
+
+    pub(super) fn historical_specificity(&self) -> u8 {
+        match self.arguments {
+            Arguments::Exact { .. } if self.cwd.is_some() || self.project.is_some() => 3,
+            Arguments::Exact { .. } => 2,
+            Arguments::Prefix { .. } => 1,
+            Arguments::Any => 0,
+        }
     }
 
     pub(super) fn effects(&self) -> &[crate::effects::Effect] {
@@ -319,6 +334,9 @@ impl PackDocument {
         super::invocations::validate(self)
     }
     fn validate_header(&self) -> Result<(), Error> {
+        if self.retained_legacy {
+            return super::legacy::validate_header(self);
+        }
         self.validate_schema()?;
         let parts: Vec<_> = self.id.split('/').collect();
         if parts.len() != 2 || !parts.iter().all(|s| identifier(s)) || self.id.len() > 128 {

@@ -198,6 +198,82 @@ fn mcp_connection_setup_publishes_after_two_in_session_reviews() {
     }
 }
 
+fn install_connection_agents(transport: &Transport) {
+    let form = transport.call(
+        json!(20),
+        "mcp_setup",
+        &json!({"agents":["claude","codex"]}),
+    );
+    assert_form(&form, false);
+    let result = transport.request(&answer(&form, &json!({"action":"accept","content":{}})));
+    assert_eq!(result["result"]["isError"], false, "{result}");
+}
+
+#[test]
+fn connection_publication_registered_hosts_use_one_form_for_both_protocols() {
+    for modern in [false, true] {
+        for action in ["accept", "decline"] {
+            let (server, project) = fixture(Some("codex"));
+            let transport = Transport::start(server);
+            for message in initialize(&capabilities(FORM), "codex") {
+                transport.send(&message);
+            }
+            assert!(transport.receive()["result"].is_object());
+            install_connection_agents(&transport);
+            let args = connection_proposal(&transport, &project, false);
+            let before = std::fs::read(project.root.path().join(".mcp.json")).unwrap();
+            let form = if modern {
+                transport.request(&modern_apply(10, &args, None, None, true))
+            } else {
+                transport.call(json!(10), "policy_apply", &args)
+            };
+            assert_form(&form, modern);
+            assert!(form.to_string().contains("owned connection entries"));
+            assert_eq!(
+                std::fs::read(project.root.path().join(".mcp.json")).unwrap(),
+                before
+            );
+            let result = if modern {
+                transport.request(&modern_apply(
+                    11,
+                    &args,
+                    Some(&form["result"]["requestState"]),
+                    Some(action),
+                    true,
+                ))
+            } else {
+                transport.request(&answer(&form, &json!({"action":action,"content":{}})))
+            };
+            if action == "accept" {
+                assert_eq!(result["result"]["isError"], false, "{result}");
+                assert_eq!(
+                    result["result"]["structuredContent"]["data"]["connection_publication"],
+                    "published"
+                );
+                let host: Value = serde_json::from_slice(
+                    &std::fs::read(project.root.path().join(".mcp.json")).unwrap(),
+                )
+                .unwrap();
+                assert_eq!(host["mcpServers"]["cloud"]["command"], "acme-connector");
+                let status = transport.call(json!(12), "status", &json!({}));
+                assert_eq!(status["result"]["isError"], false, "{status}");
+                let replay = transport.call(json!(13), "policy_apply", &args);
+                assert_eq!(
+                    replay["result"]["structuredContent"]["data"]["receipt"]["activation_id"],
+                    result["result"]["structuredContent"]["data"]["receipt"]["activation_id"]
+                );
+            } else {
+                assert_eq!(error_code(&result), "approval_declined", "{result}");
+                assert_eq!(
+                    std::fs::read(project.root.path().join(".mcp.json")).unwrap(),
+                    before
+                );
+            }
+            assert!(transport.close().1.is_ok());
+        }
+    }
+}
+
 #[test]
 fn google_confirmation_forms_require_acceptance_and_refuse_missing_capability() {
     for agent in ["gemini", "agy"] {

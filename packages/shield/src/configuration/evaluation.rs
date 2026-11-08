@@ -6,6 +6,8 @@ use serde::Serialize;
 use std::sync::Arc;
 
 #[cfg(test)]
+mod legacy_tests;
+#[cfg(test)]
 mod tests;
 
 /// A read-only decision with effective candidate metadata and rule explanations.
@@ -317,6 +319,19 @@ impl Evaluator {
     /// # Errors
     /// Rejects invalid composition or missing retained selected artifacts.
     pub fn new(inputs: Vec<(Scope, Snapshot)>) -> Result<Self, Error> {
+        Self::prepare(inputs, None)
+    }
+
+    /// Recover a retained source using only a known encoding that independently
+    /// reproduces its recorded revision; no hash or policy identity is overridden.
+    pub(crate) fn new_for_revision(
+        inputs: Vec<(Scope, Snapshot)>,
+        expected: &str,
+    ) -> Result<Self, Error> {
+        Self::prepare(inputs, Some(expected))
+    }
+
+    fn prepare(inputs: Vec<(Scope, Snapshot)>, expected: Option<&str>) -> Result<Self, Error> {
         let _trace = crate::diagnostics::trace::span("policy.prepare");
         crate::diagnostics::trace::count("policy.preparations", 1);
         let [(scope, snapshot)]: [(Scope, Snapshot); 1] = inputs
@@ -324,6 +339,10 @@ impl Evaluator {
             .map_err(|_| Error::Contract("exactly one project candidate required"))?;
         refuse_unset_required(&snapshot)?;
         let effective = compose(&[(scope, snapshot.lock.clone())])?;
+        let effective = match expected {
+            Some(expected) => effective.for_revision(expected)?,
+            None => effective,
+        };
         let revision = effective.revision()?;
         let selections: std::collections::BTreeMap<_, _> = effective
             .selections()

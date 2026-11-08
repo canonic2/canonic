@@ -97,6 +97,10 @@ impl PublicCommand {
             Self::Mcp(Mcp {
                 command: McpCommand::Serve(input),
             }) => Some(input),
+            Self::Internal(command) => match command.as_ref() {
+                super::Command::Mcp(input) => Some(input),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -180,6 +184,9 @@ pub enum McpCommand {
 /// Agent integration selection.
 #[derive(Args)]
 pub struct Setup {
+    /// Review conflicting pending setup or cancel that interrupted publication.
+    #[arg(long, value_enum, conflicts_with_all = ["agents", "remove", "reset_tool_permissions"])]
+    pub pending: Option<PendingSetup>,
     /// Agent to set up or remove, or box for a Box MCP definition; repeat for several. Omission asks.
     #[arg(long = "agent", value_parser = integration_names())]
     pub agents: Vec<String>,
@@ -195,6 +202,12 @@ pub struct Setup {
     /// Show the review without writing anything.
     #[arg(long)]
     pub dry_run: bool,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum PendingSetup {
+    Review,
+    Cancel,
 }
 
 /// The integrations `--agent` accepts: Box first, then the native agent adapters.
@@ -544,6 +557,41 @@ mod mcp_setup_tests {
                 "setup",
                 "--reset-tool-permissions",
                 "--remove"
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn setup_pending_flags_preserve_project_and_confirmation_scope() {
+        assert!(matches!(
+            setup(&["--pending", "review"]).pending,
+            Some(PendingSetup::Review)
+        ));
+        assert!(matches!(
+            setup(&["--pending", "cancel", "--dry-run"]).pending,
+            Some(PendingSetup::Cancel)
+        ));
+        assert!(
+            setup(&["--pending", "cancel", "--scope", "user"])
+                .choice()
+                .is_err()
+        );
+        for conflict in ["--remove", "--reset-tool-permissions"] {
+            assert!(
+                Cli::try_parse_from(["shield", "mcp", "setup", "--pending", "cancel", conflict])
+                    .is_err()
+            );
+        }
+        assert!(
+            Cli::try_parse_from([
+                "shield",
+                "mcp",
+                "setup",
+                "--pending",
+                "review",
+                "--agent",
+                "claude"
             ])
             .is_err()
         );

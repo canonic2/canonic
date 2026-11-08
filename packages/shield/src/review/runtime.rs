@@ -10,6 +10,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 pub(crate) mod consumer;
+mod upgrades;
+pub(in crate::review) use upgrades::inspect as inspect_historical;
+pub(in crate::review) use upgrades::restore as restore_historical;
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -66,7 +69,10 @@ impl Active {
 
     pub(super) fn validate(&self, state: &State) -> Result<(), Error> {
         self.validate_binding(state)?;
-        let evaluator = configuration::Evaluator::new(snapshots(&self.candidates)?)?;
+        let evaluator = configuration::Evaluator::new_for_revision(
+            snapshots(&self.candidates)?,
+            &self.policy_revision,
+        )?;
         if evaluator.revision() != self.policy_revision {
             return Err(Error::Invalid(
                 "active revision differs from retained snapshot",

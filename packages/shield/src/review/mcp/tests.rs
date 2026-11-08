@@ -1,15 +1,19 @@
 //! Behavioral checks for the canonical project tool surface and authority separation.
 mod application;
 mod apply_cost;
+mod connection_publication;
 mod cross_source;
 mod documentation;
 mod file_editing;
 mod graphql;
+mod historical_annotations;
+mod integration_recovery;
 mod pack_acquisition;
 mod pack_identity;
 mod pack_info;
 mod pack_verbs;
 mod parity;
+mod reclamation;
 mod rule_proposals;
 mod suggestion_workflow;
 mod sweep_cost;
@@ -1390,31 +1394,42 @@ fn normalized_diagnostics_reject_files_as_working_directories() {
 }
 
 #[test]
-fn handle_capacity_refuses_a_proposal_before_it_is_persisted() {
+fn inspection_reclamation_keeps_live_review_handles_and_allows_more_proposals() {
     let (root, context, connection) = fixture();
+    let proposed = proposal(&context, &connection, "retained-review");
+    assert!(proposed["error"].is_null(), "{proposed}");
+    let pinned = proposed["data"]["after_candidate_id"].as_str().unwrap();
     let state = Store::open(root.path()).unwrap().read().unwrap();
     let mut cache = connection.views.lock().unwrap();
-    cache.active(&context).unwrap();
-    for index in 1..256 {
+    let mut first = None;
+    for index in 1..600 {
         let mut metadata = state.operator.clone();
         metadata["test_identity"] = json!(index);
-        cache
-            .retain(&state.candidates["project"], &metadata)
+        let id = cache
+            .retain(&context, &state.candidates["project"], &metadata)
             .unwrap();
+        first.get_or_insert(id);
     }
+    assert!(cache.get(pinned).is_ok());
+    assert!(matches!(
+        cache.get(first.as_deref().unwrap()),
+        Err(Error::CandidateUnavailable)
+    ));
     drop(cache);
+    let replay = proposal(&context, &connection, "retained-review");
+    assert_eq!(replay["data"]["after_candidate_id"], pinned);
     assert_eq!(
-        proposal(&context, &connection, "overflow")["error"]["code"],
-        "overloaded"
+        replay["data"]["apply_arguments"],
+        proposed["data"]["apply_arguments"]
     );
-    assert!(
-        Store::open(root.path())
-            .unwrap()
-            .read()
-            .unwrap()
-            .proposals
-            .is_empty()
+    let mut preview = request(&context);
+    preview["candidate_id"] = json!(pinned);
+    assert_eq!(
+        invoke(&context, &connection, "policy_evaluate", preview)["data"]["decision"],
+        "allow"
     );
+    let next = proposal(&context, &connection, "after-reclamation");
+    assert!(next["error"].is_null(), "{next}");
     assert!(invoke(&context, &connection, "status", json!({}))["error"].is_null());
 }
 

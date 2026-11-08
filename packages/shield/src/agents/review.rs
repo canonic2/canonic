@@ -48,3 +48,13 @@ pub(crate) fn resolve(name: Option<&str>) -> &'static dyn ReviewAdapter {
     name.and_then(super::find)
         .map_or(&generic::Generic, |adapter| adapter.review())
 }
+
+/// Bootstrap consent authorizes this connection's form workflow without
+/// inferring a native adapter or accepting ordinary tool permission as consent.
+pub(crate) fn for_context(context: &crate::review::Context) -> &'static dyn ReviewAdapter {
+    if context.surface == "mcp" && context.confirmed_mcp_forms {
+        &FORM
+    } else {
+        resolve(context.agent.as_deref())
+    }
+}

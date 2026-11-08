@@ -349,7 +349,9 @@ fn typed_read_grants_bind_original_input_and_retain_resource_during_review() {
     assert_eq!(json!(state.read_requests[0].resource), json!(resource));
     let mut incomplete = json!(state.read_requests[0]);
     incomplete.as_object_mut().unwrap().remove("resource");
-    assert!(serde_json::from_value::<ReadRequest>(incomplete).is_err());
+    let mut incomplete_state = state;
+    incomplete_state.read_requests[0] = serde_json::from_value::<ReadRequest>(incomplete).unwrap();
+    assert!(validate(&incomplete_state).is_err());
     let mut changed = resource;
     if let Input::File { original_input, .. } = &mut changed.input {
         original_input["limit"] = json!(1);
@@ -662,4 +664,350 @@ fn full_read_requests_refuse_with_pending_and_retained_counts() {
         "{refused:?}"
     );
     assert_eq!(state.read_requests.len(), 128);
+}
+
+/// Encode the historical pre-resource issuer's exact binding, independently of
+/// `ReadRequest::binding`. The intermediate codec also accepted explicit null.
+fn historical_read_state(mut state: Value, explicit_null: bool) -> Value {
+    let row = &mut state["read_requests"][0];
+    row.as_object_mut().unwrap().remove("policy");
+    if explicit_null {
+        row["resource"] = Value::Null;
+    } else {
+        row.as_object_mut().unwrap().remove("resource");
+    }
+    let binding = policy::fingerprint(
+        json!([
+            row["request_id"],
+            row["created_at_ms"],
+            row["pending_expires_at_ms"],
+            row["project_id"],
+            row["activation_id"],
+            row["policy_revision"],
+            row["candidate_digest"],
+            row["request"],
+            row["resource_digest"],
+            row["origin"],
+            row["provenance"]
+        ])
+        .to_string()
+        .as_bytes(),
+    );
+    row["binding"] = json!(binding);
+    let grant_binding = if row["grant"].is_object() {
+        let grant = &row["grant"];
+        Some(policy::fingerprint(
+            json!([
+                binding,
+                grant["approval_id"],
+                grant["issued_at_ms"],
+                grant["expires_at_ms"]
+            ])
+            .to_string()
+            .as_bytes(),
+        ))
+    } else {
+        None
+    };
+    if let Some(grant_binding) = &grant_binding {
+        row["grant"]["binding"] = json!(grant_binding);
+    }
+    let request_id = row["request_id"].clone();
+    for event in state["authorization_events"].as_array_mut().unwrap() {
+        if event["links"]["request_id"] != request_id {
+            continue;
+        }
+        event["details"]["request_binding"] = json!(binding);
+        if event["kind"] == "read_grant_issued" {
+            event["details"]["binding"] = json!(grant_binding.as_ref().unwrap());
+        } else if event["kind"] == "read_grant_consumed" {
+            event["details"]["grant_binding"] = json!(grant_binding.as_ref().unwrap());
+        }
+    }
+    state
+}
+
+#[test]
+fn legacy_read_pending_and_approved_continue_without_resigning() {
+    for explicit_null in [false, true] {
+        for already_approved in [false, true] {
+            let (_root, context, evidence, digest) = fixture();
+            let id = pending(&context, &evidence, &digest);
+            if already_approved {
+                authorize(&context, &id, 300, None, false).unwrap();
+            }
+            let store = Store::open(Path::new(&context.project_root)).unwrap();
+            let wire =
+                historical_read_state(json!(store.read_checkpoint().unwrap()), explicit_null);
+            let original_binding = wire["read_requests"][0]["binding"].clone();
+            let original_grant = wire["read_requests"][0]["grant"].clone();
+            let original_events = wire["authorization_events"].clone();
+            std::fs::write(
+                Path::new(&context.project_root).join(".shield/review/state.json"),
+                wire.to_string(),
+            )
+            .unwrap();
+            let loaded = store.read_checkpoint().unwrap();
+            assert_eq!(json!(loaded.read_requests[0].binding), original_binding);
+            assert_eq!(json!(loaded.read_requests[0].grant), original_grant);
+            assert_eq!(json!(loaded.authorization_events), original_events);
+            validate(&loaded).unwrap();
+            assert_eq!(
+                inspect_from(&loaded, Some(&id), now().unwrap()).unwrap()["status"],
+                if already_approved {
+                    "approved"
+                } else {
+                    "pending"
+                }
+            );
+            authorize(&context, &id, 300, None, false).unwrap();
+            let loaded = store.read_checkpoint().unwrap();
+            assert_eq!(json!(loaded.read_requests[0].binding), original_binding);
+            if already_approved {
+                assert_eq!(json!(loaded.read_requests[0].grant), original_grant);
+                assert_eq!(json!(loaded.authorization_events), original_events);
+            }
+            assert_eq!(
+                consume_with_retry(&context, &evidence, &digest, &id)["code"],
+                "allowed-once"
+            );
+            assert_ne!(
+                consume_with_retry(&context, &evidence, &digest, &id)["allowed"],
+                true
+            );
+        }
+    }
+}
+
+#[test]
+fn legacy_read_terminal_receipts_remain_terminal_and_keep_original_proof() {
+    for terminal in ["consumed", "revoked"] {
+        let (_root, context, evidence, digest) = fixture();
+        let id = pending(&context, &evidence, &digest);
+        authorize(&context, &id, 300, None, false).unwrap();
+        let mut state = Store::open(Path::new(&context.project_root))
+            .unwrap()
+            .read_checkpoint()
+            .unwrap();
+        if terminal == "consumed" {
+            let origin = state.read_requests[0].origin.clone();
+            assert_eq!(
+                consume(
+                    &mut state,
+                    &context,
+                    &origin,
+                    &evidence,
+                    &digest,
+                    &id,
+                    now().unwrap()
+                )
+                .unwrap()["allowed"],
+                true
+            );
+        } else {
+            revoke_request(&mut state, &context, 0, None);
+        }
+        let wire = historical_read_state(json!(state), false);
+        let binding = wire["read_requests"][0]["binding"].clone();
+        let grant = wire["read_requests"][0]["grant"].clone();
+        let events = wire["authorization_events"].clone();
+        let mut loaded: State = serde_json::from_value(wire).unwrap();
+        validate(&loaded).unwrap();
+        assert_eq!(json!(loaded.read_requests[0].binding), binding);
+        assert_eq!(json!(loaded.read_requests[0].grant), grant);
+        let original = json!(loaded.read_requests[0]);
+        let origin = loaded.read_requests[0].origin.clone();
+        let outcome = consume(
+            &mut loaded,
+            &context,
+            &origin,
+            &evidence,
+            &digest,
+            &id,
+            now().unwrap(),
+        )
+        .unwrap();
+        assert_ne!(outcome["allowed"], true);
+        assert_eq!(outcome["approval"]["status"], terminal);
+        assert_eq!(json!(loaded.read_requests[0]), original);
+        assert_eq!(json!(loaded.authorization_events), events);
+    }
+}
+
+#[test]
+fn legacy_read_outer_checkpoint_upgrade_preserves_live_and_terminal_authority() {
+    for status in ["pending", "approved", "consumed", "revoked"] {
+        let (_root, context, evidence, digest) = fixture();
+        let id = pending(&context, &evidence, &digest);
+        if status != "pending" {
+            authorize(&context, &id, 300, None, false).unwrap();
+        }
+        let store = Store::open(Path::new(&context.project_root)).unwrap();
+        let mut state = store.read_checkpoint().unwrap();
+        if status == "consumed" {
+            let origin = state.read_requests[0].origin.clone();
+            assert_eq!(
+                consume(
+                    &mut state,
+                    &context,
+                    &origin,
+                    &evidence,
+                    &digest,
+                    &id,
+                    now().unwrap()
+                )
+                .unwrap()["allowed"],
+                true
+            );
+        } else if status == "revoked" {
+            revoke_request(&mut state, &context, 0, None);
+        }
+        let mut wire = historical_read_state(json!(state), status == "approved");
+        for name in [
+            "hook_requests",
+            "session_grants",
+            "policy_drafts",
+            "dismissed_reviews",
+            "enforcement",
+        ] {
+            wire.as_object_mut().unwrap().remove(name);
+        }
+        wire["active"].as_object_mut().unwrap().remove("compiled");
+        wire["history_generation"] = Value::Null;
+        for field in ["authorization_events", "events"] {
+            let events = wire[field].as_array_mut().unwrap();
+            events.retain(|event| event["kind"] != "compiled_cache_prepared");
+            for event in events {
+                if event["kind"] == "runtime_activated" {
+                    event["details"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("compiled_digest");
+                }
+            }
+        }
+        let binding = wire["read_requests"][0]["binding"].clone();
+        let grant = wire["read_requests"][0]["grant"].clone();
+        let protected = wire["authorization_events"].as_array().unwrap().clone();
+        let state_path = Path::new(&context.project_root).join(".shield/review/state.json");
+        std::fs::write(&state_path, wire.to_string()).unwrap();
+        let loaded = store.read_checkpoint().unwrap();
+        validate(&loaded).unwrap();
+        assert_eq!(loaded.read_requests.len(), 1, "{status}");
+        assert_eq!(loaded.read_requests[0].status, status);
+        assert_eq!(json!(loaded.read_requests[0].binding), binding);
+        assert_eq!(json!(loaded.read_requests[0].grant), grant);
+        for event in &protected {
+            assert!(
+                loaded.authorization_events.contains(event),
+                "{status}: {event}"
+            );
+        }
+        assert!(loaded.authorization_events.len() <= protected.len() + 1);
+        let origin = loaded.read_requests[0].origin.clone();
+        if matches!(status, "consumed" | "revoked") {
+            let mut loaded = loaded;
+            let result = consume(
+                &mut loaded,
+                &context,
+                &origin,
+                &evidence,
+                &digest,
+                &id,
+                now().unwrap(),
+            )
+            .unwrap();
+            assert_ne!(result["allowed"], true);
+            assert_eq!(result["approval"]["status"], status);
+        } else {
+            if status == "pending" {
+                authorize(&context, &id, 300, None, false).unwrap();
+            }
+            assert_eq!(
+                consume_with_retry(&context, &evidence, &digest, &id)["code"],
+                "allowed-once"
+            );
+            assert_ne!(
+                consume_with_retry(&context, &evidence, &digest, &id)["allowed"],
+                true
+            );
+        }
+    }
+}
+
+#[test]
+fn legacy_read_rejects_corrupt_bindings_and_widened_resources() {
+    let (_root, context, evidence, digest) = fixture();
+    let id = pending(&context, &evidence, &digest);
+    authorize(&context, &id, 300, None, false).unwrap();
+    let state = Store::open(Path::new(&context.project_root))
+        .unwrap()
+        .read_checkpoint()
+        .unwrap();
+    let wire = historical_read_state(json!(state), false);
+    for field in ["binding", "resource_digest"] {
+        let mut corrupt = wire.clone();
+        corrupt["read_requests"][0][field] = json!("0".repeat(64));
+        assert!(validate(&serde_json::from_value::<State>(corrupt).unwrap()).is_err());
+    }
+    let mut corrupt = wire.clone();
+    corrupt["read_requests"][0]["grant"]["binding"] = json!("0".repeat(64));
+    assert!(validate(&serde_json::from_value::<State>(corrupt).unwrap()).is_err());
+    let loaded: State = serde_json::from_value(wire).unwrap();
+    let row = &loaded.read_requests[0];
+    assert!(row.matches(&evidence, &digest, &row.origin));
+    assert!(!row.matches(&evidence, "different-file-digest", &row.origin));
+    let mut foreign = row.origin.clone();
+    foreign.consumer_id = "different-factory".into();
+    assert!(!row.matches(&evidence, &digest, &foreign));
+    let snapshot = Project::open(Path::new(&context.project_root))
+        .unwrap()
+        .snapshot()
+        .unwrap();
+    let mut window = evidence.request().clone();
+    window.arguments.extend(["--offset".into(), "1".into()]);
+    let changed = snapshot
+        .evaluate_resource(window, evidence.resource().unwrap().clone())
+        .unwrap();
+    assert!(!row.matches(&changed, &digest, &row.origin));
+    for variant in ["window", "path", "environment", "effect"] {
+        let mut resource = evidence.resource().unwrap().clone();
+        match variant {
+            "environment" => resource.context.environment = Some(std::collections::BTreeMap::new()),
+            _ => {
+                if let policy::normalized::Input::File {
+                    action,
+                    sources,
+                    original_input,
+                    ..
+                } = &mut resource.input
+                {
+                    match variant {
+                        "window" => original_input["limit"] = json!(1),
+                        "path" => sources.push(
+                            Path::new(&context.project_root)
+                                .join("other.txt")
+                                .to_str()
+                                .unwrap()
+                                .into(),
+                        ),
+                        "effect" => *action = "remove".into(),
+                        _ => unreachable!(),
+                    }
+                }
+            }
+        }
+        let changed = snapshot
+            .evaluate_resource(evidence.request().clone(), resource)
+            .unwrap();
+        assert!(!row.matches(&changed, &digest, &row.origin), "{variant}");
+    }
+    for path in [
+        "/acme/outside.txt".to_owned(),
+        format!("{}/.shield/private.txt", context.project_root),
+    ] {
+        let mut request = evidence.request().clone();
+        request.arguments = vec![path];
+        assert!(legacy::resource(&request).is_err());
+    }
 }

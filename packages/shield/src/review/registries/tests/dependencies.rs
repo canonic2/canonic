@@ -152,10 +152,15 @@ fn commit(context: &Context, proposal: &Value) {
 fn signed_https_add_and_update_capture_transitive_closures_for_offline_confirmation() {
     let mut registry = Registry::new();
     let (root, context, connection) = project(&registry);
-    let custom =
-        review::tests::propose(&context, &review::tests::input("custom"), &|| Ok(())).unwrap();
-    review::operator::commit_proposal_fixture(&context, custom["proposal_id"].as_str().unwrap())
-        .unwrap();
+    let custom = call(
+        &context,
+        &connection,
+        "policy_propose",
+        &json!({"change":review::tests::input("custom").change,
+            "idempotency_key":"custom","agent_reason":"Read Acme data"}),
+        &|| Ok(()),
+    );
+    commit(&context, &custom);
     registry.clear();
     let before = Store::open(root.path()).unwrap().read().unwrap();
     let added = propose(&context, &connection, "pack_add", "add");

@@ -80,7 +80,7 @@ pub(super) fn list(context: &Context, session: Option<&str>) -> Value {
             "reason":if !collected.available || state.is_err(){"history or review state unavailable"} else if capped {"review item limit reached"} else if !collected.complete {"history scan or retained request limit reached"} else {"complete retained window"}},
         "next_action":"Review eligible groups after the task. Listing or deferral grants no permission. Incomplete evidence is not an empty successful review.",
         "authoring_examples":super::schemas::proposal_examples(),
-        "approval_guidance":crate::agents::review::resolve(context.agent.as_deref()).guidance().ask})
+        "approval_guidance":crate::agents::review::for_context(context).guidance().ask})
 }
 
 fn annotate(

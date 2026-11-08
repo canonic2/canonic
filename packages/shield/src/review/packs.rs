@@ -95,7 +95,7 @@ fn acquire(
     // from that capture; final publication still checks the current metadata.
     let effective = registries::effective_from_metadata(&before.operator)?;
     let (alias, source, reference) = resolve_effective(&effective, input)?;
-    let catalog = registries::checked_catalog(context, &source)?;
+    let mut catalog = registries::checked_catalog(context, &source)?;
     let id = catalog
         .lookup(&reference.pack)
         .map_err(|error| match error {
@@ -103,29 +103,11 @@ fn acquire(
             LookupError::Missing => Error::Missing,
         })?;
     let (entry, bytes) = if let Some(version) = reference.version.as_ref() {
+        registries::checked_history(context, &source, &mut catalog, &id, Some(version))?;
         let entry = catalog.release(&id, version).ok_or(Error::Missing)?;
         (entry.clone(), artifact(&context.fetcher, &source, entry)?)
     } else {
-        let mut selected = None;
-        let mut published = false;
-        for entry in catalog
-            .releases(&id)
-            .into_iter()
-            .filter(|entry| entry.version.pre.is_empty())
-        {
-            published = true;
-            if let Some(bytes) = candidate_artifact(&context.fetcher, &source, entry)? {
-                selected = Some((entry.clone(), bytes));
-                break;
-            }
-        }
-        selected.ok_or_else(|| {
-            if published {
-                Error::UnsupportedReleases(id.to_string())
-            } else {
-                Error::Missing
-            }
-        })?
+        latest(context, &source, &mut catalog, &id)?
     };
     Ok(Acquired {
         source,
@@ -133,6 +115,43 @@ fn acquire(
         bytes,
         alias,
         catalog,
+    })
+}
+
+fn latest(
+    context: &Context,
+    source: &Source,
+    catalog: &mut Catalog,
+    id: &PackId,
+) -> Result<(Entry, String), Error> {
+    let head = catalog.select(id, None).cloned();
+    if let Some(entry) = &head
+        && let Some(bytes) = candidate_artifact(&context.fetcher, source, entry)?
+    {
+        return Ok((entry.clone(), bytes));
+    }
+    registries::checked_history(context, source, catalog, id, None)?;
+    let mut published = head.is_some();
+    for entry in catalog
+        .releases(id)
+        .into_iter()
+        .filter(|entry| entry.version.pre.is_empty())
+    {
+        published = true;
+        if head
+            .as_ref()
+            .is_some_and(|head| head.version == entry.version)
+        {
+            continue;
+        }
+        if let Some(bytes) = candidate_artifact(&context.fetcher, source, entry)? {
+            return Ok((entry.clone(), bytes));
+        }
+    }
+    Err(if published {
+        Error::UnsupportedReleases(id.to_string())
+    } else {
+        Error::Missing
     })
 }
 fn artifact(fetcher: &Fetcher, source: &Source, entry: &Entry) -> Result<String, Error> {
@@ -398,7 +417,7 @@ pub(super) fn search(context: &Context, query: &str) -> Result<Value, Error> {
 pub(super) fn info(context: &Context, query: &str) -> Result<Value, Error> {
     let profiles = json!(["loose", "recommended", "strict"]);
     let (alias, source, reference) = resolve(context, query)?;
-    let catalog = registries::checked_catalog(context, &source)?;
+    let mut catalog = registries::checked_catalog(context, &source)?;
     let version = reference.version.as_ref();
     let mut result =
         json!({"source":alias,"source_identity":source.identity(),"packs":[],"profiles":profiles});
@@ -407,6 +426,11 @@ pub(super) fn info(context: &Context, query: &str) -> Result<Value, Error> {
         Err(LookupError::Missing) => return Err(Error::Missing),
         // An exact version can name the one publisher that lists it.
         Err(LookupError::Ambiguous(ids)) => {
+            if let Some(version) = version {
+                for id in &ids {
+                    registries::checked_history(context, &source, &mut catalog, id, Some(version))?;
+                }
+            }
             let ids_all = ids.clone();
             let listed: Vec<_> = ids
                 .into_iter()
@@ -425,6 +449,7 @@ pub(super) fn info(context: &Context, query: &str) -> Result<Value, Error> {
             }
         }
     };
+    registries::checked_history(context, &source, &mut catalog, &id, version)?;
     let entries: Vec<_> = catalog
         .entries()
         .iter()

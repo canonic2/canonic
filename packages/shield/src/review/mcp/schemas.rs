@@ -129,9 +129,35 @@ fn rules_selection() -> Value {
     schema["then"] = object(json!({"rule_ref":rule_ref(),"candidate_id":id()}), &[]);
     schema
 }
+/// Shared by catalog annotations and pre-dispatch setup maintenance.
+pub(super) fn mutates(name: &str) -> bool {
+    super::super::admin::supports(name)
+        || [
+            "policy_propose",
+            "policy_defer",
+            "policy_draft_remove",
+            "rule_add",
+            "rule_edit",
+            "rule_remove",
+            "pack_configure",
+            "pack_add",
+            "pack_update",
+            "pack_remove",
+            "policy_withdraw",
+            "policy_apply",
+            "review_defer",
+            "request_approve",
+            "request_deny",
+            "session_grant_propose",
+            "session_grant_approve",
+            "session_grant_revoke",
+        ]
+        .contains(&name)
+}
+
 pub(super) fn tools(agent: Option<&str>) -> Value {
     let output = object(
-        json!({"schema_version":{"const":1},"project_id":string(),"policy_revision":nullable(string()),"data":{},"missing":{"type":"array"},"truncated":{"type":"boolean"},"redacted":{"type":"boolean"},"error":nullable(object(json!({"code":string(),"message":string(),"operator_route":nullable(string()),"alternatives":{"type":"array","maxItems":crate::review::MAX_ALTERNATIVES,"items":string()},"alternatives_total":{"type":"integer","minimum":0},"pack":string(),"dependents":{"type":"array","maxItems":crate::review::MAX_ALTERNATIVES,"items":string()},"dependents_total":{"type":"integer","minimum":0},"retry_arguments":object(json!({"request_ids":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":id()}}), &["request_ids"]),"remaining_request_ids":{"type":"array","minItems":1,"maxItems":7,"uniqueItems":true,"items":id()}}),&["code","message","operator_route"]))}),
+        json!({"schema_version":{"const":1},"project_id":string(),"policy_revision":nullable(string()),"data":{},"missing":{"type":"array"},"truncated":{"type":"boolean"},"redacted":{"type":"boolean"},"error":nullable(object(json!({"code":string(),"message":string(),"operator_route":nullable(string()),"alternatives":{"type":"array","maxItems":crate::review::MAX_ALTERNATIVES,"items":string()},"alternatives_total":{"type":"integer","minimum":0},"pack":string(),"dependents":{"type":"array","maxItems":crate::review::MAX_ALTERNATIVES,"items":string()},"dependents_total":{"type":"integer","minimum":0},"retry_arguments":{"oneOf":[object(json!({"request_ids":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":id()}}), &["request_ids"]),object(json!({"agents":{"type":"array","minItems":1,"maxItems":2,"uniqueItems":true,"items":{"enum":["claude","codex"]}},"repair":{"const":true}}), &["agents","repair"])]},"remaining_request_ids":{"type":"array","minItems":1,"maxItems":7,"uniqueItems":true,"items":id()}}),&["code","message","operator_route"]))}),
         &[
             "schema_version",
             "project_id",
@@ -160,7 +186,7 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
             }
         }
         if ["policy_propose","rule_add","rule_edit","session_grant_propose"].contains(&name) { let mut definitions = crate::policy::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
-        let mutation=super::super::admin::supports(name) || ["policy_propose","policy_defer","policy_draft_remove","rule_add","rule_edit","rule_remove","pack_configure","pack_add","pack_update","pack_remove","policy_withdraw","policy_apply","review_defer","request_approve","request_deny","session_grant_propose","session_grant_approve","session_grant_revoke"].contains(&name);
+        let mutation=mutates(name);
         json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply","protection_set","disable","registry_remove","history_configure","policy_reject","mcp_setup"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","pack_update","policy_propose","registry_add","mcp_setup"].contains(&name))}})
     }).chain(super::documentation::tools().into_iter().map(|mut tool| {
         // The shared definitions carry their own schemas and annotations;
@@ -261,8 +287,8 @@ fn admin_inventory() -> Vec<Definition> {
         ),
         (
             "cache_prepare",
-            "Prepare derived cache from committed policy; changes no policy authority",
-            || object(json!({}), &[]),
+            "Rebuild committed policy cache; optional absolute cache_dir relocates it after in-session user confirmation",
+            || object(json!({"cache_dir":string()}), &[]),
         ),
         (
             "protection_set",
@@ -333,10 +359,10 @@ fn admin_inventory() -> Vec<Definition> {
         ),
         (
             "mcp_setup",
-            "Review agent registration changes; dry_run shows the plan, otherwise the user confirms it",
+            "Review agent registration changes; pending review resolves conflicting owned fragments, pending cancel abandons interrupted setup, and dry_run shows a private-safe preview",
             || {
                 object(
-                    json!({"agents":{"type":"array","maxItems":64,"uniqueItems":true,"items":string()},"remove":{"type":"boolean","default":false},"dry_run":{"type":"boolean","default":false},"scope":{"enum":["project"],"default":"project"}}),
+                    json!({"agents":{"type":"array","maxItems":64,"uniqueItems":true,"items":string()},"remove":{"type":"boolean","default":false},"repair":{"type":"boolean","default":false,"description":"Review reconciliation of conflicting Shield hooks and native MCP registration for explicitly selected Claude/Codex targets; other hooks and servers are preserved"},"pending":{"enum":["review","cancel"],"description":"Request a new human review of a conflicting confirmed setup, or cancel that interrupted publication"},"dry_run":{"type":"boolean","default":false},"scope":{"enum":["project"],"default":"project"}}),
                     &[],
                 )
             },
@@ -633,7 +659,7 @@ fn session_grant_propose() -> Definition {
         "Prepare temporary permission for a known batch or constrained argv family before repeated privileged operations. Inspect session_grant_show first. Default duration is two hours; project policy stays unchanged. Named Deny overrides are explicit, and the user confirms session_grant_approve. Do not repeat declined offers.",
         || {
             let definitions = crate::policy::schema::definitions();
-            let conditions = definitions["rule_custom"]["properties"]["conditions"].clone();
+            let conditions = definitions["conditions"].clone();
             let requirements = definitions["rule_custom"]["properties"]["requirements"].clone();
             let selector = object(
                 json!({"conditions":{"allOf":[conditions,{"type":"object","properties":{"domain":{"const":"argv"}}}]},"requirements":requirements}),

@@ -118,7 +118,8 @@ pub(crate) struct Request<'a> {
     pub tool: &'a str,
     pub input: &'a Value,
     pub tool_id: Option<&'a str>,
-    /// Verified native identity of a tool served by Shield itself.
+    /// Recognized Shield tool name under the host's `shield` alias; the name
+    /// alone does not authenticate the server behind that alias.
     pub shield_tool: Option<&'a str>,
     pub session: &'a str,
     pub cwd: std::borrow::Cow<'a, str>,
@@ -287,6 +288,23 @@ pub(crate) trait AgentAdapter: Sync {
         previous: &setup::HookGroups,
         desired: &setup::HookGroups,
     ) -> Result<String, crate::review::Error>;
+    /// Explicitly reviewed replacement of recognizable conflicting Shield hooks.
+    fn repair_hooks(
+        &self,
+        _source: Option<&str>,
+        _desired: &setup::HookGroups,
+    ) -> Result<String, crate::review::Error> {
+        Err(crate::review::Error::Invalid(
+            "hook reconciliation is unavailable for this adapter",
+        ))
+    }
+    fn repair_mcp(
+        &self,
+        before: Option<&str>,
+        desired: Option<&str>,
+    ) -> Result<String, crate::review::Error> {
+        self.merge_mcp(before, None, desired)
+    }
     /// Reconcile adapter settings; `approved` lists the Shield tools allowed
     /// without asking when installing, and is `None` when removing.
     fn merge_settings(
@@ -366,7 +384,7 @@ pub(crate) fn reserved_mcp_alias(alias: &str) -> bool {
 
 /// Refuse aliases that can collapse into the same encoded tool namespace or
 /// consume the `__` delimiter. Never pick a connection by a similar name.
-fn unambiguous_mcp_alias<'a>(
+pub(crate) fn unambiguous_mcp_alias<'a>(
     alias: &str,
     aliases: impl Iterator<Item = &'a str>,
 ) -> Result<(), crate::review::Error> {

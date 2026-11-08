@@ -135,7 +135,27 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
         }
         _ => {}
     }
-    let context = project(&start)?;
+    let context = if matches!(input.command, PublicCommand::Status | PublicCommand::Doctor) {
+        match project_with(&start, super::open_diagnostics) {
+            Ok(context) => context,
+            Err(error) => {
+                return match bootstrap_root(&start)
+                    .and_then(|root| super::bootstrap::inspect(&root))
+                {
+                    Ok(probe) if probe.bootstrap_required() => {
+                        let mut report = probe.report();
+                        report["next_action"] = json!(
+                            "Run shield init in this project to review and confirm enrollment."
+                        );
+                        Ok(report)
+                    }
+                    _ => Err(error),
+                };
+            }
+        }
+    } else {
+        project(&start)?
+    };
     if !input.json {
         match &input.command {
             PublicCommand::Pack(pack)
@@ -157,6 +177,17 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
             command: McpCommand::Setup(setup),
         }) => {
             let choice = setup.choice()?;
+            if let Some(action) = setup.pending {
+                let action = match action {
+                    crate::cli::public::PendingSetup::Review => {
+                        super::integrations::recovery::Action::Review
+                    }
+                    crate::cli::public::PendingSetup::Cancel => {
+                        super::integrations::recovery::Action::Cancel
+                    }
+                };
+                return integrations::recover(&context, action, input.json, setup.dry_run);
+            }
             if setup.dry_run {
                 return integrations::setup_review(
                     &context,
@@ -315,13 +346,34 @@ fn administer(
 }
 
 pub(super) fn project(start: &Path) -> Result<Context, Error> {
+    project_with(start, super::open)
+}
+
+fn project_with(start: &Path, open: fn(&Path) -> Result<Context, Error>) -> Result<Context, Error> {
     let path = start.canonicalize()?;
     for root in path.ancestors() {
-        if root.join(".shield/review").exists() {
-            return super::open(root);
+        if configured(root) {
+            return open(root);
         }
     }
     Err(Error::Invalid("no enrolled project; run shield init"))
+}
+
+fn bootstrap_root(start: &Path) -> Result<std::path::PathBuf, Error> {
+    let path = start.canonicalize()?;
+    path.ancestors()
+        .find(|root| configured(root))
+        .map(Path::to_path_buf)
+        .ok_or(Error::Missing)
+}
+
+fn configured(root: &Path) -> bool {
+    [".shield/config.yml", ".shield/review"].iter().any(|name| {
+        match std::fs::symlink_metadata(root.join(name)) {
+            Ok(_) => true,
+            Err(error) => error.kind() != std::io::ErrorKind::NotFound,
+        }
+    })
 }
 
 fn decide(context: &Context, id: &str, deny: bool, json_mode: bool) -> Result<Value, Error> {

@@ -225,6 +225,16 @@ impl AgentAdapter for Codex {
     ) -> Result<String, Error> {
         setup::merge_mcp(before, old, new)
     }
+    fn repair_hooks(
+        &self,
+        source: Option<&str>,
+        desired: &super::setup::HookGroups,
+    ) -> Result<String, Error> {
+        super::setup::repair(source, desired)
+    }
+    fn repair_mcp(&self, before: Option<&str>, desired: Option<&str>) -> Result<String, Error> {
+        setup::repair_mcp(before, desired)
+    }
     fn diagnose(
         &self,
         hooks: Option<&str>,

@@ -1,5 +1,5 @@
 //! Shield-owned agent prefix rules files, derived from the active policy.
-use super::{Error, Registration, files, registration};
+use super::{Error, Plan, Registration, files, registration};
 use crate::{agents, policy::agent_outputs::CodexPrefix};
 use serde_json::Value;
 use std::path::Path;
@@ -21,9 +21,22 @@ pub(in crate::review) fn plan(
     meta: &Value,
     prefixes: &[CodexPrefix],
 ) -> Result<Vec<files::Change>, Error> {
+    plan_for(root, meta, prefixes, None)
+}
+
+/// Limit setup maintenance to the agents covered by its confirmed plan.
+pub(in crate::review) fn plan_for(
+    root: &Path,
+    meta: &Value,
+    prefixes: &[CodexPrefix],
+    scope: Option<&Plan>,
+) -> Result<Vec<files::Change>, Error> {
     let registered = registration(meta)?;
     let mut changes = Vec::new();
     for adapter in agents::ADAPTERS {
+        if scope.is_some_and(|plan| !plan.affects(adapter.spec().id)) {
+            continue;
+        }
         let Some(path) = adapter.spec().prefix_rules_path else {
             continue;
         };
@@ -58,8 +71,19 @@ pub(crate) fn sync(
     prefixes: &[CodexPrefix],
     enabled: bool,
 ) -> Result<(), Error> {
+    sync_for(root, meta, prefixes, enabled, None)
+}
+
+/// Setup uses its reviewed scope; policy and mode changes use all agents.
+pub(in crate::review) fn sync_for(
+    root: &Path,
+    meta: &Value,
+    prefixes: &[CodexPrefix],
+    enabled: bool,
+    scope: Option<&Plan>,
+) -> Result<(), Error> {
     let prefixes = if enabled { prefixes } else { &[] };
-    files::publish(root, &plan(root, meta, prefixes)?)
+    files::publish(root, &plan_for(root, meta, prefixes, scope)?)
 }
 
 /// The prefixes of the current activation, from its prepared snapshot.
@@ -81,8 +105,23 @@ pub(in crate::review) fn preview(
     prefixes: &[CodexPrefix],
     enabled: bool,
 ) {
+    preview_for(root, review, desired, prefixes, enabled, None);
+}
+
+/// Preview only prefix files included in the setup plan's maintenance scope.
+pub(in crate::review) fn preview_for(
+    root: &Path,
+    review: &mut Value,
+    desired: Option<&Registration>,
+    prefixes: &[CodexPrefix],
+    enabled: bool,
+    scope: Option<&Plan>,
+) {
     let prefixes = if enabled { prefixes } else { &[] };
     for adapter in agents::ADAPTERS {
+        if scope.is_some_and(|plan| !plan.affects(adapter.spec().id)) {
+            continue;
+        }
         let Some(path) = adapter.spec().prefix_rules_path else {
             continue;
         };
@@ -144,6 +183,55 @@ pub(in crate::review) fn diagnose(
 mod tests {
     use super::*;
     use clap::Parser as _;
+
+    #[test]
+    fn targeted_prefix_maintenance_skips_unowned_and_unreadable_omitted_files() {
+        for unreadable in [false, true] {
+            let root = assert_fs::TempDir::new().unwrap();
+            let mut setup = super::super::setup::prepare_initial(
+                root.path(),
+                super::super::IntegrationChoice::agent("codex"),
+            )
+            .unwrap()
+            .unwrap();
+            setup.targets = Some(vec!["claude".into()]);
+            let meta = serde_json::json!({"integration":setup.desired});
+            let path = root.path().join(".codex/rules/shield.rules");
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            if unreadable {
+                std::fs::create_dir(&path).unwrap();
+            } else {
+                std::fs::write(&path, "foreign rules remain untouched").unwrap();
+            }
+            let mut review = serde_json::json!({"files":[]});
+            preview_for(
+                root.path(),
+                &mut review,
+                setup.desired.as_ref(),
+                &[],
+                true,
+                Some(&setup),
+            );
+            assert_eq!(review, serde_json::json!({"files":[]}));
+            assert!(
+                plan_for(root.path(), &meta, &[], Some(&setup))
+                    .unwrap()
+                    .is_empty()
+            );
+            sync_for(root.path(), &meta, &[], true, Some(&setup)).unwrap();
+            assert!(plan(root.path(), &meta, &[]).is_err());
+            setup.targets = Some(vec!["codex".into()]);
+            assert!(plan_for(root.path(), &meta, &[], Some(&setup)).is_err());
+            if unreadable {
+                assert!(path.is_dir());
+            } else {
+                assert_eq!(
+                    std::fs::read_to_string(path).unwrap(),
+                    "foreign rules remain untouched"
+                );
+            }
+        }
+    }
 
     #[test]
     fn shield_mode_initial_prefix_preview_requires_no_enrollment() {

@@ -11,11 +11,14 @@ use std::{
     thread::{self, JoinHandle},
 };
 mod admin_parity;
+mod agent_isolation;
 mod confirmation;
 mod elicitation;
 mod prompts;
+mod recovery;
 mod request_parity;
 mod session_grants;
+mod setup_continuity;
 mod skills;
 
 /// A fixture project. The temporary root lives as long as this value.
@@ -159,11 +162,68 @@ impl Transport {
     }
 
     pub(crate) fn with_options(server: Server, options: stdio::Options) -> Self {
+        Self::with_runner(move |input, output| serve(server, input, output, &options))
+    }
+
+    pub(crate) fn bootstrap(attribution: crate::cli::ReviewContext) -> Self {
+        Self::bootstrap_fixture(attribution, false)
+    }
+
+    pub(crate) fn bootstrap_after_publication_failure(
+        attribution: crate::cli::ReviewContext,
+    ) -> Self {
+        Self::bootstrap_fixture(attribution, true)
+    }
+
+    pub(crate) fn bootstrap_before_publication_cancellation(
+        attribution: crate::cli::ReviewContext,
+    ) -> (Self, Arc<std::sync::atomic::AtomicBool>) {
+        let project = crate::review::bootstrap::inspect(&attribution.project)
+            .expect("bootstrap cancellation fixture")
+            .project_root()
+            .to_path_buf();
+        let pending = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let cancel = pending.clone();
+        let transport = Self::with_runner(move |input, output| {
+            super::bootstrap::serve_cancellation_fixture(
+                &project,
+                attribution,
+                cancel,
+                input,
+                output,
+                &test_options(),
+            )
+        });
+        (transport, pending)
+    }
+
+    fn bootstrap_fixture(attribution: crate::cli::ReviewContext, fail: bool) -> Self {
+        let project = crate::review::bootstrap::inspect(&attribution.project)
+            .expect("bootstrap review fixture")
+            .project_root()
+            .to_path_buf();
+        Self::with_runner(move |input, output| {
+            if fail {
+                super::bootstrap::serve_recovery_fixture(
+                    &project,
+                    attribution,
+                    input,
+                    output,
+                    &test_options(),
+                )
+            } else {
+                super::serve_bootstrap(&project, attribution, input, output, &test_options())
+            }
+        })
+    }
+
+    fn with_runner(
+        run: impl FnOnce(BufReader<Frames>, Responses) -> Result<(), ServeError> + Send + 'static,
+    ) -> Self {
         let (input, incoming) = mpsc::sync_channel(8);
         let (outgoing, output) = mpsc::sync_channel(8);
         let serving = thread::spawn(move || {
-            serve(
-                server,
+            run(
                 BufReader::new(Frames {
                     incoming,
                     current: Cursor::new(Vec::new()),
@@ -172,7 +232,6 @@ impl Transport {
                     outgoing,
                     current: Vec::new(),
                 },
-                &options,
             )
         });
         Self {

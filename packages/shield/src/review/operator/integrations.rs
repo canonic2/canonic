@@ -40,13 +40,32 @@ pub(super) fn initialize_in_cache(
 ) -> Result<Value, Error> {
     let root = start.canonicalize()?;
     if root.join(".shield/review/state.json").exists() {
-        Terminal::required(json_mode)?;
+        let mut terminal = Terminal::required(json_mode)?;
+        let context = match review::open(&root) {
+            Ok(context) => context,
+            Err(error) => {
+                let cache_dir = cache_dir.map(std::path::absolute).transpose()?;
+                let plan = review::bootstrap::prepare_options(&root, None, cache_dir.as_deref())
+                    .map_err(|_| error)?;
+                let mut enrollment = plan.report();
+                enrollment["enrollment_review"] = json!(plan.message());
+                terminal.confirm(&enrollment)?;
+                let context = plan.commit_cli()?;
+                drop(terminal);
+                let mut receipt = crate::review::project::status(&context)?;
+                receipt["reenrolled"] = json!(true);
+                if choice.is_some_and(|choice| !matches!(choice, IntegrationChoice::Keep)) {
+                    receipt["agent_setup"] = setup(&context, choice, json_mode, false)?;
+                }
+                return Ok(receipt);
+            }
+        };
         if choice.is_some_and(|c| !matches!(c, IntegrationChoice::Keep)) {
             return Err(Error::Invalid(
                 "project already initialized; use shield mcp setup to change agents",
             ));
         }
-        let mut receipt = crate::review::project::status(&review::open(&root)?)?;
+        let mut receipt = crate::review::project::status(&context)?;
         receipt["next_action"] = json!("shield mcp setup");
         return Ok(receipt);
     }
@@ -60,6 +79,29 @@ pub(super) fn setup(
     reset_tool_permissions: bool,
 ) -> Result<Value, Error> {
     workflow::setup(context, choice, json_mode, reset_tool_permissions)
+}
+
+pub(super) fn recover(
+    context: &Context,
+    action: review::integrations::recovery::Action,
+    json_mode: bool,
+    dry_run: bool,
+) -> Result<Value, Error> {
+    if json_mode && !dry_run {
+        return Err(Error::ApprovalRequired);
+    }
+    let prepared = review::admin::prepare(
+        context,
+        "mcp_setup",
+        &json!({"pending":action,"dry_run":dry_run}),
+        &|| Ok(()),
+    )?;
+    if dry_run {
+        return Ok(prepared.public_review());
+    }
+    let mut terminal = Terminal::required(json_mode)?;
+    terminal.confirm_mcp(&prepared.review())?;
+    prepared.commit(context, &|| Ok(()))
 }
 
 pub(super) fn setup_review(
@@ -76,11 +118,13 @@ pub(crate) fn configure_fixture(root: &Path, choice: IntegrationChoice, setting:
     let context = review::open(root).unwrap();
     let meta = crate::review::project::metadata(&crate::review::project::load(&context).unwrap());
     let mut plan = prepare(root, &meta, choice).unwrap().unwrap();
-    plan.desired
-        .as_mut()
-        .unwrap()
-        .ask_fallback
-        .insert("codex".into(), setting);
+    if choice.contains("codex") {
+        plan.desired
+            .as_mut()
+            .unwrap()
+            .ask_fallback
+            .insert("codex".into(), setting);
+    }
     apply(&context, &meta, &plan).unwrap();
 }
 

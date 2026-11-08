@@ -29,8 +29,9 @@ fn raw_deny(code: &str) -> Reply {
         "invalid-context" => "Shield: the session's working directory is not an existing folder inside this Shield project. Work from the project folder, or ask the user to start the session there.".to_owned(),
         "runtime-busy" => "Shield: Shield state is briefly locked; retry the request.".to_owned(),
         "handoff-failed" | "project-changed" => "Shield: current authorization could not be verified. Inspect the status tool and retry only after the user resolves any protection problem.".to_owned(),
-        "compiled-cache-unavailable" => "Shield: compiled policy is unavailable. Ask the user to run `shield cache prepare` in their terminal, then retry.".to_owned(),
-        _ => format!("Shield blocked this tool ({code}). Ask the user to run `shield doctor` before retrying."),
+        "compiled-cache-unavailable" => "Shield: compiled policy is unavailable. Call cache_prepare and retry the original request. If the saved cache location is unusable, call cache_prepare with an absolute cache_dir for a new private location; Shield requests the user's in-session approval. This rebuilds committed policy only.".to_owned(),
+        "protection-failure" => "Shield could not verify this hook's project state. Use the doctor or status MCP tool to diagnose it, then request any necessary integration repair with mcp_setup and in-session user confirmation. Do not edit protected review state.".to_owned(),
+        _ => format!("Shield blocked this tool ({code}). Call the doctor or status MCP tool and follow its in-session recovery route before retrying."),
     };
     Reply {
         decision: Decision::Deny,

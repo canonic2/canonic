@@ -72,6 +72,7 @@ fn run_internal(
     log: &std::sync::Arc<diagnostics::Log>,
 ) -> std::process::ExitCode {
     let result = match command {
+        cli::Command::Mcp(_) => unreachable!("MCP launches are routed by PublicCommand::mcp_serve"),
         cli::Command::Run(input) => return execution::run(input),
         cli::Command::EnforceRequest(input) => return enforcement::protocol::run(&input.project),
         cli::Command::NativeHook(input) => return agents::run(input, log),

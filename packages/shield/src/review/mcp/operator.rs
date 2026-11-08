@@ -102,7 +102,7 @@ fn capture(context: &Context, views: &mut Views, selector: &str) -> Result<Strin
     };
     let source = crate::review::storage::Store::open(Path::new(&context.project_root))?
         .captured_candidate(candidate)?;
-    views.retain(&source, metadata)
+    views.retain(context, &source, metadata)
 }
 
 #[cfg(test)]

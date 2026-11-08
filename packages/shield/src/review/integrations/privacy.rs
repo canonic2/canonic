@@ -67,6 +67,9 @@ pub(crate) fn private_mcp_destination(root: &Path, agent: &str) -> Result<(), Er
 pub(super) fn validate(root: &Path, plan: &Plan) -> Result<(), Error> {
     if let Some(desired) = &plan.desired {
         for (agent, owned) in &desired.connections {
+            if !plan.affects(agent) {
+                continue;
+            }
             let local = owned["review"]
                 .as_array()
                 .into_iter()
@@ -144,6 +147,32 @@ fn untracked(root: &Path, path: &str) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn omitted_private_bindings_are_preserved_without_revalidation() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let mut plan = super::super::setup::prepare_initial(
+            root.path(),
+            super::super::IntegrationChoice::agent("codex"),
+        )
+        .unwrap()
+        .unwrap();
+        plan.desired.as_mut().unwrap().connections.insert(
+            "codex".into(),
+            serde_json::json!({"review":[{"id":"local","source":"local","enabled":true}],"launches":{}}),
+        );
+        plan.targets = Some(vec!["claude".into()]);
+        validate(root.path(), &plan).unwrap();
+        plan.targets = Some(vec!["codex".into()]);
+        assert!(matches!(
+            validate(root.path(), &plan),
+            Err(Error::Invalid(
+                "private MCP launch binding needs fresh reviewed setup"
+            ))
+        ));
+        plan.targets = None;
+        assert!(validate(root.path(), &plan).is_err());
+    }
 
     #[test]
     fn native_git_tracking_refuses_private_projection_into_the_index() {

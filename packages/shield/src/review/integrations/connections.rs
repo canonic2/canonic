@@ -2,6 +2,71 @@
 use super::{Path, Registration, Value, json, review, verify_mcp_connection};
 use crate::mcp_connections::{Connection, Transport, launcher::Binding};
 
+#[cfg(test)]
+mod tests;
+
+/// One committed launcher and its exact owned host entry. Other aliases in the
+/// same host file do not participate in this connection's authority.
+fn retained_launch<'a>(
+    registration: &'a Registration,
+    agent: &str,
+    id: &str,
+) -> Option<(&'a str, &'a Value, &'a Value)> {
+    if !registration.covers(agent) {
+        return None;
+    }
+    let owned = registration.connections.get(agent)?;
+    let binding = owned["launches"].get(id)?;
+    let mut rows = owned["review"]
+        .as_array()?
+        .iter()
+        .filter(|row| row["id"] == id && row["enabled"] == true);
+    let alias = rows.next()?["alias"].as_str()?;
+    if rows.next().is_some() {
+        return None;
+    }
+    let entry = owned["entries"]
+        .get(alias)
+        .filter(|entry| !entry.is_null())?;
+    Some((alias, binding, entry))
+}
+
+fn validate_pending_launch(
+    metadata: &Value,
+    registered: &Registration,
+    agent: &str,
+    id: &str,
+) -> Result<(), super::Error> {
+    let Some(plan) = super::pending(metadata)? else {
+        return Ok(());
+    };
+    let unchanged = plan
+        .previous
+        .as_ref()
+        .zip(plan.desired.as_ref())
+        .is_some_and(|(previous, desired)| {
+            registered.binary == previous.binary
+                && registered.binary == desired.binary
+                && retained_launch(registered, agent, id).is_some_and(|committed| {
+                    retained_launch(previous, agent, id) == Some(committed)
+                        && retained_launch(desired, agent, id) == Some(committed)
+                })
+        });
+    if unchanged {
+        Ok(())
+    } else {
+        Err(super::Error::Invalid(
+            "this private MCP connection has an unsettled setup change",
+        ))
+    }
+}
+
+fn native_matches(root: &Path, agent: &str, connection: &Connection) -> bool {
+    connection.agents.get(agent).is_some_and(|alias| {
+        verify_mcp_connection(root, agent, alias, &connection.transport).is_ok()
+    })
+}
+
 pub(super) fn projected(
     root: &Path,
     registration: &Registration,
@@ -9,6 +74,15 @@ pub(super) fn projected(
     id: &str,
     connection: &Connection,
 ) -> Result<Transport, super::Error> {
+    let canonical_root = root.canonicalize()?;
+    let root = canonical_root.as_path();
+    // The activated transport is already reviewed authority. An existing native
+    // entry that matches it needs no generated launcher or installation refresh.
+    // Verification includes competing host scopes; alias equality alone is not
+    // evidence of connection identity.
+    if connection.local && native_matches(root, agent, connection) {
+        return Ok(connection.transport.clone());
+    }
     let owned = registration.connections.get(agent).unwrap_or(&Value::Null);
     let binding = if connection.local {
         let binding: Binding =
@@ -22,11 +96,10 @@ pub(super) fn projected(
     } else {
         None
     };
-    Ok(connection.projected(
-        &registration.binary,
-        root,
-        binding.as_ref().map(|binding| binding.token.as_str()),
-    )?)
+    match binding {
+        Some(binding) => binding.projected(connection, &registration.binary, root),
+        None => Ok(connection.projected(&registration.binary, root, None)?),
+    }
 }
 
 pub(crate) fn mcp_projection(
@@ -35,17 +108,15 @@ pub(crate) fn mcp_projection(
     id: &str,
     connection: &Connection,
 ) -> Result<Transport, super::Error> {
-    if !connection.local {
+    if !connection.local || native_matches(root, agent, connection) {
         return Ok(connection.transport.clone());
     }
     crate::mcp_connections::launcher::private_state(root)?;
     let state = review::project::checkpoint(&review::open(root)?)?;
-    if super::pending(&state.operator)?.is_some() {
-        return Err(super::Error::Invalid("private MCP setup requires repair"));
-    }
     let registration = super::registration(&state.operator)?.ok_or(super::Error::Invalid(
         "private MCP launch is not registered",
     ))?;
+    validate_pending_launch(&state.operator, &registration, agent, id)?;
     projected(root, &registration, agent, id, connection)
 }
 
@@ -58,17 +129,15 @@ pub(crate) fn resolve_mcp_token(
     }
     crate::mcp_connections::launcher::private_state(root)?;
     let state = review::project::checkpoint(&review::open(root)?)?;
-    if super::pending(&state.operator)?.is_some() {
-        return Err(super::Error::Invalid("private MCP setup requires repair"));
-    }
     let registration = super::registration(&state.operator)?.ok_or(super::Error::Invalid(
         "private MCP launch is not registered",
     ))?;
-    for owned in registration.connections.values() {
+    for (agent, owned) in &registration.connections {
         for (id, value) in owned["launches"].as_object().into_iter().flatten() {
             if let Ok(binding) = serde_json::from_value::<Binding>(value.clone())
                 && binding.token == token
             {
+                validate_pending_launch(&state.operator, &registration, agent, id)?;
                 return Ok((id.clone(), binding));
             }
         }

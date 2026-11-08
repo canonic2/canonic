@@ -187,8 +187,13 @@ settings. The human confirmation form compares the private candidates with
 sensitive values masked and hidden differences labelled; those details are not
 copied into the public change record.
 
-Local stdio settings use private indirection. Host files contain a Shield
-launcher, project path and opaque random token; the connection ID, transport
+Existing native entries whose complete transport matches the active local
+connection work without setup or host-file changes. Shield checks the command,
+arguments and environment, together with competing agent configuration scopes.
+This verification does not require a Git repository.
+
+When Shield writes local stdio settings, it uses private indirection. Host files
+contain a Shield launcher, project path and opaque random token; the connection ID, transport
 digest, command, arguments and environment stay in private review state. Tokens
 are reused for unchanged settings and replaced when launch settings change.
 The launcher replaces itself with the connector, preserving native stdio and

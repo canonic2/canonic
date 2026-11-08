@@ -72,9 +72,10 @@ These are workspace candidates without source-revision attestation.
 Extract the archive, then copy its `shield` executable to a stable folder on PATH,
 for example `~/.local/bin/shield`, with mode 755. Check `shield --version` and
 follow [Your first Shield project](getting-started.md). Close Shield and connected
-agents before replacing the executable; repair each project's registrations with
-`shield mcp setup --repair` after an update or move. To remove an installation,
-run `shield mcp remove` for each connected agent in each project, then delete the
+agents before replacing the executable. Updates at the same installed path
+keep existing registrations; moving the executable requires setting up the
+registered agents again with `shield mcp setup --agent <agent>`. To remove an
+installation, run `shield mcp remove` for each connected agent in each project, then delete the
 executable. Preserve project `.shield` folders to retain policy and history.
 
 The GNU executable's minimum glibc version depends on the target toolchain and is
@@ -184,9 +185,9 @@ its implementation is accepted for this stage without native runtime acceptance.
 To install a portable package, extract it into a stable folder you own and add
 that folder to PATH. Check `shield --version`, then follow
 [Your first Shield project](getting-started.md). Before an update, close Shield
-and connected agents, replace the executable, run `shield mcp setup --repair`
-for each project's agent registration, and restart the agent. After moving the
-installation, repair those registrations as well. To remove it, run
+and connected agents, replace the executable at the same installed path,
+and restart the agent. After moving the installation, set up its registered
+agents again with `shield mcp setup --agent <agent>`. To remove it, run
 `shield mcp remove` for each connected agent in each project, then delete the
 installation folder. Preserve project `.shield` folders to keep policy/history.
 
@@ -317,6 +318,14 @@ cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2 cargo-llvm-cov@0.
 Tests use assert_cmd, assert_fs, predicates, insta, and proptest. Tool versions
 and dependencies are pinned in the package configuration.
 
+The retained interceptor's protocol regression runs with the Rust library tests.
+Its JavaScript receipt-validator interoperability check is opt-in and requires
+Node 24+:
+
+```sh
+make -C packages/shield test-focus FILTER=historical_interceptor_receipts_pass_legacy_js_validator CARGO_FLAGS='--run-ignored ignored-only'
+```
+
 ## Checks
 
 The default nextest profile runs four tests at a time. Run process-heavy Node,
@@ -393,9 +402,9 @@ falling back to Cargo on PATH.
 optimization, debug symbols, debug assertions and automatic JSONL logging. Native
 hook deadlines also apply to diagnostic builds. `make -C packages/shield install-local-debug`
 installs that build into `~/.local/bin`. `make -C packages/shield install-local`
-installs the release build, which has logging disabled by default. After replacing
-the installed executable, run `shield mcp setup --agent codex --project /path/to/project`
-(or `--agent claude`) to refresh its pinned digest, then restart the agent.
+installs the release build, which has logging disabled by default. Replacing
+the installed executable at the same path keeps existing registrations;
+restart the agent to load the new build.
 
 Automatic logs live in the OS temporary directory under
 `shield-logs/shield-<timestamp>-<pid>.jsonl`. On macOS, inspect them with

@@ -87,7 +87,7 @@ pub(super) fn configure(
                 setup::apply(artifact, binding, edits)
             });
         }
-        let id = policy::Pack::from_yaml(artifact)?.id().to_owned();
+        let id = policy::Pack::from_retained_yaml(artifact)?.id().to_owned();
         let questions = !policy::declarations(artifact)?.is_empty();
         let mut resume = false;
         // Setup questions, then rule overrides; going back from the override

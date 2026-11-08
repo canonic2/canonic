@@ -1,14 +1,20 @@
 //! One bounded atomic project-state owner; locks are never stolen from writers.
+pub(in crate::review) mod bootstrap;
+mod locking;
+mod upgrades;
 use super::{Checkpoint, Context, Error, model::State};
+use locking::Lock;
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
     fs::{self, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
-    thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH},
 };
+#[cfg(test)]
+use std::{thread, time::Duration};
 const MAX_STATE: usize = 16 * 1024 * 1024;
 type ComparisonCapture = (
     State,
@@ -22,23 +28,33 @@ mod tests;
 pub(crate) struct Store {
     directory: PathBuf,
     root: String,
+    writer_owned: Mutex<Option<std::thread::ThreadId>>,
 }
-struct Lock {
-    path: Option<PathBuf>,
+/// A store-local witness for conversion reached from an existing writer.
+struct Writer<'a> {
+    lock: Option<Lock>,
+    owned: &'a Mutex<Option<std::thread::ThreadId>>,
 }
-impl Drop for Lock {
+impl Drop for Writer<'_> {
     fn drop(&mut self) {
-        if let Some(path) = self.path.take() {
-            let _ = fs::remove_file(path);
+        if self.lock.is_some() {
+            *self
+                .owned
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+            drop(self.lock.take());
         }
     }
 }
-impl Lock {
-    fn release(mut self) -> Result<(), std::io::Error> {
-        if let Some(path) = self.path.take() {
-            fs::remove_file(path)?;
-        }
-        Ok(())
+impl Writer<'_> {
+    fn release(mut self) -> std::io::Result<()> {
+        // Forget before unlocking: another thread may acquire this same Store
+        // immediately afterwards, and its witness must not be cleared by Drop.
+        *self
+            .owned
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        self.lock.take().expect("owned writer").release()
     }
 }
 struct Temporary {
@@ -76,6 +92,7 @@ impl Store {
         Ok(Self {
             directory,
             root: root_text,
+            writer_owned: Mutex::new(None),
         })
     }
     pub(crate) fn open(project: &Path) -> Result<Self, Error> {
@@ -229,7 +246,10 @@ impl Store {
         &self,
     ) -> Result<(State, crate::configuration::Evaluator), Error> {
         let state = self.read_unprepared()?;
-        let evaluator = crate::configuration::Evaluator::new(super::snapshots(&state.candidates)?)?;
+        let evaluator = crate::configuration::Evaluator::new_for_revision(
+            super::snapshots(&state.candidates)?,
+            &state.policy_revision,
+        )?;
         Self::validate_evaluated(&state, &evaluator)?;
         Ok((state, evaluator))
     }
@@ -245,7 +265,10 @@ impl Store {
         let snapshots = super::snapshots(&state.candidates)?;
         let evaluator = match Self::cached_evaluator(&state) {
             Some(evaluator) => evaluator,
-            None => crate::configuration::Evaluator::new(snapshots.clone())?,
+            None => crate::configuration::Evaluator::new_for_revision(
+                snapshots.clone(),
+                &state.policy_revision,
+            )?,
         };
         Self::validate_evaluated(&state, &evaluator)?;
         Ok((state, evaluator, snapshots))
@@ -283,7 +306,10 @@ impl Store {
         let state = self.read_current()?;
         let evaluator = match Self::cached_evaluator(&state) {
             Some(evaluator) => evaluator,
-            None => crate::configuration::Evaluator::new(super::snapshots(&state.candidates)?)?,
+            None => crate::configuration::Evaluator::new_for_revision(
+                super::snapshots(&state.candidates)?,
+                &state.policy_revision,
+            )?,
         };
         Self::validate_evaluated(&state, &evaluator)?;
         Ok((state, evaluator))
@@ -291,11 +317,17 @@ impl Store {
 
     /// Doctor explicitly checks source preparation even when a valid compiled
     /// artifact exists; ordinary consumers reuse that authenticated artifact.
-    pub(in crate::review) fn prepare_current(&self) -> Result<State, Error> {
-        let state = self.read_current()?;
-        let evaluator = crate::configuration::Evaluator::new(super::snapshots(&state.candidates)?)?;
-        Self::validate_evaluated(&state, &evaluator)?;
-        Ok(state)
+    pub(in crate::review) fn prepare_diagnostics(&self, state: &State) -> Result<(), Error> {
+        let candidates = state
+            .candidates
+            .iter()
+            .map(|(scope, candidate)| Ok((scope.clone(), self.captured_candidate(candidate)?)))
+            .collect::<Result<BTreeMap<_, _>, Error>>()?;
+        let evaluator = crate::configuration::Evaluator::new_for_revision(
+            super::snapshots(&candidates)?,
+            &state.policy_revision,
+        )?;
+        Self::validate_evaluated(state, &evaluator)
     }
 
     /// Reuse immutable content only after the caller verified current source.
@@ -376,10 +408,52 @@ impl Store {
         serde_json::from_value(value).map_err(|_| Error::Invalid("retained source map invalid"))
     }
 
+    /// Read-only diagnostic snapshot including optional history health.
+    pub(in crate::review) fn read_diagnostics(&self) -> Result<(State, bool), Error> {
+        let (mut state, pending) = self.read_diagnostic_checkpoint()?;
+        // Historical inspection already captured its old history in memory.
+        if !pending {
+            let _history = crate::diagnostics::trace::span("history.read");
+            let view = history::lock(self).and_then(|_guard| history::capture(self, &state));
+            history::finish(view, &mut state);
+        }
+        Ok((state, pending))
+    }
+
+    /// Read-only enrollment metadata, without current policy or history hydration.
+    /// The boolean identifies an uncommitted upgrade; this state must never be
+    /// used to authorize execution or a mutation. Historical conversion validates
+    /// its retained authority in memory without publishing files.
+    pub(in crate::review) fn read_diagnostic_checkpoint(&self) -> Result<(State, bool), Error> {
+        let _trace = crate::diagnostics::trace::span("state.checkpoint");
+        crate::diagnostics::trace::count("state.checkpoint_reads", 1);
+        let bytes = self.checkpoint_bytes()?;
+        let (mut state, pending) = match upgrades::checkpoint(&bytes) {
+            Ok(state) => {
+                self.validate_checkpoint(&state)?;
+                (state, false)
+            }
+            Err(_) => (upgrades::inspect(self, &bytes)?, true),
+        };
+        super::proposal_lifecycle::refresh(&mut state);
+        Ok((state, pending))
+    }
+
     // Current enrollment, authorization and source identities, without preparing policy.
     pub(in crate::review) fn read_checkpoint(&self) -> Result<State, Error> {
         let _trace = crate::diagnostics::trace::span("state.checkpoint");
         crate::diagnostics::trace::count("state.checkpoint_reads", 1);
+        let bytes = self.checkpoint_bytes()?;
+        let mut state = match upgrades::checkpoint(&bytes) {
+            Ok(state) => state,
+            Err(_) => upgrades::convert(self, &bytes)?,
+        };
+        self.validate_checkpoint(&state)?;
+        super::proposal_lifecycle::refresh(&mut state);
+        Ok(state)
+    }
+
+    fn checkpoint_bytes(&self) -> Result<Vec<u8>, Error> {
         let file = self.directory.join("state.json");
         #[cfg(windows)]
         crate::windows_security::check_private(&file)?;
@@ -395,8 +469,10 @@ impl Store {
             return Err(crate::policy::Error::Limit.into());
         }
         crate::diagnostics::trace::count("state.read_bytes", bytes.len() as u64);
-        let mut state: State = serde_json::from_slice(&bytes)
-            .map_err(|_| Error::Invalid("corrupt review state; preserve it for recovery"))?;
+        Ok(bytes)
+    }
+
+    fn validate_checkpoint(&self, state: &State) -> Result<(), Error> {
         if state.project_id.len() != 64
             || !state.project_id.bytes().all(|b| b.is_ascii_hexdigit())
             || state.sequence > u64::MAX - 1024
@@ -409,22 +485,20 @@ impl Store {
             "cli",
         ))?;
         if let Some(active) = &state.active {
-            active.validate_binding(&state)?;
+            active.validate_binding(state)?;
         }
-        super::read_approval::validate(&state)?;
-        super::run_approval::validate(&state)?;
-        super::hook_approval::validate(&state)?;
-        super::session_grants::validate(&state)?;
-        super::proposal_lifecycle::refresh(&mut state);
-        Ok(state)
+        super::read_approval::validate(state)?;
+        super::run_approval::validate(state)?;
+        super::hook_approval::validate(state)?;
+        super::session_grants::validate(state)?;
+        Ok(())
     }
     /// Captures the history view under the lock, then verifies, correlates and
     /// retains it after releasing the lock.
     pub(in crate::review) fn read_history(&self) -> Result<State, Error> {
         let _trace = crate::diagnostics::trace::span("history.read");
         let (mut state, view) = {
-            let _guard = history::lock(self)?;
-            let state = self.read_checkpoint()?;
+            let (state, _guard) = self.observation_checkpoint()?;
             let view = history::capture(self, &state);
             (state, view)
         };
@@ -437,8 +511,7 @@ impl Store {
         context: &Context,
         operation: impl FnOnce(&mut State) -> Result<Value, Error>,
     ) -> Result<Value, Error> {
-        let _guard = history::lock(self)?;
-        let mut state = self.read_checkpoint()?;
+        let (mut state, _guard) = self.observation_checkpoint()?;
         state.check(context)?;
         if !state.history_enabled {
             return Ok(json!({"status":"disabled","request_id":null,"event_id":null}));
@@ -450,6 +523,23 @@ impl Store {
         }
         Ok(result)
     }
+    /// Capture optional observations under their own lock. Legacy conversion
+    /// needs authority -> history ordering, so release history before converting.
+    fn observation_checkpoint(&self) -> Result<(State, fs::File), Error> {
+        loop {
+            let guard = history::lock(self)?;
+            let _trace = crate::diagnostics::trace::span("state.checkpoint");
+            crate::diagnostics::trace::count("state.checkpoint_reads", 1);
+            let bytes = self.checkpoint_bytes()?;
+            if let Ok(mut state) = upgrades::checkpoint(&bytes) {
+                self.validate_checkpoint(&state)?;
+                super::proposal_lifecycle::refresh(&mut state);
+                return Ok((state, guard));
+            }
+            drop(guard);
+            self.read_checkpoint()?;
+        }
+    }
     pub(in crate::review) fn with_interaction_lock<T>(
         &self,
         operation: impl FnOnce() -> Result<T, Error>,
@@ -459,27 +549,17 @@ impl Store {
         lock.release()?;
         Ok(result)
     }
-    fn lock(&self, checkpoint: Checkpoint<'_>) -> Result<Lock, Error> {
+    fn lock(&self, checkpoint: Checkpoint<'_>) -> Result<Writer<'_>, Error> {
         let _trace = crate::diagnostics::trace::span("authority.lock_wait");
-        let path = self.directory.join("state.lock");
-        for _ in 0..20 {
-            checkpoint()?;
-            let mut options = OpenOptions::new();
-            options.write(true).create_new(true);
-            private(&mut options);
-            match options.open(&path) {
-                Ok(mut file) => {
-                    let lock = Lock { path: Some(path) };
-                    file.write_all(format!("{}\n", std::process::id()).as_bytes())?;
-                    return Ok(lock);
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    thread::sleep(Duration::from_millis(25));
-                }
-                Err(e) => return Err(e.into()),
-            }
-        }
-        Err(Error::Locked)
+        let lock = locking::acquire(&self.directory, checkpoint)?;
+        *self
+            .writer_owned
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(std::thread::current().id());
+        Ok(Writer {
+            lock: Some(lock),
+            owned: &self.writer_owned,
+        })
     }
     #[cfg(test)]
     pub(crate) fn update(
@@ -655,7 +735,18 @@ impl Store {
             Err(error) if state.history_control => return Err(error),
             Err(_) => None,
         };
-        if state.authorization_events.len() > 1024 {
+        // One derived migration receipt has reserved capacity so a full older
+        // journal upgrades without deleting any retained grant evidence.
+        let upgrade_receipts = state
+            .authorization_events
+            .iter()
+            .filter(|event| {
+                event["kind"] == "compiled_cache_prepared"
+                    && event["operator"]["mechanism"] == "derived-cache"
+                    && event["details"]["migration"] == "optional-compiled-v1"
+            })
+            .count();
+        if upgrade_receipts > 1 || state.authorization_events.len() > 1024 + upgrade_receipts {
             return Err(crate::policy::Error::Limit.into());
         }
         let bytes = history::encode(self, state, history_guard.is_some())?;

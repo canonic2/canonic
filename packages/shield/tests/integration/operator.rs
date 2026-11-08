@@ -748,10 +748,17 @@ fn old_public_commands_and_unattended_mutations_are_refused() {
         vec!["mcp", "setup", "--agent", "all"],
         vec!["init", "--integration", "skip"],
         vec!["registry", "list", "--global"],
-        vec!["__internal", "mcp"],
     ] {
         cargo_bin_cmd!("shield").args(&args).assert().code(2);
     }
+    // Retained MCP launch syntax is supported, but still requires enrollment.
+    cargo_bin_cmd!("shield")
+        .current_dir(root.path())
+        .args(["__internal", "mcp"])
+        .assert()
+        .code(1)
+        .stdout("")
+        .stderr(predicates::str::contains("enrolled project required"));
     cargo_bin_cmd!("shield")
         .args(["init", "--json", "--project"])
         .arg(root.path())

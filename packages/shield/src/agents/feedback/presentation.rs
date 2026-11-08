@@ -41,8 +41,9 @@ pub(super) fn denial(mut reply: Reply, receipt: &Value) -> Reply {
         "invalid-context" => "The session's working directory is not an existing folder inside this Shield project.".into(),
         "runtime-busy" => "Shield state was briefly locked by another update. Retrying the request can succeed.".into(),
         "handoff-failed" | "project-changed" => "The project's current authorization could not be verified. Check Shield's project status before retrying.".into(),
-        "compiled-cache-unavailable" => "The policy cache is unavailable. Run `shield cache prepare` in your terminal before retrying.".into(),
-        _ => "Authorization could not be verified. Run `shield doctor` in your terminal before retrying.".into(),
+        "compiled-cache-unavailable" => "The policy cache is unavailable. The agent can rebuild it, or ask you to approve a new cache location in this session.".into(),
+        "protection-failure" => "Project protection could not be verified. The agent can inspect it and request a repair in this session.".into(),
+        _ => "Authorization could not be verified. The agent can inspect Shield and request recovery in this session.".into(),
     };
     let context = reply.agent_context.take();
     reply.agent_context = Some(context.map_or_else(

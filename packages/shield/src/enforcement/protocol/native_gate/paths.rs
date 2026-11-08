@@ -821,6 +821,7 @@ fn protected_path(path: &Path, cache: Option<&Path>) -> bool {
     let parts: Vec<_> = path.components().map(Component::as_os_str).collect();
     cache.is_some_and(|cache| path.starts_with(cache))
         || protected_files().iter().any(|owned| {
+            let historical = *owned == crate::review::integrations::LEGACY_INTERCEPTOR_PATH;
             let owned: Vec<_> = Path::new(owned)
                 .components()
                 .map(Component::as_os_str)
@@ -830,6 +831,7 @@ fn protected_path(path: &Path, cache: Option<&Path>) -> bool {
                     .iter()
                     .zip(&owned)
                     .all(|(left, right)| native_name(left, right))
+                    && (!historical || crate::review::integrations::protects_legacy_path(path))
             })
         })
 }
@@ -925,6 +927,47 @@ fn destructive(value: &Value, root: &Path, cwd: &Path, cwd_known: bool, guard: G
         };
         removal(&source, root, guard) || removal(&destination, root, guard)
     })
+}
+
+#[cfg(test)]
+mod historical_skills {
+    use super::*;
+
+    #[test]
+    fn unowned_shield_skill_folders_follow_ordinary_path_policy() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let bundle =
+            crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None)
+                .unwrap();
+        crate::review::mcp::initialize_fixture(root.path(), &bundle);
+        let guard = Guard {
+            cache: None,
+            allow: PathAccess::default(),
+            working_files: None,
+        };
+        for relative in [
+            ".claude/skills/shield",
+            ".claude/skills/shield/SKILL.md",
+            "demo/.claude/skills/shield/SKILL.md",
+        ] {
+            assert!(
+                classify(&root.path().join(relative), guard, Access::Write) == Protection::None,
+                "{relative}"
+            );
+        }
+        assert!(!removal(
+            &root.path().join(".claude/skills"),
+            root.path(),
+            guard
+        ));
+        assert!(
+            classify(
+                &root.path().join(".codex/config.toml"),
+                guard,
+                Access::Write
+            ) == Protection::Blocked
+        );
+    }
 }
 
 #[cfg(all(test, unix))]

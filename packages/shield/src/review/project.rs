@@ -44,9 +44,11 @@ pub(super) fn captured(context: &Context) -> Result<State, Error> {
 }
 
 pub(super) fn status(context: &Context) -> Result<Value, Error> {
-    let state = Store::open(Path::new(&context.project_root))?.read_history()?;
+    let (state, pending) = Store::open(Path::new(&context.project_root))?.read_diagnostics()?;
     state.check(context)?;
-    status_from(context, &state)
+    let mut value = status_from(context, &state)?;
+    value["checkpoint_upgrade_pending"] = json!(pending);
+    Ok(value)
 }
 
 /// Render a checked history capture, also used by doctor's additional probes.

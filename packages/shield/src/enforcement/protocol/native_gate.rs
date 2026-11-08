@@ -18,7 +18,7 @@ pub(crate) fn paused(
 ) -> Result<(), &'static str> {
     let root = paused.root.as_path();
     let cwd = cwd.canonicalize().map_err(|_| "invalid-context")?;
-    if !cwd.is_dir() || !cwd.starts_with(root) {
+    if !cwd.is_dir() || !super::owns_context(root, &cwd) {
         return Err("invalid-context");
     }
     let guard = paths::Guard {

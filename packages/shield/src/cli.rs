@@ -17,6 +17,9 @@ pub enum Command {
     EnforceRequest(EnforceRequest),
     /// Translate a registered native host event into the core protocol.
     NativeHook(NativeHook),
+    /// Retained MCP launch protocol used by earlier installations.
+    #[command(hide = true)]
+    Mcp(McpServe),
     /// Launch an exact reviewed local stdio connection without exposing its settings.
     McpConnect(McpConnect),
     /// Run a supported native command against active policy.
@@ -70,8 +73,8 @@ pub struct NativeHook {
     /// Agent protocol fixed by confirmed installation.
     #[arg(long, value_parser = crate::agents::names())]
     pub agent: String,
-    /// Event fixed by confirmed installation, including input-read failures.
-    #[arg(long)]
+    /// Event fixed by installation; omitted only by legacy Claude/Codex hooks.
+    #[arg(long, default_value = "", hide_default_value = true)]
     pub event: String,
 }
 

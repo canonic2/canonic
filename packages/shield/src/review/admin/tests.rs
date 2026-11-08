@@ -368,7 +368,7 @@ fn parity_admin_cache_preparation_uses_committed_policy_without_new_authority() 
         prepare(
             &context,
             "cache_prepare",
-            &json!({"cache_dir":"/tmp/acme-other-cache"}),
+            &json!({"cache_dir":"relative-cache"}),
             &|| Ok(())
         )
         .is_err()

@@ -1,5 +1,77 @@
 //! Adapter-owned hook and MCP configuration reconciliation.
 use super::*;
+
+#[test]
+fn historical_native_profiles_keep_actual_coverage_without_requiring_advisory_upgrade() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let binary = std::env::current_exe().unwrap();
+    for (agent, events) in [
+        (
+            "claude",
+            vec!["PreToolUse", "PostToolUse", "PostToolUseFailure"],
+        ),
+        ("codex", vec!["PreToolUse", "PostToolUse"]),
+        (
+            "codex",
+            vec!["PreToolUse", "PermissionRequest", "PostToolUse"],
+        ),
+    ] {
+        let adapter = lookup(agent).unwrap();
+        let groups = events
+            .iter()
+            .map(|event| {
+                let command = hook_command(&binary, root.path(), agent, event).unwrap();
+                ((*event).into(), adapter.hook_group(&command))
+            })
+            .collect();
+        let installed = Installation {
+            groups,
+            mcp: None,
+            settings: None,
+        };
+        assert!(compatible_historical_hooks(
+            root.path(),
+            adapter,
+            &binary,
+            &installed
+        ));
+        assert!(!installed.groups.contains_key("Stop"));
+        let mut incomplete = installed.clone();
+        incomplete.groups.remove("PreToolUse");
+        assert!(!compatible_historical_hooks(
+            root.path(),
+            adapter,
+            &binary,
+            &incomplete
+        ));
+        #[cfg(not(windows))]
+        {
+            let mut installed = installed;
+            let command = format!(
+                "{} __internal native-hook --project {} --agent {agent} || exit 2",
+                quoted(&binary).unwrap(),
+                quoted(root.path()).unwrap()
+            );
+            for value in installed.groups.values_mut() {
+                *value = adapter.hook_group(&command);
+            }
+            assert!(compatible_historical_hooks(
+                root.path(),
+                adapter,
+                &binary,
+                &installed
+            ));
+            installed.groups.get_mut("PreToolUse").unwrap()["hooks"][0]["command"] =
+                serde_json::json!("acme-unowned-command");
+            assert!(!compatible_historical_hooks(
+                root.path(),
+                adapter,
+                &binary,
+                &installed
+            ));
+        }
+    }
+}
 use crate::agents::{AgentSpec, Event, Reply, Request};
 use crate::enforcement::protocol::NativeApproval;
 use serde_json::{Value, json};
@@ -194,9 +266,17 @@ fn adapter_toml_codec_composes_shared_file_install_repair_and_removal() {
     fs::write(&path, original).unwrap();
     let binary = Path::new("/opt/acme/shield");
     let mut changes = Vec::new();
-    let installed = prepare_adapter(root.path(), &Acme, None, Some(binary), &[], &mut changes)
-        .unwrap()
-        .unwrap();
+    let installed = prepare_adapter(
+        root.path(),
+        &Acme,
+        None,
+        Some(binary),
+        &[],
+        &mut changes,
+        false,
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(changes.len(), 1);
     assert_eq!(changes[0].before.as_deref(), Some(original));
     assert_eq!(fs::read_to_string(&path).unwrap(), original);
@@ -220,6 +300,7 @@ fn adapter_toml_codec_composes_shared_file_install_repair_and_removal() {
         Some(binary),
         &[],
         &mut repair,
+        false,
     )
     .unwrap();
     assert_eq!(repair.len(), 1);
@@ -234,6 +315,7 @@ fn adapter_toml_codec_composes_shared_file_install_repair_and_removal() {
         None,
         &[],
         &mut removal,
+        false,
     )
     .unwrap();
     assert_eq!(removal.len(), 1);
@@ -243,7 +325,18 @@ fn adapter_toml_codec_composes_shared_file_install_repair_and_removal() {
     // A second component's refusal must leave the file untouched.
     fs::write(&path, "theme = \"acme\"\nshield_server = \"user-server\"\n").unwrap();
     let before = fs::read_to_string(&path).unwrap();
-    assert!(prepare_adapter(root.path(), &Acme, None, Some(binary), &[], &mut Vec::new()).is_err());
+    assert!(
+        prepare_adapter(
+            root.path(),
+            &Acme,
+            None,
+            Some(binary),
+            &[],
+            &mut Vec::new(),
+            false
+        )
+        .is_err()
+    );
     assert_eq!(fs::read_to_string(&path).unwrap(), before);
 }
 
@@ -262,10 +355,17 @@ fn google_adapters_install_repair_remove_preserve_settings_and_shared_files() {
         fs::write(&path, original.to_string()).unwrap();
         let binary = std::env::current_exe().unwrap();
         let mut changes = Vec::new();
-        let installed =
-            prepare_adapter(root.path(), adapter, None, Some(&binary), &[], &mut changes)
-                .unwrap()
-                .unwrap();
+        let installed = prepare_adapter(
+            root.path(),
+            adapter,
+            None,
+            Some(&binary),
+            &[],
+            &mut changes,
+            false,
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(changes.len(), if agent == "gemini" { 1 } else { 2 });
         files::publish(root.path(), &changes).unwrap();
         let source = fs::read_to_string(&path).unwrap();
@@ -277,6 +377,7 @@ fn google_adapters_install_repair_remove_preserve_settings_and_shared_files() {
             Some(&binary),
             &[],
             &mut repair,
+            false,
         )
         .unwrap();
         files::publish(root.path(), &repair).unwrap();
@@ -289,6 +390,7 @@ fn google_adapters_install_repair_remove_preserve_settings_and_shared_files() {
             None,
             &[],
             &mut removal,
+            false,
         )
         .unwrap();
         files::publish(root.path(), &removal).unwrap();

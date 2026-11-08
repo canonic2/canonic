@@ -43,7 +43,9 @@ fn identity(row: &Value) -> Result<Instance, Error> {
 }
 
 fn release(row: &Value, bytes: &str) -> Result<Release, Error> {
-    let pack = Pack::from_yaml(bytes)?;
+    // Installed artifacts already carry exact retained identities. Fresh
+    // acquisitions pass the strict candidate_artifact decoder before this call.
+    let pack = Pack::from_retained_yaml(bytes)?;
     if pack.id() != row["id"]
         || pack.version() != row["version"]
         || row["digest"].as_str().is_none_or(|digest| {
@@ -141,6 +143,7 @@ pub(super) fn prepare(
         context,
         None,
         rows,
+        &roots,
         Acquisition {
             pending,
             locked: roots
@@ -166,85 +169,207 @@ fn acquire_closure(
     context: &Context,
     registered: Option<&Effective>,
     rows: &[Value],
-    mut acquisition: Acquisition,
+    roots: &[Root<Profile>],
+    acquisition: Acquisition,
     releases: &mut Vec<Release>,
     artifacts: &mut Artifacts,
 ) -> Result<BTreeSet<Instance>, Error> {
+    let current = if registered.is_none() && !acquisition.offline {
+        Some(registries::effective(Some(context))?)
+    } else {
+        None
+    };
+    let registered = registered.or(current.as_ref());
+    let mut enrolled: BTreeSet<_> = registered
+        .into_iter()
+        .flat_map(Effective::iter)
+        .map(|(_, source, _)| source.identity().to_owned())
+        .collect();
+    enrolled.extend(releases.iter().map(|r| r.instance.registry.clone()));
+    let mut known = known_instances(
+        releases,
+        roots,
+        acquisition.pending,
+        &acquisition.locked,
+        acquisition.offline,
+    )?;
+    let mut pending = BTreeSet::new();
     let mut acquired = BTreeSet::new();
     let mut catalogs = acquisition.catalogs;
-    while let Some(instance) = acquisition.pending.pop_first() {
-        if !acquired.insert(instance.clone()) {
-            continue;
-        }
-        if acquired.len() > 64 {
-            return Err(policy::Error::Limit.into());
-        }
-        // Existing roots remain exact during add. Retained dependencies can satisfy
-        // offline profile changes; acquisition is only needed for a missing closure.
-        if (acquisition.offline || acquisition.locked.contains(&instance))
-            && releases.iter().any(|r| r.instance == instance)
-        {
-            for release in releases.iter().filter(|r| r.instance == instance) {
-                acquisition.pending.extend(dependencies(release));
-            }
-            continue;
-        }
+    loop {
+        let request =
+            match resolution::resolve_pending(roots, releases, &enrolled, &known, &pending) {
+                Ok(_) => break,
+                Err(
+                    request @ (resolution::Error::CandidatesRequired(_)
+                    | resolution::Error::MetadataRequired(_, _)),
+                ) => request,
+                Err(error) => return Err(error.into()),
+            };
+        let instance = match &request {
+            resolution::Error::CandidatesRequired(instance)
+            | resolution::Error::MetadataRequired(instance, _) => instance.clone(),
+            _ => unreachable!(),
+        };
         if acquisition.offline {
             return Err(Error::Invalid("retained dependency closure is incomplete"));
         }
-        let current;
-        let registered = if let Some(registered) = registered {
-            registered
-        } else {
-            current = registries::effective(Some(context))?;
-            &current
-        };
-        let (alias, source) = enrolled_source(registered, rows, &instance)?;
-        if !catalogs.contains_key(&instance.registry) {
-            catalogs.insert(
-                instance.registry.clone(),
-                registries::checked_catalog(context, &source)?,
-            );
-        }
-        let catalog = &catalogs[&instance.registry];
-        let mut published = false;
-        for entry in catalog.entries().iter().filter(|entry| {
-            entry.id == instance.pack
-                && acquisition
-                    .minimum_versions
-                    .get(&instance)
-                    .is_none_or(|minimum| entry.version >= *minimum)
-        }) {
-            published = true;
-            let Some(bytes) = candidate_artifact(&context.fetcher, &source, entry)? else {
-                continue;
-            };
-            let row = json!({"id":entry.id,"version":entry.version,"digest":entry.sha256,"source":source,"source_identity":source.identity(),"source_alias":alias,"direct":false,"pinned":false});
-            let release = release(&row, &bytes)?;
-            acquisition.pending.extend(dependencies(&release));
-            let key = (release.instance.clone(), release.version.clone());
-            if let Some((_, retained)) = artifacts.get(&key) {
-                if retained != &bytes {
-                    return Err(Error::Invalid(
-                        "same dependency release has different bytes",
-                    ));
+        let (alias, source) = enrolled_source(
+            registered.expect("online registry capture"),
+            rows,
+            &instance,
+        )?;
+        let catalog = acquire_catalog(&mut catalogs, context, &source, &instance)?;
+        match request {
+            resolution::Error::CandidatesRequired(_) => {
+                known.insert(instance.clone());
+                acquired.insert(instance.clone());
+                if known.len() > 64 {
+                    return Err(policy::Error::Limit.into());
                 }
-                continue;
+                registries::checked_history(context, &source, catalog, &instance.pack, None)?;
+                for entry in catalog
+                    .releases(&instance.pack)
+                    .into_iter()
+                    .filter(|entry| {
+                        acquisition
+                            .minimum_versions
+                            .get(&instance)
+                            .is_none_or(|minimum| entry.version >= *minimum)
+                    })
+                {
+                    if releases
+                        .iter()
+                        .any(|r| r.instance == instance && r.version == entry.version)
+                    {
+                        continue;
+                    }
+                    pending.insert((instance.clone(), entry.version.clone()));
+                    releases.push(Release {
+                        instance: instance.clone(),
+                        version: entry.version.clone(),
+                        dependencies: Vec::new(),
+                    });
+                }
             }
-            artifacts.insert(key, (row, bytes));
-            releases.push(release);
-            if releases.len() > 4096
-                || artifacts.values().map(|(_, b)| b.len()).sum::<usize>()
-                    > crate::configuration::MAX_BUNDLE_BYTES
-            {
-                return Err(policy::Error::Limit.into());
+            resolution::Error::MetadataRequired(_, version) => {
+                let entry = catalog
+                    .release(&instance.pack, &version)
+                    .expect("enumerated release");
+                pending.remove(&(instance.clone(), version.clone()));
+                let Some(bytes) = candidate_artifact(&context.fetcher, &source, entry)? else {
+                    releases.retain(|r| r.instance != instance || r.version != version);
+                    if !releases.iter().any(|r| r.instance == instance) {
+                        return Err(Error::UnsupportedReleases(instance.pack.to_string()));
+                    }
+                    continue;
+                };
+                let row = json!({"id":entry.id,"version":entry.version,"digest":entry.sha256,"source":source,"source_identity":source.identity(),"source_alias":alias,"direct":false,"pinned":false});
+                let loaded = release(&row, &bytes)?;
+                refresh_known(&loaded, &acquired, &acquisition.locked, roots, &mut known);
+                retain_release(releases, artifacts, (instance, version), row, bytes, loaded)?;
             }
-        }
-        if published && !releases.iter().any(|r| r.instance == instance) {
-            return Err(Error::UnsupportedReleases(instance.pack.to_string()));
+            _ => unreachable!(),
         }
     }
+    releases.retain(|r| !pending.contains(&(r.instance.clone(), r.version.clone())));
     Ok(acquired)
+}
+
+fn retain_release(
+    releases: &mut [Release],
+    artifacts: &mut Artifacts,
+    key: (Instance, semver::Version),
+    row: Value,
+    bytes: String,
+    loaded: Release,
+) -> Result<(), Error> {
+    let candidate = releases
+        .iter_mut()
+        .find(|r| r.instance == key.0 && r.version == key.1)
+        .expect("enumerated release");
+    *candidate = loaded;
+    artifacts.insert(key, (row, bytes));
+    if artifacts.values().map(|(_, b)| b.len()).sum::<usize>()
+        > crate::configuration::MAX_BUNDLE_BYTES
+    {
+        return Err(policy::Error::Limit.into());
+    }
+    Ok(())
+}
+
+fn refresh_known(
+    loaded: &Release,
+    acquired: &BTreeSet<Instance>,
+    locked: &BTreeSet<Instance>,
+    roots: &[Root<Profile>],
+    known: &mut BTreeSet<Instance>,
+) {
+    for dependency in dependencies(loaded) {
+        if !acquired.contains(&dependency)
+            && !locked.contains(&dependency)
+            && !roots
+                .iter()
+                .any(|root| root.instance == dependency && root.pin.is_some())
+        {
+            known.remove(&dependency);
+        }
+    }
+}
+
+fn known_instances(
+    releases: &[Release],
+    roots: &[Root<Profile>],
+    mut mutable: BTreeSet<Instance>,
+    locked: &BTreeSet<Instance>,
+    offline: bool,
+) -> Result<BTreeSet<Instance>, Error> {
+    // Refresh only the requested seeds and their reachable dependencies. Other
+    // retained instances remain exact during a targeted update.
+    loop {
+        let before = mutable.len();
+        let reachable: Vec<_> = releases
+            .iter()
+            .filter(|r| mutable.contains(&r.instance) && !locked.contains(&r.instance))
+            .flat_map(dependencies)
+            .collect();
+        mutable.extend(reachable);
+        if mutable.len() == before {
+            break;
+        }
+        if mutable.len() > 64 {
+            return Err(policy::Error::Limit.into());
+        }
+    }
+    Ok(releases
+        .iter()
+        .filter(|r| {
+            offline
+                || !mutable.contains(&r.instance)
+                || locked.contains(&r.instance)
+                || roots
+                    .iter()
+                    .any(|root| root.instance == r.instance && root.pin.is_some())
+        })
+        .map(|r| r.instance.clone())
+        .collect())
+}
+
+fn acquire_catalog<'a>(
+    catalogs: &'a mut BTreeMap<String, Catalog>,
+    context: &Context,
+    source: &Source,
+    instance: &Instance,
+) -> Result<&'a mut Catalog, Error> {
+    if !catalogs.contains_key(&instance.registry) {
+        catalogs.insert(
+            instance.registry.clone(),
+            registries::checked_catalog(context, source)?,
+        );
+    }
+    Ok(catalogs
+        .get_mut(&instance.registry)
+        .expect("acquired catalog"))
 }
 
 fn enrolled_source(
@@ -298,7 +423,7 @@ fn render(
         }
         row["profile"] = json!(selection.level);
         row["direct"] = json!(selection.direct);
-        row["dependencies"] = json!(Pack::from_yaml(&bytes)?.dependencies());
+        row["dependencies"] = json!(Pack::from_retained_yaml(&bytes)?.dependencies());
         chosen_rows.push(row);
         chosen_bytes.push(bytes);
     }

@@ -10,7 +10,45 @@ use crate::{
 use serde_json::{Value, json};
 use std::path::Path;
 mod connections;
+mod scope;
+pub(super) use connections::prepare_configured;
 use connections::prepare_connections;
+
+/// Continue already confirmed work without asking the person to repeat setup.
+/// Conflicting owned edits remain pending for a new, exact human review.
+pub(in crate::review) fn resume_confirmed(context: &Context) -> Result<bool, Error> {
+    resume_for(context, true)
+}
+
+pub(in crate::review) fn resume_for(context: &Context, explicit: bool) -> Result<bool, Error> {
+    let meta = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
+    if let Some(plan) = pending(&meta)? {
+        if !explicit
+            && context
+                .agent
+                .as_deref()
+                .is_some_and(|agent| !plan.affects(agent))
+        {
+            return Ok(false);
+        }
+        resume_plan(context, &meta, &plan, None)?;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+pub(super) fn resume_plan(
+    context: &Context,
+    metadata: &Value,
+    plan: &Plan,
+    activation: Option<&str>,
+) -> Result<(), Error> {
+    match activation {
+        Some(id) => super::apply_owned(context, metadata, plan, &|| Ok(()), Some(id)),
+        None => apply(context, metadata, plan),
+    }?;
+    sync_prefix_rules_for(context, Some(plan))
+}
 
 pub(in crate::review) fn desired(root: &Path) -> Result<Registration, Error> {
     let binary = std::env::current_exe()?.canonicalize()?;
@@ -37,6 +75,7 @@ pub(in crate::review) fn desired(root: &Path) -> Result<Registration, Error> {
         binary,
         version: env!("CARGO_PKG_VERSION").into(),
         agents: std::collections::BTreeMap::new(),
+        interceptor: None,
         ask_fallback: std::collections::BTreeMap::new(),
         approved_tools: None,
         connections: std::collections::BTreeMap::new(),
@@ -50,7 +89,7 @@ pub(in crate::review) fn prepare(
     meta: &Value,
     choice: IntegrationChoice,
 ) -> Result<Option<Plan>, Error> {
-    prepare_with(root, meta, choice, false, None, true)
+    prepare_with(root, meta, choice, false, None, true, false)
 }
 
 #[cfg(test)]
@@ -75,7 +114,7 @@ pub(in crate::review) fn prepare_approving(
     if initial && matches!(choice, IntegrationChoice::Keep) {
         return Ok(None);
     }
-    prepare_with(root, meta, choice, initial, approved, handover)
+    prepare_with(root, meta, choice, initial, approved, handover, false)
 }
 
 /// The tools approved without asking: saved, or the defaults.
@@ -92,50 +131,40 @@ pub(in crate::review) fn prepare_with(
     initial: bool,
     approved: Option<Vec<String>>,
     handover: bool,
+    repair_hooks: bool,
 ) -> Result<Option<Plan>, Error> {
-    let before = read_file(root)?;
+    let canonical_root = root.canonicalize()?;
+    let root = canonical_root.as_path();
     if let Some(plan) = pending(meta)? {
-        files::validate_recovery(root, &plan.files)?;
-        if before != plan.before && before.as_deref() != Some(&plan.after) {
-            return Err(Error::Invalid(
-                "MCP file changed after partial setup; restore the reviewed file before repair",
-            ));
-        }
-        if !matches!(choice, IntegrationChoice::Keep) {
-            return Err(Error::Invalid(
-                "finish the confirmed setup first: run shield mcp setup without --agent or --remove",
-            ));
-        }
-        return Ok(Some(plan));
+        return retained_plan(root, meta, choice, plan).map(Some);
     }
     let mut previous = registration(meta)?;
     if matches!(choice, IntegrationChoice::Keep) {
         return Ok(None);
     }
+    let fresh = matches!(choice, IntegrationChoice::Agents(_))
+        .then(|| desired(root))
+        .transpose()?;
+    let approved = approved.unwrap_or(approved_tools(meta)?);
+    let requested = choice;
+    let (choice, scope_reason) =
+        scope::selection(choice, previous.as_ref(), fresh.as_ref(), &approved)?;
+    let targets = selected_targets(choice);
+    let shared = choice.contains(box_definition::ID)
+        || agents::ADAPTERS
+            .iter()
+            .any(|a| a.spec().mcp_path.is_none() && choice.contains(a.spec().id));
+    let before = if shared { read_file(root)? } else { None };
     if initial && previous.is_none() && !matches!(choice, IntegrationChoice::RemoveAgents(_)) {
         previous = capture_initial(root, choice, before.as_deref())?;
     }
-    let mut desired = match choice {
-        IntegrationChoice::Agents(_) => Some(desired(root)?),
-        IntegrationChoice::RemoveAgents(_) => previous.clone().map(|mut registration| {
-            registration.agents.clear();
-            registration.box_definition = None;
-            registration
-        }),
-        IntegrationChoice::Keep => None,
-    };
-    let approved = match approved {
-        Some(approved) => approved,
-        None => approved_tools(meta)?,
-    };
-    if let Some(desired) = &mut desired {
-        desired.ask_fallback = previous
-            .as_ref()
-            .map(|r| r.ask_fallback.clone())
-            .unwrap_or_default();
-        desired.approved_tools = Some(approved.clone());
-    }
+    let mut desired = next_registration(previous.as_ref(), fresh, &approved, choice);
     let handed_over = handed_over(previous.as_ref(), choice, handover);
+    if let Some(desired) = &mut desired {
+        for agent in &handed_over {
+            desired.agents.remove(agent);
+        }
+    }
     // Files are reconciled as if Shield never recorded the handed-over
     // installations, so their native entries stay exactly as they are.
     let planned = previous.clone().map(|mut registration| {
@@ -145,29 +174,54 @@ pub(in crate::review) fn prepare_with(
         registration
     });
     let mut files = Vec::new();
+    let file_choice = file_selection(choice, requested, previous.as_ref())?;
     prepare_files(
         root,
-        choice,
+        file_choice,
         planned.as_ref(),
         desired.as_mut(),
         &approved,
         &mut files,
+        repair_hooks,
     )?;
     if desired.as_ref().is_some_and(|registration| {
-        registration.agents.is_empty() && registration.box_definition.is_none()
+        registration.agents.is_empty()
+            && registration.box_definition.is_none()
+            && registration.interceptor.is_none()
     }) {
         desired = None;
     }
     if desired.is_none() && previous.is_none() {
         return Ok(None);
     }
-    let after = mcp_after(before.as_deref(), planned.as_ref(), desired.as_ref())?;
-    let (after, policy_revision) =
-        prepare_connections(root, &after, planned.as_ref(), desired.as_mut(), &mut files)?;
+    let repair_shared = repair_hooks
+        && agents::ADAPTERS.iter().any(|adapter| {
+            adapter.spec().mcp_path.is_none() && selected_agent(choice, adapter.spec().id)
+        });
+    let after = if shared {
+        mcp_after(
+            before.as_deref(),
+            planned.as_ref(),
+            desired.as_ref(),
+            repair_shared,
+        )?
+    } else {
+        String::new()
+    };
+    let (after, policy_revision) = prepare_connections(
+        root,
+        &after,
+        planned.as_ref(),
+        desired.as_mut(),
+        &mut files,
+        &targets,
+    )?;
     if after.len() as u64 > MAX_CONFIG {
         return Err(Error::Invalid("MCP configuration exceeds limit"));
     }
-    Ok(Some(Plan {
+    let plan = Plan {
+        targets: Some(targets),
+        scope_reason,
         policy_revision,
         before,
         after,
@@ -175,7 +229,82 @@ pub(in crate::review) fn prepare_with(
         desired,
         files,
         handed_over,
-    }))
+    };
+    super::maintenance::validate(&plan)?;
+    Ok(Some(plan))
+}
+
+/// Shared-launcher review does not select an omitted SDK-to-native migration.
+fn file_selection(
+    choice: IntegrationChoice,
+    requested: IntegrationChoice,
+    previous: Option<&Registration>,
+) -> Result<IntegrationChoice, Error> {
+    match choice {
+        IntegrationChoice::Agents(selected)
+            if !requested.contains("claude")
+                && previous.is_some_and(|r| r.interceptor.is_some()) =>
+        {
+            Ok(IntegrationChoice::Agents(
+                selected & !IntegrationChoice::bits(&["claude"])?,
+            ))
+        }
+        _ => Ok(choice),
+    }
+}
+
+fn selected_targets(choice: IntegrationChoice) -> Vec<String> {
+    std::iter::once(box_definition::ID)
+        .chain(agents::ADAPTERS.iter().map(|a| a.spec().id))
+        .filter(|id| choice.contains(id))
+        .map(str::to_owned)
+        .collect()
+}
+
+fn retained_plan(
+    root: &Path,
+    meta: &Value,
+    choice: IntegrationChoice,
+    plan: Plan,
+) -> Result<Plan, Error> {
+    super::validate_pending_ownership(meta)?;
+    files::validate_plan_recovery(root, &plan)?;
+    if plan.touches_shared() {
+        super::reconcile::reconcile(
+            ".mcp.json",
+            plan.before.as_deref(),
+            super::shared_after(&plan),
+            read_file(root)?.as_deref(),
+        )?;
+    }
+    if !matches!(choice, IntegrationChoice::Keep) {
+        return Err(Error::Invalid(
+            "a confirmed setup is unfinished; review or cancel it through mcp_setup before selecting another change",
+        ));
+    }
+    Ok(plan)
+}
+
+fn next_registration(
+    previous: Option<&Registration>,
+    mut fresh: Option<Registration>,
+    approved: &[String],
+    choice: IntegrationChoice,
+) -> Option<Registration> {
+    if !choice.contains("claude")
+        && let Some((fresh, previous)) = fresh.as_mut().zip(previous)
+    {
+        fresh.entry.clone_from(&previous.entry);
+    }
+    let mut next = previous.cloned().or_else(|| fresh.clone());
+    if let (Some(next), Some(fresh)) = (&mut next, fresh) {
+        next.binary = fresh.binary;
+        next.binary_digest = fresh.binary_digest;
+        next.version = fresh.version;
+        next.entry = fresh.entry;
+        next.approved_tools = Some(approved.to_vec());
+    }
+    next
 }
 
 /// The direct installations an install of Box hands over: those recorded and
@@ -223,6 +352,7 @@ pub(in crate::review) fn prepare_files(
     mut desired: Option<&mut Registration>,
     approved: &[String],
     files: &mut Vec<files::Change>,
+    repair_hooks: bool,
 ) -> Result<(), Error> {
     prepare_native(
         root,
@@ -231,6 +361,7 @@ pub(in crate::review) fn prepare_files(
         desired.as_deref_mut(),
         approved,
         files,
+        repair_hooks,
     )?;
     prepare_box(
         root,
@@ -240,11 +371,27 @@ pub(in crate::review) fn prepare_files(
         approved,
         files,
     )?;
+    let replace_legacy = selected_agent(choice, "claude")
+        || (desired.as_ref().is_some_and(|r| r.native_covers("claude"))
+            && previous.is_none_or(|r| !r.native_covers("claude")));
+    super::legacy::prepare(
+        root,
+        previous,
+        desired.as_deref_mut(),
+        replace_legacy,
+        files,
+    )?;
     if let Some(registration) = desired {
         let covered: Vec<String> = registration
             .ask_fallback
             .keys()
-            .filter(|agent| registration.covers(agent))
+            .filter(|agent| {
+                registration.covers(agent)
+                    || !(choice.contains(agent)
+                        || choice.contains(box_definition::ID)
+                            && agents::find(agent)
+                                .is_some_and(agents::AgentAdapter::supports_box_hooks))
+            })
             .cloned()
             .collect();
         registration
@@ -255,8 +402,7 @@ pub(in crate::review) fn prepare_files(
 }
 
 /// Add each native adapter's hooks, MCP entry and settings to the plan:
-/// installed or refreshed when selected or already owned, kept or removed on
-/// removal.
+/// installed, refreshed or removed only when selected. Omitted records stay intact.
 pub(in crate::review) fn prepare_native(
     root: &Path,
     choice: IntegrationChoice,
@@ -264,34 +410,42 @@ pub(in crate::review) fn prepare_native(
     mut desired: Option<&mut Registration>,
     approved: &[String],
     files: &mut Vec<files::Change>,
+    repair_hooks: bool,
 ) -> Result<(), Error> {
     let removing = matches!(choice, IntegrationChoice::RemoveAgents(_));
     for adapter in agents::ADAPTERS {
         let agent = adapter.spec().id;
         let old = previous.and_then(|r| r.agents.get(agent));
         let selected = selected_agent(choice, agent);
-        if removing && !selected {
-            if let (Some(registration), Some(old)) = (desired.as_deref_mut(), old) {
-                registration.agents.insert(agent.into(), old.clone());
-            }
+        if !selected {
             continue;
         }
         // Removal reaches here only for selected agents, which are removed.
-        let retain = !removing && (selected || old.is_some());
+        let retain = !removing;
         let binary = desired
             .as_deref()
             .filter(|_| retain)
             .map(|r| r.binary.clone());
-        let installation = native::prepare(root, agent, old, binary.as_deref(), approved, files)?;
+        let installation = native::prepare(
+            root,
+            agent,
+            old,
+            binary.as_deref(),
+            approved,
+            files,
+            repair_hooks && selected,
+        )?;
         if let (Some(r), Some(installation)) = (desired.as_deref_mut(), installation) {
             r.agents.insert(agent.into(), installation);
+        } else if removing && let Some(r) = desired.as_deref_mut() {
+            r.agents.remove(agent);
         }
     }
     Ok(())
 }
 
 /// Add the Box MCP definition to the plan: written when Box is selected,
-/// refreshed with the other agents while unchanged, or removed on request.
+/// or removed on request. Omitted definitions are preserved without inspection.
 pub(in crate::review) fn prepare_box(
     root: &Path,
     choice: IntegrationChoice,
@@ -306,8 +460,7 @@ pub(in crate::review) fn prepare_box(
     let Some(desired) = desired else {
         return Ok(());
     };
-    if removing && !selected {
-        desired.box_definition = old.cloned();
+    if !selected {
         return Ok(());
     }
     let binary = (!removing && (selected || old.is_some())).then_some(desired.binary.as_path());
@@ -374,9 +527,12 @@ pub(in crate::review) fn with_fallbacks(
 pub(in crate::review) fn setup_preview(root: &Path, plan: Option<&Plan>) -> Result<Value, Error> {
     let enabled = crate::review::mode::current(root)?;
     let mut review = preview(root, plan);
+    if plan.is_none() {
+        return Ok(review);
+    }
     let prefixes = super::prefix_rules::active(root).unwrap_or_default();
     let desired = plan.and_then(|plan| plan.desired.as_ref());
-    super::prefix_rules::preview(root, &mut review, desired, &prefixes, enabled);
+    super::prefix_rules::preview_for(root, &mut review, desired, &prefixes, enabled, plan);
     Ok(review)
 }
 
@@ -396,11 +552,13 @@ pub(in crate::review) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
         (Some(b), Some(a)) if b == a => Some("unchanged"),
         _ => Some("updated"),
     }
+    .filter(|_| p.affects(box_definition::ID))
     .map(|change| json!({"agent":super::box_definition::ID,"change":change,"mcp_server":"shield"}));
     let direct = p.desired.as_ref().is_some_and(|r| !r.agents.is_empty());
     let native = crate::agents::ADAPTERS
         .iter()
         .map(|a| a.spec().id)
+        .filter(|agent| p.affects(agent))
         .filter_map(|agent| {
             let before = p
                 .previous
@@ -439,7 +597,7 @@ pub(in crate::review) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
         });
     let fallbacks: Value = crate::agents::ADAPTERS
         .iter()
-        .filter(|a| a.spec().needs_ask_fallback)
+        .filter(|a| a.spec().needs_ask_fallback && p.affects(a.spec().id))
         .map(|a| {
             let id = a.spec().id;
             let before = p.previous.as_ref().and_then(|r| r.ask_fallback.get(id));
@@ -468,12 +626,13 @@ pub(in crate::review) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
         });
     json!({
         "tool_approvals":tool_approvals,
+        "maintenance_scope":{"targets":p.targets,"reason":p.scope_reason},
         "operation":if p.desired.is_some() {"set up agent integrations"} else {"remove Shield integrations"},
         "project":root,
         "binary":p.desired.as_ref().or(p.previous.as_ref()).map(|r| &r.binary),
         "agents":agents,
         "box":box_next,
-        "connections":p.desired.as_ref().map(|r|r.connections.iter().flat_map(|(agent,value)|value["review"].as_array().into_iter().flatten().map(move |row| {let mut row=row.clone();row["agent"]=json!(agent);row})).collect::<Vec<_>>()).unwrap_or_default(),
+        "connections":p.desired.as_ref().map(|r|r.connections.iter().filter(|(agent,_)|p.affects(agent)).flat_map(|(agent,value)|value["review"].as_array().into_iter().flatten().map(move |row| {let mut row=row.clone();row["agent"]=json!(agent);row})).collect::<Vec<_>>()).unwrap_or_default(),
         "ask_fallbacks":fallbacks,
         "adopt_existing_entries":p.previous.is_some() && !root.join(".shield/review/state.json").exists(),
         "files":files,
@@ -488,8 +647,18 @@ pub(in crate::review) fn finish(
     plan: Option<&Plan>,
     receipt: Option<Value>,
 ) -> Result<Value, Error> {
+    finish_checked(context, meta, plan, receipt, &|| Ok(()))
+}
+
+pub(in crate::review) fn finish_checked(
+    context: &Context,
+    meta: &Value,
+    plan: Option<&Plan>,
+    receipt: Option<Value>,
+    checkpoint: crate::review::Checkpoint<'_>,
+) -> Result<Value, Error> {
     if let Some(plan) = plan
-        && let Err(error) = apply(context, meta, plan)
+        && let Err(error) = super::apply_checked(context, meta, plan, checkpoint)
     {
         if pending(&crate::review::project::metadata(
             &crate::review::project::checkpoint(context)?,
@@ -500,24 +669,35 @@ pub(in crate::review) fn finish(
         }
         let mut receipt = crate::review::project::status(context)?;
         receipt["setup_error"] = json!(error.to_string());
-        receipt["repair_route"] = json!("shield mcp setup");
+        receipt["repair_route"] = json!("mcp_setup");
+        receipt["repair_arguments"] = json!({"pending":"review"});
+        receipt["pending_setup"] = json!({"review":{"tool":"mcp_setup","arguments":{"pending":"review"}},"cancel":{"tool":"mcp_setup","arguments":{"pending":"cancel"}}});
         return Ok(receipt);
     }
-    let synced = sync_prefix_rules(context);
+    let synced = if plan.is_some() {
+        sync_prefix_rules_for(context, plan)
+    } else {
+        Ok(())
+    };
     let mut receipt = match receipt {
         Some(receipt) if plan.is_none() => receipt,
         _ => crate::review::project::status(context)?,
     };
     if let Err(error) = synced {
         receipt["setup_error"] = json!(error.to_string());
-        receipt["repair_route"] = json!("shield mcp setup");
+        receipt["repair_route"] = json!("mcp_setup");
+        receipt["next_action"] = json!(
+            "Review agent setup in this session. The integration publication is settled; this separate prefix-rule failure is not a pending setup conflict."
+        );
+    }
+    if let Some(plan) = plan {
+        receipt["maintenance_scope"] = json!({"targets":plan.targets,"reason":plan.scope_reason});
     }
     Ok(receipt)
 }
 
-/// Write the active policy's prefix rules for installed agents, or remove them
-/// with the agent. Without a readable activation they wait for the next one.
-pub(in crate::review) fn sync_prefix_rules(context: &Context) -> Result<(), Error> {
+/// Write only the prefix rules covered by this setup's review.
+fn sync_prefix_rules_for(context: &Context, plan: Option<&Plan>) -> Result<(), Error> {
     let root = Path::new(&context.project_root);
     let Ok(snapshot) = crate::runtime::Project::open(root).and_then(|project| project.snapshot())
     else {
@@ -527,11 +707,12 @@ pub(in crate::review) fn sync_prefix_rules(context: &Context) -> Result<(), Erro
         if state.policy_revision != snapshot.identity().policy_revision() {
             return Err(Error::StaleSnapshot);
         }
-        super::prefix_rules::sync(
+        super::prefix_rules::sync_for(
             root,
             &crate::review::project::metadata(state),
             snapshot.codex_prefixes(),
             state.enforcement.enabled,
+            plan,
         )
     })
 }
@@ -567,7 +748,7 @@ mod tests {
         std::fs::write(&path, &damaged).unwrap();
         assert!(matches!(
             setup_preview(root.path(), plan.as_ref()),
-            Err(Error::Invalid(_))
+            Err(Error::StateCorrupt { .. })
         ));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), damaged);
         std::fs::remove_file(&path).unwrap();

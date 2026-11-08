@@ -6,6 +6,139 @@ use canonic_registry_kit::{
 };
 use std::time::Duration;
 
+fn historical_installed(context: &Context) -> (State, Vec<Value>, Vec<String>) {
+    let mut before =
+        crate::review::storage::Store::open(std::path::Path::new(&context.project_root))
+            .unwrap()
+            .read_checkpoint()
+            .unwrap();
+    let mut rows = Vec::new();
+    let mut selections = Vec::new();
+    let mut artifacts = Vec::new();
+    let mut locks = Vec::new();
+    for name in ["keep", "remove"] {
+        // The actual old matcher/profile schema, including the obsolete engine
+        // range, must remain usable only as exact retained source.
+        let bytes = json!({"schema_version":1,"id":format!("acme/{name}"),"version":"0.1.0",
+            "description":"Historical maintenance fixture","license":"MIT","maintainers":["Acme"],
+            "engine":"^0.1.0","capabilities":["argv-v1"],"rules":[{
+                "id":"inspect","matcher":{"executable":"git","arguments":{"kind":"exact","values":["status"]}},
+                "reason":"Inspect","profiles":{"loose":"allow","recommended":"ask","strict":"deny"}}]}).to_string();
+        assert!(
+            Pack::from_yaml(&bytes).is_err(),
+            "fresh acquisition stays strict"
+        );
+        let digest = policy::fingerprint(bytes.as_bytes());
+        let path = format!("{name}.yml");
+        selections.push(json!({"id":format!("acme/{name}"),"registry_identity":"main","version":"0.1.0","profile":"recommended","path":path}));
+        locks.push(json!({"id":format!("main/acme/{name}"),"version":"0.1.0","profile":"recommended","artifact":{"path":path,"digest":digest}}));
+        rows.push(
+            json!({"selector":format!("pack:{name}"),"id":format!("acme/{name}"),
+            "version":"0.1.0","profile":"recommended","source_identity":"main",
+            "source_alias":"project-files","digest":digest,"direct":true,"pinned":true}),
+        );
+        artifacts.push(bytes);
+    }
+    let config = json!({"schema_version":1,"packs":selections}).to_string();
+    before.candidates.insert("project".into(), json!({"schema_version":1,"kind":"candidate-bundle",
+        "trust":"unverified","config":config,"packs":artifacts,"rules":null,
+        "lock":{"schema_version":1,"kind":"local-candidate","config_digest":policy::fingerprint(config.as_bytes()),"packs":locks,"rules":null}}));
+    before.operator["installed"] = json!(rows);
+    (before, rows, artifacts)
+}
+
+#[test]
+fn historical_installed_packs_support_removal_and_offline_profile_changes() {
+    let (_root, context) = crate::review::tests::enrolled();
+    let (mut before, rows, artifacts) = historical_installed(&context);
+    let (candidate, meta) = mutations::remove(&before, "acme/remove").unwrap();
+    assert_eq!(candidate["packs"], json!([artifacts[0]]));
+    assert_eq!(meta["installed"].as_array().unwrap().len(), 1);
+    assert_eq!(meta["installed"][0]["selector"], "pack:keep");
+    assert_eq!(meta["installed"][0]["digest"], rows[0]["digest"]);
+    assert_eq!(meta["installed"][0]["dependencies"], json!([]));
+    before.candidates.insert("project".into(), candidate);
+    before.operator = meta.clone();
+    let mut strict = meta;
+    strict["installed"][0]["profile"] = json!("strict");
+    let (candidate, meta) = prepare(
+        &context,
+        &before,
+        strict,
+        &[artifacts[0].clone()],
+        0,
+        false,
+        None,
+    )
+    .unwrap();
+    assert_eq!(candidate["packs"], json!([artifacts[0]]));
+    assert_eq!(meta["installed"][0]["selector"], "pack:keep");
+    assert_eq!(meta["installed"][0]["profile"], "strict");
+    let bundle: crate::configuration::Bundle = serde_json::from_value(candidate).unwrap();
+    let evaluator = crate::configuration::Evaluator::new(vec![(
+        policy::Scope::Project,
+        bundle.snapshot().unwrap(),
+    )])
+    .unwrap();
+    let request = policy::Request {
+        executable: "git".into(),
+        arguments: vec!["status".into()],
+        cwd: context.project_root.clone(),
+        project: context.project_root.clone(),
+    };
+    assert_eq!(
+        evaluator.evaluate(&request).unwrap().decision,
+        policy::Decision::Deny
+    );
+    let mut changed = rows[0].clone();
+    changed["digest"] = json!("0".repeat(64));
+    assert!(
+        release(&changed, &artifacts[0]).is_err(),
+        "retained source still requires its exact digest"
+    );
+}
+
+#[test]
+fn historical_installed_pack_configuration_preserves_sources_and_applies_overrides() {
+    let (_root, context) = crate::review::tests::enrolled();
+    let (mut before, _, artifacts) = historical_installed(&context);
+    // Remove the other matching pack so a disabled rule has an observable effect.
+    let (candidate, meta) = mutations::remove(&before, "acme/remove").unwrap();
+    before.candidates.insert("project".into(), candidate);
+    before.operator = meta;
+    let (candidate, meta) =
+        super::super::prepare_configure(&before, "acme/keep", |source, settings| {
+            assert_eq!(Pack::from_retained_yaml(source)?.id(), "acme/keep");
+            settings.edit(false, |binding| {
+                binding
+                    .overrides
+                    .insert("inspect".into(), policy::Override::Off);
+                Ok(())
+            })
+        })
+        .unwrap();
+    assert_eq!(candidate["packs"], json!([artifacts[0]]));
+    assert_eq!(meta["installed"][0]["selector"], "pack:keep");
+    let config: Value = policy::parse(candidate["config"].as_str().unwrap()).unwrap();
+    assert_eq!(config["packs"][0]["overrides"]["inspect"], "off");
+    let bundle: crate::configuration::Bundle = serde_json::from_value(candidate).unwrap();
+    let evaluator = crate::configuration::Evaluator::new(vec![(
+        policy::Scope::Project,
+        bundle.snapshot().unwrap(),
+    )])
+    .unwrap();
+    let evaluation = evaluator
+        .evaluate(&policy::Request {
+            executable: "git".into(),
+            arguments: vec!["status".into()],
+            cwd: context.project_root.clone(),
+            project: context.project_root.clone(),
+        })
+        .unwrap();
+    assert_eq!(evaluation.decision, policy::Decision::Ask);
+    assert!(evaluation.unmatched_ask());
+}
+
 #[test]
 fn builtin_tracking_root_acquires_and_selects_a_verified_new_release() {
     let (_root, mut context) = crate::review::tests::enrolled();
@@ -55,6 +188,12 @@ fn builtin_tracking_root_acquires_and_selects_a_verified_new_release() {
         &context,
         Some(&registered),
         &[row],
+        &[Root {
+            instance: instance.clone(),
+            requirement: "*".parse().unwrap(),
+            pin: None,
+            level: Profile::Strict,
+        }],
         Acquisition {
             pending: BTreeSet::from([instance.clone()]),
             locked: BTreeSet::new(),

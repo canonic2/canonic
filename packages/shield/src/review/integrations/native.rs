@@ -200,8 +200,17 @@ pub(in crate::review) fn prepare(
     binary: Option<&Path>,
     approved: &[String],
     changes: &mut Vec<Change>,
+    repair_hooks: bool,
 ) -> Result<Option<Installation>, Error> {
-    prepare_adapter(root, lookup(agent)?, previous, binary, approved, changes)
+    prepare_adapter(
+        root,
+        lookup(agent)?,
+        previous,
+        binary,
+        approved,
+        changes,
+        repair_hooks,
+    )
 }
 
 fn prepare_adapter(
@@ -211,6 +220,7 @@ fn prepare_adapter(
     binary: Option<&Path>,
     approved: &[String],
     changes: &mut Vec<Change>,
+    repair_hooks: bool,
 ) -> Result<Option<Installation>, Error> {
     if previous.is_none() && binary.is_none() {
         return Ok(None);
@@ -220,11 +230,12 @@ fn prepare_adapter(
         .transpose()?;
     let empty = HookGroups::new();
     files::edit(root, changes, adapter.spec().hooks_path, |source| {
-        let hooks = adapter.merge_hooks(
-            source,
-            previous.map_or(&empty, |p| &p.groups),
-            desired.as_ref().map_or(&empty, |p| &p.groups),
-        )?;
+        let groups = desired.as_ref().map_or(&empty, |p| &p.groups);
+        let hooks = if repair_hooks {
+            adapter.repair_hooks(source, groups)?
+        } else {
+            adapter.merge_hooks(source, previous.map_or(&empty, |p| &p.groups), groups)?
+        };
         let settings = adapter.merge_settings(
             Some(&hooks),
             previous.and_then(|p| p.settings.as_ref()),
@@ -237,11 +248,12 @@ fn prepare_adapter(
     })?;
     if let Some(path) = adapter.spec().mcp_path {
         files::edit_optional(root, changes, path, |source| {
-            let merged = adapter.merge_mcp(
-                source,
-                previous.and_then(|p| p.mcp.as_deref()),
-                desired.as_ref().and_then(|p| p.mcp.as_deref()),
-            )?;
+            let new = desired.as_ref().and_then(|p| p.mcp.as_deref());
+            let merged = if repair_hooks {
+                adapter.repair_mcp(source, new)?
+            } else {
+                adapter.merge_mcp(source, previous.and_then(|p| p.mcp.as_deref()), new)?
+            };
             let empty = crate::json::parse(merged.as_bytes())
                 .ok()
                 .is_some_and(|value| value.as_object().is_some_and(serde_json::Map::is_empty));
@@ -254,13 +266,21 @@ fn prepare_adapter(
 pub(in crate::review) fn diagnose(
     root: &Path,
     agent: &str,
+    binary: &Path,
     installation: &Installation,
     diagnostics: &mut Vec<&'static str>,
 ) -> Result<(), Error> {
     let adapter = lookup(agent)?;
     let mut changes = Vec::new();
-    if let Err(error) = prepare_adapter(root, adapter, Some(installation), None, &[], &mut changes)
-    {
+    if let Err(error) = prepare_adapter(
+        root,
+        adapter,
+        Some(installation),
+        None,
+        &[],
+        &mut changes,
+        false,
+    ) {
         match error {
             Error::Invalid(reason) => diagnostics.push(reason),
             other => return Err(other),
@@ -269,11 +289,12 @@ pub(in crate::review) fn diagnose(
     if changes.iter().any(|f| f.before.is_none()) {
         diagnostics.push("owned native hook configuration is missing");
     }
-    if adapter
-        .spec()
-        .events
-        .iter()
-        .any(|(event, _)| !installation.groups.contains_key(*event))
+    if !compatible_historical_hooks(root, adapter, binary, installation)
+        && adapter
+            .spec()
+            .events
+            .iter()
+            .any(|(event, _)| !installation.groups.contains_key(*event))
     {
         diagnostics.push("native hook registration needs an adapter upgrade");
     }
@@ -290,6 +311,50 @@ pub(in crate::review) fn diagnose(
         extra.as_deref(),
         diagnostics,
     )
+}
+
+/// Missing later advisory events do not invalidate an exact installed profile
+/// whose entry points remain supported by the CLI compatibility boundary.
+fn compatible_historical_hooks(
+    root: &Path,
+    adapter: &dyn AgentAdapter,
+    binary: &Path,
+    installed: &Installation,
+) -> bool {
+    let profiles: &[&[&str]] = match adapter.spec().id {
+        "claude" => &[&["PreToolUse", "PostToolUse", "PostToolUseFailure"]],
+        "codex" => &[
+            &["PreToolUse", "PostToolUse"],
+            &["PreToolUse", "PermissionRequest", "PostToolUse"],
+        ],
+        _ => return false,
+    };
+    let profile = profiles.iter().find(|profile| {
+        installed.groups.len() == profile.len()
+            && profile
+                .iter()
+                .all(|event| installed.groups.contains_key(*event))
+    });
+    let Some(profile) = profile else { return false };
+    if profile.iter().all(|event| {
+        hook_command(binary, root, adapter.spec().id, event).is_ok_and(|command| {
+            installed.groups.get(*event) == Some(&adapter.hook_group(&command))
+        })
+    }) {
+        return true;
+    }
+    #[cfg(not(windows))]
+    if let (Ok(binary), Ok(project)) = (quoted(binary), quoted(root)) {
+        let command = format!(
+            "{binary} __internal native-hook --project {project} --agent {} || exit 2",
+            adapter.spec().id
+        );
+        let group = adapter.hook_group(&command);
+        return profile
+            .iter()
+            .all(|event| installed.groups.get(*event) == Some(&group));
+    }
+    false
 }
 
 #[cfg(test)]

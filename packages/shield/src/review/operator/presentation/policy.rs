@@ -337,10 +337,10 @@ fn changes(changes: &Value, candidate: &Value) -> Vec<String> {
                 (Some("mcp"), _)
                     if change.get("before").is_none() && change.get("after").is_none() =>
                 {
-                    format!("~ MCP connection {id} changed · terminal setup review required")
+                    format!("~ MCP connection {id} changed · registered connection entries publish on approval")
                 }
                 (Some("mcp"), _) => format!(
-                    "~ MCP connection {id}: {} → {} · terminal setup review required",
+                    "~ MCP connection {id}: {} → {} · registered connection entries publish on approval",
                     label(&change["before"]),
                     label(&change["after"])
                 ),

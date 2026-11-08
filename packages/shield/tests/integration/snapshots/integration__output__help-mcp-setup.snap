@@ -7,16 +7,24 @@ Install, repair or with --remove uninstall project hooks and Shield MCP, after c
 Usage: shield mcp setup [OPTIONS]
 
 Options:
+      --pending <PENDING>
+          Review conflicting pending setup or cancel that interrupted publication
+
+          [possible values: review, cancel]
+
+      --project <PROJECT>
+          Select a project; otherwise discover the nearest enrolled ancestor
+
       --agent <AGENTS>
           Agent to set up or remove, or box for a Box MCP definition; repeat for several. Omission asks
 
           [possible values: box, claude, codex, gemini, agy]
 
-      --project <PROJECT>
-          Select a project; otherwise discover the nearest enrolled ancestor
-
       --json
           Print one JSON result; commands that change policy refuse JSON mode
+
+      --debug-log-dir <DEBUG_LOG_DIR>
+          Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
 
       --scope <SCOPE>
           Shield integrations are project scoped; user scope is refused
@@ -27,20 +35,17 @@ Options:
 
           [default: project]
 
-      --debug-log-dir <DEBUG_LOG_DIR>
-          Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+      --no-debug-log
+          Disable diagnostic logging, including automatic debug-build logs
 
       --remove
           Remove the selected agents' hooks, MCP server and permission settings
 
-      --no-debug-log
-          Disable diagnostic logging, including automatic debug-build logs
+      --cache-dir <CACHE_DIR>
+          Compiled cache location for init, MCP setup or cache preparation
 
       --reset-tool-permissions
           Start from current tool permission defaults instead of the saved selection
-
-      --cache-dir <CACHE_DIR>
-          Compiled cache location for init, MCP setup or cache preparation
 
       --dry-run
           Show the review without writing anything

@@ -17,7 +17,7 @@ use std::{
 /// The plan format this engine writes and loads. Change it whenever compiled
 /// bytes would decide differently, such as how patterns are prepared, so
 /// plans written before the change are rebuilt instead of loaded.
-pub(crate) const FORMAT: &str = "SHPLAN10";
+pub(crate) const FORMAT: &str = "SHPLAN14";
 const MAGIC: &[u8] = FORMAT.as_bytes();
 const HEADER: usize = 16;
 const ENTRY: usize = 16;
@@ -31,6 +31,7 @@ struct Metadata {
     packs: Vec<PackMetadata>,
     custom: Option<CustomMetadata>,
     effective: serde_json::Value,
+    historical_semantic: bool,
     /// Codex prefixes of active rules that allow, in owner order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     codex_prefixes: Vec<super::agent_outputs::CodexPrefix>,
@@ -59,6 +60,7 @@ impl Metadata {
 #[serde(deny_unknown_fields)]
 struct PackMetadata {
     document: model::PackDocument,
+    retained_legacy: bool,
     digest: String,
     semantic: bool,
     profile: Profile,
@@ -140,6 +142,13 @@ impl Plan {
             packs: vec![],
             custom: None,
             effective,
+            historical_semantic: super::historical_semantic_selection(
+                &packs
+                    .iter()
+                    .map(|(pack, profile)| (pack, *profile))
+                    .collect::<Vec<_>>(),
+                &custom.iter().collect::<Vec<_>>(),
+            ),
             codex_prefixes: codex_prefixes(&packs, custom.as_ref()),
         };
         for (owner, (mut pack, profile)) in packs.into_iter().enumerate() {
@@ -163,6 +172,7 @@ impl Plan {
                 rows.push((key(&rule, owner), encode(&rule)?, owner));
             }
             metadata.packs.push(PackMetadata {
+                retained_legacy: pack.document.retained_legacy,
                 document: pack.document,
                 digest: pack.digest,
                 semantic: pack.semantic,
@@ -262,8 +272,11 @@ impl Plan {
         if body > bytes.len() {
             return Err(Error::Contract("truncated compiled plan"));
         }
-        let metadata: Metadata =
+        let mut metadata: Metadata =
             serde_json::from_slice(&bytes[HEADER..table]).map_err(|_| Error::Syntax)?;
+        for pack in &mut metadata.packs {
+            pack.document.retained_legacy = pack.retained_legacy;
+        }
         if metadata.engine != env!("CARGO_PKG_VERSION")
             || metadata.packs.len() > 64
             || metadata.packs.iter().any(|p| !p.document.rules.is_empty())
@@ -296,6 +309,7 @@ impl Plan {
             document: model::CustomDocument::empty(),
             digest: c.digest.clone(),
             semantic: c.semantic,
+            historical_semantic: metadata.historical_semantic,
             index: index::Index::new(std::iter::empty()),
             patterns: Arc::default(),
         });
@@ -323,6 +337,7 @@ impl Plan {
         }
         let mut expected = self.table + self.count * ENTRY;
         let mut previous: &[u8] = &[];
+        let mut historical_semantic = false;
         for position in 0..self.count {
             let entry = self.entry(position)?;
             let key = &self.bytes[entry.start..entry.key_end];
@@ -349,6 +364,9 @@ impl Plan {
                         crate::graphql::descriptor(requirements)?;
                     }
                     rule.validate_for(entry.owner < self.metadata.packs.len())?;
+                    historical_semantic |= (rule.legacy.is_some()
+                        || rule.legacy_normalized.is_some())
+                        && rule.semantic();
                     if let Some(pack) = self.metadata.packs.get(entry.owner) {
                         super::invocations::binding(&pack.document, &rule)?;
                     }
@@ -364,6 +382,9 @@ impl Plan {
         }
         if expected != self.bytes.len() {
             return Err(Error::Contract("trailing compiled data"));
+        }
+        if full && historical_semantic != self.metadata.historical_semantic {
+            return Err(Error::Contract("inconsistent historical semantic coverage"));
         }
         Ok(())
     }
@@ -447,6 +468,9 @@ impl Plan {
                         document: p.document.descriptor(|gate| gate.candidate(facts)),
                         digest: p.digest.clone(),
                         semantic: p.semantic,
+                        // These descriptors contain only query candidates; retain
+                        // the full selection's historical coverage obligation.
+                        historical_semantic: self.metadata.historical_semantic,
                         index: index::Index::new(std::iter::empty()),
                         patterns: Arc::default(),
                         resolution: Vec::new(),
@@ -459,11 +483,15 @@ impl Plan {
             document: model::CustomDocument::empty(),
             digest: c.digest.clone(),
             semantic: c.semantic,
+            historical_semantic: c.historical_semantic,
             index: index::Index::new(std::iter::empty()),
             patterns: Arc::default(),
         });
-        if matches!(facts.input, normalized::Input::Argv { .. }) {
-            self.collect_invocations(request, &mut packs, checkpoint)?;
+        let argv = matches!(facts.input, normalized::Input::Argv { .. });
+        if argv || super::rules::legacy_read(request, facts) {
+            if argv {
+                self.collect_invocations(request, &mut packs, checkpoint)?;
+            }
             let mut q = query(0, &request.executable);
             for length in 0..=request.arguments.len() {
                 self.collect(&q, &mut packs, &mut custom, checkpoint)?;
@@ -498,7 +526,7 @@ impl Plan {
         }
         let selected: Vec<_> = packs.iter().map(|(p, profile)| (p, *profile)).collect();
         let customs: Vec<_> = custom.as_ref().into_iter().collect();
-        let evaluation = super::evaluate_facts(
+        let mut evaluation = super::evaluate_facts(
             &selected,
             &customs,
             request,
@@ -512,11 +540,36 @@ impl Plan {
             },
             Some(self),
         )?;
+        self.constrain_historical_effects(request, facts, &mut evaluation);
         if let Some(observer) = facts.locations {
             observer.ensure_budget()?;
         }
         checkpoint()?;
         Ok(evaluation)
+    }
+
+    fn constrain_historical_effects(
+        &self,
+        request: &Request,
+        facts: &Facts<'_>,
+        evaluation: &mut super::Evaluation,
+    ) {
+        let argv = matches!(facts.input, normalized::Input::Argv { .. });
+        if self.metadata.historical_semantic && (argv || super::rules::legacy_read(request, facts))
+        {
+            evaluation.semantic_coverage = Some("incomplete-possible-effects-v1");
+            let exact = evaluation.matches.iter().any(|matched| {
+                matched.exact_request
+                    && matched.applied
+                    && matched.decision == super::Decision::Allow
+            });
+            if !argv || !exact {
+                evaluation.decision = evaluation.decision.max(super::Decision::Ask);
+                if evaluation.decision == super::Decision::Ask {
+                    evaluation.reason = "incomplete-effect-evidence";
+                }
+            }
+        }
     }
     fn collect(
         &self,
@@ -528,8 +581,9 @@ impl Plan {
         for position in self.bound(query, false)?..self.bound(query, true)? {
             checkpoint()?;
             let entry = self.entry(position)?;
-            let rule: Rule = serde_json::from_slice(&self.bytes[entry.key_end..entry.end])
+            let mut rule: Rule = serde_json::from_slice(&self.bytes[entry.key_end..entry.end])
                 .map_err(|_| Error::Syntax)?;
+            rule.prepare();
             if let Some((pack, _)) = packs.get_mut(entry.owner) {
                 pack.document.rules.push(rule);
             } else {

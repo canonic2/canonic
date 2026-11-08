@@ -182,14 +182,20 @@ pub(super) fn configured(value: &Value) -> String {
 /// Which agents are connected, and what the operator still has to do.
 fn connected(value: &Value) -> String {
     let coverage = &value["coverage"];
+    let targets = value["maintenance_scope"]["targets"].as_array();
+    let selected =
+        |id: &str| targets.is_none_or(|targets| targets.iter().any(|target| target == id));
     let agents: Vec<_> = coverage["installed_integrations"]
         .as_array()
         .into_iter()
         .flatten()
+        .filter(|row| selected(row["agent"].as_str().unwrap_or_default()))
         .map(|row| crate::agents::label(row["agent"].as_str().unwrap_or("an agent")))
         .collect();
-    let boxed = coverage["box_integration"].is_object();
-    let mut output = if agents.is_empty() && !boxed {
+    let boxed = coverage["box_integration"].is_object() && selected("box");
+    let mut output = if agents.is_empty() && !boxed && targets.is_some() {
+        "Selected agent integrations removed.\n".to_owned()
+    } else if agents.is_empty() && !boxed {
         "No agent is connected. Connect one with shield mcp setup.\n".to_owned()
     } else if agents.is_empty() {
         String::new()
@@ -222,6 +228,9 @@ fn integrations(output: &mut String, value: &Value) {
             let _ = writeln!(output, "  Remove Shield's hooks and MCP servers.");
         }
         _ => {}
+    }
+    if let Some(reason) = value["maintenance_scope"]["reason"].as_str() {
+        let _ = writeln!(output, "  Broader review: {reason}");
     }
     for agent in value["agents"].as_array().into_iter().flatten() {
         if agent["agent"] == crate::review::integrations::box_definition::ID {
@@ -451,6 +460,30 @@ fn file_change(output: &mut String, file: &Value, width: usize) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn broader_integration_review_explains_the_shared_change() {
+        let plan = json!({"operation":"set up agent integrations",
+            "maintenance_scope":{"targets":["claude","codex"],"reason":"The shared Shield tool approvals changed."},
+            "agents":[{"agent":"claude","change":"updated","hooks":[]},{"agent":"codex","change":"updated","hooks":[]}],
+            "files":[]});
+        let shown = review(&plan).unwrap();
+        assert!(shown.contains("Broader review: The shared Shield tool approvals changed."));
+        assert!(shown.contains("Claude Code") && shown.contains("Codex"));
+    }
+
+    #[test]
+    fn configured_receipt_scopes_restart_and_box_instructions() {
+        let mut receipt = json!({"maintenance_scope":{"targets":["claude"]},
+            "coverage":{"installed_integrations":[{"agent":"claude"},{"agent":"codex"}],"box_integration":{"status":"installed"}}});
+        let shown = configured(&receipt);
+        assert!(shown.contains("Connected Claude Code"));
+        assert!(!shown.contains("Codex") && !shown.contains("box config sync"));
+        receipt["coverage"]["installed_integrations"] = json!([{"agent":"codex"}]);
+        let shown = configured(&receipt);
+        assert!(shown.contains("Selected agent integrations removed."));
+        assert!(!shown.contains("No agent is connected") && !shown.contains("Codex"));
+    }
 
     #[test]
     fn integration_reviews_summarize_agents_and_list_each_file_once() {

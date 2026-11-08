@@ -300,8 +300,7 @@ pub(super) fn selection_settings(candidate: &Value, index: usize) -> Result<Sett
 }
 
 pub(super) fn project_rules(source: &str, _project: &str) -> Result<Value, Error> {
-    crate::policy::CustomRules::from_yaml(source)?;
-    crate::policy::parse(source).map_err(Into::into)
+    crate::policy::normalize_retained_custom(source).map_err(Into::into)
 }
 pub(super) fn public_pack_rule(rule: &Value, profile: &Value) -> Value {
     let mut result = rule.clone();

@@ -266,6 +266,15 @@ pub(super) fn merge_mcp(
     Ok(doc.to_string())
 }
 
+/// A reviewed reconciliation replaces only the reserved Shield server table.
+pub(super) fn repair_mcp(before: Option<&str>, desired: Option<&str>) -> Result<String, Error> {
+    let mut doc = document(before)?;
+    if let Some(servers) = doc.get_mut("mcp_servers").and_then(Item::as_table_mut) {
+        servers.remove("shield");
+    }
+    merge_mcp(Some(&doc.to_string()), None, desired)
+}
+
 fn detach_positions(table: &mut Table) {
     table.set_position(None);
     for (_, item) in table.iter_mut() {

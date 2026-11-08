@@ -1,5 +1,6 @@
 //! Session authorization through real protected storage, scopes and native matching.
 use super::*;
+mod maintenance;
 
 pub(crate) fn fixture() -> (assert_fs::TempDir, Context, String) {
     fixture_with_rules(None)
@@ -560,7 +561,7 @@ fn policy_changes_and_registration_changes_permanently_invalidate_grants() {
                 if change == "policy" {
                     state.policy_revision = "changed".into();
                 } else if change == "registration" {
-                    state.operator["integration"]["binary_digest"] = json!("b".repeat(64));
+                    state.operator["integration"]["binary"] = json!("/fixture/replaced-shield");
                 } else {
                     state.operator["path_access"] = json!({"agent_settings_read":"allow"});
                 }

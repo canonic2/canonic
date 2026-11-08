@@ -2,6 +2,10 @@
 
 Run `shield status` and `shield doctor` in the affected project. Follow any
 reported recovery command, or find your symptom below.
+In an agent session, ask the agent to use the `status` and `doctor` MCP tools
+and follow their in-session recovery route. Cache relocation and native
+integration reconciliation have their own confirmation forms; terminal commands
+remain available when you choose to use them directly.
 
 | What you observe | Where to look |
 | --- | --- |
@@ -15,6 +19,7 @@ reported recovery command, or find your symptom below.
 | A pack proposal reports `candidate_error` | [Inconsistent pack candidate](#a-pack-proposal-reports-candidate_error) |
 | Status reports repair or cache failure | [Policy files](#policy-files-need-repair) or [compiled cache](#the-compiled-policy-cache-cannot-load) |
 | Initialization fails while downloading | [Baseline acquisition](#initialization-cannot-download-the-baseline) |
+| Shield's project folder was moved or copied | [Confirm the new location](#the-project-was-moved-or-copied) |
 | A change cannot obtain confirmation | [Terminal confirmation](#terminal-confirmation-is-unavailable) |
 
 ## A pack proposal reports `candidate_error`
@@ -23,6 +28,29 @@ Shield could not align a candidate's selected packs with its artifact bytes.
 The proposal did not activate. Continue the task without that proposal and report
 the error. Changing valid tool arguments or deleting project state is not a
 recovery for this failure.
+
+## The project was moved or copied
+
+Ask the agent to call Shield's `status` tool. Shield can keep a restricted MCP
+connection open when the saved enrollment names the old location, including
+when the launch command still names that location. `project_enroll` shows a
+confirmation form for the new folder and its captured policy. Accepting it
+creates a fresh enrollment and continues on the same connection. Declining
+leaves the saved state unchanged.
+If the default compiled-cache location is unavailable, the agent can request a
+fresh `project_enroll` form with an absolute `cache_dir`. The new location appears
+in the review. This changes derived cache storage, not project permissions.
+
+Moves and copies both require this review. Old approvals, session grants,
+registry trust and agent registrations do not transfer. Shield preserves the
+previous checkpoint and recent history as private recovery data. The agent can
+then request any needed agent setup through its normal confirmation form.
+Do not delete `.shield/review/` or edit project IDs to bypass enrollment.
+
+`shield status` and `shield doctor` also explain a location mismatch without
+changing state. If you choose to work directly in the terminal, `shield init`
+offers the enrollment review there.
+An explicit `--cache-dir` is included in that review.
 
 ## The agent does not seem to use Shield
 
@@ -34,10 +62,12 @@ Restart the agent, trust the project, enable native hooks, and approve the MCP
 connection. Codex also requires reviewing hook definitions through `/hooks`.
 Use `shield doctor` to check for missing or changed owned files and binaries.
 
-If doctor reports an interrupted confirmed setup, use `shield mcp setup` to
-finish it. If an owned entry was edited, inspect the named configuration and
-resolve the conflict; Shield preserves conflicting edits instead of replacing
-them silently.
+Interrupted confirmed setup resumes on the next MCP request while preserving
+unrelated settings. If an owned setting conflicts, the agent can request
+`mcp_setup {"pending":"review"}` to show its replacement for your approval,
+or `mcp_setup {"pending":"cancel"}` to review cancellation. Manual edits are
+preserved unless you approve their replacement. The optional terminal routes
+are `shield mcp setup --pending review` and `shield mcp setup --pending cancel`.
 
 Hooks must be loaded to check requests. A host may continue execution if it
 skips, disables, kills, or times out a hook. See
@@ -157,8 +187,10 @@ snapshot. Other manual edits are preserved for manual review.
 
 A reported committed change with repair needed can already be active even if a
 projected file could not be written. Check status before retrying a mutation.
-For lock errors, preserve the private review state and inspect the diagnostic;
-Shield does not automatically steal an abandoned writer lock. See
+Writer ownership is released automatically after a crash. A live writer can
+briefly cause a lock error; retry after its operation finishes. Shield preserves
+legacy markers whose ownership cannot be verified and never removes a live
+writer's lock because a wait timed out. See
 [active policy and repair](runtime-activation.md).
 
 ## The compiled policy cache cannot load

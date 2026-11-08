@@ -544,7 +544,7 @@ fn publication_failure_withholds_callback_and_release_failure_keeps_consumption(
             |decision| {
                 assert_eq!(decision["allowed"], true);
                 std::fs::write(&effect, b"observed effect").expect("owned effect");
-                std::fs::remove_file(
+                std::fs::remove_dir(
                     Path::new(&context.project_root).join(".shield/review/state.lock"),
                 )
                 .expect("simulate release failure");

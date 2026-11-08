@@ -9,6 +9,64 @@ use std::{
 };
 
 #[test]
+fn current_mcp_startup_reads_no_history_and_cli_status_captures_it_once() {
+    let (root, context, _connection) = fixture();
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "--project",
+        root.path().to_str().unwrap(),
+        "--json",
+        "status",
+    ]);
+    let log = Arc::new(diagnostics::Log::open(&cli));
+    let attribution = crate::cli::ReviewContext {
+        project: root.path().into(),
+        agent: Some("codex".into()),
+        session_id: Some("acme-session".into()),
+        tool_use_id: None,
+    };
+    for (age, retained) in [("fresh", 0), ("aged", 32)] {
+        for index in 0..retained {
+            review::observations::decision(&context, json!({
+                "operation":{"kind":"argv","executable":"acme","arguments":[index.to_string()]},
+                "host_decision":"allow","evaluation":{"decision":"allow"},"disposition":"allowed"
+            })).unwrap();
+        }
+        let checkpoint = root.path().join(".shield/review/state.json");
+        let before = fs::read(&checkpoint).unwrap();
+        let trace = log.request("command", "mcp_startup", None, None).unwrap();
+        {
+            let _scope = trace.enter();
+            let started = Instant::now();
+            let caller = review::cli::context(&attribution).unwrap();
+            assert_eq!(caller.declared_agent.as_deref(), Some("codex"));
+            let server = mcp::Server::for_review(caller).unwrap();
+            assert_eq!(server.review().project_id, context.project_id);
+            eprintln!(
+                "startup_history {age} elapsed_us={} captures={}",
+                started.elapsed().as_micros(),
+                trace.recorded_count("history.captures")
+            );
+            assert_eq!(trace.recorded_count("history.captures"), 0, "{age}");
+            assert_eq!(trace.recorded_count("policy.preparations"), 0, "{age}");
+            assert_eq!(trace.recorded_count("source.hydrated"), 0, "{age}");
+        }
+        trace.finish("success");
+        let trace = log.request("command", "status", None, None).unwrap();
+        {
+            let _scope = trace.enter();
+            assert_eq!(review::operator::run(&cli), std::process::ExitCode::SUCCESS);
+            assert_eq!(trace.recorded_count("history.captures"), 1, "{age}");
+        }
+        trace.finish("success");
+        assert_eq!(fs::read(&checkpoint).unwrap(), before, "{age}");
+    }
+}
+
+#[test]
 fn uncached_owned_apply_reuses_active_plan_and_prepares_only_the_selected_candidate() {
     let (_root, mut context, connection) = fixture();
     context.agent = Some("codex".into());
@@ -207,6 +265,41 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
         std::thread::yield_now();
     };
     assert!(transport.close().1.is_ok());
+    // Report every diagnostic budget before assertions, so a stale expectation
+    // does not hide the other fresh/aged observations from the failure log.
+    for (age, tool, id, _) in &summaries {
+        if !matches!(*tool, "request_list" | "status" | "doctor") {
+            continue;
+        }
+        let start = records
+            .iter()
+            .find(|r| r["event"] == "request_start" && r["fields"]["request_id"] == *id)
+            .unwrap();
+        let end = records
+            .iter()
+            .find(|r| {
+                r["event"] == "request_end"
+                    && r["fields"]["trace_id"] == start["fields"]["trace_id"]
+            })
+            .unwrap();
+        let stages = |stage: &str| {
+            records
+                .iter()
+                .filter(|r| {
+                    r["event"] == "request_span"
+                        && r["fields"]["trace_id"] == start["fields"]["trace_id"]
+                        && r["fields"]["stage"] == stage
+                })
+                .count()
+        };
+        eprintln!(
+            "sweep_budget {age} {tool} checkpoint={} cache={} history={} counts={}",
+            stages("state.checkpoint"),
+            stages("cache.load"),
+            stages("history.read"),
+            end["fields"]["counts"]
+        );
+    }
     for (age, tool, id, elapsed) in summaries {
         let start = records
             .iter()
@@ -229,14 +322,13 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
             .count();
         let (preparations, sources, history_reads) = match tool {
             "policy_propose" => (1, 1, 0),
-            "pack_list" | "registry_list" | "request_list" | "native_tool_lookup"
-            | "tool_summaries" | "cli_pack_list" => (0, 0, 0),
-            "status" => (0, 0, 1),
             "doctor" => (1, 1, 1),
+            "status" => (0, 0, 1),
+            // Rule lookup reuses the base hydrated by the first proposal after
+            // lazy startup; list requests do not load optional history.
+            "pack_list" | "registry_list" | "request_list" | "native_tool_lookup"
+            | "tool_summaries" | "cli_pack_list" | "rule_list" => (0, 0, 0),
             "selected" => (0, 2, 0),
-            // Registration changes metadata, while the active policy's retained
-            // handle can reuse its already captured immutable source.
-            "rule_list" if age == "registered" => (0, 0, 0),
             _ => (0, 1, 0),
         };
         assert_eq!(
@@ -257,11 +349,10 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
                         && record["fields"]["stage"] == "state.checkpoint"
                 })
                 .count();
-            let expected = match tool {
-                "status" => 3,
-                "doctor" => 4,
-                _ => 1,
-            };
+            // Read-only tools skip pending-setup publication. Status reads its
+            // diagnostic checkpoint and registry metadata; doctor shares its
+            // one captured checkpoint, and request_list reads only its records.
+            let expected = if tool == "status" { 2 } else { 1 };
             assert_eq!(reads, expected, "{age} {tool}: authority checkpoint budget");
         }
         if matches!(tool, "status" | "doctor") {
@@ -292,8 +383,10 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
             );
         }
         let admissions = if tool == "policy_propose" {
-            // The changed registration also invalidates the active handle.
-            if age == "registered" { 2 } else { 1 }
+            // Startup leaves diagnostic handles lazy. The first proposal admits
+            // both captures; later unchanged bases reuse the inspected handle.
+            // A changed registration also invalidates that cached base.
+            if age == "aged" { 1 } else { 2 }
         } else {
             0
         };

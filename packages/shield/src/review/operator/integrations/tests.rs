@@ -7,6 +7,8 @@ use crate::review::{
     storage::Store,
 };
 use std::collections::BTreeMap;
+mod agent_isolation;
+mod interrupted;
 
 #[test]
 fn antigravity_doctor_reports_disabled_hooks_and_removal_deletes_empty_mcp_settings() {
@@ -43,7 +45,7 @@ fn antigravity_doctor_reports_disabled_hooks_and_removal_deletes_empty_mcp_setti
 }
 
 #[test]
-fn retained_setup_records_require_current_registration_and_repair_fields() {
+fn retained_setup_records_preserve_legacy_block_fallback_and_require_file_ownership() {
     let (root, context) = fixture();
     let plan = prepare(root.path(), &meta(&context), IntegrationChoice::all())
         .unwrap()
@@ -57,12 +59,71 @@ fn retained_setup_records_require_current_registration_and_repair_fields() {
     incomplete_plan.as_object_mut().unwrap().remove("files");
     assert!(pending(&json!({"integration_pending":incomplete_plan})).is_err());
 
-    let mut incomplete_registration = json!(plan.desired.unwrap());
+    let mut incomplete_registration = json!(plan.desired.as_ref().unwrap());
     incomplete_registration
         .as_object_mut()
         .unwrap()
         .remove("ask_fallback");
-    assert!(registration(&json!({"integration":incomplete_registration})).is_err());
+    let legacy_meta = json!({"integration":incomplete_registration});
+    assert!(
+        registration(&legacy_meta)
+            .unwrap()
+            .unwrap()
+            .ask_fallback
+            .is_empty()
+    );
+    assert!(matches!(
+        fallback(&legacy_meta, "codex").unwrap(),
+        AskFallback::Block
+    ));
+    // The same retained codec is used inside interrupted setup plans.
+    let mut legacy_plan = json!(plan);
+    legacy_plan["desired"] = legacy_meta["integration"].clone();
+    assert!(
+        pending(&json!({"integration_pending":legacy_plan}))
+            .unwrap()
+            .unwrap()
+            .desired
+            .unwrap()
+            .ask_fallback
+            .is_empty()
+    );
+}
+
+#[test]
+fn historical_native_registration_retains_exact_ownership_without_new_permissions() {
+    // Native registration shape and launch bytes from 27343ffa (0.1.0),
+    // before saved fallback/tool selections and per-event hook arguments.
+    let group = json!({"matcher":".*","hooks":[{"type":"command",
+        "command":"'/usr/local/bin/shield' __internal native-hook --project '/srv/acme' --agent claude || exit 2",
+        "timeout":10,"statusMessage":"Shield project enforcement"}]});
+    let legacy = json!({"binary":"/usr/local/bin/shield","binary_digest":"a".repeat(64),"version":"0.1.0",
+        "entry":{"type":"stdio","command":"/usr/local/bin/shield",
+            "args":["__internal","mcp","--project","/srv/acme","--agent","claude-code"]},
+        "agents":{"claude":{"groups":{"PreToolUse":group,"PostToolUse":group,"PostToolUseFailure":group},"mcp":null}}});
+    let meta = json!({"integration":legacy});
+    let bytes = meta.to_string();
+    let decoded = registration(&meta).unwrap().unwrap();
+    assert_eq!(json!(decoded.agents), legacy["agents"]);
+    assert_eq!(decoded.entry, legacy["entry"]);
+    assert!(decoded.approved_tools.is_none());
+    assert!(decoded.connections.is_empty());
+    assert!(matches!(
+        fallback(&meta, "codex").unwrap(),
+        AskFallback::Block
+    ));
+    assert_eq!(meta.to_string(), bytes);
+    let mut explicit = legacy.clone();
+    explicit["agents"]["codex"] = explicit["agents"]["claude"].clone();
+    explicit["ask_fallback"] = json!({"codex":"allow"});
+    assert!(matches!(
+        fallback(&json!({"integration":explicit}), "codex").unwrap(),
+        AskFallback::Allow
+    ));
+    // Legacy interceptor ownership is a different protocol, not native hooks.
+    let mut interceptor = legacy;
+    interceptor["interceptor"] = json!({"assets":{}});
+    assert!(registration(&json!({"integration":interceptor})).is_err());
 }
 
 #[test]
@@ -1168,6 +1229,30 @@ fn manual_edits_during_recovery_and_owned_entry_changes_are_preserved() {
 }
 
 #[test]
+fn installed_binary_upgrade_preserves_integration_without_rewriting_project_state() {
+    let (root, context) = fixture();
+    install(&context);
+    Store::open(root.path())
+        .unwrap()
+        .update(&context, &|| Ok(()), |state| {
+            state.operator["integration"]["version"] = json!("0.0.0");
+            state.operator["integration"]["binary_digest"] = json!("0".repeat(64));
+            Ok(json!({}))
+        })
+        .unwrap();
+    let before = fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let files = read_file(root.path()).unwrap();
+    let doctor = crate::review::project::doctor(&context).unwrap();
+    assert_eq!(doctor["repair_needed"], false, "{doctor}");
+    assert_eq!(doctor["checks"], json!([]), "{doctor}");
+    assert_eq!(
+        before,
+        fs::read(root.path().join(".shield/review/state.json")).unwrap()
+    );
+    assert_eq!(files, read_file(root.path()).unwrap());
+}
+
+#[test]
 fn diagnostic_reads_detect_missing_binary_and_do_not_mutate_state_or_files() {
     let (root, context) = fixture();
     install(&context);
@@ -1235,11 +1320,11 @@ fn fallback_is_preserved_by_agent_repair_and_validated_under_current_activation(
         IntegrationChoice::agent("codex"),
         AskFallback::Allow,
     );
-    let before = meta(&context);
-    let plan = prepare(root.path(), &before, IntegrationChoice::agent("claude"))
-        .unwrap()
-        .unwrap();
-    apply(&context, &before, &plan).unwrap();
+    configure_fixture(
+        root.path(),
+        IntegrationChoice::agent("claude"),
+        AskFallback::Block,
+    );
     assert!(fallback(&meta(&context), "codex").unwrap() == AskFallback::Allow);
     let active = crate::review::project::load(&context)
         .unwrap()

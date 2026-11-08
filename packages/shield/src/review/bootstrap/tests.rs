@@ -1,0 +1,703 @@
+//! Enrollment drift is a reviewed new identity, never transplanted authority.
+use super::*;
+use crate::review::{self, storage::Store};
+use std::{fs, sync::Arc};
+
+const CONFIG: &str = "schema_version: 1\npacks: []\nrules: rules.yml\n";
+const RULES: &str = r#"{"schema_version":1,"kind":"custom","capabilities":["structured-rules-v1","argument-rules-v1"],"rules":[{"id":"inspect","decision":"allow","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"exact","values":["inspect"]}}}]}"#;
+
+fn fixture() -> (assert_fs::TempDir, Context) {
+    let root = assert_fs::TempDir::new().expect("fixture root");
+    let bundle = configuration::Bundle::capture(CONFIG, &[], Some(RULES)).expect("fixture policy");
+    let context = review::mcp::initialize_fixture(root.path(), &bundle);
+    fs::write(root.path().join(".shield/config.yml"), CONFIG).expect("fixture config");
+    fs::write(root.path().join(".shield/rules.yml"), RULES).expect("fixture rules");
+    (root, context)
+}
+
+fn copy(from: &Path, to: &Path) {
+    for entry in fs::read_dir(from).expect("fixture directory") {
+        let entry = entry.expect("fixture entry");
+        let target = to.join(entry.file_name());
+        if entry.file_type().expect("fixture file kind").is_dir() {
+            fs::create_dir(&target).expect("fixture child directory");
+            copy(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), target).expect("copy fixture file");
+        }
+    }
+}
+
+fn files(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    fn visit(root: &Path, at: &Path, files: &mut BTreeMap<PathBuf, Vec<u8>>) {
+        for entry in fs::read_dir(at).expect("fixture files") {
+            let entry = entry.expect("fixture file");
+            if entry.file_type().expect("fixture type").is_dir() {
+                visit(root, &entry.path(), files);
+            } else {
+                files.insert(
+                    entry
+                        .path()
+                        .strip_prefix(root)
+                        .expect("relative fixture")
+                        .into(),
+                    fs::read(entry.path()).expect("fixture bytes"),
+                );
+            }
+        }
+    }
+    let mut result = BTreeMap::new();
+    visit(root, root, &mut result);
+    result
+}
+
+#[test]
+fn bootstrap_move_is_read_only_until_review_and_retries_one_new_enrollment() {
+    let parent = assert_fs::TempDir::new().unwrap();
+    let (original, old_context) = fixture();
+    let original_root = original.path().canonicalize().unwrap();
+    let old_state = fs::read(original.path().join(".shield/review/state.json")).unwrap();
+    let moved = parent.path().join("moved");
+    fs::rename(original.path(), &moved).unwrap();
+    assert!(review::open(&moved).is_err());
+    let before = files(&moved);
+    let plan = Arc::new(prepare(&moved).unwrap());
+    assert_eq!(plan.report()["classification"], "relocation");
+    assert_eq!(plan.report()["previous_project_root"], json!(original_root));
+    assert_eq!(
+        files(&moved),
+        before,
+        "preparation and decline write nothing"
+    );
+    let first = plan.commit().unwrap();
+    let committed = files(&moved);
+    let second = plan.commit().unwrap();
+    assert_eq!(first.project_id, second.project_id);
+    assert_ne!(first.project_id, old_context.project_id);
+    assert_eq!(committed, files(&moved), "accepted retry is read-only");
+    assert_eq!(
+        fs::read(moved.join(".shield/config.yml")).unwrap(),
+        CONFIG.as_bytes()
+    );
+    assert_eq!(
+        fs::read(moved.join(".shield/rules.yml")).unwrap(),
+        RULES.as_bytes()
+    );
+    let backup = moved.join(format!(
+        ".shield/review/bootstrap-{}.json",
+        policy::fingerprint(&old_state)
+    ));
+    assert_eq!(fs::read(backup).unwrap(), old_state);
+    assert!(accepts_launch(&moved, &original_root));
+    let snapshot = crate::runtime::Project::open(&moved)
+        .unwrap()
+        .snapshot()
+        .unwrap();
+    let evaluation = snapshot
+        .evaluate(policy::Request {
+            executable: "acme".into(),
+            arguments: vec!["inspect".into()],
+            cwd: first.project_root.clone(),
+            project: first.project_root.clone(),
+        })
+        .unwrap();
+    assert_eq!(evaluation.evaluation().decision, policy::Decision::Allow);
+}
+
+fn add_approval(root: &Path, context: &Context) {
+    let path = Path::new(&context.project_root).join("acme.txt");
+    fs::write(&path, "Acme text").expect("fixture text");
+    let input = json!({"protocol_version":1,"request_id":"acme-read","expected_project_id":context.project_id,
+        "cwd":context.project_root,"operation":{"kind":"read-text","path":path,"offset":null,"limit":null},
+        "host":{"agent":"claude-mod","session_id":"acme-session","tool_use_id":"acme-tool","event":"PreToolUse","consumer_id":"acme-session"}});
+    let (receipt, code) = crate::enforcement::protocol::evaluate(
+        root,
+        &serde_json::to_vec(&input).expect("read input"),
+    );
+    assert_eq!(code, 0, "{receipt}");
+    assert_eq!(receipt["code"], "approval-required", "{receipt}");
+    let id = receipt["approval"]["request_id"]
+        .as_str()
+        .expect("pending read request");
+    review::read_approval::authorize(context, id, 300, None, false).expect("fixture grant");
+}
+
+#[test]
+fn bootstrap_copy_never_imports_authority_or_observations_and_keeps_original() {
+    let (original, old_context) = fixture();
+    add_approval(original.path(), &old_context);
+    let original_store = Store::open(original.path()).unwrap();
+    original_store.update(&old_context,&|| Ok(()),|state| {
+        state.enforcement.enabled = false;
+        state.operator["sources"]["private"] = json!({"identity":"private","location":"https://example.com/registry","key":"a".repeat(64)});
+        Ok(json!({}))
+    }).unwrap();
+    let before = original_store.read_checkpoint().unwrap();
+    assert!(!before.read_requests.is_empty());
+    let original_files = files(original.path());
+    let copied = assert_fs::TempDir::new().unwrap();
+    copy(original.path(), copied.path());
+    let plan = prepare(copied.path()).unwrap();
+    assert_eq!(plan.report()["classification"], "copy");
+    let context = plan.commit().unwrap();
+    let store = Store::open(copied.path()).unwrap();
+    let after = store.read_checkpoint().unwrap();
+    assert_ne!(context.project_id, old_context.project_id);
+    assert!(
+        after.read_requests.is_empty()
+            && after.run_requests.is_empty()
+            && after.hook_requests.is_empty()
+    );
+    assert!(after.proposals.is_empty() && after.registry_checkpoints.is_empty());
+    assert_eq!(after.operator["sources"], json!({}));
+    assert!(
+        review::integrations::registration(&after.operator)
+            .unwrap()
+            .is_none()
+    );
+    assert!(after.enforcement.enabled);
+    assert_ne!(after.history_generation, before.history_generation);
+    assert_eq!(
+        files(original.path()),
+        original_files,
+        "the original stays untouched"
+    );
+    let journal = before.history_generation.strip_prefix("journal-").unwrap();
+    let historical: Vec<_> = original_files
+        .iter()
+        .filter(|(path, _)| {
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|name| name.starts_with(&format!("history-{journal}.")))
+        })
+        .collect();
+    assert!(!historical.is_empty());
+    store
+        .update(&context, &|| Ok(()), |state| {
+            state.operator["acme"] = json!(true);
+            Ok(json!({}))
+        })
+        .unwrap();
+    for (path, bytes) in historical {
+        assert_eq!(fs::read(copied.path().join(path)).unwrap(), *bytes);
+    }
+    assert!(
+        store
+            .read_history()
+            .unwrap()
+            .events
+            .iter()
+            .all(|event| event["kind"] != "read_grant_issued")
+    );
+}
+
+#[test]
+fn bootstrap_source_or_checkpoint_changes_require_a_new_review() {
+    let (original, _) = fixture();
+    let copied = assert_fs::TempDir::new().unwrap();
+    copy(original.path(), copied.path());
+    let plan = prepare(copied.path()).unwrap();
+    let checkpoint = copied.path().join(".shield/review/state.json");
+    let before = fs::read(&checkpoint).unwrap();
+    fs::write(
+        copied.path().join(".shield/rules.yml"),
+        format!("{RULES}\n"),
+    )
+    .unwrap();
+    assert!(plan.commit().is_err());
+    assert_eq!(fs::read(&checkpoint).unwrap(), before);
+    let plan = prepare(copied.path()).unwrap();
+    let mut state: Value = serde_json::from_slice(&before).unwrap();
+    state["sequence"] = json!(state["sequence"].as_u64().unwrap() + 1);
+    fs::write(&checkpoint, state.to_string()).unwrap();
+    assert!(plan.commit().is_err());
+    let fresh = prepare(copied.path()).unwrap();
+    fresh.commit().unwrap();
+}
+
+#[test]
+fn bootstrap_config_only_prepare_does_not_create_local_authority() {
+    let root = assert_fs::TempDir::new().unwrap();
+    fs::create_dir(root.path().join(".shield")).unwrap();
+    fs::write(root.path().join(".shield/config.yml"), CONFIG).unwrap();
+    fs::write(root.path().join(".shield/rules.yml"), RULES).unwrap();
+    let before = files(root.path());
+    let plan = prepare(root.path()).unwrap();
+    assert_eq!(plan.report()["classification"], "unenrolled");
+    assert_eq!(files(root.path()), before);
+    let context = plan.commit_cli().unwrap();
+    assert_eq!(context.surface, "cli");
+    assert_eq!(
+        review::open(root.path()).unwrap().project_id,
+        context.project_id
+    );
+    let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
+    assert!(
+        state
+            .authorization_events
+            .iter()
+            .any(|event| event["kind"] == "project_enrolled"
+                && event["operator"]["mechanism"] == "operator-cli"
+                && event["provenance"]["surface"] == "cli")
+    );
+}
+
+#[test]
+fn bootstrap_explicit_cache_is_reviewed_without_importing_a_copied_override() {
+    let (original, old_context) = fixture();
+    let old_cache = original
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("unused-old-cache");
+    Store::open(original.path())
+        .unwrap()
+        .update(&old_context, &|| Ok(()), |state| {
+            state.operator["compiled_cache_root"] = json!(old_cache);
+            Ok(json!({}))
+        })
+        .unwrap();
+    let copied = assert_fs::TempDir::new().unwrap();
+    copy(original.path(), copied.path());
+    let before = files(copied.path());
+    let cache = copied.path().canonicalize().unwrap().join(".shield/cache");
+    let default = prepare(copied.path()).unwrap();
+    assert!(default.metadata["compiled_cache_root"].is_null());
+    let plan = prepare_options(copied.path(), None, Some(&cache)).unwrap();
+    assert_eq!(plan.report()["cache_dir"], json!(cache));
+    assert!(
+        plan.message()
+            .contains(&serde_json::to_string(cache.to_str().unwrap()).unwrap())
+    );
+    assert_ne!(plan.fingerprint, default.fingerprint);
+    assert!(!cache.exists() && !old_cache.exists());
+    assert_eq!(
+        files(copied.path()),
+        before,
+        "cache selection is read-only before confirmation"
+    );
+    let context = plan.commit_cli().unwrap();
+    let state = Store::open(copied.path())
+        .unwrap()
+        .read_checkpoint()
+        .unwrap();
+    assert_eq!(state.operator["compiled_cache_root"], json!(cache));
+    assert_eq!(state.operator["bootstrap"]["cache_dir"], json!(cache));
+    assert_eq!(state.project_id, context.project_id);
+    assert!(cache.is_dir());
+    assert!(!old_cache.exists());
+}
+
+#[test]
+fn bootstrap_cache_choices_bind_exact_paths_and_refuse_relative_input() {
+    let (original, _) = fixture();
+    let copied = assert_fs::TempDir::new().unwrap();
+    copy(original.path(), copied.path());
+    let scratch = assert_fs::TempDir::new().unwrap();
+    let first = scratch.path().canonicalize().unwrap().join("first");
+    let second = scratch.path().canonicalize().unwrap().join("second");
+    let first_plan = prepare_options(copied.path(), None, Some(&first)).unwrap();
+    let second_plan = prepare_options(copied.path(), None, Some(&second)).unwrap();
+    assert_ne!(first_plan.fingerprint, second_plan.fingerprint);
+    assert!(prepare_options(copied.path(), None, Some(Path::new("relative-cache"))).is_err());
+    fs::write(
+        copied.path().join(".shield/rules.yml"),
+        format!("{RULES}\n"),
+    )
+    .unwrap();
+    assert!(matches!(first_plan.commit(), Err(Error::StaleSnapshot)));
+    assert!(!first.exists() && !second.exists());
+}
+
+#[test]
+fn bootstrap_confirmed_launch_binding_survives_activation_and_cannot_be_copied() {
+    let (original, _) = fixture();
+    let copied = assert_fs::TempDir::new().unwrap();
+    copy(original.path(), copied.path());
+    assert!(!forms_reviewed_at(original.path()));
+    assert!(!forms_reviewed_at(copied.path()));
+    let context = prepare(copied.path()).unwrap().commit().unwrap();
+    assert!(forms_reviewed_at(copied.path()));
+    let original_path = original.path().canonicalize().unwrap();
+    assert!(accepts_launch(copied.path(), &original_path));
+    let store = Store::open(copied.path()).unwrap();
+    store
+        .update(&context, &|| Ok(()), |state| {
+            let artifact = review::cache::build(state, None)?;
+            review::runtime::publish_confirmed(state, &context, None, artifact, "host-elicitation");
+            state.compact_authorization();
+            Ok(json!({}))
+        })
+        .unwrap();
+    assert!(accepts_launch(copied.path(), &original_path));
+    let third = assert_fs::TempDir::new().unwrap();
+    copy(copied.path(), third.path());
+    assert!(!accepts_launch(third.path(), &original_path));
+    assert!(!forms_reviewed_at(third.path()));
+    store
+        .update(&context, &|| Ok(()), |state| {
+            state.operator["bootstrap"]["previous_project_root"] = json!("/different");
+            Ok(json!({}))
+        })
+        .unwrap();
+    assert!(!accepts_launch(copied.path(), Path::new("/different")));
+}
+
+#[test]
+fn bootstrap_repeated_moves_keep_the_actual_original_launcher_without_alias_growth() {
+    let (original, old_context) = fixture();
+    let launcher = PathBuf::from(&old_context.project_root);
+    let parent = assert_fs::TempDir::new().unwrap();
+    let mut current = original.path().to_path_buf();
+    for index in 0..5 {
+        let destination = parent.path().join(format!("moved-{index}"));
+        fs::rename(&current, &destination).unwrap();
+        assert!(launch_matches_metadata(&destination, &launcher));
+        assert!(!accepts_launch(&destination, &launcher));
+        let plan = prepare_launch(&destination, &launcher).unwrap();
+        assert!(plan.committed().unwrap().is_none());
+        let context = plan.commit().unwrap();
+        assert_eq!(
+            plan.committed().unwrap().unwrap().project_id,
+            context.project_id
+        );
+        assert!(accepts_launch(&destination, &launcher));
+        let state = Store::open(&destination)
+            .unwrap()
+            .read_checkpoint()
+            .unwrap();
+        assert!(
+            state.operator["bootstrap"]["launch_roots"]
+                .as_array()
+                .unwrap()
+                .len()
+                <= 2
+        );
+        assert!(
+            state.operator["bootstrap"]["history_recovery"]
+                .as_array()
+                .unwrap()
+                .len()
+                <= 2
+        );
+        current = destination;
+    }
+}
+
+#[test]
+fn bootstrap_concurrent_acceptance_commits_one_enrollment() {
+    let (original, _) = fixture();
+    let copied = assert_fs::TempDir::new().unwrap();
+    copy(original.path(), copied.path());
+    let plan = Arc::new(prepare(copied.path()).unwrap());
+    let mut threads = Vec::new();
+    for _ in 0..2 {
+        let plan = plan.clone();
+        threads.push(std::thread::spawn(move || {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            loop {
+                match plan.commit() {
+                    Ok(context) => break context,
+                    Err(Error::Locked) if std::time::Instant::now() < deadline => {
+                        std::thread::yield_now();
+                    }
+                    Err(error) => panic!("concurrent enrollment failed: {error}"),
+                }
+            }
+        }));
+    }
+    let first = threads.remove(0).join().unwrap();
+    let second = threads.remove(0).join().unwrap();
+    assert_eq!(first.project_id, second.project_id);
+    let state = Store::open(copied.path())
+        .unwrap()
+        .read_checkpoint()
+        .unwrap();
+    assert_eq!(
+        state
+            .authorization_events
+            .iter()
+            .filter(|event| event["kind"] == "project_enrolled")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn bootstrap_cli_moves_preserve_an_existing_confirmed_mcp_launcher() {
+    let (original, old_context) = fixture();
+    let launcher = PathBuf::from(old_context.project_root);
+    let parent = assert_fs::TempDir::new().unwrap();
+    let mut current = parent.path().join("mcp-move");
+    fs::rename(original.path(), &current).unwrap();
+    prepare_launch(&current, &launcher)
+        .unwrap()
+        .commit()
+        .unwrap();
+    for index in 0..2 {
+        let destination = parent.path().join(format!("cli-move-{index}"));
+        fs::rename(&current, &destination).unwrap();
+        let plan = prepare(&destination).unwrap();
+        assert_eq!(plan.report()["launch_roots"], json!([launcher]));
+        plan.commit_cli().unwrap();
+        assert!(accepts_launch(&destination, &launcher));
+        current = destination;
+    }
+}
+
+#[test]
+fn bootstrap_refuses_corrupt_future_or_healthy_state_without_writes() {
+    let (original, _) = fixture();
+    assert!(prepare(original.path()).is_err());
+    let copied = assert_fs::TempDir::new().unwrap();
+    copy(original.path(), copied.path());
+    let path = copied.path().join(".shield/review/state.json");
+    let mut future: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    future["schema_version"] = json!(2);
+    for bytes in [future.to_string().into_bytes(), b"not valid JSON".to_vec()] {
+        fs::write(&path, &bytes).unwrap();
+        let before = files(copied.path());
+        assert!(prepare(copied.path()).is_err());
+        assert_eq!(files(copied.path()), before);
+    }
+}
+
+#[test]
+fn bootstrap_probe_diagnoses_a_copy_with_malformed_policy_without_preparing_it() {
+    let (original, _) = fixture();
+    let copied = assert_fs::TempDir::new().unwrap();
+    copy(original.path(), copied.path());
+    fs::write(
+        copied.path().join(".shield/rules.yml"),
+        "this is not a rules document",
+    )
+    .unwrap();
+    let before = files(copied.path());
+    let probe = inspect(copied.path()).unwrap();
+    assert!(probe.bootstrap_required());
+    assert_eq!(probe.project_root(), copied.path().canonicalize().unwrap());
+    assert_eq!(probe.report()["classification"], "copy");
+    assert_eq!(probe.report()["policy_validated"], false);
+    assert!(prepare(copied.path()).is_err());
+    assert_eq!(files(copied.path()), before);
+}
+
+#[test]
+fn bootstrap_probe_of_config_only_or_current_projects_reads_only_location_metadata() {
+    let root = assert_fs::TempDir::new().unwrap();
+    fs::create_dir(root.path().join(".shield")).unwrap();
+    fs::write(
+        root.path().join(".shield/config.yml"),
+        "malformed: [ configuration",
+    )
+    .unwrap();
+    let before = files(root.path());
+    let probe = inspect(root.path()).unwrap();
+    assert!(probe.bootstrap_required());
+    assert_eq!(probe.report()["classification"], "unenrolled");
+    assert!(prepare(root.path()).is_err());
+    assert_eq!(files(root.path()), before);
+    assert!(!root.path().join(".shield/review").exists());
+    let (enrolled, _) = fixture();
+    let before = files(enrolled.path());
+    let current = inspect(enrolled.path()).unwrap();
+    assert!(!current.bootstrap_required());
+    assert_eq!(current.report()["classification"], "enrolled");
+    assert_eq!(files(enrolled.path()), before);
+}
+
+#[test]
+fn bootstrap_probe_refuses_future_and_corrupt_checkpoint_headers_without_writes() {
+    let (original, _) = fixture();
+    let copied = assert_fs::TempDir::new().unwrap();
+    copy(original.path(), copied.path());
+    let path = copied.path().join(".shield/review/state.json");
+    let mut raw: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    raw["schema_version"] = json!(2);
+    fs::write(&path, raw.to_string()).unwrap();
+    let before = files(copied.path());
+    assert!(matches!(
+        inspect(copied.path()),
+        Err(Error::StateFormat { .. })
+    ));
+    assert_eq!(files(copied.path()), before);
+    for malformed in [
+        "not JSON",
+        r#"{"schema_version":1,"project_root":"relative"}"#,
+    ] {
+        fs::write(&path, malformed).unwrap();
+        let before = files(copied.path());
+        assert!(matches!(
+            inspect(copied.path()),
+            Err(Error::StateCorrupt { .. })
+        ));
+        assert_eq!(files(copied.path()), before);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn bootstrap_rejects_symlinked_configuration_and_escapes_untrusted_path_display() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let external = assert_fs::TempDir::new().unwrap();
+    fs::create_dir(root.path().join(".shield")).unwrap();
+    fs::write(external.path().join("config.yml"), CONFIG).unwrap();
+    std::os::unix::fs::symlink(
+        external.path().join("config.yml"),
+        root.path().join(".shield/config.yml"),
+    )
+    .unwrap();
+    assert!(prepare(root.path()).is_err());
+    assert_eq!(
+        display("/acme\nconfirm\u{202e}", 256),
+        "\"/acme\\nconfirm\\u202e\""
+    );
+}
+
+fn record_integration_review(
+    state: &mut review::model::State,
+    context: &Context,
+    review_id: &str,
+    mechanism: &str,
+) -> Value {
+    let marker = json!({"project_id":state.project_id,"project_root":state.project_root,
+        "review_id":review_id});
+    state.operator["integration_review"] = marker.clone();
+    let mut event = state.event(
+        "integration_review_confirmed",
+        context,
+        json!({}),
+        json!({}),
+        json!({"review_channel":marker}),
+    );
+    event["operator"] = json!({"operator_id":null,"display_name":null,"mechanism":mechanism});
+    state.record(event);
+    marker
+}
+
+#[test]
+fn integration_review_forms_require_exact_human_proof_and_current_project() {
+    for mechanism in ["host-elicitation", "operator-cli"] {
+        let (root, context) = fixture();
+        let store = Store::open(root.path()).unwrap();
+        assert!(!forms_reviewed_at(root.path()));
+        store
+            .update(&context, &|| Ok(()), |state| {
+                record_integration_review(state, &context, "review-confirmed", mechanism);
+                Ok(json!({}))
+            })
+            .unwrap();
+        assert!(forms_reviewed_at(root.path()));
+        let path = root.path().join(".shield/review/state.json");
+        let baseline = fs::read(&path).unwrap();
+        for fault in [
+            "mechanism",
+            "review-id",
+            "empty-id",
+            "missing-event",
+            "project-id",
+            "project-root",
+            "event-project",
+        ] {
+            let mut raw: Value = serde_json::from_slice(&baseline).unwrap();
+            let marker = &mut raw["operator"]["integration_review"];
+            match fault {
+                "review-id" => marker["review_id"] = json!("another-review"),
+                "empty-id" => marker["review_id"] = json!(""),
+                "project-id" => marker["project_id"] = json!("f".repeat(64)),
+                "project-root" => marker["project_root"] = json!("/another-project"),
+                _ => {}
+            }
+            let events = raw["authorization_events"].as_array_mut().unwrap();
+            if fault == "missing-event" {
+                events.retain(|event| event["kind"] != "integration_review_confirmed");
+            } else {
+                let event = events
+                    .iter_mut()
+                    .find(|event| event["kind"] == "integration_review_confirmed")
+                    .unwrap();
+                match fault {
+                    "mechanism" => event["operator"]["mechanism"] = json!("host-tool-permission"),
+                    "empty-id" => event["details"]["review_channel"]["review_id"] = json!(""),
+                    "event-project" => event["provenance"]["project_id"] = json!("f".repeat(64)),
+                    _ => {}
+                }
+            }
+            fs::write(&path, raw.to_string()).unwrap();
+            assert!(!forms_reviewed_at(root.path()), "{mechanism}: {fault}");
+        }
+        fs::write(&path, baseline).unwrap();
+        assert!(forms_reviewed_at(root.path()));
+        let copied = assert_fs::TempDir::new().unwrap();
+        copy(root.path(), copied.path());
+        assert!(
+            !forms_reviewed_at(copied.path()),
+            "copying proof does not enroll a new location"
+        );
+    }
+}
+
+#[test]
+fn integration_review_compaction_and_history_purge_preserve_only_current_proof() {
+    let (root, context) = fixture();
+    add_approval(root.path(), &context);
+    let store = Store::open(root.path()).unwrap();
+    let before = store.read_checkpoint().unwrap();
+    let authority = json!({"active":before.active,"read":before.read_requests,"run":before.run_requests,
+        "hooks":before.hook_requests,"sessions":before.session_grants});
+    store
+        .update(&context, &|| Ok(()), |state| {
+            state.history_enabled = false;
+            record_integration_review(state, &context, "older-review", "host-elicitation");
+            let current =
+                record_integration_review(state, &context, "current-review", "host-elicitation");
+            let mut foreign = state
+                .authorization_events
+                .iter()
+                .find(|event| {
+                    event["kind"] == "integration_review_confirmed"
+                        && event["details"]["review_channel"] == current
+                })
+                .unwrap()
+                .clone();
+            foreign["provenance"]["project_id"] = json!("f".repeat(64));
+            state.record(foreign);
+            state.compact_authorization();
+            let retained: Vec<_> = state
+                .authorization_events
+                .iter()
+                .filter(|event| event["kind"] == "integration_review_confirmed")
+                .collect();
+            assert_eq!(retained.len(), 1);
+            assert_eq!(retained[0]["details"]["review_channel"], current);
+            Ok(json!({}))
+        })
+        .unwrap();
+    assert!(forms_reviewed_at(root.path()));
+    review::admin::prepare(
+        &context,
+        "history_configure",
+        &json!({"enabled":false,"purge":true}),
+        &|| Ok(()),
+    )
+    .unwrap()
+    .commit(&context, &|| Ok(()))
+    .unwrap();
+    let after = store.read_checkpoint().unwrap();
+    assert!(!after.history_enabled);
+    assert!(store.read_history().unwrap().events.is_empty());
+    assert!(forms_reviewed_at(root.path()));
+    assert_eq!(
+        json!({"active":after.active,"read":after.read_requests,"run":after.run_requests,
+        "hooks":after.hook_requests,"sessions":after.session_grants}),
+        authority
+    );
+    assert_eq!(
+        after
+            .authorization_events
+            .iter()
+            .filter(|event| event["kind"] == "integration_review_confirmed")
+            .count(),
+        1
+    );
+}

@@ -8,6 +8,253 @@ use std::{
 };
 
 #[test]
+#[cfg(any(unix, windows))]
+fn authority_lock_recovers_dead_legacy_writers_but_preserves_live_and_unknown_owners() {
+    let (root, _) = enrolled();
+    let store = Store::open(root.path()).unwrap();
+    let marker = store.directory.join("state.lock");
+    for contents in [
+        format!("{}\n", std::process::id()),
+        String::new(),
+        "unknown\n".into(),
+    ] {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        private(&mut options);
+        let mut file = options.open(&marker).unwrap();
+        file.write_all(contents.as_bytes()).unwrap();
+        drop(file);
+        assert!(matches!(
+            store.with_interaction_lock(|| Ok(())),
+            Err(Error::Locked)
+        ));
+        assert_eq!(fs::read_to_string(&marker).unwrap(), contents);
+        fs::remove_file(&marker).unwrap();
+    }
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    private(&mut options);
+    let mut file = options.open(&marker).unwrap();
+    writeln!(file, "{}", super::exited_pid()).unwrap();
+    drop(file);
+    store.with_interaction_lock(|| Ok(())).unwrap();
+    assert!(!marker.exists());
+    assert!(store.directory.join("writer.lock").is_file());
+}
+
+#[test]
+fn authority_lock_serializes_contenders_and_excludes_legacy_writers() {
+    use std::sync::{
+        Arc, Barrier,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let (root, _) = enrolled();
+    let store = Store::open(root.path()).unwrap();
+    store
+        .with_interaction_lock(|| {
+            assert!(
+                OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(store.directory.join("state.lock"))
+                    .is_err()
+            );
+            Ok(())
+        })
+        .unwrap();
+    let barrier = Arc::new(Barrier::new(4));
+    let inside = Arc::new(AtomicUsize::new(0));
+    let completed = Arc::new(AtomicUsize::new(0));
+    thread::scope(|scope| {
+        for _ in 0..4 {
+            let (barrier, inside, completed) = (barrier.clone(), inside.clone(), completed.clone());
+            let root = root.path();
+            scope.spawn(move || {
+                barrier.wait();
+                let store = Store::open(root).unwrap();
+                for _ in 0..4 {
+                    store
+                        .with_interaction_lock(|| {
+                            assert_eq!(inside.fetch_add(1, Ordering::SeqCst), 0);
+                            thread::sleep(Duration::from_millis(5));
+                            assert_eq!(inside.fetch_sub(1, Ordering::SeqCst), 1);
+                            completed.fetch_add(1, Ordering::SeqCst);
+                            Ok(())
+                        })
+                        .unwrap();
+                }
+            });
+        }
+    });
+    assert_eq!(completed.load(Ordering::SeqCst), 16);
+    assert!(!store.directory.join("state.lock").exists());
+}
+
+#[test]
+fn authority_lock_cancellation_and_unwind_release_ownership() {
+    let (root, _) = enrolled();
+    let store = Store::open(root.path()).unwrap();
+    store
+        .with_interaction_lock(|| {
+            assert!(matches!(
+                store.lock(&|| Err(crate::policy::Error::Interrupted)),
+                Err(Error::Policy(crate::policy::Error::Interrupted))
+            ));
+            assert!(matches!(
+                store.with_interaction_lock(|| Ok(())),
+                Err(Error::Locked)
+            ));
+            Ok(())
+        })
+        .unwrap();
+    assert!(
+        std::panic::catch_unwind(|| {
+            store.with_interaction_lock(|| -> Result<(), Error> { panic!("owned writer panic") })
+        })
+        .is_err()
+    );
+    store.with_interaction_lock(|| Ok(())).unwrap();
+    assert!(!store.directory.join("state.lock").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn authority_lock_refuses_linked_or_nonprivate_kernel_files() {
+    use std::os::unix::fs::PermissionsExt;
+    let (root, _) = enrolled();
+    let store = Store::open(root.path()).unwrap();
+    let path = store.directory.join("writer.lock");
+    let unrelated = root.path().join("unrelated");
+    fs::write(&unrelated, "preserve me").unwrap();
+    // Enrollment already created the persistent lock. This fixture has no
+    // concurrent owner; replace its namespace only to exercise unsafe paths.
+    fs::remove_file(&path).unwrap();
+    std::os::unix::fs::symlink(&unrelated, &path).unwrap();
+    assert!(store.with_interaction_lock(|| Ok(())).is_err());
+    assert_eq!(fs::read_to_string(&unrelated).unwrap(), "preserve me");
+    fs::remove_file(&path).unwrap();
+    fs::hard_link(&unrelated, &path).unwrap();
+    assert!(store.with_interaction_lock(|| Ok(())).is_err());
+    fs::remove_file(&path).unwrap();
+    fs::write(&path, "").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(store.with_interaction_lock(|| Ok(())).is_err());
+    assert!(!store.directory.join("state.lock").exists());
+}
+
+#[test]
+fn authority_lock_preserves_unknown_marker_contents() {
+    let (root, _) = enrolled();
+    let store = Store::open(root.path()).unwrap();
+    let marker = store.directory.join("state.lock");
+    fs::create_dir(&marker).unwrap();
+    fs::write(marker.join("unknown"), "preserve me").unwrap();
+    assert!(store.with_interaction_lock(|| Ok(())).is_err());
+    assert_eq!(
+        fs::read_to_string(marker.join("unknown")).unwrap(),
+        "preserve me"
+    );
+}
+
+#[test]
+#[cfg(any(unix, windows))]
+fn authority_lock_recovers_early_crashes_and_dead_legacy_processes() {
+    for mode in ["legacy", "kernel"] {
+        let (root, _) = enrolled();
+        let store = Store::open(root.path()).unwrap();
+        let marker = store.directory.join("state.lock");
+        let before = fs::read(store.directory.join("state.json")).unwrap();
+        let kernel = fs::File::open(store.directory.join("writer.lock")).unwrap();
+        let mut child = OwnedChild(
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "review::storage::tests::authority_lock_writer_process",
+                    "--ignored",
+                    "--nocapture",
+                ])
+                .env("SHIELD_TEST_LOCK_ROOT", root.path())
+                .env("SHIELD_TEST_LOCK_MODE", mode)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .unwrap(),
+        );
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while fs::read_to_string(root.path().join("ready"))
+            .ok()
+            .as_deref()
+            != Some(mode)
+        {
+            assert!(child.0.try_wait().unwrap().is_none(), "lock writer exited");
+            assert!(Instant::now() < deadline, "lock writer never became ready");
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(matches!(
+            store.with_interaction_lock(|| Ok(())),
+            Err(Error::Locked)
+        ));
+        if mode == "legacy" {
+            assert_eq!(
+                fs::read_to_string(&marker).unwrap(),
+                format!("{}\n", child.0.id())
+            );
+        } else {
+            assert!(marker.is_dir());
+        }
+        child.0.kill().unwrap();
+        child.0.wait().unwrap();
+        store.with_interaction_lock(|| Ok(())).unwrap();
+        assert!(!marker.exists());
+        assert_eq!(
+            fs::read(store.directory.join("state.json")).unwrap(),
+            before
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let held = kernel.metadata().unwrap();
+            let current = fs::metadata(store.directory.join("writer.lock")).unwrap();
+            assert_eq!((held.dev(), held.ino()), (current.dev(), current.ino()));
+        }
+        #[cfg(windows)]
+        {
+            let held = winapi_util::file::information(&kernel).unwrap();
+            let current = fs::File::open(store.directory.join("writer.lock")).unwrap();
+            let current = winapi_util::file::information(&current).unwrap();
+            assert_eq!(
+                (held.volume_serial_number(), held.file_index()),
+                (current.volume_serial_number(), current.file_index())
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "owned lock writer invoked by authority_lock_recovers_early_crashes_and_dead_legacy_processes"]
+fn authority_lock_writer_process() {
+    let root = std::env::var("SHIELD_TEST_LOCK_ROOT").unwrap();
+    let mode = std::env::var("SHIELD_TEST_LOCK_MODE").unwrap();
+    let store = Store::open(Path::new(&root)).unwrap();
+    let _lock = if mode == "legacy" {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        private(&mut options);
+        let mut marker = options.open(store.directory.join("state.lock")).unwrap();
+        writeln!(marker, "{}", std::process::id()).unwrap();
+        drop(marker);
+        None
+    } else {
+        Some(store.lock(&|| Ok(())).unwrap())
+    };
+    fs::write(Path::new(&root).join("ready"), mode).unwrap();
+    loop {
+        thread::park();
+    }
+}
+
+#[test]
 fn current_policy_cache_reuse_preserves_source_integrity_and_read_only_fallback() {
     let (root, context) = enrolled();
     let status = runtime::status(&context).unwrap();
@@ -267,6 +514,7 @@ fn incomplete_state_and_proposal_records_are_refused_without_mutation() {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Stage {
+    UpgradePrepared,
     Created,
     Written,
     Synced,
@@ -276,6 +524,7 @@ pub(super) enum Stage {
 impl Stage {
     fn name(self) -> &'static str {
         match self {
+            Self::UpgradePrepared => "upgrade-prepared",
             Self::Created => "created",
             Self::Written => "written",
             Self::Synced => "synced",
@@ -291,6 +540,9 @@ pub(super) fn observe(stage: Stage) {
     if let Some(observer) = OBSERVER.with(Cell::get) {
         observer(stage);
     }
+}
+pub(super) fn set_observer(observer: Option<fn(Stage)>) {
+    OBSERVER.with(|slot| slot.set(observer));
 }
 
 fn barrier(stage: Stage) {
@@ -412,6 +664,12 @@ fn publication_crashes_never_launch_before_durable_consumption() {
         let id = decision["approval"]["request_id"].as_str().unwrap();
         crate::review::run_approval::authorize(&operator, id, 300, None, false).unwrap();
         let mut child = consumption_writer_at(root.path(), stage);
+        assert!(matches!(
+            Store::open(root.path())
+                .unwrap()
+                .with_interaction_lock(|| Ok(())),
+            Err(Error::Locked)
+        ));
         child.0.kill().unwrap();
         child.0.wait().unwrap();
         assert!(!root.path().join("launched").exists());
@@ -430,8 +688,7 @@ fn publication_crashes_never_launch_before_durable_consumption() {
                 .count(),
             usize::from(committed)
         );
-        // Only recover the stale lock after this owned writer has been reaped.
-        fs::remove_file(root.path().join(".shield/review/state.lock")).unwrap();
+        // Retrying after the owned writer exits needs no lock-file cleanup.
         let retry = crate::review::run_approval::gate(
             &context,
             &evidence,
@@ -544,6 +801,10 @@ fn publication_crashes_keep_complete_authorized_snapshots() {
             !committed,
             "visibility at {stage:?}"
         );
+        assert!(matches!(
+            runtime::publish_fixture(&context, revision, digest, Some(previous), &|| Ok(())),
+            Err(Error::Locked)
+        ));
         child.0.kill().unwrap();
         assert!(!child.0.wait().unwrap().success());
         assert_eq!(runtime::status(&context).unwrap(), visible);
@@ -552,12 +813,8 @@ fn publication_crashes_keep_complete_authorized_snapshots() {
         if !committed {
             assert_eq!(fs::read(&state_path).unwrap(), before);
         }
-        assert!(matches!(
-            runtime::publish_fixture(&context, revision, digest, Some(previous), &|| Ok(())),
-            Err(Error::Locked)
-        ));
-        // The owned writer was killed and reaped, so manual lock recovery is established.
-        fs::remove_file(root.path().join(".shield/review/state.lock")).unwrap();
+        // The kernel releases the writer's ownership. Recovery must be an
+        // ordinary retry, preserving the committed outcome and consumed grants.
         let recovered =
             runtime::publish_fixture(&context, revision, digest, Some(previous), &|| Ok(()))
                 .unwrap();
@@ -582,5 +839,22 @@ fn publication_crashes_keep_complete_authorized_snapshots() {
             recovered
         );
         assert_eq!(store.read().unwrap().authorization_events.len(), 1);
+        reconnect_and_prepare_cache(&context, stage);
+        assert_eq!(runtime::status(&context).unwrap()["active"], recovered);
     }
+}
+
+/// A fresh MCP connection must start after the crash and prepare the committed
+/// cache through its normal tool, without manual lock repair.
+fn reconnect_and_prepare_cache(context: &Context, stage: Stage) {
+    let mut context = context.clone();
+    context.surface = "mcp".into();
+    context.connection_id = Some(format!("crash-reconnect-{stage:?}"));
+    let connection = crate::review::mcp::Connection::enrolled(&context).unwrap();
+    let prepared =
+        crate::review::mcp::call(&context, &connection, "cache_prepare", &json!({}), &|| {
+            Ok(())
+        });
+    assert!(prepared["error"].is_null(), "{prepared}");
+    assert_eq!(prepared["data"]["prepared"], true, "{prepared}");
 }

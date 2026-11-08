@@ -204,6 +204,13 @@ impl AgentAdapter for ClaudeCode {
     ) -> Result<String, Error> {
         super::setup::merge(source, previous, desired)
     }
+    fn repair_hooks(
+        &self,
+        source: Option<&str>,
+        desired: &super::setup::HookGroups,
+    ) -> Result<String, Error> {
+        super::setup::repair(source, desired)
+    }
     fn merge_mcp(
         &self,
         before: Option<&str>,

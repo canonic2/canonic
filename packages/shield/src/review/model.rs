@@ -16,8 +16,8 @@ pub(crate) struct Context {
     pub(crate) project_id: String,
     pub(crate) project_root: String,
     pub(crate) surface: String,
-    /// The enrolled agent, which selects the review adapter. A registered
-    /// connection sets it only for an agent whose integration is recorded.
+    /// The enrolled agent or a bootstrap session's explicitly reviewed agent.
+    /// Ordinary launch attribution alone cannot select this field.
     pub(crate) agent: Option<String>,
     /// A registered connection's declared agent whose integration is not
     /// recorded: attribution only, never adapter selection.
@@ -29,6 +29,9 @@ pub(crate) struct Context {
     pub(crate) session_id: Option<String>,
     pub(crate) tool_use_id: Option<String>,
     pub(crate) connection_id: Option<String>,
+    /// The transport verified bootstrap consent or its enrollment receipt.
+    /// Never accepted as a stored or tool-supplied capability boolean.
+    pub(crate) confirmed_mcp_forms: bool,
     pub(crate) cwd: Option<String>,
     pub(crate) source: String,
     pub(crate) host_event_name: Option<String>,
@@ -49,6 +52,7 @@ impl Context {
             session_id: None,
             tool_use_id: None,
             connection_id: None,
+            confirmed_mcp_forms: false,
             cwd: None,
             source: "caller".into(),
             host_event_name: None,
@@ -203,11 +207,42 @@ impl Proposal {
         if reveal {
             value["redacted"] = json!(false);
         } else {
+            let private = redact_comparison(&mut value["comparison"]);
             let changed = redact(&mut value);
-            value["redacted"] = json!(changed);
+            value["redacted"] = json!(changed || private);
         }
         value
     }
+}
+
+/// Public comparison identities must not disclose local launcher settings.
+/// The protected comparison and human-only connection form keep their source.
+pub(crate) fn redact_comparison(value: &mut Value) -> bool {
+    let mut changed = false;
+    for side in ["before", "after"] {
+        let Some(scopes) = value
+            .get_mut(side)
+            .and_then(|side| side.get_mut("scopes"))
+            .and_then(Value::as_array_mut)
+        else {
+            continue;
+        };
+        for scope in scopes {
+            for connection in scope
+                .get_mut("lock")
+                .and_then(|lock| lock.get_mut("mcp"))
+                .and_then(Value::as_object_mut)
+                .into_iter()
+                .flat_map(|map| map.values_mut())
+            {
+                if connection["local"] == true && connection.get("transport").is_some() {
+                    *connection = json!({"local":true,"settings":"private"});
+                    changed = true;
+                }
+            }
+        }
+    }
+    changed
 }
 
 #[derive(Serialize, Deserialize)]
@@ -346,6 +381,8 @@ impl State {
         if event["kind"].as_str().is_some_and(|kind| {
             [
                 "proposal_rejected",
+                "project_enrolled",
+                "integration_review_confirmed",
                 "runtime_activated",
                 "compiled_cache_prepared",
                 "read_grant_issued",
@@ -409,9 +446,18 @@ impl State {
             )
             .collect();
         self.authorization_events.retain(|event| {
-            event["links"]["request_id"]
-                .as_str()
-                .is_some_and(|id| ids.contains(id))
+            (event["kind"] == "project_enrolled"
+                && event["provenance"]["project_id"] == self.project_id
+                && event["provenance"]["project_root"] == self.project_root
+                && event["details"]["bootstrap"] == self.operator["bootstrap"])
+                || (event["kind"] == "integration_review_confirmed"
+                    && event["provenance"]["project_id"] == self.project_id
+                    && event["provenance"]["project_root"] == self.project_root
+                    && self.operator["integration_review"].is_object()
+                    && event["details"]["review_channel"] == self.operator["integration_review"])
+                || event["links"]["request_id"]
+                    .as_str()
+                    .is_some_and(|id| ids.contains(id))
                 || self
                     .active
                     .as_ref()

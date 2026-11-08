@@ -45,6 +45,10 @@ Other hook groups, MCP servers, plugins, settings and Codex rules files survive
 installation and removal. Repeating setup creates one registration per agent.
 Missing entries can be repaired by selecting the agent again. Edited owned
 entries conflict; Shield preserves them and requires resolution. `shield mcp setup`
+can also be driven in-session with `mcp_setup`: use `repair: true` and an
+explicit Claude or Codex target to review reconciliation of conflicting Shield
+hooks and its native MCP registration. The exact changes need confirmation;
+unrelated hooks and servers are preserved. `shield mcp setup`
 without `--agent` resumes a confirmed interrupted plan. `shield mcp setup --remove`
 removes the agents you select, and with every agent selected removes all owned
 registrations while preserving policy, approvals and history.

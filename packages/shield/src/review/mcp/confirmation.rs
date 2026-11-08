@@ -186,7 +186,7 @@ fn change_lines(change: &Value) -> Vec<String> {
         }
         Some("rule") => return scope::rule_lines(change, local),
         Some("mcp") => format!(
-            "Change MCP connection {}{local}. Shield shows its captured settings in a separate confirmation form; host settings are published through mcp_setup.",
+            "Change MCP connection {}{local}. Shield shows its captured settings in the confirmation form and publishes owned connection entries for registered agents.",
             text(&change["id"])
         ),
         Some("access_paths") => {

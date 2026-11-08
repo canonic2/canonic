@@ -255,6 +255,7 @@ impl PackQuestion {
     ) -> Value {
         let result: Result<Value, Error> = (|| {
             checkpoint()?;
+            connection.ensure_owner(context)?;
             if let Some(input) = &self.replay {
                 let mut views = connection
                     .views

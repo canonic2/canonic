@@ -5,7 +5,10 @@
 //! the decisions of the one segment it seals. Readers capture segment handles and
 //! the active boundary under the lock, then verify, correlate and retain outside it.
 mod correlation;
+mod legacy;
 use super::{Error, State, Store, Temporary, private, sync};
+pub(super) use legacy::inspect as inspect_legacy;
+pub(super) use legacy::upgrade;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -78,6 +81,7 @@ pub(in crate::review) struct View {
 }
 
 pub(in crate::review) fn lock(store: &Store) -> Result<File, Error> {
+    crate::diagnostics::trace::count("history.lock_attempts", 1);
     let path = store.directory.join("history.lock");
     if path.exists() || fs::symlink_metadata(&path).is_ok() {
         regular(&path)?;
@@ -210,6 +214,7 @@ fn segments(store: &Store, state: &State) -> Result<Vec<Segment>, Error> {
 }
 /// Captures the current generation's bounded view for reading outside the lock.
 pub(in crate::review) fn capture(store: &Store, state: &State) -> Result<View, Error> {
+    crate::diagnostics::trace::count("history.captures", 1);
     let list = segments(store, state)?;
     let mut segments = Vec::with_capacity(list.len());
     let mut bytes = 0_u64;
@@ -781,6 +786,14 @@ pub(in crate::review) fn cleanup(store: &Store, state: &State) {
         if digest.len() == 64
             && digest.bytes().all(|b| b.is_ascii_hexdigit())
             && digest != current
+            && !state.operator["bootstrap"]["history_recovery"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .take(2)
+                .filter_map(Value::as_str)
+                .filter(|pin| pin.len() == 64 && pin.bytes().all(|byte| byte.is_ascii_hexdigit()))
+                .any(|pin| pin == digest)
             && matches!(extension, Some("jsonl" | "error"))
         {
             let _ = fs::remove_file(entry.path());

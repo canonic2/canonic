@@ -435,7 +435,10 @@ pub(super) fn setup(
     json_mode: bool,
     reset: bool,
 ) -> Result<Value, Error> {
-    let meta = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
+    let mut meta = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
+    if let Some(receipt) = resume_pending(context, selected, json_mode, &mut meta)? {
+        return Ok(receipt);
+    }
     tool_permissions(&meta, reset)?;
     let mut tty = Terminal::required(json_mode)?;
     let root = Path::new(&context.project_root);
@@ -468,6 +471,38 @@ pub(super) fn setup(
         tty.confirm_mcp(&setup_preview(root, plan.as_ref())?)?;
     }
     finish(context, &meta, plan.as_ref(), None)
+}
+
+fn resume_pending(
+    context: &Context,
+    selected: Option<IntegrationChoice>,
+    json_mode: bool,
+    metadata: &mut Value,
+) -> Result<Option<Value>, Error> {
+    if json_mode || pending(metadata)?.is_none() {
+        return Ok(None);
+    }
+    let receipt = match crate::review::integrations::setup::resume_confirmed(context) {
+        Ok(_) => crate::review::project::status(context)?,
+        Err(error) => {
+            let mut terminal = Terminal::required(json_mode)?;
+            terminal.note("Interrupted integration setup", &error.to_string())?;
+            let action = terminal.choose("Resolve interrupted setup", "Review the owned conflict or cancel this interrupted publication. Unrelated settings stay intact.", &[
+                ("leave", "Leave unchanged", "Keep the pending setup for later"),
+                ("review", "Review conflicting fragments", "Show exact current and proposed settings for fresh confirmation"),
+                ("cancel", "Cancel interrupted setup", "Restore owned fragments when safe, preserving manual changes"),
+            ], "leave")?;
+            drop(terminal);
+            let action = match action.as_str() {
+                "review" => crate::review::integrations::recovery::Action::Review,
+                "cancel" => crate::review::integrations::recovery::Action::Cancel,
+                _ => return Err(Error::Cancelled),
+            };
+            super::recover(context, action, json_mode, false)?
+        }
+    };
+    *metadata = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
+    Ok((selected.is_none() || pending(metadata)?.is_some()).then_some(receipt))
 }
 
 /// Ask the common action once; returning from permissions revisits the agent

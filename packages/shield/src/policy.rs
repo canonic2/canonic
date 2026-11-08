@@ -5,9 +5,12 @@ mod argument_rules;
 pub(crate) mod compiled;
 pub(crate) mod dependencies;
 pub(crate) mod directories;
+#[cfg(test)]
+mod historical_tests;
 mod index;
 mod invocations;
 mod json_budget;
+mod legacy;
 mod model;
 pub(crate) mod normalized;
 pub(crate) mod partition;
@@ -55,6 +58,8 @@ pub const MAX_DOCUMENT_BYTES: usize = 256 * 1024 * 1024;
 /// was written for a different Shield version.
 pub(crate) const CAPABILITIES: &[&str] = &[
     "structured-rules-v1",
+    "historical-matchers-v1",
+    "historical-normalized-v1",
     "argument-rules-v1",
     "argument-paths-v1",
     "graphql-v1",
@@ -237,6 +242,7 @@ pub struct Pack {
     digest: String,
     index: index::Index,
     semantic: bool,
+    historical_semantic: bool,
     patterns: std::sync::Arc<patterns::Store>,
     resolution: Vec<resolution::Entry>,
 }
@@ -248,6 +254,7 @@ pub struct CustomRules {
     digest: String,
     index: index::Index,
     semantic: bool,
+    historical_semantic: bool,
     patterns: std::sync::Arc<patterns::Store>,
 }
 
@@ -274,7 +281,7 @@ pub struct Request {
 }
 
 /// A matching rule and whether it contributed to the resolved decision.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[expect(
     clippy::struct_excessive_bools,
     reason = "independent evidence flags, each serialized under its own name"
@@ -294,6 +301,8 @@ pub struct Match {
     guidance: Option<rules::Guidance>,
     #[serde(skip)]
     exact_request: bool,
+    #[serde(skip)]
+    legacy: bool,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     fallback: bool,
     /// A failed pack precondition, deciding its pack before rules compete.
@@ -535,12 +544,37 @@ impl Pack {
         required: bool,
         previous: Option<&Self>,
     ) -> Result<Self, Error> {
+        Self::prepare_yaml(input, binding, required, previous, false)
+    }
+
+    pub(crate) fn from_retained_yaml(input: &str) -> Result<Self, Error> {
+        Self::from_retained_yaml_reusing(input, &Binding::default(), false, None)
+    }
+
+    pub(crate) fn from_retained_yaml_reusing(
+        input: &str,
+        binding: &Binding,
+        required: bool,
+        previous: Option<&Self>,
+    ) -> Result<Self, Error> {
+        Self::prepare_yaml(input, binding, required, previous, true)
+    }
+
+    fn prepare_yaml(
+        input: &str,
+        binding: &Binding,
+        required: bool,
+        previous: Option<&Self>,
+        retained: bool,
+    ) -> Result<Self, Error> {
         let _trace = crate::diagnostics::trace::span("pack.prepare");
-        let mut document: PackDocument = {
+        let mut document: PackDocument = if retained {
+            legacy::pack(input)?
+        } else {
             let _trace = crate::diagnostics::trace::span("pack.decode");
             parse(input)?
         };
-        {
+        if !document.retained_legacy {
             let _trace = crate::diagnostics::trace::span("pack.validate_source");
             document.validate()?;
         }
@@ -588,11 +622,13 @@ impl Pack {
             }
             store.into()
         };
+        let historical_semantic = historical_semantic_rules(&document.rules);
         Ok(Self {
             document,
             digest,
             index,
             semantic,
+            historical_semantic,
             patterns,
             resolution: entries,
         })
@@ -634,11 +670,22 @@ impl Pack {
     }
 }
 
+fn retained_pack_document(source: &str) -> Result<PackDocument, Error> {
+    legacy::pack(source)
+}
+
+/// Materialize a retained custom source for an ordinary reviewed policy edit.
+/// Automatic checkpoint loading keeps the original source bytes instead.
+pub(crate) fn normalize_retained_custom(source: &str) -> Result<serde_json::Value, Error> {
+    let document = legacy::custom(source)?;
+    serde_json::to_value(document).map_err(|_| Error::Syntax)
+}
+
 pub(crate) fn inspect_pack_rule(
     source: &str,
     id: &str,
 ) -> Result<Option<serde_json::Value>, Error> {
-    let document: PackDocument = parse(source)?;
+    let document = retained_pack_document(source)?;
     document.validate_schema()?;
     if let Some(rule) = invocations::inspect(&document, id)? {
         return serde_json::to_value(rule)
@@ -663,11 +710,11 @@ pub(crate) fn inspect_resolution(
     source: &str,
     binding: &Binding,
 ) -> Result<BTreeMap<String, serde_json::Value>, Error> {
-    let document: PackDocument = parse(source)?;
+    let document = retained_pack_document(source)?;
     if !resolution::dynamic(&document) && binding.is_empty() {
         return Ok(BTreeMap::new());
     }
-    let pack = Pack::from_yaml_bound(source, binding, false)?;
+    let pack = Pack::from_retained_yaml_reusing(source, binding, false, None)?;
     let mut report = BTreeMap::new();
     for entry in pack.resolution() {
         let mut row = serde_json::to_value(entry).map_err(|_| Error::Syntax)?;
@@ -699,7 +746,7 @@ pub(crate) fn inspect_resolution(
 /// # Errors
 /// Returns an error for documents that are not version-1 packs.
 pub(crate) fn override_targets(source: &str) -> Result<Vec<resolution::targets::Target>, Error> {
-    let document: PackDocument = parse(source)?;
+    let document = retained_pack_document(source)?;
     document.validate_schema()?;
     Ok(resolution::targets::list(&document))
 }
@@ -711,7 +758,7 @@ pub(crate) fn override_targets(source: &str) -> Result<Vec<resolution::targets::
 pub(crate) fn declarations(
     source: &str,
 ) -> Result<BTreeMap<String, variables::Declaration>, Error> {
-    let document: PackDocument = parse(source)?;
+    let document = retained_pack_document(source)?;
     document.validate_schema()?;
     Ok(document.variables)
 }
@@ -744,11 +791,11 @@ pub(crate) fn override_widens(
     before: Option<&Override>,
     after: Option<&Override>,
 ) -> bool {
-    let Ok(document) = parse::<PackDocument>(before_source) else {
+    let Ok(document) = retained_pack_document(before_source) else {
         return false;
     };
     let Ok(updated) = (before_source != after_source)
-        .then(|| parse::<PackDocument>(after_source))
+        .then(|| retained_pack_document(after_source))
         .transpose()
     else {
         return false;
@@ -796,7 +843,7 @@ pub(crate) fn override_widens(
 /// Drop override IDs and bound names that a pack artifact does not declare,
 /// and values its declarations no longer accept.
 pub(crate) fn retain_declared(source: &str, binding: &mut Binding) -> Result<(), Error> {
-    let document: PackDocument = parse(source)?;
+    let document = retained_pack_document(source)?;
     document.validate_schema()?;
     binding.variables.retain(|name, value| {
         document
@@ -816,6 +863,10 @@ pub(crate) fn retain_declared(source: &str, binding: &mut Binding) -> Result<(),
 }
 
 impl CustomRules {
+    pub(crate) fn normalized_document(&self) -> Result<serde_json::Value, Error> {
+        serde_json::to_value(&self.document).map_err(|_| Error::Syntax)
+    }
+
     pub(crate) fn from_rule_values(values: &[serde_json::Value]) -> Result<Self, Error> {
         let rules = values
             .iter()
@@ -826,6 +877,7 @@ impl CustomRules {
         let document = CustomDocument::from_rules(rules)?;
         let index = index::Index::new(document.rules.iter().map(rules::Rule::executable));
         let semantic = document.rules.iter().any(rules::Rule::semantic);
+        let historical_semantic = historical_semantic_rules(&document.rules);
         let patterns = model::prepare_patterns(&document.rules, &[])?.into();
         Ok(Self {
             document,
@@ -836,6 +888,7 @@ impl CustomRules {
             ),
             index,
             semantic,
+            historical_semantic,
             patterns,
         })
     }
@@ -873,14 +926,24 @@ impl CustomRules {
     pub fn from_yaml(input: &str) -> Result<Self, Error> {
         let mut document: CustomDocument = parse(input)?;
         document.validate()?;
+        Self::prepare_yaml(input, document)
+    }
+
+    pub(crate) fn from_retained_yaml(input: &str) -> Result<Self, Error> {
+        Self::prepare_yaml(input, legacy::custom(input)?)
+    }
+
+    fn prepare_yaml(input: &str, document: CustomDocument) -> Result<Self, Error> {
         let index = index::Index::new(document.rules.iter().map(rules::Rule::executable));
         let semantic = document.rules.iter().any(rules::Rule::semantic);
+        let historical_semantic = historical_semantic_rules(&document.rules);
         let patterns = model::prepare_patterns(&document.rules, &[])?.into();
         Ok(Self {
             document,
             digest: fingerprint(input.as_bytes()),
             index,
             semantic,
+            historical_semantic,
             patterns,
         })
     }
@@ -1146,6 +1209,7 @@ fn evaluate_facts(
         {
             checkpoint()?;
             if let Some(matched) = custom.document.rules[position].matching(
+                request,
                 facts,
                 prepared.unwrap_or(&memo),
                 "custom:project",
@@ -1157,12 +1221,17 @@ fn evaluate_facts(
         }
     }
     let mut decision = resolve(&mut matches, checkpoint)?;
-    let semantic =
-        semantic_selection(packs, customs) && matches!(facts.input, normalized::Input::Argv { .. });
+    if rules::legacy_read(request, facts) {
+        decision = constrain_current_read(&mut matches, decision, checkpoint)?;
+    }
+    let historical_semantic = historical_semantic_selection(packs, customs);
+    let semantic = semantic_selection(packs, customs)
+        && matches!(facts.input, normalized::Input::Argv { .. })
+        || historical_semantic && rules::legacy_read(request, facts);
     let exact = matches
         .iter()
         .any(|m| m.exact_request && m.applied && m.decision == Decision::Allow);
-    if semantic && !exact {
+    if semantic && (!exact || rules::legacy_read(request, facts)) {
         decision = decision.max(Decision::Ask);
     }
     let (requirement_checks, guidance) = applied_feedback(&mut matches, decision);
@@ -1252,11 +1321,15 @@ fn collect_pack_matches(
             )? {
                 checkpoint()?;
                 let candidate = candidate?;
-                if let Some(matched) = candidate.matching(facts, provider, pack.id(), profile, 1)? {
+                if let Some(matched) =
+                    candidate.matching(request, facts, provider, pack.id(), profile, 1)?
+                {
                     matches.push(matched);
                 }
             }
-        } else if let Some(matched) = rule.matching(facts, provider, pack.id(), profile, 1)? {
+        } else if let Some(matched) =
+            rule.matching(request, facts, provider, pack.id(), profile, 1)?
+        {
             matches.push(matched);
         }
     }
@@ -1308,6 +1381,48 @@ fn applied_feedback(
 
 pub(crate) fn semantic_selection(packs: &[(&Pack, Profile)], customs: &[&CustomRules]) -> bool {
     packs.iter().any(|(pack, _)| pack.semantic) || customs.iter().any(|custom| custom.semantic)
+}
+
+fn historical_semantic_selection(packs: &[(&Pack, Profile)], customs: &[&CustomRules]) -> bool {
+    packs.iter().any(|(pack, _)| pack.historical_semantic)
+        || customs.iter().any(|custom| custom.historical_semantic)
+}
+
+fn historical_semantic_rules(rules: &[rules::Rule]) -> bool {
+    rules.iter().any(|rule| {
+        rule.legacy
+            .as_ref()
+            .is_some_and(|legacy| legacy.matcher.semantic())
+            || rule.legacy_normalized.is_some() && rule.semantic()
+    })
+}
+
+/// Current typed file restrictions still constrain a retained argv read allow.
+/// An empty current selection supplies no policy decision of its own.
+fn constrain_current_read(
+    matches: &mut [Match],
+    decision: Decision,
+    checkpoint: &dyn Fn() -> Result<(), Error>,
+) -> Result<Decision, Error> {
+    let mut current: Vec<_> = matches
+        .iter()
+        .filter(|matched| !matched.legacy)
+        .cloned()
+        .collect();
+    if current.is_empty() {
+        return Ok(decision);
+    }
+    let restriction = resolve(&mut current, checkpoint)?;
+    for selected in current.iter().filter(|matched| matched.applied) {
+        if let Some(original) = matches.iter_mut().find(|matched| {
+            !matched.legacy
+                && matched.source == selected.source
+                && matched.rule_id == selected.rule_id
+        }) {
+            original.applied = true;
+        }
+    }
+    Ok(decision.max(restriction))
 }
 
 fn selected_metadata(packs: &[(&Pack, Profile)]) -> Vec<SelectedPack> {

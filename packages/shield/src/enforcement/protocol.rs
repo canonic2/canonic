@@ -335,6 +335,10 @@ fn evaluate_with_original(
         value["approval"] = json!({"request_id":null,"status":"none","approval_id":null});
     }
     stage("history_start");
+    let legacy_receipt = native.is_none()
+        && input
+            .as_ref()
+            .is_some_and(|input| uses_legacy_receipt(root, input));
     value["history"] = match input {
         Some(input) if input.host.is_some() && !matches!(input.operation, Operation::Register) => {
             let result = if matches!(input.operation, Operation::Completion { .. }) && code != 0 {
@@ -346,8 +350,28 @@ fn evaluate_with_original(
         }
         _ => json!({"status":"not-requested","request_id":null,"event_id":null}),
     };
+    if legacy_receipt && let Some(fields) = value.as_object_mut() {
+        // The installed mod validates exactly the original eight fields. This
+        // changes only wire representation after policy, grants and history.
+        fields.remove("diagnostics");
+    }
     stage("history_ready");
     (value, code)
+}
+
+fn uses_legacy_receipt(root: &Path, input: &Input) -> bool {
+    (input
+        .host
+        .as_ref()
+        .is_some_and(|host| host.agent == "claude-mod")
+        || (input.host.is_none()
+            && matches!(input.operation, Operation::Register)
+            && input
+                .request_id
+                .strip_prefix("register-")
+                .and_then(|sequence| sequence.parse::<u64>().ok())
+                .is_some_and(|sequence| sequence > 0)))
+        && crate::review::integrations::has_legacy_interceptor(root)
 }
 
 fn record(
@@ -488,7 +512,7 @@ fn evaluate_inner(
     let Ok(cwd) = fs::canonicalize(&input.cwd) else {
         return (failure(id, "invalid-context"), 2);
     };
-    if !cwd.is_dir() || !cwd.starts_with(root) || cwd.to_str().is_none() {
+    if !cwd.is_dir() || !owns_context(Path::new(root), &cwd) || cwd.to_str().is_none() {
         return (failure(id, "invalid-context"), 2);
     }
     let operation = match &input.operation {
@@ -552,6 +576,24 @@ fn evaluate_inner(
         },
     };
     evaluate_read(input, &project, &snapshot, &cwd, &operation, original)
+}
+
+/// A descendant directory belongs to this enrollment only until another
+/// configured project begins. A copied child cannot inherit the parent's
+/// approvals or disabled mode merely because its path has the same prefix.
+fn owns_context(root: &Path, cwd: &Path) -> bool {
+    if !cwd.starts_with(root) {
+        return false;
+    }
+    for directory in cwd.ancestors().take_while(|path| *path != root) {
+        for marker in [".shield/config.yml", ".shield/review"] {
+            match fs::symlink_metadata(directory.join(marker)) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                _ => return false,
+            }
+        }
+    }
+    true
 }
 
 fn evaluate_shell(

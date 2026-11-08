@@ -1,6 +1,7 @@
 //! Exact-byte signed metadata, retained checkpoints and the pinned main registry.
 mod dependencies;
 mod hosted;
+mod indexed;
 use super::*;
 use canonic_registry_kit::testing::SigningKey;
 

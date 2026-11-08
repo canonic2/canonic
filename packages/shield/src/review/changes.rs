@@ -1,5 +1,6 @@
 //! Complete project candidates shared by MCP proposal capture and operator commit.
 pub(super) mod diff;
+pub(in crate::review) mod historical;
 pub(super) mod project_files;
 use super::{Checkpoint, Context, Error, model::Proposal, snapshots, storage::Store};
 use crate::{configuration, policy};
@@ -383,6 +384,7 @@ pub(super) fn propose(
         )?
     };
     let mut after = BTreeMap::new();
+    historical::validate(&before.candidates["project"], &candidate)?;
     after.insert("project".into(), candidate.clone());
     let next_snapshots = {
         let _trace = crate::diagnostics::trace::span("proposal.capture_next");

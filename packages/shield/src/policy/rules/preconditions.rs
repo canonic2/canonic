@@ -241,6 +241,7 @@ impl Precondition {
             requirement_checks,
             guidance: self.on_unmet.guidance(),
             exact_request: false,
+            legacy: false,
             fallback: false,
             precondition: true,
         }))

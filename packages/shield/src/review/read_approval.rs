@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::Path;
 
+mod legacy;
 #[cfg(test)]
 mod tests;
 
@@ -34,7 +35,8 @@ pub(crate) struct ReadRequest {
     policy_revision: String,
     candidate_digest: String,
     request: Request,
-    resource: super::runtime::consumer::ResourceRequest,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    resource: Option<super::runtime::consumer::ResourceRequest>,
     resource_digest: String,
     origin: Origin,
     provenance: Value,
@@ -72,7 +74,7 @@ impl ReadRequest {
         live.then_some(self.request_id.as_str())
     }
     fn binding(&self) -> String {
-        let binding = json!([
+        let mut binding = json!([
             self.request_id,
             self.created_at_ms,
             self.pending_expires_at_ms,
@@ -83,9 +85,14 @@ impl ReadRequest {
             self.request,
             self.resource_digest,
             self.origin,
-            self.provenance,
-            self.resource
+            self.provenance
         ]);
+        if let Some(resource) = &self.resource {
+            binding
+                .as_array_mut()
+                .expect("binding array")
+                .push(json!(resource));
+        }
         hash(&binding)
     }
     fn grant_binding(&self, grant: &Grant) -> String {
@@ -102,9 +109,12 @@ impl ReadRequest {
             && self.policy_revision == evidence.identity().policy_revision()
             && self.candidate_digest == evidence.identity().candidate_digest()
             && json!(self.request) == json!(evidence.request())
-            && evidence
-                .resource()
-                .is_some_and(|resource| json!(self.resource) == json!(resource))
+            && evidence.resource().is_some_and(|resource| {
+                self.resource.as_ref().map_or_else(
+                    || legacy::matches(&self.request, resource),
+                    |bound| json!(bound) == json!(resource),
+                )
+            })
             && self.resource_digest == resource
             && json!(self.origin) == json!(origin)
     }
@@ -114,14 +124,17 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
     let mut ids = std::collections::BTreeSet::new();
     for row in &state.read_requests {
         row.request.validate()?;
-        let resource = &row.resource;
-        resource
-            .input
-            .validate(&resource.context, &row.request.project)?;
-        if resource.context.cwd != row.request.cwd
-            || !matches!(&resource.input, policy::normalized::Input::File { action, sources, destination: None, recursive: false, .. } if action == "read" && Some(sources.as_slice()) == row.request.arguments.get(..1))
-        {
-            return Err(Error::Invalid("invalid bound read resource"));
+        if let Some(resource) = &row.resource {
+            resource
+                .input
+                .validate(&resource.context, &row.request.project)?;
+            if resource.context.cwd != row.request.cwd
+                || !matches!(&resource.input, policy::normalized::Input::File { action, sources, destination: None, recursive: false, .. } if action == "read" && Some(sources.as_slice()) == row.request.arguments.get(..1))
+            {
+                return Err(Error::Invalid("invalid bound read resource"));
+            }
+        } else {
+            legacy::resource(&row.request)?;
         }
         if row.project_id != state.project_id
             || row.request.project != state.project_root
@@ -428,10 +441,12 @@ fn capture(
         policy_revision: evidence.identity().policy_revision().into(),
         candidate_digest: evidence.identity().candidate_digest().into(),
         request: evidence.request().clone(),
-        resource: evidence
-            .resource()
-            .cloned()
-            .ok_or(Error::Invalid("read resource missing"))?,
+        resource: Some(
+            evidence
+                .resource()
+                .cloned()
+                .ok_or(Error::Invalid("read resource missing"))?,
+        ),
         resource_digest: resource.into(),
         origin: origin.clone(),
         provenance: context.provenance(),
@@ -521,7 +536,8 @@ fn authorize_with_clock(
         if time < row.created_at_ms || (row.grant.is_none() && time >= row.pending_expires_at_ms) { return Err(Error::Invalid("pending request expired")); }
         let snapshot = snapshot.as_ref().ok_or(Error::StaleSnapshot)?;
         if state.active.as_ref().is_none_or(|active| !active.matches(snapshot.identity())) { return Err(Error::StaleSnapshot); }
-        let evidence = snapshot.evaluate_resource(row.request.clone(), row.resource.clone()).map_err(|_|Error::Invalid("request cannot be evaluated"))?;
+        let resource = row.resource.clone().map_or_else(|| legacy::resource(&row.request), Ok)?;
+        let evidence = snapshot.evaluate_resource(row.request.clone(), resource).map_err(|_|Error::Invalid("request cannot be evaluated"))?;
         if !row.matches(&evidence, &row.resource_digest, &row.origin) || evidence.evaluation().decision != Decision::Ask {
             return Err(Error::StaleSnapshot);
         }

@@ -67,6 +67,12 @@ checks and other operations in the same shell request still apply. Inspect the
 active rule with `shield rule list --json`, or preview a request through
 [MCP diagnostics](project-mcp.md#diagnostic-input-and-snapshots) without executing it.
 
+Imported rules can carry `historical_matcher` or `historical_normalized` fields
+that preserve their original matching behavior. Leave such a rule unchanged
+when editing other rules. To replace it, write the complete intended scope using
+current `conditions` and remove the historical annotation; reviews reject new
+or modified annotations and copies into another configuration layer.
+
 ## Choose the right matching style
 
 Use `exact` when only one complete argument list should match. Use `options`

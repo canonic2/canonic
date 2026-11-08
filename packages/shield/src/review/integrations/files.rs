@@ -27,18 +27,19 @@ pub(in crate::review) struct Change {
     pub(in crate::review) after: Option<String>,
 }
 
-fn checked_path(root: &Path, name: &str) -> Result<std::path::PathBuf, Error> {
-    if ![
+fn checked_path(root: &Path, name: &str, legacy: bool) -> Result<std::path::PathBuf, Error> {
+    let allowed = [
         super::box_definition::PATH,
         super::box_definition::LOCAL_PATH,
     ]
     .contains(&name)
-        && !crate::agents::ADAPTERS.iter().any(|a| {
+        || (legacy && super::legacy::asset_path(name))
+        || crate::agents::ADAPTERS.iter().any(|a| {
             a.spec().hooks_path == name
                 || a.spec().mcp_path == Some(name)
                 || a.spec().prefix_rules_path == Some(name)
-        })
-    {
+        });
+    if !allowed {
         return Err(Error::Invalid("invalid owned integration path"));
     }
     let mut path = root.to_path_buf();
@@ -59,7 +60,18 @@ fn checked_path(root: &Path, name: &str) -> Result<std::path::PathBuf, Error> {
     Ok(path)
 }
 pub(in crate::review) fn read(root: &Path, name: &str) -> Result<Option<String>, Error> {
-    let path = checked_path(root, name)?;
+    read_with(root, name, false)
+}
+
+pub(super) fn read_legacy(root: &Path, name: &str) -> Result<Option<String>, Error> {
+    if !super::legacy::asset_path(name) {
+        return Err(Error::Invalid("invalid legacy integration asset path"));
+    }
+    read_with(root, name, true)
+}
+
+fn read_with(root: &Path, name: &str, legacy: bool) -> Result<Option<String>, Error> {
+    let path = checked_path(root, name, legacy)?;
     match fs::symlink_metadata(&path) {
         Ok(m) if m.is_file() && m.len() <= MAX_CONFIG => {
             #[cfg(unix)]
@@ -125,8 +137,17 @@ pub(in crate::review) fn edit_optional(
     Ok(())
 }
 pub(in crate::review) fn validate_before(root: &Path, files: &[Change]) -> Result<(), Error> {
+    validate_before_with(root, files, false)
+}
+
+pub(super) fn validate_plan_before(root: &Path, plan: &super::Plan) -> Result<(), Error> {
+    super::legacy::validate_plan(plan)?;
+    validate_before_with(root, &plan.files, true)
+}
+
+fn validate_before_with(root: &Path, files: &[Change], legacy: bool) -> Result<(), Error> {
     for f in files {
-        if read(root, &f.path)? != f.before {
+        if read_with(root, &f.path, legacy)? != f.before {
             return Err(Error::Invalid(
                 "integration files changed during confirmation",
             ));
@@ -135,13 +156,23 @@ pub(in crate::review) fn validate_before(root: &Path, files: &[Change]) -> Resul
     Ok(())
 }
 pub(in crate::review) fn validate_recovery(root: &Path, files: &[Change]) -> Result<(), Error> {
+    validate_recovery_with(root, files, false)
+}
+
+pub(super) fn validate_plan_recovery(root: &Path, plan: &super::Plan) -> Result<(), Error> {
+    super::legacy::validate_plan(plan)?;
+    validate_recovery_with(root, &plan.files, true)
+}
+
+fn validate_recovery_with(root: &Path, files: &[Change], legacy: bool) -> Result<(), Error> {
     for f in files {
-        let value = read(root, &f.path)?;
-        if value != f.before && value != f.after {
-            return Err(Error::Invalid(
-                "integration files changed after confirmed setup",
-            ));
-        }
+        let value = read_with(root, &f.path, legacy)?;
+        super::reconcile::reconcile(
+            &f.path,
+            f.before.as_deref(),
+            f.after.as_deref(),
+            value.as_deref(),
+        )?;
     }
     Ok(())
 }
@@ -190,7 +221,7 @@ fn create_parent(name: &str, parent: &Path) -> Result<(), Error> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
     #[cfg(unix)]
-    if name == super::box_definition::LOCAL_PATH {
+    if name == super::box_definition::LOCAL_PATH || super::legacy::asset_path(name) {
         use std::os::unix::fs::DirBuilderExt;
         builder.mode(0o700);
     }
@@ -201,24 +232,49 @@ fn create_parent(name: &str, parent: &Path) -> Result<(), Error> {
 }
 
 pub(in crate::review) fn publish(root: &Path, files: &[Change]) -> Result<(), Error> {
-    validate_recovery(root, files)?;
+    publish_with(root, files, false)
+}
+
+pub(super) fn publish_plan(root: &Path, plan: &super::Plan) -> Result<(), Error> {
+    super::legacy::validate_plan(plan)?;
+    publish_with(root, &plan.files, true)
+}
+
+fn publish_with(root: &Path, files: &[Change], legacy: bool) -> Result<(), Error> {
+    if legacy {
+        validate_recovery_with(root, files, true)?;
+    } else {
+        validate_recovery(root, files)?;
+    }
     for f in files {
-        if read(root, &f.path)? == f.after {
+        let current = read_with(root, &f.path, legacy)?;
+        let after = super::reconcile::reconcile(
+            &f.path,
+            f.before.as_deref(),
+            f.after.as_deref(),
+            current.as_deref(),
+        )?;
+        if current == after {
             continue;
         }
-        let path = checked_path(root, &f.path)?;
+        let path = checked_path(root, &f.path, legacy)?;
         let parent = path
             .parent()
             .ok_or(Error::Invalid("integration file parent"))?;
         create_parent(&f.path, parent)?;
-        checked_path(root, &f.path)?;
-        if let Some(after) = &f.after {
+        checked_path(root, &f.path, legacy)?;
+        if let Some(after) = &after {
             let tmp = parent.join(format!(".shield-{}.tmp", std::process::id()));
             let mut file = create_like(&tmp, &path)?;
+            #[cfg(unix)]
+            if super::legacy::asset_path(&f.path) && f.before.is_none() {
+                use std::os::unix::fs::PermissionsExt;
+                file.set_permissions(fs::Permissions::from_mode(0o600))?;
+            }
             let result = (|| {
                 file.write_all(after.as_bytes())?;
                 crate::review::storage::sync(&file)?;
-                if read(root, &f.path)? != f.before {
+                if read_with(root, &f.path, legacy)? != current {
                     return Err(Error::Invalid(
                         "integration file changed during publication",
                     ));
@@ -232,7 +288,7 @@ pub(in crate::review) fn publish(root: &Path, files: &[Change]) -> Result<(), Er
             }
             result?;
         } else {
-            if read(root, &f.path)? != f.before {
+            if read_with(root, &f.path, legacy)? != current {
                 return Err(Error::Invalid("integration file changed during removal"));
             }
             fs::remove_file(&path)?;

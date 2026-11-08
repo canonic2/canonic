@@ -23,19 +23,130 @@ fn version_matches_package() {
 }
 
 #[test]
-fn native_hook_requires_a_pinned_supported_event() {
+fn native_hook_rejects_an_unknown_pinned_event() {
     let project = assert_fs::TempDir::new().unwrap();
-    for event in [None, Some("UnknownEvent")] {
-        let mut command = cargo_bin_cmd!("shield");
-        command
-            .args(["__internal", "native-hook", "--agent", "codex", "--project"])
-            .arg(project.path());
-        if let Some(event) = event {
-            command.args(["--event", event]);
+    cargo_bin_cmd!("shield")
+        .args([
+            "__internal",
+            "native-hook",
+            "--agent",
+            "codex",
+            "--event",
+            "UnknownEvent",
+            "--project",
+        ])
+        .arg(project.path())
+        .write_stdin("not JSON")
+        .assert()
+        .code(2)
+        .stdout("");
+    project.child(".shield").assert(predicate::path::missing());
+}
+
+#[test]
+fn historical_hooks_continue_without_an_event_argument_and_fail_closed() {
+    let project = assert_fs::TempDir::new().unwrap();
+    for agent in ["claude", "codex"] {
+        for (input, completion) in [
+            (r#"{"hook_event_name":"PostToolUse"}"#, true),
+            (r#"{"hook_event_name":"PostToolUseFailure"}"#, true),
+            (r#"{"hook_event_name":"PreToolUse"}"#, false),
+            ("not JSON", false),
+            (r#"{"hook_event_name":"UnknownEvent"}"#, false),
+            (
+                r#"{"hook_event_name":"PreToolUse","hook_event_name":"PostToolUse"}"#,
+                false,
+            ),
+        ] {
+            let output = cargo_bin_cmd!("shield")
+                .args(["__internal", "native-hook", "--agent", agent, "--project"])
+                .arg(project.path())
+                .write_stdin(input)
+                .assert()
+                .success();
+            let value: serde_json::Value =
+                serde_json::from_slice(&output.get_output().stdout).unwrap();
+            if completion && !(agent == "codex" && input.contains("PostToolUseFailure")) {
+                assert_eq!(value, serde_json::json!({}));
+            } else {
+                assert_eq!(
+                    value["hookSpecificOutput"]["permissionDecision"], "deny",
+                    "{agent}: {value}"
+                );
+            }
         }
-        command.write_stdin("not JSON").assert().code(2).stdout("");
+        let output = cargo_bin_cmd!("shield")
+            .args(["__internal", "native-hook", "--agent", agent, "--project"])
+            .arg(project.path())
+            .write_stdin(format!(
+                r#"{{"hook_event_name":"PostToolUse","padding":"{}"}}"#,
+                "x".repeat(8 * 1024 * 1024)
+            ))
+            .assert()
+            .success();
+        let value: serde_json::Value = serde_json::from_slice(&output.get_output().stdout).unwrap();
+        assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
     }
     project.child(".shield").assert(predicate::path::missing());
+}
+
+#[test]
+fn historical_hooks_preserve_active_policy_decisions() {
+    use serde_json::{Value, json};
+    let project = assert_fs::TempDir::new().unwrap();
+    project.child(".shield").create_dir_all().unwrap();
+    project
+        .child(".shield/config.yml")
+        .write_str("schema_version: 1\npacks: []\nrules: rules.yml\n")
+        .unwrap();
+    project.child(".shield/rules.yml").write_str(&json!({
+        "schema_version":1,"kind":"custom","capabilities":["structured-rules-v1","argument-rules-v1"],
+        "rules":[
+            {"id":"inspect","decision":"allow","conditions":{"domain":"argv","executable":"git","arguments":{"kind":"exact","values":["status"]}}},
+            {"id":"destroy","decision":"deny","conditions":{"domain":"argv","executable":"git","arguments":{"kind":"exact","values":["reset","--hard"]}}},
+            {"id":"publish","decision":"ask","conditions":{"domain":"argv","executable":"git","arguments":{"kind":"exact","values":["push"]}}}
+        ]
+    }).to_string()).unwrap();
+    assert_eq!(
+        super::operator::interactive(&project, &["init"], "yes\n")["code"],
+        0
+    );
+    for agent in ["claude", "codex"] {
+        for (source, decision) in [
+            ("git status", "allow"),
+            ("git reset --hard", "deny"),
+            ("git push", "ask"),
+        ] {
+            let host = json!({"hook_event_name":"PreToolUse","tool_name":"Bash",
+                "tool_use_id":"acme-historical","session_id":"acme-historical","cwd":project.path(),
+                "tool_input":{"command":source}});
+            for pinned in [false, true] {
+                if !pinned {
+                    super::mcp::historical_checkpoint(&project);
+                }
+                // 27343ffa installed the same native command without --event.
+                let mut command = cargo_bin_cmd!("shield");
+                command
+                    .args(["__internal", "native-hook", "--agent", agent, "--project"])
+                    .arg(project.path());
+                if pinned {
+                    command.args(["--event", "PreToolUse"]);
+                }
+                let output = command.write_stdin(host.to_string()).assert().success();
+                let response: Value = serde_json::from_slice(&output.get_output().stdout).unwrap();
+                let expected = match (agent, decision) {
+                    ("codex", "allow") => None,
+                    ("codex", "ask") => Some("deny"),
+                    _ => Some(decision),
+                };
+                assert_eq!(
+                    response["hookSpecificOutput"]["permissionDecision"].as_str(),
+                    expected,
+                    "{agent}, {source}, pinned={pinned}: {response}"
+                );
+            }
+        }
+    }
 }
 
 #[test]

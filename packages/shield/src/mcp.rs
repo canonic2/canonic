@@ -2,7 +2,9 @@
 //! identity, review dispatch and host confirmation of policy changes, served by
 //! canonic-mcp-kit's stdio driver.
 
+mod bootstrap;
 mod confirmation;
+pub(crate) use bootstrap::serve as serve_bootstrap;
 mod elicitation;
 mod frame_log;
 mod messages;
@@ -119,7 +121,7 @@ impl Server {
         message: String,
         review_binding: Option<u64>,
     ) -> Outcome {
-        if crate::agents::review::resolve(review.agent.as_deref()).confirmation()
+        if crate::agents::review::for_context(&review).confirmation()
             == crate::agents::review::Confirmation::Terminal
             || review
                 .agent
@@ -324,6 +326,49 @@ impl Server {
     }
 }
 
+impl Server {
+    fn maintain_setup(
+        &self,
+        review: &crate::review::Context,
+        call: &ToolCall,
+        context: &stdio::Context,
+    ) -> Option<Outcome> {
+        if context.check().is_err() {
+            return Some(Outcome::Tool(reply(
+                review,
+                &self.connection,
+                call,
+                context,
+                Answer::None,
+            )));
+        }
+        let resumed = crate::review::mcp::resume_setup(review, &call.name, &call.arguments);
+        if !crate::review::mcp::setup_resume_only(&call.name, &call.arguments)
+            || !(resumed.as_ref().is_ok_and(|resumed| *resumed) || resumed.is_err())
+        {
+            return None;
+        }
+        let value = crate::review::mcp::setup_resume_status(
+            review,
+            &self.connection,
+            resumed.as_ref().err(),
+            &|| {
+                context
+                    .check()
+                    .map_err(|_| crate::policy::Error::Interrupted)
+            },
+        );
+        let failed = !value["error"].is_null();
+        Some(Outcome::Tool(response::tool_result(
+            &call.name,
+            review.agent.as_deref(),
+            value,
+            failed,
+            &|| Ok(()),
+        )))
+    }
+}
+
 impl stdio::Handler for Server {
     fn admit(&self, request: &Request) -> stdio::Admission {
         stdio::Admission {
@@ -343,7 +388,7 @@ impl stdio::Handler for Server {
         context.client = Some(client.name.clone());
         context.host_version = Some(client.version.clone());
         Ok(ServerInfo::new("shield", env!("CARGO_PKG_VERSION"))
-            .with_instructions(messages::instructions(context.agent.as_deref())))
+            .with_instructions(messages::instructions_for(context)))
     }
 
     fn call(&self, request: Request, context: &stdio::Context) -> Outcome {
@@ -376,6 +421,9 @@ impl stdio::Handler for Server {
             // NULs are refused before dispatch or confirmation, so no tool stores one.
             if crate::json::contains_nul(&call.arguments) {
                 return nul_arguments(&review, &call);
+            }
+            if let Some(outcome) = self.maintain_setup(&review, &call, context) {
+                return outcome;
             }
             if pack_form {
                 return elicitation::call(self, review, call, context);
@@ -664,11 +712,17 @@ pub(crate) fn serve(
     output: impl std::io::Write,
     options: &stdio::Options,
 ) -> Result<(), ServeError> {
-    let catalog = catalog(server.review().agent.as_deref()).map_err(ServeError::Catalog)?;
+    let review = server.review();
+    let agent = if review.confirmed_mcp_forms {
+        None
+    } else {
+        review.agent.as_deref()
+    };
+    let catalog = catalog(agent).map_err(ServeError::Catalog)?;
     let mut options = bundled_options(options)?;
     options.session.modern = Some(canonic_mcp_kit::ModernOptions::new(
         ServerInfo::new("shield", env!("CARGO_PKG_VERSION"))
-            .with_instructions(messages::instructions(server.review().agent.as_deref())),
+            .with_instructions(messages::instructions_for(&review)),
     ));
     stdio::serve(Arc::new(server), Arc::new(catalog), input, output, &options)
         .map_err(ServeError::Transport)

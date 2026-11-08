@@ -518,7 +518,10 @@ fn cross_source_enrollment_and_artifact_failures_preserve_policy_and_pending_pro
                     .unwrap();
             }
             "artifact" => {
-                std::fs::write(b.root.path().join("child-1.0.0.json"), "altered").unwrap();
+                // A retained artifact is already verified and need not be
+                // downloaded again. Corrupt a newly selected candidate.
+                b.publish("child", "1.1.0", json!([]));
+                std::fs::write(b.root.path().join("child-1.1.0.json"), "altered").unwrap();
             }
             _ => b.publish("child", "1.0.0", edge(&a.identity, "parent", "^1")),
         }

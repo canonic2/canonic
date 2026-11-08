@@ -11,7 +11,7 @@ use super::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub(in crate::review) mod policy;
 pub(in crate::review) mod protection;
@@ -31,7 +31,7 @@ enum Input {
         shield_config_change: Option<super::path_access::Change>,
     },
     #[serde(rename = "cache_prepare")]
-    Cache {},
+    Cache { cache_dir: Option<PathBuf> },
     #[serde(rename = "registry_add")]
     RegistryAdd {
         name: String,
@@ -75,6 +75,10 @@ enum Input {
         dry_run: bool,
         #[serde(default)]
         scope: Scope,
+        #[serde(default)]
+        repair: bool,
+        #[serde(default)]
+        pending: Option<integrations::recovery::Action>,
     },
 }
 
@@ -89,7 +93,7 @@ enum Scope {
 enum Operation {
     Mode(super::mode::Prepared),
     Protection(protection::Prepared),
-    Cache,
+    Cache(Option<PathBuf>),
     Registry(registries::Prepared, Scope),
     Repair(Box<State>),
     History(policy::History),
@@ -98,6 +102,7 @@ enum Operation {
         metadata: Value,
         plan: Option<Box<integrations::Plan>>,
     },
+    Recovery(Box<integrations::recovery::Prepared>),
 }
 
 /// A server-owned exact review. It contains no client-provided confirmation.
@@ -117,7 +122,10 @@ impl Prepared {
     /// A model-visible setup preview never reads protected settings back to
     /// the caller. The exact sources remain private to the human review.
     pub(super) fn public_review(&self) -> Value {
-        if !matches!(self.operation, Operation::Setup { .. }) {
+        if !matches!(
+            self.operation,
+            Operation::Setup { .. } | Operation::Recovery(_)
+        ) {
             return self.review();
         }
         let mut value = serde_json::Map::new();
@@ -131,6 +139,11 @@ impl Prepared {
             "box",
             "adopt_existing_entries",
             "dry_run",
+            "repair",
+            "pending",
+            "preserved_paths",
+            "dropped_ownership",
+            "effect",
             "connection_lifecycle",
         ] {
             if let Some(shown) = self.review.get(field) {
@@ -186,16 +199,26 @@ impl Prepared {
         match self.operation {
             Operation::Mode(plan) => plan.commit(context, checkpoint),
             Operation::Protection(plan) => plan.commit(context, checkpoint),
-            Operation::Cache => super::cache::prepare_committed(context, checkpoint),
+            Operation::Cache(directory) => match directory {
+                Some(directory) => {
+                    super::cache::relocate_committed(context, &directory, checkpoint)
+                }
+                None => super::cache::prepare_committed(context, checkpoint),
+            },
             Operation::Registry(plan, scope) => {
                 plan.commit((scope == Scope::Project).then_some(context), checkpoint)
             }
             Operation::Repair(before) => super::publication::reconcile(context, &before),
             Operation::History(plan) => plan.commit(context, checkpoint),
             Operation::Reject(plan) => plan.commit(context, checkpoint),
-            Operation::Setup { metadata, plan } => {
-                integrations::setup::finish(context, &metadata, plan.as_deref(), None)
-            }
+            Operation::Setup { metadata, plan } => integrations::setup::finish_checked(
+                context,
+                &metadata,
+                plan.as_deref(),
+                None,
+                checkpoint,
+            ),
+            Operation::Recovery(plan) => plan.commit(context, checkpoint),
         }
     }
 }
@@ -246,10 +269,15 @@ pub(super) fn prepare(
             agent_settings_change,
             shield_config_change,
         )?,
-        Input::Cache {} => (
-            Operation::Cache,
-            json!({"operation":"prepare committed policy cache","project":context.project_root,"policy_authority":"unchanged"}),
-        ),
+        Input::Cache { cache_dir } => {
+            if cache_dir.as_ref().is_some_and(|path| !path.is_absolute()) {
+                return Err(Error::Invalid("cache_dir must be an absolute directory"));
+            }
+            let review = json!({"operation":"prepare committed policy cache",
+                "project":context.project_root,"cache_directory":cache_dir,
+                "policy_authority":"unchanged"});
+            (Operation::Cache(cache_dir), review)
+        }
         Input::RegistryAdd {
             name,
             location,
@@ -295,9 +323,19 @@ pub(super) fn prepare(
             remove,
             dry_run: preview,
             scope,
+            repair: repair_hooks,
+            pending,
         } => {
             dry_run = preview;
-            setup(context, &agents, remove, preview, scope)?
+            setup(
+                context,
+                &agents,
+                remove,
+                preview,
+                scope,
+                repair_hooks,
+                pending,
+            )?
         }
     };
     checkpoint()?;
@@ -358,10 +396,36 @@ fn setup(
     remove: bool,
     dry_run: bool,
     scope: Scope,
+    repair_hooks: bool,
+    pending: Option<integrations::recovery::Action>,
 ) -> Result<(Operation, Value), Error> {
+    if let Some(action) = pending {
+        if !agents.is_empty() || remove || repair_hooks || scope != Scope::Project {
+            return Err(Error::Invalid(
+                "pending review or cancel cannot be combined with agent selection, removal, repair or user scope",
+            ));
+        }
+        let metadata = project::metadata(&project::checkpoint(context)?);
+        let plan =
+            integrations::recovery::prepare(Path::new(&context.project_root), &metadata, action)?;
+        let mut review = plan.review(Path::new(&context.project_root));
+        review["dry_run"] = json!(dry_run);
+        return Ok((Operation::Recovery(Box::new(plan)), review));
+    }
     if scope != Scope::Project {
         return Err(Error::Invalid(
             "Shield integrations are project scoped; user scope is not supported",
+        ));
+    }
+    if repair_hooks
+        && (remove
+            || agents.is_empty()
+            || agents
+                .iter()
+                .any(|agent| !matches!(agent.as_str(), "claude" | "codex")))
+    {
+        return Err(Error::Invalid(
+            "repair requires explicit Claude or Codex installation targets",
         ));
     }
     let metadata = project::metadata(&project::checkpoint(context)?);
@@ -383,11 +447,19 @@ fn setup(
             IntegrationChoice::Agents(bits)
         }
     };
-    let mut plan =
-        integrations::setup::prepare_approving(root, &metadata, choice, false, None, true)?;
+    let mut plan = integrations::setup::prepare_with(
+        root,
+        &metadata,
+        choice,
+        false,
+        None,
+        true,
+        repair_hooks,
+    )?;
     integrations::setup::with_fallbacks(&metadata, choice, plan.as_mut())?;
     let mut review = integrations::setup::setup_preview(root, plan.as_ref())?;
     review["dry_run"] = json!(dry_run);
+    review["repair"] = json!(repair_hooks);
     review["connection_lifecycle"] =
         json!("Restart the agent connection after changing its Shield registration.");
     Ok((

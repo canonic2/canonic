@@ -39,19 +39,18 @@ make -C packages/shield install-local
 This installs `shield` into `~/.local/bin`; add that folder to your `PATH`, or
 set `PREFIX=/path/to/prefix` to install somewhere else.
 
-macOS and AMD64 Windows have native verification. Windows source builds support enrollment,
+Windows source builds support enrollment,
 setup, Claude Code/Codex hooks, bounded System32 checked execution and protected
-Git for Windows inspection. Windows release tooling targets AMD64 and ARM64;
-ARM64 compatibility is implemented and accepted for this stage without a build
-or native runtime verification. Portable build/package commands and installation
-instructions are in the development guide. Windows signing and publication remain pending.
+Git for Windows inspection. Windows release tooling targets AMD64 and ARM64.
+Portable build/package commands, installation prerequisites and platform coverage
+are in the development guide. Windows signing and publication remain pending.
 PowerShell supports a bounded single native invocation; other PowerShell syntax
 and cmd requests are blocked. See
 [development](docs/development.md#native-windows-development).
 
 GNU/Linux compatibility is implemented for x64 and ARM64, including the used
 MCP, Registry and TUI libraries. See [Linux development and packaging](docs/development.md#native-linux-development)
-for build prerequisites, the glibc baseline and the focused verification scope.
+for build prerequisites, the glibc baseline and platform coverage.
 
 ## Quick start
 
@@ -73,6 +72,8 @@ shield doctor
 shield history list
 shield history show ENTRY
 ```
+
+Replace `ENTRY` with an ID from `shield history list`.
 
 [Your first project](docs/getting-started.md) walks through each step.
 
@@ -102,8 +103,13 @@ rules:
       cwd: {within: {root: project}}
 ```
 
-Activate edits you make by hand with `shield policy review`. When nothing
-decides a request, the result is Ask. See [writing rules](docs/policy-rules.md)
+In an initialized project, merge the rule and capabilities into the file selected
+by `.shield/config.yml`. For a new shared file, save the document above as
+`.shield/rules.yml` and set `rules: rules.yml` in the existing configuration.
+Run `shield policy review`, choose **manual**, and confirm to activate the edit.
+`acme-check` is a fictional executable; substitute your own reviewed command.
+
+When nothing decides a request, the result is Ask. See [writing rules](docs/policy-rules.md)
 and the [rule reference](docs/rule-reference.md).
 
 ## Permission packs
@@ -151,10 +157,9 @@ the review shows this setting, and Deny still blocks. In a Box project,
   command does, and it does not replace your agent's sandbox.
 - A host that skips, disables or times out a hook bypasses Shield. `status`
   reports installed integrations, not live interception.
-- Claude Code and Codex integration has native verification on macOS and AMD64
-  Windows. GNU/Linux uses the shared Unix hooks; focused native execution and
-  operator checks pass. Linux agent-host coverage and ARM64 runtime behavior
-  are accepted without additional tests for this stage.
+- Agent integration depends on the host and platform. GNU/Linux uses the shared
+  Unix hooks; consult [Development](docs/development.md) for platform coverage
+  and the supported native integration paths.
 
 ## Documentation
 

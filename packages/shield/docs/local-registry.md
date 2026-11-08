@@ -189,6 +189,13 @@ index also require the updated client; downgrading is not supported for that sta
 
 ### Catalog files
 
+Shield reads flat v1/v2 catalogs and indexed v3 catalogs. V3 discovery lists
+current pack heads; authenticated history pages retain old versions. Exact pins
+fetch only their version branch, while dependency resolution fetches selected
+packs' history within byte, page and search budgets. Signature, expiry,
+anti-rollback and retained-digest checks apply to both formats. V1/v2-only Shield
+builds require an upgrade before a registry switches to v3.
+
 A local directory contains `catalog.json` and declarative pack artifacts:
 
 ```json

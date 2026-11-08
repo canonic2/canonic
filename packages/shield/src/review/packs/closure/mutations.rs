@@ -115,6 +115,7 @@ pub(in crate::review::packs) fn update(
         context,
         None,
         &retained.rows,
+        &roots,
         Acquisition {
             minimum_versions: retained
                 .rows

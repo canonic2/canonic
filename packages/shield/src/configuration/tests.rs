@@ -447,6 +447,76 @@ fn local_source() -> String {
     )
 }
 
+#[test]
+fn modern_custom_rule_merge_preserves_the_previous_raw_rule_digest() {
+    let cwd = std::env::current_dir()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let request = policy::Request {
+        executable: "acme".into(),
+        arguments: vec!["read".into()],
+        cwd: cwd.clone(),
+        project: cwd,
+    };
+    for reason in [None, Some("Acme rule")] {
+        let mut shared_rule = json!({"id":"shared","decision":"deny",
+            "conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}}});
+        if let Some(reason) = reason {
+            shared_rule["reason"] = json!(reason);
+        }
+        let local_rule = json!({"id":"local","decision":"allow",
+            "conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"exact","values":["read"]}},
+            "guidance":{"message":"Acme guidance"}});
+        let shared = policy::rules::document(&[shared_rule.clone()])
+            .unwrap()
+            .to_string();
+        let local = policy::rules::document(std::slice::from_ref(&local_rule))
+            .unwrap()
+            .to_string();
+        for shared_source in [None, Some(shared.as_str())] {
+            let actual = super::custom_rules(shared_source, Some(&local))
+                .unwrap()
+                .unwrap();
+            // Before retained-source normalization, the merge fed the original
+            // rule Values directly to the same canonical document builder.
+            let mut rows = if shared_source.is_some() {
+                vec![shared_rule.clone()]
+            } else {
+                vec![]
+            };
+            rows.push(local_rule.clone());
+            let expected = policy::CustomRules::from_yaml(
+                &policy::rules::document(&rows).unwrap().to_string(),
+            )
+            .unwrap();
+            let actual = policy::evaluate_selected(&[], &[&actual], &request).unwrap();
+            let expected = policy::evaluate_selected(&[], &[&expected], &request).unwrap();
+            assert_eq!(actual.revision, expected.revision);
+            assert_eq!(actual.decision, expected.decision);
+        }
+    }
+}
+
+#[test]
+fn custom_rule_merge_validates_patterns_even_when_local_rules_replace_them() {
+    let shared = json!({"schema_version":1,"kind":"custom",
+        "capabilities":["structured-rules-v1","argument-rules-v1","regex-v1"],"rules":[{
+        "id":"inspect","decision":"allow",
+            "conditions":{"domain":"argv","executable":{"regex":"["},"arguments":{"kind":"any"}}
+    }]})
+    .to_string();
+    let local = json!({"schema_version":1,"kind":"custom",
+        "capabilities":["structured-rules-v1","argument-rules-v1"],"rules":[{
+        "id":"inspect","decision":"allow",
+            "conditions":{"domain":"argv","executable":"git","arguments":{"kind":"any"}}
+    }]})
+    .to_string();
+    assert!(super::custom_rules(Some(&shared), Some(&local)).is_err());
+    assert!(super::custom_rules(Some(&local), Some(&shared)).is_err());
+    assert!(super::custom_rules(Some(&local), Some(&local)).is_ok());
+}
+
 fn layered() -> Value {
     json!(
         Bundle::capture_layers(

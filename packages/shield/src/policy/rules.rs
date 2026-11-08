@@ -139,6 +139,19 @@ impl Unmet {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Rule {
     pub(crate) id: String,
+    /// Lossless historical argv matching, with no additional authority tiers.
+    #[serde(
+        default,
+        rename = "historical_matcher",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(super) legacy: Option<super::legacy::Authority>,
+    #[serde(
+        default,
+        rename = "historical_normalized",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(super) legacy_normalized: Option<super::legacy::NormalizedAuthority>,
     #[serde(
         default,
         deserialize_with = "present",
@@ -227,6 +240,11 @@ impl Rule {
         self.validate_for(false)
     }
     pub(super) fn validate_for(&self, pack: bool) -> Result<(), Error> {
+        super::legacy::validate_authority(self, pack)?;
+        super::legacy::validate_normalized_authority(self, pack)?;
+        if self.legacy.is_some() || self.legacy_normalized.is_some() {
+            return Ok(());
+        }
         if pack
             && self.conditions["domain"] == "exact_request"
             && self.conditions["input"]["kind"] == "mcp"
@@ -425,7 +443,16 @@ impl Rule {
     }
 
     pub(super) fn prepare(&mut self) {
-        self.matcher = self.projection();
+        self.matcher = if self.legacy_normalized.is_some() {
+            // Literal normalized rules have different effect and environment
+            // semantics; they cannot use the matcher comparison projection.
+            None
+        } else {
+            self.legacy
+                .as_ref()
+                .map(|legacy| legacy.matcher.clone())
+                .or_else(|| self.projection())
+        };
     }
     fn projection(&self) -> Option<Matcher> {
         if self.invocation.is_some()
@@ -476,6 +503,12 @@ impl Rule {
         }
     }
     pub(super) fn capabilities(&self, result: &mut BTreeSet<String>) {
+        if self.legacy.is_some() {
+            result.insert("historical-matchers-v1".into());
+        }
+        if self.legacy_normalized.is_some() {
+            result.insert("historical-normalized-v1".into());
+        }
         if self.invocation.is_some() {
             result.insert("invocation-groups-v1".into());
         }
@@ -664,6 +697,15 @@ pub(crate) struct Facts<'a> {
     pub(crate) effects: Option<&'a crate::effects::Hints>,
 }
 
+/// Historical SDK reads used this exact argv identity. Only the matching
+/// historical rule sees argv; current file rules retain the original facts.
+pub(super) fn legacy_read(request: &super::Request, facts: &Facts<'_>) -> bool {
+    request.executable == "shield:read-text"
+        && request.cwd == facts.context.cwd
+        && matches!(facts.input, Input::File { action, sources, destination: None, recursive: false, .. }
+            if action == "read" && sources.len() == 1 && request.arguments.first() == sources.first())
+}
+
 impl Rule {
     fn exact_matches(&self, facts: &Facts<'_>, profile: Profile) -> Result<bool, Error> {
         if self.decision.selected(profile) == Decision::Allow
@@ -684,6 +726,67 @@ impl Rule {
             && self.conditions["executable"] == json!(facts.executable))
     }
     pub(super) fn matching(
+        &self,
+        request: &super::Request,
+        facts: &Facts<'_>,
+        patterns: &dyn Provider,
+        source: &str,
+        profile: Profile,
+        tier: u8,
+    ) -> Result<Option<Match>, Error> {
+        let original;
+        let bound;
+        let historical_read = legacy_read(request, facts);
+        let facts =
+            if (self.legacy.is_some() || self.legacy_normalized.is_some()) && historical_read {
+                original = Input::Argv {
+                    executable: request.executable.clone(),
+                    arguments: request.arguments.clone(),
+                    original_input: json!({}),
+                };
+                bound = Facts {
+                    input: &original,
+                    ..*facts
+                };
+                &bound
+            } else {
+                facts
+            };
+        if let Some(legacy) = &self.legacy_normalized {
+            if !facts.known_cwd || !facts.known_arguments {
+                return Ok(None);
+            }
+            return Ok(legacy
+                .matching(request, facts, historical_read)
+                .map(|specificity| Match {
+                    source: source.into(),
+                    rule_id: self.id.clone(),
+                    decision: self.decision.selected(profile),
+                    reason: self.reason.clone().unwrap_or_default(),
+                    specificity,
+                    applied: false,
+                    tier,
+                    branch: "met",
+                    requirement_checks: Vec::new(),
+                    guidance: None,
+                    exact_request: self.conditions["domain"] == "exact_request",
+                    legacy: true,
+                    fallback: false,
+                    precondition: false,
+                }));
+        }
+        if let Some(legacy) = &self.legacy
+            && (!matches!(facts.input, Input::Argv { .. })
+                || !facts.known_cwd
+                || !facts.known_arguments
+                || !legacy.matcher.matches_evidence(request, facts.effects))
+        {
+            return Ok(None);
+        }
+        self.matching_current(facts, patterns, source, profile, tier)
+    }
+
+    fn matching_current(
         &self,
         facts: &Facts<'_>,
         patterns: &dyn Provider,
@@ -764,7 +867,10 @@ impl Rule {
         let requirement_checks =
             self.requirement_evidence(facts, patterns, &failures, &rule_ref, branch)?;
         let rank = if met {
-            self.rank()
+            self.legacy.as_ref().map_or_else(
+                || self.rank(),
+                |legacy| legacy.matcher.historical_specificity(),
+            )
         } else {
             rank(&self.conditions).max(2)
         };
@@ -776,6 +882,7 @@ impl Rule {
             specificity: rank,
             applied: false,
             tier,
+            legacy: self.legacy.is_some(),
             branch,
             requirement_checks,
             guidance,

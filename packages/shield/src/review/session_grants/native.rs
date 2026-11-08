@@ -21,55 +21,58 @@ fn capture(context: &Context, receipt: &mut Value) -> Result<(), Error> {
     let store = store(context)?;
     let state = store.read_checkpoint()?;
     state.check(context)?;
-    let Ok(reg) = registration(&state, agent) else {
+    if registration(&state, agent).is_err() {
         return Ok(());
-    };
+    }
     let existing = state
         .session_grants
         .contexts
         .get(&key)
-        .filter(|s| s.registration == reg && now < s.created.saturating_add(super::RETAIN))
+        .filter(|s| {
+            super::Authority::capture(&state).context_matches(&key, s)
+                && now < s.created.saturating_add(super::RETAIN)
+        })
         .cloned();
     let first = existing.is_none();
-    let captured =
-        if existing.is_some() {
-            existing
-        } else {
-            let mut captured = None;
-            store.update_checkpoint_if_changed(context, &|| Ok(()), |state| {
-                let Ok(reg) = registration(state, agent) else {
-                    return Ok(false);
-                };
-                // Another hook may have captured the same tuple since our read.
-                if let Some(record) = state.session_grants.contexts.get(&key).filter(|s| {
-                    s.registration == reg && now < s.created.saturating_add(super::RETAIN)
-                }) {
-                    captured = Some(record.clone());
-                    return Ok(false);
-                }
-                state.session_grants.compact(now);
-                if state.session_grants.contexts.len() >= 256 {
-                    return Ok(false);
-                }
-                let record = Conversation {
-                    reference: format!(
-                        "session-{}",
-                        hash(&json!([state.project_id, key, now, state.sequence]))
-                    ),
-                    agent: agent.into(),
-                    session_id: session.into(),
-                    registration: reg,
-                    created: now,
-                };
-                state
-                    .session_grants
-                    .contexts
-                    .insert(key.clone(), record.clone());
-                captured = Some(record);
-                Ok(true)
-            })?;
-            captured
-        };
+    let captured = if existing.is_some() {
+        existing
+    } else {
+        let mut captured = None;
+        store.update_checkpoint_if_changed(context, &|| Ok(()), |state| {
+            let Ok(reg) = registration(state, agent) else {
+                return Ok(false);
+            };
+            // Another hook may have captured the same tuple since our read.
+            if let Some(record) = state.session_grants.contexts.get(&key).filter(|s| {
+                super::Authority::capture(state).context_matches(&key, s)
+                    && now < s.created.saturating_add(super::RETAIN)
+            }) {
+                captured = Some(record.clone());
+                return Ok(false);
+            }
+            state.session_grants.compact(now);
+            if state.session_grants.contexts.len() >= 256 {
+                return Ok(false);
+            }
+            let record = Conversation {
+                reference: format!(
+                    "session-{}",
+                    hash(&json!([state.project_id, key, now, state.sequence]))
+                ),
+                agent: agent.into(),
+                session_id: session.into(),
+                registration: reg,
+                created: now,
+            };
+            state
+                .session_grants
+                .contexts
+                .insert(key.clone(), record.clone());
+            captured = Some(record);
+            Ok(true)
+        })?;
+        captured
+    };
     let Some(captured) = captured else {
         return Ok(());
     };

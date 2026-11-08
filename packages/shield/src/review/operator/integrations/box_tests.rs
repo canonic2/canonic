@@ -137,6 +137,8 @@ fn matches_direct_installation(
     written: &Value,
     allowed: &[String],
 ) {
+    let canonical_root = root.canonicalize().unwrap();
+    let root = canonical_root.as_path();
     let pinned_word = native::quoted(&registered.binary).unwrap();
     let direct = prepare(root, &json!({}), IntegrationChoice::all())
         .unwrap()
@@ -562,6 +564,7 @@ fn box_install_hands_direct_installations_over_without_touching_their_files() {
         choice(&["box"]),
         false,
         None,
+        false,
         false,
     )
     .unwrap()

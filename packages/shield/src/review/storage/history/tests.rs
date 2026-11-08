@@ -41,6 +41,57 @@ fn event(store: &Store, receipt: &Value) -> Option<Value> {
         .find(|e| e["event_id"] == receipt["event_id"])
 }
 
+#[test]
+fn diagnostic_history_capture_waits_for_the_history_writer() {
+    use clap::Parser as _;
+    let (root, context) = enrolled();
+    decision(&context, "before rotation");
+    let store = Store::open(root.path()).unwrap();
+    let state = store.read_checkpoint().unwrap();
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let trace = log.request("command", "status", None, None).unwrap();
+    let guard = lock(&store).unwrap();
+    std::thread::scope(|scope| {
+        let (send, receive) = std::sync::mpsc::channel();
+        let trace = &trace;
+        let store = &store;
+        let reader = scope.spawn(move || {
+            let _scope = trace.enter();
+            send.send(store.read_diagnostics()).unwrap();
+        });
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while trace.recorded_count("history.lock_attempts") == 0 {
+            assert!(
+                Instant::now() < deadline,
+                "reader did not attempt history locking"
+            );
+            std::thread::yield_now();
+        }
+        assert_eq!(trace.recorded_count("history.captures"), 0);
+        assert!(receive.try_recv().is_err());
+        // A generation rewrite under its ordinary writer lock cannot be
+        // observed halfway through by status or doctor.
+        replace(store, &state, &[], false).unwrap();
+        drop(guard);
+        let (loaded, pending) = receive
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+        assert!(!pending);
+        assert!(loaded.history_available);
+        assert!(loaded.events.is_empty());
+        reader.join().unwrap();
+    });
+    trace.finish("success");
+}
+
 #[cfg(windows)]
 #[test]
 fn windows_history_refuses_an_explicit_public_acl_inside_a_private_directory() {

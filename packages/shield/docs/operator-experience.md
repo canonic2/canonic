@@ -79,7 +79,7 @@ interfaces never acquire this operator UI or emit human presentation.
 | Command | Workflow |
 | --- | --- |
 | `init` | Review default baseline and project configuration, select agents, confirm enrollment |
-| `mcp setup [--agent AGENT]... [--remove] [--dry-run]` | Install, repair or remove complete project hooks/MCP integrations, including fallback settings; omission opens guided selection or resumes a confirmed repair, removal keeps unselected agents; restart/trust the agent afterwards |
+| `mcp setup [--agent AGENT]... [--remove] [--pending review\|cancel] [--dry-run]` | Install, repair or remove project hooks/MCP integrations; omission opens guided selection or resumes confirmed work; pending reviews conflicts or cancellation; removal keeps unselected agents; restart/trust the agent after registration changes |
 | `status`, `doctor` | Inspect active policy, history, registrations and reported repair needs |
 | `pack search`, `pack info` | Discover releases and inspect source, compatibility, profiles and rules before installation |
 | `pack add`, `pack update`, `pack remove` | Acquire or select verified artifacts; review the complete policy comparison before activation. `pack add` asks for a new pack's profile (Recommended preselected) unless `--profile` is given |

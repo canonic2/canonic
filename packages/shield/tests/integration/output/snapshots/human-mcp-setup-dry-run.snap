@@ -5,7 +5,6 @@ expression: text
 $ shield mcp setup --agent codex --dry-run
 --- terminal
 Agent integrations
-  Claude Code unchanged · hooks PostToolUse, PostToolUseFailure, PreToolUse, SessionEnd, Stop · MCP server shield
   Codex       added · hooks Interrupt, PermissionRequest, PostToolUse, PreToolUse, SessionEnd, Stop · MCP server shield · Ask fallback allows requests
   Hooks and MCP run [SHIELD] for this project.
   51 of 52 Shield MCP tools run without asking; ask each time: policy_apply.
@@ -13,10 +12,8 @@ Agent integrations
   Agents can read/write their skill folders and system temporary folders. Session files use each agent's supported mappings.
 
   Files
-    .mcp.json                    unchanged  Claude Code MCP server
-    .claude/settings.local.json  unchanged  Claude Code hooks
-    .codex/hooks.json            created    Codex hooks
-    .codex/config.toml           created    Codex MCP server
+    .codex/hooks.json   created    Codex hooks
+    .codex/config.toml  created    Codex MCP server
   Other settings in these files are preserved.
 
 After confirming, restart each agent, trust this project, review its hooks and approve the MCP server.

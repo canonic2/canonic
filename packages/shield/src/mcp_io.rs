@@ -4,7 +4,17 @@ use crate::{
     cli::{McpServe, ReviewContext},
     mcp,
 };
-use std::{io, path::Path, process::ExitCode, sync::Arc, time::Duration};
+use std::{
+    fs,
+    io::{self, Read},
+    path::{Path, PathBuf},
+    process::ExitCode,
+    sync::Arc,
+    time::Duration,
+};
+
+#[cfg(test)]
+mod tests;
 
 pub(crate) fn run(
     project: Option<&Path>,
@@ -28,16 +38,59 @@ pub(crate) fn run(
             }
         };
     }
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let target = match project_path(project, &cwd) {
+        Ok(target) => target,
+        Err(error) => {
+            eprintln!("Cannot start Shield MCP server: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let requested =
+        project.map_or_else(|| target.clone(), |project| absolute_project(project, &cwd));
     let context = ReviewContext {
-        project: project.unwrap_or(Path::new(".")).to_path_buf(),
+        project: target.clone(),
         agent: input.agent.clone(),
         session_id: input.session_id.clone(),
         tool_use_id: input.tool_use_id.clone(),
     };
     log.event("mcp_start", serde_json::json!({"project":context.project,"session_id":context.session_id,"agent":context.agent,"request_timeout_ms":input.request_timeout_ms}));
-    let Ok(context) = crate::review::cli::context(&context) else {
-        eprintln!("Cannot start Shield MCP server: enrolled project required");
-        return ExitCode::FAILURE;
+    if valid_attribution(&context)
+        && let Ok(probe) = crate::review::bootstrap::inspect(&target)
+        && probe.bootstrap_required()
+    {
+        let attribution = ReviewContext {
+            project: requested,
+            ..context
+        };
+        return match mcp::serve_bootstrap(
+            probe.project_root(),
+            attribution,
+            io::BufReader::new(io::stdin()),
+            io::stdout().lock(),
+            &options,
+        ) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+    let context = match review_context(&context) {
+        Ok(context) => context,
+        Err(error) => {
+            if matches!(
+                error,
+                crate::review::Error::StateFormat { .. }
+                    | crate::review::Error::StateCorrupt { .. }
+            ) {
+                eprintln!("{error}");
+            } else {
+                eprintln!("Cannot start Shield MCP server: enrolled project required");
+            }
+            return ExitCode::FAILURE;
+        }
     };
     let Ok(server) = mcp::Server::for_review(context).map(|server| server.with_log(log.clone()))
     else {
@@ -56,4 +109,101 @@ pub(crate) fn run(
             ExitCode::FAILURE
         }
     }
+}
+
+/// A validated enrollment or integration-review receipt retains human forms
+/// across connections, without importing native registration or caller claims.
+pub(crate) fn review_context(
+    input: &ReviewContext,
+) -> Result<crate::review::Context, crate::review::Error> {
+    let mut context = crate::review::cli::context(input)?;
+    context.confirmed_mcp_forms = crate::agents::review::resolve(context.agent.as_deref())
+        .confirmation()
+        == crate::agents::review::Confirmation::Terminal
+        && crate::review::bootstrap::forms_reviewed_at(Path::new(&context.project_root));
+    Ok(context)
+}
+
+fn valid_attribution(context: &ReviewContext) -> bool {
+    [&context.agent, &context.session_id, &context.tool_use_id]
+        .into_iter()
+        .all(|value| {
+            value.as_ref().is_none_or(|value| {
+                !value.is_empty() && value.len() <= 4096 && !value.contains('\0')
+            })
+        })
+}
+
+/// Old registrations pin an absolute root. A nearest copied/moved enrollment
+/// naming exactly that root must reach its own review instead of the original.
+fn project_path(project: Option<&Path>, cwd: &Path) -> Result<PathBuf, crate::review::Error> {
+    let cwd = cwd.canonicalize()?;
+    let nearest = cwd.ancestors().find(|path| {
+        [".shield/config.yml", ".shield/review"].iter().any(|name| {
+            match fs::symlink_metadata(path.join(name)) {
+                Ok(_) => true,
+                Err(error) => error.kind() != io::ErrorKind::NotFound,
+            }
+        })
+    });
+    let Some(project) = project else {
+        return Ok(nearest.unwrap_or(&cwd).into());
+    };
+    let selected = absolute_project(project, &cwd);
+    if let Some(nearest) = nearest
+        && nearest != selected
+    {
+        if recorded_launch(
+            &nearest.join(".shield/review/state.json"),
+            &selected,
+            nearest,
+        ) || crate::review::bootstrap::accepts_launch(nearest, &selected)
+        {
+            return Ok(nearest.into());
+        }
+        return Err(crate::review::Error::Invalid(
+            "configured working directory and selected project are ambiguous; no project authority was opened",
+        ));
+    }
+    Ok(selected)
+}
+
+fn absolute_project(project: &Path, cwd: &Path) -> PathBuf {
+    let selected = if project.is_absolute() {
+        project.into()
+    } else {
+        cwd.join(project)
+    };
+    selected.canonicalize().unwrap_or(selected)
+}
+
+fn recorded_launch(path: &Path, requested: &Path, current: &Path) -> bool {
+    recorded_claim(path).is_some_and(|value| {
+        // Raw claims select only a visibly displaced checkpoint, which cannot
+        // open ordinary authority at current. A healthy enrollment needs its
+        // independently validated confirmation proof to redirect a launcher.
+        value["project_root"]
+            .as_str()
+            .is_some_and(|root| Path::new(root) != current)
+            && (value["project_root"]
+                .as_str()
+                .is_some_and(|root| Path::new(root) == requested)
+                || crate::review::bootstrap::launch_matches_metadata(current, requested))
+    })
+}
+
+fn recorded_claim(path: &Path) -> Option<serde_json::Value> {
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 16 * 1024 * 1024
+    {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(path)
+        .ok()?
+        .take(16 * 1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    let value = crate::json::parse(&bytes).ok()?;
+    Some(value)
 }

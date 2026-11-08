@@ -1,6 +1,5 @@
 //! `shield doctor`: status plus additional checks and repair routes.
-//! Probes may recover derived cache data; policy and host-setting repairs stay
-//! with their owning commands.
+//! Probes inspect retained authority without publishing upgrades or cache data.
 use super::{Context, Error};
 use crate::review::{project as state, registries};
 use serde_json::{Value, json};
@@ -9,19 +8,11 @@ use std::path::{Path, PathBuf};
 /// The status report with a `checks` list of the problems found.
 pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
     let store = crate::review::storage::Store::open(Path::new(&context.project_root))?;
-    // History inspection already validates the authority checkpoint. If it
-    // fails, retain the compact-only recovery report when authority is readable.
-    let (current, history_error) = match store.read_history() {
-        Ok(current) => (current, None),
-        Err(error) => (store.read_checkpoint()?, Some(error)),
-    };
+    let (current, upgrade_pending) = store.read_diagnostics()?;
     current.check(context)?;
     let meta = state::metadata(&current);
     let mut checks = Vec::new();
-    let complete = match history_error {
-        Some(error) => Err(error),
-        None => state::status_from(context, &current),
-    };
+    let complete = state::status_from(context, &current);
     let mut value = match complete {
         Ok(value) => value,
         Err(error) => {
@@ -35,13 +26,21 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
         }
     };
     value["enabled"] = json!(current.enforcement.enabled);
+    value["checkpoint_upgrade_pending"] = json!(upgrade_pending);
     let mut problem = |check: &str, detail: String, repair: &str| {
         checks.push(json!({"check":check,"detail":detail,"repair":repair}));
     };
 
-    if let Err(error) = crate::review::storage::Store::open(Path::new(&context.project_root))
-        .and_then(|store| store.prepare_current())
-    {
+    if upgrade_pending {
+        problem(
+            "checkpoint_upgrade",
+            "The historical checkpoint is validated in memory; conversion has not been saved."
+                .into(),
+            "The next Shield mutation or hook will save the conversion. If saving fails, check write access and free space in the project review directory.",
+        );
+    }
+
+    if let Err(error) = store.prepare_diagnostics(&current) {
         problem(
             "policy_source",
             format!("the retained policy source cannot be prepared: {error}"),
@@ -50,7 +49,7 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
     }
 
     // The active policy must load as hooks load it, compiled plan included.
-    if let Err(error) = crate::review::runtime::consumer::load(context, &|| Ok(()))
+    if let Err(error) = crate::review::runtime::consumer::inspect_cached(&current)
         .map_err(crate::runtime::Error::from)
     {
         // Without an activation there is nothing for the cache to rebuild from,

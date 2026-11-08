@@ -1,6 +1,7 @@
 //! Project-owned proposals and observational history, shared by CLI and MCP.
 pub(crate) mod admin;
 mod approvals;
+pub(crate) mod bootstrap;
 mod cache;
 mod changes;
 pub(crate) mod cli;
@@ -55,6 +56,15 @@ pub(crate) enum Error {
     UnsupportedReleases(String),
     #[error("invalid review input or state: {0}")]
     Invalid(&'static str),
+    #[error(
+        "unsupported Shield checkpoint at {path:?}: observed schema {observed}; supported schema 1 with retained historical codecs. Original bytes are unchanged. Use a Shield version that supports this format; do not delete or re-enroll the project"
+    )]
+    StateFormat {
+        path: std::path::PathBuf,
+        observed: String,
+    },
+    #[error("corrupt review state at {path:?}; preserve it for recovery")]
+    StateCorrupt { path: std::path::PathBuf },
     /// A reference names several packs; `alternatives` holds at most
     /// [`MAX_ALTERNATIVES`] of the `total` references that name exactly one.
     #[error("{reason}; use one of {}", alternatives_text(.alternatives, *.total))]
@@ -174,6 +184,8 @@ impl Error {
             Self::Dependency(_)
             | Self::Policy(_)
             | Self::Invalid(_)
+            | Self::StateFormat { .. }
+            | Self::StateCorrupt { .. }
             | Self::Ambiguous { .. }
             | Self::NotPortable(_)
             | Self::Grouped { .. }
@@ -256,6 +268,7 @@ pub(in crate::review) fn compare_prepared(
     after: &BTreeMap<String, Value>,
     prepared_base: Option<&configuration::Evaluator>,
 ) -> Result<(Value, configuration::Evaluator), Error> {
+    changes::historical::validate(&before["project"], &after["project"])?;
     let before = snapshots(before)?;
     let after = snapshots(after)?;
     let mut comparison = json!(configuration::compare_policy(&before, &after)?);
@@ -304,6 +317,22 @@ pub(crate) fn open(project: &Path) -> Result<Context, Error> {
     let store = Store::open(project)?;
     let state = store.read_checkpoint()?;
     Ok(Context::new(state.project_id, state.project_root, "cli"))
+}
+
+pub(crate) fn open_diagnostics(project: &Path) -> Result<Context, Error> {
+    let (state, _) = Store::open(project)?.read_diagnostic_checkpoint()?;
+    Ok(Context::new(state.project_id, state.project_root, "cli"))
+}
+
+#[cfg(test)]
+pub(crate) fn update_operator_fixture(
+    context: &Context,
+    update: impl FnOnce(&mut Value),
+) -> Result<Value, Error> {
+    Store::open(Path::new(&context.project_root))?.update(context, &|| Ok(()), |state| {
+        update(&mut state.operator);
+        Ok(json!({}))
+    })
 }
 
 /// Derive caller context and pause guards from one validated checkpoint.

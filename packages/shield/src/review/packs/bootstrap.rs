@@ -6,7 +6,7 @@ use crate::{
 };
 use canonic_registry_kit::{
     acquisition::Fetcher,
-    catalog::Entry,
+    catalog::{Catalog, Entry},
     checkpoint::Checkpoints,
     registrations::Effective,
     resolution::{self, Instance, Release, Root},
@@ -23,6 +23,122 @@ pub(in crate::review) struct Initial {
     pub(in crate::review) rows: Vec<Value>,
     pub(in crate::review) bytes: Vec<String>,
     pub(in crate::review) checkpoints: BTreeMap<String, Value>,
+}
+
+type Artifacts = BTreeMap<(Instance, semver::Version), (String, Source, Entry, String)>;
+
+#[derive(Default)]
+struct Candidates {
+    releases: Vec<Release<Profile>>,
+    artifacts: Artifacts,
+    pending: BTreeSet<(Instance, semver::Version)>,
+    known: BTreeSet<Instance>,
+    size: usize,
+}
+
+impl Candidates {
+    fn enumerate(
+        &mut self,
+        instance: Instance,
+        is_root: bool,
+        fetcher: &Fetcher,
+        source: &Source,
+        alias: &str,
+        catalog: &mut Catalog,
+    ) -> Result<(), Error> {
+        self.known.insert(instance.clone());
+        if self.known.len() > 64 {
+            return Err(policy::Error::Limit.into());
+        }
+        // A dependency-free current baseline needs no historical alternatives.
+        // Every other instance is enumerated before the solver chooses a version.
+        if is_root
+            && let Some(head) = catalog
+                .history(&instance.pack)
+                .and_then(|_| catalog.select(&instance.pack, None))
+                .cloned()
+            && let Some(bytes) = candidate_artifact(fetcher, source, &head)?
+        {
+            let pack = Pack::from_yaml(&bytes)?;
+            if pack.dependencies().is_empty() {
+                self.size += bytes.len();
+                self.releases.push(Release {
+                    instance: instance.clone(),
+                    version: head.version.clone(),
+                    dependencies: Vec::new(),
+                });
+                self.artifacts.insert(
+                    (instance, head.version.clone()),
+                    (alias.into(), source.clone(), head, bytes),
+                );
+                return Ok(());
+            }
+            // Cache the already authenticated head for the later request.
+            self.artifacts.insert(
+                (instance.clone(), head.version.clone()),
+                (alias.into(), source.clone(), head, bytes),
+            );
+        }
+        registries::history(fetcher, source, catalog, &instance.pack)?;
+        for entry in catalog.releases(&instance.pack) {
+            self.pending
+                .insert((instance.clone(), entry.version.clone()));
+            self.releases.push(Release {
+                instance: instance.clone(),
+                version: entry.version.clone(),
+                dependencies: Vec::new(),
+            });
+        }
+        Ok(())
+    }
+
+    fn load(
+        &mut self,
+        instance: &Instance,
+        version: &semver::Version,
+        fetcher: &Fetcher,
+        source: &Source,
+        alias: &str,
+        catalog: &Catalog,
+    ) -> Result<(), Error> {
+        let entry = catalog
+            .release(&instance.pack, version)
+            .expect("enumerated release")
+            .clone();
+        let key = (instance.clone(), version.clone());
+        self.pending.remove(&key);
+        let bytes = if let Some((_, _, _, bytes)) = self.artifacts.remove(&key) {
+            Some(bytes)
+        } else {
+            candidate_artifact(fetcher, source, &entry)?
+        };
+        let Some(bytes) = bytes else {
+            self.releases
+                .retain(|r| r.instance != *instance || r.version != *version);
+            if !self.releases.iter().any(|r| r.instance == *instance) {
+                return Err(Error::UnsupportedReleases(instance.pack.to_string()));
+            }
+            return Ok(());
+        };
+        self.size = self.size.saturating_add(bytes.len());
+        if self.size > crate::configuration::MAX_BUNDLE_BYTES {
+            return Err(policy::Error::Limit.into());
+        }
+        let pack = Pack::from_yaml(&bytes)?;
+        let candidate = self
+            .releases
+            .iter_mut()
+            .find(|r| r.instance == *instance && r.version == *version)
+            .expect("enumerated release");
+        candidate.dependencies = pack
+            .dependencies()
+            .iter()
+            .map(policy::Declaration::parsed)
+            .collect::<Result<_, _>>()?;
+        self.artifacts
+            .insert(key, (alias.into(), source.clone(), entry, bytes));
+        Ok(())
+    }
 }
 pub(in crate::review) fn acquire(
     project: &Path,
@@ -56,18 +172,28 @@ fn prepare(
     }];
     let sources = by_identity(main, registered);
     let mut catalogs = BTreeMap::new();
-    let mut releases = Vec::new();
-    let mut artifacts = BTreeMap::new();
-    let mut pending = BTreeSet::from([instance]);
-    let mut visited = BTreeSet::new();
-    let mut size = 0usize;
-    while let Some(instance) = pending.pop_first() {
-        if !visited.insert(instance.clone()) {
-            continue;
-        }
-        if visited.len() > 64 {
-            return Err(policy::Error::Limit.into());
-        }
+    let mut candidates = Candidates::default();
+    let enrolled = sources.keys().cloned().collect();
+    let selected = loop {
+        let request = match resolution::resolve_pending(
+            &roots,
+            &candidates.releases,
+            &enrolled,
+            &candidates.known,
+            &candidates.pending,
+        ) {
+            Ok(selected) => break selected,
+            Err(
+                request @ (resolution::Error::CandidatesRequired(_)
+                | resolution::Error::MetadataRequired(_, _)),
+            ) => request,
+            Err(error) => return Err(error.into()),
+        };
+        let instance = match &request {
+            resolution::Error::CandidatesRequired(instance)
+            | resolution::Error::MetadataRequired(instance, _) => instance.clone(),
+            _ => unreachable!(),
+        };
         let (alias, source) = sources.get(&instance.registry).ok_or(Error::Invalid(
             "baseline dependency registry is not enrolled",
         ))?;
@@ -77,51 +203,27 @@ fn prepare(
                 registries::catalog(fetcher, source)?,
             );
         }
-        let catalog = &catalogs[&instance.registry];
-        let mut published = false;
-        for entry in catalog.entries().iter().filter(|e| e.id == instance.pack) {
-            published = true;
-            let Some(bytes) = candidate_artifact(fetcher, source, entry)? else {
-                continue;
-            };
-            size = size.saturating_add(bytes.len());
-            if size > crate::configuration::MAX_BUNDLE_BYTES || releases.len() >= 4096 {
-                return Err(policy::Error::Limit.into());
+        let catalog = catalogs
+            .get_mut(&instance.registry)
+            .expect("acquired catalog");
+        match request {
+            resolution::Error::CandidatesRequired(_) => {
+                let is_root = instance == roots[0].instance;
+                candidates.enumerate(instance, is_root, fetcher, source, alias, catalog)?;
             }
-            let pack = Pack::from_yaml(&bytes)?;
-            let release = Release {
-                instance: instance.clone(),
-                version: entry.version.clone(),
-                dependencies: pack
-                    .dependencies()
-                    .iter()
-                    .map(policy::Declaration::parsed)
-                    .collect::<Result<_, _>>()?,
-            };
-            pending.extend(release.dependencies.iter().map(|d| {
-                Instance {
-                    registry: d
-                        .registry
-                        .clone()
-                        .unwrap_or_else(|| instance.registry.clone()),
-                    pack: d.pack.clone(),
-                }
-            }));
-            artifacts.insert(
-                (instance.clone(), release.version.clone()),
-                (alias.clone(), source.clone(), entry.clone(), bytes),
-            );
-            releases.push(release);
+            resolution::Error::MetadataRequired(_, version) => {
+                candidates.load(&instance, &version, fetcher, source, alias, catalog)?;
+            }
+            _ => unreachable!(),
         }
-        if published && !releases.iter().any(|r| r.instance == instance) {
-            return Err(Error::UnsupportedReleases(instance.pack.to_string()));
-        }
-    }
-    let selected = resolution::resolve(&roots, &releases, &sources.keys().cloned().collect())?;
-    let (rows, bytes) = installed(project, &selected, &artifacts);
+    };
+    let (rows, bytes) = installed(project, &selected, &candidates.artifacts);
     let mut checkpoints = Checkpoints::default();
     for catalog in catalogs.values() {
-        registries::admit(&mut checkpoints, catalog)?;
+        let protected = registries::protected_releases(&rows, catalog.source_identity())?;
+        checkpoints
+            .admit_retaining(catalog, &protected)
+            .map_err(|error| registries::checkpoint_error(&error))?;
     }
     Ok(Initial {
         rows,
@@ -134,7 +236,7 @@ fn prepare(
 fn installed(
     project: &Path,
     selected: &[resolution::Selection<'_, Profile>],
-    artifacts: &BTreeMap<(Instance, semver::Version), (String, Source, Entry, String)>,
+    artifacts: &Artifacts,
 ) -> (Vec<Value>, Vec<String>) {
     let mut rows = Vec::new();
     let mut bytes = Vec::new();
@@ -235,6 +337,95 @@ mod tests {
         assert_eq!(state.registry_checkpoints, initial.checkpoints);
         assert_eq!(state.operator["installed"][0]["profile"], "recommended");
     }
+
+    #[test]
+    fn indexed_current_baseline_never_fetches_its_old_history() {
+        let (root, source) = fixture();
+        let path = root.path().join("catalog.json");
+        let mut document: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        document["schema_version"] = json!(3);
+        document["histories"] = json!({"canonic/baseline":{"path":"unavailable-history.json",
+            "sha256":"a".repeat(64),"first":"0.0.1","last":"0.1.0"}});
+        fs::write(&path, document.to_string()).unwrap();
+        let initial = prepare(
+            root.path(),
+            Profile::Recommended,
+            &registries::fetcher(),
+            &registered(&source),
+        )
+        .unwrap();
+        assert_eq!(initial.rows[0]["version"], "0.1.0");
+        assert_eq!(initial.rows.len(), 1);
+    }
+
+    #[test]
+    fn indexed_baseline_resolves_a_historical_dependency_below_its_current_head() {
+        use canonic_registry_kit::testing::{Server, SignedRegistry};
+        let mut registry = SignedRegistry::new("acme");
+        let pack = |id: &str, version: &str, dependencies: Value| {
+            json!({"schema_version":1,"kind":"pack","id":id,"version":version,
+                "description":"Acme bootstrap dependency fixture","license":"UNLICENSED",
+                "maintainers":["Acme"],"engines":{"shield":env!("CARGO_PKG_VERSION")},
+                "capabilities":["structured-rules-v1","dependencies-v1"],
+                "dependencies":dependencies,"rules":[]})
+            .to_string()
+        };
+        registry.release(
+            "canonic/baseline",
+            "1.0.0",
+            pack(
+                "canonic/baseline",
+                "1.0.0",
+                json!([{"pack":"acme/child","requirement":"=1.0.0"}]),
+            )
+            .as_bytes(),
+        );
+        for major in 1..=130 {
+            let version = format!("{major}.0.0");
+            registry.release(
+                "acme/child",
+                &version,
+                pack("acme/child", &version, json!([])).as_bytes(),
+            );
+        }
+        registry.publish_indexed(1, "9999-12-31T00:00:00Z");
+        let fetcher = Server::fetcher(std::time::Duration::from_secs(2));
+        let source = fetcher
+            .discover(registry.server().url(), std::time::SystemTime::now())
+            .unwrap()
+            .source;
+        let project = assert_fs::TempDir::new().unwrap();
+        let initial = prepare(
+            project.path(),
+            Profile::Strict,
+            &fetcher,
+            &registered(&source),
+        )
+        .unwrap();
+        assert_eq!(initial.rows.len(), 2);
+        assert!(
+            initial
+                .rows
+                .iter()
+                .any(|row| row["id"] == "canonic/baseline"
+                    && row["version"] == "1.0.0"
+                    && row["direct"] == true)
+        );
+        assert!(initial.rows.iter().any(|row| row["id"] == "acme/child"
+            && row["version"] == "1.0.0"
+            && row["direct"] == false));
+        assert!(initial.rows.iter().all(|row| row["profile"] == "strict"));
+        let requests = registry.server().requests();
+        assert_eq!(
+            requests
+                .iter()
+                .filter(|path| path.contains("/packs/"))
+                .count(),
+            2,
+            "only the baseline and exact child are downloaded across 130 child versions: {requests:?}"
+        );
+        assert!(!project.path().join(".shield").exists());
+    }
     /// Publishes a release in a policy schema this Shield version cannot read.
     fn publish_unreadable(root: &Path, version: &str) {
         let bytes = format!(
@@ -289,7 +480,7 @@ mod tests {
     #[test]
     fn malformed_release_within_its_single_engine_range_still_refuses() {
         let (root, source) = fixture();
-        publish_single_engine(root.path(), "0.0.9", "*");
+        publish_single_engine(root.path(), "0.2.0", "*");
         assert!(
             prepare(
                 root.path(),

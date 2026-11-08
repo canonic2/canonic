@@ -46,6 +46,12 @@ impl From<Error> for RuntimeError {
             | Error::Grouped { reason, .. } => Self::Invalid(reason),
             Error::ApprovalFormTooLong { .. } => Self::Invalid("approval form is too long"),
             Error::NotPortable(_) => Self::Invalid("rule names a folder on this machine"),
+            Error::StateFormat { .. } => {
+                Self::Invalid("unsupported Shield checkpoint format; original bytes preserved")
+            }
+            Error::StateCorrupt { .. } => {
+                Self::Invalid("corrupt review state; preserve it for recovery")
+            }
             Error::Dependency(_) => Self::Invalid("dependency closure is invalid"),
             Error::RequiredPack { .. } => Self::Invalid("pack is required by another selection"),
             Error::UnsupportedReleases(_) => {
@@ -470,12 +476,16 @@ pub(in crate::review) fn load(
     load_plan(context, checkpoint, true)
 }
 
-/// Inspect an existing plan without preparing or publishing missing cache data.
-pub(in crate::review) fn load_cached(
-    context: &Context,
-    checkpoint: Checkpoint<'_>,
-) -> Result<Snapshot, Error> {
-    load_plan(context, checkpoint, false)
+/// Inspect the artifact named by an already validated diagnostic checkpoint.
+/// This path never reopens authority or publishes conversion/cache data.
+pub(in crate::review) fn inspect_cached(state: &super::State) -> Result<Snapshot, Error> {
+    let active = state.active.as_ref().ok_or(Error::Invalid(
+        "no active snapshot; initialize the project with shield init",
+    ))?;
+    let evaluator = active
+        .compiled
+        .load(&state.project_root, &state.project_id)?;
+    snapshot_from(state, evaluator)
 }
 
 fn load_plan(
@@ -498,22 +508,32 @@ fn load_plan(
         }
         Err(error) => return Err(error),
     };
-    let compiled = &active.compiled;
+    let snapshot = snapshot_from(&state, evaluator)?;
+    checkpoint()?;
+    Ok(snapshot)
+}
+
+fn snapshot_from(
+    state: &super::State,
+    evaluator: crate::configuration::Evaluator,
+) -> Result<Snapshot, Error> {
+    let active = state.active.as_ref().ok_or(Error::Invalid(
+        "no active snapshot; initialize the project with shield init",
+    ))?;
     if evaluator.revision() != active.policy_revision {
         return Err(Error::StaleSnapshot);
     }
-    checkpoint()?;
     Ok(Snapshot {
         working_files: None,
         identity: SnapshotIdentity {
-            project_id: state.project_id,
-            project_root: state.project_root,
+            project_id: state.project_id.clone(),
+            project_root: state.project_root.clone(),
             activation_id: active.activation_id.clone(),
             previous_activation_id: active.previous_activation_id.clone(),
             policy_revision: active.policy_revision.clone(),
             candidate_digest: active.candidate_digest.clone(),
             binding: active.binding.clone(),
-            compiled_digest: compiled.digest.clone(),
+            compiled_digest: active.compiled.digest.clone(),
         },
         evaluator: Arc::new(evaluator),
     })

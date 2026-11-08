@@ -20,6 +20,55 @@ fn artifact(root: &Path) -> Artifact {
 }
 
 #[test]
+fn cache_artifact_description_matches_publication_without_creating_directories() {
+    let (root, context) = fixture();
+    let state = Store::open(root.path()).unwrap().read_current().unwrap();
+    let evaluator = Evaluator::new_for_revision(
+        snapshots(&state.candidates).unwrap(),
+        &state.policy_revision,
+    )
+    .unwrap();
+    let scratch = assert_fs::TempDir::new().unwrap();
+    let directory = scratch.path().canonicalize().unwrap().join("planned-cache");
+    let mut operator = state.operator.clone();
+    operator["compiled_cache_root"] = json!(directory);
+    let described = describe_candidate(
+        &context,
+        &state.candidates,
+        &state.policy_revision,
+        &operator,
+        &evaluator,
+    )
+    .unwrap();
+    assert!(!directory.exists());
+    assert!(matches!(
+        describe_candidate(
+            &context,
+            &state.candidates,
+            "unverified-revision",
+            &operator,
+            &evaluator
+        ),
+        Err(Error::StaleSnapshot)
+    ));
+    assert!(!directory.exists());
+    let published = build_candidate(
+        &context,
+        &state.candidates,
+        &state.policy_revision,
+        &operator,
+        &evaluator,
+    )
+    .unwrap();
+    assert_eq!(json!(described), json!(published));
+    assert!(
+        described
+            .load(&context.project_root, &context.project_id)
+            .is_ok()
+    );
+}
+
+#[test]
 fn activation_requires_its_retained_compiled_plan_reference() {
     let (root, _) = fixture();
     let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
@@ -293,7 +342,7 @@ fn incompatible_plans_rebuild_on_demand_and_preserve_activation() {
     let (root, context) = fixture();
     let current = artifact(root.path());
     let mut bytes = fs::read(current.path()).unwrap();
-    bytes[..8].copy_from_slice(b"INVALID!");
+    bytes[..8].copy_from_slice(b"SHPLAN13");
     let mut corrupted = current.clone();
     corrupted.digest = compiled_digest(&bytes);
     fs::write(corrupted.path(), &bytes).unwrap();
@@ -322,7 +371,7 @@ fn incompatible_plans_rebuild_on_demand_and_preserve_activation() {
     Project::open(root.path()).unwrap().snapshot().unwrap();
     let prepared = artifact(root.path());
     assert!(prepared.digest.starts_with("blake3-v1:"));
-    assert_eq!(&fs::read(prepared.path()).unwrap()[..8], b"SHPLAN10");
+    assert_eq!(&fs::read(prepared.path()).unwrap()[..8], b"SHPLAN14");
     let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
     assert!(state.authorization_events.iter().any(|event| {
         event["kind"] == "compiled_cache_prepared"

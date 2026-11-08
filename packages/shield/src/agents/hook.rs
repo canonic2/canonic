@@ -15,9 +15,11 @@ pub(crate) fn run(input: &NativeHook, log: &crate::diagnostics::Log) -> ExitCode
     let Some(adapter) = find(&input.agent) else {
         return ExitCode::from(2);
     };
-    let Some(expected) = adapter.event(&input.event) else {
+    let legacy = input.event.is_empty() && matches!(input.agent.as_str(), "claude" | "codex");
+    let pinned = adapter.event(&input.event);
+    if pinned.is_none() && !legacy {
         return ExitCode::from(2);
-    };
+    }
     log.event(
         "hook_start",
         json!({"project":input.project,"agent":input.agent}),
@@ -26,6 +28,16 @@ pub(crate) fn run(input: &NativeHook, log: &crate::diagnostics::Log) -> ExitCode
     let read_ok = bytes.is_ok();
     let bytes = bytes.unwrap_or_default();
     log.hook_input(&input.agent, &bytes, read_ok, oversized.is_some());
+    // Old launchers did not pin an event. Infer only from a complete, strictly
+    // parsed vendor envelope. Unknown, duplicate, truncated and oversized input
+    // always uses the authorization denial format, never completion silence.
+    let expected = pinned.unwrap_or_else(|| {
+        if read_ok && oversized.is_none() {
+            legacy_event(adapter, &bytes)
+        } else {
+            Event::Before
+        }
+    });
     let value = if !read_ok || oversized.is_some() {
         if read_ok && expected.post() && oversized.as_ref().is_some_and(|o| !o.names_pre) {
             json!({})
@@ -38,6 +50,13 @@ pub(crate) fn run(input: &NativeHook, log: &crate::diagnostics::Log) -> ExitCode
     log.hook_output(&value);
     println!("{value}");
     ExitCode::SUCCESS
+}
+
+fn legacy_event(adapter: &dyn AgentAdapter, bytes: &[u8]) -> Event {
+    crate::json::parse(bytes)
+        .ok()
+        .and_then(|host| adapter.input_event(&host))
+        .unwrap_or(Event::Before)
 }
 
 const MAX_HOOK_INPUT: usize = 8 * 1024 * 1024;
@@ -197,15 +216,21 @@ fn handle(
     log: &crate::diagnostics::Log,
 ) -> Option<Value> {
     log.event("hook_stage", json!({"stage":"project_open_start"}));
-    let (context, paused) = crate::review::open_native(root).ok()?;
+    let (context, paused) = match crate::review::open_native(root) {
+        Ok(opened) => opened,
+        // A recognized name keeps inspection/recovery reachable, but the alias
+        // alone cannot justify granting permission without project authority.
+        Err(_) if request.shield_tool.is_some() => return Some(json!({})),
+        Err(_) => return None,
+    };
     log.event("hook_stage", json!({"stage":"project_open_ready"}));
     if let Some(paused) = paused {
         return Some(paused_reply(adapter, request, &paused));
     }
-    log.event("hook_stage", json!({"stage":"registration_ready"}));
     if let Some(name) = request.shield_tool {
         return Some(shield_tool_reply(adapter, request, name, log));
     }
+    log.event("hook_stage", json!({"stage":"registration_ready"}));
     if request.operation.is_none() && request.harmless && request.event == Event::Permission {
         return Some(allow(adapter, request.event, String::new()));
     }
@@ -277,14 +302,7 @@ fn handle(
         }
     }
     if request.event.post() {
-        let note = if unmodeled {
-            None
-        } else {
-            request
-                .tool_id
-                .and_then(|id| feedback::approval_note(root, adapter, request.session, id))
-        };
-        Some(adapter.completion(request.event_name, note.as_deref()))
+        Some(completion_reply(root, adapter, request, unmodeled))
     } else {
         let mut reply = strictest?;
         if blocks(adapter, request.event, &reply)
@@ -300,6 +318,22 @@ fn handle(
         }
         Some(adapter.reply(request.event, &reply))
     }
+}
+
+fn completion_reply(
+    root: &Path,
+    adapter: &dyn AgentAdapter,
+    request: &Request<'_>,
+    unmodeled: bool,
+) -> Value {
+    let note = if unmodeled {
+        None
+    } else {
+        request
+            .tool_id
+            .and_then(|id| feedback::approval_note(root, adapter, request.session, id))
+    };
+    adapter.completion(request.event_name, note.as_deref())
 }
 
 fn paused_reply(
@@ -386,8 +420,8 @@ fn prepare_mcp(
                 return json!({"systemMessage":"Shield completion history unavailable; MCP bindings could not be checked."});
             }
             let mut reply = feedback::deny("mcp-bindings-unavailable");
-            reply.reason = "Shield: blocked. MCP bindings could not be checked. Run `shield doctor` in your terminal before retrying.".into();
-            reply.agent_context = Some("Shield could not determine whether this MCP server is bound to project policy. Authorization fails closed until the project snapshot is available; ask the user to run `shield doctor`.".into());
+            reply.reason = "Shield: blocked. MCP bindings could not be checked. The agent can diagnose and request repair in this session.".into();
+            reply.agent_context = Some("Shield could not determine whether this MCP server is bound to project policy. Call doctor or status, then use its in-session repair route and obtain any required user confirmation before retrying.".into());
             adapter.reply(request.event, &reply)
         })?;
     match prepared.prepare_mcp(
@@ -410,7 +444,7 @@ fn prepare_mcp(
             }
             let mut reply = feedback::deny("mcp-binding-changed");
             reply.reason = format!(
-                "Shield: blocked. {error}. Inspect the MCP configuration with shield doctor before retrying."
+                "Shield: blocked. {error}. Inspect the MCP configuration with the doctor tool before retrying."
             );
             Err(adapter.reply(request.event, &reply))
         }
@@ -481,17 +515,7 @@ fn decide(
     };
     if exit != 0 {
         let code = receipt["code"].as_str().unwrap_or("protection-failure");
-        let mut reply = feedback::deny(code);
-        if code == "compiled-cache-unavailable"
-            && let Some(route) = crate::agent_message::cache_repair(&context.project_root)
-        {
-            reply.reason = format!(
-                "Shield: blocked. The policy cache is unavailable. Run `{route}` in your terminal before retrying."
-            );
-            reply.agent_context = Some(format!(
-                "Shield: compiled policy is unavailable. Ask the user to run `{route}` in their terminal, then retry."
-            ));
-        }
+        let reply = feedback::deny(code);
         return Some((reply, refusal));
     }
     feedback::respond(

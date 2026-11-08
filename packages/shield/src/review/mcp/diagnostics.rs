@@ -75,6 +75,9 @@ pub(super) fn compare(
         }
         _ => return Err(Error::Invalid("invalid comparison domain")),
     };
+    if crate::review::model::redact_comparison(&mut value) {
+        value["redacted"] = json!(true);
+    }
     checkpoint()?;
     value["before_candidate_id"] = json!(before_id);
     value["after_candidate_id"] = json!(after_id);

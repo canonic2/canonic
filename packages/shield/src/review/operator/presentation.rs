@@ -90,7 +90,10 @@ fn plural(count: usize, one: &str, many: &str) -> String {
 
 /// The review shown in the operator terminal before a change is confirmed.
 pub(super) fn review(value: &Value) -> String {
-    if let Some(message) = value["session_grant_review"].as_str() {
+    if let Some(message) = value["enrollment_review"]
+        .as_str()
+        .or_else(|| value["session_grant_review"].as_str())
+    {
         return format!(
             "{}\n",
             message
@@ -141,6 +144,14 @@ pub(super) fn print(command: &PublicCommand, value: &Value) {
 }
 
 fn result(command: &PublicCommand, value: &Value) -> String {
+    if value["bootstrap_required"] == true {
+        return format!(
+            "Shield needs enrollment confirmation for {}.\nPrevious location: {}\n{}\n",
+            label(&value["project_root"]),
+            label(&value["previous_project_root"]),
+            label(&value["next_action"]),
+        );
+    }
     match command {
         PublicCommand::Init { .. } => setup::initialized(value),
         PublicCommand::Mcp(_) if value["dry_run"] == true => {

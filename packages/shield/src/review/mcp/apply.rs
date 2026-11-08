@@ -22,11 +22,20 @@ pub(super) fn apply(
         .find(|p| p.id == id)
         .ok_or(Error::Missing)?;
     if proposal.status == "applied" {
-        return Ok(
-            json!({"proposal_id":id,"status":"applied","policy_revision":proposal.receipt["policy_revision"],"receipt":proposal.receipt,"operator":proposal.operator}),
-        );
+        let mut value = json!({"proposal_id":id,"status":"applied","policy_revision":proposal.receipt["policy_revision"],"receipt":proposal.receipt,"operator":proposal.operator});
+        if before.operator["integration_publication"]["proposal_id"] == id
+            && let Some(activation) = proposal.receipt["activation_id"].as_str()
+        {
+            crate::review::publication::resume_connections(
+                context,
+                Some(&id),
+                activation,
+                &mut value,
+            );
+        }
+        return Ok(value);
     }
-    let confirmation = crate::agents::review::resolve(context.agent.as_deref()).confirmation();
+    let confirmation = crate::agents::review::for_context(context).confirmation();
     let connections_changed =
         crate::review::publication::mcp_changed(&proposal.base_candidate, &proposal.candidate)?;
     let mechanism = match confirmation {
@@ -58,9 +67,17 @@ pub(super) fn apply(
     let mut result = json!({"proposal_id":id,"status":"applied","policy_revision":receipt["policy_revision"],"receipt":receipt,
         "operator":{"operator_id":null,"display_name":null,"mechanism":mechanism.mechanism()}});
     if connections_changed {
-        result["next_action"] = json!(
-            "Connection configuration is active. Call mcp_setup with the intended agents for host-settings review and publication in this session."
-        );
+        result["connection_publication"] = receipt
+            .get("connection_publication")
+            .cloned()
+            .unwrap_or_else(|| json!("not_required"));
+        result["next_action"] = receipt.get("next_action").cloned().unwrap_or_else(|| {
+            json!(if receipt.get("connection_publication").is_some() {
+                "Connection configuration is active and its registered host bindings are published. Host loading remains subject to the agent's connection reload behavior."
+            } else {
+                "Connection configuration is active. No registered host entries needed publication; use mcp_setup to connect an agent if needed."
+            })
+        });
     }
     Ok(result)
 }
@@ -75,7 +92,7 @@ fn validate_with_views(
     views: Option<&super::views::Views>,
 ) -> Result<(State, String, Value), Error> {
     let _trace = crate::diagnostics::trace::span("apply.validate");
-    let adapter = crate::agents::review::resolve(context.agent.as_deref());
+    let adapter = crate::agents::review::for_context(context);
     // No model-supplied confirmation flag or human identity is accepted.
     if context.surface != "mcp" || adapter.confirmation() == Confirmation::Terminal {
         return Err(Error::ApprovalRequired);
@@ -112,9 +129,10 @@ fn validate_with_views(
     } else {
         owned = match crate::review::storage::Store::cached_evaluator(&before) {
             Some(evaluator) => evaluator,
-            None => {
-                crate::configuration::Evaluator::new(crate::review::snapshots(&before.candidates)?)?
-            }
+            None => crate::configuration::Evaluator::new_for_revision(
+                crate::review::snapshots(&before.candidates)?,
+                &before.policy_revision,
+            )?,
         };
         &owned
     };
@@ -167,6 +185,7 @@ fn validate_with_views(
         return Ok((before, id, source));
     }
     validate_live(proposal, context, &before.policy_revision)?;
+    crate::review::changes::historical::validate(&proposal.base_candidate, &proposal.candidate)?;
     let id = proposal.id.clone();
     crate::review::publication::validate_proposal_base(&before, &id)?;
     Ok((before, id, source))
@@ -251,7 +270,7 @@ pub(super) fn present_proposal(context: &Context, proposal: &Proposal, data: &mu
     }
     let canonical = data["apply_arguments"].take();
     data["apply_arguments"] = present_arguments(
-        crate::agents::review::resolve(context.agent.as_deref()),
+        crate::agents::review::for_context(context),
         proposal,
         &canonical,
     );
@@ -273,7 +292,7 @@ pub(super) fn proposal_result(context: &Context, proposal: &Proposal) -> Value {
     if let Some(headline) = confirmation::headline(&canonical["changes"]) {
         data["change_summary"] = json!(headline);
     }
-    let adapter = crate::agents::review::resolve(context.agent.as_deref());
+    let adapter = crate::agents::review::for_context(context);
     data["apply_arguments"] = present_arguments(adapter, proposal, &canonical);
     // Hosts may show the model only structured data; it carries the activation route.
     data["next_action"] = json!(adapter.guidance().proposed);
@@ -283,7 +302,7 @@ pub(super) fn proposal_result(context: &Context, proposal: &Proposal) -> Value {
 /// Project canonical operator results onto the requesting adapter's wire view.
 /// The persisted proposal and CLI output remain independent of host presentation.
 pub(super) fn present(context: &Context, data: &mut Value) -> Result<(), Error> {
-    let adapter = crate::agents::review::resolve(context.agent.as_deref());
+    let adapter = crate::agents::review::for_context(context);
     if !adapter.readable_arguments() {
         return Ok(());
     }

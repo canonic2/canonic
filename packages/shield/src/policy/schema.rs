@@ -257,15 +257,171 @@ fn rule() -> Value {
         &[],
     );
     guidance["minProperties"] = json!(1);
-    let rule = object(
-        json!({"id":{"type":"string","minLength":1,"maxLength":128},"decision":{"enum":["allow","ask","deny"]},"conditions":reference("conditions"),"requirements":reference("requirements"),"on_unmet":object(json!({"decision":{"enum":["ask","deny"]},"message":message,"alternatives":alternatives}),&["decision"]),"reason":nonempty(4096),"guidance":reference("guidance"),"expires_at":{"type":"string","format":"date-time"}}),
+    let mut rule = object(
+        json!({"id":{"type":"string","minLength":1,"maxLength":128},"decision":{"enum":["allow","ask","deny"]},"conditions":{"anyOf":[reference("conditions"),reference("historical_conditions")]},"requirements":reference("requirements"),"on_unmet":object(json!({"decision":{"enum":["ask","deny"]},"message":message,"alternatives":alternatives}),&["decision"]),"reason":string(4096),"guidance":reference("guidance"),"expires_at":{"type":"string"},"historical_matcher":reference("historical_matcher"),"historical_normalized":reference("historical_normalized")}),
         &["id", "decision", "conditions"],
     );
+    rule["if"] = json!({"required":["historical_normalized"]});
+    rule["then"] = json!({"properties":{"conditions":reference("historical_conditions")},"not":{"anyOf":[{"required":["historical_matcher"]},{"required":["requirements"]},{"required":["on_unmet"]},{"required":["guidance"]}]}});
+    rule["else"] = json!({"properties":{"conditions":reference("conditions"),"reason":nonempty(4096),"expires_at":{"type":"string","format":"date-time"}}});
     json!({"guidance":guidance,"rule_custom":rule})
+}
+
+fn historical_arguments(prefix_min: usize) -> Value {
+    one_of(vec![
+        object(json!({"kind":{"const":"any"}}), &["kind"]),
+        object(
+            json!({"kind":{"const":"exact"},"values":list(string(4096),0)}),
+            &["kind", "values"],
+        ),
+        object(
+            json!({"kind":{"const":"prefix"},"values":list(string(4096),prefix_min)}),
+            &["kind", "values"],
+        ),
+    ])
+}
+
+fn historical_effects() -> Value {
+    json!({"type":"array","minItems":1,"maxItems":11,"items":{"enum":["repository-write","worktree-write","data-removal","history-rewrite","network","code-execution","daemon-write","image-build","host-exposure","privileged-runtime","configuration"]}})
+}
+
+fn historical() -> Value {
+    let matcher = object(
+        json!({"executable":nonempty(4096),"arguments":historical_arguments(1),"cwd":nonempty(4096),"project":nonempty(4096),"possible_effects":historical_effects()}),
+        &["executable", "arguments"],
+    );
+    let authority = object(
+        json!({"matcher":matcher,"scope":{"const":"project"},"mandatory":{"const":false}}),
+        &["matcher", "scope", "mandatory"],
+    );
+    let nullable = |value| one_of(vec![json!({"type":"null"}), value]);
+    let normalized = object(
+        json!({"schema_version":{"const":1},"id":nonempty(128),"decision":{"enum":["allow","ask","deny"]},"conditions":reference("historical_conditions"),"reason":nullable(string(4096)),"expires_at":nullable(string(20))}),
+        &[
+            "schema_version",
+            "id",
+            "decision",
+            "conditions",
+            "reason",
+            "expires_at",
+        ],
+    );
+    json!({"historical_matcher":authority,"historical_normalized":normalized,"historical_conditions":historical_conditions(),"historical_input":historical_input(),"policy_capabilities":{"type":"array","maxItems":crate::policy::CAPABILITIES.len(),"uniqueItems":true,"items":{"enum":crate::policy::CAPABILITIES}}})
+}
+
+fn historical_normalized_arguments() -> Value {
+    let values = json!({"type":"array","maxItems":50_000,"items":string(1_048_576)});
+    one_of(vec![
+        object(json!({"kind":{"const":"any"},"values":{}}), &["kind"]),
+        object(
+            json!({"kind":{"const":"exact"},"values":values.clone()}),
+            &["kind", "values"],
+        ),
+        object(
+            json!({"kind":{"const":"prefix"},"values":values}),
+            &["kind", "values"],
+        ),
+    ])
+}
+
+fn historical_input() -> Value {
+    let nullable = |value| one_of(vec![json!({"type":"null"}), value]);
+    let strings = json!({"type":"array","maxItems":256,"items":string(1_048_576)});
+    let mut inputs = Vec::new();
+    for (kind, fields, mut required) in [
+        (
+            "argv",
+            json!({"executable":nonempty(4096),"arguments":list(string(4096),0)}),
+            vec!["executable", "arguments"],
+        ),
+        (
+            "shell",
+            json!({"source":string(65536),"dialect":{"enum":["bash","posix","powershell","cmd"]},"dialect_version":nullable(string(1_048_576))}),
+            vec!["source", "dialect"],
+        ),
+        (
+            "file",
+            json!({"action":{"enum":["read","write","copy","move","remove"]},"sources":strings,"destination":nullable(string(1_048_576)),"recursive":{"type":"boolean"}}),
+            vec!["action", "sources", "recursive"],
+        ),
+        (
+            "web",
+            json!({"action":{"enum":["search","fetch"]},"query":nullable(string(1_048_576)),"url":nullable(string(1_048_576)),"method":nullable(string(1_048_576)),"conditions":{"type":"object"}}),
+            vec!["action", "conditions"],
+        ),
+        (
+            "mcp",
+            json!({"server":nonempty(1_048_576),"tool":nonempty(1_048_576),"arguments":{"type":"object"}}),
+            vec!["server", "tool", "arguments"],
+        ),
+        (
+            "unknown",
+            json!({"host_tool":nonempty(1_048_576)}),
+            vec!["host_tool"],
+        ),
+    ] {
+        let mut fields = fields;
+        fields["kind"] = json!({"const":kind});
+        fields["original_input"] = json!({"type":"object"});
+        required.extend(["kind", "original_input"]);
+        inputs.push(object(fields, &required));
+    }
+    one_of(inputs)
+}
+
+fn historical_conditions() -> Value {
+    let nullable = |value| one_of(vec![json!({"type":"null"}), value]);
+    let path = object(
+        json!({"kind":{"enum":["exact","within"]},"path":nonempty(4096)}),
+        &["kind", "path"],
+    );
+    let common = json!({"cwd":nullable(path.clone()),"environment":nullable(json!({"type":"object","additionalProperties":{"type":"string"}}))});
+    let mut conditions = Vec::new();
+    for (domain, predicates, required) in [
+        (
+            "argv",
+            json!({"executable":nonempty(1_048_576),"arguments":historical_normalized_arguments(),"possible_effects":historical_effects()}),
+            vec!["domain", "executable", "arguments"],
+        ),
+        (
+            "shell",
+            json!({"source":string(1_048_576),"dialect":{"enum":["bash","posix","powershell","cmd"]},"dialect_version":nullable(string(1_048_576))}),
+            vec!["domain", "source", "dialect"],
+        ),
+        (
+            "file",
+            json!({"action":{"enum":["read","write","copy","move","remove"]},"sources":nullable(list(path.clone(),0)),"destination":nullable(path),"recursive":{"type":"boolean"}}),
+            vec!["domain", "action"],
+        ),
+        (
+            "web",
+            json!({"action":{"enum":["fetch","search"]},"url":nullable(string(1_048_576)),"query":nullable(string(1_048_576)),"method":nullable(string(1_048_576)),"conditions":{"type":"object"}}),
+            vec!["domain", "action"],
+        ),
+        (
+            "mcp",
+            json!({"server":string(1_048_576),"tool":string(1_048_576),"arguments":{"type":"object"}}),
+            vec!["domain", "server", "tool"],
+        ),
+    ] {
+        let mut properties = common.clone();
+        properties
+            .as_object_mut()
+            .expect("schema object")
+            .extend(predicates.as_object().expect("schema object").clone());
+        properties["domain"] = json!({"const":domain});
+        conditions.push(object(properties, &required));
+    }
+    let context = object(
+        json!({"cwd":nonempty(4096),"environment":nullable(json!({"type":"object","additionalProperties":{"type":"string"}}))}),
+        &["cwd"],
+    );
+    conditions.push(object(json!({"domain":{"const":"exact_request"},"input":reference("historical_input"),"context":context,"executable":nullable(nonempty(4096))}), &["domain","input","context","executable"]));
+    one_of(conditions)
 }
 pub(crate) fn definitions() -> Value {
     let mut value = base();
-    for section in [arguments(), domains(), rule()] {
+    for section in [arguments(), domains(), historical(), rule()] {
         if let Value::Object(fields) = section {
             value.as_object_mut().expect("schema object").extend(fields);
         }
@@ -277,4 +433,80 @@ pub(crate) fn definitions() -> Value {
             .clone(),
     );
     value
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rule_schema() -> Value {
+        let mut schema = json!({"$defs":definitions(),"$ref":"#/$defs/rule_custom"});
+        schema["$defs"]["normalized_input"] = json!({"type":"object"});
+        schema
+    }
+
+    #[test]
+    fn reviewed_historical_rows_pass_closed_proposal_schemas() {
+        for row in [
+            json!({"id":"read","scope":"project","decision":"allow","reason":"Acme read",
+                "matcher":{"executable":"acme","arguments":{"kind":"exact","values":["read"]},"project":"/project"}}),
+            json!({"schema_version":1,"id":"Acme read rule","decision":"allow","reason":null,"expires_at":null,
+                "conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"prefix","values":[]},"cwd":null}}),
+        ] {
+            let source = json!({"schema_version":1,"rules":[row]}).to_string();
+            let normalized = crate::policy::normalize_retained_custom(&source).unwrap();
+            let row = &normalized["rules"][0];
+            canonic_mcp_kit::schema::validate(&rule_schema(), row).unwrap();
+            let mut unknown = row.clone();
+            unknown["rank"] = json!(255);
+            assert!(canonic_mcp_kit::schema::validate(&rule_schema(), &unknown).is_err());
+            let mut nested = row.clone();
+            let field = if row.get("historical_matcher").is_some() {
+                "historical_matcher"
+            } else {
+                "historical_normalized"
+            };
+            nested[field]["tier"] = json!(0);
+            assert!(canonic_mcp_kit::schema::validate(&rule_schema(), &nested).is_err());
+        }
+    }
+
+    #[test]
+    fn historical_conditions_require_their_explicit_annotation() {
+        let row = json!({"id":"read","decision":"allow","conditions":{"domain":"argv","executable":"acme",
+            "arguments":{"kind":"exact","values":["read"]},"cwd":null}});
+        assert!(canonic_mcp_kit::schema::validate(&rule_schema(), &row).is_err());
+        let mut source = row;
+        source["historical_matcher"] = json!({"matcher":{"executable":"acme","arguments":{"kind":"exact","values":["read"]}},"scope":"organization","mandatory":false});
+        assert!(canonic_mcp_kit::schema::validate(&rule_schema(), &source).is_err());
+    }
+
+    #[test]
+    fn historical_normalized_reasons_keep_the_original_four_kib_limit() {
+        // The historical normalized rule validator bounds reason bytes at 4096.
+        for (length, accepted) in [(4096, true), (4097, false)] {
+            let original = json!({"schema_version":1,"rules":[{
+                "schema_version":1,"id":"read","decision":"allow",
+                "conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}},
+                "reason":"x".repeat(length),"expires_at":null
+            }]})
+            .to_string();
+            let normalized = crate::policy::normalize_retained_custom(&original);
+            assert_eq!(normalized.is_ok(), accepted);
+            let mut modern = json!({"id":"read","decision":"allow","conditions":{
+                "domain":"argv","executable":"acme","arguments":{"kind":"any"}},
+                "reason":"x".repeat(length)});
+            assert_eq!(
+                canonic_mcp_kit::schema::validate(&rule_schema(), &modern).is_ok(),
+                accepted
+            );
+            if let Ok(normalized) = normalized {
+                canonic_mcp_kit::schema::validate(&rule_schema(), &normalized["rules"][0]).unwrap();
+                modern = normalized["rules"][0].clone();
+                modern["reason"] = json!("x".repeat(4097));
+                modern["historical_normalized"]["reason"] = modern["reason"].clone();
+                assert!(canonic_mcp_kit::schema::validate(&rule_schema(), &modern).is_err());
+            }
+        }
+    }
 }

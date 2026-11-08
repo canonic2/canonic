@@ -1220,7 +1220,7 @@ fn effective_external_cache_and_ancestors_are_protected_under_allow_fallback() {
 
 #[test]
 fn unrecoverable_compiled_plan_blocks_allow_fallback_with_a_short_repair_route() {
-    let (root, context) = fixture();
+    let (root, _context) = fixture();
     review::operator::integrations::configure_fixture(
         root.path(),
         crate::cli::public::IntegrationChoice::agent("codex"),
@@ -1245,22 +1245,16 @@ fn unrecoverable_compiled_plan_blocks_allow_fallback_with_a_short_repair_route()
     let reason = value["hookSpecificOutput"]["permissionDecisionReason"]
         .as_str()
         .unwrap();
-    assert!(reason.contains("shield cache prepare"), "{reason}");
-    assert!(
-        reason.contains(&format!("--project '{}'", context.project_root)),
-        "{reason}"
-    );
+    assert!(reason.contains("policy cache is unavailable"), "{reason}");
+    assert!(reason.contains("in this session"), "{reason}");
     assert!(reason.len() < 200);
     let agent = value["hookSpecificOutput"]["additionalContext"]
         .as_str()
         .unwrap();
-    assert!(
-        agent.contains(&format!(
-            "shield cache prepare --project '{}'",
-            context.project_root
-        )),
-        "{agent}"
-    );
+    assert!(agent.contains("Call cache_prepare"), "{agent}");
+    assert!(agent.contains("absolute cache_dir"), "{agent}");
+    assert!(agent.contains("in-session approval"), "{agent}");
+    assert!(agent.contains("committed policy only"), "{agent}");
 }
 
 #[test]
@@ -2701,6 +2695,94 @@ fn native_bound_reads_allow_and_malformed_foreign_unknown_requests_block() {
     }
     let state = fs::read_to_string(root.join(".shield/review/state.json")).unwrap();
     assert!(!state.contains("ACME_PRIVATE_READ_OUTPUT"));
+}
+
+#[test]
+fn canonical_mcp_recovery_defers_to_host_when_hook_project_state_cannot_open() {
+    let fixture = assert_fs::TempDir::new().unwrap();
+    let root = fixture.path();
+    for corrupt in [false, true] {
+        if corrupt {
+            fs::create_dir_all(root.join(".shield/review")).unwrap();
+            fs::write(root.join(".shield/review/state.json"), "invalid state").unwrap();
+        }
+        for agent in ["claude", "codex"] {
+            let mut host = json!({"hook_event_name":"PreToolUse",
+                "tool_name":"mcp__shield__doctor","tool_use_id":"acme-recovery",
+                "session_id":"acme-session","cwd":root,"tool_input":{}});
+            for tool in [
+                "doctor",
+                "status",
+                "cache_prepare",
+                "policy_propose",
+                "mcp_setup",
+                "policy_apply",
+                "request_approve",
+            ] {
+                host["tool_name"] = json!(format!("mcp__shield__{tool}"));
+                for (event, name) in [
+                    (Event::Before, "PreToolUse"),
+                    (Event::Permission, "PermissionRequest"),
+                    (Event::Completed, "PostToolUse"),
+                ] {
+                    if agent == "claude" && event == Event::Permission {
+                        // Claude's Shield adapter registers Pre/PostToolUse;
+                        // PermissionRequest is the Codex permission event.
+                        continue;
+                    }
+                    host["hook_event_name"] = json!(name);
+                    let reply =
+                        translate_for(root, agent, event, &serde_json::to_vec(&host).unwrap());
+                    assert_eq!(reply, json!({}), "{agent} {tool} {name}");
+                }
+            }
+            host["hook_event_name"] = json!("PreToolUse");
+            for tool in ["mcp__shield__unknown", "mcp__acme__doctor", "Bash"] {
+                host["tool_name"] = json!(tool);
+                host["tool_input"] = json!({"command":"pwd"});
+                let reply = translate(root, agent, &serde_json::to_vec(&host).unwrap());
+                assert_eq!(reply["hookSpecificOutput"]["permissionDecision"], "deny");
+                if tool == "Bash" {
+                    let guidance = reply["hookSpecificOutput"]["additionalContext"]
+                        .as_str()
+                        .unwrap();
+                    assert!(
+                        guidance.contains("doctor") && guidance.contains("mcp_setup"),
+                        "{reply}"
+                    );
+                    assert!(!guidance.contains("terminal"));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn canonical_mcp_tools_defer_to_host_when_shield_is_paused() {
+    let (root, mut context) = fixture();
+    context.agent = Some("claude".into());
+    let connection = review::mcp::Connection::new("acme-paused-tools".into());
+    confirm_mode(&context, &connection, "disable");
+    for agent in ["claude", "codex"] {
+        for tool in [
+            "doctor",
+            "status",
+            "cache_prepare",
+            "mcp_setup",
+            "policy_propose",
+            "policy_apply",
+            "request_approve",
+        ] {
+            let host = json!({"hook_event_name":"PreToolUse",
+                "tool_name":format!("mcp__shield__{tool}"),"tool_use_id":"acme-paused",
+                "session_id":"acme-session","cwd":root.path(),"tool_input":{}});
+            assert_eq!(
+                translate(root.path(), agent, &serde_json::to_vec(&host).unwrap()),
+                json!({}),
+                "{agent} {tool}"
+            );
+        }
+    }
 }
 
 #[test]

@@ -257,7 +257,7 @@ pub(crate) fn settle(
     status: &str,
     reason: &str,
 ) -> Result<Value, Error> {
-    let adapter = crate::agents::review::resolve(context.agent.as_deref());
+    let adapter = crate::agents::review::for_context(context);
     Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
         let row = state.proposals.iter_mut().find(|p| adapter.identifies(args, &p.id)).ok_or(Error::Missing)?;
         if row.status == "applied" { return Ok(json!({"proposal_id":row.id,"status":"applied","receipt":row.receipt,"operator":row.operator})); }

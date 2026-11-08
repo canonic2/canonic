@@ -1,27 +1,15 @@
 //! Prepare declarative connections in the same reviewed, resumable native plan.
 use super::{Error, Path, Registration, Value, agents, files, json};
-use crate::mcp_connections::{Connection, launcher::Binding};
+use crate::mcp_connections::launcher::Binding;
 use std::collections::BTreeMap;
-
-fn launch_binding(connection: &Connection, previous: &Value) -> Result<Option<Binding>, Error> {
-    if !connection.local {
-        return Ok(None);
-    }
-    let old = serde_json::from_value::<Binding>(previous.clone()).ok();
-    Ok(Some(
-        match old.filter(|binding| binding.matches(connection)) {
-            Some(binding) => binding,
-            None => Binding::new(connection)?,
-        },
-    ))
-}
 
 pub(super) fn prepare_connections(
     root: &Path,
     shared: &str,
     previous: Option<&Registration>,
-    mut desired: Option<&mut Registration>,
+    desired: Option<&mut Registration>,
     changes: &mut Vec<files::Change>,
+    targets: &[String],
 ) -> Result<(String, Option<String>), Error> {
     let (configured, policy_revision) = if root.join(".shield/review/state.json").exists() {
         let snapshot =
@@ -46,9 +34,33 @@ pub(super) fn prepare_connections(
             (BTreeMap::new(), None)
         }
     };
+    let shared = prepare_configured(
+        root,
+        shared,
+        previous,
+        desired,
+        changes,
+        targets,
+        &configured,
+    )?;
+    Ok((shared, policy_revision))
+}
+
+pub(in crate::review::integrations) fn prepare_configured(
+    root: &Path,
+    shared: &str,
+    previous: Option<&Registration>,
+    mut desired: Option<&mut Registration>,
+    changes: &mut Vec<files::Change>,
+    targets: &[String],
+    configured: &crate::mcp_connections::Connections,
+) -> Result<String, Error> {
     let mut shared = shared.to_owned();
     for adapter in agents::ADAPTERS {
         let agent = adapter.spec().id;
+        if !selected(targets, *adapter) {
+            continue;
+        }
         let old = previous
             .and_then(|r| r.connections.get(agent))
             .unwrap_or(&Value::Null);
@@ -67,15 +79,30 @@ pub(super) fn prepare_connections(
             for (id, connection) in configured.iter().filter(|(_, c)| c.enabled) {
                 if let Some(alias) = connection.agents.get(agent) {
                     adapter.check_mcp_scopes(root, root, alias)?;
-                    let binding = launch_binding(connection, &old["launches"][id])?;
+                    let previous_binding = old["review"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .any(|row| row["id"] == *id && row["alias"] == *alias)
+                        .then(|| {
+                            serde_json::from_value::<Binding>(old["launches"][id].clone()).ok()
+                        })
+                        .flatten();
+                    let binding = if connection.local {
+                        match previous_binding {
+                            Some(binding) => Some(binding.refreshed(connection)?),
+                            None => Some(Binding::new(connection)?),
+                        }
+                    } else {
+                        None
+                    };
                     let binary = &desired.as_ref().expect("retained registration").binary;
                     entries.insert(
                         alias.clone(),
-                        connection.projected(
-                            binary,
-                            root,
-                            binding.as_ref().map(|binding| binding.token.as_str()),
-                        )?,
+                        match &binding {
+                            Some(binding) => binding.projected(connection, binary, root)?,
+                            None => connection.projected(binary, root, None)?,
+                        },
                     );
                     if let Some(binding) = binding {
                         launches.insert(id.clone(), binding);
@@ -121,5 +148,12 @@ pub(super) fn prepare_connections(
             );
         }
     }
-    Ok((shared, policy_revision))
+    Ok(shared)
+}
+
+fn selected(targets: &[String], adapter: &dyn crate::agents::AgentAdapter) -> bool {
+    targets.iter().any(|target| {
+        target == adapter.spec().id
+            || target == super::box_definition::ID && adapter.supports_box_hooks()
+    })
 }

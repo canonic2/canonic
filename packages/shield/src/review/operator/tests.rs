@@ -1,4 +1,5 @@
 //! Retention and publication checks beyond ordinary live-capacity thresholds.
+mod bootstrap;
 use crate::{
     configuration::Bundle,
     review::{self, storage::Store},
