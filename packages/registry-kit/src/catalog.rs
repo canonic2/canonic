@@ -1,6 +1,6 @@
 //! Catalog schema, exact-byte authentication and release lookups.
 //!
-//! A catalog is `catalog.json`, version 1 or 2. Signed sources also serve a
+//! A catalog is `catalog.json`, version 1, 2 or 3. Signed sources also serve a
 //! detached hexadecimal Ed25519 `catalog.sig` over the exact catalog bytes;
 //! the signature is checked before the bytes are parsed.
 
@@ -17,8 +17,12 @@ use std::{
     time::SystemTime,
 };
 
-/// Maximum releases one catalog may list.
+pub mod history;
+
+/// Maximum releases a flat version-1/2 catalog may list.
 pub const MAX_ENTRIES: usize = 64;
+/// Maximum current heads in an indexed discovery catalog, within its byte bound.
+pub const MAX_HEADS: usize = 4096;
 /// Maximum command basenames advertised by one pack.
 pub const MAX_COMMANDS: usize = 16;
 /// Maximum size of a catalog document, enforced before it is verified or parsed.
@@ -51,6 +55,8 @@ struct Document {
     expires_at: Option<String>,
     #[serde(default, deserialize_with = "present_commands")]
     commands: Option<BTreeMap<PackId, Vec<String>>>,
+    #[serde(default, deserialize_with = "present_histories")]
+    histories: Option<BTreeMap<PackId, history::Reference>>,
 }
 
 /// A parsed catalog whose bytes were authenticated against its source.
@@ -59,10 +65,13 @@ pub struct Catalog {
     source: String,
     digest: String,
     entries: Vec<Entry>,
+    heads: Vec<Entry>,
     registry_id: Option<String>,
     sequence: Option<u64>,
     expires_at: Option<String>,
     commands: BTreeMap<PackId, Vec<String>>,
+    histories: BTreeMap<PackId, history::Reference>,
+    loaded: BTreeSet<PackId>,
 }
 
 /// Why catalog bytes were refused.
@@ -77,8 +86,7 @@ pub enum CatalogError {
     /// The bytes are not a supported catalog document.
     #[error("invalid registry catalog")]
     Malformed,
-    /// The catalog is larger than [`MAX_CATALOG_BYTES`] or lists more than
-    /// [`MAX_ENTRIES`] releases.
+    /// The catalog exceeds its byte, flat-release or history query bounds.
     #[error("registry catalog exceeds limits")]
     Limit,
     /// A signed catalog names another registry.
@@ -136,12 +144,16 @@ impl Catalog {
         }
         let document: Document =
             serde_json::from_slice(bytes).map_err(|_| CatalogError::Malformed)?;
-        if !matches!(document.schema_version, 1 | 2)
+        if !matches!(document.schema_version, 1..=3)
             || (document.schema_version == 1 && document.commands.is_some())
+            || (document.schema_version != 3 && document.histories.is_some())
+            || (document.schema_version == 3 && document.histories.is_none())
         {
             return Err(CatalogError::Malformed);
         }
-        if document.packs.len() > MAX_ENTRIES {
+        if (document.schema_version != 3 && document.packs.len() > MAX_ENTRIES)
+            || (document.schema_version == 3 && document.packs.len() > MAX_HEADS)
+        {
             return Err(CatalogError::Limit);
         }
         if let Some(expiry) = &document.expires_at
@@ -177,32 +189,102 @@ impl Catalog {
                 digest::normalize_sha256(&entry.sha256).ok_or(CatalogError::InvalidEntry)?;
         }
         let commands = document.commands.unwrap_or_default();
-        if commands.len() > MAX_ENTRIES {
+        if document.schema_version != 3 && commands.len() > MAX_ENTRIES {
             return Err(CatalogError::Limit);
         }
-        for (id, names) in &commands {
-            if names.len() > MAX_COMMANDS {
-                return Err(CatalogError::Limit);
-            }
-            if names.is_empty()
-                || !entries
-                    .iter()
-                    .any(|entry| entry.id == *id && entry.version.pre.is_empty())
-                || names.iter().collect::<BTreeSet<_>>().len() != names.len()
-                || names.iter().any(|name| !is_command(name))
-            {
+        validate_commands(&entries, &commands)?;
+        let histories = document.histories.unwrap_or_default();
+        if document.schema_version == 3 {
+            let heads: BTreeSet<_> = entries.iter().map(|entry| &entry.id).collect();
+            if heads.len() != entries.len() || heads.len() != histories.len() {
                 return Err(CatalogError::InvalidEntry);
+            }
+            for entry in &entries {
+                let reference = histories.get(&entry.id).ok_or(CatalogError::InvalidEntry)?;
+                reference.validate()?;
+                if entry.version < reference.first
+                    || entry.version > reference.last
+                    || (reference.last.pre.is_empty() && entry.version != reference.last)
+                    || (!entry.version.pre.is_empty() && entry.version != reference.last)
+                {
+                    return Err(CatalogError::InvalidEntry);
+                }
             }
         }
         Ok(Self {
             source: source.identity().to_owned(),
             digest: digest::sha256_hex(bytes),
+            heads: entries.clone(),
             entries,
             registry_id: document.registry_id,
             sequence: document.sequence,
             expires_at: document.expires_at,
             commands,
+            histories,
+            loaded: BTreeSet::new(),
         })
+    }
+
+    /// Authenticated history root for a pack; flat catalogs have none.
+    #[must_use]
+    pub fn history(&self, id: &PackId) -> Option<&history::Reference> {
+        self.histories.get(id)
+    }
+
+    pub(crate) fn history_loaded(&self, id: &PackId) -> bool {
+        self.loaded.contains(id)
+    }
+
+    pub(crate) fn extend_history(
+        &mut self,
+        id: &PackId,
+        entries: Vec<Entry>,
+        complete: bool,
+    ) -> Result<(), CatalogError> {
+        let existing: BTreeMap<_, _> = self
+            .entries
+            .iter()
+            .filter(|entry| entry.id == *id)
+            .map(|entry| (&entry.version, entry))
+            .collect();
+        let head = self
+            .heads
+            .iter()
+            .find(|entry| entry.id == *id)
+            .ok_or(CatalogError::InvalidEntry)?;
+        for entry in &entries {
+            if entry.id != *id
+                || (entry.version.pre.is_empty()
+                    && (!head.version.pre.is_empty() || entry.version > head.version))
+                || existing
+                    .get(&entry.version)
+                    .is_some_and(|old| **old != *entry)
+            {
+                return Err(CatalogError::InvalidEntry);
+            }
+        }
+        if complete {
+            let latest = entries
+                .iter()
+                .filter(|entry| entry.version.pre.is_empty())
+                .max_by(|a, b| a.version.cmp(&b.version))
+                .or_else(|| entries.iter().max_by(|a, b| a.version.cmp(&b.version)));
+            if latest != Some(head) {
+                return Err(CatalogError::InvalidEntry);
+            }
+        }
+        let added: Vec<_> = entries
+            .into_iter()
+            .filter(|entry| !existing.contains_key(&entry.version))
+            .collect();
+        if existing.len().saturating_add(added.len()) > history::MAX_RELEASES {
+            return Err(CatalogError::Limit);
+        }
+        self.entries.extend(added);
+        if complete {
+            self.loaded.insert(id.clone());
+        }
+        Ok(())
     }
 
     /// Advisory command basenames by pack ID from this authenticated catalog.
@@ -228,6 +310,12 @@ impl Catalog {
     #[must_use]
     pub fn entries(&self) -> &[Entry] {
         &self.entries
+    }
+
+    /// Entries authenticated directly by discovery, excluding loaded history.
+    #[must_use]
+    pub fn heads(&self) -> &[Entry] {
+        &self.heads
     }
 
     /// The registry ID, required for signed sources.
@@ -316,6 +404,31 @@ impl Catalog {
     }
 }
 
+/// Checks command associations against stable pack IDs prepared once per catalog.
+fn validate_commands(
+    entries: &[Entry],
+    commands: &BTreeMap<PackId, Vec<String>>,
+) -> Result<(), CatalogError> {
+    let stable_ids: BTreeSet<_> = entries
+        .iter()
+        .filter(|entry| entry.version.pre.is_empty())
+        .map(|entry| &entry.id)
+        .collect();
+    for (id, names) in commands {
+        if names.len() > MAX_COMMANDS {
+            return Err(CatalogError::Limit);
+        }
+        if names.is_empty()
+            || !stable_ids.contains(id)
+            || names.iter().collect::<BTreeSet<_>>().len() != names.len()
+            || names.iter().any(|name| !is_command(name))
+        {
+            return Err(CatalogError::InvalidEntry);
+        }
+    }
+    Ok(())
+}
+
 fn is_command(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
@@ -328,6 +441,12 @@ fn is_command(name: &str) -> bool {
 fn present_commands<'de, D: serde::Deserializer<'de>>(
     input: D,
 ) -> Result<Option<BTreeMap<PackId, Vec<String>>>, D::Error> {
+    BTreeMap::deserialize(input).map(Some)
+}
+
+fn present_histories<'de, D: serde::Deserializer<'de>>(
+    input: D,
+) -> Result<Option<BTreeMap<PackId, history::Reference>>, D::Error> {
     BTreeMap::deserialize(input).map(Some)
 }
 

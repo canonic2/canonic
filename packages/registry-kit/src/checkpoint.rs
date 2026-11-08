@@ -4,7 +4,7 @@
 //! [`Checkpoints::admit`] for every authenticated catalog before using it.
 //! Admission is all-or-nothing: a refusal leaves the checkpoints unchanged.
 
-use crate::catalog::Catalog;
+use crate::{catalog::Catalog, digest, names::PackId};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -12,15 +12,17 @@ use std::collections::BTreeMap;
 /// scopes and the built-in source can enroll, with room for sources whose
 /// registrations were removed.
 pub const MAX_SOURCES: usize = 256;
-/// Maximum retained releases per source.
-pub const MAX_RELEASES: usize = 4096;
+/// Maximum caller-protected installed or pinned releases per source.
+pub const MAX_PROTECTED: usize = 64;
+/// Maximum retained discovery and protected releases per source.
+pub const MAX_RELEASES: usize = crate::catalog::MAX_HEADS + MAX_PROTECTED;
 
 /// Checkpoints keyed by source identity.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Checkpoints(BTreeMap<String, Checkpoint>);
 
-/// The last admitted catalog of one source and every release digest it has listed.
+/// The last admitted root, discovery entries and caller-protected releases.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Checkpoint {
@@ -48,6 +50,9 @@ pub enum CheckpointError {
     /// Source or release retention bounds are exhausted.
     #[error("registry checkpoint limit exceeded")]
     Limit,
+    /// The caller supplied an invalid protected release identity or digest.
+    #[error("invalid protected registry release")]
+    InvalidRetention,
 }
 
 impl Checkpoints {
@@ -58,11 +63,28 @@ impl Checkpoints {
     /// A sequenced catalog must not go below the retained sequence, and an
     /// equal sequence must have identical bytes. Once a source has admitted a
     /// sequence, later catalogs must keep sequencing. A release seen before
-    /// must keep its digest, even after it leaves the catalog.
+    /// must keep its digest while retained. This convenience method retains
+    /// discovery entries; installed releases need [`Self::admit_retaining`].
     ///
     /// # Errors
     /// Returns [`CheckpointError`] and leaves the checkpoints unchanged.
     pub fn admit(&mut self, catalog: &Catalog) -> Result<(), CheckpointError> {
+        self.admit_retaining(catalog, &BTreeMap::new())
+    }
+
+    /// Admits a root while retaining current discovery entries and exact digests
+    /// for the caller's installed or pinned releases. Unreferenced history is
+    /// pruned after checking observed entries against the previous checkpoint.
+    /// Old serialized checkpoints use the same shape and compact on admission.
+    ///
+    /// # Errors
+    /// Returns [`CheckpointError`] without changing state on rollback, replacement,
+    /// invalid protected identities or active-set bounds.
+    pub fn admit_retaining(
+        &mut self,
+        catalog: &Catalog,
+        protected: &BTreeMap<String, String>,
+    ) -> Result<(), CheckpointError> {
         let identity = catalog.source_identity();
         let previous = self.0.get(identity);
         if let Some(previous) = previous
@@ -75,19 +97,47 @@ impl Checkpoints {
         if previous.is_none() && self.0.len() >= MAX_SOURCES {
             return Err(CheckpointError::Limit);
         }
-        let mut releases = previous.map(|p| p.releases.clone()).unwrap_or_default();
+        if protected.len() > MAX_PROTECTED {
+            return Err(CheckpointError::Limit);
+        }
+        for (release, sha256) in protected {
+            let Some((id, version)) = release.rsplit_once('@') else {
+                return Err(CheckpointError::InvalidRetention);
+            };
+            if id.parse::<PackId>().is_err()
+                || version.parse::<semver::Version>().is_err()
+                || !digest::is_sha256_hex(sha256)
+            {
+                return Err(CheckpointError::InvalidRetention);
+            }
+            if previous
+                .and_then(|p| p.releases.get(release))
+                .is_some_and(|old| old != sha256)
+            {
+                return Err(CheckpointError::Replaced(release.clone()));
+            }
+        }
         for entry in catalog.entries() {
             let release = format!("{}@{}", entry.id, entry.version);
-            match releases.get(&release) {
+            match previous
+                .and_then(|p| p.releases.get(&release))
+                .or_else(|| protected.get(&release))
+            {
                 Some(retained) if *retained != entry.sha256 => {
                     return Err(CheckpointError::Replaced(release));
                 }
-                Some(_) => {}
-                None if releases.len() >= MAX_RELEASES => return Err(CheckpointError::Limit),
-                None => {
-                    releases.insert(release, entry.sha256.clone());
-                }
+                Some(_) | None => {}
             }
+        }
+        let mut releases = protected.clone();
+        for entry in catalog.heads() {
+            releases.insert(
+                format!("{}@{}", entry.id, entry.version),
+                entry.sha256.clone(),
+            );
+        }
+        if releases.len() > MAX_RELEASES {
+            return Err(CheckpointError::Limit);
         }
         let mut commands: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for (id, names) in catalog.commands() {
@@ -242,13 +292,16 @@ mod tests {
     }
 
     #[test]
-    fn removed_releases_stay_retained_and_identical_catalogs_readmit() {
+    fn protected_releases_stay_retained_and_identical_catalogs_readmit() {
         let mut checkpoints = Checkpoints::default();
         let first = catalog(Some(1), &[("acme/a", "1.0.0", '0')]);
         checkpoints.admit(&first).unwrap();
         checkpoints.admit(&first).unwrap();
         checkpoints
-            .admit(&catalog(Some(2), &[("acme/b", "1.0.0", '1')]))
+            .admit_retaining(
+                &catalog(Some(2), &[("acme/b", "1.0.0", '1')]),
+                &BTreeMap::from([("acme/a@1.0.0".into(), "0".repeat(64))]),
+            )
             .unwrap();
         assert_eq!(
             checkpoints.admit(&catalog(Some(3), &[("acme/a", "1.0.0", '2')])),
@@ -298,7 +351,12 @@ mod tests {
         }
         restored.admit(&sequenced).unwrap();
         assert_eq!(restored, checkpoints);
-        restored.admit(&catalog(Some(5), &[])).unwrap();
+        restored
+            .admit_retaining(
+                &catalog(Some(5), &[]),
+                &BTreeMap::from([("acme/a@1.0.0".into(), "0".repeat(64))]),
+            )
+            .unwrap();
         assert_eq!(restored.get(&identity()).unwrap().sequence, Some(5));
         assert_eq!(
             restored.admit(&catalog(Some(6), &[("acme/a", "1.0.0", '1')])),
@@ -344,5 +402,34 @@ mod tests {
             serde_json::from_value::<Checkpoints>(value).unwrap(),
             checkpoints
         );
+    }
+
+    #[test]
+    fn aged_checkpoints_compact_history_and_keep_installed_pin_protection() {
+        let old: BTreeMap<_, _> = (0..4096)
+            .map(|index| (format!("acme/a@1.0.{index}"), "0".repeat(64)))
+            .collect();
+        let mut checkpoints: Checkpoints = serde_json::from_value(json!({identity():{
+            "sequence":1,"digest":"a".repeat(64),"releases":old}}))
+        .unwrap();
+        let protected = BTreeMap::from([("acme/a@1.0.3".into(), "0".repeat(64))]);
+        checkpoints
+            .admit_retaining(&catalog(Some(2), &[("acme/a", "2.0.0", '1')]), &protected)
+            .unwrap();
+        assert_eq!(checkpoints.get(&identity()).unwrap().releases.len(), 2);
+        assert_eq!(
+            checkpoints.release_digest(&identity(), "acme/a@1.0.3"),
+            Some("0".repeat(64).as_str())
+        );
+        let before = checkpoints.clone();
+        assert_eq!(
+            checkpoints.admit_retaining(&catalog(Some(3), &[("acme/a", "1.0.3", '2')]), &protected),
+            Err(CheckpointError::Replaced("acme/a@1.0.3".into()))
+        );
+        assert_eq!(checkpoints, before);
+        checkpoints
+            .admit_retaining(&catalog(Some(3), &[("acme/a", "3.0.0", '3')]), &protected)
+            .unwrap();
+        assert_eq!(checkpoints.get(&identity()).unwrap().releases.len(), 2);
     }
 }

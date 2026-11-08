@@ -80,6 +80,21 @@ Keep candidates alive while using the results. Selected cycles are refused.
 
 ## Explain fallback during review
 
+For lazy acquisition, use `resolve_pending` with authenticated version candidates
+represented by dependency-free placeholders. Track enumerated instances in
+`known` and unloaded `(Instance, Version)` pairs in `pending`. On
+`CandidatesRequired`, enumerate the requested instance; on `MetadataRequired`,
+authenticate and decode that exact artifact, replace its placeholder and remove
+its pending key, then retry. Mark an empty enumeration known too. Unsupported
+artifacts can be removed from the candidates. These requests stop search without
+rejecting a branch, preserving newest-first selection and backtracking while
+avoiding downloads for versions the solver never attempts. Keep the operation's
+overall acquisition and memory budgets across retries. Each `resolve_pending`
+call starts a fresh `MAX_STATES` search budget and validates all supplied inputs
+again. Cap total retry rounds and elapsed time as well as downloaded bytes and
+artifact counts; a pack-count cap does not bound version retries. With `R`
+calls, search alone may consume `R × MAX_STATES` states.
+
 Use `resolve_with_diagnostics` when presenting a resolution to the operator:
 
 ```rust

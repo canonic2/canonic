@@ -32,12 +32,13 @@ when publishing.
 
 | Field | Required | Rule |
 | --- | --- | --- |
-| `schema_version` | Always | Integer `1` or `2` |
-| `packs` | Always | Array of at most 64 release entries; may be empty |
+| `schema_version` | Always | Integer `1`, `2` or `3` |
+| `packs` | Always | At most 64 release entries in v1/v2; one current head per pack in v3 |
 | `registry_id` | HTTPS | Stable non-blank ID, at most 4096 bytes, without NUL |
 | `sequence` | HTTPS | Non-negative `u64` publication counter |
 | `expires_at` | HTTPS | Valid whole-second UTC `YYYY-MM-DDTHH:MM:SSZ` |
-| `commands` | Optional, v2 only | Map from listed stable pack IDs to command basenames, described below |
+| `commands` | Optional, v2/v3 | Map from listed stable pack IDs to command basenames, described below |
+| `histories` | Required, v3 only | Each listed pack ID's history root reference |
 
 Local catalogs may omit the three trust metadata fields. A present expiry must
 still be well formed, but expiry is enforced only for signed sources.
@@ -55,7 +56,7 @@ Version 2 can advertise a pack for multiple commands with this `commands` value:
 ```
 
 Each key must name a `publisher/name` with at least one stable release in the
-same catalog. The map holds at most 64 pack IDs. Each list contains 1–16 unique
+same catalog. V2 holds at most 64 pack IDs; v3 uses the catalog byte bound. Each list contains 1–16 unique
 basenames, each 1–64 ASCII characters, starting with a letter or digit and
 continuing with letters, digits or `._+-`. Paths and shell syntax are refused.
 These associations indicate potential relevance, not permission to execute.
@@ -93,6 +94,34 @@ extension. Spaces, backslashes, percent encoding and absolute paths are invalid.
 The artifact extension has no meaning to Registry. The consuming application
 defines the format and reads dependency metadata from it; the catalog has no
 dependency field.
+
+## Version 3 history pages
+
+Use v3 when retaining a growing release history. Keep one current entry per pack
+in `packs` and a `histories` reference for each ID:
+
+```json
+{"path":"metadata/HASH.json","sha256":"REPLACE_WITH_PAGE_SHA256","first":"0.1.0","last":"1.2.0"}
+```
+
+Each page has `schema_version: 1`, the pack `id`, and either `entries` (release
+entries) or `children` (page references). Both forms hold at most 64 items.
+Sort by SemVer, use nonoverlapping child ranges, and match the parent's first and
+last bounds. The current head is the highest stable version, or the highest
+prerelease when there are no stable versions. Page digests use lowercase hex.
+Compute leaves first, then parents, then sign the discovery catalog. Publish
+pages before the root that references them, and retain immutable artifacts for
+old pins. Root and page files must each fit 1 MiB.
+Discovery contains at most 4096 heads within its byte bound. A prerelease head
+must equal its history range's last version. Partial history reads reject any
+stable release newer than the advertised head, including stable releases under
+a prerelease head.
+
+Consumers read the signed root for discovery, then fetch only the selected
+pack's pages. Exact-version lookup follows one branch. Full-history queries are
+bounded to 128 pages, 8 MiB and 4096 materialized releases per selected pack; a query does
+not limit the registry's stored history. Each query shares one fetcher deadline.
+Upgrade v1/v2-only clients before serving v3.
 
 ## Signature files
 

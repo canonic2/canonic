@@ -184,7 +184,7 @@ fn a_partial_tls_record_cannot_hold_a_connection_past_the_deadline() {
     stop.store(true, Ordering::Relaxed);
     host.join().expect("host joined");
     assert!(
-        matches!(result, Err(AcquisitionError::Transport)),
+        matches!(result, Err(AcquisitionError::Timeout)),
         "{result:?}"
     );
     assert!(elapsed < Duration::from_secs(5), "{elapsed:?}");
@@ -225,7 +225,7 @@ fn hosts_cannot_keep_a_body_read_alive_past_the_deadline() {
     let started = std::time::Instant::now();
     assert!(matches!(
         Server::fetcher(deadline).read(&source(&server), "catalog.json", 1),
-        Err(AcquisitionError::Transport)
+        Err(AcquisitionError::Timeout)
     ));
     assert!(
         started.elapsed() < Duration::from_secs(3),
@@ -244,7 +244,7 @@ fn hosts_cannot_keep_a_body_read_alive_past_the_deadline() {
     let started = std::time::Instant::now();
     assert!(matches!(
         Server::fetcher(deadline).read(&source(&server), "catalog.json", MAX_CATALOG_BYTES),
-        Err(AcquisitionError::Transport)
+        Err(AcquisitionError::Timeout)
     ));
     assert!(
         started.elapsed() < Duration::from_secs(3),
@@ -279,7 +279,7 @@ fn delayed_responses_expire_within_the_deadline() {
     let started = std::time::Instant::now();
     assert!(matches!(
         Server::fetcher(Duration::from_millis(75)).read(&source(&server), "catalog.json", 1024),
-        Err(AcquisitionError::Transport)
+        Err(AcquisitionError::Timeout)
     ));
     assert!(started.elapsed() < Duration::from_secs(2));
 }

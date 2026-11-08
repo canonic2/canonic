@@ -29,6 +29,12 @@ Parse input with `selector::parse`, passing a predicate over effective aliases.
 For a catalog reference, call `Effective::select`, fetch and admit its catalog,
 then resolve its name with `Catalog::lookup`.
 
+For a v3 catalog, call `Fetcher::history` with that pack ID and the optional exact
+version before inspecting historical releases. Admit the expanded view through
+the same checkpoints before using it. Root bytes, source identity and sequence
+remain unchanged. Latest discovery heads need no history read. Flat catalogs
+work through the same API without additional I/O.
+
 Capture the source identity in the root. Dependencies and locked entries must
 continue referring to that identity even if an alias or default later changes.
 For `pack:<uuid>`, use your installed state instead of a catalog lookup.

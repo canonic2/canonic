@@ -51,7 +51,21 @@ impl Client {
         max_bytes: u64,
     ) -> Result<Vec<u8>, AcquisitionError> {
         let deadline = Instant::now() + self.timeout;
-        read(&self.agent(deadline), base, path, max_bytes)
+        read(&self.agent(deadline)?, base, path, max_bytes)
+    }
+
+    pub(super) fn deadline(&self) -> Instant {
+        Instant::now() + self.timeout
+    }
+
+    pub(super) fn read_until(
+        &self,
+        base: &str,
+        path: &str,
+        max_bytes: u64,
+        deadline: Instant,
+    ) -> Result<Vec<u8>, AcquisitionError> {
+        read(&self.agent(deadline)?, base, path, max_bytes)
     }
 
     /// Builds an HTTPS-only agent bound to `deadline`.
@@ -72,11 +86,17 @@ impl Client {
     /// granted again. Connections are never pooled, so each agent makes one
     /// connection and its deadlines and establishment belong to one request.
     /// Proxies are disabled, so the chain needs no proxy connectors.
-    fn agent(&self, deadline: Instant) -> ureq::Agent {
+    fn agent(&self, deadline: Instant) -> Result<ureq::Agent, AcquisitionError> {
         let mut tls = ureq::tls::TlsConfig::builder();
         if let Some(roots) = self.roots.clone() {
             tls = tls.root_certs(roots);
         }
+        // Resolution and TCP connect precede the deadline transport. A later
+        // history page must inherit the query's remaining budget there too.
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or(AcquisitionError::Timeout)?;
         let mut config = ureq::Agent::config_builder()
             .https_only(true)
             .proxy(None)
@@ -86,7 +106,7 @@ impl Client {
             .max_response_header_size(16_384)
             .max_idle_connections(0)
             .max_idle_connections_per_host(0)
-            .timeout_global(Some(self.timeout))
+            .timeout_global(Some(remaining.min(self.timeout)))
             .timeout_connect(Some(SETUP))
             .tls_config(tls.build());
         if self.roots.is_some() {
@@ -104,7 +124,11 @@ impl Client {
             })
             .chain(RustlsConnector::default())
             .chain(EstablishedConnector { established });
-        ureq::Agent::with_parts(config, connector, DefaultResolver::default())
+        Ok(ureq::Agent::with_parts(
+            config,
+            connector,
+            DefaultResolver::default(),
+        ))
     }
 }
 
@@ -279,7 +303,7 @@ fn read(
     let mut response = agent
         .get(&format!("{base}{path}"))
         .call()
-        .map_err(|_| AcquisitionError::Transport)?;
+        .map_err(|error| transport_error(&error))?;
     if response.status() != 200 || response.headers().contains_key("content-encoding") {
         return Err(AcquisitionError::Response);
     }
@@ -292,7 +316,7 @@ fn read(
         .map_err(|error| match error {
             ureq::Error::BodyExceedsLimit(_) => AcquisitionError::TooLarge,
             // A connection that closes, passes the deadline or breaks mid-body.
-            _ => AcquisitionError::Transport,
+            error => transport_error(&error),
         })?;
     if bytes.len() as u64 > max_bytes {
         return Err(AcquisitionError::TooLarge);
@@ -300,10 +324,82 @@ fn read(
     Ok(bytes)
 }
 
+fn transport_error(error: &ureq::Error) -> AcquisitionError {
+    match error {
+        ureq::Error::Timeout(_) => AcquisitionError::Timeout,
+        _ => AcquisitionError::Transport,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+    use ureq::unversioned::resolver::{ResolvedSocketAddrs, Resolver};
     use ureq::unversioned::transport::LazyBuffers;
+
+    /// Records the budgets ureq passes to DNS and TCP without opening a socket.
+    #[derive(Clone, Debug, Default)]
+    struct SetupProbe(Arc<Mutex<Vec<Duration>>>);
+
+    impl Resolver for SetupProbe {
+        fn resolve(
+            &self,
+            _: &ureq::http::Uri,
+            _: &ureq::config::Config,
+            timeout: NextTimeout,
+        ) -> Result<ResolvedSocketAddrs, ureq::Error> {
+            self.0.lock().unwrap().push(*timeout.after);
+            let mut addresses = self.empty();
+            addresses.push("127.0.0.1:443".parse().unwrap());
+            Ok(addresses)
+        }
+    }
+
+    impl<In: Transport> Connector<In> for SetupProbe {
+        type Out = In;
+
+        fn connect(
+            &self,
+            details: &ConnectionDetails,
+            _: Option<In>,
+        ) -> Result<Option<Self::Out>, ureq::Error> {
+            self.0.lock().unwrap().push(*details.timeout.after);
+            Err(ureq::Error::Timeout(details.timeout.reason))
+        }
+    }
+
+    #[test]
+    fn later_history_page_setup_inherits_the_remaining_query_budget() {
+        let client = Client::new(Duration::from_secs(10), None);
+        // Earlier page reads consumed nine seconds of the query's budget.
+        let remaining = Duration::from_secs(1);
+        let deadline = Instant::now() + remaining;
+        let agent = client.agent(deadline).unwrap();
+        let probe = SetupProbe::default();
+        let agent = ureq::Agent::with_parts(agent.config().clone(), probe.clone(), probe.clone());
+        assert!(matches!(
+            read(&agent, "https://example.com/", "metadata/page.json", 1024),
+            Err(AcquisitionError::Timeout)
+        ));
+        let waits = probe.0.lock().unwrap();
+        assert_eq!(waits.len(), 2, "both DNS and TCP setup were reached");
+        assert!(waits.iter().all(|wait| *wait <= remaining));
+    }
+
+    #[test]
+    fn expired_query_refuses_before_network_setup() {
+        let client = Client::new(Duration::from_secs(10), None);
+        assert!(matches!(
+            client.read_until(
+                "https://example.com/",
+                "metadata/page.json",
+                1024,
+                Instant::now(),
+            ),
+            Err(AcquisitionError::Timeout)
+        ));
+    }
 
     /// A transport that records the timeouts it is handed.
     #[derive(Debug)]

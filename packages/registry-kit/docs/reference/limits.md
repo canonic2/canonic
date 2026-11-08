@@ -21,7 +21,10 @@ input even when its length fits. See [Catalog format](../publishing/catalog-form
 | Input or operation | Limit |
 | --- | --- |
 | Catalog document | 1 MiB (`catalog::MAX_CATALOG_BYTES`, also exported by `acquisition`) |
-| Releases in one catalog | 64 (`catalog::MAX_ENTRIES`) |
+| Releases in a flat v1/v2 catalog | 64 (`catalog::MAX_ENTRIES`) |
+| Current heads in v3 discovery | 4096 (`catalog::MAX_HEADS`), within the byte bound |
+| Entries or children per history page | 64 (`catalog::history::PAGE_SIZE`) |
+| History query | 16 levels, 128 pages, 8 MiB and 4096 materialized releases per selected pack |
 | Public key and signature files | 4 KiB each (`acquisition::MAX_TRUST_BYTES`) |
 | Artifact reads | Caller-supplied `max_bytes` |
 | Overall HTTPS request | Caller-supplied timeout, capped at 24 hours (`acquisition::MAX_DEADLINE`) |
@@ -29,9 +32,12 @@ input even when its length fits. See [Catalog format](../publishing/catalog-form
 | HTTP response headers | 16 KiB and 128 fields |
 
 The request deadline includes response-body reads. Each file request gets a
-separate deadline. Chunked trailers are discarded; each must fit the client's
+separate deadline; all page reads in one history query share one deadline.
+Chunked trailers are discarded; each must fit the client's
 128 KiB input buffer, and the overall deadline bounds continuing trailers.
-Timeouts do not apply to local filesystem operations.
+Local catalog and artifact reads have no timeout. History queries apply the
+shared deadline to local sources too, checking before each page and after its
+read. These checks cannot interrupt a filesystem call already in progress.
 
 ## Registrations and retained state
 
@@ -40,14 +46,16 @@ Timeouts do not apply to local filesystem operations.
 | Aliases in one scope | 64 (`registrations::MAX_REGISTRATIONS`) |
 | Global registrations JSON | 1 MiB (`registrations::MAX_FILE_BYTES`) |
 | Checkpoint sources | 256 (`checkpoint::MAX_SOURCES`) |
-| Retained releases per checkpoint source | 4096 (`checkpoint::MAX_RELEASES`) |
+| Explicit protected releases per source | 64 (`checkpoint::MAX_PROTECTED`) |
+| Retained releases per checkpoint source | 4160 (`checkpoint::MAX_RELEASES`): discovery entries plus protected releases |
 | Locked packs | 64 (`lock::MAX_PACKS`) |
 | Cached artifact read | Caller-supplied `max_bytes` |
 
 The cache has no total capacity or write-size limit. Bound acquired artifacts
 before storing them and manage retention in your application. Checkpoints retain
-historical release digests even when catalogs stop listing them, so their limit
-is cumulative rather than a limit on one current catalog.
+current discovery entries and caller-supplied installed/pinned releases. Each
+admission checks incoming entries before pruning older observations outside this
+set, so release age does not accumulate toward checkpoint capacity.
 
 ## Resolution
 
@@ -58,7 +66,7 @@ is cumulative rather than a limit on one current catalog.
 | Supplied releases | 4096 (`resolution::MAX_RELEASES`) |
 | Total supplied dependency edges | 4096 (`resolution::MAX_RELEASES`) |
 | Enrolled source identities | 256 (`resolution::MAX_SOURCES`) |
-| Search states | 10,000 (`resolution::MAX_STATES`) |
+| Search states per resolver call | 10,000 (`resolution::MAX_STATES`) |
 
 `resolution::Error::Limit` can mean oversized inputs, a closure larger than 64
 packs or exhausted search work. Keeping unrelated candidates out of a request
@@ -66,6 +74,11 @@ can reduce work, but ensure you still supply candidates needed for backtracking.
 
 `resolve_with_diagnostics` shares these bounds and retains at most one rejection
 record per attempted search state. It does not extend the search budget.
+
+`resolve_pending` starts a fresh search budget on every call. Across `R` retries,
+search work can reach `R × MAX_STATES`; input validation is also repeated each
+time. Callers must cap total retry rounds, acquisitions, bytes and elapsed time
+for one operation. The 64-pack limit alone does not bound retries per version.
 
 Next: [Errors and troubleshooting](errors.md).
 

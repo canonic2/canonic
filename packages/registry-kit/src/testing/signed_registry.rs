@@ -59,6 +59,82 @@ impl SignedRegistry {
         self.publish_bytes(bytes.as_bytes());
     }
 
+    /// Publishes a version-3 discovery catalog and content-addressed history trees.
+    ///
+    /// # Panics
+    /// Panics if an internal fixture page is empty.
+    pub fn publish_indexed(&self, sequence: u64, expires_at: &str) {
+        let mut groups = std::collections::BTreeMap::<_, Vec<_>>::new();
+        for entry in &self.entries {
+            groups.entry(entry.id.clone()).or_default().push(entry);
+        }
+        let mut heads = Vec::new();
+        let mut histories = std::collections::BTreeMap::new();
+        for (id, mut entries) in groups {
+            entries.sort_by(|a, b| a.version.cmp(&b.version));
+            heads.push(
+                *entries
+                    .iter()
+                    .rev()
+                    .find(|entry| entry.version.pre.is_empty())
+                    .or_else(|| entries.last())
+                    .expect("fixture releases"),
+            );
+            let mut level: Vec<_> = entries
+                .chunks(crate::catalog::history::PAGE_SIZE)
+                .map(|entries| {
+                    self.page(
+                        &id,
+                        json!({"entries":entries}),
+                        &entries[0].version,
+                        &entries.last().expect("chunk").version,
+                    )
+                })
+                .collect();
+            while level.len() > 1 {
+                level = level
+                    .chunks(crate::catalog::history::PAGE_SIZE)
+                    .map(|children| {
+                        self.page(
+                            &id,
+                            json!({"children":children}),
+                            &children[0].first,
+                            &children.last().expect("chunk").last,
+                        )
+                    })
+                    .collect();
+            }
+            histories.insert(id, level.pop().expect("fixture history"));
+        }
+        self.publish_bytes(
+            json!({"schema_version":3,"registry_id":self.registry_id,
+            "sequence":sequence,"expires_at":expires_at,"packs":heads,"histories":histories})
+            .to_string()
+            .as_bytes(),
+        );
+    }
+
+    fn page(
+        &self,
+        id: &PackId,
+        mut body: serde_json::Value,
+        first: &Version,
+        last: &Version,
+    ) -> crate::catalog::history::Reference {
+        body["schema_version"] = json!(1);
+        body["id"] = json!(id);
+        let bytes = body.to_string().into_bytes();
+        let sha256 = digest::sha256_hex(&bytes);
+        let path = format!("metadata/{sha256}.json");
+        self.server.set(&path, Response::ok(bytes));
+        crate::catalog::history::Reference {
+            path,
+            sha256,
+            first: first.clone(),
+            last: last.clone(),
+        }
+    }
+
     /// Publishes exact catalog bytes with a valid signature.
     pub fn publish_bytes(&self, bytes: &[u8]) {
         self.server

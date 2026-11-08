@@ -431,7 +431,8 @@ fn invalid_metadata_and_bounds_refuse() {
             &enrolled(),
             &BTreeMap::new(),
             &mut budget,
-            &mut None
+            &mut None,
+            None
         )
         .expect_err("work bound"),
         Error::Limit
@@ -456,6 +457,62 @@ fn invalid_metadata_and_bounds_refuse() {
             .expect_err("oversized"),
         Error::Invalid
     );
+}
+
+#[test]
+fn lazy_search_loads_only_attempted_candidates_and_preserves_backtracking() {
+    let roots = [
+        root("a", "*", Profile::Recommended),
+        root("b", "*", Profile::Strict),
+    ];
+    let complete = vec![
+        release("a", "2.0.0", vec![edge("c", "^2")]),
+        release("a", "1.0.0", vec![edge("c", "^1")]),
+        release("b", "1.0.0", vec![edge("c", "^1")]),
+        release("c", "2.0.0", vec![]),
+        release("c", "1.0.0", vec![]),
+        release("c", "0.0.1", vec![]),
+    ];
+    let mut supplied = Vec::new();
+    let mut known = BTreeSet::new();
+    let mut pending = BTreeSet::new();
+    let mut loaded = BTreeSet::new();
+    loop {
+        match resolve_pending(&roots, &supplied, &enrolled(), &known, &pending) {
+            Ok(selected) => {
+                assert_eq!(
+                    summary(&selected),
+                    summary(&resolve(&roots, &complete, &enrolled()).unwrap())
+                );
+                break;
+            }
+            Err(Error::CandidatesRequired(instance)) => {
+                known.insert(instance.clone());
+                for candidate in complete.iter().filter(|r| r.instance == instance) {
+                    let mut placeholder = candidate.clone();
+                    placeholder.dependencies.clear();
+                    pending.insert((instance.clone(), candidate.version.clone()));
+                    supplied.push(placeholder);
+                }
+            }
+            Err(Error::MetadataRequired(instance, version)) => {
+                assert!(pending.remove(&(instance.clone(), version.clone())));
+                loaded.insert((instance.clone(), version.clone()));
+                let target = supplied
+                    .iter_mut()
+                    .find(|r| r.instance == instance && r.version == version)
+                    .unwrap();
+                *target = complete
+                    .iter()
+                    .find(|r| r.instance == instance && r.version == version)
+                    .unwrap()
+                    .clone();
+            }
+            Err(error) => panic!("{error}"),
+        }
+    }
+    assert!(!loaded.contains(&(id("c"), "2.0.0".parse().unwrap())));
+    assert!(!loaded.contains(&(id("c"), "0.0.1".parse().unwrap())));
 }
 
 #[test]

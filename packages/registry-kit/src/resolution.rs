@@ -143,6 +143,12 @@ pub enum Error {
     /// The selected release graph contains a cycle.
     #[error("cyclic dependency closure")]
     Cycle,
+    /// A lazy acquisition owner must enumerate this instance before retrying.
+    #[error("dependency candidates required: {0:?}")]
+    CandidatesRequired(Instance),
+    /// A lazy acquisition owner must load this exact candidate before retrying.
+    #[error("dependency metadata required: {0:?}@{1}")]
+    MetadataRequired(Instance, Version),
 }
 
 impl<L: Level> Dependency<L> {
@@ -181,6 +187,7 @@ impl<L: Level> Dependency<L> {
 
 type Assigned<'a, L> = BTreeMap<Instance, &'a Release<L>>;
 type Requirements<'a> = BTreeMap<Instance, Vec<(&'a VersionReq, bool)>>;
+type Pending<'a> = (&'a BTreeSet<Instance>, &'a BTreeSet<(Instance, Version)>);
 
 /// Resolves supplied releases deterministically, highest versions first in
 /// source/pack identity order, backtracking when a release has no valid closure.
@@ -209,6 +216,7 @@ pub fn resolve<'a, L: Level>(
         &BTreeMap::new(),
         &mut budget,
         &mut None,
+        None,
     )
 }
 
@@ -268,11 +276,54 @@ pub fn resolve_with_diagnostics<'a, L: Level>(
         &BTreeMap::new(),
         &mut budget,
         &mut Some(&mut rejected),
+        None,
     )?;
     Ok(ResolutionReport {
         selections,
         rejected,
     })
+}
+
+/// Runs the same deterministic search with unloaded candidates represented by
+/// dependency-free placeholders. `known` contains enumerated instances;
+/// `pending` identifies placeholders whose exact dependencies are not loaded.
+/// Acquisition owners retry after satisfying the first requested enumeration or
+/// artifact. Requests propagate through backtracking without rejecting a branch.
+/// Each call gets a fresh [`MAX_STATES`] budget and validates all inputs again.
+/// Callers must bound total retry rounds, acquisition work and elapsed time;
+/// the instance limit does not bound the number of version retries.
+///
+/// # Errors
+/// Returns ordinary resolution errors, or [`Error::CandidatesRequired`] and
+/// [`Error::MetadataRequired`]. No acquisition or other side effects occur here.
+pub fn resolve_pending<'a, L: Level>(
+    roots: &[Root<L>],
+    releases: &'a [Release<L>],
+    enrolled: &BTreeSet<String>,
+    known: &BTreeSet<Instance>,
+    pending: &BTreeSet<(Instance, Version)>,
+) -> Result<Vec<Selection<'a, L>>, Error> {
+    validate(roots, releases, enrolled)?;
+    if known.len() > MAX_INSTANCES || pending.len() > MAX_RELEASES {
+        return Err(Error::Limit);
+    }
+    let candidates: BTreeSet<_> = releases
+        .iter()
+        .map(|r| (r.instance.clone(), r.version.clone()))
+        .collect();
+    if !pending.is_subset(&candidates) {
+        return Err(Error::Invalid);
+    }
+    let mut budget = MAX_STATES;
+    search(
+        roots,
+        releases,
+        enrolled,
+        &BTreeMap::new(),
+        &mut budget,
+        &mut None,
+        Some((known, pending)),
+    )
 }
 
 /// Whether a requirement is within the comparator and text bounds.
@@ -412,6 +463,7 @@ fn search<'a, L: Level>(
     assigned: &Assigned<'a, L>,
     budget: &mut usize,
     diagnostics: &mut Option<&mut Vec<RejectedCandidate<'a, L>>>,
+    lazy: Option<Pending<'_>>,
 ) -> Result<Vec<Selection<'a, L>>, Error> {
     *budget = budget.checked_sub(1).ok_or(Error::Limit)?;
     let required = requirements(roots, assigned, enrolled)?;
@@ -440,6 +492,9 @@ fn search<'a, L: Level>(
     let Some(id) = required.keys().find(|id| !assigned.contains_key(*id)) else {
         return levels(roots, assigned);
     };
+    if lazy.is_some_and(|(known, _)| !known.contains(id)) {
+        return Err(Error::CandidatesRequired(id.clone()));
+    }
     let mut candidates: Vec<_> = releases
         .iter()
         .filter(|r| r.instance == *id && compatible(id, r))
@@ -447,11 +502,20 @@ fn search<'a, L: Level>(
     candidates.sort_by(|a, b| b.version.cmp(&a.version));
     let mut failure = Error::Conflict;
     for release in candidates {
+        if lazy.is_some_and(|(_, pending)| pending.contains(&(id.clone(), release.version.clone())))
+        {
+            return Err(Error::MetadataRequired(id.clone(), release.version.clone()));
+        }
         let mut next = assigned.clone();
         next.insert(id.clone(), release);
-        match search(roots, releases, enrolled, &next, budget, diagnostics) {
+        match search(roots, releases, enrolled, &next, budget, diagnostics, lazy) {
             Ok(result) => return Ok(result),
-            Err(error @ (Error::Limit | Error::Invalid)) => return Err(error),
+            Err(
+                error @ (Error::Limit
+                | Error::Invalid
+                | Error::CandidatesRequired(_)
+                | Error::MetadataRequired(_, _)),
+            ) => return Err(error),
             Err(error) => {
                 if let Some(rejected) = diagnostics {
                     rejected.push(RejectedCandidate {

@@ -5,6 +5,7 @@
 //! ordinary TLS validation with public roots, a fixed origin, no proxy, no
 //! redirects, no content encoding and bounded size and time.
 
+mod history;
 mod hosted;
 
 use crate::{
@@ -43,9 +44,12 @@ pub enum AcquisitionError {
     /// A local artifact resolves outside its source.
     #[error("registry artifact escapes its source")]
     Escapes,
-    /// The HTTPS request failed, including TLS validation and timeouts.
+    /// The HTTPS request failed, including TLS validation or interrupted content.
     #[error("registry HTTPS acquisition failed")]
     Transport,
+    /// The operation's absolute acquisition deadline expired.
+    #[error("registry acquisition timed out")]
+    Timeout,
     /// The response was not an unencoded HTTP 200.
     #[error("registry requires an unencoded HTTP 200 response")]
     Response,

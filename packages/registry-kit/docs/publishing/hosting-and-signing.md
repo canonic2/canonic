@@ -1,6 +1,6 @@
 # Hosting and signing
 
-Publish a directory containing immutable artifacts and a version 1 or 2 catalog.
+Publish a directory containing immutable artifacts and a version 1, 2 or 3 catalog.
 Registry supplies a consuming library, not a production publishing or key
 management CLI. Use your release tooling to generate an Ed25519 key, sign the
 catalog and deploy the files.
@@ -79,14 +79,17 @@ an inconsistent pair, it refuses verification rather than accepting a partial
 catalog.
 
 Artifact responses must fit each application's selected size limit. The catalog
-can contain at most 64 releases and be at most 1 MiB, so this format suits small
-pack catalogs. It has no pagination or remote index query protocol.
+must fit 1 MiB. Flat v1/v2 catalogs contain at most 64 releases. Version 3 keeps
+current pack heads in discovery and stores old versions in authenticated history
+trees; see [the page format](catalog-format.md#version-3-history-pages). Upgrade
+clients before serving v3. Keep referenced pages available alongside artifacts.
 
 ## Publish updates and renewals
 
 A release ID/version is immutable. Publish changed artifact bytes under a new
-version, never by changing the digest of an existing release. Clients remember
-digests even after a release disappears from the catalog.
+version, never by changing the digest of an existing release. Clients retain
+digests for current discovery entries and caller-protected installations/pins,
+including installed releases absent from a later catalog.
 
 Every catalog byte change requires a higher sequence, including formatting,
 removals and expiry renewal. Republishing identical bytes at the same sequence

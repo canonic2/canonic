@@ -17,19 +17,26 @@ unpublished, so its API reference is built locally rather than hosted on docs.rs
 | --- | --- | --- |
 | Discover a new source | `acquisition::Fetcher::discover`, `Discovery` | [Sources and trust](../guides/sources-and-trust.md) |
 | Construct an already trusted source | `source::Source::{local,signed,pinned}` | [Sources and trust](../guides/sources-and-trust.md) |
-| Fetch catalogs and releases | `Fetcher::{catalog,artifact,read}` | [Sources and trust](../guides/sources-and-trust.md) |
+| Fetch catalogs and releases | `Fetcher::{catalog,history,artifact,read}` | [Sources and trust](../guides/sources-and-trust.md) |
 | Verify supplied catalog bytes | `catalog::Catalog::verify` | [Sources and trust](../guides/sources-and-trust.md) |
-| Retain rollback history | `checkpoint::Checkpoints::{admit,get,release_digest}` | [Sources and trust](../guides/sources-and-trust.md) |
+| Retain rollback history | `checkpoint::Checkpoints::{admit,admit_retaining,get,release_digest}` | [Sources and trust](../guides/sources-and-trust.md) |
 | Manage aliases and defaults | `registrations::{Registrations,Effective,Scope}` | [Registrations](../guides/registrations.md) |
 | Read and replace global state | `registrations::GlobalFile` | [Registrations](../guides/registrations.md) |
 | Parse user input | `selector::{parse,Selector,Reference}` | [Selecting packs](../guides/selecting-packs.md) |
-| Browse releases | `Catalog::{lookup,select,release,releases,search,entries}` | [Selecting packs](../guides/selecting-packs.md) |
+| Browse releases | `Catalog::{lookup,select,release,releases,search,entries,heads,history}` | [Selecting packs](../guides/selecting-packs.md) |
+| Verify indexed history pages | `catalog::history::{Page,Reference}` | [Catalog format](../publishing/catalog-format.md) |
 | Identify an installation | `selector::{InstalledSelector,Installed,find_installed}` | [Selecting packs](../guides/selecting-packs.md) |
 | Resolve versions and levels | `resolution::{resolve,Root,Release,Dependency,Instance,Selection,Level}` | [Dependencies](../guides/dependencies.md) |
+| Request lazy candidate acquisition | `resolution::{resolve_pending,Error}` | [Dependencies](../guides/dependencies.md#explain-fallback-during-review) |
 | Explain candidate fallback | `resolution::{resolve_with_diagnostics,ResolutionReport,RejectedCandidate}` | [Dependencies](../guides/dependencies.md#explain-fallback-during-review) |
 | Store and read retained bytes | `cache::ArtifactCache::{put,put_expected,get,contains}` | [Cache](../guides/cache.md) |
 | Record and check a closure | `lock::{LockedPack,LockedEdge,sort,validate,incoming}` | [Lockfiles](../guides/lockfiles.md) |
 | Serve signed fixtures | `testing::{SignedRegistry,Server,Response,SigningKey}` | [Testing](../guides/testing.md) |
+
+`catalog::MAX_HEADS` bounds v3 discovery entries; `checkpoint::MAX_PROTECTED`
+bounds explicitly retained releases per source. `catalog::history` exposes
+`PAGE_SIZE`, `MAX_DEPTH`, `MAX_PAGES`, `MAX_BYTES` and `MAX_RELEASES` for page
+and query admission. See [Limits](limits.md) for values and counting rules.
 
 ## Text, digest and time helpers
 

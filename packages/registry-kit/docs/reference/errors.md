@@ -12,7 +12,8 @@ the [generated API reference](api.md).
 | `AcquisitionError::Location` or `SourceError::Url` | Existing local directory or supported HTTPS base URL; constructors require a trailing slash |
 | `LocalIdentityChanged` | The enrolled local root is gone, is not a directory, or canonicalizes to a different path |
 | `Path` or `Escapes` | Safe relative path, regular file and containment within the local source |
-| `Transport` | Public TLS validation, connectivity, overall timeout and the 3-second setup deadline |
+| `Transport` | Public TLS validation, connectivity or interrupted response |
+| `Timeout` | HTTPS acquisition/setup deadline, or a history query's shared deadline (including local sources), expired; local filesystem calls are checked between reads rather than interrupted |
 | `Response` | HTTP 200, no redirects and no `Content-Encoding` |
 | `TooLarge` | Catalog, trust-file or caller artifact byte limit |
 | `Key` or `RegistryId` | Discovery key encoding and signed catalog identity metadata |
@@ -45,10 +46,10 @@ The publisher must restore the accepted bytes or publish a valid
 higher sequence. `Replaced(release)` means that release was assigned a different
 digest; publish the new content under a new version instead.
 
-`Limit` means checkpoint source or cumulative release retention is full. The
-library has no automatic pruning API. Treat resetting retained state as an
-explicit application trust decision: discarding it discards rollback and
-replacement history. Refused admissions leave the previous value intact.
+`Limit` means the source or active protected-release bound is full. Historical
+observations outside current discovery entries and caller-protected installations
+are pruned on successful admission. `InvalidRetention` means a protected release
+key or digest is malformed. Refused admissions leave the previous value intact.
 
 ## References and resolution
 
@@ -66,6 +67,8 @@ Use an installed `pack:` selector to resolve ambiguity.
 | `Invalid` | Correct malformed identities, duplicate roots/releases/edges, requirements or levels |
 | `Unenrolled(identity)` | Review and enroll the intended source, or remove the foreign dependency; metadata cannot enroll it |
 | `Conflict` | Supply needed candidate releases and reconcile requirements or pins |
+| `CandidatesRequired(instance)` | In lazy resolution, authenticate and enumerate this instance's candidates, mark it known even if empty, then retry within the operation's total budget |
+| `MetadataRequired(instance, version)` | Authenticate and decode this exact release, replace its pending placeholder, then retry within the operation's total budget |
 | `Cycle` | Choose releases whose reachable dependency closure is acyclic |
 | `LevelConflict(instance)` | Review explicit root levels and incoming requirements |
 | `Limit` | Check input counts, reachable packs and search complexity |

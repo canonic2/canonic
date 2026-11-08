@@ -81,8 +81,12 @@ the library does not read the clock for this decision. Expiry is inclusive:
 at `expires_at` the catalog is expired.
 
 Checkpoints refuse a lower sequence, different bytes at the same sequence, and
-a changed digest for any release seen before—even one removed from a later
-catalog. An admission failure leaves checkpoints unchanged. Local catalogs also
+a changed digest for any retained release. Use `admit_retaining(&catalog,
+&protected)` with a map of `publisher/name@version` to exact digest for every
+installed or pinned release. Successful admission retains these plus current
+discovery entries, pruning older observations after checking incoming entries.
+`admit` alone retains discovery entries. Uninstalled historical observations
+are not protected indefinitely. An admission failure leaves checkpoints unchanged. Local catalogs also
 retain release digests and may start without sequencing. After admitting a
 sequenced catalog, the checkpoint refuses every later catalog that omits its
 sequence. Local expiry remains optional and is not enforced.

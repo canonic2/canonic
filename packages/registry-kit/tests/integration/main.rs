@@ -2,6 +2,7 @@
 //!
 //! Requires the `test-support` feature.
 
+mod history;
 mod hosted;
 mod signed;
 mod workflow;

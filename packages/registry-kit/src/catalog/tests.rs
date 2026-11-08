@@ -11,6 +11,131 @@ fn local_registry() -> Source {
 }
 
 #[test]
+fn partial_history_rejects_stable_releases_above_head_and_old_prerelease_heads() {
+    let id: PackId = "acme/a".parse().unwrap();
+    let document = json!({"schema_version":3,"packs":[entry("acme/a","1.0.0")],
+        "histories":{"acme/a":{"path":"page.json","sha256":"a".repeat(64),
+            "first":"1.0.0","last":"2.0.0-rc.1"}}});
+    let mut catalog = Catalog::verify(
+        &local_registry(),
+        document.to_string().as_bytes(),
+        None,
+        now(),
+    )
+    .unwrap();
+    let before = catalog.clone();
+    let newer: Entry = serde_json::from_value(entry("acme/a", "1.5.0")).unwrap();
+    assert_eq!(
+        catalog.extend_history(&id, vec![newer], false),
+        Err(CatalogError::InvalidEntry)
+    );
+    assert_eq!(catalog, before);
+    let mut document = document;
+    document["packs"][0]["version"] = json!("2.0.0-beta.1");
+    assert_eq!(
+        Catalog::verify(
+            &local_registry(),
+            document.to_string().as_bytes(),
+            None,
+            now()
+        ),
+        Err(CatalogError::InvalidEntry)
+    );
+    document["packs"][0]["version"] = json!("2.0.0-rc.1");
+    assert!(
+        Catalog::verify(
+            &local_registry(),
+            document.to_string().as_bytes(),
+            None,
+            now()
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn history_budget_belongs_to_selected_pack_instead_of_unrelated_heads() {
+    let packs: Vec<_> = (0..2500)
+        .map(|i| entry(&format!("a/p{i}"), "1.0.0"))
+        .collect();
+    let histories: serde_json::Map<_, _> = packs
+        .iter()
+        .map(|e| {
+            (
+                e["id"].as_str().unwrap().into(),
+                json!({"path":"p","sha256":"a".repeat(64),"first":"0.0.0","last":"1.0.0"}),
+            )
+        })
+        .collect();
+    let document = json!({"schema_version":3,"packs":packs,"histories":histories});
+    let mut catalog = Catalog::verify(
+        &local_registry(),
+        document.to_string().as_bytes(),
+        None,
+        now(),
+    )
+    .unwrap();
+    let id = "a/p0".parse().unwrap();
+    let releases = (0..1800)
+        .map(|i| serde_json::from_value(entry("a/p0", &format!("0.0.{i}"))).unwrap())
+        .collect();
+    catalog.extend_history(&id, releases, false).unwrap();
+    assert_eq!(catalog.entries().len(), 4300);
+    assert_eq!(catalog.releases(&id).len(), 1801);
+}
+
+#[test]
+fn indexed_discovery_uses_byte_bounds_instead_of_flat_release_slots() {
+    let packs: Vec<_> = (0..80)
+        .map(|index| entry(&format!("acme/pack{index}"), "1.0.0"))
+        .collect();
+    let histories: serde_json::Map<_,_> = packs.iter().map(|entry|(entry["id"].as_str().unwrap().to_owned(),
+        json!({"path":"metadata/page.json","sha256":"a".repeat(64),"first":"1.0.0","last":"1.0.0"}))).collect();
+    let commands: serde_json::Map<_, _> = packs
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| {
+            (
+                entry["id"].as_str().unwrap().to_owned(),
+                json!([format!("command{index}")]),
+            )
+        })
+        .collect();
+    let mut document =
+        json!({"schema_version":3,"packs":packs,"histories":histories,"commands":commands});
+    let catalog = Catalog::verify(
+        &local_registry(),
+        document.to_string().as_bytes(),
+        None,
+        now(),
+    )
+    .unwrap();
+    assert_eq!(catalog.entries().len(), 80);
+    assert_eq!(catalog.commands().len(), 80);
+    document["histories"]["acme/pack0"]["last"] = json!("1.0.1");
+    assert_eq!(
+        Catalog::verify(
+            &local_registry(),
+            document.to_string().as_bytes(),
+            None,
+            now()
+        ),
+        Err(CatalogError::InvalidEntry)
+    );
+    document["schema_version"] = json!(2);
+    document.as_object_mut().unwrap().remove("histories");
+    assert_eq!(
+        Catalog::verify(
+            &local_registry(),
+            document.to_string().as_bytes(),
+            None,
+            now()
+        ),
+        Err(CatalogError::Limit)
+    );
+}
+
+#[test]
 fn command_associations_are_authenticated_bounded_and_optional() {
     let key = SigningKey::generate();
     let mut document = json!({"schema_version":2,"registry_id":"acme","sequence":1,
@@ -176,6 +301,14 @@ fn a_catalog_signed_by_another_key_is_rejected() {
 #[test]
 fn malformed_catalogs_refuse() {
     for (document, error) in [
+        (
+            json!({"schema_version":1,"packs":[],"histories":null}),
+            CatalogError::Malformed,
+        ),
+        (
+            json!({"schema_version":3,"packs":[],"histories":null}),
+            CatalogError::Malformed,
+        ),
         (
             json!({"schema_version":1,"packs":null}),
             CatalogError::Malformed,
