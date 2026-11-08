@@ -7,6 +7,26 @@ filled from GitHub releases. The site publishes to GitHub Pages.
 The website source is public; `specs/` is private. Building uses public sources:
 this package and the adjacent `../workbench/docs/` and `../shield/docs/` directories.
 
+## Run locally
+
+Use Node 22.19+ and the pnpm version pinned in `package.json`. From the repository root:
+
+```sh
+pnpm --dir packages/website install --frozen-lockfile
+pnpm --dir packages/website run dev
+```
+
+Open the Astro URL printed in the terminal, normally `http://localhost:4321/`.
+The site reads the adjacent product guides and uses checked-in screenshots;
+running it does not require the private Workbench implementation. Release and
+download data come from GitHub, so those pages need network access.
+
+For a production build, previews, tests and release-data options, see
+[Developing](#developing). [Publishing](#publishing) describes the separate
+deployment workflow.
+
+## Source map
+
 | File | Job |
 | --- | --- |
 | `src/pages/workbench/index.astro` | the Workbench overview |
@@ -234,3 +254,8 @@ and `../workbench/extension/icon-source.svg` / `icon.png` (128 px extension list
 These and `public/canonic.svg` use the exported paths, with only presentation
 changes for their background, color, or size. Refresh those assets and the
 website screenshots when replacing the Workbench exports.
+
+## License
+
+The website is subject to the [Canonic Proprietary License](LICENSE).
+Third-party components retain their own licenses and notices.

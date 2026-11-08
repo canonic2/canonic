@@ -4,6 +4,49 @@ For package tooling and test boundaries, see [Development and checks](developmen
 
 Add `canonic-agent-kit = { path = "../agent-kit" }` to a sibling Rust package.
 
+## Review a registration
+
+This example prints a proposed Codex registration without writing configuration,
+prompting or starting a server. Add the dependency from the package README and
+save this as your Rust application's `src/main.rs`:
+
+```rust
+use canonic_agent_kit::{Context, Options, Result, Tool, prepare};
+use std::path::Path;
+
+fn main() -> Result<()> {
+    let project = std::env::args_os().nth(1).expect("pass a project directory");
+    let context = Context::local(
+        "acme",
+        Path::new(&project),
+        vec!["mcp".into(), "serve".into()],
+    )?
+    .with_tools(vec![Tool::new("acme_status", "Read service status", false)]);
+    let options = Options {
+        agents: vec!["codex".into()],
+        dry_run: true,
+        ..Options::default()
+    };
+    let plan = prepare(&context, &options)?;
+    println!("{}", plan.review());
+    Ok(())
+}
+```
+
+Run `cargo run -- /path/to/acme-project`, selecting an existing project
+directory. The JSON describes the project scope, configuration path, proposed
+`acme mcp serve` entry and tool approval choices. Existing malformed or conflicting
+configuration is refused. No configuration is applied by this example.
+
+The example only prepares a review; it does not implement an MCP server.
+For real installation, embed this flow in your installed server executable,
+implement its declared launch arguments and catalog-check mode, and use `run`
+for guided preflight and confirmation. If you compose `Plan::apply` yourself,
+perform `check_catalog` and obtain authorization before applying; `prepare`
+alone does neither. See the integration details below.
+
+## Integrate your server
+
 Construct `Context::local(product, root, arguments)` and supply the product's
 tools through `with_tools`. `launch_command` can require a stable PATH name in
 both scopes; otherwise project configuration uses the product name and user

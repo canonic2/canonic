@@ -209,8 +209,10 @@ pub struct Client {
 pub enum Decision {
     /// The host reported that its user accepted.
     Accepted,
-    /// The host reported that its user declined or dismissed the form.
+    /// The host reported that its user explicitly declined the form.
     Declined,
+    /// The host reported that its user dismissed the form without a decision.
+    Cancelled,
     /// No confirmation could be obtained: the client lacks form elicitation,
     /// another confirmation is pending, the client answered with an error, or
     /// the connection closed.
@@ -713,8 +715,9 @@ impl Session {
         }
         let decision = match outcome {
             Some(Ok(result)) if result["action"] == "accept" => Decision::Accepted,
-            Some(Ok(_)) => Decision::Declined,
-            Some(Err(_)) | None => Decision::Unavailable,
+            Some(Ok(result)) if result["action"] == "cancel" => Decision::Cancelled,
+            Some(Ok(result)) if result["action"] == "decline" => Decision::Declined,
+            Some(Ok(_) | Err(_)) | None => Decision::Unavailable,
         };
         Inbound::Confirmation { id, decision }
     }

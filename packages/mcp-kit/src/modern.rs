@@ -394,12 +394,7 @@ impl RequestContext {
         {
             return Err(invalid("Unexpected confirmation response"));
         }
-        confirmation_answer(&responses["confirmation"])?;
-        match responses["confirmation"]["action"].as_str() {
-            Some("accept") => Ok(Some(Decision::Accepted)),
-            Some("decline" | "cancel") => Ok(Some(Decision::Declined)),
-            _ => Err(invalid("Invalid confirmation response")),
-        }
+        confirmation_answer(&responses["confirmation"]).map(Some)
     }
 
     /// Captured tool output contract, suitable for validation before task persistence.
@@ -852,6 +847,8 @@ pub(crate) fn confirmation_answer(response: &Value) -> Result<Decision, RpcError
     }
     Ok(if response["action"] == "accept" {
         Decision::Accepted
+    } else if response["action"] == "cancel" {
+        Decision::Cancelled
     } else {
         Decision::Declined
     })

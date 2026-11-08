@@ -1,32 +1,59 @@
 # Process Kit
 
-A Rust library for one background manager per user and data root. It provides
-private local IPC, kernel-owned single-instance leases, explicit startup,
-bounded ordinary and control lanes, and atomic admission and retirement.
-Version-aware clients replace an empty older manager and request retirement
-after existing work settles when it is busy.
-Startup-authorized clients wait through drain. Opt-in recovery coordinates
-stable-ID replay with product reconciliation, dedicated owner channels detect
-owner death, and an explicitly enabled force-stop supports crash recovery.
+Run a shared local background manager for your application's clients.
 
-The admission core performs no I/O and accepts a caller-supplied clock. A
-synchronous driver uses standard threads; no async runtime is required.
-It waits for activity or the next policy deadline, with no periodic idle poll.
-Applications supply request handling, product-held obligations, exit policy,
-blocker contents and durable request-ID reconciliation.
+`canonic-process-kit` is a Rust library for applications whose commands need to
+share long-lived work. It provides private local IPC, single-instance leases,
+explicit startup, request admission and coordinated shutdown. Your application
+supplies the request handler and decides which resources keep the manager alive.
 
-Explicit connection handshakes transfer a guarded duplex stream after the reply,
-freeing request workers while separately bounding live connections. Control
-extensions declare inspection, ordinary-work or drain-cleanup roles.
+## Add the library
+
+Process Kit is unpublished and used from source. It supports macOS, Linux and
+Windows 10 version 1803 or later. Consumers require Rust 1.97 or newer; the
+checkout pins its own development toolchain.
+
+From a sibling Rust package, add this to `Cargo.toml`:
 
 ```toml
 [dependencies]
 canonic-process-kit = { path = "../process-kit" }
+serde_json = "1.0" # Request/reply bodies in the manager/client example
 ```
 
-This public library is unpublished. It supports macOS, Linux and Windows 10
-version 1803 or later; the socket and process fixtures run on all three.
+Adjust the path to your checkout's `packages/process-kit` directory.
 
-- [Get started](docs/getting-started.md): a minimal manager and client.
-- [API reference](docs/reference.md): responsibilities, options and errors.
-- [Development](docs/development.md): individual checks and fixture ownership.
+## Start a manager and client
+
+Follow [A minimal manager and client](docs/getting-started.md) to build a program
+with an internal manager mode and an ordinary client mode. The example starts
+an absent manager explicitly, sends an echo request and prints
+`{"echo":"hello"}`. The manager exits after its empty grace period.
+
+Inspection can connect without starting or preparing a manager. Clients that
+may start work choose a launch path explicitly. For work that outlives a reply,
+keep a resource hold until cleanup finishes so shutdown waits for it.
+
+## Lifecycle and recovery
+
+The admission core performs no I/O and accepts your clock. The synchronous
+driver uses standard threads, without an async runtime or periodic idle poll.
+
+Version-aware clients can replace an empty older manager; a busy older manager
+retires after its work settles. Optional recovery supports owner-death detection,
+stable-ID replay and explicit force-stop. Your product still owns durable
+request-ID reconciliation and the meaning of a completed operation.
+
+- [API reference](docs/reference.md): request handling, resource holds, control
+  lanes, version handoff and recovery.
+- [Get started](docs/getting-started.md): the complete manager/client example.
+
+## Development
+
+See [Development](docs/development.md) for individual checks and fixture
+ownership. Tests and socket fixtures use their own temporary roots.
+
+## License
+
+Process Kit is subject to the [Canonic Proprietary License](LICENSE).
+Third-party components retain their own licenses and notices.

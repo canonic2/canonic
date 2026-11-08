@@ -326,18 +326,25 @@ of a second, without reloading the canvas:
   place reloads the preview, keeping its scenario, size, and inputs.
 - Saving `workbench.config.ts` restarts the compilers and reloads the open
   previews.
+- Changing a file in `public/` reloads open previews and refreshes cached stills
+  and pictures. Released snapshots are marked out of date.
 - A syntax error shows in the frame, and the next good save recovers it.
+
+After a server restart, previews reload their code when the connection returns.
+This also resets component state held in the old document.
 
 If you add or remove a definition, or change its `title` or scenarios, run
 **Workbench: Refresh Pages** to update the sidebar.
 
 Workbench compiles previews with [Rspack](https://rspack.rs/), bundled with the
-extension. It starts building when the project opens, and builds all of the
-project's previews and docs examples together, so code they share loads once:
-moving to another page loads only that page's own code. The saved page list and
+extension. It builds requested previews and docs examples together, so code they
+share loads once: moving to another page builds and loads that page as needed.
+The saved page list and
 build cache are kept in the system's temporary folder, never in your project,
 and are reused when Workbench restarts. Your project does not need to install
-a compiler.
+a compiler. Cached stills and pictures live separately in your account's
+Workbench folder and are invalidated by preview code, public assets and
+Workbench version changes.
 
 ## Register other technologies
 

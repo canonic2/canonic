@@ -390,6 +390,30 @@ fn interleaved_calls_retain_context_through_cancel_and_id_reuse() {
 }
 
 #[test]
+fn confirmation_retries_preserve_host_decisions() {
+    for (action, decision) in [
+        ("accept", Decision::Accepted),
+        ("decline", Decision::Declined),
+        ("cancel", Decision::Cancelled),
+    ] {
+        let params = json!({
+            "_meta": {CAPABILITIES_KEY: {"elicitation": {}}},
+            "requestState": "signed",
+            "inputResponses": {"confirmation": {"action": action}},
+        });
+        let context = RequestContext::parse(
+            &params,
+            &ModernOptions::new(ServerInfo::new("acme", "1")),
+            "tools/call",
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(context.confirmation_decision().unwrap(), Some(decision));
+    }
+}
+
+#[test]
 fn metadata_and_confirmation_bounds_are_enforced() {
     let mut session = session();
     let oversized = request(

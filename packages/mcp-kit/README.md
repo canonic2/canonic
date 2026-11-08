@@ -8,53 +8,6 @@ do. The library handles protocol messages, validation and request lifetimes,
 with ready-to-use stdio and Streamable HTTP drivers or a core you can drive
 from your own runtime.
 
-## Highlights
-
-- **Validated tools.** Publish tool descriptions and argument schemas. Calls
-  are checked before your handler runs, and structured results are checked
-  against declared output schemas. Results support text, images, audio,
-  resource links, embedded resources and structured data, with optional
-  audience, priority and modification hints.
-- **Paged tool discovery.** Hosts list tools in publication order with opaque
-  cursors; legacy views include only compatible tools.
-- **Optional change subscriptions.** Modern hosts select catalog and resource
-  updates, with bounded streams and a nonblocking consumer publication queue.
-- **Metadata and trace context.** Publish custom JSON, icons and display details;
-  inspect validated request-local trace and baggage strings in your own runtime.
-  See the [metadata guide](docs/guides/metadata.md).
-- **Resources and templates.** Serve guides, reports and binary artifacts by
-  URI, with paginated catalogs and parameterized addresses.
-- **Optional prompts.** Publish user-selected conversation starters with checked
-  string arguments, paginated discovery and typed messages.
-- **Optional MCP Apps.** Link tools to bundled HTML dashboards, with typed UI
-  metadata, app-only actions and text fallback. Compatible hosts render them;
-  the library serves immutable documents through the existing drivers.
-- **Optional completion.** Suggest prompt arguments and resource-template
-  variables using validated references and contextual string inputs.
-- **Bundled skills.** Publish workflows alongside their tools, with parsed
-  metadata, complete file manifests and SHA-256 digests. Files are prepared
-  once and served from memory. Optionally serve directory listings, and
-  publish generated skills whose files your handler supplies on request.
-- **Managed stdio requests.** Worker lanes, per-key ordering, queue limits,
-  deadlines, cancellation and progress keep request handling bounded.
-- **Streamable HTTP.** Serve the same handler to modern hosts over HTTP POST,
-  with header checks, `x-mcp-header` arguments, JSON or SSE replies and
-  cancellation when a client disconnects.
-- **Bearer token protection.** Require OAuth access tokens on HTTP: the library
-  serves discovery metadata, refuses tokens issued for other servers and
-  missing scopes, and passes your handler the grant. You verify tokens with
-  your own authorization server, or issue tokens from the optional embedded
-  OAuth 2.1 server. Without it, bind loopback.
-- **User confirmation.** Ask a yes/no question through the host, using legacy
-  continuations or modern input-required replies and retries.
-- **Richer user input.** Collect fields and single/multiple selections, or ask
-  for URL consent, with validated answers and bounded interaction lifetime.
-- **Your runtime.** The protocol core performs no I/O and starts no threads.
-  Use the shared driver or bring your own transport and scheduler.
-- **Optional Tasks.** Return a handle for long operations, then serve status,
-  input and cancellation through the protocol. Your server owns durable records,
-  execution and recovery; ordinary tool results remain available.
-
 ## Installation
 
 The library is built from source and has not been published to crates.io.
@@ -91,6 +44,19 @@ network access; its workflow files are embedded in the executable.
 
 See the [example source](examples/skills.rs), or follow the
 [first-tool guide](docs/getting-started.md) to build your own server.
+
+## Highlights
+
+- **Tools and content:** validated argument/result schemas, resources, templates,
+  prompts, skills and optional MCP Apps.
+- **User interaction:** confirmation, structured input and URL consent, with
+  host capability checks and bounded interaction lifetimes.
+- **Request handling:** worker lanes, ordering, cancellation, deadlines, progress
+  and optional Tasks.
+- **Transport choice:** shared stdio and HTTP drivers, or an I/O-free core for
+  your own transport and scheduler.
+- **HTTP access control:** bearer-token validation hooks and an optional embedded
+  authorization server. Without authentication, bind loopback.
 
 ## Resources and skills
 
@@ -131,26 +97,17 @@ authority by itself.
 
 ## Documentation
 
-- [Your first tool](docs/getting-started.md)
-- [Lanes, deadlines and cancellation](docs/guides/stdio.md)
-- [Streamable HTTP](docs/guides/http.md)
-- [Bearer token protection](docs/guides/authorization.md)
-- [Embedded authorization server](docs/guides/authorization-server.md)
-- [Tool catalog pagination](docs/guides/pagination.md)
-- [Subscriptions and change notifications](docs/guides/subscriptions.md)
-- [User confirmation](docs/guides/confirmation.md)
-- [Resources and templates](docs/guides/resources.md)
-- [Interactive MCP Apps](docs/guides/apps.md)
-- [Reusable prompts](docs/guides/prompts.md)
-- [Argument completion](docs/guides/completion.md)
-- [Audio and content hints](docs/guides/audio.md)
-- [Argument and result schemas](docs/guides/schemas.md)
-- [Bundled skills](docs/guides/skills.md)
-- [Long-running tasks](docs/guides/tasks.md)
-- [Structured input and URL interactions](docs/guides/elicitation.md)
-- [API map](docs/reference/api.md)
-- [Errors and recovery](docs/reference/errors.md)
-- [All guides](docs/README.md)
+- [Your first tool](docs/getting-started.md): build a server with a complete example.
+- [Stdio](docs/guides/stdio.md) and [HTTP](docs/guides/http.md): choose a driver and
+  configure request handling.
+- [Authorization](docs/guides/authorization.md): protect HTTP access and choose a
+  token verifier or [embedded authorization server](docs/guides/authorization-server.md).
+- [Resources](docs/guides/resources.md), [skills](docs/guides/skills.md) and
+  [MCP Apps](docs/guides/apps.md): publish content and workflows.
+- [All guides](docs/README.md): schemas, pagination, subscriptions, prompts,
+  completion, Tasks and user interaction.
+- [API map](docs/reference/api.md) and [errors](docs/reference/errors.md):
+  consult types, limits and recovery paths.
 
 ## Development
 

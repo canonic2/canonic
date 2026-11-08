@@ -5,7 +5,8 @@ uses [consumer-owned confirmation retries](skills.md#modern-confirmation-retries
 
 Some actions need the person using the host, not the agent, to agree. A
 handler returns `Outcome::Confirm`; the host shows the message as a form with
-Accept and Decline, and your continuation receives the answer.
+Accept and Decline, which the user can also dismiss. Your continuation receives
+the reported outcome.
 
 ```rust,ignore
 use canonic_mcp_kit::{Decision, stdio::{Confirm, Outcome}};
@@ -16,7 +17,7 @@ fn call(&self, request: Request, context: &Context) -> Outcome {
         format!("Remove the Acme service {} and its data?", plan.service),
         move |decision, context| match decision {
             Decision::Accepted => plan.apply(context), // recheck the plan, then act
-            Decision::Declined => declined("The service was kept."),
+            Decision::Declined | Decision::Cancelled => declined("The service was kept."),
             Decision::Unavailable => declined(
                 "This host cannot ask for confirmation. Ask the user to run the removal in a terminal.",
             ),
@@ -29,6 +30,11 @@ fn call(&self, request: Request, context: &Context) -> Outcome {
 
 - Only `Decision::Accepted` means the host reported that its user accepted.
   Treat everything else as no.
+- `Declined` means an explicit refusal; `Cancelled` means the user dismissed
+  the form without deciding. A host reply with a missing or unknown action
+  yields `Unavailable`, so offer an alternative such as running the command
+  in a terminal. Malformed modern confirmation retries instead return an
+  invalid-params error.
 - The host must declare form elicitation. Otherwise, and while another
   confirmation is pending, the continuation runs with `Unavailable` and no
   form is shown. Tell the agent what the user can do instead.

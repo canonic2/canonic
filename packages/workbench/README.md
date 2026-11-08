@@ -10,10 +10,45 @@ a local server for the canvas; nothing is added to your pages or source.
 
 Documentation: <https://canonic.sh/workbench/docs/>
 
+## Requirements
+
+- VS Code 1.123 or later.
+- Screenshots, handoffs and design-system exports use Workbench's browser
+  runtime, which this release ships only in the Intel macOS (`darwin-x64`)
+  package and which needs macOS 15 or later.
+- The frameworks your previews use (React, Vue, Astro, React Native Web) come
+  from your project.
+
+See [The VS Code extension](https://canonic.sh/workbench/docs/extension/) for
+the server, its ports, the browser runtime, and workspace trust.
+
 ## Setup
 
-1. Install the extension.
-2. Add `workbench.yaml` to the project root:
+1. Install the extension from the
+   [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=canonic.canonic-workbench)
+   or a [release VSIX](https://github.com/canonic2/canonic/releases).
+2. Create `pages/sign-in.html` in your project:
+
+   ```html
+   <!doctype html>
+   <html lang="en">
+     <meta charset="utf-8">
+     <title>Sign in</title>
+     <style>
+       body { font: 16px system-ui; padding: 32px; }
+       .error { display: none; color: #b91c1c; }
+       html[data-wb-scenario="error"] .error { display: block; }
+     </style>
+     <body>
+       <h1>Sign in</h1>
+       <p class="error">Wrong password. Try again.</p>
+       <label>Email <input type="email"></label>
+       <button>Continue</button>
+     </body>
+   </html>
+   ```
+
+3. Add `workbench.yaml` to the project root:
 
    ```yaml
    name: Acme
@@ -30,7 +65,8 @@ Documentation: <https://canonic.sh/workbench/docs/>
                label: Wrong password
    ```
 
-3. Open the folder. **Workbench** appears in the activity bar.
+4. Open the folder in VS Code and select **Workbench** in the activity bar.
+   Select **Sign in**, then switch to **Wrong password** to reveal the error text.
 
 A project that only uses TypeScript previews needs just `name: Acme`; the
 previews supply the pages. See
@@ -79,18 +115,6 @@ previews supply the pages. See
 | `Workbench: Switch Space…` | Switches to another space |
 | `Workbench: Add Space…` | Adds a space from elsewhere on disk |
 | `Workbench: Show Log` | Shows the Workbench log |
-
-## Requirements
-
-- VS Code 1.123 or later.
-- Screenshots, handoffs and design-system exports use Workbench's browser
-  runtime, which this release ships only in the Intel macOS (`darwin-x64`)
-  package and which needs macOS 15 or later.
-- The frameworks your previews use (React, Vue, Astro, React Native Web) come
-  from your project.
-
-See [The VS Code extension](https://canonic.sh/workbench/docs/extension/) for
-the server, its ports, the browser runtime, and workspace trust.
 
 ## License
 

@@ -285,7 +285,13 @@ fn confirmations_need_form_elicitation_and_match_their_reply() {
 
     for (reply, decision) in [
         (json!({"result":{"action":"decline"}}), Decision::Declined),
-        (json!({"result":{"action":"cancel"}}), Decision::Declined),
+        (json!({"result":{"action":"cancel"}}), Decision::Cancelled),
+        (json!({"result":{}}), Decision::Unavailable),
+        (
+            json!({"result":{"action":"unknown"}}),
+            Decision::Unavailable,
+        ),
+        (json!({"result":{"action":true}}), Decision::Unavailable),
         (
             json!({"error":{"code":-32601,"message":"Unsupported"}}),
             Decision::Unavailable,

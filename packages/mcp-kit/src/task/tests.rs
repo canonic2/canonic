@@ -732,7 +732,7 @@ fn tasks_input_is_pending_only_and_history_refuses_reuse() {
     for (action, decision) in [
         ("accept", Decision::Accepted),
         ("decline", Decision::Declined),
-        ("cancel", Decision::Declined),
+        ("cancel", Decision::Cancelled),
     ] {
         assert_eq!(
             pending.input_decision(
