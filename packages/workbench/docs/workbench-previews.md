@@ -332,6 +332,7 @@ of a second, without reloading the canvas:
 
 After a server restart, previews reload their code when the connection returns.
 This also resets component state held in the old document.
+An ordinary reconnect to the same server keeps the running preview's state.
 
 If you add or remove a definition, or change its `title` or scenarios, run
 **Workbench: Refresh Pages** to update the sidebar.

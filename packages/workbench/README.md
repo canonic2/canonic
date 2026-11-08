@@ -103,6 +103,12 @@ previews supply the pages. See
   [Design-system export](https://canonic.sh/workbench/docs/design-system-export/).
 - Errors from the canvas, capture, server, and handoffs go to the
   **Workbench** output log, not into the project.
+- Agent tools render and inspect pages through MCP and the `workbench` CLI.
+  Apps-capable chat hosts can show screenshot previews with zoom and explicit
+  refresh. See
+  [Agent tools](https://canonic.sh/workbench/docs/agent-tools/).
+- The MCP server also serves the bundled `canonic-workbench` workflow as a
+  skill and Markdown resource; the client controls skill loading and approval.
 
 ## Commands
 

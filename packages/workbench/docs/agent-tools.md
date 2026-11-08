@@ -70,6 +70,23 @@ A target names a `page`, optionally a `space`, `scenario`, `artboard`,
 for explicit CSS dimensions. The CLI takes these as flags. If several spaces
 contain the page, supply `--space` with its ID from `config show`.
 
+## Read the Workbench workflow
+
+The server publishes the `canonic-workbench` skill, covering authoring,
+configuration and review workflows. A host with native Skills-over-MCP support
+can discover it through the standard Skills methods. Other resource-capable
+clients can list resources and read:
+
+```text
+skill://workbench/canonic-workbench/SKILL.md
+```
+
+Ask your agent to read that resource from the Workbench server. It is bundled
+with the executable and available without a project or running manager.
+Reading it does not install instructions, activate a skill or grant tool
+permissions. Your host owns skill loading and approval. Existing local skill
+copies are not changed by the server.
+
 ## Check a page
 
 ```sh
@@ -124,6 +141,25 @@ For one page, `page_screenshot` supports `--full-page`, `--clip '#selector'`,
 and `--device-scale-factor 2`. `--save` also writes that screenshot into
 `.canonic/.handoffs/`. Other captures stay outside the project: MCP captures
 last for their connection, while CLI captures keep the project's newest 50.
+
+## View a capture in chat
+
+When your chat host supports MCP Apps, `page_screenshot` can display a page
+preview beside its result. Use **Zoom** to fit the captured image or view it
+at 100% or 200% of its image pixels. **Full resolution** loads the retained PNG
+when the host supports resource reads. If it has expired or exceeds the
+resource limit, ask the agent to capture again or use the returned file.
+
+**Refresh** takes another screenshot with the original arguments, except that
+it does not save the capture into handoffs. It requires the host to support
+tool calls from the preview. Captures use the same private browser and leave
+your canvas alone.
+An open page handle keeps its existing lifetime; if it expires, ask the agent
+to start or capture the page again.
+
+The displayed image updates on capture, not automatically on source edits.
+Chat hosts control whether the UI appears and which operations it can use.
+Hosts without Apps keep the ordinary image, text and structured result.
 
 ## Exercise interactive states
 
