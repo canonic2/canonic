@@ -3,6 +3,83 @@ use serde_json::json;
 use std::fs;
 
 #[test]
+fn reset_tool_permissions_restores_defaults_without_changing_saved_choices_on_preview() {
+    for agent in ["box", "claude", "codex"] {
+        for saved in [vec![], vec!["app_uninstall".to_owned()]] {
+            let (_temp, context) = fixture();
+            let context = context.with_tools(vec![
+                Tool::new("observe", "Inspect.", true),
+                Tool::new("app_uninstall", "Remove an app.", false),
+            ]);
+            fs::create_dir_all(context.root.join(".box")).unwrap();
+            fs::write(context.root.join(".box/config.yml"), "schema_version: 1\n").unwrap();
+            // Establish owned permission settings before saving a revised set.
+            prepare(&context, &options(&[agent])).unwrap().apply().unwrap();
+            let saved_options = Options {
+                approved: Some(saved.clone()),
+                ..options(&[agent])
+            };
+            prepare(&context, &saved_options).unwrap().apply().unwrap();
+            let selected = options(&[agent]);
+            let before = prepare(&context, &selected).unwrap().review();
+            assert_eq!(before["tool_approvals"]["approved"], json!(saved));
+            let reset = Options {
+                reset_tool_permissions: true,
+                dry_run: true,
+                ..selected.clone()
+            };
+            let preview = run(&context, reset.clone(), true).unwrap();
+            assert_eq!(preview["tool_approvals"]["approved"], json!(["observe"]));
+            assert_eq!(preview["tool_approvals"]["ask"], json!(["app_uninstall"]));
+            assert_eq!(prepare(&context, &selected).unwrap().review(), before);
+
+            // The permissions page may revise even a reset's initial defaults.
+            let revised = Options {
+                approved: Some(vec![]),
+                ..reset.clone()
+            };
+            assert_eq!(
+                prepare(&context, &revised).unwrap().review()["tool_approvals"]["approved"],
+                json!([])
+            );
+            prepare(&context, &reset).unwrap().apply().unwrap();
+            let after = prepare(&context, &selected).unwrap().review();
+            assert_eq!(after["tool_approvals"]["approved"], json!(["observe"]));
+            assert_eq!(after["tool_approvals"]["ask"], json!(["app_uninstall"]));
+            let removal = Options {
+                remove: true,
+                ..reset
+            };
+            assert!(matches!(
+                prepare(&context, &removal),
+                Err(Error::InvalidSelection(_))
+            ));
+        }
+    }
+}
+
+#[test]
+fn reset_tool_permissions_flag_supports_preview_and_conflicts_with_removal() {
+    use clap::Parser;
+    #[derive(Parser)]
+    struct Invocation {
+        #[command(flatten)]
+        options: Options,
+    }
+    let parsed = Invocation::try_parse_from([
+        "acme",
+        "--agent",
+        "codex",
+        "--reset-tool-permissions",
+        "--dry-run",
+    ])
+    .unwrap();
+    assert!(parsed.options.reset_tool_permissions);
+    assert!(parsed.options.dry_run);
+    assert!(Invocation::try_parse_from(["acme", "--reset-tool-permissions", "--remove",]).is_err());
+}
+
+#[test]
 fn shared_policy_exclusive_routes_refuse_install_and_allow_combined_removal() {
     let (_temp, context) = fixture();
     let policy = SetupPolicy {

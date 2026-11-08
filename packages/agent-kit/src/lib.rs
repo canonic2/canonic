@@ -69,13 +69,16 @@ pub struct Options {
     /// Remove only the selected owned registrations.
     #[arg(long)]
     pub remove: bool,
+    /// Start from current tool permission defaults instead of the saved selection.
+    #[arg(long, conflicts_with = "remove")]
+    pub reset_tool_permissions: bool,
     /// Inspect the selected changes without writes or confirmation (also with --json).
     #[arg(long)]
     pub dry_run: bool,
     /// Apply the selected changes without a terminal confirmation; requires --agent.
     #[arg(long, conflicts_with = "dry_run", requires = "agents")]
     pub yes: bool,
-    /// Tools the agent may call without asking; `None` keeps each tool's default.
+    /// Explicit tool approvals; `None` reuses configured approvals or current defaults.
     #[arg(skip)]
     pub approved: Option<Vec<String>>,
 }

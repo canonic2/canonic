@@ -285,7 +285,7 @@ fn prepare_inputs(
         ));
     }
     validate_policy(options, policy)?;
-    let approved = approved(context, options, inputs);
+    let (approved, _) = approved(context, options, inputs);
     let mut plan = Plan {
         context: context.clone(),
         scope: options.scope,
@@ -344,6 +344,11 @@ fn prepare_inputs(
 }
 
 fn validate_policy(options: &Options, policy: SetupPolicy) -> Result<()> {
+    if options.reset_tool_permissions && options.remove {
+        return Err(Error::selection(
+            "--reset-tool-permissions conflicts with --remove",
+        ));
+    }
     if options.yes && policy.authorization == Authorization::TerminalOnly {
         return Err(Error::selection(
             "Setup requires terminal confirmation; unattended authorization is unavailable",
@@ -606,15 +611,19 @@ fn ownership(
     Ok(Some(record))
 }
 
-/// The tools to approve: an explicit selection, else the current approvals of
-/// an earlier setup, else each tool's default.
-fn approved(context: &Context, options: &Options, inputs: &Inputs) -> Vec<String> {
-    let selected = options
-        .approved
-        .clone()
-        .or_else(|| current_approvals(context, options, inputs));
+/// Return approved tool names in catalog order and whether an explicit or saved
+/// selection was found, including an empty selection. Explicit choices win;
+/// otherwise reuse saved approvals unless resetting, then use catalog defaults.
+fn approved(context: &Context, options: &Options, inputs: &Inputs) -> (Vec<String>, bool) {
+    let selected = options.approved.clone().or_else(|| {
+        if options.reset_tool_permissions {
+            None
+        } else {
+            current_approvals(context, options, inputs)
+        }
+    });
     // Catalog order, so the review reads the same however the set was found.
-    context
+    let approved = context
         .tools
         .iter()
         .filter(|t| {
@@ -623,7 +632,8 @@ fn approved(context: &Context, options: &Options, inputs: &Inputs) -> Vec<String
                 .map_or(t.approved, |s| s.contains(&t.name))
         })
         .map(|t| t.name.clone())
-        .collect()
+        .collect();
+    (approved, selected.is_some())
 }
 
 /// Approvals an earlier setup left for the selected agents: Codex's owned
@@ -921,7 +931,12 @@ fn permissions(
     options: &Options,
     inputs: &Inputs,
 ) -> Result<Option<Vec<String>>> {
-    let marked = approved(context, options, inputs);
+    let (marked, saved) = approved(context, options, inputs);
+    let source = if saved {
+        "Saved selection. Use --reset-tool-permissions to restore current defaults."
+    } else {
+        "Current product defaults."
+    };
     let marked: Vec<&str> = marked.iter().map(String::as_str).collect();
     let choices = context
         .tools
@@ -935,7 +950,9 @@ fn permissions(
         .collect();
     Ok(canonic_tui_kit::runtime::prompts::choose_many(
         "Tool permissions",
-        "Marked tools run without asking in Claude Code, Codex and the agents Box publishes to; unmarked tools ask each time. Other agents keep their own approval settings.",
+        &format!(
+            "{source} Marked tools run without asking in Claude Code, Codex and the agents Box publishes to; unmarked tools ask each time. Other agents keep their own approval settings."
+        ),
         choices,
         &marked,
         0,
@@ -1059,7 +1076,7 @@ pub fn run_with_policy(
                 "Agent selection requires a terminal; pass --agent and --dry-run to inspect without prompts".into(),
             ));
         }
-        if !options.remove {
+        if !options.remove && !options.reset_tool_permissions {
             match canonic_tui_kit::runtime::prompts::setup::action()? {
                 Some(canonic_tui_kit::runtime::prompts::setup::Action::Install) => {}
                 Some(canonic_tui_kit::runtime::prompts::setup::Action::Remove) => {

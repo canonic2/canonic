@@ -12,8 +12,14 @@ to `--check` and is appended to the trusted executable's launch arguments.
 
 `run(context, options, machine)` handles selection, review and confirmation.
 Project scope is the default; user scope is explicit. `Options` supports
-repeated agent IDs, removal, dry run and explicit `yes`. `prepare` returns a
-`Plan` with `review` and `apply` when the product owns the interaction instead.
+repeated agent IDs, removal, dry run and explicit `yes`. `--reset-tool-permissions`
+starts from the consumer's current tool defaults instead of configured approvals.
+It supports dry-run review, conflicts with removal and retains the normal
+publication authorization. The permissions page labels saved selections.
+Without explicit agents, reset skips the action picker and starts agent selection.
+Explicit `Options.approved`, including an empty vector, can revise reset defaults.
+`prepare` returns a `Plan` with `review` and `apply` when the product owns the
+interaction instead.
 
 Use `Context::local_at_root` when the consumer already selected an explicit root;
 it canonicalizes that root without replacing it with an enclosing checkout.
