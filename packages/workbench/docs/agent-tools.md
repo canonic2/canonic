@@ -27,21 +27,45 @@ workbench mcp setup --agent claude --agent codex --dry-run --json
 workbench mcp setup --agent claude --agent codex --yes --json
 ```
 
-Setup edits only Workbench's server entry and owned approval rules, keeping
-other servers and settings. Rerun it to repair an owned entry. `--remove`
-removes the selected owned registration; it refuses entries edited outside
-setup. `--scope user` explicitly chooses personal configuration, and `--project`
+For Codex and Claude Code, setup also installs the `UserPromptSubmit` hook
+`workbench hook user-prompt`. It supplies the current canvas reference on each
+prompt while a canvas is open. Codex uses `.codex/hooks.json` beside its MCP
+configuration; Claude Code uses `.claude/settings.local.json` in project scope
+and `~/.claude/settings.json` in user scope. A Box definition includes this
+hook for Box to publish to Codex and Claude Code. Other agents use `view_show`.
+
+Setup edits only Workbench's server entry, its owned approval rules and prompt
+hook, keeping other servers, settings and hooks. Rerun it to repair an owned
+registration without adding duplicate hooks. `--remove` removes the selected
+owned registration and hooks; equivalent hooks already present before setup
+remain unowned. It refuses conflicting external edits.
+An existing MCP registration created by another configurator is unowned and
+blocks setup even if it uses the same command. Use one configurator for the
+registration. To hand it over, disable the previous configurator's Workbench
+integration and remove its generated registration and prompt hook before running
+setup. For a prompt-hook conflict, align the existing group's fields with the
+requested definition or remove that group; setup preserves unrelated hooks.
+`--scope user` explicitly chooses personal configuration, and `--project`
 selects another project. The launch command is `workbench mcp serve` in both
 scopes, so agents must find `workbench` on `PATH`.
 
-Read-only tools are selected for approval by default where the host supports
-per-tool settings. Canvas-changing and interactive tools are left to ask.
+All Workbench tools are selected for approval by default where the host supports
+per-tool settings, including canvas-changing and interactive tools.
 Existing saved choices remain in effect on repair and are labeled in the picker.
 Run `workbench mcp setup --agent codex --reset-tool-permissions` to restore current
 defaults; add `--dry-run --json` to preview without writes. Reset conflicts with
 `--remove` and retains normal setup authorization. Host trust/reload may be
 needed after setup; a successful file write does not prove a live connection.
 No runtime pages or project manager start during setup.
+
+Configuration written successfully does not establish a live agent connection.
+Reload or reconnect the agent and approve its prompt hook if requested. Inspect
+the agent's MCP server list to confirm Workbench connected. With a canvas open,
+run `workbench view show --json` from that checkout to check the current reference,
+and `workbench hook user-prompt` to check prompt-hook output. Then ask the agent
+which Workbench page is open; it should name the selected page and scenario.
+A hook with no open canvas prints nothing. A failed host connection, a missing
+canvas and a successful registration are separate states.
 
 Configure your MCP client to run `workbench mcp serve` from a folder inside
 the project. The server finds `workbench.yaml` in that folder or an ancestor.
