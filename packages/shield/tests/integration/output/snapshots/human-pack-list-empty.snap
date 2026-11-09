@@ -5,4 +5,5 @@ expression: text
 $ shield pack list
 --- terminal
 No packs installed. Find one with shield pack search, or add the baseline with shield pack add main/baseline.
+No newer pack releases observed in the checked scope.
 --- exit 0

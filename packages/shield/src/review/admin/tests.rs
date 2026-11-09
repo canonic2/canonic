@@ -320,6 +320,231 @@ fn parity_admin_enrolled_setup_dry_run_and_removal_prepare_without_writing_agent
 }
 
 #[test]
+fn parity_admin_interrupted_same_project_setup_keeps_mcp_recovery() {
+    let (root, context) = enrolled();
+    let plan = prepare(
+        &context,
+        "mcp_setup",
+        &json!({"agents":["claude"],"repair":true}),
+        &|| Ok(()),
+    )
+    .unwrap();
+    root.child(format!(".claude/.shield-{}.tmp", std::process::id()))
+        .write_str("occupied")
+        .unwrap();
+    let receipt = plan.commit(&context, &|| Ok(())).unwrap();
+    assert!(receipt["setup_error"].is_string());
+    assert_eq!(receipt["repair_route"], "mcp_setup");
+    assert_eq!(receipt["repair_arguments"], json!({"pending":"review"}));
+    assert_eq!(
+        receipt["pending_setup"]["cancel"],
+        json!({"tool":"mcp_setup","arguments":{"pending":"cancel"}})
+    );
+    assert!(receipt["operator_recovery"].is_null());
+}
+
+#[test]
+fn parity_admin_interrupted_cross_project_setup_hands_off_target_recovery() {
+    use clap::Parser as _;
+    for action in ["review", "cancel"] {
+        let (source, context) = enrolled();
+        let (target, target_context) = enrolled();
+        let source_checkpoint = source.path().join(".shield/review/state.json");
+        let before_source = std::fs::read(&source_checkpoint).unwrap();
+        let before_policy = project::checkpoint(&target_context)
+            .unwrap()
+            .policy_revision;
+        let plan = prepare(
+            &context,
+            "mcp_setup",
+            &json!({
+                "project":target.path(),"agents":["claude"],"repair":true
+            }),
+            &|| Ok(()),
+        )
+        .unwrap();
+        // A real publication failure after recording the confirmed plan and
+        // publishing .mcp.json: the hook writer cannot claim its temporary file.
+        let occupied = target.child(format!(".claude/.shield-{}.tmp", std::process::id()));
+        occupied
+            .write_str("occupied by the interrupted writer")
+            .unwrap();
+        let receipt = plan.commit(&context, &|| Ok(())).unwrap();
+        assert!(receipt["setup_error"].is_string(), "{receipt}");
+        assert!(target.path().join(".mcp.json").exists());
+        assert!(
+            integrations::pending(&project::metadata(
+                &project::checkpoint(&target_context).unwrap()
+            ))
+            .unwrap()
+            .is_some()
+        );
+        assert_eq!(receipt["repair_route"], "operator_cli", "{receipt}");
+        assert!(receipt["repair_arguments"].is_null());
+        assert!(receipt["pending_setup"].is_null());
+        assert_eq!(
+            receipt["operator_recovery"]["project"],
+            target_context.project_root
+        );
+        assert_eq!(
+            receipt["operator_recovery"]["project_id"],
+            target_context.project_id
+        );
+        let handoff = &receipt["operator_recovery"][action];
+        assert_eq!(handoff["command"], "shield");
+        assert_eq!(
+            handoff["arguments"],
+            json!([
+                "--project",
+                target_context.project_root,
+                "mcp",
+                "setup",
+                "--pending",
+                action
+            ])
+        );
+        let mut argv = vec!["shield".to_owned()];
+        argv.extend(
+            handoff["arguments"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|arg| arg.as_str().unwrap().to_owned()),
+        );
+        let cli = crate::cli::Cli::try_parse_from(argv).unwrap();
+        assert_eq!(
+            cli.project.as_deref(),
+            Some(Path::new(&target_context.project_root))
+        );
+        assert_eq!(std::fs::read(&source_checkpoint).unwrap(), before_source);
+
+        std::fs::remove_file(occupied.path()).unwrap();
+        let recovery = integrations::recovery::prepare(
+            target.path(),
+            &project::metadata(&project::checkpoint(&target_context).unwrap()),
+            if action == "review" {
+                integrations::recovery::Action::Review
+            } else {
+                integrations::recovery::Action::Cancel
+            },
+        )
+        .unwrap();
+        recovery.commit(&target_context, &|| Ok(())).unwrap();
+        let state = project::checkpoint(&target_context).unwrap();
+        assert!(
+            integrations::pending(&project::metadata(&state))
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(state.policy_revision, before_policy);
+        assert_eq!(std::fs::read(&source_checkpoint).unwrap(), before_source);
+    }
+}
+
+#[test]
+fn parity_admin_explicit_project_repair_is_bound_to_caller_and_target() {
+    let (source, context) = enrolled();
+    let (target, target_context) = enrolled();
+    let args = json!({"project":target.path(),"agents":["claude"],"repair":true});
+    let preview = prepare(
+        &context,
+        "mcp_setup",
+        &json!({"dry_run":true, "project":target.path(),"agents":["claude"],"repair":true}),
+        &|| Ok(()),
+    )
+    .unwrap();
+    assert_eq!(
+        preview.public_review()["project"],
+        target_context.project_root
+    );
+    assert!(!target.path().join(".mcp.json").exists());
+    let plan = prepare(&context, "mcp_setup", &args, &|| Ok(())).unwrap();
+    assert!(matches!(
+        plan.commit(&target_context, &|| Ok(())),
+        Err(Error::StaleSnapshot)
+    ));
+    let plan = prepare(&context, "mcp_setup", &args, &|| Ok(())).unwrap();
+    plan.commit(&context, &|| Ok(())).unwrap();
+    assert!(target.path().join(".mcp.json").exists());
+    assert!(!source.path().join(".mcp.json").exists());
+    assert_eq!(
+        context.project_root,
+        source.path().canonicalize().unwrap().to_str().unwrap()
+    );
+    for invalid in [
+        json!({"project":target.path(),"agents":["claude"]}),
+        json!({"project":target.path(),"agents":["claude"],"repair":true,"remove":true}),
+        json!({"project":"relative","agents":["claude"],"repair":true}),
+        json!({"project":target.path(),"repair":true}),
+    ] {
+        assert!(prepare(&context, "mcp_setup", &invalid, &|| Ok(())).is_err());
+    }
+    let plan = prepare(&context, "mcp_setup", &args, &|| Ok(())).unwrap();
+    target
+        .child(".mcp.json")
+        .write_str("{\"changed\":true}\n")
+        .unwrap();
+    assert!(plan.commit(&context, &|| Ok(())).is_err());
+    assert_eq!(
+        std::fs::read_to_string(target.path().join(".mcp.json")).unwrap(),
+        "{\"changed\":true}\n"
+    );
+    let absent = assert_fs::TempDir::new().unwrap();
+    assert!(
+        prepare(
+            &context,
+            "mcp_setup",
+            &json!({"project":absent.path(),"agents":["claude"],"repair":true}),
+            &|| Ok(())
+        )
+        .is_err()
+    );
+    assert!(
+        prepare(
+            &context,
+            "protection_set",
+            &json!({"project":target.path(),"agent_settings_change":"allow"}),
+            &|| Ok(())
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn parity_admin_box_managed_hook_repair_preserves_publication_ownership() {
+    let (root, context) = enrolled();
+    root.child(".box/config.yml")
+        .write_str("schema_version: 1\n")
+        .unwrap();
+    prepare(
+        &context,
+        "mcp_setup",
+        &json!({"agents":["box"]}),
+        &|| Ok(()),
+    )
+    .unwrap()
+    .commit(&context, &|| Ok(()))
+    .unwrap();
+    let before = project::metadata(&project::checkpoint(&context).unwrap());
+    let error = prepare(
+        &context,
+        "mcp_setup",
+        &json!({"agents":["claude","codex"],"repair":true}),
+        &|| Ok(()),
+    )
+    .err()
+    .unwrap();
+    assert!(error.to_string().contains("config_sync"), "{error}");
+    assert!(error.to_string().contains("repair_hooks"), "{error}");
+    assert_eq!(
+        project::metadata(&project::checkpoint(&context).unwrap()),
+        before
+    );
+    assert!(!root.path().join(".codex/hooks.json").exists());
+    assert!(!root.path().join(".claude/settings.local.json").exists());
+}
+
+#[test]
 fn parity_admin_repair_does_not_apply_a_review_after_operator_state_changes() {
     let (_root, context) = enrolled();
     assert!(

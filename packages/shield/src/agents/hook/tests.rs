@@ -2323,6 +2323,8 @@ fn operator_cli_help_only_requests_follow_policy_without_opening_actions() {
             "shield protection --help",
             "shield protection set -h",
             "shield mcp serve --help",
+            "shield --project /projects/acme mcp setup --help",
+            "shield --project=/projects/acme mcp setup -h",
         ] {
             assert_permitted(&call(root.path(), agent, source), agent);
         }
@@ -2330,6 +2332,8 @@ fn operator_cli_help_only_requests_follow_policy_without_opening_actions() {
             "shield protection set",
             "shield protection set -- --help",
             "shield protection set --allow --help",
+            "shield --project --help",
+            "shield --project /projects/acme protection set --allow --help",
             "shield --help > .mcp.json",
             "shield --help; shield protection set",
         ] {
@@ -2345,6 +2349,29 @@ fn operator_cli_help_only_requests_follow_policy_without_opening_actions() {
         call(root.path(), "codex", "shield protection --help")["hookSpecificOutput"]["permissionDecision"],
         "deny"
     );
+}
+
+#[test]
+fn operator_diagnostics_offer_administration_routes_without_session_grants() {
+    let (root, _) = fixture();
+    for agent in ["claude", "codex"] {
+        for command in [
+            "shield --project /projects/acme doctor --json",
+            "shield --no-debug-log doctor",
+            "shield --debug-log-dir /tmp/acme status",
+        ] {
+            let value = call(root.path(), agent, command);
+            assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
+            let context = value["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .unwrap();
+            assert!(
+                context.contains("doctor") && context.contains("mcp_setup"),
+                "{value}"
+            );
+            assert!(!context.contains("For planned repeated"), "{value}");
+        }
+    }
 }
 
 #[test]

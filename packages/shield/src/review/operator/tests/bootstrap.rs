@@ -22,7 +22,9 @@ fn diagnostic(root: &Path, command: &str) -> Value {
         command,
     ])
     .expect("diagnostic arguments");
-    super::super::dispatch(&input).expect("bootstrap diagnostics")
+    let output = super::super::dispatch(&input).expect("bootstrap diagnostics");
+    assert!(output.context.is_none());
+    output.value
 }
 
 #[test]

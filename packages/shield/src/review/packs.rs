@@ -396,6 +396,7 @@ pub(super) fn list(context: &Context) -> Result<Value, Error> {
     let current = state::checkpoint(context)?;
     let mut value = summaries(&state::metadata(&current));
     value["policy_revision"] = json!(current.policy_revision);
+    value["pack_updates"] = super::pack_updates::inspect(context, &current, None);
     Ok(value)
 }
 
@@ -411,7 +412,11 @@ pub(super) fn show(context: &Context, reference: &str) -> Result<Value, Error> {
             .as_str()
             .ok_or(Error::Invalid("pack bytes missing"))?,
     )?;
-    Ok(json!({"policy_revision":current.policy_revision,"pack":rows[index],"artifact":artifact}))
+    let mut value =
+        json!({"policy_revision":current.policy_revision,"pack":rows[index],"artifact":artifact});
+    value["pack_updates"] =
+        super::pack_updates::inspect(context, &current, rows[index]["selector"].as_str());
+    Ok(value)
 }
 pub(super) fn search(context: &Context, query: &str) -> Result<Value, Error> {
     let profiles = json!(["loose", "recommended", "strict"]);

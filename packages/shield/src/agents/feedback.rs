@@ -20,7 +20,7 @@ fn raw_deny(code: &str) -> Reply {
         // A rule cannot cover a tool Shield does not model, so no proposal helps.
         "unsupported-operation" => "Shield: unsupported tool; blocked. Continue without it, or explain to the user why it is needed.".to_owned(),
         "unsupported-shell" => "Shield: blocked this shell dialect because its file effects cannot be verified. Use supported file tools or ask the user to run the command.".to_owned(),
-        "operator-cli" => "Shield: inspect with the status or rule_list tools; propose changes with policy_propose and copy the returned apply_arguments object unchanged into policy_apply for approval.".to_owned(),
+        "operator-cli" => "Shield's operator CLI is unavailable to agents. For diagnostics use doctor or status; for command help use docs_search or docs_read. For registrations use mcp_setup with explicit agents and repair: true to review conflicts; project may name an explicit enrolled repair target without changing this connection's project. For policy changes use policy_propose and copy apply_arguments unchanged into policy_apply. Registration and policy changes each require the user's confirmation; policy rules and session grants cannot open the operator CLI.".to_owned(),
         "protected-access" => format!("{PROTECTED_ACCESS} Never read or change .shield/review or the cache. Propose policy changes with policy_propose. Do not bypass protection."),
         "sensitive-read" => "Shield: settings may contain credentials; this callback cannot request read approval. Continue without them unless essential.".to_owned(),
         "search-footprint-unavailable" => "Shield: the files this search reaches could not be verified. Search a narrower path with fewer entries. In a shell rg, --no-ignore without glob filters keeps hidden files out.".to_owned(),
@@ -288,6 +288,8 @@ pub(super) fn respond(
         response(root, adapter, event, receipt, operation, session)?
     };
     if receipt["session_context"]["offer_hint"] == true
+        && receipt["fixed_protection"] != true
+        && receipt["code"] != "operator-cli"
         && receipt["authorization"]["kind"] != "session_grant"
         && let Some(reference) = receipt["session_context"]["session_ref"].as_str()
     {
@@ -324,8 +326,9 @@ fn response(
     if receipt["code"] == "unsupported-operation" {
         return Some(unsupported(adapter, event, operation));
     }
-    let guidance = &receipt["diagnostics"]["guidance"][0];
-    let entry = receipt["history"]["request_id"].as_str();
+    if receipt["code"] == "operator-cli" {
+        return Some(operator_denial(receipt));
+    }
     if receipt["disposition"] == "allowed" && receipt["ask_fallback"] == "allow" {
         return Some(fallback_reply(root, adapter, receipt, operation, session));
     }
@@ -363,61 +366,93 @@ fn response(
         });
     }
     if receipt["decision"] != "allow" {
-        if receipt["code"] == "policy-deny"
-            && let Some(value) = rewrite(receipt)
-        {
-            return Some(value);
-        }
-        let mut value = raw_deny(receipt["code"].as_str()?);
-        if receipt["code"] == "policy-deny"
-            && let Some(detail) = receipt["diagnostics"]["message"].as_str()
-        {
-            // An unmet requirement is fixed in the request, not by a new rule.
-            let unmet = receipt["diagnostics"]["requirement_checks"]
-                .as_array()
-                .is_some_and(|checks| checks.iter().any(|check| check["status"] != "met"));
-            // A path outside the approved folders is named; when its folder is
-            // narrow, adding that folder is offered as a complete proposal.
-            let outside = receipt["outside_path"]["path"].as_str();
-            let folder = outside.and_then(|_| {
-                draft(
-                    root,
-                    adapter,
-                    guidance,
-                    operation,
-                    Some(&receipt["outside_path"]),
-                    entry,
-                )
-            });
-            // The offer below replaces a rule's own advice about folders.
-            let why = guidance["message"]
-                .as_str()
-                .unwrap_or(detail)
-                .trim_end_matches('.');
-            value.reason = match (outside, folder) {
-                (Some(path), Some(offer)) => format!(
-                    "Shield: blocked because `{path}` is outside the folders agents may use. {why}. {offer}"
-                ),
-                (Some(path), None) => format!(
-                    "Shield: blocked because `{path}` is outside the folders agents may use. {why}. Its folder would open far more than this request needs, so do not propose it; work inside the project or ask the user."
-                ),
-                (None, _) if unmet => {
-                    format!("Shield: blocked in this form; a revised request can pass. {detail}")
-                }
-                (None, _) => format!(
-                    "Shield: denied. {detail} {} {PROPOSE}",
-                    crate::agent_message::denial_detail(&receipt["diagnostics"])
-                        .unwrap_or_default()
-                ),
-            };
-        }
-        return Some(value);
+        return policy_denial(root, adapter, receipt, operation);
     }
     Some(permitted(if adapter.spec().id == "claude" {
         ""
     } else {
         "Shield active project policy permits this request."
     }))
+}
+
+fn policy_denial(
+    root: &Path,
+    adapter: &dyn AgentAdapter,
+    receipt: &Value,
+    operation: &Value,
+) -> Option<Reply> {
+    let guidance = &receipt["diagnostics"]["guidance"][0];
+    let entry = receipt["history"]["request_id"].as_str();
+    if receipt["code"] == "policy-deny"
+        && let Some(value) = rewrite(receipt)
+    {
+        return Some(value);
+    }
+    let mut value = raw_deny(receipt["code"].as_str()?);
+    if receipt["code"] == "policy-deny"
+        && let Some(detail) = receipt["diagnostics"]["message"].as_str()
+    {
+        // An unmet requirement is fixed in the request, not by a new rule.
+        let unmet = receipt["diagnostics"]["requirement_checks"]
+            .as_array()
+            .is_some_and(|checks| checks.iter().any(|check| check["status"] != "met"));
+        // A path outside the approved folders is named; when its folder is
+        // narrow, adding that folder is offered as a complete proposal.
+        let outside = receipt["outside_path"]["path"].as_str();
+        let folder = outside.and_then(|_| {
+            draft(
+                root,
+                adapter,
+                guidance,
+                operation,
+                Some(&receipt["outside_path"]),
+                entry,
+            )
+        });
+        // The offer below replaces a rule's own advice about folders.
+        let why = guidance["message"]
+            .as_str()
+            .unwrap_or(detail)
+            .trim_end_matches('.');
+        value.reason = match (outside, folder) {
+            (Some(path), Some(offer)) => format!(
+                "Shield: blocked because `{path}` is outside the folders agents may use. {why}. {offer}"
+            ),
+            (Some(path), None) => format!(
+                "Shield: blocked because `{path}` is outside the folders agents may use. {why}. Its folder would open far more than this request needs, so do not propose it; work inside the project or ask the user."
+            ),
+            (None, _) if unmet => {
+                format!("Shield: blocked in this form; a revised request can pass. {detail}")
+            }
+            (None, _) => format!(
+                "Shield: denied. {detail} {} {PROPOSE}",
+                crate::agent_message::denial_detail(&receipt["diagnostics"]).unwrap_or_default()
+            ),
+        };
+    }
+    Some(value)
+}
+
+fn operator_denial(receipt: &Value) -> Reply {
+    let route = match receipt["operator_route"].as_str() {
+        Some("diagnostics") => {
+            "Use the doctor or status MCP tool for this connection. To inspect registration repair in another enrolled project, use mcp_setup with that absolute project, explicit agents, repair: true and dry_run: true. This preview writes nothing."
+        }
+        Some("registration") => {
+            "Use mcp_setup with explicit agents and repair: true for conflicting registrations. An absolute project can select another enrolled registration-repair target; preview with dry_run: true, then request the user's exact confirmation. Box-managed hooks use Box config_show and config_sync with the same project and repair_hooks: true."
+        }
+        Some("policy") => {
+            "Inspect with rule_list or policy_show. Use policy_propose for a change and copy apply_arguments unchanged into policy_apply for the user's confirmation."
+        }
+        _ => return raw_deny("operator-cli"),
+    };
+    Reply {
+        decision: Decision::Deny,
+        reason: format!(
+            "Shield's operator CLI was not executed. {route} Policy rules and session grants cannot open this boundary."
+        ),
+        agent_context: None,
+    }
 }
 
 /// A settings read the command reaches only through its output, as an unscoped

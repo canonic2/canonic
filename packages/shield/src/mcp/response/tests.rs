@@ -199,3 +199,56 @@ fn a_failed_checkpoint_stops_encoding_and_reports_cancellation() {
             .starts_with("The request was cancelled.")
     );
 }
+#[test]
+fn pack_updates_notice_reaches_structured_and_text_results_without_proposing() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let mut context = crate::review::Context::new(
+        "acme-project".into(),
+        root.path().to_str().unwrap().into(),
+        "mcp",
+    );
+    context.connection_id = Some("acme-pack-updates".into());
+    let evidence = serde_json::json!({"schema_version":1,"project_id":context.project_id,
+    "policy_revision":"acme-revision","error":null,"missing":[],"truncated":false,
+    "data":{"next_action":"Inspect current policy.","pack_updates":{"total":1,"truncated":false,"items":[{
+        "selector":"pack:acme-node","id":"acme/node","source_identity":"acme-source",
+        "reference":"main/acme/node","installed_version":"1.0.0","available_version":"2.0.0","freshness":"fresh"
+    }]}}});
+    // Cancelled serialization must not consume the first delivery.
+    let interrupted = with_pack_notice(&context, "status", evidence.clone(), false, &|| {
+        Err(Interrupted)
+    });
+    assert!(
+        interrupted
+            .structured_content
+            .as_ref()
+            .is_none_or(|v| v["data"]["pack_update_notice"].is_null())
+    );
+    let reply = with_pack_notice(&context, "status", evidence.clone(), false, &|| Ok(()));
+    let data = reply.structured_content.as_ref().unwrap();
+    assert!(
+        data["data"]["pack_update_notice"]["instruction"]
+            .as_str()
+            .unwrap()
+            .contains("unless the user requested")
+    );
+    assert_eq!(data["data"]["next_action"], "Inspect current policy.");
+    assert!(data["data"]["proposal_id"].is_null());
+    let encoded = serde_json::to_string(&reply).unwrap();
+    assert!(encoded.contains("Pack updates available"));
+    assert!(!encoded.contains("shield pack update"));
+    assert!(
+        data["data"]["pack_update_notice"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("use pack_update")
+    );
+    assert!(!reply.is_error);
+    let repeat = with_pack_notice(&context, "pack_list", evidence, false, &|| Ok(()));
+    assert!(repeat.structured_content.unwrap()["data"]["pack_update_notice"].is_null());
+    assert!(
+        root.path()
+            .join(".pack-update-test-cache/receipts")
+            .is_dir()
+    );
+}

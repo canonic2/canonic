@@ -90,6 +90,39 @@ longer needed by another selection. Inspect `shield pack list` after confirmatio
 The [dependency update and removal reference](#updating-and-removing-dependency-packs)
 explains these rules in detail.
 
+## Check for pack updates
+
+`shield status` and `shield pack list` show cached availability for unpinned
+direct selections. A newer advertised release may need a newer Shield engine,
+different settings or compatible dependencies; `shield pack update` prepares the
+actual candidate and shows permission changes for approval.
+
+Refresh the main registry's metadata explicitly, then inspect installed packs:
+
+```sh
+shield pack search main/
+shield pack list
+```
+
+Replace `main` with an enrolled alias for a custom source. Search downloads
+catalog metadata without downloading pack artifacts or installing rules. Normal
+status/list requests and hooks make no update-related network requests.
+
+Metadata stays fresh for 24 hours, bounded by its signed expiration. Missing or
+old metadata means availability is unknown. Inspection retains observation times
+and distinguishes stale evidence from fresh releases. Pins and dependency-only
+selections do not produce notices.
+
+Interactive status/list and completed pack changes may also print a short notice
+on stderr. Notices are limited to once per project per day; the same installed
+and advertised version pair is suppressed for seven days. JSON and piped
+commands receive no unsolicited notice. `--json status`, `--json pack list` and
+`--json pack show PACK_SELECTOR` retain structured `pack_updates` inspection.
+
+Set `SHIELD_PACK_UPDATE_CHECK=off` in the environment used to launch Shield to
+disable unsolicited notices; `cached` is the default. Explicit inspection and
+registry operations remain available. No automatic background refresh runs.
+
 ## GitHub GraphQL reads
 
 GraphQL analysis and permission are separate. The engine implements `graphql-v1`

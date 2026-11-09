@@ -61,6 +61,7 @@ impl Server {
     pub(crate) fn for_review(
         mut context: crate::review::Context,
     ) -> Result<Self, crate::review::Error> {
+        crate::review::pack_updates::enabled()?;
         let tick = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -678,9 +679,14 @@ fn reply(
         value["error"] = serde_json::json!({"code":code,"message":message,"operator_route":null});
     }
     let failed = !value["error"].is_null();
-    response::tool_result(&call.name, review.agent.as_deref(), value, failed, &|| {
-        context.check()
-    })
+    // Cursor data is an immutable historical view, so it cannot supply a fresh
+    // unsolicited update notice after the installed selection changes.
+    if call.arguments.get("cursor").is_some() {
+        return response::tool_result(&call.name, review.agent.as_deref(), value, failed, &|| {
+            context.check()
+        });
+    }
+    response::with_pack_notice(review, &call.name, value, failed, &|| context.check())
 }
 
 /// The published tools, in inventory order.

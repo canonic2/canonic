@@ -18,6 +18,19 @@ use crate::cli::{Cli, PublicCommand};
 use serde_json::{Value, json};
 use std::{path::Path, process::ExitCode};
 
+struct Output {
+    value: Value,
+    context: Option<Context>,
+}
+impl Output {
+    fn independent(value: Value) -> Self {
+        Self {
+            value,
+            context: None,
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn commit_proposal_fixture(context: &Context, id: &str) -> Result<Value, Error> {
     let before = crate::review::project::load(context)?;
@@ -38,7 +51,7 @@ pub(crate) fn commit_proposal_fixture(context: &Context, id: &str) -> Result<Val
 
 pub(crate) fn run(input: &Cli) -> ExitCode {
     match dispatch(input) {
-        Ok(mut value) => {
+        Ok(Output { mut value, context }) => {
             if matches!(input.command, PublicCommand::History(_)) {
                 super::history::redact_result(&mut value);
             } else if !matches!(input.command, PublicCommand::Docs(_)) {
@@ -55,27 +68,13 @@ pub(crate) fn run(input: &Cli) -> ExitCode {
             } else {
                 presentation::print(&input.command, &value);
             }
+            if let Some(context) = context.as_ref() {
+                pack_update_notice(input, &value, context);
+            }
             ExitCode::SUCCESS
         }
         Err(error) => {
-            if input.json {
-                let mut value = json!({"schema_version":1,"error":{"code":error.code(),"message":error.to_string()}});
-                let recovery = presentation::errors::recovery(&input.command, &error);
-                value["error"]["details"] = recovery["details"].clone();
-                value["error"]["recovery"] = recovery["recovery"].clone();
-                if let Error::Ambiguous {
-                    alternatives,
-                    total,
-                    ..
-                } = &error
-                {
-                    value["error"]["alternatives"] = json!(alternatives);
-                    value["error"]["alternatives_total"] = json!(total);
-                }
-                println!("{value}");
-            } else {
-                presentation::errors::print(input, &error);
-            }
+            print_error(input, &error);
             ExitCode::from(if matches!(error, Error::Cancelled) {
                 130
             } else {
@@ -85,18 +84,51 @@ pub(crate) fn run(input: &Cli) -> ExitCode {
     }
 }
 
+pub(crate) fn startup_error(input: &Cli, error: &Error) -> ExitCode {
+    if input.command.mcp_serve().is_some() {
+        eprintln!("{error}");
+    } else {
+        print_error(input, error);
+    }
+    ExitCode::from(2)
+}
+
+fn print_error(input: &Cli, error: &Error) {
+    if input.json {
+        let mut value =
+            json!({"schema_version":1,"error":{"code":error.code(),"message":error.to_string()}});
+        let recovery = presentation::errors::recovery(&input.command, error);
+        value["error"]["details"] = recovery["details"].clone();
+        value["error"]["recovery"] = recovery["recovery"].clone();
+        if let Error::Ambiguous {
+            alternatives,
+            total,
+            ..
+        } = error
+        {
+            value["error"]["alternatives"] = json!(alternatives);
+            value["error"]["alternatives_total"] = json!(total);
+        }
+        println!("{value}");
+    } else {
+        presentation::errors::print(input, error);
+    }
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "one routing arm per public command keeps the command surface in one place"
 )]
-fn dispatch(input: &Cli) -> Result<Value, Error> {
+fn dispatch(input: &Cli) -> Result<Output, Error> {
     use crate::cli::public::{
         HistoryCommand, McpCommand, PackCommand, PolicyCommand, RegistryCommand, RequestCommand,
         RuleCommand, Scope,
     };
     let start = input.project.clone().unwrap_or(std::env::current_dir()?);
     match &input.command {
-        PublicCommand::Docs(docs) => return diagnostics::docs(&docs.command),
+        PublicCommand::Docs(docs) => {
+            return diagnostics::docs(&docs.command).map(Output::independent);
+        }
         PublicCommand::Init {
             agents,
             no_setup,
@@ -125,13 +157,15 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
                         integrations::Baseline::Selected,
                     )
                 },
-            );
+            )
+            .map(Output::independent);
         }
         PublicCommand::Registry(registry) if registry.scope == Scope::User => {
             if matches!(registry.command, RegistryCommand::List) {
-                return super::registries::list(None);
+                return super::registries::list(None).map(Output::independent);
             }
-            return registries::mutate(None, &super::registries::fetcher(), registry, input.json);
+            return registries::mutate(None, &super::registries::fetcher(), registry, input.json)
+                .map(Output::independent);
         }
         _ => {}
     }
@@ -147,7 +181,7 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
                         report["next_action"] = json!(
                             "Run shield init in this project to review and confirm enrollment."
                         );
-                        Ok(report)
+                        Ok(Output::independent(report))
                     }
                     _ => Err(error),
                 };
@@ -172,7 +206,7 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
             _ => {}
         }
     }
-    match &input.command {
+    let mut value = match &input.command {
         PublicCommand::Mcp(crate::cli::public::Mcp {
             command: McpCommand::Setup(setup),
         }) => {
@@ -186,7 +220,12 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
                         super::integrations::recovery::Action::Cancel
                     }
                 };
-                return integrations::recover(&context, action, input.json, setup.dry_run);
+                return integrations::recover(&context, action, input.json, setup.dry_run).map(
+                    |value| Output {
+                        value,
+                        context: Some(context),
+                    },
+                );
             }
             if setup.dry_run {
                 return integrations::setup_review(
@@ -194,7 +233,11 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
                     choice,
                     input.json,
                     setup.reset_tool_permissions,
-                );
+                )
+                .map(|value| Output {
+                    value,
+                    context: Some(context),
+                });
             }
             let mut receipt =
                 integrations::setup(&context, choice, input.json, setup.reset_tool_permissions)?;
@@ -330,6 +373,45 @@ fn dispatch(input: &Cli) -> Result<Value, Error> {
             },
         ),
         _ => Err(Error::Invalid("invalid operator command")),
+    }?;
+    finish_pack_updates(&context, input, &mut value);
+    Ok(Output {
+        value,
+        context: Some(context),
+    })
+}
+
+fn finish_pack_updates(context: &Context, input: &Cli, value: &mut Value) {
+    use crate::cli::public::PackCommand;
+    let mutation = matches!(&input.command, PublicCommand::Pack(pack)
+        if matches!(pack.command, PackCommand::Add { .. } | PackCommand::Update { .. }
+            | PackCommand::Remove { .. } | PackCommand::Configure { .. }));
+    if mutation && let Ok(state) = project::checkpoint(context) {
+        value["pack_updates"] = super::pack_updates::inspect(context, &state, None);
+    }
+}
+
+fn pack_update_notice(input: &Cli, value: &Value, context: &Context) {
+    use crate::cli::public::PackCommand;
+    use std::io::{IsTerminal as _, Write as _};
+    let eligible = matches!(&input.command, PublicCommand::Status)
+        || matches!(&input.command, PublicCommand::Pack(pack) if matches!(pack.command,
+            PackCommand::List | PackCommand::Add { .. } | PackCommand::Update { .. }
+            | PackCommand::Remove { .. } | PackCommand::Configure { .. }));
+    if !eligible
+        || input.json
+        || !std::io::stdout().is_terminal()
+        || !std::io::stderr().is_terminal()
+        || value.get("pack_updates").is_none()
+    {
+        return;
+    }
+    let Some(pending) = super::pack_updates::pending(context, "cli", &value["pack_updates"]) else {
+        return;
+    };
+    let text = presentation::pack_update_notice(&input.command, &pending.value);
+    if writeln!(std::io::stderr().lock(), "{text}").is_ok() {
+        pending.commit();
     }
 }
 

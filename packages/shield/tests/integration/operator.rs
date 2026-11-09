@@ -10,6 +10,76 @@ use sha2::{Digest, Sha256};
 use std::fmt::Write;
 
 #[test]
+fn pack_updates_launch_preference_rejects_unknown_modes_without_starting_work() {
+    let root = TempDir::new().unwrap();
+    for mode in ["off", "cached"] {
+        let output = cargo_bin_cmd!("shield")
+            .args(["--json", "--no-debug-log", "status", "--project"])
+            .arg(root.path())
+            .env("HOME", root.path())
+            .env("SHIELD_PACK_UPDATE_CHECK", mode)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(serde_json::from_slice::<Value>(&output.stdout).unwrap()["error"].is_object());
+        assert!(output.stderr.is_empty());
+        assert!(!root.path().join(".shield/pack-updates").exists());
+    }
+    let output = cargo_bin_cmd!("shield")
+        .args(["--no-debug-log", "status", "--project"])
+        .arg(root.path())
+        .env("HOME", root.path())
+        .env("SHIELD_PACK_UPDATE_CHECK", "background")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("must be off or cached")
+    );
+    let output = cargo_bin_cmd!("shield")
+        .args(["--json", "--no-debug-log", "status", "--project"])
+        .arg(root.path())
+        .env("HOME", root.path())
+        .env("SHIELD_PACK_UPDATE_CHECK", "invalid")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stderr.is_empty());
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["schema_version"], 1);
+    assert_eq!(result["error"]["code"], "invalid-review");
+    assert!(
+        result["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("must be off or cached")
+    );
+    assert!(result["error"]["recovery"].is_array());
+    assert!(!root.path().join(".shield/pack-updates").exists());
+    let output = cargo_bin_cmd!("shield")
+        .args(["--json", "--no-debug-log", "--project"])
+        .arg(root.path())
+        .args(["mcp", "serve"])
+        .env("HOME", root.path())
+        .env("SHIELD_PACK_UPDATE_CHECK", "invalid")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        output.stdout.is_empty(),
+        "MCP stdout is reserved for protocol frames"
+    );
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("must be off or cached")
+    );
+}
+
+#[test]
 fn human_errors_are_actionable_plain_text_and_json_errors_keep_their_contract() {
     let root = TempDir::new().expect("unenrolled project");
     let human = cargo_bin_cmd!("shield")

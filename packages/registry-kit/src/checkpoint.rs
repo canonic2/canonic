@@ -55,6 +55,39 @@ pub enum CheckpointError {
     InvalidRetention,
 }
 
+impl Checkpoint {
+    /// Checks a previously authenticated observation against this checkpoint
+    /// without changing retained state. Callers must bind both values to the
+    /// same trusted source; this does not authenticate bytes or establish expiry.
+    ///
+    /// # Errors
+    /// Returns [`CheckpointError::Rollback`] or [`CheckpointError::Replaced`]
+    /// when the observation conflicts with retained sequence or release evidence.
+    pub fn check_observation(&self, observed: &Self) -> Result<(), CheckpointError> {
+        self.check_root(observed.sequence, &observed.digest)?;
+        for (release, digest) in &observed.releases {
+            self.check_release(release, digest)?;
+        }
+        Ok(())
+    }
+
+    fn check_root(&self, sequence: Option<u64>, digest: &str) -> Result<(), CheckpointError> {
+        if self.sequence.is_some()
+            && (sequence < self.sequence || (sequence == self.sequence && self.digest != digest))
+        {
+            return Err(CheckpointError::Rollback);
+        }
+        Ok(())
+    }
+
+    fn check_release(&self, release: &str, digest: &str) -> Result<(), CheckpointError> {
+        if self.releases.get(release).is_some_and(|old| old != digest) {
+            return Err(CheckpointError::Replaced(release.to_owned()));
+        }
+        Ok(())
+    }
+}
+
 impl Checkpoints {
     /// Admits `catalog` under the identity of the source that authenticated
     /// it, retaining its releases. The identity comes from the catalog itself,
@@ -87,12 +120,8 @@ impl Checkpoints {
     ) -> Result<(), CheckpointError> {
         let identity = catalog.source_identity();
         let previous = self.0.get(identity);
-        if let Some(previous) = previous
-            && previous.sequence.is_some()
-            && (catalog.sequence() < previous.sequence
-                || (catalog.sequence() == previous.sequence && previous.digest != catalog.digest()))
-        {
-            return Err(CheckpointError::Rollback);
+        if let Some(previous) = previous {
+            previous.check_root(catalog.sequence(), catalog.digest())?;
         }
         if previous.is_none() && self.0.len() >= MAX_SOURCES {
             return Err(CheckpointError::Limit);
@@ -110,19 +139,16 @@ impl Checkpoints {
             {
                 return Err(CheckpointError::InvalidRetention);
             }
-            if previous
-                .and_then(|p| p.releases.get(release))
-                .is_some_and(|old| old != sha256)
-            {
-                return Err(CheckpointError::Replaced(release.clone()));
+            if let Some(previous) = previous {
+                previous.check_release(release, sha256)?;
             }
         }
         for entry in catalog.entries() {
             let release = format!("{}@{}", entry.id, entry.version);
-            match previous
-                .and_then(|p| p.releases.get(&release))
-                .or_else(|| protected.get(&release))
-            {
+            if let Some(previous) = previous {
+                previous.check_release(&release, &entry.sha256)?;
+            }
+            match protected.get(&release) {
                 Some(retained) if *retained != entry.sha256 => {
                     return Err(CheckpointError::Replaced(release));
                 }
@@ -193,6 +219,54 @@ mod tests {
     use super::*;
     use crate::test_support::{local, local_catalog, now, release};
     use serde_json::json;
+
+    #[test]
+    fn checkpoint_observations_check_continuity_without_mutation_or_authentication() {
+        let mut checkpoints = Checkpoints::default();
+        let first = catalog(Some(2), &[("acme/a", "1.0.0", '0')]);
+        checkpoints.admit(&first).unwrap();
+        let previous = checkpoints.get(&identity()).unwrap().clone();
+        assert!(previous.check_observation(&previous).is_ok());
+        for (sequence, releases, error) in [
+            (
+                Some(1),
+                vec![("acme/a", "1.0.0", '0')],
+                CheckpointError::Rollback,
+            ),
+            (
+                None,
+                vec![("acme/a", "1.0.0", '0')],
+                CheckpointError::Rollback,
+            ),
+            (
+                Some(2),
+                vec![("acme/a", "2.0.0", '1')],
+                CheckpointError::Rollback,
+            ),
+            (
+                Some(3),
+                vec![("acme/a", "1.0.0", '1')],
+                CheckpointError::Replaced("acme/a@1.0.0".into()),
+            ),
+        ] {
+            let mut observed = Checkpoints::default();
+            observed.admit(&catalog(sequence, &releases)).unwrap();
+            assert_eq!(
+                previous.check_observation(observed.get(&identity()).unwrap()),
+                Err(error)
+            );
+        }
+        assert_eq!(checkpoints.get(&identity()).unwrap(), &previous);
+        let mut observed = Checkpoints::default();
+        observed
+            .admit(&catalog(Some(3), &[("acme/a", "2.0.0", '1')]))
+            .unwrap();
+        assert!(
+            previous
+                .check_observation(observed.get(&identity()).unwrap())
+                .is_ok()
+        );
+    }
 
     #[test]
     fn discovery_index_is_current_and_does_not_accumulate_with_release_history() {

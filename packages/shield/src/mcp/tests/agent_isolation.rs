@@ -37,6 +37,43 @@ fn installed() -> (Transport, Project) {
     (transport, project)
 }
 
+#[test]
+fn explicit_project_repair_uses_the_published_schema_and_original_connection_confirmation() {
+    let (transport, source) = installed();
+    let (_server, target) = fixture(Some("claude"));
+    let source_before = state(&source);
+    let target_before = state(&target);
+    let path = target.root.path().join(".mcp.json");
+    let host_before = std::fs::read(&path).ok();
+    let args = json!({"project":target.root.path(),"agents":["claude"],"repair":true});
+    let mut preview = args.clone();
+    preview["dry_run"] = json!(true);
+    let response = transport.call(json!(20), "mcp_setup", &preview);
+    assert_eq!(response["result"]["isError"], false, "{response}");
+    assert_eq!(state(&target), target_before);
+    assert_eq!(std::fs::read(&path).ok(), host_before);
+    let form = transport.call(json!(21), "mcp_setup", &args);
+    let declined = answer(&transport, &form, "decline");
+    assert_eq!(declined["result"]["isError"], true, "{declined}");
+    assert_eq!(state(&target), target_before);
+    assert_eq!(std::fs::read(&path).ok(), host_before);
+    let form = transport.call(json!(22), "mcp_setup", &args);
+    let applied = answer(&transport, &form, "accept");
+    assert_eq!(applied["result"]["isError"], false, "{applied}");
+    assert!(
+        std::fs::read_to_string(path)
+            .unwrap()
+            .contains(&target.review.project_root)
+    );
+    assert_eq!(state(&source), source_before);
+    let status = transport.call(json!(23), "status", &json!({}));
+    assert_eq!(
+        status["result"]["structuredContent"]["project_id"],
+        source.review.project_id
+    );
+    transport.close().1.unwrap();
+}
+
 fn pending(project: &Project) -> String {
     use crate::review::hook_approval::{Identity, Key, Outcome, Summary, refused};
     let state = state(project);

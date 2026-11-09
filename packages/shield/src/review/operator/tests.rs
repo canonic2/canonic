@@ -8,6 +8,37 @@ use serde_json::json;
 use std::collections::BTreeMap;
 
 #[test]
+fn operator_dispatch_retains_the_canonical_selected_project_context() {
+    use clap::Parser as _;
+    let root = assert_fs::TempDir::new().unwrap();
+    let bundle = Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
+    let expected = review::mcp::initialize_fixture(root.path(), &bundle);
+    std::fs::write(
+        root.path().join(".shield/config.yml"),
+        "schema_version: 1\npacks: []\n",
+    )
+    .unwrap();
+    let nested = root.path().join("nested");
+    std::fs::create_dir(&nested).unwrap();
+    let input = crate::cli::Cli::try_parse_from([
+        "shield",
+        "--project",
+        nested.to_str().unwrap(),
+        "--json",
+        "pack",
+        "list",
+    ])
+    .unwrap();
+    let output = super::dispatch(&input).unwrap();
+    let context = output
+        .context
+        .expect("enrolled inspection retains its context");
+    assert_eq!(context.project_id, expected.project_id);
+    assert_eq!(context.project_root, expected.project_root);
+    assert_eq!(output.value["pack_updates"]["availability"], "none");
+}
+
+#[test]
 fn pack_rebuild_preserves_operator_access_paths() {
     let paths = json!({"read":[crate::test_support::absolute("/acme/reference")],"write":[crate::test_support::absolute("/acme/scratch")]});
     let candidate = json!(

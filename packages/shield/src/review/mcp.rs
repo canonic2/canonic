@@ -261,7 +261,10 @@ fn admin_key(name: &str, args: &Value) -> String {
 /// Explicit conflict review/cancellation must inspect that plan before writes.
 pub(crate) fn resume_setup(context: &Context, name: &str, args: &Value) -> Result<bool, Error> {
     if !schemas::mutates(name)
-        || (name == "mcp_setup" && (!args["pending"].is_null() || args["dry_run"] == true))
+        || (name == "mcp_setup"
+            && (!args["pending"].is_null()
+                || args["dry_run"] == true
+                || !args["project"].is_null()))
     {
         return Ok(false);
     }

@@ -33,6 +33,12 @@ mod windows_security;
 /// Runs the selected CLI command.
 #[must_use]
 pub fn run(cli: &cli::Cli) -> std::process::ExitCode {
+    if (!matches!(cli.command, cli::PublicCommand::Internal(_))
+        || cli.command.mcp_serve().is_some())
+        && let Err(error) = review::pack_updates::enabled()
+    {
+        return review::operator::startup_error(cli, &error);
+    }
     // Shared so the MCP server's frame observer can outlive one borrow.
     let log = std::sync::Arc::new(diagnostics::Log::open(cli));
     let serve = cli.command.mcp_serve();

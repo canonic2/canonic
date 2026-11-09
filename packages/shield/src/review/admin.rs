@@ -113,6 +113,8 @@ pub(super) struct Prepared {
     review: Value,
     dry_run: bool,
     operation: Operation,
+    /// Explicit registration-repair target; never changes the connection owner.
+    target: Option<Context>,
 }
 
 impl Prepared {
@@ -196,7 +198,11 @@ impl Prepared {
         if self.dry_run {
             return Ok(self.public_review());
         }
-        match self.operation {
+        let cross_project = self.target.as_ref().is_some_and(|target| {
+            target.project_id != context.project_id || target.project_root != context.project_root
+        });
+        let context = self.target.as_ref().unwrap_or(context);
+        let mut receipt = match self.operation {
             Operation::Mode(plan) => plan.commit(context, checkpoint),
             Operation::Protection(plan) => plan.commit(context, checkpoint),
             Operation::Cache(directory) => match directory {
@@ -219,8 +225,43 @@ impl Prepared {
                 checkpoint,
             ),
             Operation::Recovery(plan) => plan.commit(context, checkpoint),
+        }?;
+        if cross_project && !receipt["setup_error"].is_null() {
+            target_setup_recovery(context, &mut receipt);
         }
+        Ok(receipt)
     }
+}
+
+/// Pending MCP actions are relative to their connection. A foreign target must
+/// hand recovery to its operator without advertising a source-project retry.
+fn target_setup_recovery(context: &Context, receipt: &mut Value) {
+    let command = |pending: Option<&str>| {
+        let mut arguments = vec![
+            json!("--project"),
+            json!(context.project_root),
+            json!("mcp"),
+            json!("setup"),
+        ];
+        if let Some(action) = pending {
+            arguments.extend([json!("--pending"), json!(action)]);
+        }
+        json!({"command":"shield","arguments":arguments})
+    };
+    let mut handoff = json!({"project":context.project_root,"project_id":context.project_id});
+    if receipt["pending_setup"].is_object() {
+        handoff["review"] = command(Some("review"));
+        handoff["cancel"] = command(Some("cancel"));
+    } else {
+        handoff["setup"] = command(None);
+    }
+    receipt["repair_route"] = json!("operator_cli");
+    receipt["repair_arguments"] = Value::Null;
+    receipt["pending_setup"] = Value::Null;
+    receipt["operator_recovery"] = handoff;
+    receipt["next_action"] = json!(
+        "Agent setup for the target project needs recovery. Ask the user to run the chosen operator_recovery command in an operator terminal and review its confirmation. Do not retry unqualified mcp_setup recovery on this connection: it still selects the original project."
+    );
 }
 
 pub(super) fn supports(name: &str) -> bool {
@@ -251,9 +292,33 @@ pub(super) fn prepare(
     if !supports(name) {
         return Err(Error::Invalid("unknown administrative operation"));
     }
-    let input = decode(name, args)?;
-    let mut dry_run = false;
-    let (operation, review) = match input {
+    let target = repair_target(context, name, args)?;
+    let mut input_args = args.clone();
+    if name == "mcp_setup" {
+        input_args
+            .as_object_mut()
+            .ok_or(Error::Invalid("administrative arguments must be an object"))?
+            .remove("project");
+    }
+    let input = decode(name, &input_args)?;
+    let caller = context;
+    let context = target.as_ref().unwrap_or(context);
+    let dry_run = matches!(input, Input::Setup { dry_run: true, .. });
+    let (operation, review) = prepare_operation(context, input)?;
+    checkpoint()?;
+    Ok(Prepared {
+        project_id: caller.project_id.clone(),
+        root: caller.project_root.clone(),
+        owner: caller.retry_owner(),
+        review,
+        dry_run,
+        operation,
+        target,
+    })
+}
+
+fn prepare_operation(context: &Context, input: Input) -> Result<(Operation, Value), Error> {
+    Ok(match input {
         Input::Enable {} | Input::Disable {} => {
             let plan = super::mode::Prepared::new(context, matches!(input, Input::Enable {}))?;
             let review = plan.review();
@@ -325,28 +390,53 @@ pub(super) fn prepare(
             scope,
             repair: repair_hooks,
             pending,
-        } => {
-            dry_run = preview;
-            setup(
-                context,
-                &agents,
-                remove,
-                preview,
-                scope,
-                repair_hooks,
-                pending,
-            )?
-        }
-    };
-    checkpoint()?;
-    Ok(Prepared {
-        project_id: context.project_id.clone(),
-        root: context.project_root.clone(),
-        owner: context.retry_owner(),
-        review,
-        dry_run,
-        operation,
+        } => setup(
+            context,
+            &agents,
+            remove,
+            preview,
+            scope,
+            repair_hooks,
+            pending,
+        )?,
     })
+}
+
+/// Registration repair alone may select another already enrolled project.
+/// Policy tools and the server's ordinary project binding remain unchanged.
+fn repair_target(context: &Context, name: &str, args: &Value) -> Result<Option<Context>, Error> {
+    let Some(path) = args.get("project") else {
+        return Ok(None);
+    };
+    if name != "mcp_setup"
+        || args["repair"] != true
+        || args["remove"] == true
+        || !args["pending"].is_null()
+        || args["agents"].as_array().is_none_or(Vec::is_empty)
+    {
+        return Err(Error::Invalid(
+            "project is only supported for explicit agent registration repair; use mcp_setup with repair: true and agents",
+        ));
+    }
+    let path = Path::new(
+        path.as_str()
+            .ok_or(Error::Invalid("project must be an absolute directory"))?,
+    );
+    if !path.is_absolute() {
+        return Err(Error::Invalid("project must be an absolute directory"));
+    }
+    let root = path.canonicalize()?;
+    let enrolled = super::open_diagnostics(&root)?;
+    if Path::new(&enrolled.project_root) != root {
+        return Err(Error::Invalid(
+            "project must name the enrolled project root exactly",
+        ));
+    }
+    let mut target = context.clone();
+    target.project_root = enrolled.project_root;
+    target.project_id = enrolled.project_id;
+    project::checkpoint(&target)?;
+    Ok(Some(target))
 }
 
 fn decode(name: &str, args: &Value) -> Result<Input, Error> {
@@ -429,6 +519,18 @@ fn setup(
         ));
     }
     let metadata = project::metadata(&project::checkpoint(context)?);
+    if repair_hooks
+        && integrations::registration(&metadata)?.is_some_and(|registration| {
+            registration.box_definition.is_some()
+                && agents
+                    .iter()
+                    .any(|agent| !registration.agents.contains_key(agent))
+        })
+    {
+        return Err(Error::Invalid(
+            "Box manages these hooks. Use Box config_show for this project, then config_sync with the same project, explicit agents, servers: [shield], and repair_hooks: true for a reviewed reconciliation that preserves Box ownership",
+        ));
+    }
     let root = Path::new(&context.project_root);
     let choice = if agents.is_empty() {
         if remove {

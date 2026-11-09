@@ -61,6 +61,21 @@ pub(super) fn request_unavailable(agent: Option<&str>) -> &'static str {
 /// Text block 0. An error's structured message carries its recovery, so the
 /// summary repeats it rather than keeping a second copy of the guidance.
 pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String {
+    let primary = primary_summary(name, agent, value);
+    let notice = &value["data"]["pack_update_notice"];
+    if value["error"].is_null()
+        && let Some(message) = notice["message"].as_str()
+    {
+        format!(
+            "{primary} {message} {}",
+            notice["instruction"].as_str().unwrap_or_default()
+        )
+    } else {
+        primary
+    }
+}
+
+fn primary_summary(name: &str, agent: Option<&str>, value: &Value) -> String {
     let error = &value["error"];
     if !error.is_null() {
         if error["code"] == "cache_unavailable"
@@ -94,6 +109,7 @@ pub(super) fn summary(name: &str, agent: Option<&str>, value: &Value) -> String 
         return "Already up to date; no proposal or approval is needed.".into();
     }
     match name {
+        "mcp_setup" if data["operator_recovery"].is_object() => data["next_action"].as_str().unwrap_or("Ask the user to run the target-project operator recovery command.").into(),
         "registry_add" if data["status"] == "input_collected" => data["next_action"].as_str().unwrap_or("Registry details collected; separate trust confirmation is required.").into(),
         "session_grant_list"|"session_grant_show"|"session_grant_propose"|"session_grant_reconsider"|"session_grant_approve"|"session_grant_revoke"=>data["next_action"].as_str().unwrap_or("Session grant inspection only; no command was executed.").into(),
         "pack_info" => format!("{} Inspection only; nothing is installed. {}", pack_lead(data), data["setup"]["message"].as_str().unwrap_or_default()).trim_end().to_owned(),

@@ -15,6 +15,7 @@ pub(crate) mod mode;
 mod model;
 pub(crate) mod observations;
 pub(crate) mod operator;
+pub(crate) mod pack_updates;
 mod packs;
 pub(crate) mod path_access;
 pub(crate) mod preparation_tasks;

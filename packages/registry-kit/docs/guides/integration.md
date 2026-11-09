@@ -41,6 +41,12 @@ For `pack:<uuid>`, use your installed state instead of a catalog lookup.
 
 See [Find and select packs](selecting-packs.md).
 
+For cached advisory metadata, `Checkpoint::check_observation` checks an already
+authenticated checkpoint against retained sequence and release digests without
+mutating state. Bind both checkpoints to the same enrolled source first and
+check freshness separately. This method authenticates no bytes and authorizes
+no installation. Ordinary acquisition still uses `Checkpoints::admit_retaining`.
+
 ## 4. Build candidate metadata
 
 Acquire candidate artifacts through `Fetcher::artifact` with an explicit byte

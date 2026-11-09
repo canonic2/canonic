@@ -10,6 +10,41 @@ use serde_json::{Value, json};
 #[cfg(test)]
 mod tests;
 
+/// Optional cached guidance is appended only after the primary operation has
+/// succeeded. It is discarded before essential data on budget/cancellation or
+/// unavailable presentation storage.
+pub(super) fn with_pack_notice(
+    review: &crate::review::Context,
+    name: &str,
+    value: Value,
+    failed: bool,
+    check: &dyn Fn() -> Result<(), Interrupted>,
+) -> ToolResult {
+    if !failed
+        && matches!(name, "status" | "pack_list")
+        && let Some(pending) =
+            crate::review::pack_updates::pending(review, "mcp", &value["data"]["pack_updates"])
+    {
+        let mut offered = value.clone();
+        offered["data"]["pack_update_notice"] = pending.value.clone();
+        if crate::json::fits(&offered, MAX_OUTPUT) {
+            let result = tool_result(name, review.agent.as_deref(), offered, failed, check);
+            if !result.content.is_empty()
+                && check().is_ok()
+                && result
+                    .structured_content
+                    .as_ref()
+                    .is_some_and(|v| v["data"]["pack_update_notice"].is_object())
+                && json::measure(&result, MAX_OUTPUT, check).is_ok()
+                && pending.commit()
+            {
+                return result;
+            }
+        }
+    }
+    tool_result(name, review.agent.as_deref(), value, failed, check)
+}
+
 /// The tool result for `value`, checked against the output limit with `check`
 /// at each write. Evidence that cannot fit is returned whole so the driver
 /// answers with its output-limit error.

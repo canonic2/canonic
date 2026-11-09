@@ -47,6 +47,7 @@ pub(super) fn status(context: &Context) -> Result<Value, Error> {
     let (state, pending) = Store::open(Path::new(&context.project_root))?.read_diagnostics()?;
     state.check(context)?;
     let mut value = status_from(context, &state)?;
+    value["pack_updates"] = super::pack_updates::inspect(context, &state, None);
     value["checkpoint_upgrade_pending"] = json!(pending);
     Ok(value)
 }

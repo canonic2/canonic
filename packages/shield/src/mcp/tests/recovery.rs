@@ -27,7 +27,7 @@ fn native_at(
     )
 }
 
-fn installed_hooks_with_handover(agent: &str, modern: bool) -> (Transport, Project) {
+fn installed_hooks(agent: &str, modern: bool, handover: bool) -> (Transport, Project) {
     let (server, project) = fixture(Some(agent));
     let transport = Transport::start(server);
     for message in initialize(&json!({"elicitation":{"form":{}}}), agent) {
@@ -39,7 +39,7 @@ fn installed_hooks_with_handover(agent: &str, modern: bool) -> (Transport, Proje
     let form = begin(&transport, "mcp_setup", &args, modern);
     let result = answer(&transport, "mcp_setup", &args, &form, "accept", modern);
     assert_eq!(result["result"]["isError"], false, "{result}");
-    if !cfg!(windows) {
+    if handover && !cfg!(windows) {
         // Model a project handover: Box keeps publishing these native
         // files after Shield drops its direct-install ownership.
         std::fs::create_dir_all(project.root.path().join(".box")).unwrap();
@@ -60,7 +60,7 @@ fn installed_hooks_with_handover(agent: &str, modern: bool) -> (Transport, Proje
 fn recovery_stale_hooks_reach_reviewed_reconciliation_and_native_retry() {
     for agent in ["claude", "codex"] {
         for modern in [false, true] {
-            let (transport, project) = installed_hooks_with_handover(agent, modern);
+            let (transport, project) = installed_hooks(agent, modern, false);
             let args = json!({"agents":[agent]});
             let path = project
                 .root
@@ -151,6 +151,49 @@ fn recovery_stale_hooks_reach_reviewed_reconciliation_and_native_retry() {
                 doctor["result"]["structuredContent"]["data"]["coverage"]["repair_needed"], false,
                 "{doctor}"
             );
+        }
+    }
+}
+
+#[cfg(not(windows))]
+#[test]
+fn recovery_box_managed_hooks_route_to_box_without_writing() {
+    for agent in ["claude", "codex"] {
+        for modern in [false, true] {
+            let (transport, project) = installed_hooks(agent, modern, true);
+            let adapter = crate::agents::find(agent).unwrap();
+            let hooks_path = project.root.path().join(adapter.spec().hooks_path);
+            let mut hooks: Value =
+                serde_json::from_slice(&std::fs::read(&hooks_path).unwrap()).unwrap();
+            hooks["hooks"]["PreToolUse"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!({
+                    "matcher":".*","hooks":[{"type":"command",
+                        "command":"shield __internal native-hook --project /acme/old-project"}]
+                }));
+            let broken = hooks.to_string();
+            std::fs::write(&hooks_path, &broken).unwrap();
+            let mcp_path = project
+                .root
+                .path()
+                .join(adapter.spec().mcp_path.unwrap_or(".mcp.json"));
+            let before = std::fs::read(&mcp_path).unwrap();
+            let revision = project.revision();
+            let result = transport.call(
+                json!(20),
+                "mcp_setup",
+                &json!({"agents":[agent],"repair":true}),
+            );
+            assert_eq!(result["result"]["isError"], true, "{result}");
+            let message = result["result"]["structuredContent"]["error"]["message"]
+                .as_str()
+                .unwrap();
+            assert!(message.contains("config_sync"), "{result}");
+            assert!(message.contains("repair_hooks: true"), "{result}");
+            assert_eq!(std::fs::read_to_string(&hooks_path).unwrap(), broken);
+            assert_eq!(std::fs::read(&mcp_path).unwrap(), before);
+            assert_eq!(project.revision(), revision);
         }
     }
 }

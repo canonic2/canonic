@@ -188,7 +188,14 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
         }
         if ["policy_propose","rule_add","rule_edit","session_grant_propose"].contains(&name) { let mut definitions = crate::policy::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
         let mutation=mutates(name);
-        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":output,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply","protection_set","disable","registry_remove","history_configure","policy_reject","mcp_setup"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","pack_update","policy_propose","registry_add","mcp_setup"].contains(&name))}})
+        let mut result_schema = output.clone();
+        if ["status", "pack_list", "pack_show"].contains(&name) {
+            result_schema["properties"]["data"] = nullable(json!({"type":"object","properties":{
+                "pack_updates":pack_updates_schema(),
+                "pack_update_notice":{"type":"object","properties":{"items":{"type":"array","maxItems":3},"remaining":{"type":"integer","minimum":0},"truncated":{"type":"boolean"},"message":string(),"instruction":string()},"required":["items","remaining","truncated","message","instruction"]}
+            }}));
+        }
+        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":result_schema,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply","protection_set","disable","registry_remove","history_configure","policy_reject","mcp_setup"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","pack_update","policy_propose","registry_add","mcp_setup"].contains(&name))}})
     }).chain(super::documentation::tools().into_iter().map(|mut tool| {
         // The shared definitions carry their own schemas and annotations;
         // results arrive in Shield's envelope.
@@ -196,6 +203,35 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
         tool
     })).collect::<Vec<_>>();
     json!({"tools":tools})
+}
+
+fn pack_updates_schema() -> Value {
+    let count = json!({"type":"integer","minimum":0,"maximum":64});
+    object(
+        json!({
+            "availability":{"enum":["available","none","partial","unknown"]},
+            "items":{"type":"array","maxItems":8,"items":object(json!({
+                "selector":string(),"id":string(),"source_identity":string(),"reference":string(),
+                "installed_version":string(),"available_version":string(),"observed_at":string(),
+                "expires_at":nullable(string()),"freshness":{"enum":["fresh","stale","expired","unavailable"]},
+                "compatibility":{"const":"unchecked"}
+            }), &["selector","id","source_identity","reference","installed_version","available_version","observed_at","expires_at","freshness","compatibility"])},
+            "sources":{"type":"array","maxItems":64,"items":object(json!({"source_identity":string(),"freshness":{"enum":["fresh","stale","expired","unavailable"]},"reason":nullable(string())}), &["source_identity","freshness","reason"])},
+            "excluded_pinned":count,"excluded_dependencies":count,"total":count,"fresh_total":count,
+            "truncated":{"type":"boolean"},"next_action":string()
+        }),
+        &[
+            "availability",
+            "items",
+            "sources",
+            "excluded_pinned",
+            "excluded_dependencies",
+            "total",
+            "fresh_total",
+            "truncated",
+            "next_action",
+        ],
+    )
 }
 /// One change, or 1–16 to approve together.
 fn policy_propose() -> Definition {
@@ -360,10 +396,10 @@ fn admin_inventory() -> Vec<Definition> {
         ),
         (
             "mcp_setup",
-            "Review agent registration changes; pending review resolves conflicting owned fragments, pending cancel abandons interrupted setup, and dry_run shows a private-safe preview",
+            "Review agent registration changes; repair with explicit agents may name another enrolled project without rebinding this connection. dry_run previews without writes; pending review/cancel handles interrupted setup",
             || {
                 object(
-                    json!({"agents":{"type":"array","maxItems":64,"uniqueItems":true,"items":string()},"remove":{"type":"boolean","default":false},"repair":{"type":"boolean","default":false,"description":"Review reconciliation of conflicting Shield hooks and native MCP registration for explicitly selected Claude/Codex targets; other hooks and servers are preserved"},"pending":{"enum":["review","cancel"],"description":"Request a new human review of a conflicting confirmed setup, or cancel that interrupted publication"},"dry_run":{"type":"boolean","default":false},"scope":{"enum":["project"],"default":"project"}}),
+                    json!({"project":{"type":"string","minLength":1,"maxLength":4096,"description":"Absolute enrolled project root for explicit registration repair only; requires repair: true and agents. The review names this target; ordinary tools remain bound to this connection's project."},"agents":{"type":"array","maxItems":64,"uniqueItems":true,"items":string()},"remove":{"type":"boolean","default":false},"repair":{"type":"boolean","default":false,"description":"Review reconciliation of conflicting Shield hooks and native MCP registration for explicitly selected Claude/Codex targets; other hooks and servers are preserved"},"pending":{"enum":["review","cancel"],"description":"Request a new human review of a conflicting confirmed setup, or cancel that interrupted publication"},"dry_run":{"type":"boolean","default":false},"scope":{"enum":["project"],"default":"project"}}),
                     &[],
                 )
             },
@@ -375,15 +411,17 @@ fn policy_inventory() -> Vec<Definition> {
     let mut tools: Vec<Definition> = vec![
         (
             "status",
-            "Show policy status and protection coverage",
+            "Show policy status, protection coverage and cached pack update availability; compatibility is unchecked and updates require user intent",
             || object(json!({}), &[]),
         ),
         ("doctor", "Diagnose setup and coverage problems", || {
             object(json!({}), &[])
         }),
-        ("pack_list", "List installed packs, or show one", || {
-            selectable("reference", json!({}), string())
-        }),
+        (
+            "pack_list",
+            "List installed packs, or show one, with cached pack update availability; this does not fetch metadata or prepare updates",
+            || selectable("reference", json!({}), string()),
+        ),
         (
             "pack_show",
             "Show one installed pack's selection, rules and source",

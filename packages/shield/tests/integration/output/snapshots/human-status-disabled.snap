@@ -7,4 +7,5 @@ $ shield status
 Shield policy is disabled in [PROJECT]; protected controls remain guarded. Other requests use the agent's permissions. Resume with shield enable.
 Policy: no packs · revision [SHORT-DIGEST]
 History: on, keeping up to 1000 entries
+No newer pack releases observed in the checked scope.
 --- exit 0

@@ -143,7 +143,39 @@ pub(super) fn print(command: &PublicCommand, value: &Value) {
     print!("{}", result(command, value));
 }
 
+fn shows_pack_updates(command: &PublicCommand) -> bool {
+    matches!(
+        command,
+        PublicCommand::Status
+            | PublicCommand::Pack(crate::cli::public::Pack {
+                command: PackCommand::List
+            })
+    )
+}
+
+pub(super) fn pack_update_notice(command: &PublicCommand, notice: &Value) -> String {
+    if shows_pack_updates(command) {
+        crate::review::pack_updates::CLI_NEXT_STEP.into()
+    } else {
+        notice["message"].as_str().unwrap_or_default().to_owned()
+    }
+}
+
 fn result(command: &PublicCommand, value: &Value) -> String {
+    let mut output = primary_result(command, value);
+    if shows_pack_updates(command)
+        && let Some(updates) = value.get("pack_updates")
+    {
+        let _ = writeln!(
+            output,
+            "{}",
+            crate::review::pack_updates::inspection_summary(updates)
+        );
+    }
+    output
+}
+
+fn primary_result(command: &PublicCommand, value: &Value) -> String {
     if value["bootstrap_required"] == true {
         return format!(
             "Shield needs enrollment confirmation for {}.\nPrevious location: {}\n{}\n",
@@ -352,6 +384,34 @@ fn session_grant(value: &Value) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn pack_updates_fresh_list_and_notice_do_not_repeat_the_release_list() {
+        let command = PublicCommand::Pack(crate::cli::public::Pack {
+            command: PackCommand::List,
+        });
+        let value = json!({"packs":[{"id":"acme/node","version":"1.0.0","profile":"recommended"}],
+        "pack_updates":{"availability":"available","fresh_total":1,"items":[{
+            "reference":"main/acme/node","installed_version":"1.0.0","available_version":"2.0.0","freshness":"fresh"
+        }]}});
+        let notice = json!({"message":"Pack updates available: main/acme/node 1.0.0 → 2.0.0. Run shield pack update to review compatible updates."});
+        let rendered = format!(
+            "stdout:\n{}stderr:\n{}\n",
+            result(&command, &value),
+            pack_update_notice(&command, &notice)
+        );
+        insta::assert_snapshot!(rendered, @"
+        stdout:
+        acme/node 1.0.0 · recommended
+        Pack updates available: main/acme/node 1.0.0 → 2.0.0.
+        stderr:
+        Run shield pack update to review compatible updates.
+        ");
+        assert_eq!(
+            pack_update_notice(&PublicCommand::Status, &notice),
+            pack_update_notice(&command, &notice)
+        );
+    }
 
     #[test]
     fn untrusted_text_has_terminal_controls_escaped() {

@@ -105,7 +105,19 @@ refuse; inspect the result before requesting a fresh review.
   registration, pass `repair: true` with explicit `claude` or `codex` targets.
   The user reviews the exact replacement before publication. Other hooks,
   including entries in the same group, and other servers survive.
-  Interrupted confirmed setup resumes automatically on the next mutating MCP request,
+  An absolute `project` may select another enrolled root for explicit agent
+  repair only. The review and frozen plan bind that target; the connection's
+  policy tools retain their original project. Preview with `dry_run: true`
+  before requesting confirmation. Box-managed hooks use Box's `config_sync`
+  with the same project, agents and `repair_hooks: true` instead of direct setup.
+  If cross-project publication is interrupted, the result uses
+  `repair_route: operator_cli`. `operator_recovery` names the target project and
+  gives `review` and `cancel` commands as executable/argument records. Ask the
+  operator to run the chosen command; unqualified pending recovery on this
+  connection would select its original project. A separate prefix-rule failure
+  provides a target-project `setup` command instead. Each command requires the
+  ordinary operator terminal and confirmation.
+  For the connection's own project, interrupted confirmed setup resumes automatically on the next mutating MCP request,
   including `mcp_setup {}`, preserving unrelated settings added since confirmation.
   Status, doctor and documentation calls preserve pending setup and host files.
   If an owned fragment conflicts, use `mcp_setup {"pending":"review"}` for a new human review of
@@ -378,6 +390,29 @@ Retrieving it performs no acquisition, proposal creation or approval; the
 `pack_add` tool remains available without prompts.
 
 ## Update or remove installed packs
+
+`status`, `pack_list` and `pack_show` return cached `data.pack_updates` with
+`availability` (`available`, `none`, `partial` or `unknown`), up to eight release
+rows, source freshness, excluded pin/dependency counts, total/fresh counts and
+truncation. Rows name the installed `selector`, source identity, installed and
+advertised versions, observation/expiry times and `compatibility: unchecked`.
+The reference form of `pack_list` restricts this inspection to that selection.
+
+A successful `status` or `pack_list` can additionally carry
+`data.pack_update_notice`, with up to three rows, a remaining count, message and
+agent instruction. Mention it briefly after the current task; prepare an update
+only when the user requested updates. The notice creates no proposal or approval
+prompt. Delivery is throttled per project and conversation, with connection scope
+when a conversation identity is unavailable; reconnecting does not reset the
+daily/version limits. Explicit inspection remains available after suppression.
+
+Use `pack_search` with `{"query":"main/"}` to refresh main metadata explicitly,
+or substitute the relevant enrolled alias. Inspection makes no update-related
+network requests. Old or missing evidence is unknown, rather than a guarantee
+that installed packs are current. The operator can launch Shield with
+`SHIELD_PACK_UPDATE_CHECK=off` to disable unsolicited notices. See
+[cached availability](local-registry.md#check-for-pack-updates) for freshness and
+terminal behavior.
 
 The CLI and MCP use the same pack verbs. Call `pack_update` with `{}` to
 update all tracking packs, or with `{"reference":"gate"}` to update one

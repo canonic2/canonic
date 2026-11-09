@@ -1,6 +1,7 @@
 //! One bounded atomic project-state owner; locks are never stolen from writers.
 pub(in crate::review) mod bootstrap;
 mod locking;
+pub(in crate::review) mod private_files;
 mod upgrades;
 use super::{Checkpoint, Context, Error, model::State};
 use locking::Lock;

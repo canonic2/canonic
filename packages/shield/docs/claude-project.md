@@ -53,6 +53,16 @@ without `--agent` resumes a confirmed interrupted plan. `shield mcp setup --remo
 removes the agents you select, and with every agent selected removes all owned
 registrations while preserving policy, approvals and history.
 
+To prepare repair from another connected project, call `mcp_setup` with an
+absolute enrolled `project`, explicit `agents`, `repair: true` and
+`dry_run: true`. Remove `dry_run` to request the exact host confirmation.
+For example: `{"project":"/projects/acme","agents":["claude","codex"],"repair":true}`.
+The review names the target project; ordinary tools remain bound to the original
+connection. Relative paths, unenrolled targets, removal and pending-plan actions
+cannot use this target selector. When Box manages the selected hooks, Shield
+directs repair to Box's `config_show` and `config_sync` with that same project
+and `repair_hooks: true`, preserving Box's publication ownership.
+
 ## Set up through Box
 
 In a project that uses Box, Shield can hand its integration to Box instead of

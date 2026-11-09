@@ -302,37 +302,74 @@ pub(super) fn outside(operation: &Value, root: &Path, cwd: &Path) -> Option<Outs
 /// through a path that resolves to it, or launches an `mcp serve` argument
 /// sequence under another executable name, which may be a copy of Shield.
 pub(super) fn operator_cli(value: &Value, cwd: &Path) -> bool {
+    operator_route(value, cwd).is_some()
+}
+
+/// A recovery category derived from inspected argv, never an allowance.
+pub(super) fn operator_route(value: &Value, cwd: &Path) -> Option<&'static str> {
     match value {
         Value::Object(fields) => {
             let cwd = fields
                 .get("cwd")
                 .and_then(Value::as_str)
                 .map_or(cwd, Path::new);
-            value["executable"].as_str().is_some_and(|executable| {
-                let shield = Path::new(executable).file_name().is_some_and(operator_name)
-                    || submitted_path(executable, cwd)
-                        .canonicalize()
-                        .is_ok_and(|p| p.file_name().is_some_and(operator_name));
-                if shield && help_only(&value["arguments"]) {
-                    return false;
-                }
-                value["arguments"].as_array().is_some_and(|arguments| {
-                    arguments
-                        .windows(2)
-                        .any(|pair| pair[0] == "mcp" && pair[1] == "serve")
-                }) || shield
-            }) || fields
-                .iter()
-                .filter(|(key, _)| !["evaluation", "source_units"].contains(&key.as_str()))
-                .any(|(_, v)| operator_cli(v, cwd))
+            value["executable"]
+                .as_str()
+                .and_then(|executable| {
+                    let shield = Path::new(executable).file_name().is_some_and(operator_name)
+                        || submitted_path(executable, cwd)
+                            .canonicalize()
+                            .is_ok_and(|p| p.file_name().is_some_and(operator_name));
+                    if shield && help_only(&value["arguments"]) {
+                        return None;
+                    }
+                    let server = value["arguments"].as_array().is_some_and(|arguments| {
+                        arguments
+                            .windows(2)
+                            .any(|pair| pair[0] == "mcp" && pair[1] == "serve")
+                    });
+                    (server || shield).then(|| recovery_category(&value["arguments"]))
+                })
+                .or_else(|| {
+                    fields
+                        .iter()
+                        .filter(|(key, _)| !["evaluation", "source_units"].contains(&key.as_str()))
+                        .find_map(|(_, v)| operator_route(v, cwd))
+                })
         }
-        Value::Array(values) => values.iter().any(|v| operator_cli(v, cwd)),
-        _ => false,
+        Value::Array(values) => values.iter().find_map(|v| operator_route(v, cwd)),
+        _ => None,
+    }
+}
+
+fn recovery_category(arguments: &Value) -> &'static str {
+    let Some(arguments) = arguments.as_array() else {
+        return "administration";
+    };
+    let mut words = arguments.iter().filter_map(Value::as_str);
+    let mut command = words.next();
+    while let Some(word) = command {
+        if matches!(word, "--project" | "--debug-log-dir" | "--cache-dir") {
+            words.next();
+        } else if !matches!(word, "--json" | "--no-debug-log")
+            && !["--project=", "--debug-log-dir=", "--cache-dir="]
+                .iter()
+                .any(|prefix| word.starts_with(prefix))
+        {
+            break;
+        }
+        command = words.next();
+    }
+    match (command, words.next()) {
+        (Some("doctor" | "status"), _) => "diagnostics",
+        (Some("mcp"), Some("setup" | "remove")) => "registration",
+        (Some("rule" | "pack" | "policy"), _) => "policy",
+        _ => "administration",
     }
 }
 
 /// A trailing help flag after plain words cannot select an operator action.
-/// Other options, path syntax and `--` are excluded; ordinary policy and path guards
+/// Only project selection may precede the command words; ordinary policy and path guards
 /// still decide the command and any redirections or neighboring operations.
 fn help_only(arguments: &Value) -> bool {
     let Some(arguments) = arguments.as_array() else {
@@ -341,13 +378,27 @@ fn help_only(arguments: &Value) -> bool {
     let Some((last, commands)) = arguments.split_last() else {
         return false;
     };
-    (last == "--help" || last == "-h")
-        && commands.iter().all(|word| {
-            word.as_str().is_some_and(|word| {
-                word.starts_with(|c: char| c.is_ascii_lowercase())
-                    && word.bytes().all(|c| c.is_ascii_lowercase() || c == b'-')
-            })
-        })
+    if last != "--help" && last != "-h" {
+        return false;
+    }
+    let mut commands = commands.iter();
+    while let Some(word) = commands.next() {
+        if word == "--project" {
+            if !commands.next().is_some_and(|path| {
+                path.as_str()
+                    .is_some_and(|s| !s.is_empty() && !s.starts_with('-'))
+            }) {
+                return false;
+            }
+        } else if !word.as_str().is_some_and(|word| {
+            (word.starts_with("--project=") && word.len() > 10)
+                || (word.starts_with(|c: char| c.is_ascii_lowercase())
+                    && word.bytes().all(|c| c.is_ascii_lowercase() || c == b'-'))
+        }) {
+            return false;
+        }
+    }
+    true
 }
 
 fn operator_name(name: &std::ffi::OsStr) -> bool {
@@ -932,6 +983,40 @@ fn destructive(value: &Value, root: &Path, cwd: &Path, cwd_known: bool, guard: G
 #[cfg(test)]
 mod historical_skills {
     use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn operator_recovery_category_skips_all_global_flags() {
+        for arguments in [
+            json!(["--no-debug-log", "doctor"]),
+            json!(["--debug-log-dir", "/tmp/acme", "status"]),
+            json!(["--debug-log-dir=/tmp/acme", "doctor"]),
+            json!(["--cache-dir", "/tmp/acme", "status"]),
+            json!(["--cache-dir=/tmp/acme", "doctor"]),
+            json!([
+                "--project=/projects/acme",
+                "--json",
+                "--no-debug-log",
+                "--debug-log-dir",
+                "mcp",
+                "status"
+            ]),
+        ] {
+            assert_eq!(recovery_category(&arguments), "diagnostics", "{arguments}");
+        }
+        assert_eq!(
+            recovery_category(&json!(["--debug-log-dir", "/tmp/acme", "mcp", "setup"])),
+            "registration"
+        );
+        assert_eq!(
+            recovery_category(&json!(["--cache-dir=/tmp/acme", "pack", "update"])),
+            "policy"
+        );
+        assert_eq!(
+            recovery_category(&json!(["--unknown", "status"])),
+            "administration"
+        );
+    }
 
     #[test]
     fn unowned_shield_skill_folders_follow_ordinary_path_policy() {

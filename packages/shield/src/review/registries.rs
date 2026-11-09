@@ -52,6 +52,7 @@ pub(super) fn checked_catalog(context: &Context, source: &Source) -> Result<Cata
     context.progress.stage(super::progress::Stage::Catalog);
     let catalog = catalog(&context.fetcher, source)?;
     retain_catalog(context, &catalog)?;
+    super::pack_updates::retain(context, source, &catalog);
     Ok(catalog)
 }
 

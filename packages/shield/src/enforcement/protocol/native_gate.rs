@@ -248,7 +248,8 @@ fn gate(
     let (protection, path) = footprint(value, owner, cwd, guard);
     // The operator CLI and a separately launched MCP server can activate policy;
     // agents use the registered MCP connection instead of starting either here.
-    let blocked = if paths::operator_cli(&value["_shell_analysis"], cwd) {
+    let blocked = if let Some(route) = paths::operator_route(&value["_shell_analysis"], cwd) {
+        value["operator_route"] = json!(route);
         Some("operator-cli")
     } else if protected_removal(value, cwd, owner, guard)
         || protection == paths::Protection::Blocked
