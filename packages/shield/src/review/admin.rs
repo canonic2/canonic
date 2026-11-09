@@ -476,6 +476,29 @@ fn registry(
     scope: Scope,
     change: registries::Change<'_>,
 ) -> Result<(Operation, Value), Error> {
+    // Source paths belong to the selected project even when the registration
+    // will be user-wide. Never reinterpret them against the MCP server's cwd.
+    let location;
+    let change = match change {
+        registries::Change::Add {
+            name,
+            location: input,
+        } if !input.starts_with("https://") && !Path::new(input).is_absolute() => {
+            location = Path::new(&context.project_root).join(input);
+            registries::Change::Add {
+                name,
+                location: location
+                    .to_str()
+                    .ok_or(Error::Invalid("registry path must be UTF-8"))?,
+            }
+        }
+        change => change,
+    };
+    if matches!(change, registries::Change::Add { .. }) {
+        context
+            .progress
+            .stage(super::progress::Stage::DiscoverRegistry);
+    }
     let plan = registries::Prepared::new(
         (scope == Scope::Project).then_some(context),
         &context.fetcher,

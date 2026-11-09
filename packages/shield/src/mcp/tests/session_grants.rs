@@ -1,5 +1,6 @@
 //! Reusable grants through the shipping stdio confirmation transport.
 use super::*;
+mod reconsideration;
 
 fn prepared(
     agent: &str,
@@ -77,6 +78,7 @@ fn session_grants_transport_requires_its_own_form_and_replays_one_receipt() {
         );
         let envelope = &proposed["result"]["structuredContent"];
         assert!(envelope["error"].is_null(), "{proposed}");
+        assert!(envelope["data"].get("report_resources").is_none());
         let args = &envelope["data"]["apply_arguments"];
         let form = transport.call(json!(3), "session_grant_approve", args);
         assert_eq!(form["method"], "elicitation/create", "{form}");
@@ -99,6 +101,7 @@ fn session_grants_transport_requires_its_own_form_and_replays_one_receipt() {
         );
         let issued = &accepted["result"]["structuredContent"];
         assert!(issued["error"].is_null(), "{accepted}");
+        assert!(issued["data"].get("report_resources").is_none());
         assert_eq!(issued["data"]["grant_status"], "active");
         let replay = transport.call(json!(4), "session_grant_approve", args);
         assert_eq!(

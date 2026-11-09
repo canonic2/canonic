@@ -38,6 +38,8 @@ pub(crate) struct Context {
     pub(crate) occurred_at: Option<String>,
     /// Reads registry sources for operations in this context.
     pub(crate) fetcher: canonic_registry_kit::acquisition::Fetcher,
+    /// Optional request-local observation, never serialized into provenance.
+    pub(crate) progress: super::progress::Progress,
 }
 impl Context {
     pub(crate) fn new(project_id: String, project_root: String, surface: &str) -> Self {
@@ -58,6 +60,7 @@ impl Context {
             host_event_name: None,
             occurred_at: None,
             fetcher: crate::review::registries::fetcher(),
+            progress: super::progress::Progress::default(),
         }
     }
     /// The agent named in records: the enrolled or declared agent, or the

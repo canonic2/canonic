@@ -29,6 +29,14 @@ unavailable. Inspect existing offers before proposing, stop on decline, and
 never broaden scope to avoid refusal. Use `session_grant_revoke` to end your
 grant early.
 
+Only when the person explicitly asks to reconsider a declined session grant,
+call `session_grant_reconsider` with that declined `proposal_id`, its
+`candidate_digest` and a fresh `idempotency_key`. It prepares the same scope,
+duration and Deny overrides under a new candidate ID, preserving the decline.
+Copy its new `apply_arguments` to `session_grant_approve` for a fresh human
+form. A new proposal key alone cannot reopen a decline. Do not invoke
+reconsideration automatically or change the scope to escape suppression.
+
 1. For recurring interruptions, inspect `suggestion_list` and relevant `history_list`, `rule_list` or
    `policy_show` evidence. Follow returned next actions. Respect incomplete
    coverage, existing proposals and deferrals.

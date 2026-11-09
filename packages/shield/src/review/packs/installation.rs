@@ -220,6 +220,7 @@ impl Installation {
             binding: self.binding.clone(),
             candidate,
             metadata,
+            comparison: None,
         })
     }
 }

@@ -9,6 +9,8 @@ use crate::review::{
 use std::collections::BTreeMap;
 mod agent_isolation;
 mod interrupted;
+mod repository_independence;
+mod status_reporting;
 
 #[test]
 fn antigravity_doctor_reports_disabled_hooks_and_removal_deletes_empty_mcp_settings() {
@@ -583,7 +585,7 @@ fn mcp_connections_private_stdio_uses_random_indirection_without_local_values() 
 }
 
 #[test]
-fn mcp_connections_private_projection_refuses_tracked_destinations_before_writes() {
+fn mcp_connections_private_projection_supports_tracked_destinations_without_private_values() {
     for path in [
         ".mcp.json",
         ".codex/config.toml",
@@ -602,28 +604,32 @@ fn mcp_connections_private_projection_refuses_tracked_destinations_before_writes
         )
         .unwrap();
         fixture_git(root.path(), &["add", "-f", "--", path]);
-        // An ignore pattern does not make an already tracked file private.
+        // Neither tracking nor ignore patterns determine launcher privacy.
         fs::write(
             root.path().join(".gitignore"),
             ".mcp.json\n.codex/config.toml\n.claude/settings.local.json\n",
         )
         .unwrap();
-        let original = fs::read(root.path().join(path)).unwrap();
+        let index = fs::read(root.path().join(".git/index")).unwrap();
         let before = meta(&context);
-        let error = prepare(root.path(), &before, IntegrationChoice::all())
-            .err()
+        let plan = prepare(root.path(), &before, IntegrationChoice::all())
+            .unwrap()
             .unwrap();
-        assert!(error.to_string().contains("destination is tracked"));
-        assert_eq!(fs::read(root.path().join(path)).unwrap(), original);
-        if path != ".claude/settings.local.json" {
-            assert!(!root.path().join(".claude/settings.local.json").exists());
-        }
-        assert_eq!(meta(&context), before);
+        let shown = crate::review::integrations::setup::preview(root.path(), Some(&plan));
+        assert!(
+            shown["host_path_warning"]
+                .as_str()
+                .unwrap()
+                .contains("absolute")
+        );
+        apply(&context, &before, &plan).unwrap();
+        assert_private_host_output(root.path());
+        assert_eq!(fs::read(root.path().join(".git/index")).unwrap(), index);
     }
 }
 
 #[test]
-fn mcp_connections_private_projection_rechecks_tracking_at_apply() {
+fn mcp_connections_private_projection_allows_tracking_changes_during_confirmation() {
     for path in [
         ".mcp.json",
         ".codex/config.toml",
@@ -646,18 +652,15 @@ fn mcp_connections_private_projection_rechecks_tracking_at_apply() {
             .unwrap()
             .unwrap();
         fixture_git(root.path(), &["add", "-f", "--", path]);
-        let original = fs::read(root.path().join(path)).unwrap();
-        assert!(apply(&context, &before, &plan).is_err());
-        assert_eq!(fs::read(root.path().join(path)).unwrap(), original);
-        if path != ".claude/settings.local.json" {
-            assert!(!root.path().join(".claude/settings.local.json").exists());
-        }
-        assert_eq!(meta(&context), before);
+        let index = fs::read(root.path().join(".git/index")).unwrap();
+        apply(&context, &before, &plan).unwrap();
+        assert_private_host_output(root.path());
+        assert_eq!(fs::read(root.path().join(".git/index")).unwrap(), index);
     }
 }
 
 #[test]
-fn mcp_connections_private_projection_refuses_unverifiable_or_legacy_plans() {
+fn mcp_connections_private_projection_refuses_missing_bindings_before_writes() {
     let (root, context) = private_stdio_fixture();
     let before = meta(&context);
     let mut plan = prepare(root.path(), &before, IntegrationChoice::all())
@@ -673,10 +676,66 @@ fn mcp_connections_private_projection_refuses_unverifiable_or_legacy_plans() {
     owned.as_object_mut().unwrap().remove("launches");
     assert!(apply(&context, &before, &plan).is_err());
     assert!(!root.path().join(".mcp.json").exists());
-    fs::rename(root.path().join(".git"), root.path().join("saved-git")).unwrap();
-    assert!(prepare(root.path(), &before, IntegrationChoice::all()).is_err());
-    assert!(!root.path().join(".mcp.json").exists());
     assert_eq!(meta(&context), before);
+}
+
+fn assert_private_host_output(root: &Path) {
+    for path in [
+        ".mcp.json",
+        ".codex/config.toml",
+        ".claude/settings.local.json",
+    ] {
+        let output = fs::read_to_string(root.join(path)).unwrap();
+        for private in [
+            "/acme/private/bin/connector",
+            "acme-personal",
+            "acme-private-region",
+        ] {
+            assert!(!output.contains(private), "private value in {path}");
+        }
+    }
+}
+
+#[test]
+fn mcp_connections_private_projection_needs_no_repository_or_repository_metadata() {
+    for invalid_metadata in [false, true] {
+        let (root, context) = private_stdio_fixture();
+        fs::remove_dir_all(root.path().join(".git")).unwrap();
+        if invalid_metadata {
+            fs::write(root.path().join(".git"), "gitdir: /acme/missing-metadata\n").unwrap();
+        }
+        let before = meta(&context);
+        let plan = prepare(root.path(), &before, IntegrationChoice::all())
+            .unwrap()
+            .unwrap();
+        apply(&context, &before, &plan).unwrap();
+        assert_private_host_output(root.path());
+        let repair = prepare(root.path(), &meta(&context), IntegrationChoice::all())
+            .unwrap()
+            .unwrap();
+        apply(&context, &meta(&context), &repair).unwrap();
+        assert_eq!(repair.after, plan.after);
+        let snapshot = crate::runtime::Project::open(root.path())
+            .unwrap()
+            .snapshot()
+            .unwrap();
+        for agent in ["claude", "codex"] {
+            let expected = crate::review::integrations::mcp_projection(
+                root.path(),
+                agent,
+                "cloud",
+                &snapshot.mcp_connections()["cloud"],
+            )
+            .unwrap();
+            crate::review::integrations::verify_mcp_connection(
+                root.path(),
+                agent,
+                "acme",
+                &expected,
+            )
+            .unwrap();
+        }
+    }
 }
 
 #[test]
@@ -1268,8 +1327,8 @@ fn diagnostic_reads_detect_missing_binary_and_do_not_mutate_state_or_files() {
     let report = status(&context, &crate::review::project::load(&context).unwrap());
     assert_eq!(report["registered_integrations"][0]["status"], "degraded");
     assert_eq!(
-        report["tool_interception"],
-        "native hooks installed; host loading is unverified"
+        crate::review::integrations::enforcement(&report),
+        "degraded"
     );
     assert_eq!(report["installed_integrations"][0]["status"], "degraded");
     assert_eq!(

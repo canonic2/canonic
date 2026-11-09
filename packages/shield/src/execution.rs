@@ -186,7 +186,7 @@ fn execute(input: &cli::Run) -> Result<u8, Box<dyn std::error::Error>> {
                 result?;
             }
             if decision["allowed"] != true {
-                return Err(refusal(&decision));
+                return Err(refusal(&context, &decision));
             }
         }
         Err(error) => {
@@ -236,13 +236,20 @@ struct PreparedRun {
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
-fn refusal(decision: &Value) -> Box<dyn std::error::Error> {
+fn refusal(context: &review::Context, decision: &Value) -> Box<dyn std::error::Error> {
+    let in_session = context.agent.is_some();
     if let Some(id) = decision["approval"]["request_id"].as_str() {
-        eprintln!("{}", request_line(id, decision));
+        eprintln!("{}", request_line(id, decision, in_session));
         if decision["code"] == "approval-required" {
-            eprintln!(
-                "Approve with shield request approve {id} and retry with --approval-request {id}."
-            );
+            if in_session {
+                eprintln!(
+                    "Call request_approve with {{\"request_id\":\"{id}\"}} for human confirmation, then retry with --approval-request {id} and the same attribution."
+                );
+            } else {
+                eprintln!(
+                    "Approve with shield request approve {id} and retry with --approval-request {id}."
+                );
+            }
         } else {
             eprintln!(
                 "This grant cannot launch; a fresh request and operator review are required."
@@ -259,10 +266,15 @@ fn refusal(decision: &Value) -> Box<dyn std::error::Error> {
 
 /// The refused native request's identity, decision code and inspection route.
 #[cfg(any(target_os = "macos", target_os = "linux", windows, test))]
-fn request_line(id: &str, decision: &serde_json::Value) -> String {
+fn request_line(id: &str, decision: &serde_json::Value, in_session: bool) -> String {
     format!(
-        "Shield native request {id}: {}. Inspect with shield request show {id}.",
-        decision["code"].as_str().unwrap_or("unknown")
+        "Shield native request {id}: {}. Inspect with {}.",
+        decision["code"].as_str().unwrap_or("unknown"),
+        if in_session {
+            format!("request_show using request_id {id}")
+        } else {
+            format!("shield request show {id}")
+        }
     )
 }
 
@@ -382,10 +394,14 @@ mod tests {
     fn refused_request_lines_print_the_bare_decision_code() {
         let decision = serde_json::json!({"code":"approval-required"});
         assert_eq!(
-            request_line("run-acme", &decision),
+            request_line("run-acme", &decision, false),
             "Shield native request run-acme: approval-required. Inspect with shield request show run-acme."
         );
-        assert!(request_line("run-acme", &serde_json::json!({})).contains(": unknown."));
+        assert!(request_line("run-acme", &serde_json::json!({}), false).contains(": unknown."));
+        assert_eq!(
+            request_line("run-acme", &decision, true),
+            "Shield native request run-acme: approval-required. Inspect with request_show using request_id run-acme."
+        );
     }
 
     #[test]

@@ -629,6 +629,7 @@ pub(in crate::review) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
         "maintenance_scope":{"targets":p.targets,"reason":p.scope_reason},
         "operation":if p.desired.is_some() {"set up agent integrations"} else {"remove Shield integrations"},
         "project":root,
+        "host_path_warning":super::HOST_PATH_WARNING,
         "binary":p.desired.as_ref().or(p.previous.as_ref()).map(|r| &r.binary),
         "agents":agents,
         "box":box_next,

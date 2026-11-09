@@ -144,7 +144,7 @@ pub(crate) fn status(context: &Context) -> Result<Value, Error> {
 }
 
 pub(super) fn status_from(state: &State) -> Value {
-    json!({"schema_version":1,"mode":"local-runtime","enforcement":"not-installed",
+    json!({"schema_version":1,"mode":"local-runtime","enforcement":"not-checked",
         "project_id":state.project_id,"project_root":state.project_root,
         "review":{"policy_revision":state.policy_revision,"candidate_digest":digest(&state.candidates)},
         "active":state.active.as_ref().map(Active::metadata),

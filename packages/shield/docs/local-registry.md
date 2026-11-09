@@ -132,7 +132,30 @@ shield pack remove pack:UUID
 shield registry remove acme
 ```
 
-Registry mutations ask for terminal confirmation. Removing a registration
+These CLI registry mutations ask for terminal confirmation. From an agent, use
+`registry_add` with `{"name":"team","location":"https://registry.example.com/"}`.
+Shield validates the discovered catalog, then shows a human form with its
+canonical location, registry identity, signing-key SHA-256 fingerprint and trust
+basis. HTTPS enrollment trusts the reviewed origin/key on first use; a signature
+does not independently prove publisher identity. Local sources show their
+canonical directory and unsigned trust basis. Relative directories resolve
+against the selected project.
+
+If an agent does not know the alias or location, it can omit that field from
+`registry_add` to show a missing-details form. An omitted scope then requires
+your explicit choice. Submission returns `retry_arguments` for the agent to
+call next; it neither discovers nor enrolls the source. The subsequent call
+shows the separate trust review described above. Supplied fields stay fixed.
+
+The default scope is `project`. Set `"scope":"user"` to change the user's
+registry configuration for other projects too; the form states that effect.
+Declining, cancelling or closing the connection leaves the source unenrolled.
+Discovery alone grants no trust or permissions. If a dependency needs an
+unenrolled source, call `registry_add` for it and retry the pack request after
+acceptance. Pack permissions still need their own review. The host must support
+Shield's human confirmation forms.
+
+Removing a registration
 preserves installed policy and its source identity. Registry aliases select
 sources for discovery; installed selectors identify retained instances.
 Use a displayed `pack:UUID` when names are ambiguous.
@@ -372,5 +395,9 @@ confirmation can use those captured bytes after the source becomes unavailable.
 remaining pack requires the instance, removal refuses and names its dependents.
 Removing a root prunes only dependencies no longer reachable from remaining roots.
 Shared dependencies and explicitly selected packs remain. MCP `pack_remove`
-proposals use the same preparation and confirmation boundaries. Custom rules are
+proposals use the same preparation and confirmation boundaries. Calling it
+without a reference lets you select 1–16 installed packs together, with joint
+dependency checks and a separate final policy approval. This form supports at
+most 64 installed choices and needs a multiple-selection-capable MCP client;
+explicit single references remain available. Custom rules are
 preserved across both workflows.

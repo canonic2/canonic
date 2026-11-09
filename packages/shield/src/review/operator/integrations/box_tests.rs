@@ -589,7 +589,13 @@ fn box_install_hands_direct_installations_over_without_touching_their_files() {
     assert!(registered.agents.is_empty());
     assert!(registered.box_definition.is_some());
     let report = coverage(&context);
-    assert_eq!(report["installed_integrations"], json!([]));
+    assert_eq!(
+        report["installed_integrations"],
+        json!([
+            {"agent":"claude","surface":"native-hooks","managed_by":"box","status":"installed","ask_fallback":null},
+            {"agent":"codex","surface":"native-hooks","managed_by":"box","status":"installed","ask_fallback":null}
+        ])
+    );
     assert_eq!(report["repair_needed"], false, "{report}");
     // Plain removal of a direct installation still deletes its entries.
     let (root, context) = fixture();

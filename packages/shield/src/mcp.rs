@@ -8,9 +8,12 @@ pub(crate) use bootstrap::serve as serve_bootstrap;
 mod elicitation;
 mod frame_log;
 mod messages;
+mod progress;
 mod prompts;
+mod resources;
 mod response;
 mod skills;
+mod tasks;
 #[cfg(test)]
 pub(crate) mod tests;
 
@@ -37,9 +40,24 @@ pub(crate) struct Server {
     confirmations: Mutex<confirmation::Confirmations>,
     questions: Mutex<elicitation::Questions>,
     log: Option<Arc<crate::diagnostics::Log>>,
+    preparations: Arc<crate::review::preparation_tasks::Runtime>,
+    task_schema: std::sync::OnceLock<canonic_mcp_kit::ResultSchema>,
 }
 
 impl Server {
+    fn non_tool(&self, request: &Request, context: &stdio::Context) -> Outcome {
+        match request {
+            Request::Task(request) => tasks::manage(self, request, context),
+            Request::Prompt(call) => prompts::render(call),
+            Request::Method { method, params } if method == "resources/read" => {
+                resources::read(&self.review_for_request(context), params, context)
+            }
+            _ => Outcome::Method(Err(RpcError::new(
+                rpc::METHOD_NOT_FOUND,
+                "Method not found",
+            ))),
+        }
+    }
     pub(crate) fn for_review(
         mut context: crate::review::Context,
     ) -> Result<Self, crate::review::Error> {
@@ -48,6 +66,7 @@ impl Server {
             .unwrap_or_default()
             .as_nanos();
         context.surface = "mcp".into();
+        context.progress = crate::review::progress::Progress::default();
         context.connection_id = Some(format!(
             "connection-{}",
             crate::policy::fingerprint(
@@ -55,12 +74,15 @@ impl Server {
             )
         ));
         let connection = Arc::new(crate::review::mcp::Connection::enrolled(&context)?);
+        let preparations = Arc::new(crate::review::preparation_tasks::Runtime::new(&context));
         Ok(Self {
             review: RwLock::new(Arc::new(context)),
             connection,
             confirmations: Mutex::new(confirmation::Confirmations::default()),
             questions: Mutex::new(elicitation::Questions::default()),
             log: None,
+            preparations,
+            task_schema: std::sync::OnceLock::new(),
         })
     }
 
@@ -78,10 +100,15 @@ impl Server {
 
     fn review_for_request(&self, context: &stdio::Context) -> Arc<crate::review::Context> {
         let review = self.review();
-        let Some(request) = context.request_context() else {
+        let progress = progress::for_request(context);
+        if context.request_context().is_none() && progress.is_none() {
             return review;
-        };
+        }
         let mut review = (*review).clone();
+        review.progress = progress.unwrap_or_default();
+        let Some(request) = context.request_context() else {
+            return Arc::new(review);
+        };
         if let Some(session) = review
             .agent
             .as_deref()
@@ -173,6 +200,7 @@ impl Server {
             .map(|trace| trace.wait("approval.wait", "approval.wait_us"));
         let mut guard = PolicyWait::new(&review, &call);
         Outcome::Confirm(Confirm::new(message, move |decision, context| {
+            let review = progress::resume(review, context);
             guard.disarm();
             let _scope = trace
                 .as_ref()
@@ -220,7 +248,7 @@ impl Server {
         call: ToolCall,
         context: &stdio::Context,
     ) -> Outcome {
-        match crate::review::hook_approval::confirmation(&review, &call.arguments) {
+        match crate::review::approvals::confirmation(&review, &call.arguments) {
             Ok(message) => self.confirm_apply(review, call, context, message),
             Err(_) => Outcome::Tool(reply(
                 &review,
@@ -372,7 +400,14 @@ impl Server {
 impl stdio::Handler for Server {
     fn admit(&self, request: &Request) -> stdio::Admission {
         stdio::Admission {
-            lane: usize::from(matches!(request, Request::Resource(_))),
+            lane: if matches!(request, Request::Task(_)) {
+                2
+            } else {
+                usize::from(
+                    matches!(request, Request::Resource(_))
+                        || matches!(request, Request::Method { method, .. } if method == "resources/read"),
+                )
+            },
             ..stdio::Admission::default()
         }
     }
@@ -397,25 +432,13 @@ impl stdio::Handler for Server {
             .as_ref()
             .map(crate::diagnostics::trace::Request::enter);
         let outcome = (|| {
-            if let Request::Prompt(call) = &request {
-                return prompts::render(call);
-            }
-            if let Request::Method { method, params } = &request
-                && method == "resources/read"
-            {
-                return Outcome::ResourceNotFound(
-                    params["uri"].as_str().unwrap_or_default().into(),
-                );
-            }
             let Request::Tool(call) = request else {
-                return Outcome::Method(Err(RpcError::new(
-                    rpc::METHOD_NOT_FOUND,
-                    "Method not found",
-                )));
+                return self.non_tool(&request, context);
             };
             let review = self.review_for_request(context);
-            let pack_form = needs_pack_form(&call);
-            if !pack_form && let Some(outcome) = self.resume_confirmation(&review, &call, context) {
+            let input_form = needs_input_form(&call) || elicitation::owns(self, context);
+            if !input_form && let Some(outcome) = self.resume_confirmation(&review, &call, context)
+            {
                 return outcome;
             }
             // NULs are refused before dispatch or confirmation, so no tool stores one.
@@ -425,8 +448,11 @@ impl stdio::Handler for Server {
             if let Some(outcome) = self.maintain_setup(&review, &call, context) {
                 return outcome;
             }
-            if pack_form {
+            if input_form {
                 return elicitation::call(self, review, call, context);
+            }
+            if let Some(outcome) = tasks::create(self, &review, &call, context) {
+                return outcome;
             }
             match crate::review::mcp::admin_confirmation(
                 &review,
@@ -489,6 +515,7 @@ impl stdio::Handler for Server {
                     "success"
                 }),
                 Outcome::InputRequired(_) => trace.finish("input_required"),
+                Outcome::Task(Err(_)) => trace.finish("refused"),
                 _ => trace.finish("protocol_result"),
             }
         }
@@ -503,8 +530,13 @@ impl stdio::Handler for Server {
     }
 }
 
-fn needs_pack_form(call: &ToolCall) -> bool {
+fn needs_input_form(call: &ToolCall) -> bool {
     matches!(call.name.as_str(), "pack_add" | "pack_update")
+        || (call.name == "registry_add"
+            && ["name", "location"]
+                .iter()
+                .any(|key| call.arguments.get(key).is_none()))
+        || (call.name == "pack_remove" && call.arguments.get("reference").is_none())
         || (call.name == "pack_configure"
             && (call.arguments.get("variables").is_some()
                 || !["set", "unset", "override", "clear_override"]
@@ -719,7 +751,17 @@ pub(crate) fn serve(
         review.agent.as_deref()
     };
     let catalog = catalog(agent).map_err(ServeError::Catalog)?;
+    if let Some(schema) = catalog.result_schema("policy_propose") {
+        let _ = server.task_schema.set(schema);
+    }
     let mut options = bundled_options(options)?;
+    options.session.tasks = Some(tasks::policy());
+    options
+        .lanes
+        .push(stdio::Lane::new("preparation-management", 2, 8));
+    options.session.resources = Some(Arc::new(
+        resources::catalog().map_err(ServeError::Resources)?,
+    ));
     options.session.modern = Some(canonic_mcp_kit::ModernOptions::new(
         ServerInfo::new("shield", env!("CARGO_PKG_VERSION"))
             .with_instructions(messages::instructions_for(&review)),
@@ -776,6 +818,8 @@ pub(crate) fn serve_static(
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ServeError {
+    #[error("Cannot start Shield MCP server: invalid review resource catalog")]
+    Resources(#[source] canonic_mcp_kit::ResourceError),
     #[error("Cannot start Shield MCP server: invalid prompt catalog")]
     Prompts(#[source] canonic_mcp_kit::PromptError),
     #[error("Cannot start Shield MCP server: invalid skill catalog")]

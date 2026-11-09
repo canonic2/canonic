@@ -3,7 +3,7 @@ use super::*;
 use crate::{enforcement::read_text::Binding, review, runtime::Project};
 use assert_fs::prelude::*;
 
-fn fixture() -> (assert_fs::TempDir, Context, EvaluatedRequest, String) {
+pub(crate) fn fixture() -> (assert_fs::TempDir, Context, EvaluatedRequest, String) {
     let (root, context) = review::tests::enrolled();
     root.child("acme.txt")
         .write_str("Acme private text")

@@ -3,6 +3,8 @@ use super::{Checkpoint, Connection, Context, Error, changes, fields, packs, requ
 use canonic_mcp_kit::elicitation::{Form, Request};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
+mod guided;
+pub(crate) use guided::Question;
 
 pub(crate) struct PackQuestion {
     pub(crate) tool: &'static str,

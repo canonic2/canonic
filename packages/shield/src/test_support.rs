@@ -9,6 +9,41 @@ pub(crate) fn absolute(path: &str) -> Cow<'_, str> {
     }
 }
 
+/// Run a home-sensitive test in an owned child without changing process-global
+/// environment while other test/runtime threads may be active. The caller
+/// returns when false; only the exact child test runs its assertions.
+pub(crate) fn isolated_home(test: &str) -> bool {
+    if std::env::var("SHIELD_ISOLATED_HOME_TEST").as_deref() == Ok(test) {
+        let home = std::env::var_os("SHIELD_ISOLATED_HOME").expect("owned test home");
+        assert_eq!(
+            std::env::home_dir().unwrap(),
+            std::path::PathBuf::from(home)
+        );
+        return true;
+    }
+    let home = assert_fs::TempDir::new().unwrap();
+    let name = test.split_once("::").expect("crate-qualified test name").1;
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", name, "--nocapture"])
+        .env("HOME", home.path())
+        .env("USERPROFILE", home.path())
+        .env("SHIELD_ISOLATED_HOME_TEST", test)
+        .env("SHIELD_ISOLATED_HOME", home.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("1 passed; 0 failed"),
+        "isolated fixture did not execute: {name}"
+    );
+    false
+}
+
 /// A real Git with test-owned configuration and no detached maintenance.
 pub(crate) fn git() -> std::process::Command {
     #[cfg(windows)]

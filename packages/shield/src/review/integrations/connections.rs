@@ -61,7 +61,7 @@ fn validate_pending_launch(
     }
 }
 
-fn native_matches(root: &Path, agent: &str, connection: &Connection) -> bool {
+pub(super) fn native_matches(root: &Path, agent: &str, connection: &Connection) -> bool {
     connection.agents.get(agent).is_some_and(|alias| {
         verify_mcp_connection(root, agent, alias, &connection.transport).is_ok()
     })

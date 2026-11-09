@@ -348,6 +348,18 @@ pub(crate) trait AgentAdapter: Sync {
         diagnostics: &mut Vec<&'static str>,
     ) -> Result<(), crate::review::Error>;
 
+    /// Inspect published callback coverage and loading controls independently
+    /// of the MCP tool permission settings owned by the publisher.
+    fn diagnose_published_hooks(
+        &self,
+        hooks: Option<&str>,
+        expected: &setup::HookGroups,
+        extra: Option<&str>,
+        diagnostics: &mut Vec<&'static str>,
+    ) -> Result<(), crate::review::Error> {
+        self.diagnose(hooks, expected, extra, diagnostics)
+    }
+
     fn event(&self, name: &str) -> Option<Event> {
         self.spec()
             .events

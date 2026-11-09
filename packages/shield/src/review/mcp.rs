@@ -19,7 +19,9 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
+#[cfg(test)]
 pub(crate) use elicitation::PackQuestion;
+pub(crate) use elicitation::Question;
 pub(super) use operator::{Diagnostic, diagnostic as operator_diagnostic, docs as operator_docs};
 
 pub(crate) fn question_error(context: &Context, error: &Error) -> Value {
@@ -60,6 +62,8 @@ pub(crate) fn apply_confirmation(
     }
     let mut message = confirmation::message(proposal, &proposal.apply_arguments());
     if changed {
+        message.push('\n');
+        message.push_str(super::integrations::HOST_PATH_WARNING);
         // Local settings are deliberately absent from public changes and tool
         // arguments. This human form compares the retained values privately,
         // then labels masked additions, edits and removals without exposing them.
@@ -310,12 +314,6 @@ pub(crate) fn admin_confirmation(
     if !super::admin::supports(name) || unconfirmed_cache_rebuild(name, args) {
         return Ok(None);
     }
-    if name == "registry_add" {
-        // Enrollment discovers a trust key at an agent-selected location.
-        // No in-session trust-discovery review is implemented for enrollment.
-        // Refuse without I/O and report that capability gap.
-        return Err(Error::ApprovalRequired);
-    }
     if (name == "mcp_setup" && args["dry_run"] == true)
         || crate::agents::review::for_context(context).confirmation()
             == crate::agents::review::Confirmation::Terminal
@@ -323,6 +321,13 @@ pub(crate) fn admin_confirmation(
         return Ok(None);
     }
     checkpoint()?;
+    {
+        let mut pending = connection.admin.lock().map_err(|_| Error::Locked)?;
+        pending.retain(|_, (created, _, _)| created.elapsed() < std::time::Duration::from_mins(5));
+        if pending.len() >= 8 {
+            return Err(Error::Overloaded);
+        }
+    }
     let prepared = super::admin::prepare(context, name, args, checkpoint)?;
     checkpoint()?;
     let key = admin_key(name, args);
@@ -362,9 +367,6 @@ fn admin_call(
 ) -> Result<Value, Error> {
     if unconfirmed_cache_rebuild(name, args) {
         return super::admin::prepare(context, name, args, checkpoint)?.commit(context, checkpoint);
-    }
-    if name == "registry_add" {
-        return Err(Error::ApprovalRequired);
     }
     let retained = if let Some(binding) = binding {
         connection
@@ -535,6 +537,7 @@ pub(crate) fn policy_outcome(context: &Context, args: &Value, code: &str) -> Val
 fn result_envelope(context: &Context, name: &str, result: Result<Value, Failure>) -> Value {
     match result {
         Ok(mut data) => {
+            super::reports::attach(context, name, &mut data);
             // Bundled public docs contain no runtime input. Redacting example
             // flags would corrupt their syntax and Markdown line structure.
             let redacted = if ["history_list", "history_show"].contains(&name) {
@@ -556,7 +559,7 @@ fn result_envelope(context: &Context, name: &str, result: Result<Value, Failure>
             if name.starts_with("session_grant_") && matches!(error, Error::StaleSnapshot) {
                 value["error"]["operator_route"] = json!("session_grant_show");
                 value["error"]["message"] = json!(
-                    "This session candidate is no longer pending or current. Inspect session_grant_show; obtain fresh confirmation only while the task remains authorized. Do not retry a declined offer."
+                    "This session candidate is no longer pending or current. Inspect session_grant_show; obtain fresh confirmation only while the task remains authorized. Do not retry a declined offer automatically. Only if the person explicitly asks to reconsider a still-current decline, use session_grant_reconsider and obtain fresh human confirmation."
                 );
             }
             value
@@ -682,7 +685,7 @@ fn failure(context: &Context, error: &Error) -> Value {
             Some("cache_prepare".into())
         }
         Error::Dependency(canonic_registry_kit::resolution::Error::Unenrolled(_)) => {
-            Some("shield registry add".into())
+            Some("registry_add".into())
         }
         _ => None,
     };
@@ -800,7 +803,7 @@ fn error_fields(error: &Error) -> (&'static str, String) {
         Error::Dependency(canonic_registry_kit::resolution::Error::Unenrolled(source)) => (
             "invalid_input",
             format!(
-                "A dependency needs registry {}, which this project has not added. Ask the user to add it with shield registry add, then retry",
+                "A dependency needs registry {}, which this project has not added. Call registry_add with its alias and source location to obtain the person's trust confirmation in this session, then retry the original pack request. Ask for the location if it is unknown; discovery does not grant trust",
                 source.chars().take(256).collect::<String>()
             ),
         ),
@@ -817,6 +820,16 @@ fn error_fields(error: &Error) -> (&'static str, String) {
 }
 
 fn capacity_message(kind: CapacityKind, pending: usize, retained: usize, limit: usize) -> String {
+    if matches!(
+        kind,
+        CapacityKind::StoredBytes | CapacityKind::StoredEntries
+    ) {
+        return format!(
+            "Storage admission needs {retained} {}s, limit {limit}; {}",
+            kind.noun(),
+            kind.recovery()
+        );
+    }
     let next = match kind {
         CapacityKind::Proposals => {
             "other live interactions hold the project capacity. Finish or withdraw your own interaction in this session, or wait for those interactions to finish or expire"
@@ -827,6 +840,7 @@ fn capacity_message(kind: CapacityKind, pending: usize, retained: usize, limit: 
         CapacityKind::ReadRequests | CapacityKind::RunRequests => {
             "ask the user to review them with shield request list (or deny with shield request deny), then retry"
         }
+        CapacityKind::StoredBytes | CapacityKind::StoredEntries => kind.recovery(),
     };
     format!(
         "Capacity reached for {}s: {pending} pending, {retained} retained, limit {limit}; {next}",
@@ -889,6 +903,10 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
             "overloaded",
             "Shield is busy or at capacity. Wait for the current operation to finish, then retry or reconnect",
         ),
+        Error::CleanupPending => (
+            "cleanup_pending",
+            "Bounded object cleanup made progress and has more work. Retry this still-needed operation to continue cleanup automatically; no policy change was approved",
+        ),
         Error::Missing => (
             "not_found",
             "The requested record is unavailable. List current records before selecting another ID",
@@ -900,7 +918,7 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
         ),
         Error::StaleSnapshot => (
             "stale_revision",
-            "Policy or review context changed. Call status for fresh handles, reassess and re-propose any still-needed change",
+            "Policy or review context changed. Call status for fresh handles, reassess and re-propose any still-needed change. For a preparation task, submit the original concrete changes again instead of the old preparation_task_id; if you supplied an idempotency_key, use a new key for fresh preparation",
         ),
         Error::Cancelled | Error::Policy(crate::policy::Error::Interrupted) => (
             "cancelled",
@@ -1034,6 +1052,7 @@ fn dispatch(
             Ok(super::session_grants::show(context, args)?)
         }
         "session_grant_propose" => Ok(super::session_grants::propose(context, args)?),
+        "session_grant_reconsider" => Ok(super::session_grants::reconsider(context, args)?),
         "session_grant_revoke" => Ok(super::session_grants::revoke(context, args)?),
         "session_grant_approve" => {
             super::session_grants::apply(context, args, confirmed).map_err(|error| match error {
@@ -1061,7 +1080,7 @@ fn dispatch(
             Ok(json!({"status":"deferred","policy_changed":false,"review_ids":args["review_ids"]}))
         }
         "request_approve" => {
-            super::hook_approval::approve(context, args, confirmed).map_err(|error| match error {
+            super::approvals::approve(context, args, confirmed).map_err(|error| match error {
                 Error::ApprovalRequired => Failure::Refused(&REQUEST_CONFIRMATION),
                 error => error.into(),
             })
@@ -1339,6 +1358,14 @@ fn propose(
     args: &Value,
     checkpoint: Checkpoint<'_>,
 ) -> Result<Value, Error> {
+    if args.get("preparation_task_id").is_some() {
+        fields(args, &["preparation_task_id"])?;
+        let input = super::preparation_tasks::review_input(
+            context,
+            required(args, "preparation_task_id")?,
+        )?;
+        return propose_input(context, views, &input, checkpoint);
+    }
     let input: changes::Input = serde_json::from_value(args.clone())
         .map_err(|_| Error::Invalid("invalid proposal arguments"))?;
     propose_input(context, views, &input, checkpoint)

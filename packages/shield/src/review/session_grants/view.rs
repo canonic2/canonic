@@ -24,7 +24,7 @@ fn timestamp(ms: u64) -> String {
 pub(super) fn public(row: &Record, state: &State, now: u64) -> Value {
     let status = row.effective(state, now);
     let grant = row.grant.as_ref();
-    json!({"proposal_id":row.id,"grant_id":grant.map(|g|&g.id),"session_ref":row.session.reference,
+    json!({"proposal_id":row.id,"reconsiders_proposal_id":row.reconsiders,"reconsiders_candidate_digest":row.reconsiders_digest,"grant_id":grant.map(|g|&g.id),"session_ref":row.session.reference,
         "target":{"project":state.project_root,"agent":row.session.agent,"session_id":row.session.session_id},
         "candidate_digest":row.digest,"scope":row.scope,"override_denies":row.overrides,"duration_seconds":row.duration,
         "provenance":row.provenance,"created_at_ms":row.created,"proposal_expires_at_ms":row.created.saturating_add(PENDING),
@@ -39,7 +39,7 @@ pub(super) fn public(row: &Record, state: &State, now: u64) -> Value {
         "session_binding":"host-reported","mcp_session_association":if row.provenance["session_id"].is_null(){"unavailable"}else{"host-reported"},
         "review":message(row,&state.project_root,now).ok(),
         "apply_arguments":{"proposal_id":row.id,"candidate_digest":row.digest},
-        "next_action":if status=="pending"{"Call session_grant_approve with apply_arguments unchanged; the user confirms Shield's form."}else if status=="active"{"Use covered native commands; project policy is unchanged."}else{"This authorization is unavailable. Inspect current policy and obtain fresh confirmation only if still needed."}})
+        "next_action":if status=="pending"{"Call session_grant_approve with apply_arguments unchanged; the user confirms Shield's form."}else if status=="active"{"Use covered native commands; project policy is unchanged."}else if status=="declined"{"Do not offer this scope again automatically. Only if the person explicitly asks to reconsider, call session_grant_reconsider with this proposal_id, candidate_digest and a fresh idempotency_key; then obtain fresh human confirmation."}else{"This authorization is unavailable. Inspect current policy and obtain fresh confirmation only if still needed."}})
 }
 
 pub(super) fn message(row: &Record, project_root: &str, now: u64) -> Result<String, Error> {
@@ -50,6 +50,13 @@ pub(super) fn message(row: &Record, project_root: &str, now: u64) -> Result<Stri
         format!("Duration: {} seconds from acceptance; proposed expiry: {}.",row.duration,timestamp(now.saturating_add(row.duration*1000))),
         "Unlimited matching uses until expiry, revoke or a policy/protection/integration change. Resume of this same conversation can reuse it.".into(),
         "Project policy stays unchanged. Other conversations receive no permission. This does not prove review, passing checks or execution.".into()];
+    if let Some(previous) = &row.reconsiders {
+        // Replace boilerplate rather than adding a paragraph: a scope that fit
+        // the original form must still fit when explicitly reconsidered.
+        lines[0] = format!("Fresh review of declined proposal {}?", quote(previous));
+        lines[3] = "MCP association may be unavailable; this review targets the recorded conversation above.".into();
+        lines[6] = "Policy unchanged. Other conversations get no permission. Permission proves no review, checks or execution.".into();
+    }
     if row.overrides.as_array().is_none_or(Vec::is_empty) {
         lines.push("Covers Ask only; Deny and protected-state checks remain effective.".into());
     } else {

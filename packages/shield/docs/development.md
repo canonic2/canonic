@@ -259,11 +259,16 @@ and operator workflows. Start with the module for the behavior you are changing:
 | Agent configuration ownership and repair mechanics | `review/integrations.rs`, `review/integrations/`, `review/path_access.rs` |
 | Approval clocks and request-specific grants | `review/clock.rs`, `review/read_approval.rs`, `review/run_approval.rs` |
 | Durable source, disposable cache, and history | `review/storage/sources.rs`, `review/cache.rs`, `review/storage/history.rs`, `history/correlation.rs` |
+| Object admission, reclamation and live-reader pins | `review/storage/objects.rs`, `review/storage/sources/retention.rs`, `review/cache/retention.rs` |
+| Retained proposal report projections and MCP publication | `review/reports.rs`, `mcp/resources.rs` |
+| Request-owned operation stages and MCP progress | `review/progress.rs`, `mcp/progress.rs` |
+| Durable inactive preparation, task storage and management | `review/changes/preparation.rs`, `review/preparation_tasks/`, `mcp/tasks.rs` |
 | Agent payloads, setup codecs, and replies | `src/agents.rs`, `agents/claude_code.rs`, `agents/codex.rs`, `agents/setup.rs` |
 | Shared hook dispatch and feedback | `agents/hook.rs`, `agents/feedback.rs`, `src/agent_message.rs` |
 | Host-specific MCP confirmation | `agents/review.rs`, `agents/*/review.rs` |
 | MCP startup, transport handler, and output | `src/mcp_io.rs`, `src/mcp.rs`, `mcp/response.rs`, `mcp/messages.rs` |
 | MCP tools, schemas, snapshots, and cursors | `review/mcp/` |
+| Guided input plans and bounded form continuations | `review/mcp/elicitation.rs`, `review/mcp/elicitation/guided.rs`, `mcp/elicitation.rs` |
 | Bundled Markdown guides | `build.rs`, `review/mcp/documentation.rs` |
 | Runtime snapshots and protected handoff | `src/runtime.rs`, `review/runtime/consumer.rs`, `src/enforcement.rs` |
 | Supported native launches and cleanup | `src/execution.rs` and `execution/` |
@@ -393,6 +398,19 @@ npm --prefix packages/shield/adapters/sdk-tests test
 `make -C packages/shield install-local` installs into `~/.local/bin`; `PREFIX`
 selects another root. From this package use `make build` and `make install-local`.
 `CARGO` overrides Cargo discovery and `CARGO_FLAGS=--offline` uses cached dependencies.
+
+For one adapter or local SDK regression against the current development binary,
+use `make test-adapter-focus FILTER='test name' TEST_FILE=adapters/path/to/file.test.mjs`
+from this package. It runs `dev` and supplies that binary through
+`SHIELD_TEST_BINARY`. For example:
+
+```sh
+make test-adapter-focus FILTER='interactive SDK action approval' TEST_FILE=adapters/sdk-tests/action-approval.test.mjs
+```
+
+This focused SDK case uses the installed pinned SDK, an owned loopback provider,
+temporary projects and scripted elicitation answers; it makes no cloud model
+requests. The application remains responsible for rendering its human form.
 Make prefers `~/.cargo/bin/cargo` so rustup selects the pinned toolchain,
 falling back to Cargo on PATH.
 

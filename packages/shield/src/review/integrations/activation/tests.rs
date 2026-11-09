@@ -44,14 +44,6 @@ fn connections(state: &State) -> Connections {
 
 fn fixture(local: bool) -> (assert_fs::TempDir, Context) {
     let root = assert_fs::TempDir::new().unwrap();
-    assert!(
-        crate::test_support::git()
-            .current_dir(root.path())
-            .args(["init", "-q"])
-            .status()
-            .unwrap()
-            .success()
-    );
     let context = review::mcp::initialize_fixture(root.path(), &bundle(local, "before"));
     std::fs::write(
         root.path().join(".mcp.json"),

@@ -49,13 +49,13 @@ impl Retained {
     fn roots(
         &self,
         floating: &BTreeSet<Instance>,
-        removed: Option<usize>,
+        removed: &BTreeSet<usize>,
     ) -> Result<Vec<Root<Profile>>, Error> {
         self.rows
             .iter()
             .zip(&self.releases)
             .enumerate()
-            .filter(|(i, (row, _))| Some(*i) != removed && row["direct"] != false)
+            .filter(|(i, (row, _))| !removed.contains(i) && row["direct"] != false)
             .map(|(_, (row, release))| {
                 Ok(Root {
                     instance: release.instance.clone(),
@@ -101,7 +101,7 @@ pub(in crate::review::packs) fn update(
             before.operator.clone(),
         ));
     }
-    let roots = retained.roots(&seeds, None)?;
+    let roots = retained.roots(&seeds, &BTreeSet::new())?;
     let locked = retained
         .rows
         .iter()
@@ -212,33 +212,45 @@ pub(in crate::review::packs) fn remove(
     before: &State,
     reference: &str,
 ) -> Result<(Value, Value), Error> {
+    remove_many(before, &[reference.to_owned()])
+}
+
+pub(in crate::review::packs) fn remove_many(
+    before: &State,
+    references: &[String],
+) -> Result<(Value, Value), Error> {
     let retained = Retained::load(before)?;
     let aliases = super::super::current_aliases(&before.operator);
-    let index = super::super::selection(&retained.rows, &aliases, reference)?;
-    let target = &retained.releases[index].instance;
-    let roots = retained.roots(&BTreeSet::new(), Some(index))?;
+    let removed = references
+        .iter()
+        .map(|reference| super::super::selection(&retained.rows, &aliases, reference))
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    let roots = retained.roots(&BTreeSet::new(), &removed)?;
     let selected = resolution::resolve(&roots, &retained.releases, &retained.enrolled)?;
-    if selected.iter().any(|s| &s.release.instance == target) {
-        let dependents = selected
-            .iter()
-            .filter(|s| {
-                s.release.dependencies.iter().any(|d| {
-                    d.pack == target.pack
-                        && d.registry.as_ref().unwrap_or(&s.release.instance.registry)
-                            == &target.registry
+    for index in removed {
+        let target = &retained.releases[index].instance;
+        if selected.iter().any(|s| &s.release.instance == target) {
+            let dependents = selected
+                .iter()
+                .filter(|s| {
+                    s.release.dependencies.iter().any(|d| {
+                        d.pack == target.pack
+                            && d.registry.as_ref().unwrap_or(&s.release.instance.registry)
+                                == &target.registry
+                    })
                 })
-            })
-            .map(|s| {
-                format!(
-                    "{}/{}",
-                    s.release.instance.registry, s.release.instance.pack
-                )
-            })
-            .collect();
-        return Err(Error::RequiredPack {
-            pack: format!("{}/{}", target.registry, target.pack),
-            dependents,
-        });
+                .map(|s| {
+                    format!(
+                        "{}/{}",
+                        s.release.instance.registry, s.release.instance.pack
+                    )
+                })
+                .collect();
+            return Err(Error::RequiredPack {
+                pack: format!("{}/{}", target.registry, target.pack),
+                dependents,
+            });
+        }
     }
     let (candidate, rows) = render(before, &retained.rows, &selected, &retained.artifacts)?;
     let mut meta = before.operator.clone();

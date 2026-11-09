@@ -321,6 +321,14 @@ pub(super) fn diagnose(bytes: Option<&str>, d: &mut Vec<&'static str>) -> Result
             break;
         }
     }
+    diagnose_hook_loading(bytes, d)
+}
+
+pub(super) fn diagnose_hook_loading(
+    bytes: Option<&str>,
+    d: &mut Vec<&'static str>,
+) -> Result<(), Error> {
+    let doc = document(bytes)?;
     if doc
         .get("features")
         .and_then(|s| s.get("hooks"))

@@ -61,6 +61,12 @@ fn hash(value: &Value) -> String {
     policy::fingerprint(value.to_string().as_bytes())
 }
 impl RunRequest {
+    pub(super) fn id(&self) -> &str {
+        &self.request_id
+    }
+    pub(super) fn session_id(&self) -> Option<&str> {
+        self.origin.session_id.as_deref()
+    }
     /// Whether the request still waits for an operator decision.
     pub(super) fn awaits_decision(&self, time: u64) -> bool {
         self.status == "pending" && time < self.pending_expires_at_ms
@@ -139,7 +145,12 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
         }
         if let Some(grant) = &row.grant {
             if grant.binding != row.grant_binding(grant)
-                || grant.operator_provenance["surface"] != "cli"
+                || (grant.operator_provenance["surface"] != "cli"
+                    && !super::approvals::mcp_origin(
+                        &grant.operator_provenance,
+                        row.origin.agent.as_deref(),
+                        row.origin.session_id.as_deref(),
+                    ))
                 || grant.operator_provenance["project_id"] != state.project_id
                 || grant.operator_provenance["project_root"] != state.project_root
                 || grant
@@ -155,7 +166,11 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
                         && event["links"]["request_id"] == row.request_id
                         && event["details"]["request_binding"] == row.binding
                         && event["details"]["operator_binding"] == hash(&grant.operator_provenance)
-                        && event["operator"]["mechanism"] == "operator-cli"
+                        && super::approvals::issued_by_operator(
+                            event,
+                            row.origin.agent.as_deref(),
+                            row.origin.session_id.as_deref(),
+                        )
                 })
             {
                 return Err(Error::Invalid("run grant authorization differs"));
@@ -536,38 +551,176 @@ fn authorize_with_clock(
     } else {
         Some(super::runtime::consumer::load(context, &|| Ok(()))?)
     };
-    Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &||Ok(()), |state| {
-        let index = state.run_requests.iter().position(|r|r.request_id == id).ok_or(Error::Missing)?;
-        let row = &state.run_requests[index];
-        if row.status == "consumed" || row.status == "revoked" { return Err(Error::Invalid("request is terminal")); }
-        if revoke { return Ok(revoke_request(state, context, index, reason)); }
-        let time = clock()?;
-        if time < row.created_at_ms || (row.grant.is_none() && time >= row.pending_expires_at_ms) { return Err(Error::Invalid("pending request expired")); }
-        let snapshot = snapshot.as_ref().ok_or(Error::StaleSnapshot)?;
-        if state.active.as_ref().is_none_or(|active| !active.matches(snapshot.identity())) { return Err(Error::StaleSnapshot); }
-        let evidence = snapshot.evaluate(row.request.clone()).map_err(|_|Error::Invalid("request cannot be evaluated"))?;
-        if !row.matches(&evidence, &row.resource, &row.origin) || evidence.evaluation().decision != Decision::Ask {
-            return Err(Error::StaleSnapshot);
+    Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
+        if revoke {
+            let index = state
+                .run_requests
+                .iter()
+                .position(|r| r.request_id == id)
+                .ok_or(Error::Missing)?;
+            if matches!(
+                state.run_requests[index].status.as_str(),
+                "consumed" | "revoked"
+            ) {
+                return Err(Error::Invalid("request is terminal"));
+            }
+            return Ok(revoke_request(state, context, index, reason));
         }
-        crate::execution::verify_approval_binding(&row.request, &row.resource)?;
-        if let Some(grant) = &row.grant {
-            if time < grant.issued_at_ms || time >= grant.expires_at_ms || grant.expires_at_ms-grant.issued_at_ms != ttl*1000 { return Err(Error::Invalid("grant cannot be renewed or changed")); }
-            return Ok(json!({"request_id":id,"status":"approved","approval_id":grant.approval_id,"expires_at_ms":grant.expires_at_ms}));
-        }
-        let approval = state.id("run-approval");
-        let row = &mut state.run_requests[index];
-        let mut grant = Grant { approval_id: approval.clone(), issued_at_ms: time, expires_at_ms: time + ttl * 1000, operator_provenance: context.provenance(), binding: String::new() };
-        grant.binding = row.grant_binding(&grant);
-        let binding = grant.binding.clone();
-        let operator_binding = hash(&grant.operator_provenance);
-        row.grant = Some(grant);
-        row.status = "approved".into();
-        let request_binding = row.binding.clone();
-        let event = operator_event(state, context, "run_grant_issued", id, Some(&approval), reason,
-            json!({"binding":binding,"request_binding":request_binding,"operator_binding":operator_binding,"expires_at_ms":time+ttl*1000}));
-        state.record(event);
-        Ok(json!({"request_id":id,"status":"approved","approval_id":approval,"expires_at_ms":time+ttl*1000}))
+        issue_checked(
+            state,
+            context,
+            id,
+            ttl,
+            reason,
+            snapshot.as_ref().ok_or(Error::StaleSnapshot)?,
+            clock()?,
+        )
     })
+}
+
+/// Validate the exact policy generation and consumer-owned resources without issuing a grant.
+fn check(
+    state: &State,
+    id: &str,
+    snapshot: &super::runtime::consumer::Snapshot,
+    time: u64,
+) -> Result<usize, Error> {
+    let index = state
+        .run_requests
+        .iter()
+        .position(|r| r.request_id == id)
+        .ok_or(Error::Missing)?;
+    let row = &state.run_requests[index];
+    if row.status == "consumed" || row.status == "revoked" {
+        return Err(Error::Invalid("request is terminal"));
+    }
+    if time < row.created_at_ms || (row.grant.is_none() && time >= row.pending_expires_at_ms) {
+        return Err(Error::Invalid("pending request expired"));
+    }
+    if state
+        .active
+        .as_ref()
+        .is_none_or(|active| !active.matches(snapshot.identity()))
+    {
+        return Err(Error::StaleSnapshot);
+    }
+    let evidence = snapshot
+        .evaluate(row.request.clone())
+        .map_err(|_| Error::Invalid("request cannot be evaluated"))?;
+    if !row.matches(&evidence, &row.resource, &row.origin)
+        || evidence.evaluation().decision != Decision::Ask
+    {
+        return Err(Error::StaleSnapshot);
+    }
+    crate::execution::verify_approval_binding(&row.request, &row.resource)?;
+    Ok(index)
+}
+
+fn issue_checked(
+    state: &mut State,
+    context: &Context,
+    id: &str,
+    ttl: u64,
+    reason: Option<&str>,
+    snapshot: &super::runtime::consumer::Snapshot,
+    time: u64,
+) -> Result<Value, Error> {
+    let index = check(state, id, snapshot, time)?;
+    let row = &state.run_requests[index];
+    if let Some(grant) = &row.grant {
+        if time < grant.issued_at_ms
+            || time >= grant.expires_at_ms
+            || grant.expires_at_ms - grant.issued_at_ms != ttl * 1000
+        {
+            return Err(Error::Invalid("grant cannot be renewed or changed"));
+        }
+        return Ok(
+            json!({"request_id":id,"status":"approved","approval_id":grant.approval_id,"expires_at_ms":grant.expires_at_ms}),
+        );
+    }
+    let approval = state.id("run-approval");
+    let row = &mut state.run_requests[index];
+    let mut grant = Grant {
+        approval_id: approval.clone(),
+        issued_at_ms: time,
+        expires_at_ms: time + ttl * 1000,
+        operator_provenance: context.provenance(),
+        binding: String::new(),
+    };
+    grant.binding = row.grant_binding(&grant);
+    let binding = grant.binding.clone();
+    let operator_binding = hash(&grant.operator_provenance);
+    row.grant = Some(grant);
+    row.status = "approved".into();
+    let request_binding = row.binding.clone();
+    let event = operator_event(
+        state,
+        context,
+        "run_grant_issued",
+        id,
+        Some(&approval),
+        reason,
+        json!({"binding":binding,"request_binding":request_binding,"operator_binding":operator_binding,"expires_at_ms":time+ttl*1000}),
+    );
+    state.record(event);
+    Ok(
+        json!({"request_id":id,"status":"approved","approval_id":approval,"expires_at_ms":time+ttl*1000}),
+    )
+}
+
+fn mcp_index(state: &State, context: &Context, id: &str) -> Result<usize, Error> {
+    let index = state
+        .run_requests
+        .iter()
+        .position(|r| r.request_id == id)
+        .ok_or(Error::Missing)?;
+    let row = &state.run_requests[index];
+    if context.surface != "mcp"
+        || row.origin.agent.is_none()
+        || context.agent != row.origin.agent
+        || context.session_id != row.origin.session_id
+    {
+        return Err(Error::Missing);
+    }
+    if row.status != "pending" || row.grant.is_some() {
+        return Err(Error::Invalid(
+            "this request was already answered; retry an approved request once unchanged",
+        ));
+    }
+    Ok(index)
+}
+
+pub(super) fn review_in(
+    state: &State,
+    context: &Context,
+    id: &str,
+    snapshot: &super::runtime::consumer::Snapshot,
+    time: u64,
+) -> Result<String, Error> {
+    let index = mcp_index(state, context, id)?;
+    check(state, id, snapshot, time)?;
+    let row = &state.run_requests[index];
+    let details = serde_json::to_string_pretty(&json!({"request":row.request,
+        "consumer":row.origin.consumer_id,"session":row.origin.session_id,"policy":row.policy}))
+    .map_err(|_| Error::Invalid("request review encoding"))?;
+    Ok(format!(
+        "Allow this exact checked command once?\n{details}\nIts resources are revalidated before approval and retry. Permission expires in five minutes; policy is unchanged."
+    ))
+}
+
+pub(super) fn approve_in(
+    state: &mut State,
+    context: &Context,
+    id: &str,
+    snapshot: &super::runtime::consumer::Snapshot,
+    time: u64,
+) -> Result<Value, Error> {
+    mcp_index(state, context, id)?;
+    let mut value = issue_checked(state, context, id, 300, None, snapshot, time)?;
+    value["next_action"] = json!(format!(
+        "Retry the identical checked command with --approval-request {id}, retaining the same agent, session and tool attribution. Approval does not launch it."
+    ));
+    Ok(value)
 }
 
 fn revoke_request(

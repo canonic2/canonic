@@ -1,6 +1,6 @@
 //! Project-owned proposals and observational history, shared by CLI and MCP.
 pub(crate) mod admin;
-mod approvals;
+pub(crate) mod approvals;
 pub(crate) mod bootstrap;
 mod cache;
 mod changes;
@@ -17,11 +17,14 @@ pub(crate) mod observations;
 pub(crate) mod operator;
 mod packs;
 pub(crate) mod path_access;
+pub(crate) mod preparation_tasks;
+pub(crate) mod progress;
 mod project;
 pub(crate) mod proposal_lifecycle;
 mod publication;
 pub(crate) mod read_approval;
 mod registries;
+pub(crate) mod reports;
 pub(crate) mod run_approval;
 pub(crate) mod runtime;
 pub(crate) mod session_grants;
@@ -99,6 +102,10 @@ pub(crate) enum Error {
     },
     #[error("review state is locked; retry after the owning writer finishes")]
     Locked,
+    #[error(
+        "object cleanup reached its bounded work limit; retry to continue cleanup automatically"
+    )]
+    CleanupPending,
     #[error("review object was not found")]
     Missing,
     #[error("proposal requires operator approval")]
@@ -140,6 +147,9 @@ pub(crate) enum CapacityKind {
     ReadRequests,
     /// Checked-run action requests of one consumer kind.
     RunRequests,
+    /// Bounded source/cache storage admission, including live pins and temporaries.
+    StoredBytes,
+    StoredEntries,
 }
 
 impl CapacityKind {
@@ -148,6 +158,8 @@ impl CapacityKind {
             Self::Proposals | Self::RetainedProposals => "policy proposal",
             Self::ReadRequests => "read request",
             Self::RunRequests => "run request",
+            Self::StoredBytes => "stored byte",
+            Self::StoredEntries => "stored object entry",
         }
     }
     /// What the operator does to free capacity.
@@ -162,12 +174,17 @@ impl CapacityKind {
             Self::ReadRequests | Self::RunRequests => {
                 "review pending requests with shield request list or deny them with shield request deny, then retry"
             }
+            Self::StoredBytes | Self::StoredEntries => {
+                "finish pending reviews or release unused retained readers, then retry; required active and recovery data cannot be evicted"
+            }
         }
     }
     /// The operator command that frees capacity, or `None` when no command can.
     pub(crate) fn operator_route(self) -> Option<&'static str> {
         match self {
-            Self::Proposals | Self::RetainedProposals => None,
+            Self::Proposals | Self::RetainedProposals | Self::StoredBytes | Self::StoredEntries => {
+                None
+            }
             Self::ReadRequests | Self::RunRequests => Some("shield request list"),
         }
     }
@@ -193,6 +210,7 @@ impl Error {
             | Self::UnsupportedReleases(_)
             | Self::RequiredPack { .. } => "invalid-review",
             Self::Locked => "review-locked",
+            Self::CleanupPending => "cleanup-pending",
             Self::Missing => "not-found",
             Self::ApprovalRequired => "approval-required",
             Self::StaleSnapshot => "stale-snapshot",
@@ -390,7 +408,7 @@ pub(in crate::review) fn inspect_prepared(
             json!({"schema_version":1,"rules":[],"kind":"custom","capabilities":["structured-rules-v1"]})
         }
     };
-    let mut value = json!({"schema_version":1,"mode":"local-review","enforcement":"not-installed","project_id":state.project_id,
+    let mut value = json!({"schema_version":1,"mode":"local-review","enforcement":"not-checked","project_id":state.project_id,
         "project_root":state.project_root,"policy_revision":state.policy_revision,"effective":evaluator.effective(),"project_rules":rules});
     let redacted = model::redact(&mut value);
     value["redacted"] = json!(redacted);

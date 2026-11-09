@@ -334,7 +334,7 @@ fn capabilities(text: &str) -> Value {
     serde_json::from_str(text).unwrap()
 }
 
-fn rule(id: &str, executable: &str) -> Value {
+pub(super) fn rule(id: &str, executable: &str) -> Value {
     json!({"change":{"kind":"rule_add","rule":{"id":id,"decision":"allow","conditions":{"domain":"argv","executable":executable,"arguments":{"kind":"any"}}}}})
 }
 

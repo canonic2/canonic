@@ -1,6 +1,7 @@
 //! Complete project candidates shared by MCP proposal capture and operator commit.
 pub(super) mod diff;
 pub(in crate::review) mod historical;
+pub(super) mod preparation;
 pub(super) mod project_files;
 use super::{Checkpoint, Context, Error, model::Proposal, snapshots, storage::Store};
 use crate::{configuration, policy};
@@ -212,10 +213,12 @@ fn capacity(proposals: &[Proposal]) -> Result<(), Error> {
 type PreparedPair = (configuration::Evaluator, configuration::Evaluator);
 pub(super) type CandidateChange = (Value, Value, Option<configuration::Snapshot>);
 /// An installation candidate whose exact artifacts were captured before user input.
+#[derive(Serialize, Deserialize)]
 pub(super) struct Prepared {
     pub(super) binding: String,
     pub(super) candidate: Value,
     pub(super) metadata: Value,
+    pub(super) comparison: Option<Value>,
 }
 
 pub(super) fn prepared_binding(state: &super::model::State) -> String {
@@ -361,6 +364,9 @@ pub(super) fn propose(
         return Ok(present(row));
     }
     checkpoint()?;
+    context
+        .progress
+        .stage(super::progress::Stage::PreparePolicy);
     let (mut before, base_plan, base_snapshots) = store.read_for_comparison(before)?;
     let mut reviewed_files = None;
     let mut reviewed_paths = None;
@@ -395,12 +401,26 @@ pub(super) fn propose(
     };
     let mut comparison = {
         let _trace = crate::diagnostics::trace::span("proposal.compare");
-        json!(configuration::compare_policy(
-            &base_snapshots,
-            &next_snapshots
-        )?)
+        if let Some(comparison) = input
+            .prepared
+            .as_ref()
+            .and_then(|prepared| prepared.comparison.as_ref())
+        {
+            comparison.clone()
+        } else {
+            context
+                .progress
+                .stage(super::progress::Stage::ComparePolicy);
+            json!(configuration::compare_policy(
+                &base_snapshots,
+                &next_snapshots
+            )?)
+        }
     };
     let next_plan = configuration::Evaluator::new(next_snapshots)?;
+    context
+        .progress
+        .stage(super::progress::Stage::PrepareReview);
     compare_prefixes(&base_plan, &next_plan, &mut comparison);
     if let Some(lines) = super::formatting_changes(&before.candidates["project"], &candidate) {
         comparison["formatting"] = lines;

@@ -72,6 +72,7 @@ pub(super) fn status_from(context: &Context, state: &State) -> Result<Value, Err
     ));
     value["session_grants"] = super::session_grants::summary(state);
     value["coverage"] = integrations::status(context, state);
+    value["enforcement"] = json!(integrations::enforcement(&value["coverage"]));
     value["path_access"] = path_access::load(&metadata(state)).map_or_else(
         |error| json!({"error":error.to_string()}),
         |access| json!(access),
@@ -113,6 +114,7 @@ pub(super) fn agent_setup_route(coverage: &Value) -> String {
                 .as_array()
                 .into_iter()
                 .flatten()
+                .filter(|row| row["managed_by"] != "box")
                 .filter_map(|row| row["agent"].as_str()),
         )
         .collect();

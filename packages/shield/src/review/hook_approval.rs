@@ -22,7 +22,7 @@ const GRANT_MS: u64 = 300_000;
 const FOLLOWUP_MS: u64 = 60_000;
 const ID_KIND: &str = "hook-request";
 /// Longest form Shield shows, within the host confirmation's message limit.
-const MAX_FORM: usize = 12_000;
+pub(super) const MAX_FORM: usize = 12_000;
 /// Most requests one confirmation may cover.
 const MAX_GROUP: usize = 8;
 
@@ -106,6 +106,12 @@ fn hash(value: &Value) -> String {
 }
 
 impl HookRequest {
+    pub(super) fn id(&self) -> &str {
+        &self.request_id
+    }
+    pub(super) fn session_id(&self) -> &str {
+        &self.session_id
+    }
     /// Retain a short terminal receipt for idempotent denial, never permission.
     pub(super) fn retained_id(&self, time: u64) -> Option<&str> {
         self.live_id(time).or_else(|| {
@@ -522,7 +528,7 @@ fn agent_matches(context: &Context, row: &HookRequest) -> bool {
 
 /// The request IDs a call names, and whether it names a group. Exactly one of
 /// `request_id` or `request_ids` (1–8 distinct IDs) is accepted.
-fn requested(args: &Value) -> Result<(Vec<&str>, bool), Error> {
+pub(super) fn requested(args: &Value) -> Result<(Vec<&str>, bool), Error> {
     let fields = args
         .as_object()
         .ok_or(Error::Invalid("arguments must be an object"))?;
@@ -684,8 +690,32 @@ fn question(rows: &[&HookRequest]) -> Result<String, Error> {
 pub(crate) fn confirmation(context: &Context, args: &Value) -> Result<String, Error> {
     let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
     state.check(context)?;
-    let (rows, _) = selected(&state, context, args)?;
+    confirmation_in(&state, context, args)
+}
+
+pub(super) fn confirmation_in(
+    state: &State,
+    context: &Context,
+    args: &Value,
+) -> Result<String, Error> {
+    let (rows, _) = selected(state, context, args)?;
     question(&rows)
+}
+
+pub(super) fn group_row(
+    state: &State,
+    context: &Context,
+    id: &str,
+) -> Result<(String, bool, bool), Error> {
+    let (rows, _) = selected(state, context, &json!({"request_id":id}))?;
+    let row = rows.first().ok_or(Error::Missing)?;
+    let mut text = String::new();
+    describe(&mut text, &row.summary, &row.cwd);
+    Ok((
+        text,
+        row.summary.overrides_deny,
+        row.summary.settings_change,
+    ))
 }
 
 /// Whether the form can show this request whole; a longer one is not offered.
@@ -803,25 +833,33 @@ pub(crate) fn approve(context: &Context, args: &Value, confirmed: bool) -> Resul
         return Err(Error::ApprovalRequired);
     }
     Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
-        let (rows, list) = selected(state, context, args)?;
-        question(&rows)?;
-        let ids: Vec<String> = rows.iter().map(|row| row.request_id.clone()).collect();
-        let time = now()?;
-        // One approval links every grant it issued.
-        let approval = state.id("hook-approval");
-        let mut grants = Vec::with_capacity(ids.len());
-        for id in &ids {
-            issue(state, context, id, &approval, time)?;
-            grants.push(json!({"request_id":id,"status":"approved","expires_at_ms":time + GRANT_MS}));
-        }
-        // A `request_ids` call gets its list back, even for one ID.
-        Ok(if list {
-            json!({"status":"approved","approval_id":approval,"grants":grants,
+        approve_in(state, context, args)
+    })
+}
+
+pub(super) fn approve_in(
+    state: &mut State,
+    context: &Context,
+    args: &Value,
+) -> Result<Value, Error> {
+    let (rows, list) = selected(state, context, args)?;
+    question(&rows)?;
+    let ids: Vec<String> = rows.iter().map(|row| row.request_id.clone()).collect();
+    let time = now()?;
+    // One approval links every grant it issued.
+    let approval = state.id("hook-approval");
+    let mut grants = Vec::with_capacity(ids.len());
+    for id in &ids {
+        issue(state, context, id, &approval, time)?;
+        grants.push(json!({"request_id":id,"status":"approved","expires_at_ms":time + GRANT_MS}));
+    }
+    // A `request_ids` call gets its list back, even for one ID.
+    Ok(if list {
+        json!({"status":"approved","approval_id":approval,"grants":grants,
                 "next_action":"Repeat each approved tool call once now, identically and in any order. Any change to one needs a new approval."})
-        } else {
-            json!({"request_id":ids[0],"status":"approved","expires_at_ms":time + GRANT_MS,
+    } else {
+        json!({"request_id":ids[0],"status":"approved","expires_at_ms":time + GRANT_MS,
                 "next_action":"Repeat the identical tool call once now. Any change to it needs a new approval."})
-        })
     })
 }
 

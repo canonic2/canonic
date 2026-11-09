@@ -26,6 +26,7 @@ pub(super) struct Captured {
     cached: Option<Cached>,
 }
 struct Cached {
+    _sources: crate::review::storage::objects::Pins,
     artifact: crate::review::cache::Artifact,
     root: String,
     project_id: String,
@@ -191,7 +192,7 @@ impl Views {
     }
     pub(super) fn active(&mut self, context: &Context) -> Result<String, Error> {
         let store = Store::open(Path::new(&context.project_root))?;
-        let state = store.read_checkpoint()?;
+        let (state, pins) = store.read_pinned_checkpoint()?;
         state.check(context)?;
         let active = state
             .active
@@ -226,6 +227,7 @@ impl Views {
                     metadata: state.operator,
                     evaluator: OnceLock::new(),
                     cached: Some(Cached {
+                        _sources: pins,
                         artifact: compiled.clone(),
                         root: state.project_root,
                         project_id: state.project_id,

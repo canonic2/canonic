@@ -44,7 +44,7 @@ For client implementation, see [transport details](#responses-and-transport-life
 | Packs and registries | `pack_list`, `pack_show`, `registry_list`, `registry_add`, `registry_remove`, `registry_default`, `pack_search`, `pack_info`, `pack_add`, `pack_configure`, `pack_update`, `pack_remove` |
 | Policy and rules | `policy_show`, `rule_list`, `rule_add`, `rule_edit`, `rule_remove`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_apply`, `policy_withdraw`, `policy_receipt`, `policy_defer`, `policy_draft_list`, `policy_draft_remove`, `policy_reject`, `policy_repair` |
 | Approvals and history | `request_list`, `request_show`, `request_approve`, `request_deny`, `history_list`, `history_show`, `history_configure` |
-| Session grants | `session_grant_list`, `session_grant_show`, `session_grant_propose`, `session_grant_approve`, `session_grant_revoke` |
+| Session grants | `session_grant_list`, `session_grant_show`, `session_grant_propose`, `session_grant_reconsider`, `session_grant_approve`, `session_grant_revoke` |
 | Administration | `enable`, `disable`, `protection_set`, `cache_prepare`, `mcp_setup` |
 | Diagnostics | `policy_evaluate`, `policy_compare` |
 | Documentation | `docs_list`, `docs_search`, `docs_read` |
@@ -78,13 +78,22 @@ refuse; inspect the result before requesting a fresh review.
   requests to host permissions. MCP remains available. Restart agents when
   requested to refresh generated permission rules.
   See [pause or resume Shield](project-review.md#pause-or-resume-shield).
-- `registry_add` accepts `name` and `location`, but in-session source enrollment
-  is unsupported. It reports that capability gap without fetching the location
-  or directing the user to a terminal.
-  `registry_remove` and
+- `registry_add` accepts `name` and a local directory or HTTPS `location`.
+  Omit either to ask the person for the missing details in a form. If scope is
+  omitted in that form workflow, the person must choose `project` or `user`.
+  Submission returns exact `retry_arguments`; call `registry_add` with those
+  arguments for the separate trust review. Input collection does not read the
+  source or enroll it, and defaults never supply missing answers.
+  It discovers and validates the source, then asks the person to review its
+  canonical location, registry identity, signing-key fingerprint and trust basis.
+  Discovery grants no trust; acceptance enrolls exactly the reviewed source.
+  Relative directories resolve against this project. `registry_remove` and
   `registry_default` accept `name`. Optional `scope` defaults to `project`;
   `user` explicitly changes discovery for other projects too. Installed policy
   is preserved.
+  If a pack needs an unenrolled dependency source, use `registry_add` for that
+  source and retry the pack request after acceptance. Ask for its location if
+  unknown. Registry trust and permission-policy approval are separate reviews.
 - `policy_repair` restores managed projections from committed policy.
   `policy_reject` asks the user to reject a pending `proposal_id`.
 - `history_configure` accepts `enabled`, retention `limit` (1–10000) and
@@ -375,6 +384,18 @@ update all tracking packs, or with `{"reference":"gate"}` to update one
 selection and its dependencies. Pinned versions stay fixed and are listed in
 `skipped_pinned`. Call `pack_remove` with `{"reference":"gate"}` to remove
 one selection using the same dependency checks as `shield pack remove`.
+
+To let the person choose installed packs, call `pack_remove` with `{}`. The form
+shows exact installed selectors and accepts 1–16 selections from a list of at
+most 64 packs. Submit them together to prepare one removal proposal. Shield
+checks the selected set as a whole, so selecting a pack and its dependents does
+not depend on display order. A remaining dependent still blocks removal. Shield
+refuses a question that cannot fit its bounds rather than omitting choices.
+
+Multiple selection requires MCP `2025-11-25` or modern `2026-07-28`. Older
+clients can use explicit single-pack references; Shield never narrows the list
+silently. Empty, duplicate or unknown choices refuse. If policy or review
+metadata changes while the form is open, request a fresh form and new answers.
 
 These tools prepare an inactive candidate. Inspect the returned changes, then
 copy `apply_arguments` unchanged to `policy_apply` for user approval. Preparing
@@ -715,6 +736,22 @@ conversation.
 are separate: inspect `request_list`, then use `request_approve` or `request_deny`
 for in-session confirmation.
 
+`request_approve` supports native-hook requests, SDK reads and checked commands.
+It shows the stored action to the person; Accept creates a one-time permission
+without executing it or changing policy. Follow the returned `next_action`.
+Checked commands retry with `--approval-request REQUEST` and unchanged command,
+agent, session and tool attribution. SDK reads retry through the same factory,
+session and read window. SDK applications use the explicit
+[interactive read session](claude-read-only.md#approve-reads-in-the-sdk-session).
+Read and checked-command grants satisfy Ask; native-hook forms can also review
+supported Deny overrides. Resource changes, expiry and policy activation require
+a fresh request.
+
+Pass `request_ids` to review up to eight distinct pending requests together,
+including different kinds from the same identified session. Accept issues all
+grants atomically; an invalid member issues none. A request with no recorded
+session can be reviewed individually with `request_id` on its matching channel.
+
 ## Diagnostic input and snapshots
 
 `status` and `policy_show` expose `active_candidate_id`. Submission or
@@ -777,6 +814,85 @@ Diagnostic Allow has preview disposition and supplies no execution or grant.
 
 ## Responses and transport lifetime
 
+### Durable preparation tasks
+
+Clients using per-request MCP `2026-07-28` can declare
+`capabilities.extensions["io.modelcontextprotocol/tasks"] = {}` in their modern
+request metadata. A concrete `policy_propose` call may then return a task handle
+instead of waiting for preparation. Legacy calls and calls without that extension
+keep their ordinary synchronous result. Guided settings forms and manual file
+adoption keep their existing workflows.
+
+Keep the returned `taskId`. Send `tasks/get` with `{"taskId":"RETURNED_ID"}`
+to read status and, after completion, the original tool result. Reconnect to the
+same enrolled project to continue polling. If the creation reply was lost, repeat
+the identical `policy_propose` arguments, including the same idempotency key when
+supplied, to recover the original handle. Automatically derived keys include the
+current policy base and engine, so the same concrete changes prepare afresh after
+the base changes. An explicit key continues identifying its original task; use a
+new explicit key when fresh preparation is needed.
+
+Completion captures policy and comparison evidence without creating an applicable
+proposal. Copy the completed result's `data.review_arguments` into
+`policy_propose`, for example:
+
+```json
+{"preparation_task_id":"RETURNED_ID"}
+```
+
+This creates a fresh review for the current connection after checking the retained
+capture and current policy base. Inspect that review, then pass its unchanged
+`apply_arguments` to `policy_apply` for the person's separate confirmation. A
+completed task, polling response or task input message cannot approve a change.
+
+Use `tasks/cancel` with the same `taskId` to request cancellation. Completion may
+win the race; inspect the subsequent status. Shield's preparation tasks collect
+no user input through `tasks/update`; well-formed unissued answers are ignored.
+Do not restart cancelled or failed work automatically. If it is still needed,
+prepare a new request with a new `idempotency_key` after inspecting the failure.
+
+Tasks retain results for 24 hours from creation. Each project admits at most
+32 retained tasks and two running preparations; a full reservation selects the
+synchronous path before work starts. Captures are limited to 16 MiB and results
+to 1 MiB, within a 640 MiB project task-store bound. Oversized captures fail
+without creating a proposal. Execution has its own cooperative 60-second budget.
+Closing a connection does not cancel published work, but exiting its process can
+stop the worker. Reopening marks an interrupted task failed without replaying it.
+Polling does not extend retention or restart work. It settles an unowned working
+record as failed even if the polling server was already running when its owner died.
+
+Any connection authorized to that local project enrollment can inspect or cancel
+a known handle; client names do not establish identity. Unknown, expired and
+foreign handles return not-found. Unusable task storage falls back to synchronous
+preparation, including for Tasks-capable calls. Host presentation of tasks depends on the client.
+
+### Operation progress
+
+MCP clients can include `_meta.progressToken` in `tools/call` parameters to
+receive `notifications/progress` while Shield acquires registry content or
+compares policy. Tokens may be strings or integers. For example:
+
+```json
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"pack_info","arguments":{"reference":"main/canonic/node"},"_meta":{"progressToken":"pack-review-7"}}}
+```
+
+Messages identify stages such as reading and verifying the registry catalog,
+release history or pack artifact, preparing policy inputs, comparing permissions
+and preparing an inactive review. Registry enrollment can report identity/key
+discovery before its separate trust confirmation. Stage messages contain no
+registry URLs, command text, settings or credentials.
+
+The increasing `progress` value counts stages within that RPC; it is not a
+percentage, and Shield omits `total`. At most 64 stages are offered per RPC.
+Legacy settings forms retain the count after input; modern input retries are
+new RPCs with their own tokens and counts. Calls without a token send no progress.
+
+Progress is best effort: queue pressure or request completion can drop stages.
+Notifications never follow the request's final reply. Use the final tool result
+and receipt to determine the outcome. Progress cannot approve a proposal, extend
+a deadline or revive a cancelled operation. Whether a host displays notifications
+depends on that host.
+
 ### Client startup
 
 Shield exposes project inspection, approved policy changes, and diagnostic
@@ -820,11 +936,41 @@ a local rule with a shared rule's ID replaces it in lists and exact lookups.
 Inspection uses the same strict source parser and budgets
 as policy admission.
 
+### Read a proposal's full reports
+
+Proposal results and `policy_show` include `report_resources` with two addresses:
+the captured policy comparison and the retained review evidence. Exact proposal
+results also include MCP `resource_link` blocks. Text-only clients can read the
+same addresses from text block 1. Use MCP `resources/read` with the returned URI:
+
+```json
+{"uri":"COPY_THE_RETURNED_REPORT_URI"}
+```
+
+The JSON comparison report preserves coverage, unknowns and before/after
+evidence. The evidence report includes attribution, reasons, linked requests,
+current disposition and any retained receipt or authorization events. Private
+connection settings and secrets are redacted. A report is inspection only;
+activate a change through its separate, unchanged `apply_arguments` and host
+confirmation.
+
+Report addresses belong to one enrolled project and exact proposal candidate.
+They can be read after reconnect while the proposal remains retained. Evidence
+reflects its latest retained disposition; a URI never switches to a different
+candidate or project. A foreign, unknown or reclaimed report returns a resource
+not-found error. Discover the address shape with `resources/templates/list`;
+`resources/list` continues to list bundled static resources. Reports exceeding
+the response limit return an error rather than partial evidence. Project reports
+are unavailable before enrollment consent or on the project-free static server.
+
+### Tool result format
+
 Results retain the complete envelope in `structuredContent`. Text block 0 gives
 short guidance; text block 1 is bounded JSON with `data`, `error`, `missing` and
 `truncated`. Inspection tools include requested data there. Proposal/withdrawal
-text includes IDs, status and candidate handles; use `policy_show` to inspect
-the complete proposal. Text-only clients parse block 1 rather than block 0. The shared
+text includes IDs, status, candidate handles and report addresses; use the report
+links or `policy_show` to inspect the proposal. Text-only clients parse block 1
+rather than block 0. The shared
 envelope has schema_version, project_id, nullable policy_revision, data, missing,
 truncated and nullable error. Allow/Ask/Deny diagnostics are successful results.
 Failures set `isError` and use fixed safe codes/messages with an applicable operator
@@ -851,6 +997,8 @@ eight tool calls may be outstanding, including one waiting for confirmation;
 more are refused with `-32000`. Duplicate outstanding IDs close the session.
 Bundled reads use a separate worker with eight outstanding reads, allowing them
 to finish while the policy evaluator is busy.
+Task management uses two separate workers with eight outstanding requests, so
+status and cancellation remain reachable while preparation runs.
 `--request-timeout-ms` bounds queued work, evaluation and encoding
 (default 5,000 ms, range 1–60,000); a call that exceeds it receives `-32001`
 "Request deadline exceeded". Cancellation suppresses pending responses.

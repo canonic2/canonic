@@ -123,6 +123,11 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             "The project state is locked by its current writer.",
             &["Wait for that operation to finish, then retry."],
         ),
+        Error::CleanupPending => Report::new(
+            "Object cleanup has more work",
+            "The bounded cleanup pass finished without completing its inventory.",
+            &["Retry the operation to continue cleanup automatically."],
+        ),
         Error::StaleSnapshot => Report::new(
             "The project changed during this operation",
             "The request's policy revision is no longer current.",
@@ -270,6 +275,11 @@ fn capacity(
 ) -> Report {
     use crate::review::CapacityKind;
     let mut r = match kind {
+        CapacityKind::StoredBytes | CapacityKind::StoredEntries => Report::new(
+            "Policy object storage admission is full",
+            kind.recovery(),
+            &[],
+        ),
         CapacityKind::ReadRequests | CapacityKind::RunRequests => Report::new(
             &format!("Too many open {}s", kind.noun()),
             "Pending and approved requests that have not expired count toward this bound.",
@@ -290,8 +300,15 @@ fn capacity(
         r.help
             .push(format!("Run {route} to review them, then retry."));
     }
-    r.field("Pending", pending.to_string());
-    r.field("Retained", retained.to_string());
+    if matches!(
+        kind,
+        CapacityKind::StoredBytes | CapacityKind::StoredEntries
+    ) {
+        r.field("Needed", format!("{retained} {}s", kind.noun()));
+    } else {
+        r.field("Pending", pending.to_string());
+        r.field("Retained", retained.to_string());
+    }
     r.field("Limit", limit.to_string());
     r
 }

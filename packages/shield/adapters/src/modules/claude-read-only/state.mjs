@@ -13,8 +13,9 @@ export const APPROVAL_LIMIT = 128;
 export const APPROVAL_RETENTION_MS = (10 + 60) * 60 * 1000;
 
 /** The host-visible reason for a denied SDK read. */
-export function denialReason(code, request, detail, project) {
+export function denialReason(code, request, detail, project, interactive = false) {
   if (code === 'policy-deny' && detail) return `Shield: denied. ${detail}`;
+  if (request && interactive) return `Shield: approval required for read ${request}. Call mcp__shield__request_approve with {"request_id":"${request}"} for the person's confirmation, then retry this read once unchanged. Decline or unavailable confirmation grants no permission.`;
   if (request) return `Shield: approval required for read ${request}. Ask the user to review it with shield request show ${request} and approve or deny it. Retry only after approval.`;
   if (code === 'approval-unavailable') return 'Shield blocked this read (approval-unavailable). Submit a fresh action request for operator review.';
   if (['approval-stale', 'approval-expired', 'approval-consumed', 'read-changed'].includes(code)) {
@@ -71,6 +72,10 @@ export class ApprovalReferences {
   get(key) {
     this.#prune();
     return this.#entries.get(key)?.reference;
+  }
+  has(reference) {
+    this.#prune();
+    return [...this.#entries.values()].some(entry => entry.reference === reference);
   }
   /** Retain a pending reference, keeping its first time; the oldest goes when full. */
   pending(key, reference) {

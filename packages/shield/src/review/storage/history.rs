@@ -6,6 +6,7 @@
 //! the active boundary under the lock, then verify, correlate and retain outside it.
 mod correlation;
 mod legacy;
+mod locking;
 use super::{Error, State, Store, Temporary, private, sync};
 pub(super) use legacy::inspect as inspect_legacy;
 pub(super) use legacy::upgrade;
@@ -18,8 +19,7 @@ use std::{
     io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
     ops::ControlFlow,
     path::{Path, PathBuf},
-    thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 /// Physical cap on every segment of one generation.
 const STORE_LIMIT: usize = 64 * 1024 * 1024;
@@ -80,26 +80,7 @@ pub(in crate::review) struct View {
     complete: bool,
 }
 
-pub(in crate::review) fn lock(store: &Store) -> Result<File, Error> {
-    crate::diagnostics::trace::count("history.lock_attempts", 1);
-    let path = store.directory.join("history.lock");
-    if path.exists() || fs::symlink_metadata(&path).is_ok() {
-        regular(&path)?;
-    }
-    let mut options = OpenOptions::new();
-    options.read(true).write(true).create(true).truncate(false);
-    private(&mut options);
-    let file = options.open(&path)?;
-    regular(&path)?;
-    for _ in 0..500 {
-        match file.try_lock() {
-            Ok(()) => return Ok(file),
-            Err(std::fs::TryLockError::WouldBlock) => thread::sleep(Duration::from_millis(1)),
-            Err(std::fs::TryLockError::Error(e)) => return Err(e.into()),
-        }
-    }
-    Err(Error::Locked)
-}
+pub(in crate::review) use locking::{lock, lock_control};
 fn regular(path: &Path) -> Result<(), Error> {
     let m = fs::symlink_metadata(path)?;
     if !m.is_file() || m.file_type().is_symlink() {
@@ -545,9 +526,9 @@ pub(in crate::review) fn encode(
     store: &Store,
     state: &State,
     locked: bool,
-) -> Result<Vec<u8>, Error> {
+) -> Result<(Vec<u8>, super::objects::Pins), Error> {
     let mut value = json!(state);
-    super::sources::checkpoint(store, &mut value, false)?;
+    let pins = super::sources::checkpoint(store, &mut value, false)?;
     value["events"] = json!([]);
     if let Some(purge) = state.history_rewrite {
         let (mut events, mut evicted) = (Vec::new(), false);
@@ -576,7 +557,9 @@ pub(in crate::review) fn encode(
     {
         mark_failure(store, state);
     }
-    serde_json::to_vec(&value).map_err(|_| Error::Invalid("review encoding"))
+    serde_json::to_vec(&value)
+        .map(|bytes| (bytes, pins))
+        .map_err(|_| Error::Invalid("review encoding"))
 }
 /// Appends pending observations under the caller's history lock. Work is
 /// bounded by the active segment: tail recovery, and on rotation one count of

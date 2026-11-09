@@ -1,6 +1,7 @@
 //! Session authorization through real protected storage, scopes and native matching.
 use super::*;
 mod maintenance;
+mod reconsideration;
 
 pub(crate) fn fixture() -> (assert_fs::TempDir, Context, String) {
     fixture_with_rules(None)
@@ -416,6 +417,7 @@ fn published_mcp_catalog_admits_the_session_workflow() {
     for name in [
         "session_grant_show",
         "session_grant_propose",
+        "session_grant_reconsider",
         "session_grant_approve",
         "session_grant_revoke",
     ] {

@@ -1,6 +1,7 @@
 //! Real cache repair and current-generation boundaries, without command execution.
 use super::*;
 use crate::{configuration::Bundle, review, runtime::Project};
+mod retention;
 
 fn fixture() -> (assert_fs::TempDir, Context) {
     let root = assert_fs::TempDir::new().unwrap();
@@ -143,7 +144,15 @@ fn preparation_removes_only_exited_writers_temporaries() {
         format!("acme.{dead}-0-1.tmp"),
     ];
     for name in exited.iter().chain(&kept) {
-        fs::write(partition.join(name), b"partial").unwrap();
+        let path = partition.join(name);
+        fs::write(&path, b"partial").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        #[cfg(windows)]
+        crate::windows_security::make_private(&path).unwrap();
     }
     prepare(&context, None).unwrap();
     for name in &exited {
@@ -237,6 +246,10 @@ fn repair_retains_committed_generation_and_pending_source_objects_share_durable_
     assert_eq!(
         fs::read_dir(root.path().join(".shield/review/sources"))
             .unwrap()
+            .filter(|entry| entry.as_ref().is_ok_and(|entry| entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "json")))
             .count(),
         2
     );

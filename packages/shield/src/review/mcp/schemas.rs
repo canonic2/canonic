@@ -149,6 +149,7 @@ pub(super) fn mutates(name: &str) -> bool {
             "request_approve",
             "request_deny",
             "session_grant_propose",
+            "session_grant_reconsider",
             "session_grant_approve",
             "session_grant_revoke",
         ]
@@ -200,15 +201,15 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
 fn policy_propose() -> Definition {
     (
         "policy_propose",
-        "Prepare an inactive proposal from 1-16 changes for atomic policy_apply approval. Use pack_add for guided settings. Apply project_files_adopt separately before preparing other changes. After a deadline, inspect policy_show before retrying identical arguments on this connection. Report unresolved failures; never retry cancellation.",
+        "Prepare an inactive proposal from 1-16 changes for atomic policy_apply approval. Modern Tasks-capable calls may return a preparation task: poll tasks/get, then pass only preparation_task_id here to create a fresh review; separate human approval is still required. Use pack_add for guided settings. Apply project_files_adopt separately. After uncertain delivery, repeat identical arguments to recover the original handle or proposal. Never retry cancellation automatically.",
         || {
             let mut schema = object(
-                json!({"change":change(),"changes":{"type":"array","minItems":1,"maxItems":16,"items":change()},"idempotency_key":id(),"agent_reason":string(),"source_entry_id":id(),"review_ids":{"type":"array","maxItems":16,"items":{"type":"string","minLength":64,"maxLength":64}},"supersedes_proposal_id":id()}),
+                json!({"preparation_task_id":id(),"change":change(),"changes":{"type":"array","minItems":1,"maxItems":16,"items":change()},"idempotency_key":id(),"agent_reason":string(),"source_entry_id":id(),"review_ids":{"type":"array","maxItems":16,"items":{"type":"string","minLength":64,"maxLength":64}},"supersedes_proposal_id":id()}),
                 &[],
             );
-            schema["if"] = json!({"required":["change"]});
-            schema["then"] = json!({"not":{"required":["changes"]}});
-            schema["else"] = json!({"required":["changes"]});
+            schema["if"] = json!({"required":["preparation_task_id"]});
+            schema["then"] = json!({"maxProperties":1});
+            schema["else"] = json!({"if":{"required":["change"]},"then":{"not":{"required":["changes"]}},"else":{"required":["changes"]}});
             schema["examples"] = proposal_examples();
             schema
         },
@@ -220,7 +221,7 @@ fn policy_propose() -> Definition {
 fn request_approve() -> Definition {
     (
         "request_approve",
-        "Request user approval for 1-8 still-needed requests from this session. Forms are limited to 12,000 bytes; oversized groups return retry_arguments and remaining_request_ids. After approval, repeat each identical call once.",
+        "Request user approval for 1-8 native-hook, SDK-read or checked-execution requests from this session. Forms are limited to 12,000 bytes; oversized groups return retry_arguments and remaining_request_ids. Follow each grant's next_action; checked commands need --approval-request when retried.",
         || {
             let mut schema = object(
                 json!({"request_id":id(),"request_ids":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":id()}}),
@@ -304,11 +305,11 @@ fn admin_inventory() -> Vec<Definition> {
         ),
         (
             "registry_add",
-            "Return the terminal enrollment route without fetching the supplied location; the person runs shield registry add",
+            "Discover a local or HTTPS registry and ask the person to trust its exact source identity, signing fingerprint and project/user scope. Omit name or location to collect missing details in a form, then call registry_add with its retry_arguments for separate trust confirmation. Input alone never enrolls it.",
             || {
                 object(
                     json!({"name":string(),"location":string(),"scope":{"enum":["project","user"],"default":"project"}}),
-                    &["name", "location"],
+                    &[],
                 )
             },
         ),
@@ -416,11 +417,11 @@ fn policy_inventory() -> Vec<Definition> {
         ),
         (
             "pack_remove",
-            "Prepare an inactive removal of one installed pack using the CLI's dependency checks. Copy returned apply_arguments unchanged to policy_apply for user approval.",
+            "Prepare inactive removal with dependency checks. Supply reference for one pack, or omit it so the person selects 1-16 installed packs in a form. Copy returned apply_arguments unchanged to policy_apply for separate user approval.",
             || {
                 object(
                     json!({"reference":string(),"idempotency_key":id(),"agent_reason":string()}),
-                    &["reference"],
+                    &[],
                 )
             },
         ),
@@ -528,6 +529,16 @@ fn request_inventory() -> Vec<Definition> {
         ),
         session_grant_show(),
         session_grant_propose(),
+        (
+            "session_grant_reconsider",
+            "Only when the person explicitly asks to reconsider a declined session grant: prepare a fresh candidate with unchanged scope, duration and Deny overrides. Copy the declined proposal_id and candidate_digest and supply a fresh idempotency_key. This issues no permission; use the returned apply_arguments with session_grant_approve for a fresh human form. Never invoke automatically or to bypass a decline.",
+            || {
+                object(
+                    json!({"proposal_id":id(),"candidate_digest":string(),"idempotency_key":id()}),
+                    &["proposal_id", "candidate_digest", "idempotency_key"],
+                )
+            },
+        ),
         (
             "session_grant_approve",
             "Ask the user to issue a retained conversation grant; copy apply_arguments unchanged",

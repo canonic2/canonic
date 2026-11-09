@@ -186,27 +186,58 @@ pub(crate) fn read_regular(path: &Path) -> io::Result<File> {
     Ok(file)
 }
 
+/// Inspect regular-file identity without requesting data access.
+pub(crate) fn inspect_regular(path: &Path) -> io::Result<File> {
+    let file = open(path, false)?;
+    if !file.metadata()?.is_file() || winapi_util::file::information(&file)?.number_of_links() != 1
+    {
+        return Err(refused());
+    }
+    unchanged(path, &file)?;
+    Ok(file)
+}
+
 /// Verify a private state file or directory without changing it.
 pub(crate) fn check_private(path: &Path) -> io::Result<()> {
     let file = open(path, false)?;
-    let user: LocalBox<Sid> = current_sid()?.parse().map_err(|_| refused())?;
-    check(descriptor(&file)?.as_ref(), &user)?;
+    check_private_file(&file)?;
     unchanged(path, &file)
+}
+
+/// Check discretionary privacy on a caller-held object without reopening it.
+pub(crate) fn check_private_file(file: &File) -> io::Result<()> {
+    let user: LocalBox<Sid> = current_sid()?.parse().map_err(|_| refused())?;
+    check(descriptor(file)?.as_ref(), &user)
 }
 
 /// Restrict an operator-owned state directory before it receives private data.
 pub(crate) fn make_private(path: &Path) -> io::Result<()> {
     let mut file = open(path, true)?;
+    make_private_file(&mut file)?;
+    unchanged(path, &file)
+}
+
+/// Verify ownership of a caller-held inode before changing its permissions.
+pub(crate) fn check_owned_file(file: &File) -> io::Result<()> {
+    let user: LocalBox<Sid> = current_sid()?.parse().map_err(|_| refused())?;
+    if !owner_matches(descriptor(file)?.as_ref(), &user) {
+        return Err(refused());
+    }
+    Ok(())
+}
+
+/// Restrict the held object without reopening a potentially changed pathname.
+pub(crate) fn make_private_file(file: &mut File) -> io::Result<()> {
     let sid = current_sid()?;
     let user: LocalBox<Sid> = sid.parse().map_err(|_| refused())?;
-    if !owner_matches(descriptor(&file)?.as_ref(), &user) {
+    if !owner_matches(descriptor(file)?.as_ref(), &user) {
         return Err(refused());
     }
     let desired: LocalBox<SecurityDescriptor> = format!("D:P(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)")
         .parse()
         .map_err(|_| refused())?;
     wrappers::SetSecurityInfo(
-        &mut file,
+        file,
         SeObjectType::SE_FILE_OBJECT,
         SecurityInformation::Dacl | SecurityInformation::ProtectedDacl,
         None,
@@ -215,8 +246,8 @@ pub(crate) fn make_private(path: &Path) -> io::Result<()> {
         None,
     )
     .map_err(|error| io::Error::other(error.to_string()))?;
-    check(descriptor(&file)?.as_ref(), &user)?;
-    unchanged(path, &file)
+    check(descriptor(file)?.as_ref(), &user)?;
+    Ok(())
 }
 
 /// Preserve a settings file's discretionary access and inheritance on replacement.

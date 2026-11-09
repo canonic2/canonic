@@ -227,6 +227,19 @@ impl AgentAdapter for ClaudeCode {
     ) -> Result<super::SettingsUpdate, Error> {
         setup::merge(source, owned, approved)
     }
+    fn diagnose_published_hooks(
+        &self,
+        hooks: Option<&str>,
+        expected: &super::setup::HookGroups,
+        _: Option<&str>,
+        diagnostics: &mut Vec<&'static str>,
+    ) -> Result<(), Error> {
+        let config = super::setup::diagnose(hooks, expected, diagnostics)?;
+        if config["disableAllHooks"] == true {
+            diagnostics.push("native hooks are disabled in project settings");
+        }
+        Ok(())
+    }
     fn diagnose(
         &self,
         hooks: Option<&str>,

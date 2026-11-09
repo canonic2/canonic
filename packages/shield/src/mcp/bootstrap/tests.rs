@@ -70,6 +70,37 @@ fn bootstrap_postpublication_failure_recovers_without_another_confirmation_or_id
     transport.close().1.unwrap();
 }
 
+#[test]
+fn review_resources_require_enrollment_consent_and_work_without_reconnecting() {
+    let (_root, project, old, transport) = fixture(None);
+    begin(&transport, &json!({"elicitation":{"form":{}}}), "acme");
+    let uri = format!(
+        "shield-review://{}/proposal-acme/{}/comparison",
+        old["project_id"].as_str().unwrap(),
+        "a".repeat(64)
+    );
+    let request =
+        |id, uri| json!({"jsonrpc":"2.0","id":id,"method":"resources/read","params":{"uri":uri}});
+    let refused = transport.request(&request(2, uri.as_str()));
+    assert_eq!(refused["error"]["code"], rpc::RESOURCE_NOT_FOUND);
+    assert_eq!(checkpoint(&project), old);
+    let form = transport.call(json!(3), "project_enroll", &json!({}));
+    let enrolled = transport.request(&answer(&form, "accept"));
+    assert!(data(&enrolled)["error"].is_null(), "{enrolled}");
+    let proposed = transport.call(json!(4), "policy_propose", &json!({"change":{"kind":"rule_add",
+        "rule":{"id":"acme-read","decision":"allow","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}}}}}));
+    let uri = data(&proposed)["data"]["report_resources"][0]["uri"]
+        .as_str()
+        .unwrap();
+    let before = checkpoint(&project);
+    let read = transport.request(&request(5, uri));
+    let report: Value =
+        serde_json::from_str(read["result"]["contents"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(report["project_id"], before["project_id"]);
+    assert_ne!(report["project_id"], old["project_id"]);
+    assert_eq!(checkpoint(&project), before);
+}
+
 fn begin(transport: &Transport, capabilities: &Value, agent: &str) {
     for message in initialize(capabilities, agent) {
         transport.send(&message);

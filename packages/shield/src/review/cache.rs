@@ -13,10 +13,13 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
 };
+mod retention;
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Artifact {
+    #[serde(skip)]
+    _pins: Option<storage::objects::Pins>,
     pub(super) directory: PathBuf,
     project_key: String,
     plan_key: String,
@@ -77,7 +80,7 @@ impl Artifact {
     pub(super) fn byte_len(&self) -> u64 {
         self.length
     }
-    fn path(&self) -> PathBuf {
+    pub(super) fn path(&self) -> PathBuf {
         self.directory
             .join("compiled")
             .join(&self.project_key)
@@ -287,6 +290,7 @@ fn describe(
     }
     let bytes = evaluator.compiled_bytes();
     Ok(Artifact {
+        _pins: None,
         directory,
         project_key: project_key(state.project_root, state.project_id),
         plan_key: plan_key(
@@ -342,19 +346,22 @@ fn build_source(
         .join(&artifact.project_key);
     prepare_directory(&artifact.directory.join("compiled"), owner)?;
     prepare_directory(&partition, owner)?;
-    // Preparers share the partition without a lock, so only a temporary whose
-    // writer has exited is removed.
-    storage::remove_dead_temporaries(&partition, temporary_writer);
-    atomic_write(&artifact.path(), bytes)?;
     let manifest = json!({"schema_version":1,"kind":"compiled-inputs","project_key":artifact.project_key,
         "plan_key":artifact.plan_key,"policy_revision":state.policy_revision,
         "candidate_digest":candidate_digest,
         "compiled_digest":artifact.digest,"engine":env!("CARGO_PKG_VERSION"),"format":PLAN_FORMAT});
-    atomic_write(
-        &partition.join(format!("{}.inputs.json", artifact.plan_key)),
-        manifest.to_string().as_bytes(),
+    let manifest = manifest.to_string();
+    let pins = retention::publish(
+        state.project_root,
+        &artifact,
+        bytes,
+        manifest.as_bytes(),
+        prepared.is_none(),
     )?;
-    Ok(artifact)
+    Ok(Artifact {
+        _pins: Some(pins),
+        ..artifact
+    })
 }
 
 fn normalize(directory: &Path) -> Result<PathBuf, Error> {
@@ -526,7 +533,7 @@ fn rebuild(
 ) -> Result<Value, Error> {
     checkpoint()?;
     let store = Store::open(Path::new(&context.project_root))?;
-    let mut state = store.read_checkpoint()?;
+    let (mut state, _source_pins) = store.read_pinned_checkpoint()?;
     state.check(context)?;
     let active = state
         .active

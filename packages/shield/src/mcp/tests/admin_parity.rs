@@ -1,5 +1,7 @@
 //! Overlapping forms retain distinct immutable administrative plans.
 use super::*;
+#[cfg(unix)]
+mod history_controls;
 
 #[test]
 fn shield_mode_transport_forms_require_acceptance_to_disable_and_reenable() {

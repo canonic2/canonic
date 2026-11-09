@@ -11,6 +11,36 @@ fn configured(root: &Path) {
 }
 
 #[test]
+fn action_request_kinds_sdk_uses_only_the_registered_claude_form_channel() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let bundle =
+        crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
+    crate::review::mcp::initialize_fixture(root.path(), &bundle);
+    let input = ReviewContext {
+        project: root.path().into(),
+        agent: Some("claude-sdk".into()),
+        session_id: Some("acme-session".into()),
+        tool_use_id: None,
+    };
+    let before = review_context(&input).unwrap();
+    assert!(before.agent.is_none() && !before.confirmed_mcp_forms);
+    crate::review::operator::integrations::configure_fixture(
+        root.path(),
+        crate::review::integrations::IntegrationChoice::agent("claude"),
+        crate::review::integrations::AskFallback::Block,
+    );
+    let unknown = review_context(&input).unwrap();
+    assert!(unknown.agent.is_none() && !unknown.confirmed_mcp_forms);
+    let native = review_context(&ReviewContext {
+        agent: Some("claude".into()),
+        ..input
+    })
+    .unwrap();
+    assert_eq!(native.agent.as_deref(), Some("claude"));
+    assert_eq!(native.session_id.as_deref(), Some("acme-session"));
+}
+
+#[test]
 fn bootstrap_healthy_launcher_remapping_requires_its_confirmed_receipt() {
     let root = assert_fs::TempDir::new().unwrap();
     let original = root.path().join("original");

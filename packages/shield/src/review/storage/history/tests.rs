@@ -5,8 +5,13 @@ use crate::review::{self, observations, tests::enrolled};
 use std::collections::BTreeSet;
 use std::{
     process::{Command, Stdio},
-    time::Instant,
+    thread,
+    time::{Duration, Instant},
 };
+#[cfg(unix)]
+mod controls;
+#[cfg(windows)]
+mod windows_controls;
 
 fn decision(context: &review::Context, name: &str) -> Value {
     observations::decision(context, json!({"operation":{"kind":"argv","executable":"acme","arguments":[name]},"host_decision":"allow","evaluation":{"decision":"ask"},"disposition":"allowed","ask_fallback":"allow"})).unwrap()

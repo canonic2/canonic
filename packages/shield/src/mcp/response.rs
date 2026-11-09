@@ -32,12 +32,24 @@ pub(super) fn tool_result(
         Err(EncodeError::TooLarge { .. }) => return oversized(value, failed),
         Ok(Err(_)) | Err(_) => return interrupted(name, agent),
     };
+    let mut content = vec![
+        Content::text(messages::summary(name, agent, &value)),
+        Content::text(text),
+    ];
+    for resource in value["data"]["report_resources"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        if let Ok(resource) = serde_json::from_value::<canonic_mcp_kit::Resource>(resource.clone())
+            && let Ok(link) = Content::resource_link(resource)
+        {
+            content.push(link);
+        }
+    }
     ToolResult {
         meta: None,
-        content: vec![
-            Content::text(messages::summary(name, agent, &value)),
-            Content::text(text),
-        ],
+        content,
         structured_content: Some(value),
         is_error: failed,
     }

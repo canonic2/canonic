@@ -41,6 +41,14 @@ test-focus: ## Run matching library tests; FILTER is required, TEST_TARGET selec
 	$(if $(strip $(FILTER)),,$(error Set FILTER to a test name or module; optionally set TEST_TARGET='--test integration'))
 	$(if $(filter -%,$(FILTER)),$(error FILTER must be a test-name substring, not a flag))
 	$(if $(strip $(APPLY_PROFILE_PROJECT)),SHIELD_APPLY_PROFILE_PROJECT="$(APPLY_PROFILE_PROJECT)") "$(CARGO)" nextest run --locked $(TEST_TARGET) $(CARGO_FLAGS) "$(FILTER)"
+
+.PHONY: test-adapter-focus
+test-adapter-focus: dev ## Run one named Node adapter/SDK test against the current development binary
+	$(if $(strip $(FILTER)),,$(error Set FILTER to a test-name pattern))
+	$(if $(filter -%,$(FILTER)),$(error FILTER must be a test-name pattern, not a flag))
+	$(if $(strip $(TEST_FILE)),,$(error Set TEST_FILE to an adapter test file))
+	SHIELD_TEST_BINARY="$(CURDIR)/target/debug/shield" node --test --test-concurrency=1 --test-name-pattern="$(FILTER)" "$(TEST_FILE)"
+
 PREFIX ?= $(HOME)/.local
 
 .DEFAULT_GOAL := help

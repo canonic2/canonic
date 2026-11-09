@@ -149,7 +149,13 @@ See [MCP review](project-mcp.md#proposals-and-operator-review).
 Repeating setup repairs missing tool approvals. Unmarking a tool or removing
 Shield deletes only approvals Shield added; other servers and existing approvals
 are preserved. Check `shield doctor --json` for missing or changed files and
-binaries. Status reports live verification as `unverified`.
+binaries. Status reports inspected hooks separately from retained hook activity.
+Box-published callbacks appear with `managed_by: box` when their generated
+settings match. Duplicate, changed or incomplete callbacks report degradation.
+`coverage.verification.agents` lists the latest retained hook event and timestamp
+for each observed agent; `coverage.live_host_verification: observed` describes that history, not
+an attestation of current host loading. With no available hook evidence it reports
+`unverified`, which does not establish that hooks are inactive.
 
 ## Intercepted requests
 

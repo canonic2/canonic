@@ -2,7 +2,9 @@
 
 Use `createClaudeReadOnlyHooks` to let a Claude Agent SDK host read selected
 plain-text files. Reads need a policy allowance or exact operator approval.
-All other tools, including Bash, Write, Edit, Agent, and MCP, are denied.
+The default hook factory denies other tools, including Bash, Write, Edit, Agent,
+and MCP. An explicit interactive session adds only the Shield request-review
+tools described below.
 
 The adapter uses Claude Agent SDK 0.3.292 and is tested on macOS with its Claude
 Code 2.1.292 process and a local provider. It has no runtime dependencies; your
@@ -67,6 +69,51 @@ narrow its matcher or add input-changing hooks, settings, or plugins after it.
 The example disables settings-file hooks and configured MCP servers. Only the
 trusted host can select the binary, project, and access classification.
 
+## Approve reads in the SDK session
+
+Use `createClaudeReadOnlySession` when your trusted SDK application provides a
+human form interface. The project's Claude MCP integration must already have
+been reviewed during [project setup](claude-project.md). This uses that registered
+confirmation channel; an SDK label alone establishes no native authority.
+
+```js
+import { query } from '@anthropic-ai/claude-agent-sdk';
+import { createClaudeReadOnlySession } from '/path/to/canonic/packages/shield/adapters/src/modules/claude-read-only/index.mjs';
+
+async function readWithApproval(showHumanForm) {
+  const options = await createClaudeReadOnlySession({
+    binary: '/path/to/canonic/packages/shield/target/release/shield',
+    project: '/path/to/acme',
+    onElicitation: (request, context) => showHumanForm(request, context.signal),
+  });
+  for await (const message of query({
+    prompt: 'Read /path/to/acme/notes.txt, requesting approval if needed.',
+    options: { ...options, cwd: '/path/to/acme', persistSession: false },
+  })) {
+    // Present the message in your application's interface.
+  }
+}
+```
+
+Your `showHumanForm` waits for the person's answer and returns the SDK elicitation
+result, such as `{action: 'accept', content: {}}`, `{action: 'decline'}` or
+`{action: 'cancel'}`. Never infer acceptance from model output or ordinary tool
+permission. The helper forwards only Shield form requests to that handler.
+
+Pass the returned hooks, fixed session ID, MCP server and elicitation handler
+together. On Ask, the Read result names `mcp__shield__request_approve` and its
+captured `request_id`. The agent can also use `request_show` or `request_deny`
+for that factory's captured IDs. These are the only permitted MCP calls. Each
+request still goes through Shield's human confirmation and resource checks;
+the callback's permission to call Shield issues no grant itself. Retry the read
+once unchanged after acceptance. A different factory, session, path or window
+cannot consume it. Policy editing, other MCP servers and process tools remain
+outside this read-only session.
+
+The pinned SDK's elicitation callback and exact read retry are covered by owned
+local-provider tests for Accept and Decline. This is an application-supplied form
+interface; the noninteractive example above supplies no such interface.
+
 ## Supported reads and failures
 
 The factory fixes the project, binary, and enrollment ID at startup. Reenrolling
@@ -95,7 +142,7 @@ SDK callback timeouts block, unlike some other hook transports. Do not register
 
 ## One-time operator approval
 
-A blocked Ask reports a stored request ID. Inspect it in your terminal, approve
+A noninteractive blocked Ask reports a stored request ID. Inspect it in your terminal, approve
 it, then retry the identical read in the same factory and session. Use `deny`
 only if you want to reject the request or revoke an unused grant:
 

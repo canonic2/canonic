@@ -61,7 +61,7 @@ impl From<Error> for RuntimeError {
             Error::Capacity { .. } => Self::Policy(crate::policy::Error::Limit),
             Error::Missing => Self::Missing,
             Error::StaleSnapshot => Self::StaleSnapshot,
-            Error::CacheUnavailable => Self::CacheUnavailable,
+            Error::CleanupPending | Error::CacheUnavailable => Self::CacheUnavailable,
             Error::ApprovalRequired => Self::Invalid("operator approval is required"),
             Error::CandidateUnavailable | Error::CursorUnavailable => {
                 Self::Invalid("diagnostic view is unavailable")

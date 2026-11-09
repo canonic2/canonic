@@ -132,7 +132,19 @@ fn diagnostics(value: &Value, connected: bool) -> String {
     let coverage = &value["coverage"];
     let mut output = String::new();
     if connected && coverage["live_host_verification"] == "unverified" {
-        output.push_str("Host loading: unverified. Restart each agent, trust this project and approve Shield's hooks and MCP server.\n");
+        output.push_str("No retained hook activity found. This does not establish that hooks are inactive. Inspect shield history list; if checks are absent, restart the agent and review project trust and hooks.\n");
+    }
+    for row in coverage["verification"]["agents"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        let _ = writeln!(
+            output,
+            "Recorded hook activity: {} at {}. Current host loading is not attested.",
+            agent_name(&row["agent"]),
+            label(&row["recorded_at"])
+        );
     }
     for diagnostic in coverage["diagnostics"].as_array().into_iter().flatten() {
         let _ = writeln!(output, "Problem: {}", label(diagnostic));

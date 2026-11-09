@@ -105,6 +105,7 @@ fn acquire(
     let (entry, bytes) = if let Some(version) = reference.version.as_ref() {
         registries::checked_history(context, &source, &mut catalog, &id, Some(version))?;
         let entry = catalog.release(&id, version).ok_or(Error::Missing)?;
+        context.progress.stage(super::progress::Stage::Artifact);
         (entry.clone(), artifact(&context.fetcher, &source, entry)?)
     } else {
         latest(context, &source, &mut catalog, &id)?
@@ -126,7 +127,7 @@ fn latest(
 ) -> Result<(Entry, String), Error> {
     let head = catalog.select(id, None).cloned();
     if let Some(entry) = &head
-        && let Some(bytes) = candidate_artifact(&context.fetcher, source, entry)?
+        && let Some(bytes) = candidate_artifact_for(context, source, entry)?
     {
         return Ok((entry.clone(), bytes));
     }
@@ -144,7 +145,7 @@ fn latest(
         {
             continue;
         }
-        if let Some(bytes) = candidate_artifact(&context.fetcher, source, entry)? {
+        if let Some(bytes) = candidate_artifact_for(context, source, entry)? {
             return Ok((entry.clone(), bytes));
         }
     }
@@ -178,6 +179,15 @@ fn candidate_artifact(
         }
         Err(error) => Err(error.into()),
     }
+}
+
+fn candidate_artifact_for(
+    context: &Context,
+    source: &Source,
+    entry: &Entry,
+) -> Result<Option<String>, Error> {
+    context.progress.stage(super::progress::Stage::Artifact);
+    candidate_artifact(&context.fetcher, source, entry)
 }
 /// The header fields that decide whether this engine admits a release at all,
 /// read without the version-1 schema's field and content rules.
@@ -457,6 +467,7 @@ pub(super) fn info(context: &Context, query: &str) -> Result<Value, Error> {
         .collect();
     result["packs"] = json!(entries);
     let selected = catalog.select(&id, version).ok_or(Error::Missing)?;
+    context.progress.stage(super::progress::Stage::Artifact);
     let bytes = artifact(&context.fetcher, &source, selected)?;
     let document: Value = crate::policy::parse(&bytes)?;
     result["selected_release"] = json!(selected);
@@ -875,6 +886,13 @@ pub(super) fn prepare_remove(
     reference: &str,
 ) -> Result<(Value, Value), Error> {
     closure::mutations::remove(before, reference)
+}
+
+pub(super) fn prepare_remove_many(
+    before: &super::model::State,
+    references: &[String],
+) -> Result<(Value, Value), Error> {
+    closure::mutations::remove_many(before, references)
 }
 pub(super) fn prepare_update(
     context: &Context,

@@ -190,23 +190,32 @@ copied into the public change record.
 Existing native entries whose complete transport matches the active local
 connection work without setup or host-file changes. Shield checks the command,
 arguments and environment, together with competing agent configuration scopes.
-This verification does not require a Git repository.
+Setup also preserves these entries and their existing ownership. Removing Shield
+leaves them in place. This verification does not require a Git repository.
 
 When Shield writes local stdio settings, it uses private indirection. Host files
 contain a Shield launcher, project path and opaque random token; the connection ID, transport
 digest, command, arguments and environment stay in private review state. Tokens
-are reused for unchanged settings and replaced when launch settings change.
-The launcher replaces itself with the connector, preserving native stdio and
-signal ownership. Changed settings need
-fresh setup and an agent restart. Review-state permissions must be private.
-Setup verifies that each destination (`.mcp.json`, Claude's local enablement
-settings or `.codex/config.toml`) is untracked in its Git repository, before
-preparation and again before publication.
-Tracked files refuse even when an ignore pattern matches them. An unavailable or
-unverifiable repository also refuses. Shield does not change tracking or ignore
-rules; keep these local host files out of commits.
-Local HTTP overrides refuse before any host write because private HTTP
-projection is unsupported. Shield never drops a local override as a fallback.
+retain the same locator for the same connection, agent and alias; approved
+transport changes rotate a separate random host-entry generation. Cached launch
+commands resolve the current approved transport. Removal, disabling or renaming
+the binding revokes its locator. The launcher replaces itself with the connector,
+preserving native stdio and signal ownership. Review-state permissions must be private.
+Approval publishes registered connection entries automatically, and interrupted
+publication resumes in the same session or from a cached launcher. Reloading an
+already running connector depends on the agent host.
+
+Launcher setup works without Git and with tracked host files, including
+`.mcp.json` and `.codex/config.toml`. It does not change repository tracking or
+ignore rules. Private transport settings remain in private review state; generated
+host entries contain only launcher information. The generated executable and
+project paths are absolute: they can reveal a local home folder or username and
+will not work unchanged on a teammate's machine. Setup shows this warning before
+approval. Review the host-file diff before committing or sharing it; Shield does
+not inspect Git tracking or alter it. Local HTTP overrides work when
+an existing native entry matches exactly; generating a new private HTTP entry is
+unsupported and refuses before host writes. Shield never drops a local override
+as a fallback.
 
 Managed connection, association, binding and enablement edits use in-session
 confirmation forms, including on Codex. Ordinary tool permission alone does not

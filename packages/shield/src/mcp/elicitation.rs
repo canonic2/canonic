@@ -1,6 +1,6 @@
-//! Bounded, connection-owned pack form continuations; input never approves activation.
+//! Bounded, connection-owned input continuations; input never approves effects.
 use super::{Server, response};
-use crate::review::{Context as Review, mcp::PackQuestion};
+use crate::review::{Context as Review, mcp::Question};
 use canonic_mcp_kit::{
     RequestContext, RpcError, ToolCall,
     elicitation::{Action, Answer, Requests},
@@ -23,10 +23,24 @@ pub(super) struct Questions {
 struct Pending {
     tool: String,
     arguments: Value,
-    plan: PackQuestion,
+    plan: Question,
     requests: Requests,
     expires: Instant,
     rounds: u8,
+}
+
+pub(super) fn owns(server: &Server, context: &Context) -> bool {
+    context
+        .request_context()
+        .and_then(|request| request.request_state.as_ref())
+        .is_some_and(|token| {
+            server
+                .questions
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .pending
+                .contains_key(token)
+        })
 }
 
 fn token() -> Result<String, RpcError> {
@@ -48,7 +62,7 @@ pub(super) fn call(
     {
         return modern_resume(server, &review, &call, context, request);
     }
-    let plan = match PackQuestion::prepare(&review, &call.name, &call.arguments) {
+    let plan = match Question::prepare(&review, &call.name, &call.arguments) {
         Ok(plan) => plan,
         Err(error) => {
             return output(
@@ -63,10 +77,10 @@ pub(super) fn call(
         Ok(token) => token,
         Err(error) => return Outcome::Method(Err(error)),
     };
-    if !plan.needs_input {
+    if !plan.needs_input() {
         return output(
             &review,
-            plan.tool,
+            plan.tool(),
             plan.propose(&review, &server.connection, &json!({}), &token, &|| {
                 context
                     .check()
@@ -76,7 +90,7 @@ pub(super) fn call(
         );
     }
     if let Some(request) = context.request_context() {
-        let requests = match Requests::new(vec![("settings".into(), plan.question.clone())]) {
+        let requests = match Requests::new(vec![("settings".into(), plan.question().clone())]) {
             Ok(requests) => requests,
             Err(error) => return Outcome::Method(Err(error)),
         };
@@ -90,7 +104,7 @@ pub(super) fn call(
         if questions.pending.len() >= 8 {
             return Outcome::Method(Err(RpcError::new(
                 rpc::INVALID_PARAMS,
-                "Too many pending pack forms",
+                "Too many pending input forms",
             )));
         }
         let result = match request.elicitation(requests.clone(), Some(&token)) {
@@ -116,8 +130,9 @@ pub(super) fn call(
         .as_ref()
         .map(|trace| trace.wait("input.wait", "input.wait_us"));
     Outcome::Elicit(Elicit::new(
-        plan.question.clone(),
+        plan.question().clone(),
         move |answer, context| {
+            let review = super::progress::resume(review, context);
             drop(waiting);
             let _scope = trace
                 .as_ref()
@@ -145,7 +160,7 @@ fn modern_resume(
     let invalid = || {
         Outcome::Method(Err(RpcError::new(
             rpc::INVALID_PARAMS,
-            "Invalid, expired or consumed pack form; start a new settings review",
+            "Invalid, expired or consumed input form; start a new review",
         )))
     };
     let Some(token) = request.request_state.as_ref() else {
@@ -193,7 +208,7 @@ fn modern_resume(
 fn finish(
     review: &Review,
     connection: &crate::review::mcp::Connection,
-    plan: &PackQuestion,
+    plan: &Question,
     token: &str,
     answer: Answer,
     context: &Context,
@@ -217,25 +232,25 @@ fn finish(
             let (code, message) = match other {
                 Answer::Response(answer) if answer.action == Action::Decline => (
                     "input_declined",
-                    "Pack settings declined; no proposal was prepared. Do not retry this offer.",
+                    "Input declined; no change was prepared or approved. Do not retry this offer.",
                 ),
                 Answer::Response(_) => (
                     "input_cancelled",
-                    "Pack settings dismissed; no proposal was prepared. Do not retry this offer.",
+                    "Input dismissed; no change was prepared or approved. Do not retry this offer.",
                 ),
                 Answer::Invalid => (
                     "invalid_input",
-                    "Invalid pack settings answer; no proposal was prepared.",
+                    "Invalid input answer; no change was prepared or approved.",
                 ),
                 Answer::Unavailable => (
                     "input_unavailable",
-                    "MCP pack form unavailable. Use shield pack add or shield pack configure in the user's terminal, or collect explicit values for ordinary policy_propose changes. Never infer missing answers.",
+                    "MCP input form unavailable. Collect explicit values from the person and use the tool's direct arguments; never infer missing answers or approval.",
                 ),
             };
             json!({"schema_version":1,"project_id":review.project_id,"policy_revision":null,"data":null,"missing":[],"truncated":false,"redacted":false,"error":{"code":code,"message":message,"operator_route":null}})
         }
     };
-    output(review, plan.tool, value, context)
+    output(review, plan.tool(), value, context)
 }
 
 fn output(review: &Review, name: &str, value: Value, context: &Context) -> Outcome {

@@ -422,6 +422,13 @@ fn writes_remove_leftover_temporaries_that_no_writer_owns() {
     ];
     for path in removed.iter().chain(&kept) {
         fs::write(path, b"partial").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        #[cfg(windows)]
+        crate::windows_security::make_private(path).unwrap();
     }
     store
         .update_checkpoint(&context, &|| Ok(()), |_| Ok(Value::Null))

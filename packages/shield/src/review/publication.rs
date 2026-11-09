@@ -210,10 +210,11 @@ fn commit_confirmed(
     let candidate_digest = review::storage::sources::map_digest(&sources);
     // A selected proposal already owns a durable, verified source object. Publish
     // that exact reference under the lock instead of serializing and retaining it again.
-    let retained = if proposal.is_none() {
-        Some(store.retain_candidates(&candidates)?)
+    let (retained, _source_pins) = if proposal.is_none() {
+        let (retained, pins) = store.retain_candidates(&candidates)?;
+        (Some(retained), Some(pins))
     } else {
-        None
+        (None, None)
     };
     let mut attempted_activation = None;
     let mut preserved = BTreeSet::new();

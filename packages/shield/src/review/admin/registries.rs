@@ -70,6 +70,8 @@ impl Prepared {
             .map(|v| v.default_alias().to_owned())
         };
         let receipt = json!({"committed":true,"change":kind,"alias":alias,"scope":if metadata.is_some() {"project"} else {"user"},"source":source,
+            "trust":source.as_ref().map(trust_review),
+            "scope_effect":if metadata.is_some() {"Only this project's registry configuration changes."} else {"User-wide registry configuration changes; other projects using this user's sources are affected."},
             "default":{"before":resolved(&before)?,"after":resolved(&after)?},"installed_policy":"preserved"});
         Ok(Self {
             root: context.map(|c| c.project_root.clone()),
@@ -128,4 +130,25 @@ impl Prepared {
             },
         )
     }
+}
+
+/// Discovery proves catalog integrity under the presented key, not publisher
+/// identity. Only the person's confirmation enrolls the retained origin/key.
+fn trust_review(source: &canonic_registry_kit::source::Source) -> Value {
+    let fingerprint = source
+        .key()
+        .and_then(|key| canonic_registry_kit::digest::decode(key, 32))
+        .map(|key| canonic_registry_kit::digest::sha256_hex(&key));
+    json!({
+        "canonical_location":source.location(),
+        "source_identity":source.identity(),
+        "registry_identity":source.registry_id(),
+        "signing_key_fingerprint_sha256":fingerprint,
+        "basis":if source.is_signed() {
+            "Trust on first use: trust this HTTPS origin, registry identity and signing key. The presented key verifies the catalog; this is not independent proof of publisher identity."
+        } else {
+            "Local operator-enrolled directory; unsigned catalog. Trust applies to this canonical directory."
+        },
+        "policy_effect":"Enrollment grants no pack permissions. Installing policy requires a separate review."
+    })
 }

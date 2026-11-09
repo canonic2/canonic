@@ -74,6 +74,34 @@ not extend its expiry. Equivalent pending, active or declined offers return the
 existing record. Do not repeatedly offer declined permission or broaden the
 scope to work around a refusal.
 
+## Reconsider a declined offer
+
+If the person explicitly asks to reconsider, inspect the declined record with
+`session_grant_show`. Call `session_grant_reconsider` using its `proposal_id`,
+`candidate_digest` and a fresh `idempotency_key`:
+
+```json
+{
+  "proposal_id": "COPY_THE_DECLINED_PROPOSAL_ID",
+  "candidate_digest": "COPY_ITS_CANDIDATE_DIGEST",
+  "idempotency_key": "explicit-reconsideration-1"
+}
+```
+
+This prepares a new candidate with the same recorded conversation, scope,
+duration, reason and Deny overrides. It preserves the original decline and grants
+no permission. Copy the new candidate's `apply_arguments` to
+`session_grant_approve`. The fresh form identifies the earlier decline and shows
+the complete permission again. Accept issues the new grant; Decline or Cancel
+leaves both decisions recorded without permission.
+
+Do not call reconsideration automatically. Changing a normal proposal's retry
+key alone keeps the decline suppressed. Repeating the same reconsideration key
+returns its retained result; another key cannot duplicate a matching pending
+review or renew a live grant. A fresh decline stays suppressed too. Changed
+policy, protection, registration or an unavailable native context requires
+inspection and a current proposal, rather than reviving the old candidate.
+
 ## What the person approves
 
 The review identifies the project, agent and recorded conversation, the complete

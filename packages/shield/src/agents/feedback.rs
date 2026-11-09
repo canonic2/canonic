@@ -292,7 +292,7 @@ pub(super) fn respond(
         && let Some(reference) = receipt["session_context"]["session_ref"].as_str()
     {
         let hint = format!(
-            "Session reference: {reference}. For planned repeated privileged operations, inspect session_grant_show, then session_grant_propose for a bounded batch/family and session_grant_approve for the user's form. Do not repeat a declined offer or broaden scope to avoid a refusal."
+            "Session reference: {reference}. For planned repeated privileged operations, inspect session_grant_show, then session_grant_propose for a bounded batch/family and session_grant_approve for the user's form. Do not repeat a declined offer automatically or broaden scope to avoid a refusal. Only the person's explicit request permits session_grant_reconsider followed by fresh human confirmation."
         );
         reply.agent_context = Some(
             reply

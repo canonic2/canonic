@@ -62,6 +62,19 @@ Restart the agent, trust the project, enable native hooks, and approve the MCP
 connection. Codex also requires reviewing hook definitions through `/hooks`.
 Use `shield doctor` to check for missing or changed owned files and binaries.
 
+In JSON output, `enforcement` reports `installed`, `defined-for-box` (the Box
+definition exists but no published hooks were found), `degraded`, or
+`not-installed`. Policy-only inspection reports `not-checked` because it does not
+inspect agent integration files. `enabled` separately reports whether Shield is
+paused. For a Box installation, use `box config sync --server shield --dry-run`
+to review what Box would publish.
+
+Check `coverage.verification.agents` for recorded hook activity and its timestamp.
+Recorded events show that callbacks ran at those times; they do not prove that
+every current session loaded hooks. Missing or unavailable history also does not
+prove that hooks are inactive. Use `shield history list` and
+`shield history show ENTRY` to inspect the actual requests and outcomes.
+
 Interrupted confirmed setup resumes on the next MCP request while preserving
 unrelated settings. If an owned setting conflicts, the agent can request
 `mcp_setup {"pending":"review"}` to show its replacement for your approval,

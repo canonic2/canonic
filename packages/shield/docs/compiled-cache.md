@@ -66,4 +66,19 @@ error rather than choosing another location.
 
 Saved policy source remains in `.shield/review/sources/`. Keep it and the
 authority checkpoint for recovery; only the compiled cache is disposable.
-Cache and source storage are not automatically pruned.
+Shield reclaims unreachable source objects when admitting new source, and old
+plan versions when preparing this project's cache. Active policy, retained
+reviews, recovery checkpoints and readers holding kernel pins remain protected.
+Cache reconstruction holds a source pin until publication. A lazy MCP
+capture can rebuild its exact older plan from its pinned source.
+
+Source storage and each project's compiled-cache namespace have independent
+4 GiB and 4,096-entry limits, including publication temporaries. Normal candidate
+preparation leaves 1 GiB and eight entries for activation or cache recovery.
+When required data or live readers fill admission capacity, Shield reports the
+needed amount and limit. Finish pending reviews or release unused retained
+captures before retrying; required policy and grants are never deleted to make
+room. Cleanup does not scan or delete another project's cache namespace.
+Unsafe neighboring entries are preserved and counted instead of blocking
+unrelated objects; `doctor` identifies their paths. A bounded cleanup backlog
+asks for a retry to continue collection, rather than reporting a live writer.

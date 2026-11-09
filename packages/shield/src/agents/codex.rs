@@ -235,6 +235,16 @@ impl AgentAdapter for Codex {
     fn repair_mcp(&self, before: Option<&str>, desired: Option<&str>) -> Result<String, Error> {
         setup::repair_mcp(before, desired)
     }
+    fn diagnose_published_hooks(
+        &self,
+        hooks: Option<&str>,
+        expected: &super::setup::HookGroups,
+        extra: Option<&str>,
+        diagnostics: &mut Vec<&'static str>,
+    ) -> Result<(), Error> {
+        super::setup::diagnose(hooks, expected, diagnostics)?;
+        setup::diagnose_hook_loading(extra, diagnostics)
+    }
     fn diagnose(
         &self,
         hooks: Option<&str>,

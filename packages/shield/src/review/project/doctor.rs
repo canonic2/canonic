@@ -11,7 +11,7 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
     let (current, upgrade_pending) = store.read_diagnostics()?;
     current.check(context)?;
     let meta = state::metadata(&current);
-    let mut checks = Vec::new();
+    let mut checks = storage_checks(context, &current);
     let complete = state::status_from(context, &current);
     let mut value = match complete {
         Ok(value) => value,
@@ -118,6 +118,30 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
 
     value["checks"] = json!(checks);
     Ok(value)
+}
+
+/// Report preserved storage anomalies without blocking unrelated operations.
+fn storage_checks(context: &Context, current: &crate::review::model::State) -> Vec<Value> {
+    let mut checks = Vec::new();
+    let mut directories = vec![Path::new(&context.project_root).join(".shield/review/sources")];
+    if let Some(active) = &current.active
+        && let Some(partition) = active.compiled.path().parent()
+    {
+        directories.push(partition.to_path_buf());
+    }
+    for directory in directories {
+        match crate::review::storage::objects::anomalies(&directory) {
+            Ok(paths) => {
+                for path in paths {
+                    checks.push(json!({"check":"object_storage","blocking":false,"path":path,"detail":"Unsafe neighboring entry is preserved and counts toward capacity; unrelated objects remain usable."}));
+                }
+            }
+            Err(error) => checks.push(
+                json!({"check":"object_storage","path":directory,"detail":error.to_string()}),
+            ),
+        }
+    }
+    checks
 }
 
 /// Cache preparation repairs an unavailable plan; other policy failures need review.

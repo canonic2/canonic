@@ -1,5 +1,6 @@
 //! Private reusable conversation authorization, distinct from policy and exact grants.
 mod native;
+mod reconsider;
 mod registration;
 mod scope;
 #[cfg(test)]
@@ -17,6 +18,7 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path};
 
 pub(crate) use native::handoff;
+pub(crate) use reconsider::reconsider;
 pub(super) use registration::preserve_integration;
 pub(crate) use view::{confirmation, show};
 
@@ -49,6 +51,10 @@ struct Conversation {
 #[serde(deny_unknown_fields)]
 struct Record {
     id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reconsiders: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reconsiders_digest: Option<String>,
     session_key: String,
     session: Conversation,
     owner: String,
@@ -171,7 +177,7 @@ impl Authority {
 
 impl Record {
     fn digest(&self) -> String {
-        hash(&json!([
+        let original = json!([
             self.id,
             self.session_key,
             self.session,
@@ -186,7 +192,19 @@ impl Record {
             self.activation,
             self.protection,
             self.provenance
-        ]))
+        ]);
+        if let Some(digest) = &self.reconsiders_digest {
+            return hash(&json!([
+                "reconsideration",
+                original,
+                self.reconsiders,
+                digest
+            ]));
+        }
+        self.reconsiders.as_ref().map_or_else(
+            || hash(&original),
+            |previous| hash(&json!(["reconsideration", original, previous])),
+        )
     }
     fn current_with(&self, authority: &Authority) -> bool {
         authority.activation.as_ref() == Some(&self.activation)
@@ -287,6 +305,15 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
     for (id, row) in &registry.records {
         if id != &row.id
             || row.digest != row.digest()
+            || row.reconsiders_digest.as_ref().is_some_and(|digest| {
+                row.reconsiders.is_none()
+                    || digest.len() != 64
+                    || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+            })
+            || row
+                .reconsiders
+                .as_ref()
+                .is_some_and(|id| id == &row.id || id.is_empty() || id.len() > 128)
             || !(60..=28_800).contains(&row.duration)
             || !["pending", "issued", "declined", "withdrawn"].contains(&row.status.as_str())
             || (row.status == "issued") != row.grant.is_some()
@@ -370,6 +397,36 @@ fn proposal_input(args: &Value) -> Result<ProposalInput, Error> {
     Ok(input)
 }
 
+/// A live equivalent takes precedence over historical declines. Declines alone
+/// still suppress ordinary new-key proposals and cannot reopen themselves.
+fn equivalent_offer<'a>(
+    state: &'a State,
+    authority: &Authority,
+    input: &ProposalInput,
+    now: u64,
+) -> Option<&'a Record> {
+    state
+        .session_grants
+        .records
+        .values()
+        .filter(|r| {
+            r.session.reference == input.session_ref
+                && r.scope == input.scope
+                && r.duration == input.duration_seconds
+                && r.overrides == input.override_denies
+                && r.current_with(authority)
+                && ["pending", "active", "declined", "suspended"]
+                    .contains(&r.effective_with(authority, now))
+        })
+        .max_by_key(|r| {
+            (
+                r.effective_with(authority, now) != "declined",
+                r.created,
+                &r.id,
+            )
+        })
+}
+
 fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Error> {
     let rules = super::inspection::rules(context, None)?;
     let override_evidence = scope::overrides(&input.override_denies, &rules)?;
@@ -403,7 +460,8 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
         }
         let owner = context.retry_owner();
         if let Some(row) = state.session_grants.records.values().find(|r| {
-            r.owner == owner
+            r.reconsiders.is_none()
+                && r.owner == owner
                 && r.session.reference == input.session_ref
                 && r.key == input.idempotency_key
         }) {
@@ -420,15 +478,7 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
         }
         // A new retry key must not create duplicate forms or reopen a declined
         // offer. Changed scope or a new policy/session requires a new review.
-        if let Some(row) = state.session_grants.records.values().find(|r| {
-            r.session.reference == input.session_ref
-                && r.scope == input.scope
-                && r.duration == input.duration_seconds
-                && r.overrides == input.override_denies
-                && r.current_with(&authority)
-                && ["pending", "active", "declined", "suspended"]
-                    .contains(&r.effective_with(&authority, now))
-        }) {
+        if let Some(row) = equivalent_offer(state, &authority, input, now) {
             return Ok(view::public(row, state, now));
         }
         if state.session_grants.records.len() >= 1024
@@ -447,6 +497,8 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
         session.registration = registration(state, &session.agent)?;
         let mut row = Record {
             id: state.id("session-proposal"),
+            reconsiders: None,
+            reconsiders_digest: None,
             session_key,
             session,
             owner,
@@ -476,7 +528,7 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
 }
 
 fn event(state: &mut State, context: &Context, kind: &str, row: &Record) {
-    let event = state.event(kind,context,json!({"proposal_id":row.id,"approval_id":row.grant.as_ref().map(|g| &g.approval)}),
+    let event = state.event(kind,context,json!({"proposal_id":row.id,"reconsiders_proposal_id":row.reconsiders,"approval_id":row.grant.as_ref().map(|g| &g.approval)}),
         json!({"agent_reason":row.reason}),json!({"grant_id":row.grant.as_ref().map(|g| &g.id),"scope_digest":row.digest,"status":row.status,"terminal_reason":row.terminal_reason}));
     state.record(event);
 }

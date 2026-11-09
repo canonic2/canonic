@@ -2,11 +2,16 @@
 use super::{Error, Store, private, sync};
 use serde_json::{Value, json};
 use std::{
+    collections::BTreeSet,
     fs,
     io::{Read, Write},
 };
 
 const KIND: &str = "retained-source-v1";
+mod retention;
+pub(in crate::review) use retention::pin;
+#[cfg(test)]
+pub(in crate::review) use retention::tests::activate as activate_fixture;
 
 pub(in crate::review) fn map_digest(
     candidates: &std::collections::BTreeMap<String, Value>,
@@ -26,12 +31,13 @@ pub(super) fn checkpoint(
     store: &Store,
     value: &mut Value,
     hydrate_source: bool,
-) -> Result<(), Error> {
-    let apply = |value: &mut Value| {
+) -> Result<super::objects::Pins, Error> {
+    let mut batch = retention::Batch::new(value, false)?;
+    let mut apply = |value: &mut Value| {
         if hydrate_source {
             hydrate(store, value)
         } else {
-            compact(store, value)
+            compact_inner(store, value, &mut batch)
         }
     };
     for name in ["candidates", "active"] {
@@ -50,29 +56,52 @@ pub(super) fn checkpoint(
             }
         }
     }
-    Ok(())
+    batch.finish(store)
 }
-pub(super) fn compact(store: &Store, value: &mut Value) -> Result<(), Error> {
+#[cfg(test)]
+pub(super) fn compact(store: &Store, value: &mut Value) -> Result<super::objects::Pins, Error> {
+    compact_with(store, value, false)
+}
+pub(super) fn compact_activating(
+    store: &Store,
+    value: &mut Value,
+) -> Result<super::objects::Pins, Error> {
+    compact_with(store, value, true)
+}
+fn compact_with(
+    store: &Store,
+    value: &mut Value,
+    activating: bool,
+) -> Result<super::objects::Pins, Error> {
+    let mut batch = retention::Batch::new(value, activating)?;
+    compact_inner(store, value, &mut batch)?;
+    batch.finish(store)
+}
+fn compact_inner(
+    store: &Store,
+    value: &mut Value,
+    batch: &mut retention::Batch,
+) -> Result<(), Error> {
     if value["kind"] == "candidate-bundle" {
         let bytes = serde_json::to_vec(value).map_err(|_| Error::Invalid("source encoding"))?;
         if bytes.len() > crate::configuration::MAX_BUNDLE_BYTES {
             return Err(crate::policy::Error::Limit.into());
         }
         let digest = crate::policy::fingerprint(&bytes);
+        batch.protect(&digest);
         let candidate_digest =
             crate::json::fingerprint(&std::collections::BTreeMap::from([("project", &*value)]))
                 .map_err(|_| Error::Invalid("source encoding"))?;
         let directory = store.directory.join("sources");
         super::private_directory(&directory)?;
+        batch.lock(store)?;
         let path = directory.join(format!("{digest}.json"));
         if path.exists() {
-            if fs::symlink_metadata(&path)?.file_type().is_symlink() || fs::read(&path)? != bytes {
+            if !super::objects::same_bytes(&path, &bytes)? {
                 return Err(Error::Invalid("retained source was replaced"));
             }
         } else {
-            // Sources are also retained outside the writer lock, so only a
-            // temporary whose writer has exited is removed.
-            super::remove_dead_temporaries(&directory, temporary_writer);
+            batch.admit(store, &digest, bytes.len() as u64)?;
             let temporary = path.with_extension(format!(
                 "{}-{}.tmp",
                 std::process::id(),
@@ -96,6 +125,7 @@ pub(super) fn compact(store: &Store, value: &mut Value) -> Result<(), Error> {
             })();
             let _ = fs::remove_file(temporary);
             result?;
+            batch.added(bytes.len() as u64);
         }
         *value = json!({"kind":KIND,"digest":digest,"candidate_digest":candidate_digest,"length":bytes.len()});
     } else if value["kind"] == KIND {
@@ -104,12 +134,12 @@ pub(super) fn compact(store: &Store, value: &mut Value) -> Result<(), Error> {
         match value {
             Value::Object(map) => {
                 for child in map.values_mut() {
-                    compact(store, child)?;
+                    compact_inner(store, child, batch)?;
                 }
             }
             Value::Array(rows) => {
                 for child in rows {
-                    compact(store, child)?;
+                    compact_inner(store, child, batch)?;
                 }
             }
             _ => {}
@@ -174,7 +204,7 @@ pub(super) fn hydrate(store: &Store, value: &mut Value) -> Result<(), Error> {
             ));
         }
         let mut bytes = Vec::new();
-        fs::File::open(path)?
+        super::objects::read_file(&path)?
             .take((crate::configuration::MAX_BUNDLE_BYTES + 1) as u64)
             .read_to_end(&mut bytes)?;
         if crate::policy::fingerprint(&bytes) != digest {

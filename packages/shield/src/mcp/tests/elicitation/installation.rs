@@ -72,6 +72,28 @@ fn approve(transport: &Transport, id: i64, proposal: &Value) {
 }
 
 #[test]
+fn operation_progress_continues_after_legacy_settings_without_approving_activation() {
+    let (transport, project, _source) = fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
+    let revision = project.revision();
+    let request = json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{
+        "name":"pack_add","arguments":{"reference":"fixture/acme/settings","variables":["manager"]},
+        "_meta":{"progressToken":"acme-install"}}});
+    let (form, before) = crate::mcp::tests::progress::collect(&transport, &request);
+    assert_eq!(form["method"], "elicitation/create", "{form}");
+    crate::mcp::tests::progress::assert_progress(&before, &json!("acme-install"));
+    transport.send(&answer(&form, "accept", form_values(&form)));
+    let (proposal, after) = crate::mcp::tests::progress::receive(&transport, &json!(2));
+    assert!(data(&proposal)["error"].is_null(), "{proposal}");
+    crate::mcp::tests::progress::assert_progress(&after, &json!("acme-install"));
+    assert!(
+        after[0]["progress"].as_f64().unwrap()
+            > before.last().unwrap()["progress"].as_f64().unwrap()
+    );
+    assert_eq!(project.revision(), revision);
+    assert_eq!(data(&proposal)["data"]["status"], "pending");
+}
+
+#[test]
 fn pack_installation_batch_collects_optional_and_required_settings_and_activates_once() {
     let (transport, project, source) = fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
     let mut root: Value =

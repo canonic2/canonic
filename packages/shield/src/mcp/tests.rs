@@ -10,16 +10,30 @@ use std::{
     sync::mpsc,
     thread::{self, JoinHandle},
 };
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
+mod action_requests;
 mod admin_parity;
 mod agent_isolation;
 mod confirmation;
 mod elicitation;
+pub(crate) mod progress;
 mod prompts;
 mod recovery;
+mod registry_enrollment;
 mod request_parity;
+mod review_resources;
 mod session_grants;
 mod setup_continuity;
 mod skills;
+mod tasks;
+
+#[test]
+fn doctor_nonblocking_storage_warnings_do_not_send_agents_to_repair() {
+    let mut envelope = json!({"error":null,"data":{"repair_needed":false,"checks":[{"check":"object_storage","blocking":false}]}});
+    assert!(messages::summary("doctor", None, &envelope).contains("remains usable"));
+    envelope["data"]["checks"][0]["blocking"] = json!(true);
+    assert!(messages::summary("doctor", None, &envelope).contains("needs repair"));
+}
 
 /// A fixture project. The temporary root lives as long as this value.
 pub(crate) struct Project {
@@ -333,6 +347,7 @@ fn catalog_publishes_every_tool_and_marks_all_state_changes_as_mutations() {
             "rule_remove",
             "session_grant_approve",
             "session_grant_propose",
+            "session_grant_reconsider",
             "session_grant_revoke"
         ]
     );

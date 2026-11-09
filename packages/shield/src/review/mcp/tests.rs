@@ -6,6 +6,7 @@ mod cross_source;
 mod documentation;
 mod file_editing;
 mod graphql;
+mod guided;
 mod historical_annotations;
 mod integration_recovery;
 mod pack_acquisition;
@@ -14,6 +15,7 @@ mod pack_info;
 mod pack_verbs;
 mod parity;
 mod reclamation;
+mod registry_enrollment;
 mod rule_proposals;
 mod suggestion_workflow;
 mod sweep_cost;
@@ -826,10 +828,8 @@ fn admin_reviews_use_tool_routes_and_prepare_outside_the_connection_lock() {
     }
     for location in ["https://127.0.0.1:1/registry", "/nonexistent/acme-registry"] {
         let args = json!({"name":"acme","location":location});
-        assert!(matches!(
-            admin_confirmation(&context, &connection, "registry_add", &args, &checkpoint),
-            Err(Error::ApprovalRequired)
-        ));
+        // A bare tool call or fabricated approval cannot perform discovery or
+        // enrollment without a retained human-review binding.
         let result = call(&context, &connection, "registry_add", &args, &checkpoint);
         assert!(result["error"]["operator_route"].is_null());
         assert_eq!(result["error"]["code"], "operator_review_required");
@@ -889,6 +889,7 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
             "session_grant_list",
             "session_grant_show",
             "session_grant_propose",
+            "session_grant_reconsider",
             "session_grant_approve",
             "rule_add",
             "rule_edit",
@@ -1335,13 +1336,10 @@ fn release_and_registry_refusals_name_the_user_step() {
         )),
     );
     let error = &unenrolled["error"];
-    assert_eq!(
-        error["operator_route"], "shield registry add",
-        "{unenrolled}"
-    );
+    assert_eq!(error["operator_route"], "registry_add", "{unenrolled}");
     let message = error["message"].as_str().unwrap();
     assert!(
-        message.contains("acme-foreign") && message.contains("shield registry add"),
+        message.contains("acme-foreign") && message.contains("registry_add"),
         "{message}"
     );
 }

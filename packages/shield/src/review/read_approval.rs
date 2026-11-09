@@ -11,7 +11,7 @@ use std::path::Path;
 
 mod legacy;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 /// Text-read requests a project retains in every status.
 const MAX_REQUESTS: usize = 128;
@@ -61,6 +61,12 @@ fn hash(value: &Value) -> String {
     policy::fingerprint(value.to_string().as_bytes())
 }
 impl ReadRequest {
+    pub(super) fn id(&self) -> &str {
+        &self.request_id
+    }
+    pub(super) fn session_id(&self) -> Option<&str> {
+        self.origin.session_id.as_deref()
+    }
     /// Whether the request still waits for an operator decision.
     pub(super) fn awaits_decision(&self, time: u64) -> bool {
         self.status == "pending" && time < self.pending_expires_at_ms
@@ -172,7 +178,11 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
                         && event["details"]["binding"] == grant.binding
                         && event["links"]["request_id"] == row.request_id
                         && event["details"]["request_binding"] == row.binding
-                        && event["operator"]["mechanism"] == "operator-cli"
+                        && super::approvals::issued_by_operator(
+                            event,
+                            super::approvals::read_operator_agent(row.origin.agent.as_deref()),
+                            row.origin.session_id.as_deref(),
+                        )
                 })
             {
                 return Err(Error::Invalid("read grant authorization differs"));
@@ -478,7 +488,7 @@ pub(super) fn deny(context: &Context, id: &str, confirmed: bool) -> Result<Value
         let row = &state.read_requests[index];
         if !super::approvals::owns_request(
             context,
-            row.origin.agent.as_deref(),
+            super::approvals::read_operator_agent(row.origin.agent.as_deref()),
             row.origin.session_id.as_deref(),
         ) {
             return Err(Error::Missing);
@@ -520,45 +530,188 @@ fn authorize_with_clock(
     if !(1..=3600).contains(&ttl) || reason.is_some_and(|r| r.len() > 4096) {
         return Err(Error::Invalid("invalid grant lifetime or reason"));
     }
-    // Recover derived data before taking the writer lock; recovery owns a writer
-    // transaction itself. The grant below still binds to the current activation.
     let snapshot = if revoke {
         None
     } else {
         Some(super::runtime::consumer::load(context, &|| Ok(()))?)
     };
-    Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &||Ok(()), |state| {
-        let index = state.read_requests.iter().position(|r|r.request_id == id).ok_or(Error::Missing)?;
-        let row = &state.read_requests[index];
-        if row.status == "consumed" || row.status == "revoked" { return Err(Error::Invalid("request is terminal")); }
-        if revoke { return Ok(revoke_request(state, context, index, reason)); }
-        let time = clock()?;
-        if time < row.created_at_ms || (row.grant.is_none() && time >= row.pending_expires_at_ms) { return Err(Error::Invalid("pending request expired")); }
-        let snapshot = snapshot.as_ref().ok_or(Error::StaleSnapshot)?;
-        if state.active.as_ref().is_none_or(|active| !active.matches(snapshot.identity())) { return Err(Error::StaleSnapshot); }
-        let resource = row.resource.clone().map_or_else(|| legacy::resource(&row.request), Ok)?;
-        let evidence = snapshot.evaluate_resource(row.request.clone(), resource).map_err(|_|Error::Invalid("request cannot be evaluated"))?;
-        if !row.matches(&evidence, &row.resource_digest, &row.origin) || evidence.evaluation().decision != Decision::Ask {
-            return Err(Error::StaleSnapshot);
+    Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
+        if revoke {
+            let index = state
+                .read_requests
+                .iter()
+                .position(|r| r.request_id == id)
+                .ok_or(Error::Missing)?;
+            if matches!(
+                state.read_requests[index].status.as_str(),
+                "consumed" | "revoked"
+            ) {
+                return Err(Error::Invalid("request is terminal"));
+            }
+            return Ok(revoke_request(state, context, index, reason));
         }
-        crate::enforcement::read_text::verify_approval_read(&row.request, &row.resource_digest,snapshot.access_paths())?;
-        if let Some(grant) = &row.grant {
-            if time < grant.issued_at_ms || time >= grant.expires_at_ms || grant.expires_at_ms-grant.issued_at_ms != ttl*1000 { return Err(Error::Invalid("grant cannot be renewed or changed")); }
-            return Ok(json!({"request_id":id,"status":"approved","approval_id":grant.approval_id,"expires_at_ms":grant.expires_at_ms}));
-        }
-        let approval = state.id("read-approval");
-        let row = &mut state.read_requests[index];
-        let mut grant = Grant { approval_id: approval.clone(), issued_at_ms: time, expires_at_ms: time + ttl * 1000, binding: String::new() };
-        grant.binding = row.grant_binding(&grant);
-        let binding = grant.binding.clone();
-        row.grant = Some(grant);
-        row.status = "approved".into();
-        let request_binding = row.binding.clone();
-        let event = operator_event(state, context, "read_grant_issued", id, Some(&approval), reason,
-            json!({"binding":binding,"request_binding":request_binding,"expires_at_ms":time+ttl*1000}));
-        state.record(event);
-        Ok(json!({"request_id":id,"status":"approved","approval_id":approval,"expires_at_ms":time+ttl*1000}))
+        issue_checked(
+            state,
+            context,
+            id,
+            ttl,
+            reason,
+            snapshot.as_ref().ok_or(Error::StaleSnapshot)?,
+            clock()?,
+        )
     })
+}
+
+/// Validate the exact policy generation and consumer-owned resources without issuing a grant.
+fn check(
+    state: &State,
+    id: &str,
+    snapshot: &super::runtime::consumer::Snapshot,
+    time: u64,
+) -> Result<usize, Error> {
+    let index = state
+        .read_requests
+        .iter()
+        .position(|r| r.request_id == id)
+        .ok_or(Error::Missing)?;
+    let row = &state.read_requests[index];
+    if row.status == "consumed" || row.status == "revoked" {
+        return Err(Error::Invalid("request is terminal"));
+    }
+    if time < row.created_at_ms || (row.grant.is_none() && time >= row.pending_expires_at_ms) {
+        return Err(Error::Invalid("pending request expired"));
+    }
+    if state
+        .active
+        .as_ref()
+        .is_none_or(|active| !active.matches(snapshot.identity()))
+    {
+        return Err(Error::StaleSnapshot);
+    }
+    let resource = row
+        .resource
+        .clone()
+        .map_or_else(|| legacy::resource(&row.request), Ok)?;
+    let evidence = snapshot
+        .evaluate_resource(row.request.clone(), resource)
+        .map_err(|_| Error::Invalid("request cannot be evaluated"))?;
+    if !row.matches(&evidence, &row.resource_digest, &row.origin)
+        || evidence.evaluation().decision != Decision::Ask
+    {
+        return Err(Error::StaleSnapshot);
+    }
+    crate::enforcement::read_text::verify_approval_read(
+        &row.request,
+        &row.resource_digest,
+        snapshot.access_paths(),
+    )?;
+    Ok(index)
+}
+
+fn issue_checked(
+    state: &mut State,
+    context: &Context,
+    id: &str,
+    ttl: u64,
+    reason: Option<&str>,
+    snapshot: &super::runtime::consumer::Snapshot,
+    time: u64,
+) -> Result<Value, Error> {
+    let index = check(state, id, snapshot, time)?;
+    let row = &state.read_requests[index];
+    if let Some(grant) = &row.grant {
+        if time < grant.issued_at_ms
+            || time >= grant.expires_at_ms
+            || grant.expires_at_ms - grant.issued_at_ms != ttl * 1000
+        {
+            return Err(Error::Invalid("grant cannot be renewed or changed"));
+        }
+        return Ok(
+            json!({"request_id":id,"status":"approved","approval_id":grant.approval_id,"expires_at_ms":grant.expires_at_ms}),
+        );
+    }
+    let approval = state.id("read-approval");
+    let row = &mut state.read_requests[index];
+    let mut grant = Grant {
+        approval_id: approval.clone(),
+        issued_at_ms: time,
+        expires_at_ms: time + ttl * 1000,
+        binding: String::new(),
+    };
+    grant.binding = row.grant_binding(&grant);
+    let binding = grant.binding.clone();
+    row.grant = Some(grant);
+    row.status = "approved".into();
+    let request_binding = row.binding.clone();
+    let event = operator_event(
+        state,
+        context,
+        "read_grant_issued",
+        id,
+        Some(&approval),
+        reason,
+        json!({"binding":binding,"request_binding":request_binding,"expires_at_ms":time+ttl*1000}),
+    );
+    state.record(event);
+    Ok(
+        json!({"request_id":id,"status":"approved","approval_id":approval,"expires_at_ms":time+ttl*1000}),
+    )
+}
+
+fn mcp_index(state: &State, context: &Context, id: &str) -> Result<usize, Error> {
+    let index = state
+        .read_requests
+        .iter()
+        .position(|r| r.request_id == id)
+        .ok_or(Error::Missing)?;
+    let row = &state.read_requests[index];
+    if context.surface != "mcp"
+        || row.origin.agent.is_none()
+        || context.agent.as_deref()
+            != super::approvals::read_operator_agent(row.origin.agent.as_deref())
+        || context.session_id != row.origin.session_id
+    {
+        return Err(Error::Missing);
+    }
+    if row.status != "pending" || row.grant.is_some() {
+        return Err(Error::Invalid(
+            "this request was already answered; retry an approved request once unchanged",
+        ));
+    }
+    Ok(index)
+}
+
+pub(super) fn review_in(
+    state: &State,
+    context: &Context,
+    id: &str,
+    snapshot: &super::runtime::consumer::Snapshot,
+    time: u64,
+) -> Result<String, Error> {
+    let index = mcp_index(state, context, id)?;
+    check(state, id, snapshot, time)?;
+    let row = &state.read_requests[index];
+    let details = serde_json::to_string_pretty(&json!({"request":row.request,
+        "consumer":row.origin.consumer_id,"session":row.origin.session_id,"policy":row.policy}))
+    .map_err(|_| Error::Invalid("request review encoding"))?;
+    Ok(format!(
+        "Allow this exact SDK text read once?\n{details}\nIts resources are revalidated before approval and retry. Permission expires in five minutes; policy is unchanged."
+    ))
+}
+
+pub(super) fn approve_in(
+    state: &mut State,
+    context: &Context,
+    id: &str,
+    snapshot: &super::runtime::consumer::Snapshot,
+    time: u64,
+) -> Result<Value, Error> {
+    mcp_index(state, context, id)?;
+    let mut value = issue_checked(state, context, id, 300, None, snapshot, time)?;
+    value["next_action"] = json!(
+        "Retry this identical read through the same factory and session, with the same window. Approval does not execute it."
+    );
+    Ok(value)
 }
 
 fn revoke_request(

@@ -12,6 +12,8 @@ use std::{
 };
 
 pub(in crate::review) const MAX_CONFIG: u64 = 1024 * 1024;
+mod reporting;
+pub(super) use reporting::enforcement;
 
 pub(crate) fn verify_mcp_connection(
     root: &Path,
@@ -76,14 +78,14 @@ pub(crate) use legacy::BASE as LEGACY_INTERCEPTOR_PATH;
 pub(in crate::review) mod project_sources;
 pub(in crate::review) mod setup;
 pub(crate) use connections::{mcp_projection, resolve_mcp_token};
-mod maintenance;
-mod privacy;
-mod reconcile;
-pub(in crate::review) mod recovery;
-pub(crate) use privacy::private_mcp_destination;
 pub(super) mod files;
+mod maintenance;
 pub(super) mod native;
 pub(super) mod prefix_rules;
+mod privacy;
+pub(in crate::review) const HOST_PATH_WARNING: &str = "Generated host entries contain absolute Shield executable and project paths, which can reveal this machine's home directory and username and will not work unchanged on another machine. Host files may be tracked; review their diff before sharing. Private connector settings remain in Shield's private state.";
+mod reconcile;
+pub(in crate::review) mod recovery;
 pub(crate) use prefix_rules::drifted as prefix_rules_drifted;
 pub(in crate::review) use prefix_rules::{
     preview as preview_prefix_rules, sync as sync_prefix_rules,
@@ -812,8 +814,9 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                 box_integration["status"] = json!("degraded");
             }
         }
+        let published = reporting::box_hooks(root, registered.as_ref(), &mut diagnostics);
         let healthy = diagnostics.is_empty();
-        Ok::<_, Error>(json!({
+        let mut report = json!({
             "box_integration":box_integration,
             "legacy_interceptor":legacy_interceptor,
             "mcp_connections":connections,
@@ -830,10 +833,12 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
             }).collect::<Vec<_>>()).unwrap_or_default(),
             "diagnostics":diagnostics,"repair_needed":!healthy,
             "tool_interception":if registered.as_ref().is_some_and(|r|!r.agents.is_empty()) {"native hooks installed; host loading is unverified"} else if !legacy_interceptor.is_null() {"legacy text-read interceptor installed; host loading is unverified"} else if box_integration.is_null() {"not installed"} else {"native hooks defined for Box to publish; host loading is unverified"},
-            "live_host_verification":"unverified","verification":{"state":"unverified","coverage":"Claude text reads and submitted shell command policy; native grant retries pending"},
+            "live_host_verification":"unverified",
             "discovery":"restart host; trust project, review native hooks and approve MCP",
             "operator_protection":"native hooks can be skipped or fail open on host timeout/startup failure; no same-user OS isolation"
-        }))
+        });
+        reporting::complete(&mut report, state, published);
+        Ok::<_, Error>(report)
     })();
     inspected.unwrap_or_else(|e| json!({"registered_integrations":[],"installed_integrations":[],"diagnostics":[e.to_string()],"repair_needed":true,"tool_interception":"unknown","live_host_verification":"unverified","verification":{"state":"unverified"}}))
 }

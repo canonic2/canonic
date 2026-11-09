@@ -49,6 +49,7 @@ pub(super) fn main_source() -> Result<Source, Error> {
 
 /// Authenticates a source's catalog and admits it to the project's retained checkpoints.
 pub(super) fn checked_catalog(context: &Context, source: &Source) -> Result<Catalog, Error> {
+    context.progress.stage(super::progress::Stage::Catalog);
     let catalog = catalog(&context.fetcher, source)?;
     retain_catalog(context, &catalog)?;
     Ok(catalog)
@@ -62,6 +63,7 @@ pub(super) fn checked_history(
     id: &names::PackId,
     version: Option<&semver::Version>,
 ) -> Result<(), Error> {
+    context.progress.stage(super::progress::Stage::History);
     let before = catalog.entries().len();
     context
         .fetcher

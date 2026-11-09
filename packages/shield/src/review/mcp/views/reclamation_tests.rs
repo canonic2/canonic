@@ -1,6 +1,43 @@
 use super::*;
 
 #[test]
+fn storage_reclamation_lazy_mcp_capture_keeps_its_source_after_cache_eviction_and_activation() {
+    use crate::review::{self, storage::sources};
+    let root = assert_fs::TempDir::new().unwrap();
+    let bundle =
+        configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
+    let mut context = review::mcp::initialize_fixture(root.path(), &bundle);
+    context.surface = "cli".into();
+    let mut views = Views::new("acme-lazy-reader".into());
+    let id = views.active(&context).unwrap();
+    let captured = views.get(&id).unwrap();
+    let candidate = captured.candidate.clone();
+    let original = captured.source().unwrap();
+    let revision = captured.revision().unwrap().to_owned();
+    assert!(captured.evaluator.get().is_none());
+    for index in 0..4 {
+        sources::activate_fixture(&context, &format!("acme-{index}"));
+    }
+    let descriptor = json!(captured.cached.as_ref().unwrap().artifact);
+    let path = std::path::PathBuf::from(descriptor["directory"].as_str().unwrap())
+        .join("compiled")
+        .join(descriptor["project_key"].as_str().unwrap())
+        .join(format!("{}.bin", descriptor["plan_key"].as_str().unwrap()));
+    assert!(!path.exists(), "unused old plans are reclaimed");
+    assert_eq!(captured.source().unwrap(), original);
+    assert_eq!(captured.evaluator().unwrap().revision(), revision);
+    drop(captured);
+    drop(views);
+    sources::activate_fixture(&context, "acme-after-reader-release");
+    assert!(
+        Store::open(root.path())
+            .unwrap()
+            .captured_candidate(&candidate)
+            .is_err()
+    );
+}
+
+#[test]
 fn inspection_reclamation_finishes_large_traversals_and_replays_without_growth() {
     let mut views = Views::new("acme-long-list".into());
     let first = views

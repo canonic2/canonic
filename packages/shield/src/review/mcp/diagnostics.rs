@@ -60,11 +60,17 @@ pub(super) fn compare(
     let mut value = match required(args, "domain")? {
         "sample" => {
             let (input, ctx) = request(context, args)?;
+            context
+                .progress
+                .stage(crate::review::progress::Stage::ComparePolicy);
             let a = evaluate_captured(context, &before, &input, &ctx, checkpoint)?;
             let b = evaluate_captured(context, &after, &input, &ctx, checkpoint)?;
             json!({"domain":"sample","complete":false,"relation":"unknown","coverage":"one request witness; no whole-policy proof","context":ctx,"witnesses":[{"input":input,"relation":if a["decision"]==b["decision"] {"equivalent"}else if rank(&b["decision"])>rank(&a["decision"]) {"restrictive"}else{"expansive"},"before":a,"after":b}]})
         }
         "literal_argv" => {
+            context
+                .progress
+                .stage(crate::review::progress::Stage::ComparePolicy);
             json!(configuration::compare_policy(
                 &snapshots(&before)?,
                 &snapshots(&after)?

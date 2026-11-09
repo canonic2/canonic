@@ -399,13 +399,35 @@ impl Store {
         sources::hydrate(self, &mut value)?;
         Ok(value)
     }
+    /// Capture pins before exposing a lazy source handle. If an activation won
+    /// the read/pin race, retry current authority before assigning any handle ID.
+    pub(in crate::review) fn read_pinned_checkpoint(
+        &self,
+    ) -> Result<(State, objects::Pins), Error> {
+        for attempt in 0..2 {
+            let state = self.read_checkpoint()?;
+            let candidate = state
+                .active
+                .as_ref()
+                .ok_or(Error::CandidateUnavailable)?
+                .project_candidate()?;
+            match sources::pin(self, candidate) {
+                Ok(pins) => return Ok((state, pins)),
+                Err(_) if attempt == 0 => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Err(Error::CandidateUnavailable)
+    }
     pub(in crate::review) fn retain_candidates(
         &self,
         candidates: &BTreeMap<String, Value>,
-    ) -> Result<BTreeMap<String, Value>, Error> {
+    ) -> Result<(BTreeMap<String, Value>, objects::Pins), Error> {
         let mut value = json!(candidates);
-        sources::compact(self, &mut value)?;
-        serde_json::from_value(value).map_err(|_| Error::Invalid("retained source map invalid"))
+        let pins = sources::compact_activating(self, &mut value)?;
+        serde_json::from_value(value)
+            .map(|map| (map, pins))
+            .map_err(|_| Error::Invalid("retained source map invalid"))
     }
 
     /// Read-only diagnostic snapshot including optional history health.
@@ -730,7 +752,12 @@ impl Store {
     }
     fn write(&self, state: &State) -> Result<(), Error> {
         let _trace = crate::diagnostics::trace::span("state.write");
-        let history_guard = match history::lock(self) {
+        let history_lock = if state.history_control {
+            history::lock_control(self)
+        } else {
+            history::lock(self)
+        };
+        let history_guard = match history_lock {
             Ok(guard) => Some(guard),
             Err(error) if state.history_control => return Err(error),
             Err(_) => None,
@@ -749,7 +776,7 @@ impl Store {
         if upgrade_receipts > 1 || state.authorization_events.len() > 1024 + upgrade_receipts {
             return Err(crate::policy::Error::Limit.into());
         }
-        let bytes = history::encode(self, state, history_guard.is_some())?;
+        let (bytes, _source_pins) = history::encode(self, state, history_guard.is_some())?;
         if bytes.len() > MAX_STATE {
             return Err(crate::policy::Error::Limit.into());
         }
@@ -800,6 +827,7 @@ impl Store {
 }
 
 pub(in crate::review) mod history;
+pub(in crate::review) mod objects;
 pub(in crate::review) mod sources;
 const LOCAL_STATE_IGNORE: &[u8] =
     b"review/\ncache/\nconfig.local.yml\nrules.local.yml\nshield.local.lock\n";
@@ -905,7 +933,7 @@ pub(in crate::review) fn remove_dead_temporaries(
 /// Whether the process that named a temporary may still be writing it. This
 /// process, and a PID whose exit cannot be established, count as running, so a
 /// live writer's temporary is never removed. A reused PID only keeps a leftover.
-fn writer_running(pid: u32) -> bool {
+pub(in crate::review) fn writer_running(pid: u32) -> bool {
     if pid == std::process::id() {
         return true;
     }
@@ -959,7 +987,7 @@ pub(in crate::review) fn exited_pid() -> u32 {
     assert!(child.wait().expect("reaped child").success());
     pid
 }
-fn private(options: &mut OpenOptions) {
+pub(in crate::review) fn private(options: &mut OpenOptions) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;

@@ -53,6 +53,7 @@ fn current_mcp_startup_reads_no_history_and_cli_status_captures_it_once() {
             assert_eq!(trace.recorded_count("history.captures"), 0, "{age}");
             assert_eq!(trace.recorded_count("policy.preparations"), 0, "{age}");
             assert_eq!(trace.recorded_count("source.hydrated"), 0, "{age}");
+            assert_eq!(trace.recorded_count("objects.sweeps"), 0, "{age}");
         }
         trace.finish("success");
         let trace = log.request("command", "status", None, None).unwrap();
@@ -60,6 +61,7 @@ fn current_mcp_startup_reads_no_history_and_cli_status_captures_it_once() {
             let _scope = trace.enter();
             assert_eq!(review::operator::run(&cli), std::process::ExitCode::SUCCESS);
             assert_eq!(trace.recorded_count("history.captures"), 1, "{age}");
+            assert_eq!(trace.recorded_count("objects.sweeps"), 0, "{age}");
         }
         trace.finish("success");
         assert_eq!(fs::read(&checkpoint).unwrap(), before, "{age}");

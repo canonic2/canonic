@@ -400,6 +400,15 @@ optional history. Clearing starts a new generation; increasing retention cannot
 restore deleted records. Policy and authorization records are separate, so
 clearing history neither removes active policy nor restores consumed grants.
 
+In an agent session, `history_configure` offers the same controls through a human
+form. If the optional history lock's permissions have drifted, confirming a
+control restores private permissions on the existing owned lock before applying
+it. Declining changes neither permissions nor settings. Shield waits for a live
+history writer and refuses linked, foreign or replaced lock files; it never
+deletes a lock to force a control through. Changing retention still requires
+valid journal content. Use the confirmed clear control to reset corrupt optional
+history while preserving policy and grants.
+
 History uses checksummed segments of at most 1 MiB, capped at 64 MiB per current
 generation. Recovery files, retention rewrites, and readers holding old files
 can use more storage. Segments reach stable storage on creation and when full;

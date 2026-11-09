@@ -154,6 +154,35 @@ fn installation(
     })
 }
 
+/// Inspect Box's published callbacks without claiming ownership of its files.
+pub(super) fn published_hooks(
+    root: &Path,
+    agent: &str,
+    binary: &Path,
+) -> Result<Option<bool>, Error> {
+    let adapter = lookup(agent)?;
+    let expected = installation(adapter, binary, root, &[])?;
+    let source = files::read(root, adapter.spec().hooks_path)?;
+    let captured = adapter.capture_hooks(source.as_deref(), &expected.groups)?;
+    if captured.is_empty() {
+        return Ok(None);
+    }
+    let extra = adapter
+        .spec()
+        .mcp_path
+        .map(|path| files::read(root, path))
+        .transpose()?
+        .flatten();
+    let mut diagnostics = Vec::new();
+    adapter.diagnose_published_hooks(
+        source.as_deref(),
+        &expected.groups,
+        extra.as_deref(),
+        &mut diagnostics,
+    )?;
+    Ok(Some(captured == expected.groups && diagnostics.is_empty()))
+}
+
 /// Capture only exact generated entries for initial operator review.
 pub(in crate::review) fn capture_matching(
     root: &Path,

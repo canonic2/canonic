@@ -11,12 +11,14 @@ const fields = (value, allowed) => object(value) && Object.keys(value).every(key
 const text = (value, max = 4096) => typeof value === 'string' && value.length > 0
   && Buffer.byteLength(value) <= max && !value.includes('\0');
 const integer = value => Number.isSafeInteger(value) && value > 0 && value <= 1_000_000;
-const deny = (code, request, detail, project) => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny',
-  permissionDecisionReason: denialReason(code, request, detail, project) } });
+const deny = (code, request, detail, project, interactive) => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny',
+  permissionDecisionReason: denialReason(code, request, detail, project, interactive) } });
 /** Registered Claude Agent SDK callback hooks. Only bounded plain .txt Read tools can proceed. */
 export async function createClaudeReadOnlyHooks(options) {
-  if (!fields(options, ['binary', 'project', 'timeoutMs']) || !text(options.binary) || !isAbsolute(options.binary)
+  if (!fields(options, ['binary', 'project', 'timeoutMs', 'approvalSessionId']) || !text(options.binary) || !isAbsolute(options.binary)
     || !text(options.project) || !isAbsolute(options.project)) throw Error('Invalid Shield registration');
+  const approvalSessionId = options.approvalSessionId;
+  if (approvalSessionId !== undefined && (!text(approvalSessionId, 128) || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(approvalSessionId))) throw Error('Invalid Shield approval session');
   const timeoutMs = options.timeoutMs ?? 5000;
   const selectedBinary = options.binary;
   const selectedProject = options.project;
@@ -58,6 +60,18 @@ export async function createClaudeReadOnlyHooks(options) {
       const id = input.tool_use_id;
       const cwd = input.cwd;
       const identity = key(input);
+      if (approvalSessionId !== undefined) {
+        if (input.session_id !== approvalSessionId) return deny('invalid-host-session');
+        if (['mcp__shield__request_show', 'mcp__shield__request_approve', 'mcp__shield__request_deny'].includes(input.tool_name)) {
+          const args = input.tool_input;
+          const ids = fields(args, ['request_id']) && text(args.request_id, 128) ? [args.request_id]
+            : input.tool_name === 'mcp__shield__request_approve' && fields(args, ['request_ids']) && Array.isArray(args.request_ids)
+              && args.request_ids.length > 0 && args.request_ids.length <= 8 && new Set(args.request_ids).size === args.request_ids.length ? args.request_ids : [];
+          if (!ids.length || !ids.every(reference => text(reference, 128) && approvals.has(reference))) return deny('invalid-approval-reference');
+          return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow',
+            permissionDecisionReason: 'This calls Shield for this factory’s captured request. Only Shield’s human form can issue permission.' } };
+        }
+      }
       let operation = { kind: 'unsupported', name: input.tool_name };
       if (input.tool_name === 'Read') {
         const tool = input.tool_input;
@@ -71,7 +85,7 @@ export async function createClaudeReadOnlyHooks(options) {
       const result = await invoke(id, cwd, operation, projectId, context.signal, host(input), reference);
       approvals.record(approvalKey, result);
       const diagnostic = result.history.status === 'failed' ? warning() : {};
-      if (result.decision !== 'allow') return { ...deny(result.code, result.approval.status === 'pending' ? result.approval.request_id : null, result.diagnostics?.message, project), ...diagnostic };
+      if (result.decision !== 'allow') return { ...deny(result.code, result.approval.status === 'pending' ? result.approval.request_id : null, result.diagnostics?.message, project, approvalSessionId !== undefined), ...diagnostic };
       const read = result.operation;
       pending.allow(identity, { operation, cwd, request: result.history.request_id });
       return { ...diagnostic, hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow',
@@ -106,4 +120,24 @@ export async function createClaudeReadOnlyHooks(options) {
   const matcher = hook => Object.freeze([Object.freeze({ hooks: Object.freeze([hook]), timeout: Math.ceil((timeoutMs + 1000) / 1000) })]);
   return Object.freeze({ PreToolUse: matcher(callback),
     PostToolUse: matcher(completion), PostToolUseFailure: matcher(completion) });
+}
+
+/** Explicit interactive SDK options. The trusted application renders every Shield form for a person. */
+export async function createClaudeReadOnlySession(options) {
+  if (!fields(options, ['binary', 'project', 'timeoutMs', 'sessionId', 'onElicitation'])
+    || typeof options.onElicitation !== 'function') throw Error('A human elicitation handler is required');
+  if (!text(options.binary) || !isAbsolute(options.binary) || !text(options.project) || !isAbsolute(options.project)) throw Error('Invalid Shield registration');
+  const sessionId = options.sessionId ?? randomUUID();
+  const selectedBinary = options.binary;
+  const selectedProject = options.project;
+  const timeoutMs = options.timeoutMs;
+  const handler = options.onElicitation;
+  const [binary, project] = await Promise.all([realpath(selectedBinary), realpath(selectedProject)]);
+  const hooks = await createClaudeReadOnlyHooks({ binary, project,
+    ...(timeoutMs === undefined ? {} : { timeoutMs }), approvalSessionId: sessionId });
+  return Object.freeze({ hooks, sessionId, settingSources: [], strictMcpConfig: true,
+    tools: ['Read'], allowedTools: ['Read', 'mcp__shield__request_show', 'mcp__shield__request_approve', 'mcp__shield__request_deny'],
+    mcpServers: { shield: { command: binary, args: ['mcp', 'serve', '--project', project, '--agent', 'claude', '--session-id', sessionId] } },
+    onElicitation: async (request, context) => request.serverName === 'shield' && (request.mode === 'form' || (request.mode === undefined && request.url === undefined))
+      ? handler(request, context) : { action: 'decline' } });
 }

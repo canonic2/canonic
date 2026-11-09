@@ -67,35 +67,27 @@ pub(in crate::review::integrations) fn prepare_configured(
         let retained = desired.as_ref().is_some_and(|r| r.covers(agent));
         let mut entries = BTreeMap::new();
         let mut launches = BTreeMap::new();
+        let mut native = std::collections::BTreeSet::new();
+        let mut old_entries = old["entries"].clone();
         if retained {
-            if configured.values().any(|connection| {
-                connection.enabled && connection.local && connection.agents.contains_key(agent)
-            }) {
-                super::review::integrations::private_mcp_destination(root, agent)?;
-                if root.join(".shield/review/state.json").exists() {
-                    crate::mcp_connections::launcher::private_state(root)?;
-                }
-            }
             for (id, connection) in configured.iter().filter(|(_, c)| c.enabled) {
                 if let Some(alias) = connection.agents.get(agent) {
                     adapter.check_mcp_scopes(root, root, alias)?;
-                    let previous_binding = old["review"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .any(|row| row["id"] == *id && row["alias"] == *alias)
-                        .then(|| {
-                            serde_json::from_value::<Binding>(old["launches"][id].clone()).ok()
-                        })
-                        .flatten();
-                    let binding = if connection.local {
-                        match previous_binding {
-                            Some(binding) => Some(binding.refreshed(connection)?),
-                            None => Some(Binding::new(connection)?),
+                    if connection.local
+                        && super::super::connections::native_matches(root, agent, connection)
+                    {
+                        native.insert(alias.clone());
+                        // Matching native entries belong to their existing owner.
+                        // Relinquish any prior projection without deleting it.
+                        if let Some(entries) = old_entries.as_object_mut() {
+                            entries.remove(alias);
                         }
-                    } else {
-                        None
-                    };
+                        continue;
+                    }
+                    if connection.local && root.join(".shield/review/state.json").exists() {
+                        crate::mcp_connections::launcher::private_state(root)?;
+                    }
+                    let binding = launch_binding(old, id, alias, connection)?;
                     let binary = &desired.as_ref().expect("retained registration").binary;
                     entries.insert(
                         alias.clone(),
@@ -110,17 +102,27 @@ pub(in crate::review::integrations) fn prepare_configured(
                 }
             }
         }
-        if entries.is_empty() && old.is_null() {
+        if entries.is_empty() && old.is_null() && native.is_empty() {
             continue;
         }
-        let aliases = entries.keys().cloned().collect::<Vec<_>>();
-        let review=configured.iter().filter(|_|retained).filter_map(|(id,c)|c.agents.get(agent).map(|alias|json!({"id":id,"alias":alias,"enabled":c.enabled,"source":if c.local {"local"}else{"project"},"settings":c.transport,"packs":c.packs,"projection":if c.local {"private Shield launcher"}else{"native project entry"}}))).collect::<Vec<_>>();
+        let aliases = entries
+            .keys()
+            .chain(native.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+        let review=configured.iter().filter(|_|retained).filter_map(|(id,c)|c.agents.get(agent).map(|alias|json!({"id":id,"alias":alias,"enabled":c.enabled,"source":if c.local {"local"}else{"project"},"settings":c.transport,"packs":c.packs,"projection":if native.contains(alias) {"existing native entry"} else if c.local {"private Shield launcher"}else{"native project entry"}}))).collect::<Vec<_>>();
         let ownership;
-        if let Some(path) = adapter.spec().mcp_path {
+        if entries.is_empty()
+            && old_entries
+                .as_object()
+                .is_none_or(serde_json::Map::is_empty)
+        {
+            ownership = Value::Null;
+        } else if let Some(path) = adapter.spec().mcp_path {
             let mut captured = None;
             files::edit(root, changes, path, |source| {
                 let update =
-                    adapter.merge_connections(source.unwrap_or(""), &old["entries"], &entries)?;
+                    adapter.merge_connections(source.unwrap_or(""), &old_entries, &entries)?;
                 captured = update.ownership;
                 Ok(update.source)
             })?;
@@ -128,16 +130,18 @@ pub(in crate::review::integrations) fn prepare_configured(
         } else {
             let update = adapter.merge_connections(
                 if shared.is_empty() { "{}" } else { &shared },
-                &old["entries"],
+                &old_entries,
                 &entries,
             )?;
             shared = update.source;
             ownership = update.ownership.unwrap_or(Value::Null);
         }
         let mut settings = None;
+        // Native entry ownership and Shield-added enablement are separate.
+        let old_settings = old["settings"].clone();
         files::edit(root, changes, adapter.spec().hooks_path, |source| {
             let update =
-                adapter.connection_settings(source.unwrap_or("{}"), &old["settings"], &aliases)?;
+                adapter.connection_settings(source.unwrap_or("{}"), &old_settings, &aliases)?;
             settings = update.ownership;
             Ok(update.source)
         })?;
@@ -156,4 +160,27 @@ fn selected(targets: &[String], adapter: &dyn crate::agents::AgentAdapter) -> bo
         target == adapter.spec().id
             || target == super::box_definition::ID && adapter.supports_box_hooks()
     })
+}
+
+/// Stable locators belong to one connection, agent registration and alias.
+fn launch_binding(
+    old: &Value,
+    id: &str,
+    alias: &str,
+    connection: &crate::mcp_connections::Connection,
+) -> Result<Option<Binding>, Error> {
+    if !connection.local {
+        return Ok(None);
+    }
+    let previous = old["review"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|row| row["id"] == id && row["alias"] == alias)
+        .then(|| serde_json::from_value::<Binding>(old["launches"][id].clone()).ok())
+        .flatten();
+    match previous {
+        Some(binding) => binding.refreshed(connection).map(Some),
+        None => Binding::new(connection).map(Some),
+    }
 }

@@ -403,6 +403,17 @@ impl Bootstrap {
 }
 
 impl Handler for Bootstrap {
+    fn admit(&self, request: &Request) -> stdio::Admission {
+        stdio::Admission {
+            lane: match request {
+                Request::Task(_) => 2,
+                Request::Resource(_) => 1,
+                Request::Method { method, .. } if method == "resources/read" => 1,
+                _ => 0,
+            },
+            ..stdio::Admission::default()
+        }
+    }
     fn initialize(&self, client: &Client) -> Result<ServerInfo, RpcError> {
         *self
             .client
@@ -414,6 +425,14 @@ impl Handler for Bootstrap {
     fn call(&self, request: Request, context: &stdio::Context) -> Outcome {
         if let Some(server) = self.active() {
             return delegate(&server, request, context);
+        }
+        if matches!(request, Request::Task(_)) {
+            return Outcome::Task(Err(canonic_mcp_kit::task::not_found()));
+        }
+        if let Request::Method { method, params } = &request
+            && method == "resources/read"
+        {
+            return Outcome::ResourceNotFound(params["uri"].as_str().unwrap_or_default().into());
         }
         if let Some(outcome) = self.adopt() {
             if let Some(server) = self.active() {
@@ -622,6 +641,13 @@ fn serve_handler(
     }));
     let catalog = Catalog::new(tools).map_err(ServeError::Catalog)?;
     let mut options = bundled_options(options)?;
+    options.session.tasks = Some(super::tasks::policy());
+    options
+        .lanes
+        .push(stdio::Lane::new("preparation-management", 2, 8));
+    options.session.resources = Some(Arc::new(
+        super::resources::catalog().map_err(ServeError::Resources)?,
+    ));
     options.session.modern = Some(canonic_mcp_kit::ModernOptions::new(
         ServerInfo::new("shield", env!("CARGO_PKG_VERSION")).with_instructions(INSTRUCTIONS),
     ));

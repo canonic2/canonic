@@ -227,11 +227,19 @@ grant expiry is a separate wall-clock limit on consumption. The fixed consumer
 identifies this CLI boundary across retries, not an authenticated process or user.
 
 Approval reopens and verifies the retained native resources against current Ask
-policy. The grant also binds the original operator CLI provenance and its minimum
+policy. The grant also binds the original operator provenance and its minimum
 issuance record; an issuance retry keeps that original evidence. It cannot override
 Deny or authorize operator/state mutation, unsupported
-commands, shell mode or SDK Bash. MCP and the normalized host transport expose
-no native grant issuance or consumption. CLI origin fields and operator invocation
+commands, shell mode or SDK Bash. A registered agent can use `request_approve`
+in the same session for a stored checked-run request attributed to that agent.
+The command's explicit CLI arguments supply agent/session/tool attribution before capture;
+these are declared values, not authenticated evidence from a trusted host launcher.
+Approval preserves those fields, including an unavailable session. The form
+issues permission only. Retry the original checked command with
+`--approval-request REQUEST_ID`, retaining its original attribution and operands.
+Groups require one identified session; requests without session identity can be
+reviewed individually. Unattributed CLI requests use terminal approval.
+The normalized host transport consumes SDK-read grants only. CLI origin fields and operator invocation
 remain declared evidence; deployment must protect the operator/state boundary.
 Unrestricted same-user access is outside that boundary.
 

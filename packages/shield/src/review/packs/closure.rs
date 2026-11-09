@@ -1,6 +1,6 @@
 //! Prepares verified enrolled-source dependency candidates, retaining exact identities.
 pub(super) mod mutations;
-use super::{candidate_artifact, new_selector, rebuild, registries};
+use super::{candidate_artifact_for, new_selector, rebuild, registries};
 use crate::{
     policy::{self, Pack, Profile},
     review::{Context, Error, model::State},
@@ -257,7 +257,7 @@ fn acquire_closure(
                     .release(&instance.pack, &version)
                     .expect("enumerated release");
                 pending.remove(&(instance.clone(), version.clone()));
-                let Some(bytes) = candidate_artifact(&context.fetcher, &source, entry)? else {
+                let Some(bytes) = candidate_artifact_for(context, &source, entry)? else {
                     releases.retain(|r| r.instance != instance || r.version != version);
                     if !releases.iter().any(|r| r.instance == instance) {
                         return Err(Error::UnsupportedReleases(instance.pack.to_string()));

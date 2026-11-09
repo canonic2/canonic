@@ -2,6 +2,39 @@
 use super::{Context, Error};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+mod confirmation;
+pub(crate) use confirmation::{approve, confirmation};
+#[cfg(all(test, any(target_os = "macos", target_os = "linux", windows)))]
+pub(crate) mod tests;
+
+/// Native resource grants keep terminal compatibility; host-issued grants also
+/// require the issuing MCP agent and session to match the captured consumer.
+pub(super) fn issued_by_operator(
+    event: &Value,
+    agent: Option<&str>,
+    session: Option<&str>,
+) -> bool {
+    event["operator"]["mechanism"] == "operator-cli"
+        || (event["operator"]["mechanism"] == "host-elicitation"
+            && mcp_origin(&event["provenance"], agent, session))
+}
+
+/// The SDK read consumer uses the registered Claude human form channel. This
+/// bridge does not give an SDK label native agent authority.
+pub(super) fn read_operator_agent(agent: Option<&str>) -> Option<&str> {
+    if agent == Some("claude-sdk") {
+        Some("claude")
+    } else {
+        agent
+    }
+}
+
+pub(super) fn mcp_origin(provenance: &Value, agent: Option<&str>, session: Option<&str>) -> bool {
+    agent.is_some()
+        && provenance["surface"] == "mcp"
+        && provenance["agent"].as_str() == agent
+        && provenance["session_id"] == json!(session)
+}
 
 /// The policy decision a request was captured under, for operator review only:
 /// the decision, the resolver's reason code and up to three decisive rules.
