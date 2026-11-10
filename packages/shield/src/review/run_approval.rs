@@ -8,6 +8,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::Path;
+mod receipts;
 
 #[cfg(all(test, any(target_os = "macos", target_os = "linux", windows)))]
 mod tests;
@@ -245,7 +246,7 @@ pub(crate) fn gate<T>(
 ) -> Result<(Value, Option<T>), Error> {
     if context.surface != "run"
         || evidence.identity().project_id() != context.project_id
-        || !crate::execution::valid_approval_binding(evidence.request(), resource)
+        || !crate::execution::valid_evaluated_approval_binding(evidence, resource)
         || evidence.request().project != context.project_root
         || reference.is_some_and(|id| id.is_empty() || id.len() > 128 || id.contains('\0'))
     {
@@ -257,20 +258,24 @@ pub(crate) fn gate<T>(
         tool_use_id: context.tool_use_id.clone(),
         consumer_id: "shield-native-run-v1".into(),
     };
+    let authority = evidence.authorization(context, &|| Ok(()))?;
     Store::open(Path::new(&context.project_root))?.transition_handoff(
         context,
         |state| {
-            if !state
-                .active
-                .as_ref()
-                .is_some_and(|a| a.matches(evidence.identity()))
-            {
-                return Err(Error::StaleSnapshot);
+            if reference.is_some() || evidence.evaluation().decision == Decision::Ask {
+                state.check_operations()?;
             }
+            authority.check_locked(state, evidence, &|| Ok(()))?;
             if !verify() {
                 return Err(Error::Invalid(
                     "native binding changed or request interrupted",
                 ));
+            }
+            if let Some(reference) = reference
+                && let Some(receipt) =
+                    receipts::replay(state, &origin, evidence, resource, reference, now()?)
+            {
+                return Ok((receipt, false));
             }
             let decision = match evidence.evaluation().decision {
                 Decision::Deny => result("policy-deny", false, None, "none", None),
@@ -340,6 +345,7 @@ fn consume(
     reference: &str,
     time: u64,
 ) -> Result<Value, Error> {
+    state.check_operations()?;
     let Some(index) = state
         .run_requests
         .iter()
@@ -397,6 +403,13 @@ fn consume(
         let approval = grant.approval_id.clone();
         let grant_binding = grant.binding.clone();
         let binding = row.binding.clone();
+        receipts::capture(
+            state,
+            index,
+            super::authorization_receipts::Status::Consumed,
+            time,
+            None,
+        )?;
         state.run_requests[index].status = "consumed".into();
         let event = state.event("run_grant_consumed", context, json!({"request_id":reference,"approval_id":approval}), json!({}),
                 json!({"request_binding":binding,"grant_binding":grant_binding,"consumed_at_ms":time,"execution":"unobserved"}));
@@ -495,6 +508,16 @@ fn capture(
 
 /// Explicit denial-only entry point; MCP cannot use it to issue a grant.
 pub(super) fn deny(context: &Context, id: &str, confirmed: bool) -> Result<Value, Error> {
+    if let Some(value) = receipts::operator(
+        context,
+        id,
+        super::authorization_receipts::Decision::Deny,
+        None,
+        None,
+        now()?,
+    )? {
+        return Ok(value);
+    }
     Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
         let index = state
             .run_requests
@@ -518,7 +541,7 @@ pub(super) fn deny(context: &Context, id: &str, confirmed: bool) -> Result<Value
         if row.status == "revoked" {
             return Ok(json!({"request_id":id,"status":"revoked"}));
         }
-        Ok(revoke_request(state, context, index, None))
+        revoke_request(state, context, index, None, now()?)
     })
 }
 
@@ -546,6 +569,20 @@ fn authorize_with_clock(
     if !(1..=3600).contains(&ttl) || reason.is_some_and(|r| r.len() > 4096) {
         return Err(Error::Invalid("invalid grant lifetime or reason"));
     }
+    if let Some(value) = receipts::operator(
+        context,
+        id,
+        if revoke {
+            super::authorization_receipts::Decision::Deny
+        } else {
+            super::authorization_receipts::Decision::Approve
+        },
+        (!revoke).then_some(ttl),
+        reason,
+        clock()?,
+    )? {
+        return Ok(value);
+    }
     let snapshot = if revoke {
         None
     } else {
@@ -564,7 +601,7 @@ fn authorize_with_clock(
             ) {
                 return Err(Error::Invalid("request is terminal"));
             }
-            return Ok(revoke_request(state, context, index, reason));
+            return revoke_request(state, context, index, reason, clock()?);
         }
         issue_checked(
             state,
@@ -585,6 +622,7 @@ fn check(
     snapshot: &super::runtime::consumer::Snapshot,
     time: u64,
 ) -> Result<usize, Error> {
+    state.check_operations()?;
     let index = state
         .run_requests
         .iter()
@@ -604,9 +642,7 @@ fn check(
     {
         return Err(Error::StaleSnapshot);
     }
-    let evidence = snapshot
-        .evaluate(row.request.clone())
-        .map_err(|_| Error::Invalid("request cannot be evaluated"))?;
+    let evidence = crate::execution::evaluate_approval(snapshot, &row.request, &row.resource)?;
     if !row.matches(&evidence, &row.resource, &row.origin)
         || evidence.evaluation().decision != Decision::Ask
     {
@@ -728,7 +764,15 @@ fn revoke_request(
     context: &Context,
     index: usize,
     reason: Option<&str>,
-) -> Value {
+    time: u64,
+) -> Result<Value, Error> {
+    receipts::capture(
+        state,
+        index,
+        super::authorization_receipts::Status::Revoked,
+        time,
+        reason,
+    )?;
     let row = &mut state.run_requests[index];
     row.status = "revoked".into();
     let id = row.request_id.clone();
@@ -744,7 +788,7 @@ fn revoke_request(
         json!({"request_binding":binding}),
     );
     state.record(event);
-    json!({"request_id":id,"status":"revoked"})
+    Ok(json!({"request_id":id,"status":"revoked"}))
 }
 fn operator_event(
     state: &mut State,

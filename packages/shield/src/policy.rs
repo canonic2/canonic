@@ -4,6 +4,7 @@ pub(crate) mod agent_outputs;
 mod argument_rules;
 pub(crate) mod compiled;
 pub(crate) mod dependencies;
+pub(crate) mod diagnostics;
 pub(crate) mod directories;
 #[cfg(test)]
 mod historical_tests;
@@ -12,11 +13,13 @@ mod invocations;
 mod json_budget;
 mod legacy;
 mod model;
+pub(crate) use model::feedback;
 pub(crate) mod normalized;
 pub(crate) mod partition;
 pub(crate) mod patterns;
 pub(crate) mod portability;
 pub(crate) mod profile_comparison;
+pub(crate) mod provenance;
 pub(crate) mod resolution;
 pub(crate) mod resources;
 pub(crate) mod rules;
@@ -173,6 +176,21 @@ pub enum Error {
         /// Why the binding is refused.
         reason: &'static str,
     },
+    /// A variable or template refusal located in one source entry and field.
+    /// Only bounded identifiers and a static reason are retained, never values.
+    #[error("{}", resolution_message(selection, entry, field, variables, reason))]
+    Resolution {
+        /// Selection identity, empty until supplied by the composition owner.
+        selection: String,
+        /// Source rule, precondition or MCP integration identity.
+        entry: String,
+        /// Authored field that failed preparation.
+        field: String,
+        /// Referenced variable names; invalid names are omitted.
+        variables: Vec<String>,
+        /// Fixed diagnostic reason.
+        reason: &'static str,
+    },
 }
 
 impl Error {
@@ -213,9 +231,76 @@ impl Error {
                 variable,
                 reason,
             },
+            Self::Resolution {
+                entry,
+                field,
+                variables,
+                reason,
+                ..
+            } => Self::Resolution {
+                selection: directories::bounded(id),
+                entry,
+                field,
+                variables,
+                reason,
+            },
             other => other,
         }
     }
+
+    /// Locate a semantic resolution refusal without changing syntax, limit or
+    /// interruption errors. An exact offending binding takes precedence over
+    /// the enclosing field's referenced names.
+    pub(crate) fn in_resolution(self, entry: &str, field: &str, names: &BTreeSet<String>) -> Self {
+        let (selection, variables, reason) = match self {
+            Self::Contract(reason) => (String::new(), names.iter().cloned().collect(), reason),
+            Self::Binding {
+                selection,
+                variable,
+                reason,
+            } => (selection, vec![variable], reason),
+            other => return other,
+        };
+        Self::Resolution {
+            selection,
+            entry: if rules::valid_id(entry) || crate::mcp_connections::valid_name(entry) {
+                directories::bounded(entry)
+            } else {
+                "<invalid>".into()
+            },
+            field: field
+                .chars()
+                .take(256)
+                .filter(|c| !c.is_control())
+                .collect(),
+            variables: variables
+                .into_iter()
+                .filter(|name| self::variables::valid_name(name))
+                .take(64)
+                .collect(),
+            reason,
+        }
+    }
+}
+
+fn resolution_message(
+    selection: &str,
+    entry: &str,
+    field: &str,
+    variables: &[String],
+    reason: &str,
+) -> String {
+    let selection = if selection.is_empty() {
+        String::new()
+    } else {
+        format!("pack {selection} ")
+    };
+    let variables = if variables.is_empty() {
+        String::new()
+    } else {
+        format!(" (variables: {})", variables.join(", "))
+    };
+    format!("invalid policy: {selection}entry {entry} field {field}{variables}: {reason}")
 }
 
 fn binding_message(selection: &str, variable: &str, reason: &str) -> String {
@@ -238,6 +323,7 @@ fn mcp_defaults_message(integration: &str, variables: &[String], reason: &str) -
 /// A validated permission pack. Loading it does not establish trust or activate it.
 #[derive(Clone)]
 pub struct Pack {
+    comparison_source: Option<feedback::SourceIdentity>,
     document: PackDocument,
     digest: String,
     index: index::Index,
@@ -245,11 +331,13 @@ pub struct Pack {
     historical_semantic: bool,
     patterns: std::sync::Arc<patterns::Store>,
     resolution: Vec<resolution::Entry>,
+    origins: BTreeMap<String, provenance::Original>,
 }
 
 /// Validated custom rules for a local preview; declared ownership is not authenticated.
 #[derive(Clone)]
 pub struct CustomRules {
+    pub(crate) comparison_sources: Option<Vec<feedback::SourceIdentity>>,
     document: CustomDocument,
     digest: String,
     index: index::Index,
@@ -281,37 +369,36 @@ pub struct Request {
 }
 
 /// A matching rule and whether it contributed to the resolved decision.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 #[expect(
     clippy::struct_excessive_bools,
     reason = "independent evidence flags, each serialized under its own name"
 )]
 pub struct Match {
-    source: String,
-    rule_id: String,
-    decision: Decision,
-    reason: String,
+    pub(crate) source: String,
+    pub(crate) rule_id: String,
+    pub(crate) decision: Decision,
+    pub(crate) reason: String,
     specificity: u8,
-    applied: bool,
-    #[serde(skip)]
+    pub(crate) applied: bool,
     tier: u8,
     branch: &'static str,
     requirement_checks: Vec<rules::Check>,
-    #[serde(skip)]
     guidance: Option<rules::Guidance>,
-    #[serde(skip)]
     exact_request: bool,
-    #[serde(skip)]
     legacy: bool,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
     fallback: bool,
     /// A failed pack precondition, deciding its pack before rules compete.
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
     precondition: bool,
+    decision_provenance: Option<provenance::Evidence>,
+    pub(crate) operation_ref: Option<String>,
+    pub(crate) executable: diagnostics::TextField,
+    rule_ref: Option<diagnostics::RuleReference>,
+    private_input: bool,
 }
 
 /// A read-only preview result, never an execution or activation grant.
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct Evaluation {
     schema_version: u8,
     mode: &'static str,
@@ -321,18 +408,16 @@ pub struct Evaluation {
     pub revision: String,
     /// All matching rules, including overridden matches.
     pub matches: Vec<Match>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     mapped_commands: Vec<Request>,
-    requirement_checks: Vec<rules::Check>,
-    guidance: Vec<serde_json::Value>,
-    reason: &'static str,
+    pub(crate) requirement_checks: Vec<rules::Check>,
+    pub(crate) guidance: Vec<diagnostics::GuidanceRecord>,
+    pub(crate) reason: &'static str,
     cwd: String,
     project: String,
     packs: Vec<SelectedPack>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     effect_evidence: Option<crate::effects::Hints>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     semantic_coverage: Option<&'static str>,
+    private_input: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -344,15 +429,52 @@ struct SelectedPack {
 }
 
 impl Evaluation {
+    pub(crate) fn mark_private_input(&mut self) {
+        self.private_input = true;
+        for matched in &mut self.matches {
+            matched.private_input = true;
+            for check in &mut matched.requirement_checks {
+                check.private_input = true;
+            }
+        }
+        for check in &mut self.requirement_checks {
+            check.private_input = true;
+        }
+        for guidance in &mut self.guidance {
+            guidance.private_input = true;
+        }
+    }
+    pub(crate) fn annotate_rule_references(&mut self, selectors: &BTreeMap<String, String>) {
+        for matched in &mut self.matches {
+            let mut reference = diagnostics::RuleReference::for_rule(
+                &matched.source,
+                &matched.rule_id,
+                matched.tier,
+            );
+            reference.annotate(selectors);
+            matched.rule_ref = Some(reference);
+            for check in &mut matched.requirement_checks {
+                check.rule_ref.annotate(selectors);
+            }
+        }
+        for check in &mut self.requirement_checks {
+            check.rule_ref.annotate(selectors);
+        }
+        for guidance in &mut self.guidance {
+            if let Some(reference) = &mut guidance.rule_ref {
+                reference.annotate(selectors);
+            }
+        }
+    }
     pub(crate) fn constrain(&mut self, mut other: Self, request: Request) {
         self.decision = self.decision.max(other.decision);
         self.mapped_commands.push(request);
         for check in &mut other.requirement_checks {
-            check.operation_ref = "mcp-command";
+            check.operation_ref = "mcp-command".into();
         }
         for matched in &mut other.matches {
             for check in &mut matched.requirement_checks {
-                check.operation_ref = "mcp-command";
+                check.operation_ref = "mcp-command".into();
             }
         }
         self.matches.extend(other.matches);
@@ -581,7 +703,9 @@ impl Pack {
         if document.variables.values().any(|d| d.setup.is_some()) {
             variables::validate_order(&document.variables, &variables::order::read(input)?)?;
         }
+        let comparison_source = feedback::source_pack(&document);
         let mut digest = fingerprint(input.as_bytes());
+        let origins = provenance::capture(&document, &binding.overrides);
         let mut entries = Vec::new();
         if resolution::dynamic(&document) || !binding.is_empty() {
             let _trace = crate::diagnostics::trace::span("pack.resolve");
@@ -624,6 +748,7 @@ impl Pack {
         };
         let historical_semantic = historical_semantic_rules(&document.rules);
         Ok(Self {
+            comparison_source,
             document,
             digest,
             index,
@@ -631,6 +756,7 @@ impl Pack {
             historical_semantic,
             patterns,
             resolution: entries,
+            origins,
         })
     }
 
@@ -643,6 +769,7 @@ impl Pack {
     }
 
     /// How each variable-dependent or overridden entry resolved.
+    #[cfg(test)]
     pub(crate) fn resolution(&self) -> &[resolution::Entry] {
         &self.resolution
     }
@@ -655,6 +782,15 @@ impl Pack {
 
     pub(crate) fn bind_identity(&mut self, identity: &str) {
         self.document.id = identity.into();
+    }
+
+    pub(crate) fn bind_override_layers(
+        &mut self,
+        local_selection: bool,
+        project: &BTreeMap<String, Override>,
+        local: Option<&BTreeMap<String, Override>>,
+    ) {
+        provenance::layers(&mut self.origins, local_selection, project, local);
     }
 
     /// Exact validated pack version.
@@ -674,6 +810,18 @@ fn retained_pack_document(source: &str) -> Result<PackDocument, Error> {
     legacy::pack(source)
 }
 
+fn retained_pack_display_document(source: &str) -> Result<PackDocument, Error> {
+    let envelope: serde_json::Value = parse(source)?;
+    if envelope["schema_version"] != 1 || envelope["kind"] != "pack" {
+        return Err(Error::Contract(
+            "historical pack display is unsupported without preparing policy; inspect or edit its retained source explicitly",
+        ));
+    }
+    let document: PackDocument = parse(source)?;
+    document.validate_schema()?;
+    Ok(document)
+}
+
 /// Materialize a retained custom source for an ordinary reviewed policy edit.
 /// Automatic checkpoint loading keeps the original source bytes instead.
 pub(crate) fn normalize_retained_custom(source: &str) -> Result<serde_json::Value, Error> {
@@ -681,11 +829,27 @@ pub(crate) fn normalize_retained_custom(source: &str) -> Result<serde_json::Valu
     serde_json::to_value(document).map_err(|_| Error::Syntax)
 }
 
+/// Display already captured current source without validating/preparing its
+/// matchers again. Historical formats report unsupported display explicitly.
+pub(crate) fn inspect_retained_custom(source: &str) -> Result<serde_json::Value, Error> {
+    let value: serde_json::Value = parse(source)?;
+    if value["schema_version"] == 1 && value["kind"] == "custom" {
+        let document: model::CustomDocument =
+            serde_json::from_value(value).map_err(|_| Error::Syntax)?;
+        document.validate_schema()?;
+        serde_json::to_value(document).map_err(|_| Error::Syntax)
+    } else {
+        Err(Error::Contract(
+            "historical custom display is unsupported without preparing policy; inspect or edit its retained source explicitly",
+        ))
+    }
+}
+
 pub(crate) fn inspect_pack_rule(
     source: &str,
     id: &str,
 ) -> Result<Option<serde_json::Value>, Error> {
-    let document = retained_pack_document(source)?;
+    let document = retained_pack_display_document(source)?;
     document.validate_schema()?;
     if let Some(rule) = invocations::inspect(&document, id)? {
         return serde_json::to_value(rule)
@@ -710,23 +874,28 @@ pub(crate) fn inspect_resolution(
     source: &str,
     binding: &Binding,
 ) -> Result<BTreeMap<String, serde_json::Value>, Error> {
-    let document = retained_pack_document(source)?;
+    let document = retained_pack_display_document(source)?;
+    document.validate_schema()?;
     if !resolution::dynamic(&document) && binding.is_empty() {
         return Ok(BTreeMap::new());
     }
-    let pack = Pack::from_retained_yaml_reusing(source, binding, false, None)?;
+    // These exact source bytes were already reviewed. Display resolution is
+    // descriptive: resolving variables must not build or validate matchers.
+    let _trace = crate::diagnostics::trace::span("pack.inspect_resolution");
+    crate::diagnostics::trace::count("pack.inspection_resolutions", 1);
+    let (document, entries) = resolution::resolve(document, binding)?;
     let mut report = BTreeMap::new();
-    for entry in pack.resolution() {
-        let mut row = serde_json::to_value(entry).map_err(|_| Error::Syntax)?;
+    for entry in entries {
+        let mut row = serde_json::to_value(&entry).map_err(|_| Error::Syntax)?;
         if entry.state == "active" {
             let resolved = if entry.kind == "precondition" {
-                pack.document
+                document
                     .preconditions
                     .iter()
                     .find(|p| p.id == entry.id)
                     .map(serde_json::to_value)
             } else {
-                pack.document
+                document
                     .rules
                     .iter()
                     .find(|r| r.id == entry.id)
@@ -791,6 +960,12 @@ pub(crate) fn override_widens(
     before: Option<&Override>,
     after: Option<&Override>,
 ) -> bool {
+    // Reactivation restores a ranked contribution. An absent entry has no
+    // decision, so treating `off` as Allow misses Ask/Allow replacing a broader
+    // restriction. Only the composed comparison can establish its actual effect.
+    if matches!(before, Some(Override::Off)) && !matches!(after, Some(Override::Off)) {
+        return true;
+    }
     let Ok(document) = retained_pack_document(before_source) else {
         return false;
     };
@@ -879,7 +1054,9 @@ impl CustomRules {
         let semantic = document.rules.iter().any(rules::Rule::semantic);
         let historical_semantic = historical_semantic_rules(&document.rules);
         let patterns = model::prepare_patterns(&document.rules, &[])?.into();
+        let comparison_sources = feedback::source_custom(&document).map(|source| vec![source]);
         Ok(Self {
+            comparison_sources,
             document,
             digest: fingerprint(
                 serde_json::to_string(values)
@@ -938,7 +1115,9 @@ impl CustomRules {
         let semantic = document.rules.iter().any(rules::Rule::semantic);
         let historical_semantic = historical_semantic_rules(&document.rules);
         let patterns = model::prepare_patterns(&document.rules, &[])?.into();
+        let comparison_sources = feedback::source_custom(&document).map(|source| vec![source]);
         Ok(Self {
+            comparison_sources,
             document,
             digest: fingerprint(input.as_bytes()),
             index,
@@ -1259,6 +1438,7 @@ fn evaluate_facts(
         packs: selected_metadata(packs),
         effect_evidence,
         semantic_coverage: semantic.then_some("incomplete-possible-effects-v1"),
+        private_input: false,
     })
 }
 
@@ -1285,6 +1465,13 @@ fn collect_pack_matches(
     for precondition in &pack.document.preconditions {
         checkpoint()?;
         if let Some(failed) = precondition.failure(facts, provider, pack.id(), profile)? {
+            let mut failed = failed;
+            failed.decision_provenance = Some(provenance::evidence(
+                pack.origins.get(&precondition.id),
+                profile,
+                true,
+                failed.decision,
+            ));
             matches.push(failed);
         }
     }
@@ -1321,15 +1508,27 @@ fn collect_pack_matches(
             )? {
                 checkpoint()?;
                 let candidate = candidate?;
-                if let Some(matched) =
+                if let Some(mut matched) =
                     candidate.matching(request, facts, provider, pack.id(), profile, 1)?
                 {
+                    matched.decision_provenance = Some(provenance::evidence(
+                        pack.origins.get(&rule.id),
+                        profile,
+                        matched.branch == "unmet",
+                        matched.decision,
+                    ));
                     matches.push(matched);
                 }
             }
-        } else if let Some(matched) =
+        } else if let Some(mut matched) =
             rule.matching(request, facts, provider, pack.id(), profile, 1)?
         {
+            matched.decision_provenance = Some(provenance::evidence(
+                pack.origins.get(&rule.id),
+                profile,
+                matched.branch == "unmet",
+                matched.decision,
+            ));
             matches.push(matched);
         }
     }
@@ -1339,7 +1538,7 @@ fn collect_pack_matches(
 fn applied_feedback(
     matches: &mut [Match],
     decision: Decision,
-) -> (Vec<rules::Check>, Vec<serde_json::Value>) {
+) -> (Vec<rules::Check>, Vec<diagnostics::GuidanceRecord>) {
     let mut requirement_checks = Vec::new();
     let mut guidance = Vec::new();
     let mut ordered: Vec<_> = matches.iter_mut().collect();
@@ -1368,12 +1567,22 @@ fn applied_feedback(
             && matched.decision == decision
             && let Some(authored) = &matched.guidance
         {
-            let rule_ref = if matched.tier == 0 {
-                serde_json::json!({"scope":"custom","rule_id":matched.rule_id})
-            } else {
-                serde_json::json!({"scope":"pack","pack_selector":matched.source,"rule_id":matched.rule_id})
-            };
-            guidance.push(serde_json::json!({"rule_ref":rule_ref,"operation_ref":"request","branch":matched.branch,"message":authored.message,"alternatives":authored.alternatives.clone().unwrap_or_default(),"candidate_only":true}));
+            guidance.push(diagnostics::GuidanceRecord {
+                alternatives: authored.alternatives.clone().unwrap_or_default(),
+                branch: Some(matched.branch),
+                candidate_only: true,
+                message: authored.message.clone(),
+                operation_ref: "request".into(),
+                rule_ref: Some(diagnostics::RuleReference::for_rule(
+                    &matched.source,
+                    &matched.rule_id,
+                    matched.tier,
+                )),
+                source: None,
+                request: None,
+                fetch_url: diagnostics::TextField::Absent,
+                private_input: false,
+            });
         }
     }
     (requirement_checks, guidance)

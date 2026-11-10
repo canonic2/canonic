@@ -28,7 +28,7 @@ pub(in crate::review) fn projections(
     let shared = candidate["config"]
         .as_str()
         .ok_or(Error::Invalid("candidate config missing"))?;
-    let mut files = BTreeMap::new();
+    let mut files = locks(candidate, meta)?;
     files.insert("config.yml".into(), policy_files::projected(shared)?);
     files.insert(
         "rules.yml".into(),
@@ -38,25 +38,8 @@ pub(in crate::review) fn projections(
                 .unwrap_or(r#"{"schema_version":1,"kind":"custom","capabilities":["structured-rules-v1"],"rules":[]}"#),
         )?,
     );
-    let rows = meta["installed"].as_array().cloned().unwrap_or_default();
-    let layer = |local: bool| {
-        let selected: Vec<_> = rows
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| (config["packs"][*index]["layer"] == "local") == local)
-            .map(|(_, row)| portable(row))
-            .collect();
-        let mut locked = crate::review::packs::summaries(&json!({"installed":selected}));
-        locked["schema_version"] = json!(1);
-        (selected.is_empty(), locked.to_string())
-    };
-    files.insert("shield.lock".into(), layer(false).1);
     if let Some(local) = candidate["local_config"].as_str() {
         files.insert("config.local.yml".into(), policy_files::projected(local)?);
-        let (none, locked) = layer(true);
-        if !none {
-            files.insert("shield.local.lock".into(), locked);
-        }
     }
     if let (Some(path), Some(source)) = (
         config["local_rules"].as_str(),
@@ -84,6 +67,109 @@ pub(in crate::review) fn projections(
         }
     }
     Ok(files)
+}
+
+/// The projection closure without cloning or rendering any artifact bodies.
+pub(in crate::review) fn paths(candidate: &Value, meta: &Value) -> Result<BTreeSet<String>, Error> {
+    let config = configuration::layers::merged(candidate)?;
+    let mut paths: BTreeSet<_> = locks(candidate, meta)?.into_keys().collect();
+    paths.extend(["config.yml".into(), "rules.yml".into()]);
+    if candidate["local_config"].is_string() {
+        paths.insert("config.local.yml".into());
+    }
+    if candidate["local_rules"].is_string()
+        && let Some(path) = config["local_rules"].as_str()
+    {
+        paths.insert(path.into());
+    }
+    for selections in ["packs", "disabled"] {
+        for row in config[selections].as_array().into_iter().flatten() {
+            paths.insert(
+                row["path"]
+                    .as_str()
+                    .ok_or(Error::Invalid("pack path missing"))?
+                    .into(),
+            );
+        }
+    }
+    Ok(paths)
+}
+
+/// Portable selection locks need authoring documents and reviewed metadata,
+/// never artifact bodies. Consent and publication use this one projection codec.
+pub(in crate::review) fn locks(
+    candidate: &Value,
+    meta: &Value,
+) -> Result<BTreeMap<String, String>, Error> {
+    let config = configuration::layers::merged(candidate)?;
+    let mut files = BTreeMap::new();
+    let rows = meta["installed"].as_array().cloned().unwrap_or_default();
+    let layer = |local: bool| {
+        let selected: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| (config["packs"][*index]["layer"] == "local") == local)
+            .map(|(_, row)| portable(row))
+            .collect();
+        let mut locked = crate::review::packs::summaries(&json!({"installed":selected}));
+        locked["schema_version"] = json!(1);
+        (selected.is_empty(), locked.to_string())
+    };
+    let shared_rows: Vec<_> = shared_rows(candidate, meta)?.iter().map(portable).collect();
+    let mut shared_lock = crate::review::packs::summaries(&json!({"installed":shared_rows}));
+    shared_lock["schema_version"] = json!(1);
+    files.insert("shield.lock".into(), shared_lock.to_string());
+    if candidate["local_config"].is_string() {
+        let (none, locked) = layer(true);
+        if !none {
+            files.insert("shield.local.lock".into(), locked);
+        }
+    }
+    Ok(files)
+}
+
+/// Shared graph records are independent of the local graph's incoming edges.
+pub(in crate::review) fn shared_rows(candidate: &Value, meta: &Value) -> Result<Vec<Value>, Error> {
+    let shared: Value = policy::parse(
+        candidate["config"]
+            .as_str()
+            .ok_or(Error::Invalid("candidate config missing"))?,
+    )?;
+    let effective = configuration::layers::merged(candidate)?;
+    let active: Vec<_> = meta["installed"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .filter(|(index, _)| effective["packs"][*index]["layer"] != "local")
+        .map(|(_, row)| row)
+        .collect();
+    Ok(shared["packs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|selection| {
+            let retained: Vec<_> = if let Some(rows) = meta["shared_installed"].as_array() {
+                rows.iter().collect()
+            } else {
+                active
+                    .iter()
+                    .copied()
+                    .chain(meta["disabled"].as_array().into_iter().flatten())
+                    .collect()
+            };
+            retained
+                .into_iter()
+                .find(|row| {
+                    row["id"] == selection["id"]
+                        && (selection["registry_identity"].is_null()
+                            || row["source_identity"] == selection["registry_identity"])
+                        && (row["version"].is_null() || row["version"] == selection["version"])
+                        && (row["profile"].is_null() || row["profile"] == selection["profile"])
+                })
+                .cloned()
+        })
+        .collect())
 }
 
 /// A lock row without machine-specific paths: a local-directory source, which

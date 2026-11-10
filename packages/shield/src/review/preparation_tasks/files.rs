@@ -3,6 +3,49 @@ use super::{CAPTURE_BYTES, Error, META_BYTES, Path, RESULT_BYTES, Value, storage
 use std::fs;
 pub(super) use storage::private_files::{directory, read, write};
 
+/// Only actual task writers call this for their known namespace/record folders.
+/// Unix changes the checked directory inode, never a swapped pathname target.
+pub(super) fn writer_directory(path: &Path, create: bool) -> Result<(), Error> {
+    let parent = path
+        .parent()
+        .ok_or(Error::Invalid("task directory parent"))?;
+    directory(parent, false)?;
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if create && error.kind() == std::io::ErrorKind::NotFound => {
+            return directory(path, true);
+        }
+        Err(error) => return Err(error.into()),
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err(Error::Invalid("task directory cannot be a link or file"));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+        if metadata.uid() != fs::symlink_metadata(parent)?.uid() {
+            return Err(Error::Invalid("task directory owner differs"));
+        }
+        let held = fs::File::open(path)?;
+        let actual = held.metadata()?;
+        if !actual.is_dir() || (actual.dev(), actual.ino()) != (metadata.dev(), metadata.ino()) {
+            return Err(Error::Invalid("task directory identity changed"));
+        }
+        if actual.mode() & 0o077 != 0 {
+            held.set_permissions(fs::Permissions::from_mode(0o700))?;
+        }
+        let named = fs::symlink_metadata(path)?;
+        if named.file_type().is_symlink()
+            || (named.dev(), named.ino()) != (actual.dev(), actual.ino())
+        {
+            return Err(Error::Invalid("task directory identity changed"));
+        }
+    }
+    #[cfg(windows)]
+    crate::windows_security::make_private(path)?;
+    directory(path, false)
+}
+
 pub(super) fn digest(value: &Value) -> Result<String, Error> {
     crate::json::fingerprint(value).map_err(|_| Error::Invalid("preparation digest encoding"))
 }

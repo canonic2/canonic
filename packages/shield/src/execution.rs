@@ -41,9 +41,14 @@ use windows_process as process;
 
 mod approval;
 mod git;
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
+mod launch;
 #[cfg(all(test, any(target_os = "macos", target_os = "linux", windows)))]
 pub(crate) use approval::capture as approval_fixture;
-pub(crate) use approval::{valid_approval_binding, verify_approval_binding};
+pub(crate) use approval::{
+    evaluate_approval, valid_approval_binding, valid_evaluated_approval_binding,
+    verify_approval_binding,
+};
 
 #[cfg(not(windows))]
 fn supported(request: &crate::policy::Request) -> bool {
@@ -120,8 +125,9 @@ fn execute(input: &cli::Run) -> Result<u8, Box<dyn std::error::Error>> {
         operation,
         evidence,
         binding,
+        launch,
+        resource,
     } = prepare(input)?;
-    let resource = json!({"timeout_ms":input.timeout_ms,"resources":binding.metadata()});
     let mut details = json!({"operation":operation,"request":request,"evaluation":evidence.evaluation(),"identity":evidence.identity(),"binding":binding.metadata(),"timeout_ms":input.timeout_ms,"execution":"unobserved"});
     let mut child = None;
     let mut prelaunch_error = None;
@@ -155,7 +161,6 @@ fn execute(input: &cli::Run) -> Result<u8, Box<dyn std::error::Error>> {
                 return Err(Error::Interrupted(signals.exit_code().unwrap_or(124)));
             }
             binding.verify()?;
-            let launch = launch_request(&request);
             child = Some(process::OwnedChild::spawn(&launch)?);
             Ok(())
         },
@@ -233,6 +238,8 @@ struct PreparedRun {
     operation: Value,
     evidence: crate::runtime::EvaluatedRequest,
     binding: binding::Binding,
+    launch: launch::EffectiveLaunch,
+    resource: Value,
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
@@ -313,19 +320,17 @@ fn prepare(input: &cli::Run) -> Result<PreparedRun, Box<dyn std::error::Error>> 
         project: context.project_root.clone(),
     };
     request.validate()?;
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let operation = if request.executable == git::EXECUTABLE {
-        json!({"kind":"native-git-inspection","request":request,"environment":"cleared-git-inspection-v1"})
-    } else {
-        json!({"kind":"native-leaf","request":request,"environment":"cleared-lc-all-c"})
-    };
-    #[cfg(windows)]
-    let operation = json!({"kind":if windows_git::application_directory(&request).is_some() {"native-git-inspection"} else {"native-leaf"},"request":request,"environment":windows_binding::environment_for(&request)?});
+    let submitted = request;
+    let launch = launch::EffectiveLaunch::prepare(&submitted)?;
+    let request = launch.request().clone();
+    let operation = json!({"kind":"native-effective-launch","request":request,"environment":launch.environment(),"original_input":submitted});
     let evidence = Project::open(Path::new(&context.project_root))
         .and_then(|project| project.snapshot())
-        .and_then(|snapshot| snapshot.evaluate(request.clone()))
+        .and_then(|snapshot| {
+            snapshot.evaluate_resource(request.clone(), launch.resource(&submitted))
+        })
         .map_err(|error| runtime_failure(error, &context.project_root))?;
-    let binding = match binding::Binding::open(&request) {
+    let binding = match binding::Binding::open(&submitted) {
         Ok(binding) => binding,
         Err(error) => {
             observe(
@@ -336,12 +341,15 @@ fn prepare(input: &cli::Run) -> Result<PreparedRun, Box<dyn std::error::Error>> 
             return Err(error.into());
         }
     };
+    let resource = approval::resource(&submitted, &launch, input.timeout_ms, &binding.metadata());
     Ok(PreparedRun {
         context,
         request,
         operation,
         evidence,
         binding,
+        launch,
+        resource,
     })
 }
 

@@ -1,6 +1,7 @@
 //! Indexed scope postings and invocation dispatch; authority remains in the resolver.
 mod invocations;
 mod mcp;
+mod workspace;
 use super::{
     CustomRules, Error, Pack, Profile, Request, index, model, normalized,
     patterns::{self, Provider},
@@ -17,7 +18,7 @@ use std::{
 /// The plan format this engine writes and loads. Change it whenever compiled
 /// bytes would decide differently, such as how patterns are prepared, so
 /// plans written before the change are rebuilt instead of loaded.
-pub(crate) const FORMAT: &str = "SHPLAN14";
+pub(crate) const FORMAT: &str = "SHPLAN15";
 const MAGIC: &[u8] = FORMAT.as_bytes();
 const HEADER: usize = 16;
 const ENTRY: usize = 16;
@@ -39,6 +40,9 @@ struct Metadata {
 impl Metadata {
     fn validate(&self) -> Result<(), Error> {
         for pack in &self.packs {
+            if pack.origins.len() > 1024 {
+                return Err(Error::Limit);
+            }
             pack.document.validate_schema()?;
             super::invocations::definitions(&pack.document)?;
             for precondition in &pack.document.preconditions {
@@ -64,6 +68,7 @@ struct PackMetadata {
     digest: String,
     semantic: bool,
     profile: Profile,
+    origins: BTreeMap<String, super::provenance::Original>,
 }
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -126,17 +131,12 @@ enum Prepared {
     Graphql(Arc<serde_json::Value>),
 }
 impl Plan {
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one encoding pass preserves common ownership and offsets for all prepared resources"
-    )]
     pub(crate) fn compile(
         packs: Vec<(Pack, Profile)>,
         custom: Option<CustomRules>,
         effective: serde_json::Value,
     ) -> Result<Self, Error> {
-        let mut rows = Vec::new();
-        let mut images = BTreeMap::new();
+        let mut encoding = workspace::Encoding::new();
         let mut metadata = Metadata {
             engine: env!("CARGO_PKG_VERSION").into(),
             packs: vec![],
@@ -152,24 +152,19 @@ impl Plan {
             codex_prefixes: codex_prefixes(&packs, custom.as_ref()),
         };
         for (owner, (mut pack, profile)) in packs.into_iter().enumerate() {
-            images.extend(
-                pack.patterns
-                    .images
-                    .iter()
-                    .map(|(key, bytes)| (key.clone(), bytes.clone())),
-            );
+            encoding.patterns(std::mem::take(&mut pack.patterns))?;
             for gate in &mut pack.document.preconditions {
-                crate::graphql::detach(&mut gate.conditions, &mut images)?;
+                encoding.detach(&mut gate.conditions)?;
                 for alternative in &mut gate.requires_any {
-                    crate::graphql::detach(alternative, &mut images)?;
+                    encoding.detach(alternative)?;
                 }
             }
             for mut rule in std::mem::take(&mut pack.document.rules) {
-                crate::graphql::detach(&mut rule.conditions, &mut images)?;
+                encoding.detach(&mut rule.conditions)?;
                 if let Some(requirements) = &mut rule.requirements {
-                    crate::graphql::detach(requirements, &mut images)?;
+                    encoding.detach(requirements)?;
                 }
-                rows.push((key(&rule, owner), encode(&rule)?, owner));
+                encoding.row(key(&rule, owner), &rule, owner)?;
             }
             metadata.packs.push(PackMetadata {
                 retained_legacy: pack.document.retained_legacy,
@@ -177,27 +172,22 @@ impl Plan {
                 digest: pack.digest,
                 semantic: pack.semantic,
                 profile,
+                origins: pack.origins,
             });
         }
         if let Some(mut custom) = custom {
-            images.extend(
-                custom
-                    .patterns
-                    .images
-                    .iter()
-                    .map(|(key, bytes)| (key.clone(), bytes.clone())),
-            );
+            encoding.patterns(std::mem::take(&mut custom.patterns))?;
             let time_sensitive = super::has_expiration(&custom);
             for mut rule in std::mem::take(&mut custom.document.rules) {
-                crate::graphql::detach(&mut rule.conditions, &mut images)?;
+                encoding.detach(&mut rule.conditions)?;
                 if let Some(requirements) = &mut rule.requirements {
-                    crate::graphql::detach(requirements, &mut images)?;
+                    encoding.detach(requirements)?;
                 }
-                rows.push((
+                encoding.row(
                     key(&rule, metadata.packs.len()),
-                    encode(&rule)?,
+                    &rule,
                     metadata.packs.len(),
-                ));
+                )?;
             }
             metadata.custom = Some(CustomMetadata {
                 document: custom.document,
@@ -206,18 +196,14 @@ impl Plan {
                 time_sensitive,
             });
         }
-        if images.values().map(Vec::len).sum::<usize>() > patterns::MAX_PREPARED_BYTES {
-            return Err(Error::Limit);
-        }
-        for (name, image) in images {
-            rows.push((query(9, &name), image, PATTERN_OWNER));
-        }
+        encoding.finish_images()?;
+        let encoded = encoding.metadata(&metadata)?;
+        let length = encoding.wire_length();
+        let mut rows = encoding.rows;
         rows.sort_by(|a, b| a.0.cmp(&b.0));
-        let encoded = encode(&metadata)?;
-        if encoded.len() > 4 * 1024 * 1024 || rows.len() > MAX_ROWS {
-            return Err(Error::Limit);
-        }
-        let mut bytes = MAGIC.to_vec();
+        let mut bytes = Vec::new();
+        bytes.try_reserve_exact(length).map_err(|_| Error::Limit)?;
+        bytes.extend(MAGIC);
         number(&mut bytes, encoded.len())?;
         number(&mut bytes, rows.len())?;
         bytes.extend(encoded);
@@ -236,6 +222,9 @@ impl Plan {
         }
         if offset > MAX_BYTES {
             return Err(Error::Limit);
+        }
+        if offset != length {
+            return Err(Error::Syntax);
         }
         for (key, row, _) in rows {
             bytes.extend(key);
@@ -306,6 +295,7 @@ impl Plan {
                 })),
         )?;
         let custom = metadata.custom.as_ref().map(|c| CustomRules {
+            comparison_sources: None,
             document: model::CustomDocument::empty(),
             digest: c.digest.clone(),
             semantic: c.semantic,
@@ -465,6 +455,7 @@ impl Plan {
             .map(|p| {
                 (
                     Pack {
+                        comparison_source: None,
                         document: p.document.descriptor(|gate| gate.candidate(facts)),
                         digest: p.digest.clone(),
                         semantic: p.semantic,
@@ -474,12 +465,14 @@ impl Plan {
                         index: index::Index::new(std::iter::empty()),
                         patterns: Arc::default(),
                         resolution: Vec::new(),
+                        origins: p.origins.clone(),
                     },
                     p.profile,
                 )
             })
             .collect::<Vec<_>>();
         let mut custom = self.custom.as_ref().map(|c| CustomRules {
+            comparison_sources: None,
             document: model::CustomDocument::empty(),
             digest: c.digest.clone(),
             semantic: c.semantic,
@@ -785,7 +778,16 @@ fn scope_key(rule: &Rule) -> Vec<u8> {
                 .is_some_and(|v| v.len() == prefix.len());
         // Location identity is observed per request. Its source spelling cannot
         // prune a rule before aliases and symlinks have been resolved.
-        let mut key = vec![u8::from(exact)];
+        let length = executable.len().checked_add(2).and_then(|length| {
+            prefix.iter().try_fold(length, |sum, value| {
+                sum.checked_add(value.len())?.checked_add(1)
+            })
+        });
+        if length.is_none_or(|length| length > 65_536) {
+            return query(8, "argv");
+        }
+        let mut key = Vec::with_capacity(length.unwrap_or_default());
+        key.push(u8::from(exact));
         key.extend(executable.as_bytes());
         key.push(0);
         for argument in prefix {
@@ -800,9 +802,6 @@ fn scope_key(rule: &Rule) -> Vec<u8> {
     } else {
         query(8, c["domain"].as_str().unwrap_or_default())
     }
-}
-fn encode(value: &impl Serialize) -> Result<Vec<u8>, Error> {
-    serde_json::to_vec(value).map_err(|_| Error::Syntax)
 }
 fn number(bytes: &mut Vec<u8>, value: usize) -> Result<(), Error> {
     bytes.extend(

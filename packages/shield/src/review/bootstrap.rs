@@ -31,7 +31,7 @@ impl Probe {
     }
 
     pub(crate) fn bootstrap_required(&self) -> bool {
-        self.previous_root.as_deref() != self.root.to_str()
+        self.previous_root.is_none()
     }
 
     pub(crate) fn report(&self) -> Value {
@@ -136,6 +136,11 @@ pub(crate) fn prepare_options(
         }
     }
     let mut metadata = json!({"sources":{},"default":null,"installed":installed,"projection":null});
+    let disabled = project_sources::disabled(&merged, &candidate)?;
+    if !disabled.is_empty() {
+        metadata["disabled"] = json!(disabled);
+    }
+    super::packs::refresh_shared_metadata(&candidate, &mut metadata)?;
     if let Some(cache_dir) = cache_dir {
         metadata["compiled_cache_root"] = json!(cache_dir);
     }
@@ -323,8 +328,9 @@ fn access_summary(value: &Value) -> String {
     parts.join("; ")
 }
 
-/// A copied receipt is not sufficient: the current enrollment must validate at
-/// this destination and its confirming activation must bind the association.
+/// Select a retained reviewed launch association for the current project.
+/// Portable enrollment evidence authenticates this route; resource grants and
+/// operation epochs still require their separate current-checkout validation.
 pub(crate) fn accepts_launch(project: &Path, requested: &Path) -> bool {
     let Ok(state) = storage::bootstrap::current_enrollment(project) else {
         return false;
@@ -346,12 +352,20 @@ pub(crate) fn launch_matches_metadata(project: &Path, requested: &Path) -> bool 
     storage::bootstrap::launch_matches_metadata(project, requested)
 }
 
-/// Continue reviewed in-session forms after reconnecting at the exact confirmed
-/// destination. This supplies no native agent identity or copied authority.
+/// Continue the reviewed host's form capability after reconnecting or relocation.
+/// This metadata supplies no native agent identity or operation authority.
 pub(crate) fn forms_reviewed_at(project: &Path) -> bool {
     storage::bootstrap::current_enrollment(project).is_ok_and(|state| {
         storage::bootstrap::enrollment(&state, &state.operator["bootstrap"])
             || integration_forms_reviewed(&state)
+            || super::registry_trust::inactive_reviewed(&state)
+            || state.authorization_events.iter().any(|event| {
+                event["kind"] == "policy_reused"
+                    && event["operator"]["mechanism"] == "reviewed-policy-reuse"
+                    && event["provenance"]["project_id"] == state.project_id
+                    && event["provenance"]["project_root"] == state.project_root
+                    && event["details"]["receipt"] == state.operator["policy_reuse"]
+            })
     })
 }
 

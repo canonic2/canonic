@@ -45,6 +45,149 @@ fn coverage(context: &Context) -> Value {
 }
 
 #[test]
+fn box_portability_copy_preserves_review_and_rebinds_only_owned_local_pin() {
+    let (root, context) = fixture();
+    box_project(root.path());
+    let plan = setup(&context, choice(&["box"])).unwrap();
+    let mut owned = plan.desired.unwrap();
+    owned.binary = Path::new("/acme/previous-install/shield").to_path_buf();
+    let previous =
+        box_definition::render(&owned.binary, &crate::review::mcp::default_approved()).unwrap();
+    fs::write(root.path().join(box_definition::PATH), &previous.shared).unwrap();
+    fs::write(
+        root.path().join(box_definition::LOCAL_PATH),
+        &previous.local,
+    )
+    .unwrap();
+    owned.box_definition = Some(previous.clone());
+    crate::review::update_operator_fixture(&context, |operator| {
+        operator["integration"] = json!(owned);
+        operator["portable_registration_epoch"] = json!(context.project_id);
+    })
+    .unwrap();
+    let unrelated =
+        "{\"mcpServers\":{\"gate\":{\"type\":\"http\",\"url\":\"https://gate.example.com/mcp\"}}}";
+    fs::write(root.path().join(".mcp.json"), unrelated).unwrap();
+    let checkpoint = fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let copied = assert_fs::TempDir::new().unwrap();
+    crate::test_support::copy_fixture_directory(root.path(), copied.path());
+    let child = crate::review::open(copied.path()).unwrap();
+    let current = registration(&meta(&child)).unwrap().unwrap();
+    assert!(current.box_definition.is_some());
+    assert!(current.covers("codex"));
+    assert!(current.covers("claude"));
+    assert_eq!(definition(copied.path()).unwrap(), previous.shared);
+    let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
+    assert_eq!(current.binary, executable);
+    let pinned: Value = crate::policy::parse(&local(copied.path()).unwrap()).unwrap();
+    assert_eq!(
+        pinned["connection"]["command"],
+        executable.to_str().unwrap()
+    );
+    assert_eq!(pinned["connection"]["args"][3], ".");
+    assert_eq!(
+        fs::read_to_string(copied.path().join(".mcp.json")).unwrap(),
+        unrelated
+    );
+    assert!(!copied.path().join(".codex/config.toml").exists());
+    assert!(!copied.path().join(".claude/settings.local.json").exists());
+    assert_eq!(
+        fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        checkpoint
+    );
+    assert_eq!(local(root.path()).unwrap(), previous.local);
+
+    // An edited local definition is its publisher's review boundary.
+    let edited = assert_fs::TempDir::new().unwrap();
+    crate::test_support::copy_fixture_directory(root.path(), edited.path());
+    let text = "schema_version: 1\nconnection:\n  command: acme-user-connector\n";
+    fs::write(edited.path().join(box_definition::LOCAL_PATH), text).unwrap();
+    crate::review::open(edited.path()).unwrap();
+    assert_eq!(local(edited.path()).unwrap(), text);
+    assert_eq!(definition(edited.path()).unwrap(), previous.shared);
+}
+
+#[test]
+fn box_portability_missing_pin_retries_and_mixed_registration_can_repin_again() {
+    let (root, context) = fixture();
+    box_project(root.path());
+    setup(&context, choice(&["codex"])).unwrap();
+    let before = meta(&context);
+    let plan = crate::review::integrations::setup::prepare_approving(
+        root.path(),
+        &before,
+        choice(&["box"]),
+        false,
+        None,
+        false,
+    )
+    .unwrap()
+    .unwrap();
+    apply(&context, &before, &plan).unwrap();
+    let mut owned = registration(&meta(&context)).unwrap().unwrap();
+    assert!(owned.agents.contains_key("codex"));
+    owned.binary = Path::new("/acme/old-install/shield").to_path_buf();
+    let definition =
+        box_definition::render(&owned.binary, &crate::review::mcp::default_approved()).unwrap();
+    fs::write(root.path().join(box_definition::PATH), &definition.shared).unwrap();
+    fs::write(
+        root.path().join(box_definition::LOCAL_PATH),
+        &definition.local,
+    )
+    .unwrap();
+    owned.box_definition = Some(definition.clone());
+    crate::review::update_operator_fixture(&context, |operator| {
+        operator["integration"] = json!(owned);
+        operator["portable_registration_epoch"] = json!(context.project_id);
+    })
+    .unwrap();
+    let copied = assert_fs::TempDir::new().unwrap();
+    crate::test_support::copy_fixture_directory(root.path(), copied.path());
+    fs::remove_file(copied.path().join(box_definition::LOCAL_PATH)).unwrap();
+    let child = crate::review::open(copied.path()).unwrap();
+    assert!(local(copied.path()).is_none());
+    assert_ne!(
+        meta(&child)["portable_registration_epoch"],
+        child.project_id
+    );
+    fs::write(
+        copied.path().join(box_definition::LOCAL_PATH),
+        &definition.local,
+    )
+    .unwrap();
+    crate::review::open(copied.path()).unwrap();
+    let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
+    let current = registration(&meta(&child)).unwrap().unwrap();
+    assert!(
+        current
+            .box_definition
+            .as_ref()
+            .unwrap()
+            .pinned_to(&executable)
+    );
+    assert_eq!(current.binary, owned.binary);
+    let state = crate::review::project::load(&child).unwrap();
+    // A later same-content executable relocation must recognize the Box pin
+    // independently of the historical direct-registration executable path.
+    let next = crate::review::integrations::portable::prepare_box(
+        copied.path(),
+        &state,
+        Path::new("/acme/next-install/shield"),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(next.files.len(), 1);
+    assert_eq!(next.files[0].path, box_definition::LOCAL_PATH);
+    assert!(
+        next.files[0]
+            .after
+            .as_ref()
+            .unwrap()
+            .contains("/acme/next-install/shield")
+    );
+}
+
+#[test]
 fn box_is_listed_first_on_every_agent_page() {
     let rows = workflow::rows("Acme box", "Acme agent");
     assert_eq!(rows[0].0, "box");
@@ -79,14 +222,7 @@ fn box_definition_renders_the_hooks_and_server_shield_installs_directly() {
     assert_eq!((&owned.shared, &owned.local), (&text, &pinned));
     let written: Value = crate::policy::parse(&text).unwrap();
     let binary = registered.binary.to_str().unwrap();
-    let args = json!([
-        "mcp",
-        "serve",
-        "--project",
-        "{project}",
-        "--agent",
-        "{agent}"
-    ]);
+    let args = json!(["mcp", "serve", "--project", ".", "--agent", "{agent}"]);
     // The shared file is portable: the bare command and no absolute path.
     assert!(!text.contains(binary) && !text.contains(root.path().to_str().unwrap()));
     assert_eq!(written["schema_version"], 1);
@@ -123,28 +259,23 @@ fn box_definition_renders_the_hooks_and_server_shield_installs_directly() {
     }
     assert_eq!(decisions["policy_apply"], "ask");
     assert!(decisions.values().any(|decision| decision == "ask"));
-    matches_direct_installation(root.path(), registered, &written, &allowed);
+    matches_direct_installation(root.path(), &written, &allowed);
     let report = coverage(&context);
     assert_eq!(report["box_integration"]["status"], "installed");
     assert_eq!(report["repair_needed"], false, "{report}");
 }
 
-/// Box's expansions must reproduce the groups and MCP arguments a direct
-/// installation writes, so Box can adopt existing entries.
-fn matches_direct_installation(
-    root: &Path,
-    registered: &crate::review::integrations::Registration,
-    written: &Value,
-    allowed: &[String],
-) {
+/// The shared definition's expansions reproduce direct installation. The
+/// private connection's executable pin is checked separately above.
+fn matches_direct_installation(root: &Path, written: &Value, allowed: &[String]) {
     let canonical_root = root.canonicalize().unwrap();
     let root = canonical_root.as_path();
-    let pinned_word = native::quoted(&registered.binary).unwrap();
+    let binary = Path::new("shield");
+    let pinned_word = native::quoted(binary).unwrap();
     let direct = prepare(root, &json!({}), IntegrationChoice::all())
         .unwrap()
         .unwrap();
     let direct = direct.desired.unwrap();
-    let project = native::quoted(root).unwrap();
     let hooks = written["hooks"].as_array().unwrap();
     let supported: Vec<_> = agents::ADAPTERS
         .iter()
@@ -167,14 +298,17 @@ fn matches_direct_installation(
             );
             let template = hook["command"].as_str().unwrap();
             assert!(template.starts_with("{command} "), "{template}");
+            assert!(!template.contains("{project}"), "{template}");
+            // Quoting the literal dot does not change the shell argument;
+            // direct hooks quote it while the Box template leaves it bare.
             let command = template
                 .replace("{command}", &pinned_word)
-                .replace("{project}", &project)
+                .replace("--project . ", "--project '.' ")
                 .replace("{agent}", spec.id)
                 .replace("{event}", event);
             assert_eq!(
                 command,
-                native::hook_command(&registered.binary, root, spec.id, event).unwrap()
+                native::hook_command(binary, root, spec.id, event).unwrap()
             );
             let mut handler = json!({"type":"command","command":command,"timeout":hook["timeout"]});
             if spec.id == "gemini" {
@@ -192,19 +326,17 @@ fn matches_direct_installation(
             .unwrap()
             .iter()
             .map(|arg| match arg.as_str().unwrap() {
-                "{project}" => root.to_str().unwrap().to_owned(),
                 "{agent}" => spec.id.to_owned(),
                 other => other.to_owned(),
             })
             .collect();
-        let entry = adapter.mcp_entry(&registered.binary, root, allowed);
+        let entry = adapter.mcp_entry(binary, root, allowed);
         let direct_entry = serde_json::from_str::<Value>(&entry).unwrap_or_else(|_| {
             toml_json(entry.parse::<toml_edit::DocumentMut>().unwrap().as_item())
         });
-        // Box adopts an unowned entry only when its whole projection is equal:
-        // the pinned binary with the direct arguments and, for Codex, a prompt
-        // default with every tool's approval in the server entry.
-        let mut projected = json!({"command":registered.binary.to_str().unwrap(),"args":expanded});
+        // The shared executable and direct arguments match, with Codex's
+        // prompt default and every tool's approval in the server entry.
+        let mut projected = json!({"command":"shield","args":expanded});
         match spec.id {
             "claude" => projected["type"] = json!("stdio"),
             "codex" => {
@@ -610,7 +742,16 @@ fn box_install_hands_direct_installations_over_without_touching_their_files() {
 fn google_adapters_hand_over_to_box_with_native_hooks() {
     let (root, context) = fixture();
     box_project(root.path());
-    setup(&context, IntegrationChoice::all()).unwrap();
+    let direct = setup(&context, IntegrationChoice::all())
+        .unwrap()
+        .desired
+        .unwrap();
+    let retained: Vec<_> = direct
+        .agents
+        .keys()
+        .filter(|id| !agents::find(id).is_some_and(agents::AgentAdapter::supports_box_hooks))
+        .map(String::as_str)
+        .collect();
     let before = fs::read(root.path().join(".gemini/settings.json")).unwrap();
     let plan = setup(&context, choice(&["box"])).unwrap();
     assert_eq!(plan.handed_over, ["agy", "claude", "codex", "gemini"]);
@@ -621,7 +762,7 @@ fn google_adapters_hand_over_to_box_with_native_hooks() {
             .keys()
             .map(String::as_str)
             .collect::<Vec<_>>(),
-        Vec::<&str>::new()
+        retained
     );
     assert_eq!(
         fs::read(root.path().join(".gemini/settings.json")).unwrap(),

@@ -140,6 +140,17 @@ use the [Git attribute-source contract](https://git-scm.com/docs/git/2.46.0).
 Windows also receives `SystemRoot` and the bound installation's helper path.
 Disabled file settings use `NUL` on Windows and `/dev/null` on macOS.
 
+Policy evaluates the exact arguments and complete cleared environment that the
+runner will spawn. For Git, this includes the fixed `--no-pager -c ...` prefix
+and inspection suffix above. A rule whose exact arguments are only `status`
+therefore does not match the effective Git launch. Review the effective arguments
+shown in the request before granting permission. The original submitted command
+is retained as `original_input` in diagnostic evidence.
+
+Native approvals bind this effective launch and its environment. Historical
+approvals created without that binding remain inspectable; retrying them requires
+a fresh request and review.
+
 On macOS the root-owned Git executable and its root-owned, non-writable-to-other-users
 parent directories are verified. Its native Mach-O contract permits only dyld,
 libSystem, libz, libiconv, CoreServices and CoreFoundation; the OS libraries/cache
@@ -246,6 +257,12 @@ Unrestricted same-user access is outside that boundary.
 Pending requests expire after ten minutes; approval lasts five minutes. Repeated
 approval does not renew it. Use `shield request deny REQUEST_ID --project /path/to/acme`
 to reject a pending request or revoke an unused grant.
+
+For up to ten minutes after consumption or denial, a compact terminal receipt
+lets the same operator decision report its recorded outcome without another
+approval or launch. The separate receipt store holds at most 128 outcomes and
+evicts older outcomes under pressure. A consumed replay returns no reusable
+approval material; losing the original result never makes the command run again.
 
 Expired, revoked, consumed, foreign, changed, or stale references cannot launch.
 A retry with an explicit reference cannot fall back to a later Allow policy.

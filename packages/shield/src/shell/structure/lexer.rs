@@ -164,6 +164,7 @@ fn read_heredoc(
                 raw_source: source[start..line_start].into(),
                 expand,
                 source_map,
+                private_evidence: false,
             };
             return Ok(result);
         }

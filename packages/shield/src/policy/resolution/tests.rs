@@ -67,6 +67,37 @@ const NODE_CAPABILITIES: &[&str] = &[
 ];
 
 #[test]
+fn retained_resolution_display_matches_prepared_entries_without_matcher_validation() {
+    let source = document(
+        &["structured-rules-v1", "argument-rules-v1", "variables-v1"],
+        json!({"target":{"type":"string","description":"Selected target"}}),
+        json!([rule(
+            "inspect",
+            json!("acme"),
+            json!({"kind":"exact","values":[{"var":"target"}]}),
+            "allow"
+        )]),
+        Value::Null,
+    );
+    let binding = bound(json!({"target":"status"}));
+    let prepared = Pack::from_yaml_bound(&source, &binding, true).unwrap();
+    let display = super::super::inspect_resolution(&source, &binding).unwrap();
+    assert_eq!(
+        display["inspect"]["resolved"],
+        serde_json::to_value(&prepared.document.rules[0]).unwrap()
+    );
+    assert_eq!(display["inspect"]["variables"]["target"], "status");
+    let mut invalid_matcher: Value = serde_json::from_str(&source).unwrap();
+    invalid_matcher["rules"][0]["conditions"]["arguments"] = json!({"kind":"unknown"});
+    assert!(Pack::from_yaml_bound(&invalid_matcher.to_string(), &binding, true).is_err());
+    // A display row never confers matcher authority. Schema-only extraction
+    // must not silently turn inspection into full source preparation.
+    assert!(super::super::inspect_resolution(&invalid_matcher.to_string(), &binding).is_ok());
+    invalid_matcher["schema_version"] = json!(2);
+    assert!(super::super::inspect_resolution(&invalid_matcher.to_string(), &binding).is_err());
+}
+
+#[test]
 fn variable_parts_bind_literal_selectors_and_unset_keeps_gates_inactive() {
     let source = document(
         &[

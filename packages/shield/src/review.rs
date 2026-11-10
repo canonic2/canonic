@@ -1,11 +1,13 @@
 //! Project-owned proposals and observational history, shared by CLI and MCP.
 pub(crate) mod admin;
 pub(crate) mod approvals;
+mod authorization_receipts;
 pub(crate) mod bootstrap;
 mod cache;
 mod changes;
 pub(crate) mod cli;
 mod clock;
+mod configuration_changes;
 mod history;
 pub(crate) mod hook_approval;
 mod inspection;
@@ -25,9 +27,11 @@ pub(crate) mod proposal_lifecycle;
 mod publication;
 pub(crate) mod read_approval;
 mod registries;
+pub(in crate::review) mod registry_trust;
 pub(crate) mod reports;
 pub(crate) mod run_approval;
 pub(crate) mod runtime;
+pub(crate) mod sdk_read;
 pub(crate) mod session_grants;
 mod storage;
 #[cfg(test)]
@@ -60,6 +64,15 @@ pub(crate) enum Error {
     UnsupportedReleases(String),
     #[error("invalid review input or state: {0}")]
     Invalid(&'static str),
+    #[error(
+        "policy artifact {pack}@{version} from {source_identity} is known revoked; remove or update the affected pack"
+    )]
+    RegistryRevoked {
+        source_identity: String,
+        pack: String,
+        version: String,
+        digest: String,
+    },
     #[error(
         "unsupported Shield checkpoint at {path:?}: observed schema {observed}; supported schema 1 with retained historical codecs. Original bytes are unchanged. Use a Shield version that supports this format; do not delete or re-enroll the project"
     )]
@@ -195,6 +208,7 @@ impl Error {
     pub(crate) fn code(&self) -> &'static str {
         match self {
             Self::Cancelled => "cancelled",
+            Self::RegistryRevoked { .. } => "revoked-policy",
             Self::Io(_) => "io",
             Self::Policy(policy::Error::Interrupted) => "interrupted",
             Self::Policy(policy::Error::Limit)
@@ -335,12 +349,34 @@ fn project_bundle_bytes(candidates: &BTreeMap<String, Value>) -> Result<Vec<u8>,
 pub(crate) fn open(project: &Path) -> Result<Context, Error> {
     let store = Store::open(project)?;
     let state = store.read_checkpoint()?;
-    Ok(Context::new(state.project_id, state.project_root, "cli"))
+    let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
+    integrations::rebind_launchers(&context, &state);
+    Ok(context)
 }
 
 pub(crate) fn open_diagnostics(project: &Path) -> Result<Context, Error> {
-    let (state, _) = Store::open(project)?.read_diagnostic_checkpoint()?;
+    let store = Store::inspect(project)?;
+    let (state, _) = store.read_diagnostic_checkpoint()?;
+    Ok(Context::new(
+        state.project_id,
+        store.root().to_owned(),
+        "cli",
+    ))
+}
+
+/// A connection needs a current checkout epoch before it can own operations.
+/// Supported historical formats otherwise stay inspectable until actual use.
+pub(crate) fn open_connection(project: &Path) -> Result<Context, Error> {
+    let store = Store::open(project)?;
+    let (state, _) = store.read_diagnostic_checkpoint()?;
+    if state.project_root != store.root() {
+        return open(project);
+    }
     Ok(Context::new(state.project_id, state.project_root, "cli"))
+}
+
+pub(crate) fn reuse_reviewed_policy(project: &Path) -> Result<(), Error> {
+    Store::open(project).map(|_| ())
 }
 
 #[cfg(test)]
@@ -360,6 +396,7 @@ pub(crate) fn open_native(project: &Path) -> Result<(Context, Option<mode::Pause
     let store = Store::open(project)?;
     let state = store.read_checkpoint()?;
     let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
+    integrations::rebind_launchers(&context, &state);
     Ok((context, mode::paused(state)))
 }
 
@@ -396,21 +433,43 @@ pub(in crate::review) fn inspect_prepared(
     if evaluator.revision() != state.policy_revision {
         return Err(Error::StaleSnapshot);
     }
-    // The caller verified this source and its exact evaluator. Reconstructing
-    // a Bundle here would validate every pack again just to retrieve rule text.
+    inspect_metadata(context, state, evaluator.effective())
+}
+
+pub(in crate::review) fn inspect_recorded(
+    context: &Context,
+    state: &model::State,
+) -> Result<Value, Error> {
+    let candidate = state
+        .candidates
+        .get("project")
+        .filter(|_| state.candidates.len() == 1)
+        .ok_or(Error::Invalid("project candidate is required"))?;
+    let effective = configuration::recorded_effective(candidate, &state.policy_revision)?;
+    inspect_metadata(context, state, &effective)
+}
+
+fn inspect_metadata(
+    _context: &Context,
+    state: &model::State,
+    effective: &configuration::Effective,
+) -> Result<Value, Error> {
+    // The caller bound the displayed source fields to the matching canonical
+    // lock/revision; omitted source fields need not have been hydrated.
+    // Rendering records never reconstructs a Snapshot or prepares matchers.
     let candidate = state
         .candidates
         .get("project")
         .filter(|_| state.candidates.len() == 1)
         .ok_or(Error::Invalid("project candidate is required"))?;
     let rules = match candidate["rules"].as_str() {
-        Some(source) => inspection::project_rules(source, &context.project_root)?,
+        Some(source) => policy::inspect_retained_custom(source)?,
         None => {
             json!({"schema_version":1,"rules":[],"kind":"custom","capabilities":["structured-rules-v1"]})
         }
     };
     let mut value = json!({"schema_version":1,"mode":"local-review","enforcement":"not-checked","project_id":state.project_id,
-        "project_root":state.project_root,"policy_revision":state.policy_revision,"effective":evaluator.effective(),"project_rules":rules});
+        "project_root":state.project_root,"policy_revision":state.policy_revision,"effective":effective,"project_rules":rules});
     let redacted = model::redact(&mut value);
     value["redacted"] = json!(redacted);
     Ok(value)

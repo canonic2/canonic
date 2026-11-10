@@ -89,6 +89,11 @@ fn shield_mode_disabled_defers_to_host_permissions_and_enable_restores_checks() 
                     "run_command",
                     json!({"CommandLine":"git reset --hard","Cwd":root.path()}),
                 ),
+                "copilot" => (
+                    "bash",
+                    json!({"command":"git reset --hard","description":"Acme reset"}),
+                ),
+                "opencode" => ("write", json!({"filePath":"notes.txt","content":"Acme"})),
                 _ => ("Bash", json!({"command":"git reset --hard"})),
             };
             let result = tool(root.path(), id, name, &input);
@@ -119,6 +124,8 @@ fn shield_mode_disabled_defers_to_host_permissions_and_enable_restores_checks() 
                         "call_mcp_tool",
                         &json!({"ServerName":"shield","ToolName":"enable","Arguments":{}}),
                     ),
+                    "copilot" => tool(root.path(), id, "shield-enable", &json!({})),
+                    "opencode" => tool(root.path(), id, "shield_enable", &json!({})),
                     _ => tool(root.path(), id, "mcp__shield__enable", &json!({})),
                 };
                 assert_eq!(own, json!({}), "{id}: {own}");
@@ -139,11 +146,7 @@ fn shield_mode_pause_blocks_forged_authority_and_operator_commands() {
     forged["operator"]["path_access"] = json!({"agent_settings_change":"allow"});
     let forged = forged.to_string();
     let denied = |agent: &str, reply: Value| {
-        let decision = if ["gemini", "agy"].contains(&agent) {
-            &reply["decision"]
-        } else {
-            &reply["hookSpecificOutput"]["permissionDecision"]
-        };
+        let decision = denial_decision(&reply);
         assert_eq!(decision, "deny", "{agent}: {reply}");
     };
     for adapter in crate::agents::ADAPTERS {
@@ -166,6 +169,18 @@ fn shield_mode_pause_blocks_forged_authority_and_operator_commands() {
                 agent,
                 "write_to_file",
                 &json!({"TargetFile":path,"CodeContent":forged}),
+            ),
+            "copilot" => tool(
+                root.path(),
+                agent,
+                "create",
+                &json!({"path":path,"file_text":forged}),
+            ),
+            "opencode" => tool(
+                root.path(),
+                agent,
+                "write",
+                &json!({"filePath":path,"content":forged}),
             ),
             _ => tool(
                 root.path(),
@@ -200,6 +215,10 @@ fn shield_mode_pause_blocks_forged_authority_and_operator_commands() {
                     "run_command",
                     json!({"CommandLine":source,"Cwd":root.path()}),
                 ),
+                "copilot" | "opencode" => (
+                    "bash",
+                    json!({"command":source,"description":"Acme command"}),
+                ),
                 _ => ("Bash", json!({"command":source})),
             };
             denied(agent, tool(root.path(), agent, name, &input));
@@ -208,7 +227,13 @@ fn shield_mode_pause_blocks_forged_authority_and_operator_commands() {
     assert_eq!(fs::read(&path).unwrap(), before);
     confirm_mode(&context, &connection, "enable");
     let after: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
-    let before: Value = serde_json::from_slice(&before).unwrap();
+    let mut before: Value = serde_json::from_slice(&before).unwrap();
+    assert_ne!(
+        before["operator"]["administration_origin"]["token"],
+        after["operator"]["administration_origin"]["token"]
+    );
+    before["operator"]["administration_origin"] =
+        after["operator"]["administration_origin"].clone();
     assert_eq!(after["operator"], before["operator"]);
     assert_eq!(after["session_grants"], before["session_grants"]);
 }
@@ -277,6 +302,94 @@ fn fixture() -> (assert_fs::TempDir, review::Context) {
     .unwrap();
     let context = review::mcp::initialize_fixture(root.path(), &bundle);
     (root, context)
+}
+
+#[test]
+fn copilot_reused_shells_retain_host_permissions_after_modeled_allow() {
+    let (root, _) = fixture();
+    let mut host = json!({"sessionId":"copilot-fixture","timestamp":1,"cwd":root.path(),
+        "toolName":"bash","toolArgs":{"command":"git status","description":"Inspect status"}});
+    let fresh = translate_for(
+        root.path(),
+        "copilot",
+        Event::Before,
+        &serde_json::to_vec(&host).unwrap(),
+    );
+    assert_eq!(fresh["permissionDecision"], "allow", "{fresh}");
+    host["toolArgs"]["shellId"] = json!("earlier-shell");
+    let reused = translate_for(
+        root.path(),
+        "copilot",
+        Event::Before,
+        &serde_json::to_vec(&host).unwrap(),
+    );
+    assert_eq!(reused, json!({}));
+    host["toolArgs"]["command"] = json!("git reset --hard");
+    let denied = translate_for(
+        root.path(),
+        "copilot",
+        Event::Before,
+        &serde_json::to_vec(&host).unwrap(),
+    );
+    assert_eq!(denied["permissionDecision"], "deny", "{denied}");
+}
+
+#[test]
+fn native_host_plugin_and_hook_directories_require_administrative_access() {
+    let (root, _) = fixture();
+    for path in [
+        "ordinary.txt",
+        ".opencode/plugins/other.js",
+        ".opencode/tool/other.ts",
+        ".opencode/tools/other.ts",
+        ".github/hooks/other.json",
+    ] {
+        let value = tool(
+            root.path(),
+            "claude",
+            "Write",
+            &json!({"file_path":root.path().join(path),"content":"fixture"}),
+        );
+        if path == "ordinary.txt" {
+            assert_permitted(&value, "claude");
+        } else {
+            assert_eq!(
+                value["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{path}: {value}"
+            );
+        }
+    }
+}
+
+#[test]
+fn native_cwd_cannot_select_a_nested_or_sibling_policy() {
+    let (root, outer) = fixture();
+    let sibling = assert_fs::TempDir::new().unwrap();
+    let nested = root.path().join("nested");
+    fs::create_dir(&nested).unwrap();
+    let rules = json!({"schema_version":1,"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"],"rules":[{"id":"loose","decision":"allow","conditions":{"domain":"argv","executable":"git","arguments":{"kind":"any"}}}]}).to_string();
+    let bundle = Bundle::capture(
+        "schema_version: 1\npacks: []\nrules: custom.json\n",
+        &[],
+        Some(&rules),
+    )
+    .unwrap();
+    for cwd in [nested.as_path(), sibling.path()] {
+        let inner = review::mcp::initialize_fixture(cwd, &bundle);
+        assert_ne!(outer.project_id, inner.project_id);
+    }
+    for cwd in [
+        nested.as_path(),
+        sibling.path(),
+        root.path().parent().unwrap(),
+    ] {
+        let host = json!({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_use_id":"authority","session_id":"test","cwd":cwd,"tool_input":{"command":"git reset --hard"}});
+        let value = translate(root.path(), "codex", &serde_json::to_vec(&host).unwrap());
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{value}"
+        );
+    }
 }
 
 #[test]
@@ -851,7 +964,7 @@ fn ripgrep_lists_names_and_searches_bounded_trees_without_reading_protected_stat
             "rg --no-config --files -g '*'",
             "rg --no-config Acme src",
             "rg --no-config -g '*.js' Acme src",
-            "rg --no-config --no-ignore Acme .",
+            "rg --no-config --no-ignore Acme src",
         ] {
             assert_permitted(&call(root.path(), agent, source), agent);
         }
@@ -871,14 +984,20 @@ fn ripgrep_lists_names_and_searches_bounded_trees_without_reading_protected_stat
             );
         }
         let result = call(root.path(), agent, "rg --no-config Acme .");
-        assert!(
-            reason(&result).contains(&Path::new(".shield").join("review").display().to_string()),
-            "{result}"
-        );
-        assert!(
-            reason(&result).contains("Search a narrower path"),
-            "{result}"
-        );
+        assert_eq!(denial_decision(&result), "deny", "{result}");
+        if reason(&result).contains("opencode.json") {
+            assert!(reason(&result).contains("may hold credentials"), "{result}");
+        } else {
+            assert!(
+                reason(&result)
+                    .contains(&Path::new(".shield").join("review").display().to_string()),
+                "{result}"
+            );
+            assert!(
+                reason(&result).contains("Search a narrower path"),
+                "{result}"
+            );
+        }
         // A pattern-only search after a pipe reads the pipe, not the project;
         // a path, closed input or no pipe still walks the directory.
         for source in ["rg --files | rg app", "rg --files | rg -i -m 3 app"] {
@@ -899,6 +1018,8 @@ fn ripgrep_lists_names_and_searches_bounded_trees_without_reading_protected_stat
             let reply = call(root.path(), agent, source);
             let expected = if cfg!(windows) && agent == "codex" && source.contains('|') {
                 "shell dialect"
+            } else if reason(&reply).contains("opencode.json") {
+                "may hold credentials"
             } else {
                 ".shield"
             };
@@ -1333,6 +1454,19 @@ fn tool(root: &Path, agent: &str, name: &str, input: &Value) -> Value {
 
 fn native_host(root: &Path, agent: &str, event: &str, name: &str, input: &Value) -> Value {
     match agent {
+        "copilot" => {
+            let mut host = json!({"timestamp":1,"sessionId":"acme-session","cwd":root,"toolName":name,"toolArgs":input});
+            if event == "postToolUse" {
+                host["toolResult"] = json!({"resultType":"success"});
+            }
+            if event == "postToolUseFailure" {
+                host["error"] = json!("Acme tool failed");
+            }
+            host
+        }
+        "opencode" => {
+            json!({"protocol_version":1,"hook_event_name":event,"cwd":root,"tool":name,"sessionID":"acme-session","callID":"acme-tool","arguments":input,"shell":null})
+        }
         "agy" => {
             json!({"conversationId":"acme-session","workspacePaths":[root],"stepIdx":2,"toolCall":{"name":name,"args":input}})
         }
@@ -1348,6 +1482,7 @@ fn native_host(root: &Path, agent: &str, event: &str, name: &str, input: &Value)
 fn denial_decision(value: &Value) -> &Value {
     value
         .get("decision")
+        .or_else(|| value.get("permissionDecision"))
         .unwrap_or(&value["hookSpecificOutput"]["permissionDecision"])
 }
 
@@ -1953,7 +2088,7 @@ fn native_internal_tools_defer_and_modeled_operations_keep_policy_checks() {
 }
 
 #[test]
-fn every_native_adapter_delegates_unknown_internal_tools_without_policy_history() {
+fn native_adapters_enforce_their_unknown_tool_boundary_without_policy_history() {
     let (root, _) = fixture();
     let before = journal(root.path());
     for adapter in crate::agents::ADAPTERS {
@@ -1966,22 +2101,24 @@ fn every_native_adapter_delegates_unknown_internal_tools_without_policy_history(
             "ReadMcpResourceTool",
         ] {
             let input = json!({"private":"ACME_PRIVATE_INPUT","future_field":{"value":true}});
-            assert_eq!(
-                tool(root.path(), agent, name, &input),
-                json!({}),
-                "{agent}: {name}"
-            );
+            let assert_boundary = |reply: Value, event: Event| {
+                if ["copilot", "opencode"].contains(&agent) && event == Event::Before {
+                    assert_eq!(denial_decision(&reply), "deny", "{agent}: {name}: {reply}");
+                } else {
+                    assert_eq!(reply, json!({}), "{agent}: {name}");
+                }
+            };
+            assert_boundary(tool(root.path(), agent, name, &input), Event::Before);
             for (event_name, event) in adapter.spec().events.iter().copied() {
                 let host = native_host(root.path(), agent, event_name, name, &input);
-                assert_eq!(
+                assert_boundary(
                     translate_for(
                         root.path(),
                         agent,
                         event,
-                        &serde_json::to_vec(&host).unwrap()
+                        &serde_json::to_vec(&host).unwrap(),
                     ),
-                    json!({}),
-                    "{agent}: {name}: {event_name}"
+                    event,
                 );
             }
         }
@@ -2740,6 +2877,7 @@ fn canonical_mcp_recovery_defers_to_host_when_hook_project_state_cannot_open() {
             for tool in [
                 "doctor",
                 "status",
+                "project_enroll",
                 "cache_prepare",
                 "policy_propose",
                 "mcp_setup",
@@ -3039,9 +3177,21 @@ fn powershell_tool_uses_its_own_grammar_and_preserves_claude_policy_decisions() 
         ),
         "claude",
     );
+    for source in ["git status; git status", "& 'git' status"] {
+        assert_permitted(
+            &tool(
+                root.path(),
+                "claude",
+                "PowerShell",
+                &json!({"command":source}),
+            ),
+            "claude",
+        );
+    }
     for (source, expected) in [
         ("git push", "ask"),
         ("git reset --hard", "deny"),
+        ("git status; git reset --hard", "deny"),
         ("Get-Content .shield/review/state.json", "deny"),
         ("git status; Remove-Item .shield", "deny"),
     ] {

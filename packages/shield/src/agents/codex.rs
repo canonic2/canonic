@@ -31,6 +31,15 @@ static SPEC: AgentSpec = AgentSpec {
     approval_action: "Codex cannot prompt here. Submit a revised request; for a recurring need, propose a narrow rule with policy_propose.",
 };
 impl AgentAdapter for Codex {
+    fn accepts_unpinned_hook_events(&self) -> bool {
+        true
+    }
+    fn historical_hook_profiles(&self) -> &'static [&'static [&'static str]] {
+        &[
+            &["PreToolUse", "PostToolUse"],
+            &["PreToolUse", "PermissionRequest", "PostToolUse"],
+        ]
+    }
     fn discover_mcp(
         &self,
         root: &Path,
@@ -54,6 +63,9 @@ impl AgentAdapter for Codex {
         desired: &std::collections::BTreeMap<String, crate::mcp_connections::Transport>,
     ) -> Result<super::SettingsUpdate, Error> {
         connections::merge(source, previous, desired)
+    }
+    fn portable_mcp_launcher(&self) -> bool {
+        true
     }
     fn connection(
         &self,
@@ -232,6 +244,22 @@ impl AgentAdapter for Codex {
     ) -> Result<String, Error> {
         super::setup::repair(source, desired)
     }
+    fn migrate_hooks(
+        &self,
+        source: &str,
+        permitted: &super::setup::PortableHookGroups,
+        desired: &super::setup::HookGroups,
+    ) -> Result<Option<String>, Error> {
+        super::setup::migrate(source, permitted, desired).map(Some)
+    }
+    fn portable_mcp_entry(
+        &self,
+        source: &str,
+        binary: &Path,
+        roots: &[&Path],
+    ) -> Result<Option<String>, Error> {
+        setup::portable_mcp(source, binary, roots).map(Some)
+    }
     fn repair_mcp(&self, before: Option<&str>, desired: Option<&str>) -> Result<String, Error> {
         setup::repair_mcp(before, desired)
     }
@@ -344,7 +372,7 @@ fn operation(host: &Value) -> Option<Value> {
             // An explicitly selected shell stays opaque until its provenance
             // and dialect can be established from the host contract.
             let dialect = if input.contains_key("shell") {
-                "cmd"
+                "unsupported"
             } else if cfg!(windows) {
                 "powershell"
             } else {
@@ -426,7 +454,7 @@ mod tests {
             Value::Null,
         ] {
             host["tool_input"]["shell"] = shell;
-            assert_eq!(operation(&host).unwrap()["dialect"], "cmd");
+            assert_eq!(operation(&host).unwrap()["dialect"], "unsupported");
         }
     }
 

@@ -1,4 +1,5 @@
-//! Optional request-owned spans. Explicit links cross threads; scopes only attach a link.
+//! Shared nonblocking event sink and optional request spans. Explicit links cross
+//! threads; native fixed events create no request or span session.
 use serde_json::{Value, json};
 use std::{
     cell::RefCell,
@@ -18,28 +19,52 @@ use std::{
 
 const QUEUE: usize = 512;
 const SPANS: u64 = 256;
+const RECORD_BYTES: usize = 32 * 1024;
 type Writer = Arc<Mutex<Option<(File, u64)>>>;
 
+enum Message {
+    Record(Value),
+    #[cfg(test)]
+    Flush(mpsc::SyncSender<()>),
+}
+
 pub(crate) struct Recorder {
-    sender: Option<mpsc::SyncSender<Value>>,
+    sender: Option<mpsc::SyncSender<Message>>,
     done: Mutex<mpsc::Receiver<()>>,
     worker: Option<thread::JoinHandle<()>>,
     sequence: AtomicU64,
     dropped: Arc<AtomicU64>,
+    dropped_total: Arc<AtomicU64>,
     epoch: Instant,
+    drain: Duration,
 }
 
 impl Recorder {
-    pub(super) fn new(writer: Writer, epoch: Instant) -> Self {
-        let (sender, records) = mpsc::sync_channel::<Value>(QUEUE);
+    pub(super) fn new(writer: Writer, epoch: Instant, drain: Duration) -> Self {
+        let (sender, records) = mpsc::sync_channel::<Message>(QUEUE);
         let (finished, done) = mpsc::sync_channel(1);
         let dropped = Arc::new(AtomicU64::new(0));
         let loss = dropped.clone();
+        let dropped_total = Arc::new(AtomicU64::new(0));
+        let total = dropped_total.clone();
         let worker = thread::Builder::new()
-            .name("shield-request-trace".into())
+            .name("shield-diagnostics".into())
             .spawn(move || {
-                while let Ok(mut record) = records.recv() {
-                    record["dropped_records"] = json!(loss.swap(0, Ordering::Relaxed));
+                while let Ok(message) = records.recv() {
+                    #[cfg(not(test))]
+                    let Message::Record(mut record) = message;
+                    #[cfg(test)]
+                    let mut record = match message {
+                        Message::Record(record) => record,
+                        Message::Flush(done) => {
+                            let _ = done.send(());
+                            continue;
+                        }
+                    };
+                    // Acquiring a published loss also observes its preceding
+                    // cumulative increment on hosts with weak memory ordering.
+                    record["dropped_records"] = json!(loss.swap(0, Ordering::Acquire));
+                    record["dropped_records_total"] = json!(total.load(Ordering::Relaxed));
                     let Ok(mut writer) = writer.lock() else { break };
                     let Some((file, used)) = writer.as_mut() else {
                         break;
@@ -51,12 +76,12 @@ impl Recorder {
                     if used.saturating_add(bytes.len() as u64).saturating_add(64) > super::LIMIT {
                         let _ = file.write_all(b"{\"event\":\"log_limit_reached\"}\n");
                         *writer = None;
-                        eprintln!("Shield: trace capacity exhausted; diagnostics stopped.");
+                        eprintln!("Shield: diagnostic capacity exhausted; recording stopped.");
                         break;
                     }
                     if file.write_all(&bytes).is_err() {
                         *writer = None;
-                        eprintln!("Shield: trace sink unavailable; diagnostics stopped.");
+                        eprintln!("Shield: diagnostic sink unavailable; recording stopped.");
                         break;
                     }
                     *used += bytes.len() as u64;
@@ -70,7 +95,9 @@ impl Recorder {
             worker,
             sequence: AtomicU64::new(0),
             dropped,
+            dropped_total,
             epoch,
+            drain,
         }
     }
 
@@ -78,12 +105,46 @@ impl Recorder {
         let mut record =
             json!({"event":event,"schema_version":1,"elapsed_us":micros(self.epoch.elapsed())});
         record["fields"] = fields;
+        self.publish(record);
+    }
+
+    pub(super) fn publish(&self, record: Value) {
+        if !crate::json::fits(&record, RECORD_BYTES - 128)
+            || self
+                .sender
+                .as_ref()
+                .is_none_or(|sender| sender.try_send(Message::Record(record)).is_err())
+        {
+            self.dropped_total.fetch_add(1, Ordering::Relaxed);
+            self.dropped.fetch_add(1, Ordering::Release);
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn loss(&self) -> u64 {
+        self.dropped_total.load(Ordering::Relaxed)
+    }
+
+    #[cfg(test)]
+    pub(super) fn take_worker(&mut self) -> thread::JoinHandle<()> {
+        self.worker.take().expect("diagnostic fixture worker")
+    }
+
+    #[cfg(test)]
+    pub(super) fn flush(&self) {
+        let (sender, done) = mpsc::sync_channel(1);
         if self
             .sender
             .as_ref()
-            .is_none_or(|sender| sender.try_send(record).is_err())
+            .is_some_and(|queue| queue.send(Message::Flush(sender)).is_ok())
         {
-            self.dropped.fetch_add(1, Ordering::Relaxed);
+            assert!(
+                !matches!(
+                    done.recv_timeout(Duration::from_secs(1)),
+                    Err(mpsc::RecvTimeoutError::Timeout)
+                ),
+                "diagnostic test writer did not finish"
+            );
         }
     }
 
@@ -114,22 +175,35 @@ impl Recorder {
 impl Drop for Recorder {
     fn drop(&mut self) {
         self.sender.take();
-        if self
+        if self.drain.is_zero() {
+            if self
+                .worker
+                .as_ref()
+                .is_some_and(thread::JoinHandle::is_finished)
+                && let Some(worker) = self.worker.take()
+            {
+                let _ = worker.join();
+            }
+        } else if self
             .done
             .get_mut()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .recv_timeout(Duration::from_millis(5))
+            .recv_timeout(self.drain)
             .is_ok()
         {
             if let Some(worker) = self.worker.take() {
                 let _ = worker.join();
             }
         } else {
-            eprintln!("Shield: trace drain unfinished; diagnostic records may be missing.");
+            eprintln!("Shield: diagnostic drain unfinished; records may be missing.");
         }
-        let dropped = self.dropped.load(Ordering::Relaxed);
+        let dropped = if self.drain.is_zero() {
+            self.dropped_total.load(Ordering::Relaxed)
+        } else {
+            self.dropped.load(Ordering::Relaxed)
+        };
         if dropped != 0 {
-            eprintln!("Shield: {dropped} trace records dropped.");
+            eprintln!("Shield: {dropped} diagnostic records dropped.");
         }
     }
 }
@@ -152,6 +226,17 @@ impl Default for State {
                 ("state.checkpoint_reads", 0),
                 ("storage.sync_calls", 0),
                 ("projection.files_written", 0),
+                ("history.captures", 0),
+                ("history.directory_entries", 0),
+                ("history.read_bytes", 0),
+                ("history.decoded_records", 0),
+                ("history.tail_read_bytes", 0),
+                ("history.rotation_read_bytes", 0),
+                ("history.appended_bytes", 0),
+                ("history.appended_records", 0),
+                ("history.rotations", 0),
+                ("history.control_rewrites", 0),
+                ("history.correlations", 0),
             ]),
         }
     }

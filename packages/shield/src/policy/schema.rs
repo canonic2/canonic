@@ -209,7 +209,7 @@ fn domains() -> Value {
         (
             "shell",
             shell,
-            json!({"dialect":enum_text(&["posix","bash","powershell","cmd"])}),
+            json!({"dialect":enum_text(&["posix","bash","powershell","cmd","unsupported"])}),
             vec!["domain", "source", "dialect"],
         ),
         (
@@ -336,7 +336,7 @@ fn historical_input() -> Value {
         ),
         (
             "shell",
-            json!({"source":string(65536),"dialect":{"enum":["bash","posix","powershell","cmd"]},"dialect_version":nullable(string(1_048_576))}),
+            json!({"source":string(65536),"dialect":{"enum":["bash","posix","powershell","cmd","unsupported"]},"dialect_version":nullable(string(1_048_576))}),
             vec!["source", "dialect"],
         ),
         (
@@ -468,6 +468,21 @@ mod tests {
             };
             nested[field]["tier"] = json!(0);
             assert!(canonic_mcp_kit::schema::validate(&rule_schema(), &nested).is_err());
+        }
+    }
+
+    #[test]
+    fn historical_shell_versions_keep_empty_and_long_retained_values() {
+        for version in [String::new(), "v".repeat(65), "v".repeat(4096)] {
+            let original = json!({"schema_version":1,"rules":[{
+                "schema_version":1,"id":"old-shell","decision":"deny","reason":null,"expires_at":null,
+                "conditions":{"domain":"exact_request","input":{
+                    "kind":"shell","source":"git status","dialect":"powershell","dialect_version":version,"original_input":{}
+                },"context":{"cwd":"/project","environment":{}},"executable":"/bin/powershell"}
+            }]}).to_string();
+            let normalized = crate::policy::normalize_retained_custom(&original).unwrap();
+            canonic_mcp_kit::schema::validate(&rule_schema(), &normalized["rules"][0]).unwrap();
+            crate::policy::CustomRules::from_yaml(&normalized.to_string()).unwrap();
         }
     }
 

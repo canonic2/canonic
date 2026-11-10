@@ -67,16 +67,28 @@ pub(crate) fn decision(context: &Context, mut details: Value) -> Result<Value, E
     // Large selected-pack metadata is diagnostic evidence, not request history.
     // Keep the decision, request, matched rules and source identity when omitting it.
     if !crate::json::fits(&details, 4096) {
+        let mut removed = false;
         if let Some(evaluation) = details["evaluation"].as_object_mut() {
-            evaluation.remove("effective");
+            removed |= evaluation.remove("effective").is_some();
             if let Some(explanation) = evaluation
                 .get_mut("evaluation")
                 .and_then(Value::as_object_mut)
             {
-                explanation.remove("packs");
+                removed |= explanation.remove("packs").is_some();
             }
         }
-        details["missing"] = json!(["selected_pack_metadata"]);
+        if removed {
+            if !details["missing"].is_array() {
+                details["missing"] = json!([]);
+            }
+            if let Some(missing) = details["missing"].as_array_mut()
+                && !missing
+                    .iter()
+                    .any(|field| field == "selected_pack_metadata")
+            {
+                missing.push(json!("selected_pack_metadata"));
+            }
+        }
     }
     Store::open(Path::new(&context.project_root))?.observe(context, |state| {
         if !state.history_enabled {

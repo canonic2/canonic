@@ -86,7 +86,7 @@ pub(in crate::review) fn inspect(project: &Path) -> Result<Previous, Error> {
     };
     let state = match super::upgrades::checkpoint(&bytes) {
         Ok(state) => {
-            saved.validate_checkpoint(&state)?;
+            Store::validate_checkpoint(&state)?;
             state
         }
         Err(_) => super::upgrades::inspect(&saved, &bytes)?,
@@ -145,6 +145,10 @@ fn pins(value: &Value) -> Vec<String> {
         .collect()
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "the enrollment transaction keeps exact source preparation, native projection ownership and durable recovery handoff in one ordered commit"
+)]
 pub(in crate::review) fn commit(
     plan: &Plan,
     mechanism: &str,
@@ -158,10 +162,9 @@ pub(in crate::review) fn commit(
     };
     let store = Store::location(&plan.root)?;
     private_directory(&store.directory)?;
-    let lock = store.lock(checkpoint)?;
+    let publication = crate::review::publication::ProjectionLease::acquire(&plan.root)?;
     if let Some(mut context) = committed(plan)? {
         context.surface = surface.into();
-        lock.release()?;
         return Ok(context);
     }
     checkpoint()?;
@@ -182,13 +185,10 @@ pub(in crate::review) fn commit(
         return Err(Error::StaleSnapshot);
     }
     checkpoint()?;
-    clear_temporaries(&store);
     let mut pending = plan.previous.checkpoint_pins.clone();
     pending.extend(plan.previous.digest.iter().cloned());
-    cleanup(&store, &pending);
     let mut checkpoint_pins = Vec::new();
     if let Some(bytes) = &plan.previous.bytes {
-        retain(&store, bytes)?;
         checkpoint_pins.push(policy::fingerprint(bytes));
     }
     for pin in &plan.previous.checkpoint_pins {
@@ -201,6 +201,9 @@ pub(in crate::review) fn commit(
     }
     checkpoint()?;
     let mut state = fresh(plan)?;
+    if let Ok(observed) = super::incarnation::observe(&store, true) {
+        super::incarnation::stamp(&mut state, &observed);
+    }
     let receipt = json!({"review_fingerprint":plan.fingerprint,"project_id":state.project_id,
         "project_root":state.project_root,"previous_project_root":plan.previous.root,
         "previous_checkpoint":plan.previous.digest,"history_recovery":plan.previous.history_pins,
@@ -212,6 +215,9 @@ pub(in crate::review) fn commit(
         surface,
     );
     let evaluator = configuration::Evaluator::new(crate::review::snapshots(&state.candidates)?)?;
+    let registry_guard =
+        crate::review::registry_trust::guard_effective(&state.operator, evaluator.effective())?;
+    registry_guard.bind_modes(&mut state.operator)?;
     let compiled = crate::review::cache::build_candidate(
         &context,
         &state.candidates,
@@ -220,6 +226,17 @@ pub(in crate::review) fn commit(
         &evaluator,
     )?;
     crate::review::runtime::publish_confirmed(&mut state, &context, None, compiled, mechanism);
+    let (retained, _source_pins) = store.retain_candidates(&state.candidates)?;
+    state.candidates = retained;
+    if let Some(active) = &mut state.active {
+        active.candidates = state.candidates.clone();
+    }
+    let prepared_consent = state
+        .active
+        .as_ref()
+        .and_then(|active| active.project_candidate().ok())
+        .and_then(|reference| store.prepare_policy_consent(reference));
+    super::stamp_policy_consent(&mut state.operator, prepared_consent.as_ref());
     let mut event = state.event(
         "project_enrolled",
         &context,
@@ -229,19 +246,42 @@ pub(in crate::review) fn commit(
     );
     event["operator"] = json!({"operator_id":null,"display_name":null,"mechanism":mechanism});
     state.record(event);
-    store.validate_checkpoint(&state)?;
+    Store::validate_checkpoint(&state)?;
     store.ignore_local_state();
     // Keep observational evidence of the previous identity as recovery data.
     // The new history generation does not read or import those observations.
     checkpoint()?;
-    let result = store.write(&state);
+    publication.check(&context)?;
+    let lock = store.lock(checkpoint)?;
+    let latest = match store.checkpoint_bytes() {
+        Ok(bytes) => Some(policy::fingerprint(&bytes)),
+        Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    if latest != plan.previous.digest
+        || crate::review::bootstrap::prepare_options(
+            &plan.root,
+            plan.requested_launch.as_deref(),
+            plan.requested_cache.as_deref(),
+        )?
+        .fingerprint
+            != plan.fingerprint
+    {
+        return Err(Error::StaleSnapshot);
+    }
+    clear_temporaries(&store);
+    cleanup(&store, &pending);
+    if let Some(bytes) = &plan.previous.bytes {
+        retain(&store, bytes)?;
+    }
+    let result = store.write(&mut state);
     if result.is_err() {
         let committed = store
             .checkpoint_bytes()
             .ok()
             .and_then(|bytes| super::upgrades::checkpoint(&bytes).ok())
             .is_some_and(|saved| {
-                store.validate_checkpoint(&saved).is_ok()
+                Store::validate_checkpoint(&saved).is_ok()
                     && saved.project_id == state.project_id
                     && enrollment(&saved, &receipt)
             });
@@ -251,17 +291,26 @@ pub(in crate::review) fn commit(
     }
     cleanup(&store, &checkpoint_pins);
     lock.release()?;
+    crate::review::configuration_changes::export(&mut state);
+    store.finish_policy_consent(
+        prepared_consent,
+        state
+            .active
+            .as_ref()
+            .map(crate::review::runtime::Active::activation_id),
+    );
     Ok(context)
 }
 
 fn fresh(plan: &Plan) -> Result<State, Error> {
-    let project_id = history::identifier(
-        "project",
-        &policy::fingerprint(plan.root.to_string_lossy().as_bytes()),
-    )?;
+    let project_id = history::identifier("project", &policy::fingerprint(b"shield-project"))?;
     let project_id = policy::fingerprint(project_id.as_bytes());
     Ok(State {
+        legacy_preview: None,
+        remember_policy: false,
+        administration_copy: None,
         history_generation: history::generation()?,
+        history_owner: None,
         history_available: true,
         pending_history: vec![],
         history_rewrite: None,
@@ -283,11 +332,14 @@ fn fresh(plan: &Plan) -> Result<State, Error> {
         read_requests: vec![],
         run_requests: vec![],
         hook_requests: vec![],
+        terminal_receipts: crate::review::authorization_receipts::Registry::default(),
         session_grants: crate::review::session_grants::Registry::default(),
         proposals: vec![],
         policy_drafts: vec![],
         dismissed_reviews: vec![],
         events: vec![],
+        configuration_changes: crate::review::configuration_changes::Log::default(),
+        configuration_changes_dirty: false,
         authorization_events: vec![],
         history_enabled: true,
         enforcement: crate::review::mode::Mode::default(),
@@ -300,7 +352,7 @@ fn fresh(plan: &Plan) -> Result<State, Error> {
 pub(in crate::review) fn current_enrollment(project: &Path) -> Result<State, Error> {
     let store = Store::open(project)?;
     let state = super::upgrades::checkpoint(&store.checkpoint_bytes()?)?;
-    store.validate_checkpoint(&state)?;
+    Store::validate_checkpoint(&state)?;
     Ok(state)
 }
 
@@ -318,7 +370,7 @@ pub(in crate::review) fn enrollment(state: &State, receipt: &Value) -> bool {
         })
 }
 
-fn retain(store: &Store, bytes: &[u8]) -> Result<(), Error> {
+pub(super) fn retain(store: &Store, bytes: &[u8]) -> Result<(), Error> {
     let target = store
         .directory
         .join(format!("bootstrap-{}.json", policy::fingerprint(bytes)));
@@ -327,6 +379,7 @@ fn retain(store: &Store, bytes: &[u8]) -> Result<(), Error> {
             if recovery_bytes(&target)? != bytes {
                 return Err(Error::Invalid("enrollment recovery source differs"));
             }
+            super::history::inline::retain(store, bytes, "bootstrap");
             return Ok(());
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -351,6 +404,7 @@ fn retain(store: &Store, bytes: &[u8]) -> Result<(), Error> {
     super::tests::observe(super::tests::Stage::Synced);
     drop(file);
     super::replace(&temporary.path, &target)?;
+    super::history::inline::retain(store, bytes, "bootstrap");
     #[cfg(test)]
     super::tests::observe(super::tests::Stage::Renamed);
     #[cfg(unix)]
@@ -395,7 +449,7 @@ pub(in crate::review) fn committed(plan: &Plan) -> Result<Option<Context>, Error
     let Ok(state) = super::upgrades::checkpoint(&bytes) else {
         return Ok(None);
     };
-    if store.validate_checkpoint(&state).is_err()
+    if Store::validate_checkpoint(&state).is_err()
         || state.operator["bootstrap"]["review_fingerprint"] != plan.fingerprint
         || !enrollment(&state, &state.operator["bootstrap"])
     {
@@ -457,7 +511,7 @@ fn recovery_bytes(path: &Path) -> Result<Vec<u8>, Error> {
     Ok(bytes)
 }
 
-fn cleanup(store: &Store, keep: &[String]) {
+pub(super) fn cleanup(store: &Store, keep: &[String]) {
     let Ok(entries) = fs::read_dir(&store.directory) else {
         return;
     };
@@ -473,8 +527,10 @@ fn cleanup(store: &Store, keep: &[String]) {
         if !digest(pin) || keep.iter().any(|kept| kept == pin) {
             continue;
         }
-        if recovery_bytes(&entry.path()).is_ok_and(|bytes| policy::fingerprint(&bytes) == pin) {
-            let _ = fs::remove_file(entry.path());
+        if recovery_bytes(&entry.path()).is_ok_and(|bytes| policy::fingerprint(&bytes) == pin)
+            && fs::remove_file(entry.path()).is_ok()
+        {
+            super::history::inline::remove(store, pin, "bootstrap");
         }
     }
 }

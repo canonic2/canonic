@@ -2,12 +2,18 @@
 use serde_json::{Value, json};
 
 pub(super) fn summary(proposal: &super::Proposal) -> Value {
-    let comparison = &proposal.comparison;
-    let before = packs(&proposal.base_candidate);
-    let after = if proposal.base_candidate["packs"] == proposal.candidate["packs"] {
+    captured(
+        &proposal.base_candidate,
+        &proposal.candidate,
+        &proposal.comparison,
+    )
+}
+pub(super) fn captured(base: &Value, candidate: &Value, comparison: &Value) -> Value {
+    let before = packs(base);
+    let after = if base["packs"] == candidate["packs"] {
         before.clone()
     } else {
-        packs(&proposal.candidate)
+        packs(candidate)
     };
     let mut summary = json!({"packs":{"before":before,"after":after},
         "comparison":{"relation":comparison["relation"],"complete":comparison["complete"],

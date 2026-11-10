@@ -4,12 +4,16 @@ mod arithmetic;
 mod bindings;
 mod brace;
 mod budget;
+mod cmd;
 mod control;
+mod cwd;
 mod expansion;
 mod flow;
+mod native;
 mod powershell;
 mod provenance;
 mod redirection;
+mod report;
 mod state;
 mod structure;
 mod words;
@@ -19,6 +23,10 @@ use crate::{
     configuration::Evaluator,
     policy::{Decision, Error, Request},
 };
+#[cfg(test)]
+use report::ReportCoverage;
+pub(crate) use report::{Coverage, Operation, PolicyRequest, Report, SourceUnit};
+use report::{Data, Facts as ReportFacts, Invocation, Parent as SourceParent, Transition};
 use serde_json::{Value, json};
 use state::{FunctionBinding, State, state_effect, taint};
 use std::{collections::BTreeMap, rc::Rc};
@@ -36,10 +44,12 @@ pub enum Dialect {
     Posix,
     /// Bash quoting for the bounded literal subset; history syntax is opaque.
     Bash,
-    /// A bounded single native invocation; other PowerShell syntax is opaque.
+    /// Common-version literal native PowerShell invocations and sequences.
     Powershell,
-    /// No cmd.exe parsing is currently implemented.
+    /// Bounded literal native cmd invocations and command chains.
     Cmd,
+    /// A selected shell whose actual dialect has not been established.
+    Unsupported,
 }
 
 /// Preview structured literal shell operations, conservatively aggregating every branch.
@@ -92,7 +102,65 @@ pub(crate) fn analyze_with_working_files(
     checkpoint: &dyn Fn() -> Result<(), Error>,
     working_files: Option<&crate::location::WorkingFiles>,
 ) -> Result<Value, Error> {
+    analyze_versioned_with_working_files(
+        source,
+        dialect,
+        None,
+        cwd,
+        environment,
+        project,
+        evaluator,
+        checkpoint,
+        working_files,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "preserves reported dialect version alongside request-owned shell observations"
+)]
+pub(crate) fn analyze_versioned_with_working_files(
+    source: &str,
+    dialect: Dialect,
+    dialect_version: Option<&str>,
+    cwd: &str,
+    environment: Option<&BTreeMap<String, String>>,
+    project: &str,
+    evaluator: &Evaluator,
+    checkpoint: &dyn Fn() -> Result<(), Error>,
+    working_files: Option<&crate::location::WorkingFiles>,
+) -> Result<Value, Error> {
+    analyze_versioned_report_with_working_files(
+        source,
+        dialect,
+        dialect_version,
+        cwd,
+        environment,
+        project,
+        evaluator,
+        checkpoint,
+        working_files,
+    )?
+    .into_value()
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "preserves the existing explicit shell analysis context"
+)]
+pub(crate) fn analyze_versioned_report_with_working_files(
+    source: &str,
+    dialect: Dialect,
+    dialect_version: Option<&str>,
+    cwd: &str,
+    environment: Option<&BTreeMap<String, String>>,
+    project: &str,
+    evaluator: &Evaluator,
+    checkpoint: &dyn Fn() -> Result<(), Error>,
+    working_files: Option<&crate::location::WorkingFiles>,
+) -> Result<Report, Error> {
     checkpoint()?;
+    validate_version(dialect_version)?;
     if source.len() > 65_536 {
         return Err(Error::Limit);
     }
@@ -118,8 +186,11 @@ pub(crate) fn analyze_with_working_files(
     let tree = match dialect {
         Dialect::Posix | Dialect::Bash => structure::parse(source, dialect, checkpoint)?,
         Dialect::Powershell => powershell::parse(source, checkpoint)?.unwrap_or_else(opaque),
-        Dialect::Cmd => opaque(),
+        Dialect::Cmd => cmd::parse(source, checkpoint)?.unwrap_or_else(opaque),
+        Dialect::Unsupported => opaque(),
     };
+    let native = matches!(dialect, Dialect::Powershell | Dialect::Cmd)
+        && !matches!(tree, Node::Opaque { .. });
     // Missing inputs are inert only when nothing else in the request can
     // create them first. This observation adds no adapter file permissions.
     let sole = sole_filter(&tree).then(|| crate::location::WorkingFiles {
@@ -132,6 +203,7 @@ pub(crate) fn analyze_with_working_files(
         working_files,
         checkpoint,
         context,
+        directories: crate::location::directory::Directories::new(),
         clients: ClientEnvironment {
             node_preload: environment
                 .and_then(|environment| environment.get("NODE_OPTIONS"))
@@ -139,6 +211,8 @@ pub(crate) fn analyze_with_working_files(
             http_configuration: environment
                 .is_some_and(crate::http_client::environment_changes_request),
             inherited: environment.map(|environment| environment.keys().cloned().collect()),
+            cdpath_empty: environment
+                .is_some_and(|environment| environment.get("CDPATH").is_none_or(String::is_empty)),
         },
         operations: Vec::new(),
         evidence_bytes: 0,
@@ -146,35 +220,81 @@ pub(crate) fn analyze_with_working_files(
         dialect,
         nested_bytes: source.len(),
         source_unit: 0,
-        source_units: vec![json!({"source":source,"dialect":dialect,"parent":null})],
+        source_units: vec![SourceUnit {
+            source: source.into(),
+            dialect,
+            dialect_version: dialect_version.map(str::to_owned),
+            parent: None,
+            structure: None,
+        }],
         frames: Vec::new(),
         suppressed: false,
         exit_bytes: 0,
     };
     // Shells set IFS at startup rather than importing it from the environment.
     let mut state = State::default();
+    state.cwd_paths.push(cwd::Directory {
+        physical: cwd.into(),
+        previous: None,
+        logical: environment
+            .and_then(|environment| environment.get("PWD"))
+            .filter(|reported| reported.as_str() == cwd)
+            .cloned(),
+        derived: false,
+    });
     state
         .variables
         .insert("IFS".into(), expansion::DEFAULT_IFS.into());
     let decision = analysis.visit(&tree, &mut state, 0)?;
     checkpoint()?;
-    let single = matches!(tree, Node::Command { .. }) && analysis.complete;
-    let request = if single {
-        analysis.operations[0]["request"].clone()
-    } else {
-        Value::Null
-    };
-    let evidence = if single {
-        analysis.operations[0]["evaluation"].clone()
-    } else {
-        Value::Null
-    };
-    let result = json!({"schema_version":2,"mode":"preview","model":"structured-literal-shell-v2","dialect":dialect,"source":source,"span":{"start":0,"end":source.len()},
-        "coverage":if analysis.complete { if single { "single-literal-invocation" } else { "structured-literal-operations" } } else { "partial" },
-        "decision":decision,"request":request,"evaluation":evidence,"structure":tree,"operations":analysis.operations,"source_units":analysis.source_units,"policy_revision":evaluator.revision(),
-        "permission_domain":"literal-argv"});
+    let result = Report::new(
+        decision,
+        dialect,
+        dialect_version,
+        source,
+        analysis.operations,
+        analysis.source_units,
+        evaluator.revision(),
+        tree,
+        analysis.complete,
+        native,
+        checkpoint,
+    )?;
     budget::measure(&result, budget::MAX_EVIDENCE_BYTES, checkpoint)?;
     Ok(result)
+}
+
+pub(crate) fn validate_version(version: Option<&str>) -> Result<(), Error> {
+    if version.is_some_and(|version| {
+        version.is_empty() || version.len() > 64 || version.chars().any(char::is_control)
+    }) {
+        return Err(Error::Contract(
+            "shell dialect version must be bounded reported text",
+        ));
+    }
+    Ok(())
+}
+
+/// Only coverage produced by the complete dedicated native parser is admitted.
+pub(crate) fn supported_dialect(analysis: &Value) -> bool {
+    match analysis["dialect"].as_str() {
+        Some("bash" | "posix") => true,
+        Some("powershell" | "cmd") => {
+            analysis["native_coverage"] == "literal-native-v1"
+                && matches!(
+                    analysis["coverage"].as_str(),
+                    Some("single-literal-invocation" | "structured-literal-operations")
+                )
+        }
+        _ => false,
+    }
+}
+
+pub(crate) fn opaque_native(analysis: &Value) -> bool {
+    matches!(
+        analysis["dialect"].as_str(),
+        Some("powershell" | "cmd" | "unsupported")
+    ) && !supported_dialect(analysis)
 }
 
 struct Analysis<'a> {
@@ -182,14 +302,15 @@ struct Analysis<'a> {
     working_files: Option<&'a crate::location::WorkingFiles>,
     checkpoint: &'a dyn Fn() -> Result<(), Error>,
     context: Request,
+    directories: crate::location::directory::Directories,
     clients: ClientEnvironment,
-    operations: Vec<Value>,
+    operations: Vec<Operation>,
     evidence_bytes: usize,
     complete: bool,
     dialect: Dialect,
     nested_bytes: usize,
     source_unit: usize,
-    source_units: Vec<Value>,
+    source_units: Vec<SourceUnit>,
     frames: Vec<control::Frame>,
     suppressed: bool,
     exit_bytes: usize,
@@ -201,6 +322,43 @@ struct ClientEnvironment {
     http_configuration: bool,
     /// Names of the reported environment, when the host reported one.
     inherited: Option<std::collections::BTreeSet<String>>,
+    cdpath_empty: bool,
+}
+
+fn redirection_actions(operator: &str) -> &'static [&'static str] {
+    match operator {
+        "<" => &["read"],
+        "<>" => &["read", "write"],
+        ">" | ">|" | ">>" | "&>" | "&>>" => &["write"],
+        _ => &[],
+    }
+}
+
+/// Syntax-only redirections open no ordinary path; their expansions and any
+/// interpreter bodies still pass through the surrounding traversal.
+fn inert_redirection(redirect: &structure::Redirection) -> Option<Coverage> {
+    if matches!(redirect.operator.as_str(), "<<" | "<<-" | "<<<")
+        && redirect
+            .descriptor
+            .as_ref()
+            .is_none_or(|descriptor| descriptor.parse::<u32>().is_ok())
+        && (redirect.operator == "<<<" || redirect.heredoc.is_some())
+    {
+        Some(Coverage::InlineInputRedirection)
+    } else if !redirection_actions(&redirect.operator).is_empty()
+        && redirect.target.literal.as_deref() == Some("/dev/null")
+    {
+        Some(Coverage::NullDeviceRedirection)
+    } else if ["<&", ">&"].contains(&redirect.operator.as_str())
+        && redirect.target.literal.as_deref().is_some_and(|value| {
+            let number = value.strip_suffix('-').unwrap_or(value);
+            value == "-" || (!number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit()))
+        })
+    {
+        Some(Coverage::DescriptorDuplication)
+    } else {
+        None
+    }
 }
 
 impl Analysis<'_> {
@@ -237,13 +395,22 @@ impl Analysis<'_> {
             // child, and zsh ties names such as `path` to PATH. Only a literal
             // value, unlike `$!` or `$(…)`, can be written into the commands.
             let coverage = if prefix < words.len() {
-                "assignment-prefix"
+                Coverage::AssignmentPrefix
             } else if words.iter().all(|word| word.literal.is_some()) {
-                "shell-assignment"
+                Coverage::ShellAssignment
             } else {
-                "computed-assignment"
+                Coverage::ComputedAssignment
             };
-            self.record(json!({"span":span,"coverage":coverage,"assignments":words[..prefix],"decision":"ask"}))?;
+            self.record(
+                Operation::new(
+                    coverage,
+                    Decision::Ask,
+                    Data::Assignments {
+                        assignments: words[..prefix].to_vec(),
+                    },
+                )
+                .at(span),
+            )?;
             if prefix == words.len() {
                 state.environment_unknown = true;
                 bindings::assignments(words, state, self.dialect, false)?;
@@ -295,7 +462,11 @@ impl Analysis<'_> {
             }],
         );
         state.defined_functions.insert(name.into());
-        self.record(json!({"coverage":"function-definition","name":name,"decision":"ask"}))?;
+        self.record(Operation::new(
+            Coverage::FunctionDefinition,
+            Decision::Ask,
+            Data::Named { name: name.into() },
+        ))?;
         Ok(Decision::Ask)
     }
 
@@ -307,15 +478,22 @@ impl Analysis<'_> {
         depth: usize,
     ) -> Result<Decision, Error> {
         let flow = redirection::analyze(redirections);
+        // Descriptor evidence moves into the report; traversal needs only the
+        // final stdin target to find interpreter bodies supplied by redirects.
+        let stdin = flow.stdin.clone();
         let mut decision = if flow.syntax_complete {
             Decision::Allow
         } else {
             Decision::Ask
         };
         if !redirections.is_empty() {
-            self.record(
-                json!({"coverage":"descriptor-flow","descriptor_flow":flow,"decision":decision}),
-            )?;
+            self.record(Operation::new(
+                Coverage::DescriptorFlow,
+                decision,
+                Data::Descriptor {
+                    descriptor_flow: flow,
+                },
+            ))?;
         }
         for (index, redirection) in redirections.iter().enumerate() {
             let opened = self.file_redirection(redirection, state)?;
@@ -335,7 +513,7 @@ impl Analysis<'_> {
                     }
                 }
                 if let Some(dialect) = stdin_shell(words, state)
-                    && flow.stdin == (redirection::Target::Heredoc { index })
+                    && stdin == (redirection::Target::Heredoc { index })
                     && !body.source.trim().is_empty()
                 {
                     let previous = self.dialect;
@@ -364,7 +542,7 @@ impl Analysis<'_> {
                     state,
                     depth,
                 )?);
-                if flow.stdin == (redirection::Target::HereString { index })
+                if stdin == (redirection::Target::HereString { index })
                     && let Some(dialect) = stdin_shell(words, state)
                     && let Some(source) = &redirection.target.literal
                     && !source.trim().is_empty()
@@ -397,61 +575,41 @@ impl Analysis<'_> {
     fn file_redirection(
         &mut self,
         redirect: &structure::Redirection,
-        state: &State,
+        state: &mut State,
     ) -> Result<Decision, Error> {
         use crate::policy::normalized::{Context, Input};
-        // Inline input opens no path. Its expansions and any interpreter body
-        // are checked separately by redirections(), as is the output file.
-        if matches!(redirect.operator.as_str(), "<<" | "<<-" | "<<<")
-            && redirect
-                .descriptor
-                .as_ref()
-                .is_none_or(|descriptor| descriptor.parse::<u32>().is_ok())
-            && (redirect.operator == "<<<" || redirect.heredoc.is_some())
-        {
+        if let Some(coverage) = inert_redirection(redirect) {
             self.record(
-                json!({"span":redirect.span,"coverage":"inline-input-redirection",
-                "redirection":redirect,"decision":"allow"}),
+                Operation::new(
+                    coverage,
+                    Decision::Allow,
+                    Data::Redirection {
+                        redirection: redirect.clone(),
+                        context: None,
+                    },
+                )
+                .at(redirect.span),
             )?;
             return Ok(Decision::Allow);
         }
-        let actions: &[&str] = match redirect.operator.as_str() {
-            "<" => &["read"],
-            "<>" => &["read", "write"],
-            ">" | ">|" | ">>" | "&>" | "&>>" => &["write"],
-            _ => &[],
-        };
-        // The null device discards writes and reads as empty, so it needs no
-        // location evidence or policy and holds even when cwd is unknown.
-        if !actions.is_empty() && redirect.target.literal.as_deref() == Some("/dev/null") {
-            self.record(
-                json!({"span":redirect.span,"coverage":"null-device-redirection",
-                "redirection":redirect,"decision":"allow"}),
-            )?;
-            return Ok(Decision::Allow);
-        }
-        // Copying, moving or closing a numbered descriptor opens no file; the
-        // descriptor flow records where each stream ends up.
-        if ["<&", ">&"].contains(&redirect.operator.as_str())
-            && redirect.target.literal.as_deref().is_some_and(|value| {
-                let number = value.strip_suffix('-').unwrap_or(value);
-                value == "-" || (!number.is_empty() && number.bytes().all(|b| b.is_ascii_digit()))
-            })
-        {
-            self.record(
-                json!({"span":redirect.span,"coverage":"descriptor-duplication",
-                "redirection":redirect,"decision":"allow"}),
-            )?;
-            return Ok(Decision::Allow);
-        }
+        let actions = redirection_actions(&redirect.operator);
         let Some(path) = redirect
             .target
             .literal
             .as_deref()
             .filter(|_| !state.cwd_unknown && !actions.is_empty())
         else {
-            self.record(json!({"span":redirect.span,"coverage":"redirection","redirection":redirect,"decision":"ask",
-                "cwd":self.context.cwd,"context":{"cwd_known":!state.cwd_unknown}}))?;
+            self.record(
+                Operation::new(
+                    Coverage::Redirection,
+                    Decision::Ask,
+                    Data::Redirection {
+                        redirection: redirect.clone(),
+                        context: Some(ReportFacts::cwd(!state.cwd_unknown)),
+                    },
+                )
+                .at(redirect.span),
+            )?;
             return Ok(Decision::Ask);
         };
         let context = Context {
@@ -479,8 +637,23 @@ impl Analysis<'_> {
                 self.checkpoint,
             )?;
             decision = decision.max(evaluation.decision);
-            self.record(json!({"span":redirect.span,"coverage":"file-redirection","normalized_request":input,
-                "evaluation":evaluation,"decision":evaluation.decision,"context":{"cwd_known":true}}))?;
+            self.record(
+                Operation::new(
+                    Coverage::FileRedirection,
+                    evaluation.decision,
+                    Data::File {
+                        normalized_request: input,
+                        evaluation: Box::new(evaluation),
+                        context: ReportFacts::cwd(true),
+                    },
+                )
+                .at(redirect.span),
+            )?;
+        }
+        if actions.contains(&"write") {
+            // Opening a regular output can change later observations, but it
+            // does not rename the shell's already observed directory.
+            state.filesystem_unknown = true;
         }
         Ok(decision)
     }
@@ -515,18 +688,34 @@ impl Analysis<'_> {
         let nested = structure::parse(source, self.dialect, self.checkpoint)?;
         let old_unit = self.source_unit;
         self.source_unit = self.source_units.len();
-        self.source_units.push(json!({"source":source,"dialect":self.dialect,"parent":{"source_unit":old_unit,"span":span,"kind":kind},"structure":nested}));
+        let unit = self.source_unit;
+        self.source_units.push(SourceUnit {
+            source: source.into(),
+            dialect: self.dialect,
+            dialect_version: None,
+            parent: Some(SourceParent {
+                source_unit: old_unit,
+                span,
+                kind: kind.into(),
+            }),
+            structure: None,
+        });
         let result = self.visit(&nested, state, depth + 1);
+        self.source_units[unit].structure = Some(nested);
         self.source_unit = old_unit;
         result
     }
 
-    fn record(&mut self, mut operation: Value) -> Result<(), Error> {
+    fn record(&mut self, mut operation: Operation) -> Result<(), Error> {
         if self.operations.len() >= 256 {
             return Err(Error::Limit);
         }
-        operation["source_unit"] = json!(self.source_unit);
-        operation["dialect"] = json!(self.dialect);
+        operation.source_unit = self.source_unit;
+        operation.cwd.clone_from(match &operation.data {
+            Data::Invocation { request, .. } => &request.cwd,
+            _ => &self.context.cwd,
+        });
+        operation.dialect = self.dialect;
         self.evidence_bytes += budget::measure(
             &operation,
             budget::MAX_EVIDENCE_BYTES.saturating_sub(self.evidence_bytes),
@@ -556,7 +745,7 @@ impl Analysis<'_> {
         let words = resolved.as_slice();
         if words.is_empty() {
             self.complete = false;
-            self.record(json!({"span":span,"coverage":"opaque","decision":"ask"}))?;
+            self.record(Operation::new(Coverage::Opaque, Decision::Ask, Data::Empty {}).at(span))?;
             return Ok(Decision::Ask);
         }
         let wrapper = wrapper_offset(words).filter(|_| {
@@ -584,7 +773,12 @@ impl Analysis<'_> {
         {
             self.complete = false;
             self.record(
-                json!({"span":span,"coverage":"function-call","name":name,"decision":"ask"}),
+                Operation::new(
+                    Coverage::FunctionCall,
+                    Decision::Ask,
+                    Data::Named { name: name.into() },
+                )
+                .at(span),
             )?;
             return Ok(self
                 .function_calls(words, bindings, state, depth, operand_state)?
@@ -613,14 +807,17 @@ impl Analysis<'_> {
                     &mut self.exit_bytes,
                 )?;
                 state_effect(name, None, state);
+                state.command_outcomes();
                 return Ok(expansions.max(decision));
             }
             state.cwd_unknown = true;
+            state.filesystem_unknown = true;
+            state.command_outcomes();
             state.environment_unknown = true;
             state.brace_expansion = None;
             state.variables.clear();
             state.defined_functions.clear();
-            self.record(json!({"span":span,"coverage":"opaque","decision":"ask"}))?;
+            self.record(Operation::new(Coverage::Opaque, Decision::Ask, Data::Empty {}).at(span))?;
             return Ok(expansions.max(Decision::Ask));
         };
         // A wrapper launches the real command itself, so the pipe is not
@@ -666,9 +863,27 @@ impl Analysis<'_> {
                 break;
             }
         }
-        self.record(json!({"span":span,"coverage":if status_only { "runtime-status-arguments" } else { "opaque-arguments" },"decision":decision,
-            "request":request,"evaluation":evaluation,"evaluation_model":"known-executable-restriction-bound",
-            "context":{"cwd_known":!state.cwd_unknown,"environment_known":!state.environment_unknown,"arguments_known":false}}))?;
+        self.record(
+            Operation::new(
+                if status_only {
+                    Coverage::RuntimeStatusArguments
+                } else {
+                    Coverage::OpaqueArguments
+                },
+                decision,
+                Data::Invocation {
+                    request,
+                    evaluation: Box::new(evaluation),
+                    detail: Box::new(Invocation::Bound {
+                        evaluation_model: "known-executable-restriction-bound",
+                        context: ReportFacts::cwd(!state.cwd_unknown)
+                            .environment(!state.environment_unknown)
+                            .arguments(false),
+                    }),
+                },
+            )
+            .at(span),
+        )?;
         Ok(decision)
     }
 
@@ -699,13 +914,32 @@ impl Analysis<'_> {
             self.checkpoint,
         )?;
         let decision = evaluation.decision.max(Decision::Ask);
-        self.record(json!({"span":span,"coverage":"background-job-kill","decision":decision,
-            "request":request,"evaluation":evaluation,"targets":targets,
-            "runtime_ownership":"unverified","evaluation_model":"known-executable-restriction-bound",
-            "context":{"cwd_known":!state.cwd_unknown,"environment_known":!state.environment_unknown,"arguments_known":false}}))?;
+        self.record(
+            Operation::new(
+                Coverage::BackgroundJobKill,
+                decision,
+                Data::Invocation {
+                    request,
+                    evaluation: Box::new(evaluation),
+                    detail: Box::new(Invocation::Kill {
+                        targets: targets.to_vec(),
+                        runtime_ownership: "unverified",
+                        evaluation_model: "known-executable-restriction-bound",
+                        context: ReportFacts::cwd(!state.cwd_unknown)
+                            .environment(!state.environment_unknown)
+                            .arguments(false),
+                    }),
+                },
+            )
+            .at(span),
+        )?;
         Ok(decision)
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one command transition records evidence before nested code and applies cwd/status outcomes in that order"
+    )]
     fn literal_command(
         &mut self,
         span: structure::Span,
@@ -720,7 +954,25 @@ impl Analysis<'_> {
             ..self.context.clone()
         };
         let loop_transfer = control::resolved_loop_transfer(words, &self.frames);
-        let same_directory = !state.cwd_unknown && same_directory(words, &request.cwd);
+        let same_directory = !state.cwd_unknown
+            && same_directory(words, &request.cwd)
+            && (!state.filesystem_unknown
+                || words
+                    .last()
+                    .is_some_and(|target| matches!(target.as_str(), "." | "./")));
+        let directory_change = words[0] == "cd" && !same_directory;
+        let target_directory = if directory_change {
+            cwd::resolve(
+                words,
+                state,
+                self.clients.cdpath_empty,
+                &self.directories,
+                self.checkpoint,
+            )?
+        } else {
+            None
+        };
+        let resolved_directory = target_directory.is_some();
         let syntax_check = !self.clients.node_preload
             && crate::location::node_check_file(
                 &words[0],
@@ -732,6 +984,7 @@ impl Analysis<'_> {
             && !builtin_query(words)
             && !syntax_check
             && !same_directory
+            && !resolved_directory
             && !loop_transfer)
             || find_launches(words)
             || bindings::printf_mutates(words);
@@ -752,23 +1005,52 @@ impl Analysis<'_> {
         if loop_transfer && evaluation.unmatched_ask() {
             decision = Decision::Allow;
         }
-        if same_directory && evaluation.fallback_only_ask() {
+        if (same_directory || resolved_directory) && evaluation.fallback_only_ask() {
             decision = Decision::Allow;
         }
         if opaque || unknown_context {
             self.complete = false;
             decision = decision.max(Decision::Ask);
         }
-        let mut operation = json!({"span":span,"request":request,"evaluation":evaluation,"decision":decision,"effects":effects,
-            "coverage":if same_directory { "unchanged-working-directory" } else if loop_transfer && decision == Decision::Allow { "resolved-control-transfer" } else if opaque || unknown_context { "partial" } else { "literal-argv" },
-            "evaluation_model":if state.cwd_unknown { "cwd-independent-restriction-bound" } else { "literal-argv" },
-            "context":{"cwd_known":!state.cwd_unknown,"environment_known":!state.environment_unknown},
-            "policy_request":policy_request});
-        // Lets file checks tell a filter reading the pipe from a file search.
-        if piped {
-            operation["stdin"] = json!("pipe");
-        }
-        self.record(operation)?;
+        let transition = target_directory.as_ref().map(|target| Transition {
+            cwd_success: target.physical.clone(),
+            cwd_failure: request.cwd.clone(),
+            logical_cwd_success: target.logical.clone(),
+        });
+        self.record(
+            Operation::new(
+                if same_directory {
+                    Coverage::UnchangedWorkingDirectory
+                } else if resolved_directory {
+                    Coverage::ObservedWorkingDirectoryChange
+                } else if loop_transfer && decision == Decision::Allow {
+                    Coverage::ResolvedControlTransfer
+                } else if opaque || unknown_context {
+                    Coverage::Partial
+                } else {
+                    Coverage::LiteralArgv
+                },
+                decision,
+                Data::Invocation {
+                    request,
+                    evaluation: Box::new(evaluation),
+                    detail: Box::new(Invocation::Literal {
+                        effects: effects.map(Box::new),
+                        evaluation_model: if state.cwd_unknown {
+                            "cwd-independent-restriction-bound"
+                        } else {
+                            "literal-argv"
+                        },
+                        context: ReportFacts::cwd(!state.cwd_unknown)
+                            .environment(!state.environment_unknown),
+                        policy_request: policy_request.map(Box::new),
+                        transition,
+                        stdin: piped.then_some("pipe"),
+                    }),
+                },
+            )
+            .at(span),
+        )?;
         decision = decision.max(self.shell_script(words, span, state, depth, "shell-c-script")?);
         let eval = self.eval_script(words, span, state, depth)?;
         if let Some(result) = eval {
@@ -784,12 +1066,20 @@ impl Analysis<'_> {
         {
             self.complete = false;
             self.record(
-                json!({"span":span,"coverage":"control-transfer","name":words[0],"decision":"ask"}),
+                Operation::new(
+                    Coverage::ControlTransfer,
+                    Decision::Ask,
+                    Data::Named {
+                        name: words[0].clone(),
+                    },
+                )
+                .at(span),
             )?;
             decision = decision.max(Decision::Ask);
         }
         if opaque
             && eval.is_none()
+            && !directory_change
             && !(self.dialect == Dialect::Bash && bindings::local_declaration(words, state))
         {
             state_effect(&words[0], Some(&words[1..]), state);
@@ -799,6 +1089,15 @@ impl Analysis<'_> {
             // old bindings for later expansions of PWD or OLDPWD.
             state.variables.remove("PWD");
             state.variables.remove("OLDPWD");
+            cwd::unchanged(state);
+        }
+        if directory_change {
+            cwd::change(state, target_directory);
+            state.variables.remove("PWD");
+            state.variables.remove("OLDPWD");
+        } else if filesystem_may_change(words, syntax_check) {
+            state.filesystem_mutation();
+            state.command_outcomes();
         }
         Ok(decision.max(indirect))
     }
@@ -807,7 +1106,13 @@ impl Analysis<'_> {
         &self,
         request: &Request,
         state: &State,
-    ) -> Result<(crate::configuration::CandidateEvaluation, Option<Value>), Error> {
+    ) -> Result<
+        (
+            crate::configuration::CandidateEvaluation,
+            Option<PolicyRequest>,
+        ),
+        Error,
+    > {
         let evaluation = self.evaluator.evaluate_context_with_working_files(
             request,
             self.checkpoint,
@@ -817,9 +1122,11 @@ impl Analysis<'_> {
         // The evaluator matched the command as run from the folder its declared
         // directory option chose; report that request beside the written one.
         if let Some(normalized) = evaluation.directory_request() {
-            let mut typed = json!(normalized);
-            typed["kind"] = json!("argv");
-            typed["directory_option"] = json!(true);
+            let typed = PolicyRequest::DirectoryOption {
+                kind: "argv",
+                request: normalized.clone(),
+                directory_option: true,
+            };
             return Ok((evaluation, Some(typed)));
         }
         if !state.cwd_unknown
@@ -850,7 +1157,7 @@ impl Analysis<'_> {
             let read =
                 self.evaluator
                     .evaluate_resource(request, &input, &context, self.checkpoint)?;
-            return Ok((read, Some(json!(input))));
+            return Ok((read, Some(PolicyRequest::Normalized(input))));
         }
         if !state.cwd_unknown
             && !state.environment_unknown
@@ -890,7 +1197,7 @@ impl Analysis<'_> {
                 let read =
                     self.evaluator
                         .evaluate_resource(request, &input, &context, self.checkpoint)?;
-                return Ok((read, Some(json!(input))));
+                return Ok((read, Some(PolicyRequest::Normalized(input))));
             }
         }
         Ok((evaluation, None))
@@ -921,7 +1228,13 @@ impl Analysis<'_> {
         &self,
         request: &Request,
         fetch: &crate::http_client::Fetch<'_>,
-    ) -> Result<(crate::configuration::CandidateEvaluation, Option<Value>), Error> {
+    ) -> Result<
+        (
+            crate::configuration::CandidateEvaluation,
+            Option<PolicyRequest>,
+        ),
+        Error,
+    > {
         use crate::policy::normalized::{Context, Input};
         let context = Context {
             cwd: request.cwd.clone(),
@@ -940,7 +1253,7 @@ impl Analysis<'_> {
             .evaluator
             .evaluate_resource(request, &web, &context, self.checkpoint)?;
         let Some(output) = fetch.output else {
-            return Ok((fetched, Some(json!(web))));
+            return Ok((fetched, Some(PolicyRequest::Normalized(web))));
         };
         let file = Input::File {
             action: "write".into(),
@@ -953,9 +1266,9 @@ impl Analysis<'_> {
             self.evaluator
                 .evaluate_resource(request, &file, &context, self.checkpoint)?;
         Ok(if written.decision > fetched.decision {
-            (written, Some(json!(file)))
+            (written, Some(PolicyRequest::Normalized(file)))
         } else {
-            (fetched, Some(json!(web)))
+            (fetched, Some(PolicyRequest::Normalized(web)))
         })
     }
 
@@ -1133,7 +1446,16 @@ impl Analysis<'_> {
             launch.variables.clear();
             launch.positionals = None;
             launch.arg0 = None;
-            self.record(json!({"span":span,"coverage":"indirect-execution","nested":nested,"decision":"ask"}))?;
+            self.record(
+                Operation::new(
+                    Coverage::IndirectExecution,
+                    Decision::Ask,
+                    Data::Indirect {
+                        nested: nested.into(),
+                    },
+                )
+                .at(span),
+            )?;
             decision = decision.max(Decision::Ask);
             if let Some(source) = &nested.source {
                 if !source.trim().is_empty() {
@@ -1162,11 +1484,28 @@ impl Analysis<'_> {
                     budget::MAX_EVIDENCE_BYTES.saturating_sub(self.evidence_bytes),
                     self.checkpoint,
                 )?;
-                let effects = crate::effects::classify(&request);
+                let effects = crate::effects::classify(&request).map(Rc::new);
                 decision = decision.max(evaluation.decision);
-                self.record(json!({"span":span,"request":request,"evaluation":evaluation,"coverage":"partial","decision":evaluation.decision.max(Decision::Ask),"effects":effects,"evaluation_model":"cwd-independent-restriction-bound","context":{"cwd_known":false,"environment_known":false,"namespace":nested.namespace}}))?;
+                self.record(
+                    Operation::new(
+                        Coverage::Partial,
+                        evaluation.decision.max(Decision::Ask),
+                        Data::Invocation {
+                            request,
+                            evaluation: Box::new(evaluation),
+                            detail: Box::new(Invocation::Foreign {
+                                effects: effects.clone(),
+                                evaluation_model: "cwd-independent-restriction-bound",
+                                context: ReportFacts::cwd(false)
+                                    .environment(false)
+                                    .namespace(nested.namespace),
+                            }),
+                        },
+                    )
+                    .at(span),
+                )?;
                 decision =
-                    decision.max(self.tool_nested(effects.as_ref(), span, &launch, depth + 1)?);
+                    decision.max(self.tool_nested(effects.as_deref(), span, &launch, depth + 1)?);
                 decision = decision.max(self.shell_script(
                     &nested.argv,
                     span,
@@ -1201,6 +1540,7 @@ impl Analysis<'_> {
         bindings::wrapper_environment(&words[..wrapper.offset], &mut nested_state);
         if wrapper.cwd_unknown {
             nested_state.cwd_unknown = true;
+            nested_state.command_outcomes();
         }
         let offset = wrapper.offset;
         let start = words[offset].span.start;
@@ -1247,6 +1587,9 @@ impl Analysis<'_> {
         depth: usize,
     ) -> Result<Decision, Error> {
         let mut decision = Decision::Allow;
+        if words.iter().any(|word| !word.substitutions.is_empty()) {
+            state.filesystem_mutation();
+        }
         if self.dialect == Dialect::Bash
             && state.brace_expansion.is_none()
             && let Some(word) = words.iter().find(|word| {
@@ -1260,8 +1603,14 @@ impl Analysis<'_> {
         {
             self.complete = false;
             self.record(
-                json!({"span":word.span,"coverage":"possible-brace-expansion",
-                "syntax":"braceexpand-unobserved","decision":"ask"}),
+                Operation::new(
+                    Coverage::PossibleBraceExpansion,
+                    Decision::Ask,
+                    Data::Syntax {
+                        syntax: "braceexpand-unobserved",
+                    },
+                )
+                .at(word.span),
             )?;
             decision = Decision::Ask;
         }
@@ -1269,7 +1618,11 @@ impl Analysis<'_> {
             state.variables.clear();
             state.environment_unknown = true;
             self.complete = false;
-            self.record(json!({"coverage":"possible-expansion-mutation","decision":"ask"}))?;
+            self.record(Operation::new(
+                Coverage::PossibleExpansionMutation,
+                Decision::Ask,
+                Data::Empty {},
+            ))?;
             decision = Decision::Ask;
         }
         for substitution in words.iter().flat_map(|word| &word.substitutions) {
@@ -1286,7 +1639,10 @@ impl Analysis<'_> {
     ) -> Result<Decision, Error> {
         self.complete = false;
         if substitution.kind == "current-shell-substitution" && self.dialect != Dialect::Bash {
-            self.record(json!({"span":substitution.span,"coverage":"opaque","decision":"ask"}))?;
+            self.record(
+                Operation::new(Coverage::Opaque, Decision::Ask, Data::Empty {})
+                    .at(substitution.span),
+            )?;
             return Ok(Decision::Ask);
         }
         self.nested_bytes += substitution.source.len();
@@ -1296,13 +1652,25 @@ impl Analysis<'_> {
         let nested = structure::parse(&substitution.source, self.dialect, self.checkpoint)?;
         let old_unit = self.source_unit;
         self.source_unit = self.source_units.len();
-        self.source_units.push(json!({"source":substitution.source,"dialect":self.dialect,"parent":{"source_unit":old_unit,"span":substitution.span,"kind":substitution.kind},"structure":nested}));
+        let unit = self.source_unit;
+        self.source_units.push(SourceUnit {
+            source: substitution.source.clone(),
+            dialect: self.dialect,
+            dialect_version: None,
+            parent: Some(SourceParent {
+                source_unit: old_unit,
+                span: substitution.span,
+                kind: substitution.kind.into(),
+            }),
+            structure: None,
+        });
         let mut branch = state.clone();
         let result = if substitution.kind == "current-shell-substitution" {
             self.visit(&nested, &mut branch, depth + 1)
         } else {
             self.isolated(&nested, &mut branch, depth + 1)
         };
+        self.source_units[unit].structure = Some(nested);
         self.source_unit = old_unit;
         if substitution.kind == "current-shell-substitution" {
             // Possible Bash 5.3 current-environment execution, never a claim
@@ -1518,6 +1886,38 @@ fn same_directory(words: &[String], cwd: &str) -> bool {
     let arguments = &words[1..];
     let arguments = arguments.strip_prefix(&["--".into()]).unwrap_or(arguments);
     matches!(arguments, [target] if matches!(target.as_str(), "." | "./") || target == cwd)
+}
+
+fn filesystem_may_change(words: &[String], syntax_check: bool) -> bool {
+    if matches!(
+        words[0].as_str(),
+        ":" | "true" | "false" | "pwd" | "echo" | "printf" | "cd"
+    ) || version_query(words)
+        || builtin_query(words)
+        || syntax_check
+        || parent_directory_builtin(words)
+    {
+        return false;
+    }
+    !crate::location::text_read_only(
+        &words[0],
+        &words[1..].iter().map(String::as_str).collect::<Vec<_>>(),
+    )
+}
+
+fn parent_directory_builtin(words: &[String]) -> bool {
+    let command = words.first().is_some_and(|word| word == "command");
+    if !command && words.first().is_none_or(|word| word != "builtin") {
+        return false;
+    }
+    let mut arguments = &words[1..];
+    while command && arguments.first().is_some_and(|word| word == "-p") {
+        arguments = &arguments[1..];
+    }
+    if arguments.first().is_some_and(|word| word == "--") {
+        arguments = &arguments[1..];
+    }
+    arguments.first().is_some_and(|word| word == "cd")
 }
 
 fn opaque_executable(executable: &str) -> bool {

@@ -25,10 +25,33 @@ pub(crate) struct NativeContext<'a> {
 }
 mod mcp;
 mod native_gate;
+pub(crate) use native_gate::mandatory_read_allowed;
 pub(crate) use native_gate::paused as paused_protection;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+type NativeBoundaryHook = Box<dyn FnOnce()>;
+#[cfg(test)]
+thread_local! {
+    static NATIVE_BOUNDARY: std::cell::RefCell<Option<NativeBoundaryHook>> = const { std::cell::RefCell::new(None) };
+}
+#[cfg(test)]
+pub(crate) struct NativeBoundary;
+#[cfg(test)]
+impl Drop for NativeBoundary {
+    fn drop(&mut self) {
+        NATIVE_BOUNDARY.with(|slot| drop(slot.borrow_mut().take()));
+    }
+}
+#[cfg(test)]
+pub(crate) fn before_native_authority(callback: impl FnOnce() + 'static) -> NativeBoundary {
+    NATIVE_BOUNDARY.with(|slot| {
+        *slot.borrow_mut() = Some(Box::new(callback));
+    });
+    NativeBoundary
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -53,7 +76,7 @@ impl Input {
             return None;
         }
         let input: Self = serde_json::from_slice(bytes).ok()?;
-        (input.protocol_version == 1
+        (matches!(input.protocol_version, 1 | 2)
             && !input.request_id.is_empty()
             && input.request_id.len() <= 128
             && !input.request_id.contains('\0')
@@ -100,6 +123,8 @@ enum Operation {
     Shell {
         source: String,
         dialect: crate::shell::Dialect,
+        #[serde(default)]
+        dialect_version: Option<String>,
     },
     /// A host web tool: a search for a query, or a GET of one URL.
     Web {
@@ -203,7 +228,17 @@ pub(crate) fn run(root: &Path) -> ExitCode {
 }
 
 pub(crate) fn evaluate(root: &Path, bytes: &[u8]) -> (Value, u8) {
-    evaluate_with_original(root, bytes, None, None, None, &|_| {})
+    let outcome = evaluate_with_original(root, bytes, None, None, None, &|_| {});
+    (outcome.receipt, outcome.code)
+}
+
+/// Native callers must retain this authority through final vendor disposition;
+/// it is never serialized into the host response or accepted from host input.
+#[must_use = "retain native authority through final vendor disposition"]
+pub(crate) struct NativeOutcome {
+    pub(crate) receipt: Value,
+    pub(crate) code: u8,
+    pub(crate) authority: Option<crate::review::runtime::consumer::NativeAuthority>,
 }
 
 /// One project-bound snapshot shared by host classification and evaluation.
@@ -238,6 +273,18 @@ impl Prepared {
 
 /// Native hook input was bounded and parsed by the vendor boundary. Retain its
 /// arguments without duplicating shell source in the bounded normalized envelope.
+pub(crate) fn evaluate_native_guarded(
+    root: &Path,
+    bytes: &[u8],
+    original: &Value,
+    native: NativeContext<'_>,
+    prepared: Option<Prepared>,
+    stage: &dyn Fn(&'static str),
+) -> NativeOutcome {
+    evaluate_with_original(root, bytes, Some(original), Some(native), prepared, stage)
+}
+
+#[cfg(test)]
 pub(crate) fn evaluate_native(
     root: &Path,
     bytes: &[u8],
@@ -246,7 +293,8 @@ pub(crate) fn evaluate_native(
     prepared: Option<Prepared>,
     stage: &dyn Fn(&'static str),
 ) -> (Value, u8) {
-    evaluate_with_original(root, bytes, Some(original), Some(native), prepared, stage)
+    let outcome = evaluate_native_guarded(root, bytes, original, native, prepared, stage);
+    (outcome.receipt, outcome.code)
 }
 
 fn evaluate_with_original(
@@ -256,20 +304,53 @@ fn evaluate_with_original(
     native: Option<NativeContext<'_>>,
     prepared: Option<Prepared>,
     stage: &dyn Fn(&'static str),
-) -> (Value, u8) {
+) -> NativeOutcome {
     let limit = if native.is_some() {
         MAX_NATIVE_INPUT
     } else {
         MAX_INPUT
     };
     let input = Input::parse(bytes, limit);
+    let mut source = None;
     stage("policy_evaluation_start");
     let (mut value, mut code) = match &input {
         None => (failure(None, "invalid-input"), 2),
-        Some(parsed) => completion_response(parsed)
-            .unwrap_or_else(|| evaluate_inner(root, parsed, original, native, prepared, stage)),
+        Some(parsed) => completion_response(parsed).unwrap_or_else(|| {
+            evaluate_inner(root, parsed, original, native, prepared, stage, &mut source)
+        }),
     };
     stage("policy_evaluation_ready");
+    #[cfg(test)]
+    if native.is_some()
+        && code == 0
+        && let Some(callback) = NATIVE_BOUNDARY.with(|slot| slot.borrow_mut().take())
+    {
+        callback();
+    }
+    let authority = if native.is_some()
+        && code == 0
+        && input
+            .as_ref()
+            .is_some_and(|input| !matches!(input.operation, Operation::Completion { .. }))
+    {
+        let checked = source
+            .as_ref()
+            .ok_or(crate::review::Error::StaleSnapshot)
+            .and_then(|source| source.acquire(root));
+        match checked {
+            Ok(authority) => Some(authority),
+            Err(error) => {
+                value = failure(
+                    input.as_ref().map(|input| input.request_id.as_str()),
+                    runtime_failure(&crate::runtime::Error::from(error)),
+                );
+                code = 2;
+                None
+            }
+        }
+    } else {
+        None
+    };
     if let (Some(agent), Some(input)) = (native, input.as_ref())
         && !matches!(input.operation, Operation::Completion { .. })
         && code == 0
@@ -296,6 +377,26 @@ fn evaluate_with_original(
             code = 2;
         }
     }
+    let (receipt, code) =
+        finish_response(root, input.as_ref(), original, native, value, code, stage);
+    NativeOutcome {
+        receipt,
+        code,
+        authority,
+    }
+}
+
+/// Protocol disposition is fixed before optional evidence and wire projection.
+/// The native owner retains trust through its later exact-grant/vendor callback.
+fn finish_response(
+    root: &Path,
+    input: Option<&Input>,
+    original: Option<&Value>,
+    native: Option<NativeContext<'_>>,
+    mut value: Value,
+    code: u8,
+    stage: &dyn Fn(&'static str),
+) -> (Value, u8) {
     if let Some(fields) = value.as_object_mut() {
         fields.remove("_shell_analysis");
         fields.remove("_codex_covered");
@@ -337,19 +438,37 @@ fn evaluate_with_original(
     stage("history_start");
     let legacy_receipt = native.is_none()
         && input
-            .as_ref()
-            .is_some_and(|input| uses_legacy_receipt(root, input));
+            .is_some_and(|input| input.protocol_version == 1 && uses_legacy_receipt(root, input));
     value["history"] = match input {
         Some(input) if input.host.is_some() && !matches!(input.operation, Operation::Register) => {
             let result = if matches!(input.operation, Operation::Completion { .. }) && code != 0 {
                 Err(crate::review::Error::Invalid("invalid completion"))
             } else {
-                record(root, &input, &value, &observed, original)
+                record(root, input, &value, &observed, original)
             };
             result.unwrap_or_else(|_| json!({"status":"failed","request_id":null,"event_id":null}))
         }
         _ => json!({"status":"not-requested","request_id":null,"event_id":null}),
     };
+    if let Some(input) = input.filter(|input| input.protocol_version == 2) {
+        value["protocol_version"] = json!(2);
+        let reported = match &input.operation {
+            Operation::Completion { request_id, .. } => Some(request_id.as_deref()),
+            _ => None,
+        };
+        value["history"]["correlation"] = json!(if reported.is_some() {
+            "deferred"
+        } else {
+            "not-applicable"
+        });
+        value["history"]["reported_request_id"] = json!(reported.flatten());
+    } else if native.is_none()
+        && let Some(identity) = value.get_mut("identity").and_then(Value::as_object_mut)
+    {
+        // SDK v1 has a closed six-field identity. Trust still participates in
+        // core handoff checks; its new revision token belongs to the v2 wire.
+        identity.remove("registry_revision");
+    }
     if legacy_receipt && let Some(fields) = value.as_object_mut() {
         // The installed mod validates exactly the original eight fields. This
         // changes only wire representation after policy, grants and history.
@@ -413,13 +532,11 @@ fn record(
         Some("approval_required") => json!("ask"),
         _ => value["decision"].clone(),
     };
-    observations::decision(
-        &context,
-        json!({"operation":input.operation,"original_input":original,"request":observed["request"],
+    let details = json!({"operation":input.operation,"original_input":original,"request":observed["request"],
         "evaluation":observed["evaluation"],"policy_revision":value["identity"]["policy_revision"],
         "activation_id":value["identity"]["activation_id"],"candidate_digest":value["identity"]["candidate_digest"],
-        "decision":policy,"host_decision":host_decision,"disposition":value["disposition"],"ask_fallback":value["ask_fallback"],"integration":value["integration"],"mcp_match":value["mcp_match"],"host_context_complete":value["host_context_complete"],"code":value["code"],"approval":value["approval"],"authorization":value["authorization"],"execution":"unobserved"}),
-    )
+        "decision":policy,"host_decision":host_decision,"disposition":value["disposition"],"ask_fallback":value["ask_fallback"],"integration":value["integration"],"mcp_match":value["mcp_match"],"host_context_complete":value["host_context_complete"],"code":value["code"],"approval":value["approval"],"authorization":value["authorization"],"execution":"unobserved"});
+    observations::decision(&context, details)
 }
 
 fn completion_response(input: &Input) -> Option<(Value, u8)> {
@@ -466,6 +583,10 @@ fn completion_response(input: &Input) -> Option<(Value, u8)> {
     })
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one exhaustive operation dispatch follows a single registered identity and cwd validation"
+)]
 fn evaluate_inner(
     root: &Path,
     input: &Input,
@@ -473,6 +594,7 @@ fn evaluate_inner(
     native: Option<NativeContext<'_>>,
     prepared: Option<Prepared>,
     stage: &dyn Fn(&'static str),
+    source: &mut Option<crate::review::runtime::consumer::NativeSource>,
 ) -> (Value, u8) {
     let id = Some(input.request_id.as_str());
     let mut prepared = match prepared.map_or_else(|| Prepared::load(root, stage), Ok) {
@@ -498,6 +620,9 @@ fn evaluate_inner(
         mut snapshot,
         mcp,
     } = prepared;
+    if native.is_some() {
+        *source = Some(snapshot.native_source());
+    }
     snapshot.observe_working_files(native.and_then(|n| n.working_files));
     let identity = snapshot.identity();
     let metadata = json!(identity);
@@ -541,8 +666,21 @@ fn evaluate_inner(
                 original,
             );
         }
-        Operation::Shell { source, dialect } => {
-            return evaluate_shell(input, &project, &snapshot, &cwd, source, *dialect, original);
+        Operation::Shell {
+            source,
+            dialect,
+            dialect_version,
+        } => {
+            return evaluate_shell(
+                input,
+                &project,
+                &snapshot,
+                &cwd,
+                source,
+                *dialect,
+                dialect_version.as_deref(),
+                original,
+            );
         }
         Operation::File {
             action,
@@ -581,7 +719,7 @@ fn evaluate_inner(
 /// A descendant directory belongs to this enrollment only until another
 /// configured project begins. A copied child cannot inherit the parent's
 /// approvals or disabled mode merely because its path has the same prefix.
-fn owns_context(root: &Path, cwd: &Path) -> bool {
+pub(super) fn owns_context(root: &Path, cwd: &Path) -> bool {
     if !cwd.starts_with(root) {
         return false;
     }
@@ -596,6 +734,10 @@ fn owns_context(root: &Path, cwd: &Path) -> bool {
     true
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "retains host-reported dialect version with the existing checked shell handoff context"
+)]
 fn evaluate_shell(
     input: &Input,
     project: &Project,
@@ -603,11 +745,13 @@ fn evaluate_shell(
     cwd: &Path,
     source: &str,
     dialect: crate::shell::Dialect,
+    dialect_version: Option<&str>,
     original: Option<&Value>,
 ) -> (Value, u8) {
     let Ok(analysis) = snapshot.analyze_shell(
         source,
         dialect,
+        dialect_version,
         cwd.to_str().expect("validated cwd"),
         original,
     ) else {
@@ -633,7 +777,7 @@ fn evaluate_shell(
         input: policy::normalized::Input::Shell {
             source: source.into(),
             dialect: json!(dialect).as_str().expect("dialect string").into(),
-            dialect_version: None,
+            dialect_version: dialect_version.map(str::to_owned),
             original_input: original.cloned().unwrap_or_else(|| json!({})),
         },
         context: policy::normalized::Context {
@@ -650,6 +794,7 @@ fn evaluate_shell(
             snapshot.analyze_shell(
                 source,
                 dialect,
+                dialect_version,
                 cwd.to_str().expect("validated cwd"),
                 original,
             )

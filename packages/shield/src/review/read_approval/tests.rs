@@ -61,6 +61,149 @@ fn pending(context: &Context, evidence: &EvaluatedRequest, resource: &str) -> St
 }
 
 #[test]
+fn identical_runtime_reads_reuse_one_pending_request() {
+    let (root, context, evidence, resource) = fixture();
+    let mut state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
+    let origin = Origin {
+        agent: context.agent.clone(),
+        session_id: context.session_id.clone(),
+        consumer_id: "acme-sdk".into(),
+    };
+    let time = now().unwrap();
+    let first = capture_context(
+        &mut state,
+        &context,
+        &origin,
+        &evidence,
+        &resource,
+        time,
+        Some("acme-runtime"),
+    )
+    .unwrap();
+    let second = capture_context(
+        &mut state,
+        &context,
+        &origin,
+        &evidence,
+        &resource,
+        time + 1,
+        Some("acme-runtime"),
+    )
+    .unwrap();
+    assert_eq!(
+        first["approval"]["request_id"],
+        second["approval"]["request_id"]
+    );
+    assert_eq!(state.read_requests.len(), 1);
+    capture_context(
+        &mut state,
+        &context,
+        &origin,
+        &evidence,
+        &resource,
+        time + 2,
+        Some("another-runtime"),
+    )
+    .unwrap();
+    assert_eq!(state.read_requests.len(), 2);
+}
+
+#[test]
+fn copied_workspace_read_grant_cannot_replay_and_original_remains_usable() {
+    let (root, context, evidence, resource) = fixture();
+    let id = pending(&context, &evidence, &resource);
+    authorize(&context, &id, 300, None, false).unwrap();
+    let original = std::fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let copy = assert_fs::TempDir::new().unwrap();
+    crate::test_support::copy_fixture_directory(root.path(), copy.path());
+    let opened = review::open(copy.path()).unwrap();
+    let mut child = context.clone();
+    child.project_id = opened.project_id;
+    child.project_root = opened.project_root;
+    assert_ne!(child.project_id, context.project_id);
+    assert!(
+        gate(
+            &child,
+            "factory-acme",
+            &evidence,
+            &resource,
+            Some(&id),
+            || true
+        )
+        .is_err()
+    );
+
+    let path = Path::new(&child.project_root).join("acme.txt");
+    let binding = Binding::open(
+        Path::new(&child.project_root),
+        Path::new(&child.project_root),
+        path.to_str().unwrap(),
+    )
+    .unwrap();
+    let request = Request {
+        executable: "shield:read-text".into(),
+        arguments: vec![path.to_str().unwrap().into()],
+        cwd: child.project_root.clone(),
+        project: child.project_root.clone(),
+    };
+    let claim = review::runtime::consumer::ResourceRequest {
+        mcp: None,
+        input: policy::normalized::Input::File {
+            action: "read".into(),
+            sources: request.arguments.clone(),
+            destination: None,
+            recursive: false,
+            original_input: json!({"file_path":path}),
+        },
+        context: policy::normalized::Context {
+            cwd: child.project_root.clone(),
+            environment: None,
+            working_files: None,
+        },
+    };
+    let fresh = Project::open(copy.path())
+        .unwrap()
+        .snapshot()
+        .unwrap()
+        .evaluate_resource(request, claim)
+        .unwrap();
+    let refused = gate(
+        &child,
+        "factory-acme",
+        &fresh,
+        &binding.digest,
+        Some(&id),
+        || true,
+    )
+    .unwrap();
+    assert_eq!(refused["code"], "approval-unavailable");
+    assert_eq!(refused["allowed"], false);
+    let child_id = pending(&child, &fresh, &binding.digest);
+    assert_ne!(child_id, id);
+    authorize(&child, &child_id, 300, None, false).unwrap();
+    assert_eq!(
+        consume_with_retry(&child, &fresh, &binding.digest, &child_id)["allowed"],
+        true
+    );
+    assert_eq!(
+        consume_with_retry(&child, &fresh, &binding.digest, &child_id)["allowed"],
+        false
+    );
+    assert_eq!(
+        std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        original
+    );
+    assert_eq!(
+        consume_with_retry(&context, &evidence, &resource, &id)["allowed"],
+        true
+    );
+    assert_eq!(
+        consume_with_retry(&context, &evidence, &resource, &id)["allowed"],
+        false
+    );
+}
+
+#[test]
 fn mcp_denial_is_confirmed_owned_and_never_issues_a_grant() {
     let (_root, mut context, evidence, resource) = fixture();
     context.agent = Some("codex".into());
@@ -85,6 +228,61 @@ fn mcp_denial_is_confirmed_owned_and_never_issues_a_grant() {
         review::approvals::deny(&context, &id, true).unwrap()["status"],
         "revoked"
     );
+}
+
+#[test]
+fn terminal_read_receipts_replay_after_row_compaction_without_history_or_new_grants() {
+    let (_root, mut context, evidence, resource) = fixture();
+    context.agent = Some("codex".into());
+    review::history_settings(&context, Some(false), None, false, &|| Ok(())).unwrap();
+    let id = pending(&context, &evidence, &resource);
+    authorize(&context, &id, 300, None, false).unwrap();
+    assert_eq!(
+        gate(
+            &context,
+            "factory-acme",
+            &evidence,
+            &resource,
+            Some(&id),
+            || true
+        )
+        .unwrap()["allowed"],
+        true
+    );
+    let state = Store::open(Path::new(&context.project_root))
+        .unwrap()
+        .read_checkpoint()
+        .unwrap();
+    assert!(state.read_requests.is_empty());
+    let outcome = gate(
+        &context,
+        "factory-acme",
+        &evidence,
+        &resource,
+        Some(&id),
+        || true,
+    )
+    .unwrap();
+    assert_eq!(outcome["code"], "approval-consumed");
+    assert_eq!(outcome["allowed"], false);
+    assert!(outcome["approval"]["approval_id"].is_null());
+    context.surface = "mcp".into();
+    let replay = review::approvals::approve(&context, &json!({"request_id":id}), false).unwrap();
+    assert_eq!(replay["status"], "consumed");
+    assert!(replay.get("approval_id").is_none());
+    assert!(review::approvals::deny(&context, &id, false).is_err());
+    let second = pending(&context, &evidence, &resource);
+    review::approvals::deny(&context, &second, true).unwrap();
+    assert_eq!(
+        review::approvals::deny(&context, &second, false).unwrap()["status"],
+        "revoked"
+    );
+    let mut foreign = context.clone();
+    foreign.session_id = Some("other-session".into());
+    assert!(matches!(
+        review::approvals::deny(&foreign, &second, false),
+        Err(Error::Missing)
+    ));
 }
 
 #[test]
@@ -199,14 +397,14 @@ fn approval_replay_uses_grant_expiry_after_pending_window_closes() {
     let origin = state.read_requests[0].origin.clone();
     assert_eq!(
         consume(
-            &mut state, &context, &origin, &evidence, &resource, &id, time
+            &mut state, &context, &origin, &evidence, &resource, &id, time, None
         )
         .unwrap()["code"],
         "allowed-once"
     );
     assert_ne!(
         consume(
-            &mut state, &context, &origin, &evidence, &resource, &id, time
+            &mut state, &context, &origin, &evidence, &resource, &id, time, None
         )
         .unwrap()["code"],
         "allowed-once"
@@ -398,7 +596,8 @@ fn approval_is_atomic_once_and_survives_history_opt_out_and_purge() {
             &evidence,
             &resource,
             &id,
-            now().unwrap()
+            now().unwrap(),
+            None
         )
         .unwrap()["allowed"],
         true
@@ -434,9 +633,12 @@ fn approval_is_atomic_once_and_survives_history_opt_out_and_purge() {
             || true
         )
         .unwrap()["code"],
-        "approval-unavailable"
+        "approval-consumed"
     );
-    assert!(authorize(&context, &id, 300, None, false).is_err());
+    let receipt = authorize(&context, &id, 300, None, false).unwrap();
+    assert_eq!(receipt["status"], "consumed");
+    assert_eq!(receipt["allowed"], false);
+    assert!(receipt.get("approval_id").is_none());
     let state = store.read().unwrap();
     assert_eq!(state.events, [] as [Value; 0]);
     assert!(state.read_requests.is_empty());
@@ -592,7 +794,7 @@ fn file_changes_block_operator_approval_and_non_operator_cannot_approve() {
             || true
         )
         .unwrap()["code"],
-        "approval-unavailable"
+        "approval-revoked"
     );
     assert!(authorize(&context, &id, 300, None, false).is_err());
 }
@@ -607,7 +809,7 @@ fn expiry_and_clock_rollback_block_without_consumption() {
     let expiry = state.read_requests[0].pending_expires_at_ms;
     assert_eq!(
         consume(
-            &mut state, &context, &origin, &evidence, &resource, &id, expiry
+            &mut state, &context, &origin, &evidence, &resource, &id, expiry, None
         )
         .unwrap()["code"],
         "approval-expired"
@@ -619,7 +821,7 @@ fn expiry_and_clock_rollback_block_without_consumption() {
     for time in [issued - 1, expires] {
         assert_eq!(
             consume(
-                &mut state, &context, &origin, &evidence, &resource, &id, time
+                &mut state, &context, &origin, &evidence, &resource, &id, time, None
             )
             .unwrap()["code"],
             "approval-expired"
@@ -799,13 +1001,14 @@ fn legacy_read_terminal_receipts_remain_terminal_and_keep_original_proof() {
                     &evidence,
                     &digest,
                     &id,
-                    now().unwrap()
+                    now().unwrap(),
+                    None
                 )
                 .unwrap()["allowed"],
                 true
             );
         } else {
-            revoke_request(&mut state, &context, 0, None);
+            revoke_request(&mut state, &context, 0, None, now().unwrap()).unwrap();
         }
         let wire = historical_read_state(json!(state), false);
         let binding = wire["read_requests"][0]["binding"].clone();
@@ -825,6 +1028,7 @@ fn legacy_read_terminal_receipts_remain_terminal_and_keep_original_proof() {
             &digest,
             &id,
             now().unwrap(),
+            None,
         )
         .unwrap();
         assert_ne!(outcome["allowed"], true);
@@ -835,7 +1039,7 @@ fn legacy_read_terminal_receipts_remain_terminal_and_keep_original_proof() {
 }
 
 #[test]
-fn legacy_read_outer_checkpoint_upgrade_preserves_live_and_terminal_authority() {
+fn legacy_read_checkpoint_upgrade_preserves_policy_and_closes_unbound_operation_authority() {
     for status in ["pending", "approved", "consumed", "revoked"] {
         let (_root, context, evidence, digest) = fixture();
         let id = pending(&context, &evidence, &digest);
@@ -854,13 +1058,14 @@ fn legacy_read_outer_checkpoint_upgrade_preserves_live_and_terminal_authority() 
                     &evidence,
                     &digest,
                     &id,
-                    now().unwrap()
+                    now().unwrap(),
+                    None
                 )
                 .unwrap()["allowed"],
                 true
             );
         } else if status == "revoked" {
-            revoke_request(&mut state, &context, 0, None);
+            revoke_request(&mut state, &context, 0, None, now().unwrap()).unwrap();
         }
         let mut wire = historical_read_state(json!(state), status == "approved");
         for name in [
@@ -869,16 +1074,41 @@ fn legacy_read_outer_checkpoint_upgrade_preserves_live_and_terminal_authority() 
             "policy_drafts",
             "dismissed_reviews",
             "enforcement",
+            "configuration_changes",
+            "terminal_receipts",
         ] {
             wire.as_object_mut().unwrap().remove(name);
         }
+        for field in ["runtime_incarnation", "policy_lineage", "portable_policy"] {
+            wire["operator"].as_object_mut().unwrap().remove(field);
+        }
         wire["active"].as_object_mut().unwrap().remove("compiled");
+        wire["active"]
+            .as_object_mut()
+            .unwrap()
+            .remove("binding_version");
+        // Reproduce the original root-bound activation proof, rather than
+        // dropping fields from a current versioned proof.
+        let activation_binding = crate::policy::fingerprint(
+            json!([
+                wire["project_id"],
+                wire["project_root"],
+                wire["active"]["activation_id"],
+                wire["active"]["previous_activation_id"],
+                wire["active"]["policy_revision"],
+                wire["active"]["candidate_digest"]
+            ])
+            .to_string()
+            .as_bytes(),
+        );
+        wire["active"]["binding"] = json!(activation_binding);
         wire["history_generation"] = Value::Null;
         for field in ["authorization_events", "events"] {
             let events = wire[field].as_array_mut().unwrap();
             events.retain(|event| event["kind"] != "compiled_cache_prepared");
             for event in events {
                 if event["kind"] == "runtime_activated" {
+                    event["details"]["binding"] = json!(activation_binding);
                     event["details"]
                         .as_object_mut()
                         .unwrap()
@@ -886,53 +1116,49 @@ fn legacy_read_outer_checkpoint_upgrade_preserves_live_and_terminal_authority() 
                 }
             }
         }
-        let binding = wire["read_requests"][0]["binding"].clone();
-        let grant = wire["read_requests"][0]["grant"].clone();
-        let protected = wire["authorization_events"].as_array().unwrap().clone();
         let state_path = Path::new(&context.project_root).join(".shield/review/state.json");
         std::fs::write(&state_path, wire.to_string()).unwrap();
         let loaded = store.read_checkpoint().unwrap();
         validate(&loaded).unwrap();
-        assert_eq!(loaded.read_requests.len(), 1, "{status}");
-        assert_eq!(loaded.read_requests[0].status, status);
-        assert_eq!(json!(loaded.read_requests[0].binding), binding);
-        assert_eq!(json!(loaded.read_requests[0].grant), grant);
-        for event in &protected {
-            assert!(
-                loaded.authorization_events.contains(event),
-                "{status}: {event}"
-            );
-        }
-        assert!(loaded.authorization_events.len() <= protected.len() + 1);
-        let origin = loaded.read_requests[0].origin.clone();
-        if matches!(status, "consumed" | "revoked") {
-            let mut loaded = loaded;
-            let result = consume(
-                &mut loaded,
-                &context,
-                &origin,
-                &evidence,
-                &digest,
-                &id,
-                now().unwrap(),
-            )
+        assert_ne!(loaded.project_id, context.project_id, "{status}");
+        assert_eq!(loaded.policy_lineage(), context.project_id, "{status}");
+        assert!(loaded.read_requests.is_empty(), "{status}");
+        assert!(loaded.terminal_receipts.is_empty(), "{status}");
+        loaded
+            .active
+            .as_ref()
+            .unwrap()
+            .validate_binding(&loaded)
             .unwrap();
-            assert_ne!(result["allowed"], true);
-            assert_eq!(result["approval"]["status"], status);
-        } else {
-            if status == "pending" {
-                authorize(&context, &id, 300, None, false).unwrap();
-            }
-            assert_eq!(
-                consume_with_retry(&context, &evidence, &digest, &id)["code"],
-                "allowed-once"
-            );
-            assert_ne!(
-                consume_with_retry(&context, &evidence, &digest, &id)["allowed"],
-                true
-            );
-        }
+        loaded.check_operations().unwrap();
+        let next = review::open(Path::new(&context.project_root)).unwrap();
+        assert!(authorize(&next, &id, 300, None, false).is_err(), "{status}");
+        review::runtime::consumer::load(&next, &|| Ok(())).unwrap();
+        assert_eq!(
+            store.read_checkpoint().unwrap().project_id,
+            loaded.project_id,
+            "ordinary reopen is stable"
+        );
     }
+}
+
+#[test]
+fn malformed_optional_terminal_outcomes_do_not_block_active_policy_admission() {
+    let (_root, context, _, _) = fixture();
+    let store = Store::open(Path::new(&context.project_root)).unwrap();
+    let mut wire = json!(store.read_checkpoint().unwrap());
+    let opaque = json!({"records":[{"unsupported":"terminal receipt"}]});
+    wire["terminal_receipts"] = opaque.clone();
+    let path = Path::new(&context.project_root).join(".shield/review/state.json");
+    std::fs::write(&path, wire.to_string()).unwrap();
+    let loaded = store.read_checkpoint().unwrap();
+    assert_eq!(json!(loaded)["terminal_receipts"]["unavailable"], opaque);
+    review::runtime::consumer::load(&context, &|| Ok(())).unwrap();
+    store
+        .update_checkpoint(&context, &|| Ok(()), |_| Ok(Value::Null))
+        .unwrap();
+    let saved: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    assert_eq!(saved["terminal_receipts"]["unavailable"], opaque);
 }
 
 #[test]

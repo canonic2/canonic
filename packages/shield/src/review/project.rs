@@ -1,5 +1,4 @@
 //! Enrolled project loading and noninteractive policy/status inspection.
-use super::publication::projections::projection_changed;
 use super::{Context, Error, model::State, storage::Store};
 use super::{integrations, path_access};
 use crate::review;
@@ -43,20 +42,64 @@ pub(super) fn captured(context: &Context) -> Result<State, Error> {
     Ok(state)
 }
 
+/// Immutable record inspection retains source references. Consumers resolve
+/// only selected fields against their canonical lock, without preparing policy.
+pub(super) fn captured_inspection(context: &Context) -> Result<State, Error> {
+    let store = Store::inspect(Path::new(&context.project_root))?;
+    let (state, _) = store.read_diagnostic_checkpoint()?;
+    state.check_inspection(context)?;
+    if state.legacy_preview.is_some() {
+        return Err(Error::Invalid(
+            "historical policy display is unavailable before runtime conversion; status and doctor can inspect its recorded proof without preparing policy",
+        ));
+    }
+    Ok(state)
+}
+
 pub(super) fn status(context: &Context) -> Result<Value, Error> {
-    let (state, pending) = Store::open(Path::new(&context.project_root))?.read_diagnostics()?;
-    state.check(context)?;
-    let mut value = status_from(context, &state)?;
-    value["pack_updates"] = super::pack_updates::inspect(context, &state, None);
+    let (state, pending) =
+        Store::inspect(Path::new(&context.project_root))?.read_diagnostic_checkpoint()?;
+    state.check_inspection(context)?;
+    let mut value = status_from(context, &state);
+    if state.legacy_preview.is_none() {
+        value["pack_updates"] = super::pack_updates::inspect(context, &state, None);
+    }
     value["checkpoint_upgrade_pending"] = json!(pending);
     Ok(value)
 }
 
 /// Render a checked history capture, also used by doctor's additional probes.
-pub(super) fn status_from(context: &Context, state: &State) -> Result<Value, Error> {
+pub(super) fn status_from(context: &Context, state: &State) -> Value {
     let mut value = review::runtime::status_from(state);
     value["policy_revision"] = json!(state.policy_revision);
     value["enabled"] = json!(state.enforcement.enabled);
+    if state.legacy_preview.is_some() {
+        value["installed_packs"] = crate::review::packs::summaries(&metadata(state));
+        value["history"] = json!({"enabled":state.history_enabled,"limit":state.history_limit,"available":null,"integrity":"unchecked","inspect":"shield history list"});
+        value["policy_validation"] =
+            json!({"source":"unchecked","model":"unchecked","compiled_integrity":"unchecked"});
+        value["project_file_inspection"] = json!("unchecked");
+        value["pending_approvals"] = json!(0);
+        value["session_grants"] =
+            json!({"available":false,"reason":"historical record inspection"});
+        value["action_authority"] = json!(
+            "unavailable until actual runtime validates and converts the historical checkpoint"
+        );
+        value["operation_readiness"] =
+            json!({"available":false,"reason":"historical checkpoint upgrade pending"});
+        value["operation_epoch_pending"] = json!(true);
+        value["coverage"] = json!({"registered_integrations":[],"installed_integrations":[],"tool_interception":"unchecked","live_host_verification":"unchecked","verification":{"state":"unchecked","basis":"historical-record-only-inspection"},"policy_inspection":{"availability":"unavailable","source_validation":"not-performed"}});
+        value["repair_needed"] = json!(false);
+        value["repair_assessment"] =
+            json!({"known_integration_repairs":false,"project_files":"unchecked","complete":false});
+        value["repair_route"] = json!(
+            "The next actual runtime operation validates and converts this historical checkpoint; no new policy consent is required solely for its format."
+        );
+        value["runtime_relocation_pending"] = json!(state.project_root != context.project_root);
+        value["retained_project_root"] = json!(state.project_root);
+        value["project_root"] = json!(context.project_root);
+        return value;
+    }
     value["installed_packs"] = crate::review::packs::summaries(&metadata(state));
     value["pending_configuration"] = json!(
         state
@@ -66,26 +109,94 @@ pub(super) fn status_from(context: &Context, state: &State) -> Result<Value, Err
             .map(crate::review::model::Proposal::summary)
             .collect::<Vec<_>>()
     );
-    value["history"] = json!({"enabled":state.history_enabled,"limit":state.history_limit,"available":state.history_available});
+    value["pending_capture_freshness"] = json!("unchecked; apply revalidates exact reviewed files");
+    value["history"] = history_metadata(context, state);
+    value["reviewed_policy_consent"] = super::storage::policy_consent_presence(state);
     value["pending_approvals"] = json!(super::approvals::pending_count(
         state,
         super::clock::best_effort_ms()
     ));
     value["session_grants"] = super::session_grants::summary(state);
     value["coverage"] = integrations::status(context, state);
+    value["coverage"]["verification"] = json!({"state":"unchecked","basis":"record-only-inspection","history_available":value["history"]["available"],"agents":[],"inspect":"shield history list"});
+    value["coverage"]["live_host_verification"] = json!("unchecked");
     value["enforcement"] = json!(integrations::enforcement(&value["coverage"]));
     value["path_access"] = path_access::load(&metadata(state)).map_or_else(
         |error| json!({"error":error.to_string()}),
         |access| json!(access),
     );
-    value["repair_needed"] =
-        json!(projection_changed(context, state)? || value["coverage"]["repair_needed"] == true);
+    // Exact projection hashing belongs to explicit review/mutation. Even a
+    // recorded digest does not make scanning all pack source a metadata probe.
+    value["project_file_inspection"] = json!("unchecked");
+    value["project_input_metadata"] = state.active.as_ref().map_or_else(
+        || json!({"availability":"unavailable","probe":"not-run","integrity":"unchecked","authorizes":false}),
+        |active| super::cache::inputs::availability(&active.compiled),
+    );
+    value["repair_needed"] = json!(value["coverage"]["repair_needed"] == true);
+    value["repair_assessment"] = json!({"known_integration_repairs":value["repair_needed"],"project_files":"unchecked","complete":false});
     value["repair_route"] = json!(if value["coverage"]["repair_needed"] == true {
         integration_route(&value["coverage"])
     } else {
         "shield policy review".into()
     });
-    Ok(value)
+    inspection_location(context, state, &mut value);
+    value
+}
+
+/// One known generation marker is a bounded probe; the journal is not opened,
+/// listed or decoded to render status. Absence does not establish completeness.
+fn history_metadata(context: &Context, state: &State) -> Value {
+    let digest = state
+        .history_generation
+        .strip_prefix("journal-")
+        .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    let incomplete = digest.is_some_and(|digest| {
+        let path = Path::new(&context.project_root)
+            .join(".shield/review")
+            .join(format!("history-{digest}.error"));
+        super::storage::objects::read_file(&path)
+            .ok()
+            .and_then(|file| file.metadata().ok())
+            .is_some_and(|metadata| metadata.len() <= 1024 * 1024)
+    });
+    json!({"enabled":state.history_enabled,"limit":state.history_limit,
+        "available":if incomplete {json!(false)}else{Value::Null},
+        "integrity":if incomplete {"incomplete"}else{"unchecked"},"inspect":"shield history list"})
+}
+
+/// A copied checkpoint is evidence of its old epoch, not usable action authority.
+pub(super) fn inspection_location(context: &Context, state: &State, value: &mut Value) {
+    let pending = state.project_root != context.project_root;
+    value["runtime_relocation_pending"] = json!(pending);
+    let readiness = super::storage::incarnation::readiness(state, Path::new(&context.project_root));
+    let operations_pending = readiness["available"] != true;
+    value["operation_readiness"] = readiness;
+    value["operation_epoch_pending"] = json!(operations_pending);
+    value["portable_administration"] = if state.operator["portable_admin_unverified"] == true {
+        json!({"integrity":"unverified","effective":"safe defaults","next_action":"Review administrative preferences and agent registration; policy content does not require another review"})
+    } else {
+        json!({"integrity":"unchecked"})
+    };
+    if state.operator["portable_lineage_unverified"] == true {
+        value["portable_lineage"] = json!({"origin":"unverified","effective":"fresh lineage","reason":"The private exact-content record belongs to another recorded lineage"});
+    }
+    if pending || operations_pending {
+        value["retained_policy_authority"] = json!(
+            "unverified until native continuity or private reviewed-content consent is established"
+        );
+        value["retained_administration"] =
+            json!({"enabled":state.enforcement.enabled,"integrity":"unverified"});
+        value["retained_project_root"] = json!(state.project_root);
+        value["project_root"] = json!(context.project_root);
+        if value.get("retained_pending_approvals").is_none() {
+            value["retained_pending_approvals"] = value["pending_approvals"].clone();
+        }
+        value["pending_approvals"] = json!(0);
+        value["session_grants"] =
+            json!({"available":false,"reason":"operation continuity unavailable"});
+        value["action_authority"] =
+            json!("unavailable until runtime operation continuity is verified");
+    }
 }
 
 /// The command that repairs integration coverage diagnostics. `shield mcp
@@ -126,8 +237,26 @@ pub(super) fn agent_setup_route(coverage: &Value) -> String {
 }
 
 pub(super) fn policy(context: &Context) -> Result<Value, Error> {
-    let (state, evaluator) = load_prepared(context)?;
-    policy_prepared(context, &state, &evaluator)
+    let mut state = captured_inspection(context)?;
+    state.candidates.insert(
+        "project".into(),
+        super::inspection::source::policy(
+            context,
+            &state.candidates["project"],
+            &state.policy_revision,
+        )?,
+    );
+    let mut value = review::inspect_recorded(context, &state)?;
+    value["pending_configuration"] = json!(
+        state
+            .proposals
+            .iter()
+            .filter(|row| row.status == "pending")
+            .map(crate::review::model::Proposal::summary)
+            .collect::<Vec<_>>()
+    );
+    inspection_location(context, &state, &mut value);
+    Ok(value)
 }
 
 pub(super) fn policy_prepared(

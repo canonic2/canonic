@@ -8,12 +8,12 @@ use crate::{
     review::{self, Context, Error},
 };
 use serde_json::{Value, json};
-fn rules(candidate: &Value, context: &Context, local: bool) -> Result<Value, Error> {
+fn rules(candidate: &Value, local: bool) -> Result<Value, Error> {
     candidate[if local { "local_rules" } else { "rules" }]
         .as_str()
         .map_or_else(
             || Ok(crate::policy::rules::document(&[])?),
-            |s| review::inspection::project_rules(s, &context.project_root),
+            |s| crate::policy::normalize_retained_custom(s).map_err(Error::from),
         )
 }
 pub(super) fn mutate(
@@ -31,7 +31,7 @@ pub(super) fn mutate(
         RuleCommand::List => return Err(Error::Invalid("invalid operator command")),
     };
     let layer = Some(if local { Layer::Local } else { Layer::Project });
-    let document = rules(&before.candidates["project"], context, local)?;
+    let document = rules(&before.candidates["project"], local)?;
     let rows = document["rules"]
         .as_array()
         .ok_or(Error::Invalid("custom rules missing"))?;
@@ -278,6 +278,11 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
             "Request history settings",
             "Configure retention and optional history clearing",
         ),
+        (
+            "changes",
+            "Configuration change history",
+            "Inspect confirmed changes independently of request history",
+        ),
     ];
     // Live interactions are optional direct reviews, never a backlog default.
     if pending > 0 {
@@ -307,6 +312,10 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
                 false,
             )?
             .or_cancel()?;
+        if action == "changes" {
+            configuration_changes(context, &mut tty)?;
+            continue;
+        }
         return match action.as_str() {
             // The policy was already shown above the choice.
             "inspect" | "" => {
@@ -335,6 +344,14 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
             _ => Err(Error::Invalid("invalid policy action")),
         };
     }
+}
+
+fn configuration_changes(context: &Context, tty: &mut Terminal) -> Result<(), Error> {
+    let (state, _) = review::storage::Store::inspect(std::path::Path::new(&context.project_root))?
+        .read_diagnostic_checkpoint()?;
+    let mut view = review::configuration_changes::inspect(&state);
+    view["operation"] = json!("configuration change history");
+    tty.display(&view)
 }
 
 /// Select one live interaction explicitly; closed history cannot be activated.

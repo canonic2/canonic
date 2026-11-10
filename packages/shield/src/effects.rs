@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 mod arguments;
 mod docker;
+mod evidence;
 mod git;
 #[cfg(test)]
 mod tests;
@@ -70,6 +71,9 @@ pub struct NestedExecution {
 }
 
 impl Hints {
+    pub(crate) fn private_input_view(&self) -> impl serde::Serialize + '_ {
+        evidence::PrivateInput(self)
+    }
     /// Test a possible effect without choosing a permission or profile.
     #[must_use]
     pub fn may(&self, effect: Effect) -> bool {

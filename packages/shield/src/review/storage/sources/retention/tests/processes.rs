@@ -63,7 +63,13 @@ fn storage_reclamation_nonactivating_writer_and_collector_in_separate_processes(
         }
         owner.child.stdin.as_mut().unwrap().write_all(b"x").unwrap();
         let mut collector = Batch::new(&Value::Null, false).unwrap();
-        collector.admit(&store, &"f".repeat(64), 1).unwrap();
+        collector
+            .admit(
+                &Namespace::project(&store),
+                &format!("{}.json", "f".repeat(64)),
+                1,
+            )
+            .unwrap();
         drop(collector);
         let id = received.recv_timeout(Duration::from_secs(5)).unwrap();
         let state = store.read_checkpoint().unwrap();

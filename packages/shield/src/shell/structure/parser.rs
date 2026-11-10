@@ -316,6 +316,7 @@ impl Parser<'_> {
                 substitutions: substitutions(&token.raw, token.span.start, &self.control)?,
                 fragments: fragments(&token.raw, token.span.start, &self.control)?,
                 resolved: false,
+                private_evidence: false,
             });
             if words.len() > 257 {
                 return Err(Error::Limit);
@@ -405,6 +406,7 @@ impl Parser<'_> {
             substitutions: substitutions(&token.raw, token.span.start, &self.control)?,
             fragments: fragments(&token.raw, token.span.start, &self.control)?,
             resolved: false,
+            private_evidence: false,
         };
         self.position += 1;
         Ok(word)
@@ -487,6 +489,7 @@ impl Parser<'_> {
                 substitutions: substitutions(&token.raw, token.span.start, &self.control)?,
                 fragments: fragments(&token.raw, token.span.start, &self.control)?,
                 resolved: false,
+                private_evidence: false,
             });
             self.position += 1;
         }

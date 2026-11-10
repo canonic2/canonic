@@ -20,9 +20,15 @@ impl IntegrationChoice {
     pub(crate) fn agent(id: &str) -> Self {
         Self::Agents(Self::bits(&[id]).expect("registered agent"))
     }
-    /// Install every registered agent.
+    /// Install the mutually compatible baseline used by shared fixtures.
+    /// Copilot remains explicit because it imports incompatible Claude hooks.
     pub(crate) fn all() -> Self {
-        Self::Agents(Self::every())
+        let ids: Vec<_> = crate::agents::ADAPTERS
+            .iter()
+            .map(|a| a.spec().id)
+            .filter(|id| *id != "copilot")
+            .collect();
+        Self::Agents(Self::bits(&ids).expect("registered compatible agents"))
     }
     /// Remove every Shield-owned agent registration.
     pub(crate) fn remove_all() -> Self {

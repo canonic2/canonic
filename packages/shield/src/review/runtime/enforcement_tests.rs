@@ -150,7 +150,7 @@ fn stale_foreign_and_corrupt_state_never_reach_allow_callback() {
             evidence(&project, "read"),
             |_, _| panic!("foreign allow")
         ),
-        Err(Error::Runtime(runtime::Error::Invalid(_)))
+        Err(Error::Runtime(runtime::Error::StaleSnapshot))
     ));
     let current = evidence(&project, "read");
     fs::write(root.path().join(".shield/review/state.json"), "corrupt").unwrap();

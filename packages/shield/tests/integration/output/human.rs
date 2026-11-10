@@ -8,6 +8,9 @@ use std::{fmt::Write, path::Path};
 /// sees: the terminal transcript (prompts and reviews), stdout, stderr and the
 /// exit status.
 fn screen(root: &Path, args: &[&str], answers: &str) -> String {
+    // Project .shield is shared configuration, not the private user cache.
+    let home = root.join(".fixture-home");
+    std::fs::create_dir_all(&home).expect("fixture home");
     let binary = assert_cmd::cargo::cargo_bin!("shield");
     let script = concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -25,7 +28,7 @@ fn screen(root: &Path, args: &[&str], answers: &str) -> String {
         .arg(binary)
         .arg(json!(full).to_string())
         .arg(answers)
-        .env("HOME", root)
+        .env("HOME", home)
         .env("NO_COLOR", "1")
         .env("TERM", "xterm-256color")
         .output()
@@ -91,6 +94,27 @@ fn filters(paths: &[(&Path, &str)]) -> Vec<(String, String)> {
 }
 
 #[test]
+fn pack_list_keeps_explicit_registry_update_observation() {
+    let root = TempDir::new().expect("project");
+    let registry = super::super::operator::local_dependency_source();
+    let source = registry.path().to_str().unwrap();
+    for (args, answers) in [
+        (vec!["init", "--no-setup", "--no-baseline"], "yes\n"),
+        (vec!["registry", "add", "acme", source], "yes\n"),
+        (vec!["registry", "default", "acme"], "yes\n"),
+        (vec!["pack", "add", "acme/parent"], "\nyes\n"),
+    ] {
+        let output = screen(root.path(), &args, answers);
+        assert!(output.ends_with("--- exit 0\n"), "{output}");
+    }
+    let text = screen(root.path(), &["pack", "list"], "");
+    let filters = filters(&[(root.path(), "[PROJECT]"), (registry.path(), "[REGISTRY]")]);
+    insta::with_settings!({filters => filters.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect::<Vec<_>>(), prepend_module_to_snapshot => false}, {
+        insta::assert_snapshot!("human-pack-list", text);
+    });
+}
+
+#[test]
 fn every_public_command_has_concise_human_output() {
     let root = TempDir::new().expect("project");
     let registry = super::super::operator::local_dependency_source();
@@ -139,7 +163,7 @@ fn public_command_steps(source: &str) -> Vec<(&'static str, Vec<&str>, &'static 
         (
             "registry-add-duplicate",
             vec!["registry", "add", "acme", source],
-            "",
+            "yes\n",
         ),
         ("registry-list", vec!["registry", "list"], ""),
         (
@@ -265,7 +289,7 @@ fn approvals_and_history_have_concise_human_output() {
             .arg(root.path())
             .arg("--")
             .args(args)
-            .env("HOME", root.path())
+            .env("HOME", root.path().join(".fixture-home"))
             .output()
             .expect("native run")
     };
@@ -275,7 +299,7 @@ fn approvals_and_history_have_concise_human_output() {
             .args(args)
             .args(["--json", "--project"])
             .arg(root.path())
-            .env("HOME", root.path())
+            .env("HOME", root.path().join(".fixture-home"))
             .output()
             .expect("inspection");
         serde_json::from_slice(&output.stdout).expect("JSON")
@@ -318,7 +342,7 @@ fn approvals_and_history_have_concise_human_output() {
             "/bin/echo",
             "Acme",
         ])
-        .env("HOME", root.path())
+        .env("HOME", root.path().join(".fixture-home"))
         .output()
         .expect("approved run");
     assert!(retried.status.success());
@@ -370,7 +394,7 @@ fn propose(root: &Path, change: &Value) -> Session {
     let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin!("shield"))
         .args(["mcp", "serve", "--project"])
         .arg(root)
-        .env("HOME", root)
+        .env("HOME", root.join(".fixture-home"))
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())

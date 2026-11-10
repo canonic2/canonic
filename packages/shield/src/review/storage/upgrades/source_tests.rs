@@ -113,6 +113,13 @@ fn fixture(pack_schema: u8, custom_schema: u8) -> (assert_fs::TempDir, review::C
     (root, context, raw)
 }
 
+fn current_context(root: &std::path::Path, mut previous: review::Context) -> review::Context {
+    let current = review::open(root).unwrap();
+    previous.project_id = current.project_id;
+    previous.project_root = current.project_root;
+    previous
+}
+
 fn assert_decisions(context: &review::Context, revision: &str) {
     let snapshot = consumer::load(context, &|| Ok(())).unwrap();
     assert_eq!(snapshot.identity().policy_revision(), revision);
@@ -167,6 +174,8 @@ fn upgrade_authentic_source_reaches_mcp_confirmation_with_a_missing_cache() {
         &|| Ok(()),
     );
     assert!(proposed["error"].is_null(), "{proposed}");
+    assert_eq!(proposed["project_id"], before.project_id);
+    context = current_context(root.path(), context);
     let args = &proposed["data"]["apply_arguments"];
     assert!(args.is_object(), "{proposed}");
     fs::remove_file(compiled_path(&before)).unwrap();
@@ -205,6 +214,7 @@ fn upgrade_authentic_source_accepts_reviewed_changes_and_preserves_existing_deci
         raw.to_string(),
     )
     .unwrap();
+    let context = current_context(root.path(), context);
     let before = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
     let proposed = review::tests::propose(
         &context,
@@ -255,22 +265,24 @@ fn upgrade_authentic_sources_preserve_original_authority_and_all_entry_points() 
             let original = serde_json::to_vec(&raw).unwrap();
             fs::write(root.path().join(".shield/review/state.json"), &original).unwrap();
             let store = Store::open(root.path()).unwrap();
+            let context = current_context(root.path(), context);
             let state = store.read_checkpoint().unwrap();
-            assert_eq!(state.project_id, raw["project_id"]);
+            assert_ne!(state.project_id, raw["project_id"]);
+            assert_eq!(state.policy_lineage(), raw["project_id"].as_str().unwrap());
+            assert_eq!(state.history_owner.as_deref(), raw["project_id"].as_str());
             assert_eq!(state.policy_revision, raw["policy_revision"]);
             let active = serde_json::to_value(state.active.as_ref().unwrap()).unwrap();
-            for field in [
-                "activation_id",
-                "previous_activation_id",
-                "policy_revision",
-                "candidate_digest",
-                "binding",
-            ] {
+            for field in ["policy_revision", "candidate_digest"] {
                 assert_eq!(active[field], raw["active"][field]);
             }
-            assert_eq!(
-                state.authorization_events[0],
-                raw["authorization_events"][0]
+            assert_ne!(active["activation_id"], raw["active"]["activation_id"]);
+            assert_eq!(active["binding_version"], 2);
+            assert!(
+                state
+                    .authorization_events
+                    .iter()
+                    .any(|event| event["kind"] == "runtime_activated"
+                        && event["operator"]["mechanism"] == "reviewed-policy-reuse")
             );
             assert_eq!(retained(&store, &source_name(&original)).unwrap(), original);
             let revision = raw["policy_revision"].as_str().unwrap();
@@ -303,10 +315,16 @@ fn upgrade_authentic_sources_preserve_original_authority_and_all_entry_points() 
             mcp.surface = "mcp".into();
             mcp.connection_id = Some("legacy-source-connection".into());
             let connection = review::mcp::Connection::enrolled(&mcp).unwrap();
-            for tool in ["pack_list", "policy_show"] {
-                let report = review::mcp::call(&mcp, &connection, tool, &json!({}), &|| Ok(()));
-                assert!(report["error"].is_null(), "{tool}: {report}");
-            }
+            let report = review::mcp::call(&mcp, &connection, "pack_list", &json!({}), &|| Ok(()));
+            assert!(report["error"].is_null(), "{report}");
+            let historical_display =
+                review::mcp::call(&mcp, &connection, "policy_show", &json!({}), &|| Ok(()));
+            assert!(
+                historical_display["error"]["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("historical custom display")),
+                "{historical_display}"
+            );
             for (decision, expected, code) in [
                 ("allow", "allow", "allowed"),
                 ("deny", "deny", "policy-deny"),

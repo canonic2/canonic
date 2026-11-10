@@ -15,6 +15,12 @@ For your first installation, follow [the setup guide](getting-started.md).
 After setup, restart and trust the agent so it loads both integrations.
 Use `shield history list` to inspect recorded requests and completion.
 
+Shield's generated MCP and hook entries use `shield` on PATH and `--project .`.
+They contain no developer home or checkout path. Shield discovers the current
+project when it starts, so moving or copying a checkout requires no location
+approval. Reviewed policy reuse and temporary approval isolation are described in
+[troubleshooting](troubleshooting.md#the-project-was-moved-or-copied).
+
 ## Install or repair an integration
 
 Run `shield mcp setup` for guided management. Choose **Install or repair** or
@@ -80,7 +86,8 @@ writes two Box files:
 
 - `.box/mcp/shield.yml` is shared with everyone who uses the project. It names
   the bare `shield` command, so it holds no path from your machine. It tells Box
-  to run Shield's MCP server for each agent, to allow the tools you marked on
+  to run Shield's MCP server for each agent with `--project .`, to allow the
+  tools you marked on
   the Tool permissions page except `policy_apply`, which always asks, and to
   install Shield's hooks for Claude Code (`pre_tool_use`, `post_tool_use`,
   `post_tool_use_failure`) and Codex (`pre_tool_use`, `permission_request`,
@@ -108,6 +115,13 @@ reports a file as missing or changed. `shield mcp setup --agent box` rewrites
 both. `shield mcp setup --remove --agent box` deletes them only while they still
 hold what Shield wrote; restore or delete an edited file yourself first.
 Removing them does not remove entries Box already published; Box manages those.
+
+Moving or copying a project on the same developer account can reuse a current
+private setup receipt. Shield keeps the shared Box definition portable and can
+refresh its exact owned local pin when the running binary's contents still match
+the review. Edited definitions need their normal setup review. Box continues to
+own the agent files it publishes; copying a workspace needs no Shield enrollment
+callback in Box.
 
 Codex cannot ask at its hook, so the review shows the same
 [Ask fallback](#codex-approval-handling) a direct Codex setup uses, Allow for a
@@ -329,9 +343,13 @@ assets and scratch folders outside temporary roots are not automatically discove
 Bash source retains flags, quoting and compounds for conservative shell analysis.
 A literal `cd` to the already known current directory, including `cd .`, keeps
 that working-directory context and needs no extra approval unless an explicit
-command rule asks or denies it. Other directory changes retain conservative
-handling; returning to the original path after an unresolved change does not
-restore known context.
+command rule asks or denies it. Literal POSIX directory changes such as
+`cd ./subproject && command` use the observed target for the successful branch.
+`||` retains the failure directory, and `;` checks both possibilities. Logical
+and physical `-L`/`-P` behavior follows observed symlinks. Unknown environment,
+directory shortcuts and preceding unclassified filesystem changes retain
+conservative handling; returning to a path after an unresolved change does not
+restore known context. Explanations show the cwd used for each operation.
 Heredocs and here-strings supply inline data without an extra approval requirement.
 The command, output destinations, substitutions and shell interpreter bodies
 still follow their own policy checks, so writing a quoted heredoc to an approved

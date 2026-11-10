@@ -41,6 +41,14 @@ struct Pending {
 }
 
 impl Confirmations {
+    pub(super) fn is_empty(&self) -> bool {
+        self.pending.is_empty()
+    }
+    pub(super) fn discard(&mut self, request: &RequestContext) -> Option<u64> {
+        self.pending
+            .remove(request.request_state.as_ref()?)?
+            .review_binding
+    }
     /// Cleanup binding of a continuation before resume consumes it, including invalid retries.
     pub(super) fn review_binding(&self, request: &RequestContext) -> Option<u64> {
         self.pending
@@ -176,5 +184,10 @@ mod tests {
         confirmations
             .begin(&request, &call, "Review", None, None)
             .unwrap();
+        let token = confirmations.pending.keys().next().unwrap().clone();
+        let count = confirmations.pending.len();
+        confirmations.discard(&context(Some(&token)));
+        assert_eq!(confirmations.pending.len(), count - 1);
+        assert!(confirmations.resume(&context(Some(&token)), &call).is_err());
     }
 }

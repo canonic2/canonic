@@ -54,7 +54,17 @@ pub(crate) fn run(
         session_id: input.session_id.clone(),
         tool_use_id: input.tool_use_id.clone(),
     };
-    log.event("mcp_start", serde_json::json!({"project":context.project,"session_id":context.session_id,"agent":context.agent,"request_timeout_ms":input.request_timeout_ms}));
+    log.event("mcp_start", || serde_json::json!({"session_id":context.session_id,"agent":context.agent,"request_timeout_ms":input.request_timeout_ms}));
+    // Starting a runtime connection, unlike CLI inspection, may reuse this
+    // developer's exact reviewed source receipt before first-use diagnostics.
+    if valid_attribution(&context)
+        && let Err(error) = crate::review::reuse_reviewed_policy(&target)
+    {
+        log.event(
+            "reviewed_policy_reuse_failed",
+            || serde_json::json!({"error_kind":error.code()}),
+        );
+    }
     if valid_attribution(&context)
         && let Ok(probe) = crate::review::bootstrap::inspect(&target)
         && probe.bootstrap_required()
@@ -134,9 +144,12 @@ fn valid_attribution(context: &ReviewContext) -> bool {
         })
 }
 
-/// Old registrations pin an absolute root. A nearest copied/moved enrollment
-/// naming exactly that root must reach its own review instead of the original.
-fn project_path(project: Option<&Path>, cwd: &Path) -> Result<PathBuf, crate::review::Error> {
+/// Resolve portable launchers from cwd and keep historical absolute launchers
+/// on the current checkout instead of opening their old runtime.
+pub(crate) fn project_path(
+    project: Option<&Path>,
+    cwd: &Path,
+) -> Result<PathBuf, crate::review::Error> {
     let cwd = cwd.canonicalize()?;
     let nearest = cwd.ancestors().find(|path| {
         [".shield/config.yml", ".shield/review"].iter().any(|name| {
@@ -146,7 +159,7 @@ fn project_path(project: Option<&Path>, cwd: &Path) -> Result<PathBuf, crate::re
             }
         })
     });
-    let Some(project) = project else {
+    let Some(project) = project.filter(|path| *path != Path::new(".")) else {
         return Ok(nearest.unwrap_or(&cwd).into());
     };
     let selected = absolute_project(project, &cwd);
@@ -161,9 +174,7 @@ fn project_path(project: Option<&Path>, cwd: &Path) -> Result<PathBuf, crate::re
         {
             return Ok(nearest.into());
         }
-        return Err(crate::review::Error::Invalid(
-            "configured working directory and selected project are ambiguous; no project authority was opened",
-        ));
+        return Ok(selected);
     }
     Ok(selected)
 }
@@ -179,9 +190,19 @@ fn absolute_project(project: &Path, cwd: &Path) -> PathBuf {
 
 fn recorded_launch(path: &Path, requested: &Path, current: &Path) -> bool {
     recorded_claim(path).is_some_and(|value| {
-        // Raw claims select only a visibly displaced checkpoint, which cannot
-        // open ordinary authority at current. A healthy enrollment needs its
-        // independently validated confirmation proof to redirect a launcher.
+        if value["operator"]["portable_launch_roots"]
+            .as_array()
+            .is_some_and(|roots| {
+                roots.iter().take(2).any(|root| {
+                    root.as_str()
+                        .is_some_and(|root| Path::new(root) == requested)
+                })
+            })
+        {
+            return true;
+        }
+        // These claims select a runtime only. Its checkpoint or private policy
+        // receipt still has to pass the ordinary authority validation.
         value["project_root"]
             .as_str()
             .is_some_and(|root| Path::new(root) != current)

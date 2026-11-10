@@ -7,6 +7,8 @@ use super::{Context, Error, model::State, path_access, storage::Store};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::Path;
+mod receipts;
+pub(super) use receipts::{compact as compact_receipts, registry as terminal_registry};
 
 #[cfg(test)]
 mod tests;
@@ -251,6 +253,9 @@ pub(super) fn pending_count(state: &State, time: u64) -> usize {
 /// Terminal records stay selectable so repeated denial can return its receipt.
 pub(super) fn inspect_from(state: &State, id: Option<&str>, time: u64) -> Result<Value, Error> {
     let view = |row: &HookRequest| {
+        if row.status == "consumed" {
+            return Err(Error::Missing);
+        }
         let status = if matches!(row.status.as_str(), "pending" | "approved") {
             if !row.current(state)? {
                 "stale"
@@ -286,6 +291,7 @@ pub(super) fn inspect_from(state: &State, id: Option<&str>, time: u64) -> Result
     let rows = state
         .hook_requests
         .iter()
+        .filter(|row| row.status != "consumed")
         .map(view)
         .collect::<Result<Vec<_>, _>>()?;
     Ok(json!({"schema_version":1,"requests":rows}))
@@ -294,7 +300,24 @@ pub(super) fn inspect_from(state: &State, id: Option<&str>, time: u64) -> Result
 /// Revoke only after confirmation, restricting agent calls to their recorded
 /// consumer/conversation. The operator may revoke any request in the project.
 pub(super) fn deny(context: &Context, id: &str, confirmed: bool) -> Result<Value, Error> {
+    let replay = |state: &State| {
+        state.check_operations()?;
+        state
+            .terminal_receipts
+            .replay_operator(super::authorization_receipts::OperatorReplay {
+                context,
+                id,
+                decision: super::authorization_receipts::Decision::Deny,
+                ttl_seconds: None,
+                reason: None,
+                at: now()?,
+            })
+    };
+    if let Some(value) = replay(&super::project::checkpoint(context)?)? {
+        return Ok(value);
+    }
     Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
+        if let Some(value) = replay(state)? { return Ok(value); }
         let index = state.hook_requests.iter().position(|row| row.request_id == id).ok_or(Error::Missing)?;
         let row = &state.hook_requests[index];
         if context.surface != "cli" && (context.surface != "mcp" || !agent_matches(context, row)
@@ -306,7 +329,8 @@ pub(super) fn deny(context: &Context, id: &str, confirmed: bool) -> Result<Value
         if row.status == "consumed" { return Err(Error::Invalid("request was consumed; execution cannot be revoked")); }
         let binding = row.binding.clone();
         let approval = row.grant.as_ref().map(|g|g.approval_id.clone());
-        state.hook_requests[index].status = "revoked".into();
+        receipts::revoke(state, index, now()?)?;
+        state.hook_requests.remove(index);
         let mut event = state.event("hook_grant_revoked", context,
             json!({"request_id":id,"approval_id":approval}),json!({}),json!({"request_binding":binding}));
         event["operator"] = json!({"operator_id":null,"display_name":null,
@@ -343,6 +367,7 @@ fn lookup(
     identity: &Identity<'_>,
     time: u64,
 ) -> Result<Option<Found>, Error> {
+    state.check_operations()?;
     if !active(state, identity) {
         return Err(Error::StaleSnapshot);
     }
@@ -491,6 +516,7 @@ pub(crate) fn followup(root: &Path, key: &Key<'_>, identity: &Identity<'_>) -> R
     // Rechecked under the writer lock: a policy change since the hook decided
     // ends the grant's cover.
     let covering = |state: &State, time: u64| -> Result<Option<usize>, Error> {
+        state.check_operations()?;
         if !active(state, identity) {
             return Ok(None);
         }
@@ -611,6 +637,7 @@ fn selected<'a>(
     context: &Context,
     args: &Value,
 ) -> Result<(Vec<&'a HookRequest>, bool), Error> {
+    state.check_operations()?;
     if context.surface != "mcp" {
         return Err(Error::ApprovalRequired);
     }

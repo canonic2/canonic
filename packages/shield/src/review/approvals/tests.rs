@@ -50,11 +50,11 @@ fn fixture_with_session(agent: &str, session: Option<&str>) -> Fixture {
         project: context.project_root.clone(),
     };
     let run_resource = crate::execution::approval_fixture(&request, 5000).expect("bind executable");
-    let run = Project::open(Path::new(&context.project_root))
+    let snapshot = Project::open(Path::new(&context.project_root))
         .expect("open project")
         .snapshot()
-        .expect("load snapshot")
-        .evaluate(request)
+        .expect("load snapshot");
+    let run = crate::execution::evaluate_approval(&snapshot, &request, &run_resource)
         .expect("evaluate command");
     let (value, outcome) = run_approval::gate(&context, &run, &run_resource, None, || true, |_| ())
         .expect("capture checked execution");
@@ -86,12 +86,11 @@ fn action_request_kinds_large_mixed_form_splits_without_issuing_unseen_grants() 
         (0..padding.div_ceil(1024)).map(|index| "x".repeat((padding - index * 1024).min(1024))),
     );
     let resource = crate::execution::approval_fixture(&request, 5000).unwrap();
-    let run = Project::open(Path::new(&f.context.project_root))
+    let snapshot = Project::open(Path::new(&f.context.project_root))
         .unwrap()
         .snapshot()
-        .unwrap()
-        .evaluate(request)
         .unwrap();
+    let run = crate::execution::evaluate_approval(&snapshot, &request, &resource).unwrap();
     let mut context = f.context.clone();
     context.surface = "run".into();
     let (captured, _) =
@@ -112,6 +111,55 @@ fn action_request_kinds_large_mixed_form_splits_without_issuing_unseen_grants() 
         event["kind"].as_str(),
         Some("read_grant_issued" | "run_grant_issued")
     )));
+}
+
+#[test]
+fn terminal_group_replay_returns_closed_outcomes_without_another_confirmation() {
+    let f = fixture("codex");
+    let args = json!({"request_ids":f.ids});
+    approve(&f.context, &args, true).unwrap();
+    assert_eq!(
+        read_approval::gate(
+            &f.context,
+            "acme-factory",
+            &f.read,
+            &f.read_digest,
+            Some(&f.ids[0]),
+            || true
+        )
+        .unwrap()["allowed"],
+        true
+    );
+    assert!(matches!(
+        approve(&f.context, &args, false),
+        Err(Error::Grouped { .. })
+    ));
+    let mut run = f.context.clone();
+    run.surface = "run".into();
+    assert_eq!(
+        run_approval::gate(
+            &run,
+            &f.run,
+            &f.run_resource,
+            Some(&f.ids[1]),
+            || true,
+            |_| ()
+        )
+        .unwrap()
+        .0["allowed"],
+        true
+    );
+    assert!(confirmation(&f.context, &args).is_err());
+    let receipt = approve(&f.context, &args, false).unwrap();
+    assert_eq!(receipt["status"], "terminal");
+    assert_eq!(receipt["allowed"], false);
+    assert!(
+        receipt["grants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["allowed"] == false && row.get("approval_id").is_none())
+    );
 }
 
 #[test]
@@ -345,6 +393,46 @@ fn action_request_kinds_mixed_native_override_read_and_run_are_one_atomic_review
         review::hook_approval::refused(root, &key, &identity, &summary).unwrap(),
         Outcome::Allowed
     ));
+    assert!(matches!(
+        approve(&f.context, &args, false),
+        Err(Error::Grouped { .. })
+    ));
+    assert_eq!(
+        read_approval::gate(
+            &f.context,
+            "acme-factory",
+            &f.read,
+            &f.read_digest,
+            Some(&f.ids[0]),
+            || true
+        )
+        .unwrap()["allowed"],
+        true
+    );
+    let mut run_context = f.context.clone();
+    run_context.surface = "run".into();
+    let (allowed, _) = run_approval::gate(
+        &run_context,
+        &f.run,
+        &f.run_resource,
+        Some(&f.ids[1]),
+        || true,
+        |_| (),
+    )
+    .unwrap();
+    assert_eq!(allowed["allowed"], true);
+    let replay = approve(&f.context, &args, false).unwrap();
+    assert_eq!(replay["allowed"], false);
+    assert_eq!(replay["grants"].as_array().unwrap().len(), 3);
+    assert!(
+        replay["grants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|v| v["allowed"] == false && v.get("approval_id").is_none())
+    );
+    // Closed metadata replay does not consume the native follow-up capability.
+    assert!(review::hook_approval::followup(root, &key, &identity).unwrap());
 }
 
 #[test]

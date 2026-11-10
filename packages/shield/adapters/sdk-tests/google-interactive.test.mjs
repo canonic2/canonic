@@ -64,7 +64,7 @@ async function geminiEnvironment(root, provider) {
     security: { auth: { selectedType: 'gemini-api-key' } }, ui: { showBanner: false },
   }));
   return { ...process.env, TERM: 'xterm-256color', NO_COLOR: '1',
-    HOME: home, GEMINI_CLI_HOME: home, GEMINI_CLI_TRUST_WORKSPACE: 'true',
+    GEMINI_CLI_HOME: home, GEMINI_CLI_TRUST_WORKSPACE: 'true',
     GOOGLE_GEMINI_BASE_URL: provider.url, GEMINI_API_KEY: 'acme-local-test-key',
     GOOGLE_GENAI_USE_GCA: 'false', GOOGLE_GENAI_USE_VERTEXAI: 'false',
     GEMINI_TELEMETRY_ENABLED: 'false', HTTP_PROXY: '', HTTPS_PROXY: '', ALL_PROXY: '', NO_PROXY: '127.0.0.1,localhost' };

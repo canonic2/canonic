@@ -38,7 +38,7 @@ fn variant(kind: &str, mut properties: Value, required: &[&str]) -> Value {
 fn input() -> Value {
     json!({"oneOf":[
         variant("argv",json!({"executable":string(),"arguments":strings()}),&["executable","arguments"]),
-        variant("shell",json!({"source":{"type":"string","maxLength":65536},"dialect":{"enum":["bash","posix","powershell","cmd"]},"dialect_version":nullable(string())}),&["source","dialect"]),
+        variant("shell",json!({"source":{"type":"string","maxLength":65536},"dialect":{"enum":["bash","posix","powershell","cmd","unsupported"]},"dialect_version":nullable(json!({"type":"string","minLength":1,"maxLength":64}))}),&["source","dialect"]),
         variant("file",json!({"action":{"enum":["read","write","copy","move","remove"]},"sources":strings(),"destination":nullable(string()),"recursive":{"type":"boolean"}}),&["action","sources","recursive"]),
         variant("web",json!({"action":{"enum":["search","fetch"]},"query":nullable(string()),"url":nullable(string()),"method":nullable(string()),"conditions":arbitrary()}),&["action","conditions"]),
         variant("mcp",json!({"server":string(),"tool":string(),"arguments":arbitrary()}),&["server","tool","arguments"]),
@@ -195,7 +195,7 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
                 "pack_update_notice":{"type":"object","properties":{"items":{"type":"array","maxItems":3},"remaining":{"type":"integer","minimum":0},"truncated":{"type":"boolean"},"message":string(),"instruction":string()},"required":["items","remaining","truncated","message","instruction"]}
             }}));
         }
-        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":result_schema,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply","protection_set","disable","registry_remove","history_configure","policy_reject","mcp_setup"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","pack_update","policy_propose","registry_add","mcp_setup"].contains(&name))}})
+        json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":result_schema,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply","protection_set","disable","registry_remove","history_configure","policy_reject","mcp_setup"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","pack_update","policy_propose","registry_add","registry_trust","mcp_setup"].contains(&name))}})
     }).chain(super::documentation::tools().into_iter().map(|mut tool| {
         // The shared definitions carry their own schemas and annotations;
         // results arrive in Shield's envelope.
@@ -348,6 +348,11 @@ fn admin_inventory() -> Vec<Definition> {
                     &[],
                 )
             },
+        ),
+        (
+            "registry_trust",
+            "Ask the person to trust a custom HTTPS registry's signing keys for all projects; this grants no policy permissions.",
+            || object(json!({"name":string()}), &["name"]),
         ),
         (
             "registry_remove",

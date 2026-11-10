@@ -1,6 +1,48 @@
 use super::*;
 
 #[test]
+fn recorded_source_handles_charge_logical_source_and_prepare_only_on_evaluation() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let bundle =
+        configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
+    let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
+    let state = Store::inspect(root.path())
+        .unwrap()
+        .read_diagnostic_checkpoint()
+        .unwrap()
+        .0;
+    let reference = &state.candidates["project"];
+    let mut views = Views::new("recorded-source-admission".into());
+    let id = views
+        .retain_prepared(
+            &context,
+            reference,
+            &state.operator,
+            None,
+            Some(&state.policy_revision),
+            None,
+        )
+        .unwrap();
+    let logical = usize::try_from(reference["length"].as_u64().unwrap()).unwrap();
+    assert!(
+        views.bytes >= logical + crate::json::encoded_len(&[reference, &state.operator]).unwrap()
+    );
+    let captured = views.get(&id).unwrap();
+    assert!(captured.source.is_some());
+    assert!(captured.cached.is_none());
+    assert!(captured.evaluator.get().is_none());
+    assert_eq!(
+        views
+            .prepare(&context, &id)
+            .unwrap()
+            .evaluator()
+            .unwrap()
+            .revision(),
+        state.policy_revision
+    );
+}
+
+#[test]
 fn storage_reclamation_lazy_mcp_capture_keeps_its_source_after_cache_eviction_and_activation() {
     use crate::review::{self, storage::sources};
     let root = assert_fs::TempDir::new().unwrap();
@@ -13,7 +55,7 @@ fn storage_reclamation_lazy_mcp_capture_keeps_its_source_after_cache_eviction_an
     let captured = views.get(&id).unwrap();
     let candidate = captured.candidate.clone();
     let original = captured.source().unwrap();
-    let revision = captured.revision().unwrap().to_owned();
+    let revision = captured.revision().to_owned();
     assert!(captured.evaluator.get().is_none());
     for index in 0..4 {
         sources::activate_fixture(&context, &format!("acme-{index}"));
@@ -25,7 +67,15 @@ fn storage_reclamation_lazy_mcp_capture_keeps_its_source_after_cache_eviction_an
         .join(format!("{}.bin", descriptor["plan_key"].as_str().unwrap()));
     assert!(!path.exists(), "unused old plans are reclaimed");
     assert_eq!(captured.source().unwrap(), original);
-    assert_eq!(captured.evaluator().unwrap().revision(), revision);
+    assert_eq!(
+        views
+            .prepare(&context, &id)
+            .unwrap()
+            .evaluator()
+            .unwrap()
+            .revision(),
+        revision
+    );
     drop(captured);
     drop(views);
     sources::activate_fixture(&context, "acme-after-reader-release");

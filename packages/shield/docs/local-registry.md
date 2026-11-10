@@ -167,6 +167,23 @@ shield registry remove acme
 
 These CLI registry mutations ask for terminal confirmation. From an agent, use
 `registry_add` with `{"name":"team","location":"https://registry.example.com/"}`.
+Using an alias already registered in that scope requests a replacement review.
+Compare its previous and proposed locations and trust before accepting. The
+alias's default selection and installed packs stay intact; installed packs keep
+their original source identity. A project registration shadows the same alias in
+your user configuration. Removing it reveals that user source, which the review
+identifies even when the default alias stays the same.
+
+User-scope changes publish a committed generation and retain their receipt.
+After an interruption, retry the same command: Shield reconciles an unfinished
+approved change using its captured source. A settled add can check the presented
+source again; an unchanged source reconciles its receipt, while a new key or
+location requires replacement review. A successful receipt can still report
+`repair_needed` or unconfirmed `durability`; that means the change committed and
+needs reconciliation, not another installation. Shield preserves conflicting
+manual edits in `~/.shield/registries.json` and keeps the committed registrations
+active. Inspect both before correcting that file or preparing another global change.
+
 Shield validates the discovered catalog, then shows a human form with its
 canonical location, registry identity, signing-key SHA-256 fingerprint and trust
 basis. HTTPS enrollment trusts the reviewed origin/key on first use; a signature
@@ -391,17 +408,29 @@ project, or all only yours. `pack configure --local` saves them locally without
 asking, and a pack added with `--local` keeps everything local. Local settings
 live in `.shield/config.local.yml` (with `rules.local.yml` and
 `shield.local.lock`), which Shield adds to `.shield/.gitignore`. A local entry
-can also turn off a shared pack for you with `disabled: true`; edit the file and
-review it with `shield policy review`. Agents cannot edit these files.
+can also replace a shared pack's release or profile: use
+`shield pack add acme/aws --profile strict --local`, adding `@VERSION` to select
+another release. `shield pack remove acme/aws --local` turns off a shared pack
+or removes your local selection. Removing a local replacement keeps the shared
+selection turned off; delete its local `disabled: true` entry and review with
+`shield policy review` to re-enable it. Shared configuration and lock files keep
+their contents. Agents cannot edit these files.
 
 An override turns a pack rule or precondition `off` or replaces its decision;
 it cannot add rules or change conditions. Values and overrides are stored with
 the selection in `.shield/config.yml`. Every change goes through the ordinary
-review, which lists changed values and overrides and marks overrides that widen
-permissions. Updates keep values and overrides; review lists any that the new
+review, which lists changed values and overrides and marks entries that may widen
+permissions. Its permission comparison describes the whole proposal, including
+other rules; incomplete comparisons stay unknown even when they show a concrete
+example. Updates keep values and overrides; review lists any that the new
 release no longer declares, and they are removed. Shield asks again when an
 update adds a required variable or no longer accepts the bound value. Agents can
 propose the same changes with the MCP `pack_configure` change.
+
+Decision explanations include each matched pack rule's selected profile,
+authored default, decision before the effective override, final decision and
+whether the pack, shared configuration or local configuration supplied it.
+The same evidence accompanies failed preconditions and shared command bodies.
 
 ## Updating and removing dependency packs
 
@@ -434,3 +463,27 @@ dependency checks and a separate final policy approval. This form supports at
 most 64 installed choices and needs a multiple-selection-capable MCP client;
 explicit single references remain available. Custom rules are
 preserved across both workflows.
+
+## Delegated signing roles and revocations
+
+If an enrolled custom HTTPS source publishes Shield's versioned root and signed
+revocation metadata, review its delegated roles from a project:
+
+```sh
+shield registry trust acme
+```
+
+The confirmation shows the original signing-key fingerprint, root-role
+fingerprints and thresholds, expiry and revocation sequence. This trust applies
+to that source across your workspaces. It grants no pack permissions; installing
+policy still has its separate review. Registered agents use `registry_trust` for
+the same confirmation. The built-in `main` registry continues to use its binary
+pin and does not accept this command.
+
+After adoption, acquisitions require current signed metadata and authenticated
+root transitions. Missing metadata does not switch the source back to its old
+trust mode. Installed policy works offline unless an exact artifact is known
+revoked. A known revocation blocks affected policy until you update or remove
+the pack, including copies and restored checkouts. Diagnostics and repair remain
+available. An exact private-consent restore can retain reviewed policy inactive
+for that repair without asking you to enroll it again.

@@ -43,7 +43,7 @@ for (const action of ['accept', 'decline']) {
     ]);
     const conversation = query({ prompt: 'Perform the Acme fixture tools in order.', options: { ...options, hooks,
       cwd: f.root, persistSession: false, maxTurns: 10,
-      env: { ...process.env, HOME: f.root, ANTHROPIC_API_KEY: 'acme-local-test-key', ANTHROPIC_BASE_URL: provider.url,
+      env: { ...process.env, ANTHROPIC_API_KEY: 'acme-local-test-key', ANTHROPIC_BASE_URL: provider.url,
         CLAUDE_CONFIG_DIR: join(f.root, 'claude-config'), CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' } } });
     t.after(() => conversation.close());
     const messages = [];

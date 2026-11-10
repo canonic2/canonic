@@ -4,6 +4,108 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 pub(crate) type HookGroups = BTreeMap<String, Value>;
+pub(crate) type PortableHookGroups = BTreeMap<String, Vec<Value>>;
+
+/// Automatic maintenance accepts only exact known callbacks and headers. The
+/// broad reviewed repair codec remains separate: resemblance is not ownership.
+pub(crate) fn migrate(
+    source: &str,
+    permitted: &PortableHookGroups,
+    desired: &HookGroups,
+) -> Result<String, Error> {
+    let config = parse(Some(source))?;
+    let hooks = config["hooks"]
+        .as_object()
+        .ok_or(Error::Invalid("hooks must be an object"))?;
+    let mut observed = std::collections::BTreeSet::new();
+    for (event, groups) in hooks {
+        let Some(groups) = groups.as_array() else {
+            continue;
+        };
+        for group in groups {
+            let Some(callbacks) = group["hooks"].as_array() else {
+                continue;
+            };
+            for callback in callbacks.iter().filter(|entry| shield_callback(entry)) {
+                let known = permitted.get(event).is_some_and(|groups| {
+                    groups.iter().any(|known| {
+                        same_hook_header(group, known)
+                            && known["hooks"]
+                                .as_array()
+                                .is_some_and(|entries| entries.contains(callback))
+                    })
+                });
+                if !known {
+                    return Err(Error::Invalid(
+                        "unknown Shield callback is preserved; review explicit hook repair",
+                    ));
+                }
+                observed.insert(event.as_str());
+            }
+        }
+    }
+    if desired
+        .keys()
+        .any(|event| !observed.contains(event.as_str()))
+    {
+        return Err(Error::Invalid(
+            "owned callback is missing; review explicit hook repair",
+        ));
+    }
+    repair(Some(source), desired)
+}
+
+/// Recognize only the supported generated stdio argument shape. Other settings
+/// remain byte/semantic data of the caller's own codec, never regenerated here.
+pub(crate) fn portable_mcp_args(
+    command: &str,
+    args: &[&str],
+    agent: &str,
+    aliases: &[&str],
+    binary: &std::path::Path,
+    roots: &[&std::path::Path],
+) -> Result<Vec<String>, Error> {
+    if !(command == "shield" || binary.to_str() == Some(command))
+        || args.len() != 6
+        || !matches!(&args[..2], ["mcp", "serve"] | ["__internal", "mcp"])
+        || args[2] != "--project"
+        || args[4] != "--agent"
+        || !(args[5] == agent || aliases.contains(&args[5]))
+        || !(args[3] == "." || roots.iter().any(|root| root.to_str() == Some(args[3])))
+    {
+        return Err(Error::Invalid("unknown MCP launcher is preserved"));
+    }
+    Ok(["mcp", "serve", "--project", ".", "--agent", agent]
+        .into_iter()
+        .map(str::to_owned)
+        .collect())
+}
+
+pub(crate) fn portable_json_mcp(
+    source: &str,
+    agent: &str,
+    aliases: &[&str],
+    binary: &std::path::Path,
+    roots: &[&std::path::Path],
+) -> Result<String, Error> {
+    let mut value = parse(Some(source))?;
+    let command = value["command"]
+        .as_str()
+        .ok_or(Error::Invalid("MCP command missing"))?;
+    let args = value["args"]
+        .as_array()
+        .ok_or(Error::Invalid("MCP arguments missing"))?
+        .iter()
+        .map(|arg| {
+            arg.as_str()
+                .ok_or(Error::Invalid("MCP argument is not text"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let args = portable_mcp_args(command, &args, agent, aliases, binary, roots)?;
+    value["command"] = json!("shield");
+    value["args"] = json!(args);
+    serde_json::to_string(&value).map_err(|_| Error::Invalid("portable MCP entry encoding"))
+}
 
 #[cfg(test)]
 mod tests;

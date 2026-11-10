@@ -12,8 +12,11 @@ pub(super) fn prepare_connections(
     targets: &[String],
 ) -> Result<(String, Option<String>), Error> {
     let (configured, policy_revision) = if root.join(".shield/review/state.json").exists() {
-        let snapshot =
-            super::review::runtime::consumer::load(&super::review::open(root)?, &|| Ok(()))?;
+        // Planning must not run startup launcher maintenance after the caller
+        // captured the exact files and registration shown in this review.
+        let state = crate::review::storage::Store::open(root)?.read_checkpoint()?;
+        let context = crate::review::Context::new(state.project_id, state.project_root, "cli");
+        let snapshot = super::review::runtime::consumer::load(&context, &|| Ok(()))?;
         (
             snapshot.mcp_connections().clone(),
             Some(snapshot.identity().policy_revision().into()),
@@ -92,6 +95,9 @@ pub(in crate::review::integrations) fn prepare_configured(
                     entries.insert(
                         alias.clone(),
                         match &binding {
+                            Some(binding) if adapter.portable_mcp_launcher() => {
+                                binding.portable_projected(connection, binary, root)?
+                            }
                             Some(binding) => binding.projected(connection, binary, root)?,
                             None => connection.projected(binary, root, None)?,
                         },

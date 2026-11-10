@@ -42,7 +42,7 @@ fn local_stdio_symlink_fixture() {
     assert_eq!(invoked.canonicalize().unwrap(), registered_binary);
     let (_root, context) = configured_project();
     let project = Path::new(&context.project_root);
-    assert_registered_launchers(project, &registered_binary);
+    assert_registered_launchers(project);
     assert_launcher_drift_is_blocked(project);
     assert_existing_native_connections(&context);
 }
@@ -89,7 +89,7 @@ fn configured_project() -> (assert_fs::TempDir, review::Context) {
     (root, context)
 }
 
-fn assert_registered_launchers(project: &Path, registered_binary: &Path) {
+fn assert_registered_launchers(project: &Path) {
     for agent in ["claude", "codex"] {
         let source = fs::read_to_string(project.join(if agent == "claude" {
             ".mcp.json"
@@ -105,7 +105,7 @@ fn assert_registered_launchers(project: &Path, registered_binary: &Path) {
         let crate::mcp_connections::Transport::Stdio { command, args, env } = transport else {
             panic!("expected private stdio launcher")
         };
-        assert_eq!(Path::new(&command), registered_binary);
+        assert_eq!(command, "shield");
         assert!(args.contains(&"mcp-connect".into()));
         assert!(args.contains(&"--token".into()));
         assert!(env.is_empty());

@@ -19,6 +19,11 @@ use std::{
 pub(super) struct Questions {
     pending: BTreeMap<String, Pending>,
 }
+impl Questions {
+    pub(super) fn is_empty(&self) -> bool {
+        self.pending.is_empty()
+    }
+}
 
 struct Pending {
     tool: String,

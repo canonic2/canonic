@@ -11,6 +11,86 @@ Code 2.1.292 process and a local provider. It has no runtime dependencies; your
 host supplies the SDK. It does not install CLI settings. For a normal coding
 session, use [native project setup](claude-project.md).
 
+## Explicit general-runtime registration
+
+The separate `claude-runtime-read-only` module opts into `general-runtime-v1`.
+Its fixed read-only mapping requires its own operator review:
+
+```sh
+shield sdk setup --adapter claude-read-only --project /path/to/acme
+```
+
+Review the binary and adapter content identities shown in the terminal. Native
+setup and the existing `createClaudeReadOnlyHooks`/`createClaudeReadOnlySession`
+factories do not supply this registration. Those existing factories keep their
+current behavior and require no new registration.
+
+The successful receipt prints the binary SHA-256, adapter mapping SHA-256 and
+policy lineage without machine paths. Save the reviewed binary SHA-256 in
+trusted application configuration and pass it as the required `binaryDigest`
+option to `createClaudeRuntimeReadOnlyClient`. Never obtain the expected digest
+from the evaluator's status or another reply from that same child.
+
+The client exposes `hooks` and an asynchronous `close()` method; close it in your
+application's `finally` cleanup after SDK work finishes.
+
+The new profile belongs to this developer and policy lineage. It follows the
+project across locations when binary and adapter contents match; changing either
+requires a new review. Each new factory obtains a private checkout-bound context
+valid for one hour. Copies and moves cannot replay an old context; create a fresh
+factory. At most 128 contexts are retained per developer. No context token is
+passed in model input or command arguments.
+
+The profile authorizes only the fixed read mapping. It adds no policy permission
+and cannot bypass Deny or the exact-read approval required by Ask. Callback
+session labels are attribution, not proof of a native Claude session. This new
+mapping has no installed-host acceptance claim; the SDK/version evidence below
+describes the retained adapter.
+
+Import `createClaudeRuntimeReadOnlyClient` from
+`adapters/src/modules/claude-runtime-read-only/index.mjs` for this profile. It
+returns `{hooks, close}`. Pass `hooks` to your trusted SDK host and await `close()`
+when the session ends. Supply `binary`, `project`, the reviewed `binaryDigest`
+and optional `timeoutMs` from trusted application configuration. Closing cancels
+this client's pending approval waits and releases its private context after its
+evaluator children finish.
+
+The parent independently hashes the opened native executable, then checks its
+file version and every canonical ancestor directory before and after each child.
+Changed or unavailable evidence refuses the child receipt. The new factory
+supports this check on macOS and Linux; Windows has no adopted equivalent and
+refuses this profile. This is a receipt check under a trusted installation
+premise. A temporary path substitution could still start another image before
+the change is detected and could expose the child's environment. Keep the binary
+and its directories outside untrusted write access. There is no atomic executable
+image handoff or OS process confinement.
+
+The new client passes only captured home/cache, locale, timezone, terminal and
+temporary-directory locators to its native children, adding its private context
+token only for evaluated calls and closure. Loader variables, `PATH`, Node options
+and unrelated application environment are not inherited. This launch environment
+does not attest the host Read operation; normalized execution evidence stays null.
+
+Ask blocks by default. A trusted application may supply
+`onApprovalRequired: async ({request_id}, {signal}) => waitForOperator(request_id, signal)`.
+This handler receives only a public request ID. It must use the existing human
+approval channel; returning cannot issue a grant. The original Read callback then
+separately consumes the exact approved request. Human interaction must finish
+within that callback's total configured deadline, at most 60 seconds. A later
+Read callback starts a fresh request, even with identical text or a reused tool
+ID. The client never gives private retry references to the model or handler.
+
+Each client admits at most eight concurrent callbacks with no queue. Additional
+PreToolUse calls deny without starting a child; completion overload reports lost
+optional history. This is a per-client limit, not a host-wide process bound.
+This profile keeps up to 128 recent correlation entries for 70 minutes. Its
+128-entry host-ID ambiguity ledger is retained for the entire client lifetime;
+when full, additional IDs remain untracked instead of evicting earlier evidence. Exact
+completion retries retain their original delivery identity for history inspection.
+A new PreToolUse with a reused host ID invalidates that correlation. Missing or
+mismatched evidence remains unlinked. These bounds describe the new profile;
+the retained adapter's lifecycle is described below.
+
 ## Policy and registration
 
 Initialize the project using [the setup guide](getting-started.md). Reads match
@@ -168,10 +248,14 @@ Rust saves consumption before returning `allowed-once`; concurrent retries can
 allow at most one read. Lost replies, cancellation, host refusal, or missing
 completion do not restore the grant. Consumption records permission, not execution.
 
-Each project and factory retains at most 128 request references. Terminal and
-expired project records are reclaimed; unknown references and a full store
-refuse requests. Clearing optional history preserves authorization records,
-which contain file identity, digest, and metadata, never contents.
+Each project and factory retains at most 128 live request references. Full terminal
+and expired records are reclaimed. A compact consumed/denied outcome remains for
+up to ten minutes, within a separate 128-receipt bound; it can be evicted earlier
+by newer terminal outcomes. Repeating that decision reports the recorded outcome
+without another permission, approval ID or handoff. An old explicit reference
+cannot fall through to a later Allow policy. Unknown references and a full live
+store refuse. Clearing optional history preserves authorization records, which
+contain identity, digests and metadata, never file contents.
 
 ## Scope of protection
 
@@ -185,6 +269,14 @@ the operator CLI or editing state. PDFs, images, notebooks, writes, and process
 execution are unsupported. Native Linux/Windows behavior is unverified.
 
 ## Decision and completion history
+
+Completion callbacks acknowledge raw history publication; history inspection
+verifies links and duplicate deliveries later. The SDK validates a versioned
+receipt with deferred correlation and checks any echoed request reference against
+the one it submitted. That acknowledgement grants no permission. A malformed or
+incompatible receipt produces the history warning while preserving protection.
+The current SDK receipt also includes a registry-trust revision in its snapshot
+identity. Keep the adapter and Shield binary on compatible protocol versions.
 
 History is enabled by default. It records policy revision, activation, operation,
 available session/tool-call IDs, evaluation, and handoff result. An approved Ask

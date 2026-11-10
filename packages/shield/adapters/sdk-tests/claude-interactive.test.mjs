@@ -80,7 +80,7 @@ writeFileSync(${JSON.stringify(observed)},JSON.stringify({mode:h.permission_mode
       };
       send({ argv: [claude, '--permission-mode', mode, '--allow-dangerously-skip-permissions',
         '--model', 'claude-opus-4-6', '--setting-sources', 'project,local', 'Perform the Acme policy fixture.'],
-        cwd: root, env: { ...process.env, HOME: root, CLAUDE_CONFIG_DIR: config,
+        cwd: root, env: { ...process.env, CLAUDE_CONFIG_DIR: config,
           ANTHROPIC_API_KEY: 'acme-local-test-key', ANTHROPIC_BASE_URL: provider.url,
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', TERM: 'xterm-256color', NO_COLOR: '1' } });
       try {

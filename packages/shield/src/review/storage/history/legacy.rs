@@ -17,12 +17,13 @@ use std::{fs::OpenOptions, io::Write, path::Path};
 const LEGACY_BYTES: usize = 32 * 1024 * 1024;
 const LEGACY_EVENTS: usize = 40_000;
 
+#[cfg(test)]
 pub(in crate::review::storage) fn inspect(store: &Store, raw: &Value, state: &mut State) {
     let generation = raw["history_generation"].as_str();
     if generation.is_some_and(|generation| generation.starts_with("journal-"))
         || (generation.is_none() && segments(store, state).map_or(true, |rows| !rows.is_empty()))
     {
-        let view = lock(store).and_then(|_guard| capture(store, state));
+        let view = super::lock_diagnostics(store).and_then(|_guard| capture(store, state));
         finish(view, state);
         if inline_history(raw) {
             state.history_available = false;
@@ -174,7 +175,7 @@ fn prepare(store: &Store, state: &State, events: &[Value]) -> Result<(), Error> 
     }
     let (mut sequence, mut chunk, mut requests) = (0, Vec::new(), BTreeSet::new());
     for (event, row) in events.iter().zip(rows) {
-        if !chunk.is_empty() && chunk.len() + row.len() > SEGMENT_LIMIT {
+        if !chunk.is_empty() && chunk.len() + row.len() + 1024 > SEGMENT_LIMIT {
             write_segment(store, state, sequence, Some(requests.len() as u64), &chunk)?;
             (sequence, chunk, requests) = (sequence + 1, Vec::new(), BTreeSet::new());
         }

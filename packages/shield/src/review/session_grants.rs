@@ -432,6 +432,7 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
     let override_evidence = scope::overrides(&input.override_denies, &rules)?;
     let now = super::clock::now_ms()?;
     store(context)?.update_checkpoint(context, &|| Ok(()), |state| {
+        state.check_operations()?;
         let authority = Authority::capture(state);
         if rules["policy_revision"] != state.policy_revision {
             return Err(Error::StaleSnapshot);
@@ -551,6 +552,7 @@ fn transition(
     let (id, digest) = view::apply_fields(args)?;
     let now = super::clock::now_ms()?;
     store(context)?.update_checkpoint(context, &|| Ok(()), |state| {
+        state.check_operations()?;
         let authority = Authority::capture(state);
         let row = state.session_grants.records.get(id).ok_or(Error::Missing)?;
         if row.digest != digest {

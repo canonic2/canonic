@@ -14,11 +14,13 @@ const codes = ['registration', 'unsupported-operation', 'unverified-read', 'read
 export const FAILURE_CODES = Object.freeze(['invalid-input', 'input-read', 'runtime-unavailable', 'runtime-busy',
   'compiled-cache-unavailable', 'project-changed', 'invalid-context', 'handoff-failed']);
 const failures = FAILURE_CODES;
+/** SDK protocol 2 explicitly acknowledges deferred completion correlation. */
+export const PROTOCOL_VERSION = 2;
 
 export function response(bytes, exit, expected) {
   const value = parseJSON(bytes);
   if (!fields(value, ['protocol_version', 'request_id', 'decision', 'code', 'identity', 'operation', 'history', 'approval', 'diagnostics'])
-    || Object.keys(value).length !== 9 || value.protocol_version !== 1 || value.request_id !== expected.id
+    || Object.keys(value).length !== 9 || value.protocol_version !== PROTOCOL_VERSION || value.request_id !== expected.id
     || !['allow', 'deny'].includes(value.decision) || !codes.includes(value.code)) throw Error('invalid response');
   {
     const d = value.diagnostics;
@@ -59,18 +61,24 @@ export function response(bytes, exit, expected) {
     || (approval.status === 'pending' && value.code !== 'approval-required')
     || ['stale', 'expired', 'revoked', 'unavailable'].some(status => approval.status === status && value.code !== `approval-${status}`)
     || (approval.status === 'consumed' && !['allowed-once', 'approval-consumed'].includes(value.code))) throw Error('inconsistent approval outcome');
-  if (!fields(history, ['status', 'request_id', 'event_id']) || Object.keys(history).length !== 3
+  const completion = expected.phase === 'completion';
+  if (!fields(history, ['status', 'request_id', 'event_id', 'correlation', 'reported_request_id']) || Object.keys(history).length !== 5
     || !['recorded', 'disabled', 'failed', 'not-requested'].includes(history.status)
+    || history.correlation !== (completion ? 'deferred' : 'not-applicable')
+    || history.reported_request_id !== (completion ? expected.reportedRequestId ?? null : null)
+    || !(history.reported_request_id === null || text(history.reported_request_id, 128))
     || (history.status === 'recorded'
-      ? !text(history.event_id, 128) || !(history.request_id === null || text(history.request_id, 128))
+      ? !text(history.event_id, 128) || (completion ? history.request_id !== null : !text(history.request_id, 128))
       : history.event_id !== null || history.request_id !== null)) throw Error('invalid history receipt');
   if (expected.phase !== 'register' && value.decision === 'allow'
     && (history.status === 'not-requested' || (history.status === 'recorded' && history.request_id === null))) throw Error('missing history receipt');
   if (value.code === 'completion-observed' && expected.phase !== 'completion') throw Error('unexpected completion');
+  if (completion && (!['completion-observed', ...failures].includes(value.code)
+    || (value.code === 'completion-observed' && history.status === 'not-requested'))) throw Error('invalid completion receipt');
   const identity = value.identity;
   if (identity !== null && (!fields(identity, ['project_id', 'project_root', 'activation_id',
-    'previous_activation_id', 'policy_revision', 'candidate_digest']) || Object.keys(identity).length !== 6
-    || !['project_id', 'project_root', 'activation_id', 'policy_revision', 'candidate_digest'].every(key => text(identity[key]))
+    'previous_activation_id', 'policy_revision', 'candidate_digest', 'registry_revision']) || Object.keys(identity).length !== 7
+    || !['project_id', 'project_root', 'activation_id', 'policy_revision', 'candidate_digest', 'registry_revision'].every(key => text(identity[key]))
     || !(identity.previous_activation_id === null || text(identity.previous_activation_id))
     || identity.project_root !== expected.project || (expected.projectId && identity.project_id !== expected.projectId))) {
     throw Error('invalid identity');

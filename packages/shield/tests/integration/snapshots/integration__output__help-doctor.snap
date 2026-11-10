@@ -2,7 +2,7 @@
 source: tests/integration/output.rs
 expression: "String::from_utf8_lossy(&output.get_output().stdout)"
 ---
-Check configuration and installation prerequisites; changes nothing
+Check configuration and installation prerequisites without changing policy
 
 Usage: shield doctor [OPTIONS]
 

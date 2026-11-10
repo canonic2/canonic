@@ -4,6 +4,7 @@ use super::Dialect;
 use crate::policy::Error;
 use serde::Serialize;
 use std::cell::Cell;
+pub(in crate::shell) mod evidence;
 mod lexer;
 mod parser;
 use lexer::lex;
@@ -107,15 +108,16 @@ pub(super) struct CaseArm {
     pub(super) terminator: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 pub(super) struct Word {
     pub(super) span: Span,
     pub(super) raw: String,
     pub(super) literal: Option<String>,
     pub(super) substitutions: Vec<Substitution>,
     pub(super) fragments: Vec<Fragment>,
-    #[serde(skip)]
     pub(super) resolved: bool,
+    /// Non-authorizing presentation annotation, set only after analysis ends.
+    pub(super) private_evidence: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -134,13 +136,14 @@ pub(super) struct Redirection {
     pub(super) heredoc: Option<HereDoc>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 pub(super) struct HereDoc {
     pub(super) span: Span,
     pub(super) source: String,
     pub(super) raw_source: String,
     pub(super) expand: bool,
     pub(super) source_map: Vec<SourceMapping>,
+    pub(super) private_evidence: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]

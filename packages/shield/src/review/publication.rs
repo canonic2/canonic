@@ -11,7 +11,14 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
 };
+mod inputs;
+mod lease;
 pub(super) mod projections;
+pub(in crate::review) use lease::ProjectionLease;
+#[cfg(test)]
+fn before_payload() {
+    tests::before_payload();
+}
 use projections::{
     digest, edited_projections, file_hashes, projection_changed, projection_fingerprint,
     projection_hashes, projections, repair_projections,
@@ -167,8 +174,12 @@ fn commit_confirmed(
     mechanism: &str,
     prepared: Option<Prepared<'_>>,
 ) -> Result<Value, Error> {
+    super::project::checkpoint(context)?;
+    let publication = ProjectionLease::acquire(Path::new(&context.project_root))?;
+    publication.check(context)?;
     let _trace = crate::diagnostics::trace::span("publication");
     if let Some(id) = proposal {
+        before.check_operations()?;
         validate_proposal_base(before, id)?;
     }
     super::changes::historical::validate(&before.candidates["project"], &candidate)?;
@@ -216,15 +227,40 @@ fn commit_confirmed(
     } else {
         (None, None)
     };
+    let consent_source = retained
+        .as_ref()
+        .and_then(|retained| retained.get("project"))
+        .unwrap_or(source);
+    let prepared_consent = store.prepare_policy_consent(consent_source);
+    review::storage::stamp_policy_consent(&mut meta, prepared_consent.as_ref());
     let mut attempted_activation = None;
+    keep_independent_metadata(&mut meta, &before.operator);
+    let registry_guard = super::registry_trust::guard_effective(&meta, evaluator.effective())?;
+    registry_guard.bind_modes(&mut meta)?;
+    let input_fence = inputs::Fence::capture(context, before, &files)?;
+    let prepared_preserved = if let Some(fence) = &input_fence {
+        let preserved =
+            verify_confirmation_files(context, before, manual_fingerprint, &files, proposal)?;
+        prepare_projection_repair(context, before, &files, &mut meta, &preserved)?;
+        fence.check()?;
+        Some(preserved)
+    } else {
+        None
+    };
     let mut preserved = BTreeSet::new();
     let result = store.update_checkpoint(context, &|| Ok(()), |state| {
-        preserved =
-            verify_confirmation_files(context, before, manual_fingerprint, &files, proposal)?;
+        preserved = if let (Some(fence), Some(prepared)) = (&input_fence, &prepared_preserved) {
+            publication.check(context)?;
+            fence.check()?;
+            prepared.clone()
+        } else {
+            verify_confirmation_files(context, before, manual_fingerprint, &files, proposal)?
+        };
         if expected != publication_identity(state) {
-            return Err(Error::Invalid("project changed; review again"));
+            return Err(Error::StaleSnapshot);
         }
         let candidates = if let Some(id) = proposal {
+            state.check_operations()?;
             let row = state
                 .proposals
                 .iter_mut()
@@ -245,8 +281,11 @@ fn commit_confirmed(
         } else {
             retained.ok_or(Error::CandidateUnavailable)?
         };
-        prepare_projection_repair(context, before, &files, &mut meta, &preserved)?;
-        keep_path_access(&mut meta, &state.operator);
+        if input_fence.is_none() {
+            prepare_projection_repair(context, before, &files, &mut meta, &preserved)?;
+        }
+        keep_independent_metadata(&mut meta, &state.operator);
+        registry_guard.bind_modes(&mut meta)?;
         state.candidates = candidates;
         state.policy_revision = evaluator.revision().into();
         state.operator = meta.clone();
@@ -269,8 +308,18 @@ fn commit_confirmed(
     };
     let mut written = files;
     written.retain(|name, _| !preserved.contains(name));
-    repair_after_commit(context, &store, evaluator, &written, &meta, &mut receipt);
+    repair_after_commit(
+        context,
+        &store,
+        evaluator,
+        &written,
+        &meta,
+        &mut receipt,
+        &publication,
+    );
     receipt["changes"] = changes;
+    receipt["policy_reuse_recorded"] =
+        json!(store.finish_policy_consent(prepared_consent, receipt["activation_id"].as_str()));
     Ok(receipt)
 }
 
@@ -307,7 +356,22 @@ pub(in crate::review) fn resume_connections(
     activation: &str,
     receipt: &mut Value,
 ) {
-    match super::integrations::activation::resume(context, proposal, activation) {
+    resume_connections_with(context, proposal, activation, receipt, None);
+}
+fn resume_connections_with(
+    context: &Context,
+    proposal: Option<&str>,
+    activation: &str,
+    receipt: &mut Value,
+    publication: Option<&ProjectionLease>,
+) {
+    let result = match publication {
+        Some(guard) => {
+            super::integrations::activation::resume_guarded(context, proposal, activation, guard)
+        }
+        None => super::integrations::activation::resume(context, proposal, activation),
+    };
+    match result {
         Ok(published) => {
             receipt["connection_publication"] =
                 json!(if published { "published" } else { "superseded" });
@@ -448,7 +512,7 @@ fn mark_applied(
             row.candidate.clone(),
         )])) != candidate_digest
     {
-        return Err(Error::Invalid("proposal changed or is stale"));
+        return Err(Error::StaleSnapshot);
     }
     row.status = "applied".into();
     row.operator = Some(json!({"operator_id":null,"display_name":null,"mechanism":mechanism}));
@@ -531,25 +595,55 @@ fn repair_after_commit(
     files: &BTreeMap<String, String>,
     meta: &Value,
     receipt: &mut Value,
+    publication: &ProjectionLease,
 ) {
     let _trace = crate::diagnostics::trace::span("publication.repair");
     let mut prefix_error = None;
-    let repair = store.inspect_checkpoint(context, &|| Ok(()), |current| {
+    let repair = (|| {
+        publication.check(context)?;
+        let current = store.read_checkpoint()?;
+        current.check(context)?;
         if current.policy_revision != evaluator.revision()
-            || metadata(current)["projection"] != meta["projection"]
+            || metadata(&current)["projection"] != meta["projection"]
+            || current
+                .active
+                .as_ref()
+                .map(review::runtime::Active::activation_id)
+                != receipt["activation_id"].as_str()
         {
-            return projection_changed(context, current);
+            return projection_changed(context, &current);
         }
+        #[cfg(test)]
+        before_payload();
+        publication.check(context)?;
         repair_projections(context, files, meta)?;
         prefix_error = super::integrations::sync_prefix_rules(
             root(context).as_path(),
-            &metadata(current),
+            &metadata(&current),
             evaluator.codex_prefixes(),
             current.enforcement.enabled,
         )
         .err();
-        projection_changed(context, current)
-    });
+        let (changed, input_hints) = super::cache::inputs::verify(context, &current, files)?;
+        store.inspect_checkpoint(context, &|| Ok(()), |latest| {
+            if latest
+                .active
+                .as_ref()
+                .map(review::runtime::Active::activation_id)
+                != receipt["activation_id"].as_str()
+                || latest.policy_revision != current.policy_revision
+                || latest.operator["projection"] != current.operator["projection"]
+                || latest.enforcement != current.enforcement
+            {
+                return Err(Error::StaleSnapshot);
+            }
+            Ok(changed)
+        })?;
+        if let Some(input_hints) = input_hints {
+            let _ = super::cache::inputs::bind(context, &current, &input_hints);
+        }
+        Ok(changed)
+    })();
     receipt["repair_needed"] = json!(repair.unwrap_or(true) || prefix_error.is_some());
     if let Some(error) = prefix_error {
         receipt["setup_error"] = json!(error.to_string());
@@ -558,11 +652,12 @@ fn repair_after_commit(
     if meta["integration_publication"]["activation_id"] == receipt["activation_id"]
         && let Some(activation) = receipt["activation_id"].as_str().map(str::to_owned)
     {
-        resume_connections(
+        resume_connections_with(
             context,
             meta["integration_publication"]["proposal_id"].as_str(),
             &activation,
             receipt,
+            Some(publication),
         );
     }
 }
@@ -576,7 +671,9 @@ pub(in crate::review) fn validate_proposal_base(state: &State, id: &str) -> Resu
         .find(|row| row.id == id)
         .ok_or(Error::Missing)?;
     let mut base = proposal.base_metadata.clone();
-    keep_path_access(&mut base, &state.operator);
+    keep_independent_metadata(&mut base, &state.operator);
+    // Receipt rotation is a consequence of separately confirmed administration,
+    // not a policy edit. Never revive a proposal's superseded private token.
     if base != state.operator {
         return Err(Error::StaleSnapshot);
     }
@@ -585,12 +682,19 @@ pub(in crate::review) fn validate_proposal_base(state: &State, id: &str) -> Resu
 
 /// Protected file access changes only through its own confirmed command, so
 /// metadata captured with an older proposal must not restore a stale choice.
-fn keep_path_access(meta: &mut Value, current: &Value) {
-    match current.get("path_access") {
-        Some(access) => meta["path_access"] = access.clone(),
-        None => {
-            if let Some(fields) = meta.as_object_mut() {
-                fields.remove("path_access");
+pub(in crate::review) fn keep_independent_metadata(meta: &mut Value, current: &Value) {
+    for field in [
+        "path_access",
+        "registry_trust",
+        "history_retired_generations",
+        "administration_origin",
+    ] {
+        match current.get(field) {
+            Some(access) => meta[field] = access.clone(),
+            None => {
+                if let Some(fields) = meta.as_object_mut() {
+                    fields.remove(field);
+                }
             }
         }
     }
@@ -644,26 +748,60 @@ pub(super) fn prepare_review(
 }
 
 pub(super) fn reconcile(context: &Context, expected: &State) -> Result<Value, Error> {
-    Store::open(Path::new(&context.project_root))?.inspect_locked(
-        context,
-        &|| Ok(()),
-        |state| {
-            if state.policy_revision != expected.policy_revision
-                || state.operator != expected.operator
-                || json!(state.active) != json!(expected.active)
-            {
-                return Err(Error::Invalid(
-                    "project changed during confirmation; review again",
-                ));
+    super::project::checkpoint(context)?;
+    let publication = ProjectionLease::acquire(Path::new(&context.project_root))?;
+    publication.check(context)?;
+    let store = Store::open(Path::new(&context.project_root))?;
+    let current = store.read_current_evaluated()?.0;
+    let meta = metadata(&current);
+    let files = projections(&current.candidates["project"], &meta)?;
+    store.inspect_checkpoint(context, &|| Ok(()), |state| {
+        if state.policy_revision != expected.policy_revision
+            || state.operator != expected.operator
+            || state.active.as_ref().map(review::runtime::Active::metadata)
+                != expected
+                    .active
+                    .as_ref()
+                    .map(review::runtime::Active::metadata)
+        {
+            return Err(Error::Invalid(
+                "project changed during confirmation; review again",
+            ));
+        }
+        Ok(())
+    })?;
+    repair_projections(context, &files, &meta)?;
+    if let Ok((false, Some(hints))) = super::cache::inputs::verify(context, &current, &files) {
+        let _ = super::cache::inputs::bind(context, &current, &hints);
+    }
+    let authority = store.read_checkpoint()?;
+    if let Some(active) = &authority.active {
+        let activation = active.activation_id().to_owned();
+        if let Ok(reference) = active.project_candidate()
+            && let Some(prepared) = store.prepare_policy_consent(reference)
+        {
+            let stamped = store
+                .update_checkpoint_if_changed(context, &|| Ok(()), |state| {
+                    if state
+                        .active
+                        .as_ref()
+                        .map(review::runtime::Active::activation_id)
+                        != Some(activation.as_str())
+                    {
+                        return Err(Error::StaleSnapshot);
+                    }
+                    let changed = state.operator["policy_consent_key"] != prepared.key()
+                        || state.operator["policy_consent_version"] != 2;
+                    review::storage::stamp_policy_consent(&mut state.operator, Some(&prepared));
+                    state.operator["policy_consent_version"] = json!(2);
+                    Ok(changed)
+                })
+                .is_ok();
+            if stamped {
+                store.finish_policy_consent(Some(prepared), Some(&activation));
             }
-            let meta = metadata(state);
-            repair_projections(
-                context,
-                &projections(&state.candidates["project"], &meta)?,
-                &meta,
-            )
-        },
-    )?;
+        }
+    }
     status(context)
 }
 

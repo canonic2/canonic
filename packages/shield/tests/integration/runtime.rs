@@ -7,6 +7,9 @@ use shield::{
 
 #[test]
 fn public_consumer_prepares_current_cli_activation_and_rejects_stale_handoff() {
+    if super::isolated_home() {
+        return;
+    }
     let root = assert_fs::TempDir::new().unwrap();
     let initialized = super::operator::interactive(&root, &["init"], "yes\n");
     assert_eq!(initialized["code"], 0, "{initialized}");

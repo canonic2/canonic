@@ -9,11 +9,13 @@ class ProcessTransportError extends Error {
 
 /** Owns one direct child; it does not launch host tools or authorize operations. */
 export async function transport(captured, validate) {
-  const { binary, args, timeoutMs, signal, input, expected } = captured;
+  const { binary, args, timeoutMs, signal, input, expected, env } = captured;
+  const stdoutLimit = captured.stdoutLimit ?? LIMITS.stdout;
+  if (!Number.isSafeInteger(stdoutLimit) || stdoutLimit < 0 || stdoutLimit > LIMITS.stdout) throw new ProcessTransportError('output-limit');
   if (signal?.aborted) throw new ProcessTransportError('cancelled');
   return new Promise((resolve, reject) => {
     let child;
-    try { child = spawn(binary, args, { shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }); }
+    try { child = spawn(binary, args, { shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, ...(env === undefined ? {} : { env }) }); }
     catch { reject(new ProcessTransportError('spawn-failed')); return; }
     let failure;
     let finished = false;
@@ -46,7 +48,7 @@ export async function transport(captured, validate) {
     child.stderr.on('error', () => fail('invalid-response'));
     child.stdout.on('data', chunk => {
       stdoutSize += chunk.length;
-      if (stdoutSize > LIMITS.stdout) fail('output-limit'); else chunks.push(chunk);
+      if (stdoutSize > stdoutLimit) fail('output-limit'); else chunks.push(chunk);
     });
     child.stderr.on('data', chunk => { stderrSize += chunk.length; if (stderrSize > LIMITS.stderr) fail('output-limit'); });
     child.on('close', (code, terminationSignal) => {

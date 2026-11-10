@@ -449,7 +449,8 @@ fn automatic_mcp_matching_callbacks_fixture() {
                 assert!(
                     rows.iter().any(|row| row["agent"] == agent
                         && row["alias"] == alias
-                        && row["configuration"] == "matched pack criteria"),
+                        && row["matching"] == "unchecked"
+                        && row["configuration"] == "policy matching checked on interception"),
                     "{status}"
                 );
                 assert_decision(

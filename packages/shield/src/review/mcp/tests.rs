@@ -30,6 +30,68 @@ fn fixture() -> (assert_fs::TempDir, Context, Connection) {
     fixture_with(&Bundle::capture(r#"{"schema_version":1,"packs":[]}"#, &[], None).unwrap())
 }
 
+fn invalidate_incarnation(root: &Path) {
+    let path = root.join(".shield/review/state.json");
+    let mut raw: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    raw["operator"]
+        .as_object_mut()
+        .unwrap()
+        .remove("runtime_incarnation");
+    std::fs::write(path, serde_json::to_vec(&raw).unwrap()).unwrap();
+}
+
+#[test]
+fn first_runtime_use_keeps_same_epoch_diagnostic_handles_but_refuses_retained_epoch_change() {
+    for rotate in [false, true] {
+        let (root, context, connection) = fixture();
+        let status = call(&context, &connection, "status", &json!({}), &|| Ok(()));
+        let handle = status["data"]["active_candidate_id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        if rotate {
+            invalidate_incarnation(root.path());
+        }
+        let proposed = call(
+            &context,
+            &connection,
+            "policy_propose",
+            &json!({"change":{"kind":"rule_add","rule":rule("after-diagnostics","allow")}}),
+            &|| Ok(()),
+        );
+        if rotate {
+            assert!(
+                proposed["error"]["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("reconnect Shield")),
+                "{proposed}"
+            );
+        } else {
+            assert!(proposed["error"].is_null(), "{proposed}");
+            assert!(connection.views.lock().unwrap().get(&handle).is_ok());
+        }
+    }
+}
+
+#[test]
+fn contextual_resolution_refusals_preserve_safe_mcp_invalid_input_messages() {
+    let names = std::collections::BTreeSet::from(["profile".into()]);
+    let error = crate::policy::Error::Contract("template names an undeclared variable")
+        .in_resolution("inspect", "guidance.message", &names)
+        .in_selection("pack:acme-selection");
+    let (code, message) = error_fields(&error.into());
+    assert_eq!(code, "invalid_input");
+    for identifier in [
+        "pack:acme-selection",
+        "inspect",
+        "guidance.message",
+        "profile",
+    ] {
+        assert!(message.contains(identifier), "{message}");
+    }
+    assert!(!message.contains("retained state is invalid"));
+}
+
 #[test]
 fn shield_mode_mcp_requires_the_exact_human_confirmation_even_while_disabled() {
     for agent in ["claude", "codex"] {
@@ -151,6 +213,57 @@ fn proposal(context: &Context, connection: &Connection, id: &str) -> Value {
         "policy_propose",
         json!({"change":{"kind":"rule_add","rule":rule(id,"allow")},"idempotency_key":id}),
     )
+}
+
+#[test]
+fn record_only_proposal_inspection_exposes_lazy_handles_with_exact_arguments() {
+    use clap::Parser as _;
+    let (root, context, connection) = fixture();
+    let proposed = proposal(&context, &connection, "lazy-inspection");
+    assert!(proposed["error"].is_null(), "{proposed}");
+    *connection.views.lock().unwrap() = views::Views::new("acme-fresh-inspection".into());
+    let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
+    let plan = state.active.as_ref().unwrap().compiled.path();
+    std::fs::remove_file(&plan).unwrap();
+    let checkpoint = root.path().join(".shield/review/state.json");
+    let before = std::fs::read(&checkpoint).unwrap();
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let trace = log.request("command", "policy_show", None, None).unwrap();
+    let inspected;
+    {
+        let _scope = trace.enter();
+        inspected = invoke(
+            &context,
+            &connection,
+            "policy_show",
+            json!({"proposal_id":proposed["data"]["proposal_id"]}),
+        );
+        assert!(inspected["error"].is_null(), "{inspected}");
+        assert_eq!(trace.recorded_count("policy.preparations"), 0);
+        assert_eq!(trace.recorded_count("history.captures"), 0);
+    }
+    trace.finish("success");
+    assert_eq!(
+        inspected["data"]["apply_arguments"],
+        proposed["data"]["apply_arguments"]
+    );
+    assert!(!plan.exists());
+    assert_eq!(std::fs::read(&checkpoint).unwrap(), before);
+    let mut input = request(&context);
+    input["candidate_id"] = inspected["data"]["after_candidate_id"].clone();
+    let evaluated = invoke(&context, &connection, "policy_evaluate", input);
+    assert_eq!(evaluated["data"]["decision"], "allow", "{evaluated}");
+    assert!(
+        !plan.exists(),
+        "evaluating a retained handle does not publish a current cache"
+    );
 }
 
 fn dependency_registry(
@@ -853,6 +966,7 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
             "cache_prepare",
             "protection_set",
             "registry_add",
+            "registry_trust",
             "registry_remove",
             "registry_default",
             "policy_repair",
@@ -1813,6 +1927,15 @@ fn pack_configure_binds_values_and_overrides_that_survive_updates_until_stale() 
         "configure",
     );
     assert_eq!(proposed["data"]["comparison"]["relation"], "expansive");
+    let summary = &proposed["data"]["comparison"]["override_permission_review"];
+    assert_override_expansion(summary);
+    let retained = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
+    let proposal = retained
+        .proposals
+        .iter()
+        .find(|row| Some(row.id.as_str()) == proposed["data"]["proposal_id"].as_str())
+        .unwrap();
+    assert_eq!(&proposal.comparison["override_permission_review"], summary);
     review::operator::commit_proposal_fixture(
         &context,
         proposed["data"]["proposal_id"].as_str().unwrap(),
@@ -1852,6 +1975,14 @@ fn pack_configure_binds_values_and_overrides_that_survive_updates_until_stale() 
     assert!(config["packs"][0].get("overrides").is_none(), "{config}");
     assert!(active.operator["installed"][0].get("variables").is_none());
     assert_eq!(decide(root.path(), "make"), crate::policy::Decision::Allow);
+}
+
+fn assert_override_expansion(summary: &Value) {
+    assert_eq!(summary["scope"], "proposal");
+    assert_eq!(summary["complete"], true);
+    assert_eq!(summary["relation"], "expansive");
+    assert_eq!(summary["widens"], true);
+    assert_eq!(summary["expansion_witness"], "/comparison/expansion");
 }
 
 #[test]

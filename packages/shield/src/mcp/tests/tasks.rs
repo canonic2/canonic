@@ -20,6 +20,113 @@ fn get(transport: &Transport, id: i64, task: &Value) -> Value {
     transport.request(&modern(id, "tasks/get", json!({"taskId":task})))
 }
 
+fn completed_task(
+    transport: &Transport,
+    jobs: &crate::review::preparation_tasks::Runtime,
+    id: i64,
+    args: &Value,
+) -> Value {
+    let created = transport.request(&modern(
+        id,
+        "tools/call",
+        json!({"name":"policy_propose","arguments":args}),
+    ));
+    assert_eq!(created["result"]["resultType"], "task", "{created}");
+    let task = created["result"]["taskId"].clone();
+    assert!(task.is_string());
+    jobs.join();
+    assert_eq!(
+        get(transport, id + 1, &task)["result"]["status"],
+        "completed"
+    );
+    task
+}
+
+fn accept_task_review(transport: &Transport, task: &Value, id: i64, before_accept: impl FnOnce()) {
+    let proposed = transport.call(
+        json!(id),
+        "policy_propose",
+        &json!({"preparation_task_id":task}),
+    );
+    assert_eq!(proposed["result"]["isError"], false, "{proposed}");
+    let args = &proposed["result"]["structuredContent"]["data"]["apply_arguments"];
+    assert!(args.is_object());
+    let form = transport.call(json!(id + 1), "policy_apply", args);
+    assert_eq!(form["method"], "elicitation/create", "{form}");
+    before_accept();
+    let applied = transport.request(&json!({"jsonrpc":"2.0","id":form["id"],
+        "result":{"action":"accept","content":{}}}));
+    assert_eq!(applied["result"]["isError"], false, "{applied}");
+}
+
+#[test]
+fn copied_policy_workflow_preparation_tasks_cannot_be_polled_cancelled_or_reviewed() {
+    let (server, original) = fixture(Some("claude"));
+    let jobs = server.preparations.clone();
+    let source = connect(server);
+    let arguments = rule("acme-copy-task", "acme");
+    let old = completed_task(&source, &jobs, 2, &arguments);
+    let original_path = original.root.path().join(".shield/review/state.json");
+    let original_bytes = std::fs::read(&original_path).unwrap();
+    let record = std::path::Path::new(".shield/review/preparation-tasks")
+        .join(old.as_str().unwrap())
+        .join("record.json");
+    let original_record = std::fs::read(original.root.path().join(&record)).unwrap();
+    let copy = assert_fs::TempDir::new().unwrap();
+    crate::test_support::copy_fixture_directory(original.root.path(), copy.path());
+    let opened = crate::review::open(copy.path()).unwrap();
+    let mut context = (*original.review).clone();
+    context.project_id = opened.project_id;
+    context.project_root = opened.project_root;
+    let server = Server::for_review(context).unwrap();
+    let child_jobs = server.preparations.clone();
+    let child = Project {
+        root: copy,
+        review: server.review(),
+    };
+    let transport = connect(server);
+    assert_ne!(child.review.project_id, original.review.project_id);
+    let revision = child.revision();
+    let copied_record = std::fs::read(child.root.path().join(&record)).unwrap();
+    assert_eq!(
+        get(&transport, 2, &old)["error"]["code"],
+        rpc::INVALID_PARAMS
+    );
+    assert_eq!(
+        std::fs::read(child.root.path().join(&record)).unwrap(),
+        copied_record
+    );
+    let refused = transport.call(
+        json!(3),
+        "policy_propose",
+        &json!({"preparation_task_id":old}),
+    );
+    assert_eq!(refused["result"]["isError"], true, "{refused}");
+    assert!(refused["result"]["structuredContent"]["data"]["apply_arguments"].is_null());
+    let cancelled = transport.request(&modern(4, "tasks/cancel", json!({"taskId":old})));
+    assert_eq!(cancelled["error"]["code"], rpc::INVALID_PARAMS);
+    assert_eq!(child.revision(), revision);
+
+    let fresh = completed_task(&transport, &child_jobs, 5, &arguments);
+    assert_ne!(fresh, old);
+    assert_eq!(child.revision(), revision);
+    accept_task_review(&transport, &fresh, 10, || {
+        assert_eq!(child.revision(), revision);
+    });
+    assert_ne!(child.revision(), revision);
+    assert_eq!(std::fs::read(&original_path).unwrap(), original_bytes);
+    assert_eq!(
+        std::fs::read(original.root.path().join(&record)).unwrap(),
+        original_record
+    );
+    assert_eq!(get(&source, 4, &old)["result"]["status"], "completed");
+    let revision = original.revision();
+    accept_task_review(&source, &old, 10, || {
+        assert_eq!(original.revision(), revision);
+    });
+    assert_ne!(original.revision(), revision);
+}
+
 #[test]
 fn preparation_tasks_lost_creation_reply_recovers_the_same_published_task() {
     struct LostReply(std::sync::mpsc::SyncSender<()>);

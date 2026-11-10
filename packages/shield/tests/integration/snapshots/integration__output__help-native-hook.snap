@@ -8,7 +8,7 @@ Usage: shield __internal native-hook [OPTIONS] --project <PROJECT> --agent <AGEN
 
 Options:
       --project <PROJECT>              Project fixed by confirmed installation
-      --agent <AGENT>                  Agent protocol fixed by confirmed installation [possible values: claude, codex, gemini, agy]
+      --agent <AGENT>                  Agent protocol fixed by confirmed installation [possible values: claude, codex, gemini, agy, copilot, opencode]
       --json                           Print one JSON result; commands that change policy refuse JSON mode
       --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
       --event <EVENT>                  Event fixed by installation; omitted only by legacy Claude/Codex hooks

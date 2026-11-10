@@ -14,6 +14,8 @@ Input → received
 Change policy
   + rule status: allow git status
   Permissions: not fully compared; check the changes above
+  Agent guidance changes (separate from permissions):
+    custom / status: null → {"guidance":null,"on_unmet":null,"reason":"Read repository state"}
 Review and confirm → Apply change
 Added rule status
 --- exit 0

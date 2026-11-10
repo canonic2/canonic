@@ -23,7 +23,7 @@ def terminal():
     os.setsid()
     fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
 
-env = dict(os.environ, HOME=project, TERM="xterm-256color", NO_COLOR="1", PATH="/usr/bin:/bin")
+env = dict(os.environ, HOME=os.environ.get("SHIELD_TEST_HOME", project), TERM="xterm-256color", NO_COLOR="1", PATH="/usr/bin:/bin")
 if mode == "agents":
     cli_dir = root / "cli"
     cli_dir.mkdir()

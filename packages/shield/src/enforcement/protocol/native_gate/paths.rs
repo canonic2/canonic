@@ -53,6 +53,43 @@ const FIND_ACTIONS: &str = "-exec -execdir -ok -okdir -delete -fprint -fprint0 -
 /// one path did.
 pub(super) type Finding = (Protection, Option<String>);
 
+/// These names are private operator storage, including user-wide continuity
+/// and registry authority. Project policy-edit permission never opens them.
+fn state_component(part: &std::ffi::OsStr) -> bool {
+    [
+        "review",
+        "cache",
+        "reviewed-policies",
+        "runtime-incarnation",
+        "registry-trust",
+        "sdk-read-profiles",
+        "sdk-read-contexts",
+        "registries.json",
+        "registries.state",
+        "registries.lease",
+        "registries.lock",
+        "registries.new",
+    ]
+    .iter()
+    .any(|name| native_name(part, std::ffi::OsStr::new(name)))
+}
+
+fn user_state_root() -> Option<&'static Path> {
+    // A runtime belongs to its starting user. Resolve this fixed owner once,
+    // rather than adding filesystem probes for every inspected operand.
+    static ROOT: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    ROOT.get_or_init(|| {
+        #[cfg(windows)]
+        let base = std::env::var_os("LOCALAPPDATA");
+        #[cfg(not(windows))]
+        let base = std::env::var_os("HOME");
+        base.map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+            .map(|path| resolve_existing(&path.join(".shield")))
+    })
+    .as_deref()
+}
+
 /// The first of the strictest findings, so a message names the earliest path
 /// in the command that caused the block.
 fn strictest(findings: impl Iterator<Item = Finding>) -> Finding {
@@ -66,6 +103,9 @@ fn strictest(findings: impl Iterator<Item = Finding>) -> Finding {
 /// policy file, or agent settings.
 pub(super) fn group(submitted: &str, cwd: &Path, guard: Guard<'_>) -> &'static str {
     let path = resolve_existing(&submitted_path(submitted, cwd));
+    if user_state_root().is_some_and(|private| path.starts_with(private)) {
+        return "state";
+    }
     if guard
         .working_files
         .is_some_and(|scope| scope.write.contains(&path))
@@ -83,13 +123,7 @@ pub(super) fn group(submitted: &str, cwd: &Path, guard: Guard<'_>) -> &'static s
         return "settings";
     };
     match parts.get(index + 1) {
-        Some(part)
-            if ["review", "cache"]
-                .iter()
-                .any(|name| native_name(part, std::ffi::OsStr::new(name))) =>
-        {
-            "state"
-        }
+        Some(part) if state_component(part) => "state",
         None => "folder",
         Some(part) if native_name(part, std::ffi::OsStr::new(".gitignore")) => "ignore",
         Some(_) => "policy",
@@ -420,6 +454,38 @@ fn operator_name(name: &std::ffi::OsStr) -> bool {
     }
 }
 
+/// Operations carry their request; parsed structures carry literal words and
+/// redirection roles. Preserve each command's access when inspecting compounds.
+fn inspected_access(value: &Value, fallback: Access) -> Access {
+    let input = |operator: &Value| {
+        if operator == "<" || operator == "<<" || operator == "<<-" || operator == "<<<" {
+            Access::Read
+        } else {
+            Access::Write
+        }
+    };
+    if value["request"].is_object() {
+        access(&value["request"])
+    } else if value["coverage"] == "redirection" {
+        input(&value["redirection"]["operator"])
+    } else if let Some(words) = value["words"].as_array() {
+        let literals: Option<Vec<&str>> =
+            words.iter().map(|word| word["literal"].as_str()).collect();
+        literals
+            .and_then(|words| {
+                let (executable, arguments) = words.split_first()?;
+                Some(access(
+                    &serde_json::json!({"executable":executable,"arguments":arguments}),
+                ))
+            })
+            .unwrap_or(Access::Write)
+    } else if value["operator"].is_string() && value.get("target").is_some() {
+        input(&value["operator"])
+    } else {
+        fallback
+    }
+}
+
 fn inspect(
     value: &Value,
     root: &Path,
@@ -435,39 +501,17 @@ fn inspect(
                 .and_then(Value::as_str)
                 .map_or(cwd, Path::new);
             let cwd_known = value["context"]["cwd_known"].as_bool().unwrap_or(cwd_known);
+            if fields
+                .keys()
+                .all(|key| ["executable", "arguments", "cwd", "project"].contains(&key.as_str()))
+                && let Some(finding) = touch_request(value, cwd, cwd_known, guard)
+            {
+                return finding;
+            }
             if unresolved_redirect(value) || destructive(value, root, cwd, cwd_known, guard) {
                 return (Protection::Blocked, None);
             }
-            // Operations carry their request; the parsed structure carries the
-            // same command's literal words, so compound commands keep per-command
-            // access instead of defaulting to a write.
-            let input = |operator: &Value| {
-                if operator == "<" || operator == "<<" || operator == "<<-" || operator == "<<<" {
-                    Access::Read
-                } else {
-                    Access::Write
-                }
-            };
-            let access = if value["request"].is_object() {
-                self::access(&value["request"])
-            } else if value["coverage"] == "redirection" {
-                input(&value["redirection"]["operator"])
-            } else if let Some(words) = value["words"].as_array() {
-                let literals: Option<Vec<&str>> =
-                    words.iter().map(|word| word["literal"].as_str()).collect();
-                literals
-                    .and_then(|words| {
-                        let (executable, arguments) = words.split_first()?;
-                        Some(self::access(
-                            &serde_json::json!({"executable":executable,"arguments":arguments}),
-                        ))
-                    })
-                    .unwrap_or(Access::Write)
-            } else if value["operator"].is_string() && value.get("target").is_some() {
-                input(&value["operator"])
-            } else {
-                access
-            };
+            let access = inspected_access(value, access);
             let piped = value["stdin"] == "pipe";
             let mut search =
                 search_protection(&value["request"], root, cwd, cwd_known, guard, piped);
@@ -487,12 +531,28 @@ fn inspect(
                                 "source_units",
                                 "project",
                                 "cwd",
+                                "cwd_success",
+                                "cwd_failure",
+                                "logical_cwd_success",
                                 "context",
                                 "stdin",
                             ]
                             .contains(&key.as_str())
                         })
                         .map(|(key, v)| {
+                            if key == "words"
+                                && let Some(words) = v.as_array()
+                            {
+                                let literals: Option<Vec<_>> =
+                                    words.iter().map(|word| word["literal"].as_str()).collect();
+                                if let Some(words) = literals
+                                    && let Some((executable, arguments)) = words.split_first()
+                                    && let Some(finding) =
+                                        touch_paths(executable, arguments, cwd, cwd_known, guard)
+                                {
+                                    return finding;
+                                }
+                            }
                             if access == Access::Output
                                 && key == "words"
                                 && let Some(words) = v.as_array()
@@ -526,6 +586,58 @@ fn inspect(
         Value::String(s) => inspect_path(s, cwd, guard, access),
         _ => (Protection::None, None),
     }
+}
+
+fn touch_request(
+    request: &Value,
+    cwd: &Path,
+    cwd_known: bool,
+    guard: Guard<'_>,
+) -> Option<Finding> {
+    let executable = request["executable"].as_str()?;
+    let arguments: Option<Vec<_>> = request["arguments"]
+        .as_array()?
+        .iter()
+        .map(Value::as_str)
+        .collect();
+    touch_paths(executable, &arguments?, cwd, cwd_known, guard)
+}
+
+fn touch_paths(
+    executable: &str,
+    arguments: &[&str],
+    cwd: &Path,
+    cwd_known: bool,
+    guard: Guard<'_>,
+) -> Option<Finding> {
+    let footprint = crate::location::touch::parse(executable, arguments)?;
+    if !footprint.complete {
+        return None;
+    }
+    if !cwd_known
+        && footprint
+            .reference
+            .into_iter()
+            .chain(footprint.destinations.iter().copied())
+            .any(|path| !Path::new(path).is_absolute())
+    {
+        return Some((Protection::Blocked, None));
+    }
+    Some(strictest(
+        std::iter::once(inspect_path(executable, cwd, guard, Access::Write))
+            .chain(
+                footprint
+                    .reference
+                    .into_iter()
+                    .map(|path| inspect_path(path, cwd, guard, Access::Metadata)),
+            )
+            .chain(
+                footprint
+                    .destinations
+                    .into_iter()
+                    .map(|path| inspect_path(path, cwd, guard, Access::Write)),
+            ),
+    ))
 }
 
 /// Files a modeled filter or download names inside a program or option,
@@ -719,6 +831,9 @@ fn search_protection(
 // The operator's path access can open agent settings and policy files, never
 // review state, the cache, the .shield folder itself or its ignore file.
 fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
+    if user_state_root().is_some_and(|private| path.starts_with(private)) {
+        return Protection::Blocked;
+    }
     if access == Access::Write
         && guard.working_files.is_some_and(|scope| {
             scope
@@ -773,13 +888,7 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
         };
     };
     match parts.get(index + 1) {
-        Some(part)
-            if ["review", "cache"]
-                .iter()
-                .any(|name| native_name(part, std::ffi::OsStr::new(name))) =>
-        {
-            Protection::Blocked
-        }
+        Some(part) if state_component(part) => Protection::Blocked,
         // Naming the folder reaches its state unless Git and listings skip it.
         None if matches!(access, Access::Index | Access::Metadata)
             && path.join(".gitignore").is_file() =>
@@ -798,6 +907,20 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
         }
         Some(_) => Protection::None,
     }
+}
+
+/// A bounded SDK read cannot use policy to open private operator storage or
+/// credential-bearing host configuration. The operand is already canonical.
+pub(crate) fn read_allowed(path: &Path, cache: Option<&Path>) -> bool {
+    classify(
+        path,
+        Guard {
+            cache,
+            allow: PathAccess::default(),
+            working_files: None,
+        },
+        Access::Read,
+    ) == Protection::None
 }
 
 fn configuration_path(path: &Path, guard: Guard<'_>) -> bool {
@@ -887,10 +1010,151 @@ fn protected_path(path: &Path, cache: Option<&Path>) -> bool {
         })
 }
 
+#[cfg(test)]
+mod portable_policy_guards {
+    use super::*;
+
+    #[test]
+    #[cfg(unix)]
+    fn touch_unknown_cwd_blocks_relative_references_and_destinations_in_request_and_ast() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let cwd = root.path().canonicalize().unwrap();
+        let reference = cwd.join("reference").to_str().unwrap().to_owned();
+        let destination = cwd.join("destination").to_str().unwrap().to_owned();
+        let guard = Guard {
+            cache: None,
+            allow: PathAccess::default(),
+            working_files: None,
+        };
+        for (reference, destination, blocked) in [
+            ("relative-reference", destination.as_str(), true),
+            (reference.as_str(), "relative-destination", true),
+            (reference.as_str(), destination.as_str(), false),
+        ] {
+            let request = serde_json::json!({"executable":"touch","arguments":["-r",reference,destination],"cwd":cwd,"project":cwd});
+            let structure = serde_json::json!({"words":[{"literal":"touch"},{"literal":"-r"},{"literal":reference},{"literal":destination}]});
+            for value in [request, structure] {
+                assert_eq!(
+                    inspect(&value, &cwd, &cwd, false, guard, Access::Write).0
+                        == Protection::Blocked,
+                    blocked,
+                    "{value}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn touch_reference_is_metadata_and_private_references_or_any_private_write_are_blocked() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let cwd = root.path().canonicalize().unwrap();
+        std::fs::create_dir(cwd.join(".shield")).unwrap();
+        std::fs::write(cwd.join(".shield/config.yml"), "Acme policy").unwrap();
+        std::fs::create_dir(cwd.join(".codex")).unwrap();
+        std::fs::write(
+            cwd.join(".codex/config.toml"),
+            "Acme sensitive configuration",
+        )
+        .unwrap();
+        std::fs::create_dir_all(cwd.join(".shield/review")).unwrap();
+        std::fs::write(cwd.join(".shield/review/state.json"), "Acme private").unwrap();
+        std::os::unix::fs::symlink(cwd.join(".shield/review/state.json"), cwd.join("alias"))
+            .unwrap();
+        let guard = Guard {
+            cache: None,
+            allow: PathAccess::default(),
+            working_files: None,
+        };
+        for (reference, targets, blocked) in [
+            (".shield/config.yml", vec!["one", "two"], false),
+            (".codex/config.toml", vec!["one"], false),
+            (".shield/review/state.json", vec!["one"], true),
+            ("alias", vec!["one"], true),
+            ("ordinary", vec!["one", ".shield/review/state.json"], true),
+        ] {
+            let mut arguments = vec!["-r", reference];
+            arguments.extend(targets);
+            let request = serde_json::json!({"executable":"touch","arguments":arguments,"cwd":cwd,"project":cwd});
+            let found = inspect(&request, &cwd, &cwd, true, guard, Access::Write);
+            assert_eq!(found.0 == Protection::Blocked, blocked, "{arguments:?}");
+        }
+    }
+
+    #[test]
+    fn reviewed_policy_receipts_remain_private_with_all_edit_permissions_enabled() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let guard = Guard {
+            cache: None,
+            allow: PathAccess {
+                agent_settings_read: Read::Allow,
+                agent_settings_change: Change::Allow,
+                shield_config_change: Change::Allow,
+            },
+            working_files: None,
+        };
+        let path = root
+            .path()
+            .join("developer/.shield/reviewed-policies/receipt.json");
+        assert!(classify(&path, guard, Access::Read) == Protection::Blocked);
+        assert!(classify(&path, guard, Access::Write) == Protection::Blocked);
+        assert_eq!(group(path.to_str().unwrap(), root.path(), guard), "state");
+        assert!(removal(path.parent().unwrap(), root.path(), guard));
+    }
+
+    #[test]
+    fn user_continuity_and_registry_authority_stay_private_under_policy_edit_permission() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let guard = Guard {
+            cache: None,
+            working_files: None,
+            allow: PathAccess {
+                agent_settings_read: Read::Allow,
+                agent_settings_change: Change::Allow,
+                shield_config_change: Change::Allow,
+            },
+        };
+        for name in [
+            "runtime-incarnation/host.json",
+            "registry-trust/active.json",
+            "sdk-read-profiles/index.json",
+            "sdk-read-contexts/index.json",
+            "registries.json",
+            "registries.state/active.json",
+            "registries.lease",
+            "registries.lock",
+            "registries.new",
+        ] {
+            let path = root.path().join("developer/.shield").join(name);
+            for access in [Access::Read, Access::Write, Access::Metadata, Access::Index] {
+                assert!(
+                    classify(&path, guard, access) == Protection::Blocked,
+                    "{name}"
+                );
+            }
+            assert_eq!(group(path.to_str().unwrap(), root.path(), guard), "state");
+            assert!(removal(&path, root.path(), guard));
+        }
+        // User-wide storage is protected independently of this project's
+        // location or cache override, including removal through an ancestor.
+        if let Some(private) = user_state_root() {
+            assert!(
+                classify(
+                    &private.join("registry-trust/active.json"),
+                    guard,
+                    Access::Write
+                ) == Protection::Blocked
+            );
+            assert!(removal(private.parent().unwrap(), root.path(), guard));
+        }
+    }
+}
+
 pub(super) fn removal(path: &Path, root: &Path, guard: Guard<'_>) -> bool {
     let path = resolve_existing(path);
     let locked = |path: &Path| classify(path, guard, Access::Write) == Protection::Blocked;
     locked(&path)
+        || user_state_root().is_some_and(|private| private.starts_with(&path))
         || guard.working_files.is_some_and(|scope| {
             scope
                 .write

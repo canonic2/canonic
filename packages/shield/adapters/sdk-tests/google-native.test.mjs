@@ -13,7 +13,7 @@ async function geminiEnvironment(root, provider) {
   const home=join(root,'gemini-home');
   await mkdir(join(home,'.gemini'),{recursive:true});
   await writeFile(join(home,'.gemini/settings.json'),JSON.stringify({telemetry:{enabled:false},privacy:{usageStatisticsEnabled:false},security:{auth:{selectedType:'gemini-api-key'}}}));
-  return {...process.env,HOME:home,GEMINI_CLI_HOME:home,GOOGLE_GEMINI_BASE_URL:provider.url,
+  return {...process.env,GEMINI_CLI_HOME:home,GOOGLE_GEMINI_BASE_URL:provider.url,
     GEMINI_API_KEY:'acme-local-test-key',GEMINI_CLI_TRUST_WORKSPACE:'true',GOOGLE_GENAI_USE_GCA:'false',GOOGLE_GENAI_USE_VERTEXAI:'false',
     GEMINI_TELEMETRY_ENABLED:'false',HTTP_PROXY:'',HTTPS_PROXY:'',ALL_PROXY:'',NO_PROXY:'127.0.0.1,localhost'};
 }
@@ -47,7 +47,7 @@ test('Gemini native hooks enforce Allow, Ask and Deny with a local scripted prov
     const pending = exec('gemini', ['--skip-trust', '--approval-mode', 'yolo', '--output-format', 'json',
       '--model', 'gemini-2.5-flash', '--prompt', 'Perform the Acme fixture tool exactly once.'], {
       cwd: f.root, timeout: 25000, maxBuffer: 1024 * 1024,
-      env: { ...process.env, HOME: home, GEMINI_CLI_HOME: home, GOOGLE_GEMINI_BASE_URL: provider.url,
+      env: { ...process.env, GEMINI_CLI_HOME: home, GOOGLE_GEMINI_BASE_URL: provider.url,
         GEMINI_API_KEY: 'acme-local-test-key', GEMINI_CLI_TRUST_WORKSPACE: 'true', GOOGLE_GENAI_USE_GCA: 'false', GOOGLE_GENAI_USE_VERTEXAI: 'false',
         GEMINI_TELEMETRY_ENABLED: 'false', HTTP_PROXY: '', HTTPS_PROXY: '', ALL_PROXY: '', NO_PROXY: '127.0.0.1,localhost' },
     });

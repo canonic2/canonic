@@ -31,6 +31,9 @@ static SPEC: AgentSpec = AgentSpec {
 };
 
 impl AgentAdapter for Gemini {
+    fn portable_mcp_launcher(&self) -> bool {
+        true
+    }
     fn native_forms_unavailable(&self, version: Option<&str>) -> bool {
         version == Some("0.67.0")
     }
@@ -152,9 +155,25 @@ impl AgentAdapter for Gemini {
     ) -> Result<String, Error> {
         super::setup::merge(source, old, new)
     }
-    fn mcp_entry(&self, binary: &Path, root: &Path, _: &[String]) -> String {
-        json!({"command":binary,"args":["mcp","serve","--project",root,"--agent",SPEC.id]})
+    fn mcp_entry(&self, _binary: &Path, _root: &Path, _: &[String]) -> String {
+        json!({"command":"shield","args":["mcp","serve","--project",".","--agent",SPEC.id]})
             .to_string()
+    }
+    fn migrate_hooks(
+        &self,
+        source: &str,
+        permitted: &super::setup::PortableHookGroups,
+        desired: &super::setup::HookGroups,
+    ) -> Result<Option<String>, Error> {
+        super::setup::migrate(source, permitted, desired).map(Some)
+    }
+    fn portable_mcp_entry(
+        &self,
+        source: &str,
+        binary: &Path,
+        roots: &[&Path],
+    ) -> Result<Option<String>, Error> {
+        super::setup::portable_json_mcp(source, SPEC.id, &[], binary, roots).map(Some)
     }
     fn has_mcp_entry(&self, source: &str) -> Result<bool, Error> {
         super::json_mcp::present(source)

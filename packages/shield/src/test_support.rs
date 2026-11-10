@@ -9,6 +9,29 @@ pub(crate) fn absolute(path: &str) -> Cow<'_, str> {
     }
 }
 
+/// Copy an owned fixture without sharing file identities or relaxing private modes.
+pub(crate) fn copy_fixture_directory(from: &Path, to: &Path) {
+    for entry in std::fs::read_dir(from).expect("read owned fixture directory") {
+        let entry = entry.expect("owned fixture entry");
+        let target = to.join(entry.file_name());
+        let kind = entry.file_type().expect("owned fixture entry type");
+        if kind.is_dir() {
+            std::fs::create_dir(&target).expect("create copied fixture directory");
+            copy_fixture_directory(&entry.path(), &target);
+        } else {
+            assert!(kind.is_file(), "fixture copies contain only regular files");
+            std::fs::copy(entry.path(), target).expect("copy owned fixture file");
+        }
+    }
+    std::fs::set_permissions(
+        to,
+        std::fs::metadata(from)
+            .expect("source fixture metadata")
+            .permissions(),
+    )
+    .expect("preserve fixture directory permissions");
+}
+
 /// Run a home-sensitive test in an owned child without changing process-global
 /// environment while other test/runtime threads may be active. The caller
 /// returns when false; only the exact child test runs its assertions.
@@ -27,6 +50,8 @@ pub(crate) fn isolated_home(test: &str) -> bool {
         .args(["--exact", name, "--nocapture"])
         .env("HOME", home.path())
         .env("USERPROFILE", home.path())
+        .env("LOCALAPPDATA", home.path())
+        .env("APPDATA", home.path())
         .env("SHIELD_ISOLATED_HOME_TEST", test)
         .env("SHIELD_ISOLATED_HOME", home.path())
         .output()

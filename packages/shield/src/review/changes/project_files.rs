@@ -12,23 +12,6 @@ pub(in crate::review) struct Capture {
 
 type Reader<'a> = dyn FnMut(&str) -> Result<Option<String>, Error> + 'a;
 
-/// Missing or linked projections require repair rather than file adoption.
-pub(in crate::review) fn adoption_available(context: &Context) -> Result<bool, Error> {
-    let state = crate::review::storage::Store::open(std::path::Path::new(&context.project_root))?
-        .read_checkpoint()?;
-    state.check(context)?;
-    let Some(edited) =
-        crate::review::publication::projections::edited_projections(context, &state)?
-    else {
-        return Ok(false);
-    };
-    let directory = crate::review::project::root(context).join(".shield");
-    Ok(!edited.is_empty()
-        && edited.iter().all(|name| {
-            std::fs::symlink_metadata(directory.join(name)).is_ok_and(|metadata| metadata.is_file())
-        }))
-}
-
 /// Bind the union of current and proposed output paths, including local files
 /// that did not exist in the active generation. Missing files remain evidence.
 pub(in crate::review) fn fingerprint(
@@ -49,13 +32,12 @@ fn fingerprint_with(
     meta: &Value,
     read: &mut Reader<'_>,
 ) -> Result<String, Error> {
-    use crate::review::publication::projections::projections;
-    let mut files = projections(&before.candidates["project"], &before.operator)?;
-    files.extend(projections(candidate, meta)?);
-    files.entry("config.local.yml".into()).or_default();
-    files.entry("rules.local.yml".into()).or_default();
+    use crate::review::publication::projections::paths;
+    let mut files = paths(&before.candidates["project"], &before.operator)?;
+    files.extend(paths(candidate, meta)?);
+    files.extend(["config.local.yml".into(), "rules.local.yml".into()]);
     let mut hashes = BTreeMap::new();
-    for name in files.keys() {
+    for name in &files {
         let hash = read(name)?.map(|bytes| crate::policy::fingerprint(bytes.as_bytes()));
         hashes.insert(name, hash);
     }
@@ -81,11 +63,13 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
     };
     let (source, local, config) = adopted_config(&mut read)?;
     let mut meta = crate::review::project::metadata(before);
+    crate::review::packs::repair_disabled_metadata(&before.candidates["project"], &mut meta)?;
     // Installed and locally disabled selections are both known releases.
     let known: Vec<Value> = meta["installed"]
         .as_array()
         .into_iter()
         .chain(meta["disabled"].as_array())
+        .chain(meta["shared_installed"].as_array())
         .flatten()
         .cloned()
         .collect();
@@ -149,6 +133,7 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
         local_rules.as_deref(),
         &disabled_bytes,
     )?);
+    update_shared_metadata(before, &source, &candidate, &mut meta)?;
     let fingerprint = fingerprint_with(before, &candidate, &meta, &mut read)?;
     let paths = files
         .into_iter()
@@ -165,6 +150,28 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
         fingerprint,
         paths,
     })
+}
+
+fn update_shared_metadata(
+    before: &State,
+    source: &str,
+    candidate: &Value,
+    meta: &mut Value,
+) -> Result<(), Error> {
+    if before.candidates["project"]["config"]
+        .as_str()
+        .map(crate::policy::parse::<Value>)
+        .transpose()?
+        == Some(crate::policy::parse::<Value>(source)?)
+    {
+        meta["shared_installed"] = json!(crate::review::publication::projections::shared_rows(
+            &before.candidates["project"],
+            &before.operator
+        )?);
+    } else {
+        crate::review::packs::refresh_shared_metadata(candidate, meta)?;
+    }
+    Ok(())
 }
 
 /// Capture both configuration layers, preserving comments when selecting rules.yml.
@@ -208,6 +215,63 @@ pub(in crate::review) fn read_file(directory: &Path, path: &str) -> Result<Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_disabled_release_can_be_reenabled_by_local_file_adoption() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let artifact = json!({"schema_version":1,"kind":"pack","id":"acme/read","version":"1.0.0","description":"Retained source fixture","license":"MIT","maintainers":["Acme"],"engines":{"shield":env!("CARGO_PKG_VERSION")},"capabilities":["structured-rules-v1"],"rules":[]}).to_string();
+        let source = json!({"schema_version":1,"rules":"rules.yml","packs":[{"id":"acme/read","registry_identity":"main","version":"1.0.0","profile":"recommended","path":"read.yml"}]}).to_string();
+        let local = "schema_version: 1\npacks:\n  - id: acme/read\n    registry_identity: main\n    disabled: true\n";
+        let rules =
+            "schema_version: 1\nkind: custom\ncapabilities: [structured-rules-v1]\nrules: []\n";
+        let bundle = crate::configuration::Bundle::capture_layers(
+            &source,
+            Some(local),
+            &[],
+            Some(rules),
+            None,
+            std::slice::from_ref(&artifact),
+        )
+        .unwrap();
+        let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
+        let mut state = crate::review::project::load(&context).unwrap();
+        state.operator.as_object_mut().unwrap().remove("disabled");
+        state
+            .operator
+            .as_object_mut()
+            .unwrap()
+            .remove("shared_installed");
+        let previous = crate::review::publication::projections::projections(
+            &state.candidates["project"],
+            &state.operator,
+        )
+        .unwrap();
+        let captured = capture_with(&state, &mut |name| {
+            Ok(match name {
+                "config.yml" => Some(source.clone()),
+                "rules.yml" => Some(rules.into()),
+                "read.yml" => Some(artifact.clone()),
+                _ => previous
+                    .get(name)
+                    .cloned()
+                    .filter(|_| name != "config.local.yml"),
+            })
+        })
+        .unwrap();
+        assert_eq!(captured.metadata["installed"][0]["trust"], "unverified");
+        assert_eq!(
+            captured.metadata["installed"][0]["source_alias"],
+            "project-files"
+        );
+        assert!(captured.metadata["installed"][0]["source"]["key"].is_null());
+        let next = crate::review::publication::projections::projections(
+            &captured.candidate,
+            &captured.metadata,
+        )
+        .unwrap();
+        assert_eq!(next["shield.lock"], previous["shield.lock"]);
+        assert_eq!(next["config.yml"], previous["config.yml"]);
+    }
 
     #[test]
     fn project_files_adopt_fingerprint_uses_candidate_reads_even_if_disk_changes_back() {

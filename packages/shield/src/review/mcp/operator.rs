@@ -61,11 +61,15 @@ pub(crate) fn diagnostic(context: &Context, command: Diagnostic<'_>) -> Result<V
             ("policy_compare", args)
         }
     };
-    let mut result = if name == "policy_evaluate" {
+    let result = if name == "policy_evaluate" {
         diagnostics::evaluate(context, &mut views, &args, &|| Ok(()))?
     } else {
         diagnostics::compare(context, &mut views, &args, &|| Ok(()))?
     };
+    let (mut result, redacted) = result.into_parts();
+    if redacted {
+        result["redacted"] = json!(true);
+    }
     // Handles are invocation-local evidence; never suggest they are reusable selectors.
     for key in ["candidate_id", "before_candidate_id", "after_candidate_id"] {
         if let Some(object) = result.as_object_mut() {

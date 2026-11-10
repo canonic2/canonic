@@ -39,11 +39,11 @@ fn fixture() -> (assert_fs::TempDir, Context, EvaluatedRequest, Value) {
     };
     let resource =
         crate::execution::approval_fixture(&request, 5000).expect("native approval fixture");
-    let evidence = Project::open(Path::new(&context.project_root))
+    let snapshot = Project::open(Path::new(&context.project_root))
         .expect("native approval fixture")
         .snapshot()
-        .expect("native approval fixture")
-        .evaluate(request)
+        .expect("native approval fixture");
+    let evidence = crate::execution::evaluate_approval(&snapshot, &request, &resource)
         .expect("native approval fixture");
     (root, context, evidence, resource)
 }
@@ -71,6 +71,201 @@ fn pending(context: &Context, evidence: &EvaluatedRequest, resource: &Value) -> 
 }
 
 #[test]
+fn copied_workspace_run_grant_cannot_replay_and_original_remains_usable() {
+    let (root, context, evidence, resource) = fixture();
+    let id = pending(&context, &evidence, &resource);
+    authorize(&operator(&context), &id, 300, None, false).unwrap();
+    let original = std::fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let copy = assert_fs::TempDir::new().unwrap();
+    crate::test_support::copy_fixture_directory(root.path(), copy.path());
+    let opened = review::open(copy.path()).unwrap();
+    let mut child = context.clone();
+    child.project_id = opened.project_id;
+    child.project_root = opened.project_root;
+    child.cwd = Some(child.project_root.clone());
+    assert_ne!(child.project_id, context.project_id);
+    assert!(
+        gate(
+            &child,
+            &evidence,
+            &resource,
+            Some(&id),
+            || true,
+            |_| panic!("foreign evidence must never reach handoff")
+        )
+        .is_err()
+    );
+    let request = Request {
+        cwd: child.project_root.clone(),
+        project: child.project_root.clone(),
+        ..evidence.request().clone()
+    };
+    let fresh_resource = crate::execution::approval_fixture(&request, 5000).unwrap();
+    let snapshot = Project::open(copy.path()).unwrap().snapshot().unwrap();
+    let fresh = crate::execution::evaluate_approval(&snapshot, &request, &fresh_resource).unwrap();
+    let (refused, handoff) = gate(
+        &child,
+        &fresh,
+        &fresh_resource,
+        Some(&id),
+        || true,
+        |_| panic!("copied approval must never reach handoff"),
+    )
+    .unwrap();
+    assert_eq!(refused["code"], "approval-unavailable");
+    assert_eq!(refused["allowed"], false);
+    assert!(handoff.is_none());
+    let child_id = pending(&child, &fresh, &fresh_resource);
+    assert_ne!(child_id, id);
+    authorize(&operator(&child), &child_id, 300, None, false).unwrap();
+    let (allowed, handoff) = gate(
+        &child,
+        &fresh,
+        &fresh_resource,
+        Some(&child_id),
+        || true,
+        |_| "child",
+    )
+    .unwrap();
+    assert_eq!(allowed["allowed"], true);
+    assert_eq!(handoff, Some("child"));
+    let (replay, handoff) = gate(
+        &child,
+        &fresh,
+        &fresh_resource,
+        Some(&child_id),
+        || true,
+        |_| panic!("child approval cannot be spent twice"),
+    )
+    .unwrap();
+    assert_eq!(replay["allowed"], false);
+    assert!(handoff.is_none());
+    assert_eq!(
+        std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        original
+    );
+    let (allowed, handoff) = gate(
+        &context,
+        &evidence,
+        &resource,
+        Some(&id),
+        || true,
+        |_| "original",
+    )
+    .unwrap();
+    assert_eq!(allowed["allowed"], true);
+    assert_eq!(handoff, Some("original"));
+    let (replay, handoff) = gate(
+        &context,
+        &evidence,
+        &resource,
+        Some(&id),
+        || true,
+        |_| panic!("original approval cannot be spent twice"),
+    )
+    .unwrap();
+    assert_eq!(replay["allowed"], false);
+    assert!(handoff.is_none());
+}
+
+#[test]
+fn legacy_native_grants_remain_readable_but_require_fresh_launch_review() {
+    let (root, context, evidence, resource) = fixture();
+    let id = pending(&context, &evidence, &resource);
+    authorize(&operator(&context), &id, 300, None, false).unwrap();
+    let mut legacy = resource.clone();
+    for field in ["schema_version", "submitted", "launch"] {
+        legacy.as_object_mut().unwrap().remove(field);
+    }
+    assert!(crate::execution::valid_approval_binding(
+        evidence.request(),
+        &legacy
+    ));
+    Store::open(root.path())
+        .unwrap()
+        .update_checkpoint(&context, &|| Ok(()), |state| {
+            let row = state
+                .run_requests
+                .iter_mut()
+                .find(|row| row.request_id == id)
+                .unwrap();
+            row.resource = legacy.clone();
+            row.resource_digest = hash(&legacy);
+            row.binding = row.binding();
+            let mut grant = row.grant.take().unwrap();
+            grant.binding = row.grant_binding(&grant);
+            let request_binding = row.binding.clone();
+            let grant_binding = grant.binding.clone();
+            row.grant = Some(grant);
+            for event in state
+                .authorization_events
+                .iter_mut()
+                .chain(state.events.iter_mut())
+            {
+                if event["kind"] == "run_grant_issued" && event["links"]["request_id"] == id {
+                    event["details"]["binding"] = json!(grant_binding);
+                    event["details"]["request_binding"] = json!(request_binding);
+                }
+            }
+            Ok(Value::Null)
+        })
+        .unwrap();
+    let before = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
+    assert_eq!(before.run_requests[0].status, "approved");
+    assert!(
+        gate(
+            &context,
+            &evidence,
+            &legacy,
+            Some(&id),
+            || panic!("old launch cannot verify"),
+            |_| panic!("old launch cannot spawn")
+        )
+        .is_err()
+    );
+    assert!(authorize(&operator(&context), &id, 300, None, false).is_err());
+    let after = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
+    assert_eq!(json!(before.run_requests), json!(after.run_requests));
+    assert_eq!(before.project_id, after.project_id);
+}
+
+#[test]
+fn native_gate_requires_evaluation_of_the_exact_launch_environment() {
+    let (root, context, evidence, resource) = fixture();
+    let literal = Project::open(root.path())
+        .unwrap()
+        .snapshot()
+        .unwrap()
+        .evaluate(evidence.request().clone())
+        .unwrap();
+    assert!(
+        gate(
+            &context,
+            &literal,
+            &resource,
+            None,
+            || panic!("unbound environment cannot verify"),
+            |_| panic!("unbound environment cannot spawn")
+        )
+        .is_err()
+    );
+    let mut altered = resource.clone();
+    altered["launch"]["environment"]["PATH"] = json!(".");
+    assert!(!crate::execution::valid_approval_binding(
+        evidence.request(),
+        &altered
+    ));
+    assert!(
+        Store::open(root.path())
+            .unwrap()
+            .read_checkpoint()
+            .unwrap()
+            .run_requests
+            .is_empty()
+    );
+}
+
+#[test]
 fn mcp_denial_is_confirmed_owned_and_never_issues_a_grant() {
     let (_root, mut context, evidence, resource) = fixture();
     context.agent = Some("codex".into());
@@ -93,6 +288,49 @@ fn mcp_denial_is_confirmed_owned_and_never_issues_a_grant() {
     ));
     assert_eq!(
         review::approvals::deny(&context, &id, true).unwrap()["status"],
+        "revoked"
+    );
+}
+
+#[test]
+fn terminal_run_receipts_survive_compaction_and_never_repeat_handoff() {
+    let (_root, context, evidence, resource) = fixture();
+    let operator = operator(&context);
+    review::history_settings(&operator, Some(false), None, false, &|| Ok(())).unwrap();
+    let id = pending(&context, &evidence, &resource);
+    authorize(&operator, &id, 300, None, false).unwrap();
+    let launches = std::cell::Cell::new(0);
+    let (first, _) = gate(
+        &context,
+        &evidence,
+        &resource,
+        Some(&id),
+        || true,
+        |_| launches.set(launches.get() + 1),
+    )
+    .unwrap();
+    assert_eq!(first["allowed"], true);
+    review::history_settings(&operator, None, None, true, &|| Ok(())).unwrap();
+    let (second, outcome) = gate(
+        &context,
+        &evidence,
+        &resource,
+        Some(&id),
+        || true,
+        |_| panic!("terminal replay cannot launch"),
+    )
+    .unwrap();
+    assert_eq!(second["code"], "approval-consumed");
+    assert_eq!(second["allowed"], false);
+    assert!(outcome.is_none());
+    assert_eq!(launches.get(), 1);
+    let replay = authorize(&operator, &id, 300, None, false).unwrap();
+    assert_eq!(replay["status"], "consumed");
+    assert!(replay.get("approval_id").is_none());
+    let denied = pending(&context, &evidence, &resource);
+    authorize(&operator, &denied, 300, None, true).unwrap();
+    assert_eq!(
+        authorize(&operator, &denied, 300, None, true).unwrap()["status"],
         "revoked"
     );
 }
@@ -276,9 +514,12 @@ fn one_atomic_consumer_survives_history_purge_and_failed_launch() {
         gate(&context, &evidence, &resource, Some(&id), || true, |_| ())
             .expect("native approval fixture")
             .0["code"],
-        "approval-unavailable"
+        "approval-consumed"
     );
-    assert!(authorize(&operator(&context), &id, 300, None, false).is_err());
+    let receipt = authorize(&operator(&context), &id, 300, None, false).unwrap();
+    assert_eq!(receipt["status"], "consumed");
+    assert_eq!(receipt["allowed"], false);
+    assert!(receipt.get("approval_id").is_none());
     let state = store.read().expect("native approval fixture");
     assert_eq!(state.events, [] as [Value; 0]);
     assert!(state.run_requests.is_empty());
@@ -350,12 +591,7 @@ fn changed_request_origin_resources_deadline_and_activation_block() {
         .expect("native approval fixture")
         .evaluate(request)
         .expect("native approval fixture");
-    assert_eq!(
-        gate(&context, &altered, &resource, Some(&id), || true, |_| ())
-            .expect("native approval fixture")
-            .0["code"],
-        "approval-stale"
-    );
+    assert!(gate(&context, &altered, &resource, Some(&id), || true, |_| ()).is_err());
     assert!(
         gate(
             &context,
@@ -399,11 +635,12 @@ fn same_policy_reactivation_invalidates_grants_and_owned_evidence() {
         )
         .is_err()
     );
-    let refreshed = project
-        .snapshot()
-        .expect("native approval fixture")
-        .evaluate(evidence.request().clone())
-        .expect("native approval fixture");
+    let refreshed = crate::execution::evaluate_approval(
+        &project.snapshot().expect("native approval fixture"),
+        evidence.request(),
+        &resource,
+    )
+    .expect("native approval fixture");
     assert_eq!(
         gate(&context, &refreshed, &resource, Some(&id), || true, |_| ())
             .expect("native approval fixture")
@@ -422,7 +659,7 @@ fn revocation_expiry_missing_and_pending_limits_fail_closed() {
         gate(&context, &evidence, &resource, Some(&id), || true, |_| ())
             .expect("native approval fixture")
             .0["code"],
-        "approval-unavailable"
+        "approval-revoked"
     );
     assert!(
         gate(
@@ -576,14 +813,13 @@ fn cwd_replacement_and_unverified_environment_refuse_issuance_and_consumption() 
         .expect("cwd")
         .into();
     context.cwd = Some(request.cwd.clone());
-    let evidence = Project::open(root.path())
+    let snapshot = Project::open(root.path())
         .expect("native project")
         .snapshot()
-        .expect("snapshot")
-        .evaluate(request)
-        .expect("evidence");
-    let resource =
-        crate::execution::approval_fixture(evidence.request(), 5000).expect("native binding");
+        .expect("snapshot");
+    let resource = crate::execution::approval_fixture(&request, 5000).expect("native binding");
+    let evidence =
+        crate::execution::evaluate_approval(&snapshot, &request, &resource).expect("evidence");
     let id = pending(&context, &evidence, &resource);
     authorize(&operator(&context), &id, 300, None, false).expect("approve owned cwd");
     std::fs::rename(root.child("nested").path(), root.child("old-nested").path())

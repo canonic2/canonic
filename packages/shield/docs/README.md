@@ -34,6 +34,10 @@ For an existing project, choose a task below or go to
   interception.
 - [Connect Gemini and Antigravity](google-agents.md): set up native integrations,
   understand confirmation and session access, and check verification limits.
+- [Connect Copilot CLI](copilot-cli.md): install its native hooks and understand
+  prompt-mode Ask, timeout behavior and request coverage.
+- [Connect OpenCode V1](opencode.md): install its owned plugin and understand
+  standing Ask fallback, V1/V2 boundaries and loading requirements.
 - [Configure project MCP servers](mcp-connections.md): bind connections and pack
   permissions, review host projections, and keep local stdio settings private.
 - [Troubleshoot Shield](troubleshooting.md): investigate unexpected decisions,

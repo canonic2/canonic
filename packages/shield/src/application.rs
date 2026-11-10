@@ -37,6 +37,7 @@ impl Error {
                 | policy::Error::Contract(_)
                 | policy::Error::DirectoryOptionConflict(_)
                 | policy::Error::McpDefaults { .. }
+                | policy::Error::Resolution { .. }
                 | policy::Error::Binding { .. },
             ) => "invalid-contract",
         }

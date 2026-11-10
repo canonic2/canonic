@@ -66,6 +66,7 @@ pub(crate) fn reconsider(context: &Context, args: &Value) -> Result<Value, Error
     }
     let now = super::super::clock::now_ms()?;
     store(context)?.update_checkpoint(context, &|| Ok(()), |state| {
+        state.check_operations()?;
         state.session_grants.compact(now);
         let authority = Authority::capture(state);
         let previous = declined(state, context, &input, &authority, now)?;

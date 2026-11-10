@@ -9,6 +9,239 @@ fn context() -> String {
 }
 
 #[test]
+fn same_condition_custom_outcomes_prove_bounds_without_inventing_normalized_witnesses() {
+    let file = |decision: &str| {
+        snapshot(
+            Scope::Project,
+            json!([{"id":"read","decision":decision,
+        "conditions":{"domain":"file","action":"read","sources":{"all":{"within":{"root":"project"}}}}}]),
+        )
+    };
+    let before = [(Scope::Project, file("allow"))];
+    let after = [(Scope::Project, file("deny"))];
+    let report = serde_json::to_value(compare_policy(&before, &after).unwrap()).unwrap();
+    assert_eq!(report["algorithm"], "selected-condition-decision-bound-v1");
+    assert_eq!(report["decision_bound"], "non-expansive");
+    assert_eq!(report["relation"], "unknown");
+    assert_eq!(report["complete"], false);
+    assert!(report["expansion"].is_null() && report["restriction"].is_null());
+
+    let argv = |decision: &str| {
+        snapshot(
+            Scope::Project,
+            json!([{"id":"inspect","decision":decision,
+        "conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"exact","values":["inspect"]}},
+        "requirements":{"cwd":{"within":{"root":"project"}}},"on_unmet":{"decision":decision}}]),
+        )
+    };
+    let before = [(Scope::Project, argv("deny"))];
+    let after = [(Scope::Project, argv("ask"))];
+    let report = compare_policy(&before, &after).unwrap();
+    assert!(report.complete);
+    assert_eq!(report.relation, Relation::Expansive);
+    assert!(report.expansion.is_some());
+    assert_eq!(
+        serde_json::to_value(report).unwrap()["algorithm"],
+        "selected-condition-decision-bound-v1"
+    );
+}
+
+#[test]
+fn same_condition_custom_bound_refuses_changed_predicates_or_opposed_requirement_branches() {
+    let original = json!({"id":"inspect","decision":"ask","conditions":{"domain":"file","action":"read"},
+        "requirements":{"sources":{"all":{"within":{"root":"project"}}}},"on_unmet":{"decision":"deny"}});
+    let before = [(Scope::Project, snapshot(Scope::Project, json!([original])))];
+    for change in ["predicate", "opposed", "expiry"] {
+        let mut changed = original.clone();
+        changed["decision"] = json!("deny");
+        match change {
+            "predicate" => {
+                changed["requirements"]["sources"]["all"] = json!({"outside":{"root":"project"}});
+            }
+            "opposed" => changed["on_unmet"]["decision"] = json!("ask"),
+            "expiry" => changed["expires_at"] = json!("2035-01-01T00:00:00Z"),
+            _ => unreachable!(),
+        }
+        let after = [(Scope::Project, snapshot(Scope::Project, json!([changed])))];
+        let report = serde_json::to_value(compare_policy(&before, &after).unwrap()).unwrap();
+        assert!(report["decision_bound"].is_null(), "{change}: {report}");
+        assert_eq!(report["relation"], "unknown");
+        assert_eq!(report["complete"], false);
+    }
+}
+
+#[test]
+fn precondition_feedback_identity_preserves_selected_profiles() {
+    let mut pack = json!({"schema_version":1,"kind":"pack","id":"acme/feedback","version":"0.1.0","description":"Acme feedback fixture","license":"MIT","maintainers":["Acme"],"engines":{"shield":"*"},"capabilities":["structured-rules-v1","argument-rules-v1","preconditions-v1"],"rules":[{"id":"allow","decision":{"loose":"allow","recommended":"ask","strict":"deny"},"conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}}}],"preconditions":[{"id":"safe","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}},"requires_any":[{"arguments":{"kind":"prefix","values":["safe"]}}],"reason":"Before gate","on_unmet":{"decision":"deny","message":"Before message","alternatives":["Before alternative"]}}]});
+    let capture = |source: &Value, profile: &str| {
+        Candidate::from_yaml(&json!({"schema_version":1,"packs":[{"id":"acme/feedback","version":"0.1.0","profile":profile,"path":"pack.json"}]}).to_string()).unwrap().capture(&[source.to_string()],None).unwrap()
+    };
+    let before = [(Scope::Project, capture(&pack, "recommended"))];
+    pack["preconditions"][0]["reason"] = json!("After gate");
+    pack["preconditions"][0]["on_unmet"]["message"] = json!("After message");
+    pack["preconditions"][0]["on_unmet"]["alternatives"] = json!(["After alternative"]);
+    let after = [(Scope::Project, capture(&pack, "recommended"))];
+    let report = serde_json::to_value(compare_policy(&before, &after).unwrap()).unwrap();
+    assert_eq!(
+        report["algorithm"],
+        "selected-permission-structure-identity-v1"
+    );
+    assert_eq!(
+        report["feedback_changes"]["entries"][0]["entry_kind"],
+        "precondition"
+    );
+    let changed_profile = [(Scope::Project, capture(&pack, "loose"))];
+    assert_ne!(
+        serde_json::to_value(compare_policy(&before, &changed_profile).unwrap()).unwrap()["algorithm"],
+        "selected-permission-structure-identity-v1"
+    );
+}
+
+#[test]
+fn guidance_only_edits_prove_permission_identity_for_normalized_and_requirement_rules() {
+    for conditions in [
+        json!({"domain":"file","action":"read","sources":{"all":{"within":{"root":"read"}}}}),
+        json!({"domain":"web","action":"fetch","url":{"schemes":["https"],"hosts":["api.example.com"],"ports":[443],"path":{"prefix":"/reports/"}},"method":"GET"}),
+        json!({"domain":"mcp","server":"acme","tool":"inspect"}),
+    ] {
+        let mut before_rule = json!({"id":"inspect","decision":"allow","conditions":conditions,"reason":"Before reason","guidance":{"message":"Before guidance","alternatives":["Before alternative"]}});
+        if conditions["domain"] == "mcp" {
+            before_rule["requirements"] = json!({"fields":{"/force":{"exact":false}}});
+            before_rule["on_unmet"] = json!({"decision":"deny","message":"Before unmet","alternatives":["Before safe operation"]});
+        }
+        let mut after_rule = before_rule.clone();
+        after_rule["reason"] = json!("After reason");
+        after_rule["guidance"] =
+            json!({"message":"After guidance","alternatives":["After alternative"]});
+        if !after_rule["on_unmet"].is_null() {
+            after_rule["on_unmet"]["message"] = json!("After unmet");
+            after_rule["on_unmet"]["alternatives"] = json!(["After safe operation"]);
+        }
+        let before = [(
+            Scope::Project,
+            snapshot(Scope::Project, json!([before_rule])),
+        )];
+        let after = [(
+            Scope::Project,
+            snapshot(Scope::Project, json!([after_rule])),
+        )];
+        let result = compare_policy(&before, &after).unwrap();
+        assert!(result.complete);
+        assert_eq!(result.relation, Relation::Equivalent);
+        assert_eq!(result.evaluated_regions, 0);
+        let report = serde_json::to_value(result).unwrap();
+        assert_eq!(
+            report["algorithm"],
+            "selected-permission-structure-identity-v1"
+        );
+        assert_eq!(report["feedback_changes"]["changed"], true);
+        assert_eq!(
+            report["feedback_changes"]["entries"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            report["feedback_changes"]["entries"][0]["after"]["guidance"]["message"],
+            "After guidance"
+        );
+    }
+}
+
+#[test]
+fn permission_identity_keeps_nested_json_decisions_requirements_and_expiry() {
+    let original = json!({"id":"inspect","decision":"allow","reason":"Before","conditions":{"domain":"mcp","server":"acme","tool":"inspect","fields":{"/metadata":{"exact":{"reason":"semantic reason","message":"semantic message"}}}},"requirements":{"fields":{"/force":{"exact":false}}},"on_unmet":{"decision":"deny","message":"Use safe operation"}});
+    let before = [(Scope::Project, snapshot(Scope::Project, json!([original])))];
+    for field in [
+        "reason",
+        "message",
+        "decision",
+        "requirement",
+        "expiry",
+        "unmet",
+    ] {
+        let mut changed = original.clone();
+        changed["reason"] = json!("After");
+        match field {
+            "reason" | "message" => {
+                changed["conditions"]["fields"]["/metadata"]["exact"][field] =
+                    json!("Different semantic value");
+            }
+            "decision" => changed["decision"] = json!("deny"),
+            "requirement" => changed["requirements"]["fields"]["/force"]["exact"] = json!(true),
+            "expiry" => changed["expires_at"] = json!("2035-01-01T00:00:00Z"),
+            "unmet" => changed["on_unmet"]["decision"] = json!("ask"),
+            _ => unreachable!(),
+        }
+        let after = [(Scope::Project, snapshot(Scope::Project, json!([changed])))];
+        let result = serde_json::to_value(compare_policy(&before, &after).unwrap()).unwrap();
+        assert_ne!(
+            result["algorithm"], "selected-permission-structure-identity-v1",
+            "{field}"
+        );
+        assert_eq!(result["relation"], "unknown", "{field}");
+        assert_eq!(result["complete"], false, "{field}");
+    }
+}
+
+#[test]
+fn guidance_permission_identity_preserves_local_source_composition() {
+    let custom = |decision: &str, reason: &str| {
+        crate::policy::rules::document(&[
+        json!({"id":"inspect","decision":decision,"reason":reason,"conditions":{"domain":"mcp","server":"acme","tool":"inspect"}})
+    ]).unwrap().to_string()
+    };
+    let shared = custom("allow", "Shared guidance");
+    let make = |local: &str| {
+        crate::configuration::Bundle::capture_layers(
+            "schema_version: 1\npacks: []\nrules: rules.yml\n",
+            Some("schema_version: 1\npacks: []\nrules: local.yml\n"),
+            &[],
+            Some(&shared),
+            Some(local),
+            &[],
+        )
+        .unwrap()
+        .snapshot()
+        .unwrap()
+    };
+    let before = [(
+        Scope::Project,
+        make(&custom("deny", "Before local guidance")),
+    )];
+    let after = [(
+        Scope::Project,
+        make(&custom("deny", "After local guidance")),
+    )];
+    let report = serde_json::to_value(compare_policy(&before, &after).unwrap()).unwrap();
+    assert_eq!(
+        report["algorithm"],
+        "selected-permission-structure-identity-v1"
+    );
+    assert_eq!(report["relation"], "equivalent");
+    let other_shared = custom("deny", "Shared guidance");
+    let altered = crate::configuration::Bundle::capture_layers(
+        "schema_version: 1\npacks: []\nrules: rules.yml\n",
+        Some("schema_version: 1\npacks: []\nrules: local.yml\n"),
+        &[],
+        Some(&other_shared),
+        Some(&custom("deny", "After local guidance")),
+        &[],
+    )
+    .unwrap()
+    .snapshot()
+    .unwrap();
+    let report =
+        serde_json::to_value(compare_policy(&before, &[(Scope::Project, altered)]).unwrap())
+            .unwrap();
+    assert_ne!(
+        report["algorithm"],
+        "selected-permission-structure-identity-v1"
+    );
+}
+
+#[test]
 fn identical_pack_artifacts_with_changed_access_paths_cannot_prove_equivalence() {
     let pack = json!({"schema_version":1,"kind":"pack","id":"acme/files","version":"0.1.0","description":"Acme file policy","license":"MIT","maintainers":["Acme"],"engines":{"shield":"*"},"capabilities":["structured-rules-v1","argument-rules-v1","location-v1","access-paths-v1","requirements-v1"],"rules":[{"id":"remove","decision":"allow","conditions":{"domain":"argv","executable":"rm","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"remove","all":{"within":{"root":"write"}}}},"on_unmet":{"decision":"deny"}}]}).to_string();
     let mut config = json!({"schema_version":1,"packs":[{"id":"acme/files","version":"0.1.0","profile":"recommended","path":"pack.yml"}]});
@@ -107,7 +340,7 @@ fn identical_selected_effect_policies_have_a_classifier_independent_identity_pro
         );
         assert_eq!(
             serde_json::to_value(report).unwrap()["algorithm"],
-            "argv-symbolic-possible-effects-bound-v1"
+            "selected-condition-decision-bound-v1"
         );
     }
 }
@@ -176,11 +409,13 @@ fn effect_snapshot(
         json!({"kind":kind,"values":values})
     };
     let doc = json!({"schema_version":1,"rules":[{"id":"operation","decision":decision,"reason":reason,"conditions":{"domain":"argv","executable":tool,"arguments":arguments,"possible_effects":effects}}],"kind":"custom","capabilities":["argument-rules-v1","possible-effects-v1","structured-rules-v1"]});
-    let candidate =
-        Candidate::from_yaml("schema_version: 1\npacks: []\nrules: rules.yml\n").unwrap();
+    // A neutral pack keeps these fixtures on the general symbolic comparison
+    // path rather than the custom-only same-predicate decision proof.
+    let pack = json!({"schema_version":1,"kind":"pack","id":"acme/neutral","version":"0.1.0","description":"Acme neutral fixture","license":"MIT","maintainers":["Acme"],"engines":{"shield":env!("CARGO_PKG_VERSION")},"capabilities":["structured-rules-v1"],"rules":[]}).to_string();
+    let candidate = Candidate::from_yaml("schema_version: 1\npacks:\n  - id: acme/neutral\n    version: 0.1.0\n    profile: recommended\n    path: pack.json\nrules: rules.yml\n").unwrap();
     [(
         Scope::Project,
-        candidate.capture(&[], Some(&doc.to_string())).unwrap(),
+        candidate.capture(&[pack], Some(&doc.to_string())).unwrap(),
     )]
 }
 
@@ -209,7 +444,11 @@ fn changed_effect_artifacts_and_prefixes_have_symbolic_bounds_but_only_real_witn
     ] {
         assert!(report.complete);
         assert_eq!(report.relation, Relation::Equivalent);
-        assert!(report.symbolic_regions.unwrap() > 0);
+        assert!(report.symbolic_regions.is_none());
+        assert_eq!(
+            report.algorithm,
+            "selected-permission-structure-identity-v1"
+        );
         assert_eq!(report.evaluated_regions, 0);
         assert!(report.expansion.is_none() && report.restriction.is_none());
     }

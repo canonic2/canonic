@@ -10,6 +10,8 @@ Change policy
   + acme/parent 0.1.0 · recommended profile · no rules · tracking · digest [SHORT-DIGEST]
   + acme/test 0.1.0 · recommended profile · 1 rule · dependency · digest [SHORT-DIGEST]
   Permissions: no command decision changes
+  Agent guidance changes (separate from permissions):
+    [DIGEST]/acme/test / mutation: null → {"guidance":null,"on_unmet":null,"reason":"Preview profile choices"}
 Review and confirm → Apply change
 Added acme/parent 0.1.0 · recommended profile
 Added acme/test 0.1.0 · recommended profile · dependency

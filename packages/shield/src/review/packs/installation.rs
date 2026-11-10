@@ -84,18 +84,6 @@ impl Installation {
                 .as_str()
                 .ok_or(Error::Invalid("pack selector missing"))?
                 .to_owned();
-            if local
-                && selection.profile.is_some()
-                && original_meta["installed"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .any(|row| row["selector"] == selector)
-            {
-                return Err(Error::Invalid(
-                    "the pack is already installed; a local installation cannot change its profile",
-                ));
-            }
             let names = requested_variables(selection)?;
             if requested.insert(selector.clone(), names).is_some() {
                 return Err(Error::Invalid("select each pack only once"));

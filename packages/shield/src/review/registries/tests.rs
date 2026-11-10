@@ -3,6 +3,14 @@ mod dependencies;
 mod hosted;
 mod indexed;
 use super::*;
+
+#[test]
+fn acquisition_cancellation_preserves_the_host_withdrawal_outcome() {
+    assert!(matches!(
+        acquisition_error(AcquisitionError::Cancelled, true),
+        Error::Cancelled
+    ));
+}
 use canonic_registry_kit::testing::SigningKey;
 
 #[test]

@@ -20,6 +20,71 @@ fn installed() -> (assert_fs::TempDir, Context, State) {
     (root, context, state)
 }
 
+#[test]
+fn registered_binary_diagnostics_distinguish_missing_from_unchecked_other_path() {
+    let (root, _, state) = installed();
+    let mut registered = registration(&state.operator).unwrap().unwrap();
+    registered.binary = root.path().join("other-shield");
+    let mut diagnostics = vec![];
+    diagnose_binary(&registered, &state.operator, &mut diagnostics).unwrap();
+    assert!(diagnostics.contains(&"registered binary is missing"));
+    std::fs::write(&registered.binary, "unverified executable content").unwrap();
+    diagnostics.clear();
+    diagnose_binary(&registered, &state.operator, &mut diagnostics).unwrap();
+    assert!(
+        diagnostics
+            .iter()
+            .any(|detail| detail.contains("content identity and compatibility are unchecked"))
+    );
+    assert!(!diagnostics.contains(&"registered binary is missing"));
+    assert_eq!(
+        std::fs::read_to_string(&registered.binary).unwrap(),
+        "unverified executable content"
+    );
+}
+
+#[test]
+fn current_executable_receipt_distinguishes_location_from_payload_verification() {
+    let (root, context, mut state) = installed();
+    let mut registered = registration(&state.operator).unwrap().unwrap();
+    registered.binary = root.path().join("missing-historical-shield");
+    state.operator["integration"] = json!(registered);
+    let running = std::env::current_exe().unwrap().canonicalize().unwrap();
+    let receipt = json!({"schema_version":1,"path":running,"digest":registered.binary_digest});
+    state.operator["current_executable"] = receipt.clone();
+    let mut diagnostics = vec![];
+    diagnose_binary(&registered, &state.operator, &mut diagnostics).unwrap();
+    assert!(!diagnostics.contains(&"registered binary is missing"));
+    let report = status(&context, &state);
+    assert_eq!(
+        report["binary_inspection"]["current_location_recorded"],
+        true
+    );
+    assert_eq!(
+        report["binary_inspection"]["payload_integrity"],
+        "unchecked"
+    );
+    assert_eq!(report["binary_inspection"]["compatibility"], "unchecked");
+    for field in ["digest", "schema_version", "path", "future"] {
+        state.operator["current_executable"] = receipt.clone();
+        state.operator["current_executable"][field] = match field {
+            "schema_version" => json!(2),
+            "path" => json!(root.path().join("missing-current-shield")),
+            _ => json!("unverified"),
+        };
+        diagnostics.clear();
+        diagnose_binary(&registered, &state.operator, &mut diagnostics).unwrap();
+        assert!(
+            diagnostics.contains(&"registered binary is missing"),
+            "{field}"
+        );
+        assert_eq!(
+            status(&context, &state)["binary_inspection"]["current_location_recorded"],
+            false
+        );
+    }
+}
+
 fn assert_agent(report: &Value, agent: &str, native: &str, mcp: &str) {
     for (key, expected) in [
         ("installed_integrations", native),
@@ -129,6 +194,7 @@ fn box_only_prefix_and_binary_drift_are_attributed_to_box() {
     state.operator["integration"]["binary"] = json!(root.path().join("missing-shield"));
     let report = status(&context, &state);
     assert_eq!(report["box_integration"]["status"], "degraded", "{report}");
+    assert_eq!(report["binary_inspection"]["compatibility"], "unchecked");
     assert_eq!(report["box_integration"]["definition_status"], "installed");
 }
 

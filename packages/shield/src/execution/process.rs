@@ -1,5 +1,6 @@
 //! Owns the direct child and original group, signals, escalation and reaping.
 use super::Error;
+#[cfg(test)]
 use crate::policy;
 use nix::{
     sys::signal::{Signal, kill, killpg},
@@ -85,36 +86,12 @@ impl OwnedChild {
             signal: status.signal(),
         })
     }
-    pub(super) fn spawn(request: &policy::Request) -> Result<Self, Error> {
-        let mut command = Command::new(&request.executable);
-        command.env_clear();
-        if request.executable == super::git::EXECUTABLE {
-            command
-                .env("GIT_CONFIG_GLOBAL", "/dev/null")
-                .env("GIT_CONFIG_SYSTEM", "/dev/null")
-                .env("GIT_OPTIONAL_LOCKS", "0")
-                .env("GIT_TERMINAL_PROMPT", "0")
-                .env("GIT_NO_LAZY_FETCH", "1");
-            command.env("GIT_ATTR_NOSYSTEM", "1").env(
-                "GIT_ATTR_SOURCE",
-                "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
-            );
-            command
-                .env(
-                    "GIT_DIR",
-                    std::path::Path::new(&request.project).join(".git"),
-                )
-                .env("GIT_WORK_TREE", &request.project);
-        }
-        let child = command
-            .args(&request.arguments)
-            .current_dir(&request.cwd)
-            .env("LC_ALL", "C")
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .process_group(0)
-            .spawn()?;
+    #[cfg(test)]
+    fn spawn_fixture(request: &policy::Request) -> Result<Self, Error> {
+        Self::spawn(&super::launch::EffectiveLaunch::process_fixture(request)?)
+    }
+    pub(super) fn spawn(launch: &super::launch::EffectiveLaunch) -> Result<Self, Error> {
+        let child = command(launch).spawn()?;
         Ok(Self {
             child,
             finished: false,
@@ -332,6 +309,21 @@ impl OwnedChild {
             std::thread::sleep(Duration::from_millis(10));
         }
     }
+}
+
+fn command(launch: &super::launch::EffectiveLaunch) -> Command {
+    let request = launch.request();
+    let mut command = Command::new(&request.executable);
+    command
+        .env_clear()
+        .envs(launch.environment())
+        .args(&request.arguments)
+        .current_dir(&request.cwd)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .process_group(0);
+    command
 }
 impl Drop for OwnedChild {
     fn drop(&mut self) {

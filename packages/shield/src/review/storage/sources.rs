@@ -4,21 +4,189 @@ use serde_json::{Value, json};
 use std::{
     collections::BTreeSet,
     fs,
-    io::{Read, Write},
+    io::Read,
+    path::{Path, PathBuf},
 };
+/// One private immutable-object namespace with an atomic durable root index.
+/// Project checkpoints and per-user consent use the same codec, not authority.
+pub(in crate::review) struct Namespace {
+    pub(super) directory: PathBuf,
+    user: bool,
+}
+impl Namespace {
+    pub(in crate::review) fn project(store: &Store) -> Self {
+        Self {
+            directory: store.directory.clone(),
+            user: false,
+        }
+    }
+    pub(in crate::review) fn private(directory: &Path) -> Result<Self, Error> {
+        super::private_files::directory(directory, false)?;
+        Ok(Self {
+            directory: directory.into(),
+            user: true,
+        })
+    }
+    fn external_usage(&self) -> Result<(u64, usize), Error> {
+        if !self.user {
+            return Ok((0, 0));
+        }
+        let entries = fs::read_dir(&self.directory)?
+            .take(4097)
+            .collect::<Result<Vec<_>, _>>()?;
+        if entries.len() > 4096 {
+            return Err(Error::CleanupPending);
+        }
+        // The index and its one atomic pending file reserve their full bounds.
+        // Every preserved legacy/unknown top-level entry is charged by metadata.
+        let mut bytes = 0u64;
+        let mut files = 0usize;
+        let mut index_bytes = 0u64;
+        for entry in entries {
+            let name = entry.file_name();
+            if name == "sources" {
+                continue;
+            }
+            let metadata = fs::symlink_metadata(entry.path())?;
+            if name == "state.json" || name == "state.pending" {
+                index_bytes = index_bytes
+                    .checked_add(metadata.len())
+                    .ok_or(crate::policy::Error::Limit)?;
+                continue;
+            }
+            bytes = bytes
+                .checked_add(metadata.len())
+                .ok_or(crate::policy::Error::Limit)?;
+            files += 1;
+        }
+        Ok((
+            bytes.saturating_add(index_bytes.max(4 * 1024 * 1024)),
+            files + 2,
+        ))
+    }
+    pub(in crate::review) fn retain_owned(
+        &self,
+        mut value: Value,
+    ) -> Result<(Value, super::objects::Pins), Error> {
+        let pins = compact_namespace(self, &mut value, true)?;
+        Ok((value, pins))
+    }
+    pub(in crate::review) fn retain_map(
+        &self,
+        candidates: &std::collections::BTreeMap<String, Value>,
+    ) -> Result<
+        (
+            std::collections::BTreeMap<String, Value>,
+            super::objects::Pins,
+        ),
+        Error,
+    > {
+        let roots: serde_json::Map<_, _> = candidates
+            .iter()
+            .map(|(name, value)| {
+                (
+                    name.clone(),
+                    if value["kind"] == "candidate-bundle" {
+                        Value::Null
+                    } else {
+                        value.clone()
+                    },
+                )
+            })
+            .collect();
+        let mut batch = retention::Batch::new(&Value::Object(roots), true)?;
+        let mut retained = std::collections::BTreeMap::new();
+        for (name, value) in candidates {
+            let reference = if value["kind"] == "candidate-bundle" {
+                manifest::retain(self, value, &mut batch)?
+            } else {
+                if value["kind"] != KIND && value["kind"] != manifest::KIND {
+                    return Err(Error::Invalid("unsupported retained candidate"));
+                }
+                check(value)?;
+                value.clone()
+            };
+            retained.insert(name.clone(), reference);
+        }
+        Ok((retained, batch.finish(self)?))
+    }
+    pub(in crate::review) fn captured(&self, reference: &Value) -> Result<Value, Error> {
+        let mut value = reference.clone();
+        hydrate_namespace(self, &mut value)?;
+        Ok(value)
+    }
+    pub(in crate::review) fn field(
+        &self,
+        reference: &Value,
+        field: &str,
+        index: Option<usize>,
+    ) -> Result<Value, Error> {
+        if reference["kind"] == manifest::KIND {
+            manifest::field(self, reference, field, index)
+        } else {
+            let value = self.captured(reference)?;
+            Ok(match index {
+                Some(index) => value[field].get(index).ok_or(Error::Missing)?.clone(),
+                None => value[field].clone(),
+            })
+        }
+    }
+    pub(in crate::review) fn pin(&self, reference: &Value) -> Result<super::objects::Pins, Error> {
+        retention::pin(self, reference)
+    }
+    pub(in crate::review) fn import(
+        &self,
+        source: &Self,
+        reference: &Value,
+    ) -> Result<(Value, super::objects::Pins), Error> {
+        manifest::import(self, source, reference)
+    }
+    pub(in crate::review) fn retain_json(
+        &self,
+        value: &Value,
+    ) -> Result<(Value, super::objects::Pins), Error> {
+        manifest::retain_json(self, value)
+    }
+    pub(in crate::review) fn read_json(&self, reference: &Value) -> Result<Value, Error> {
+        manifest::read_json(self, reference)
+    }
+}
+#[cfg(test)]
+pub(in crate::review) fn captured_field(
+    store: &Store,
+    reference: &Value,
+    field: &str,
+    index: Option<usize>,
+) -> Result<Value, Error> {
+    Namespace::project(store).field(reference, field, index)
+}
 
 const KIND: &str = "retained-source-v1";
+mod manifest;
+#[cfg(test)]
+mod manifest_tests;
 mod retention;
-pub(in crate::review) use retention::pin;
 #[cfg(test)]
 pub(in crate::review) use retention::tests::activate as activate_fixture;
+pub(in crate::review) fn pin(
+    store: &Store,
+    candidate: &Value,
+) -> Result<super::objects::Pins, Error> {
+    Namespace::project(store).pin(candidate)
+}
+pub(in crate::review) fn pin_inspection(
+    store: &Store,
+    candidate: &Value,
+) -> Result<super::objects::Pins, Error> {
+    retention::pin_inspection(&Namespace::project(store), candidate)
+}
 
 pub(in crate::review) fn map_digest(
     candidates: &std::collections::BTreeMap<String, Value>,
 ) -> String {
     if candidates.len() == 1
         && let Some(value) = candidates.get("project")
-        && value["kind"] == KIND
+        && (value["kind"] == KIND || value["kind"] == manifest::KIND)
         && check(value).is_ok()
         && let Some(digest) = value["candidate_digest"].as_str()
     {
@@ -32,12 +200,13 @@ pub(super) fn checkpoint(
     value: &mut Value,
     hydrate_source: bool,
 ) -> Result<super::objects::Pins, Error> {
+    let namespace = Namespace::project(store);
     let mut batch = retention::Batch::new(value, false)?;
     let mut apply = |value: &mut Value| {
         if hydrate_source {
             hydrate(store, value)
         } else {
-            compact_inner(store, value, &mut batch)
+            compact_inner(&namespace, value, &mut batch)
         }
     };
     for name in ["candidates", "active"] {
@@ -56,20 +225,14 @@ pub(super) fn checkpoint(
             }
         }
     }
-    batch.finish(store)
+    batch.finish(&namespace)
 }
 #[cfg(test)]
 pub(super) fn compact(store: &Store, value: &mut Value) -> Result<super::objects::Pins, Error> {
-    compact_with(store, value, false)
+    compact_namespace(&Namespace::project(store), value, false)
 }
-pub(super) fn compact_activating(
-    store: &Store,
-    value: &mut Value,
-) -> Result<super::objects::Pins, Error> {
-    compact_with(store, value, true)
-}
-fn compact_with(
-    store: &Store,
+fn compact_namespace(
+    store: &Namespace,
     value: &mut Value,
     activating: bool,
 ) -> Result<super::objects::Pins, Error> {
@@ -78,57 +241,13 @@ fn compact_with(
     batch.finish(store)
 }
 fn compact_inner(
-    store: &Store,
+    store: &Namespace,
     value: &mut Value,
     batch: &mut retention::Batch,
 ) -> Result<(), Error> {
     if value["kind"] == "candidate-bundle" {
-        let bytes = serde_json::to_vec(value).map_err(|_| Error::Invalid("source encoding"))?;
-        if bytes.len() > crate::configuration::MAX_BUNDLE_BYTES {
-            return Err(crate::policy::Error::Limit.into());
-        }
-        let digest = crate::policy::fingerprint(&bytes);
-        batch.protect(&digest);
-        let candidate_digest =
-            crate::json::fingerprint(&std::collections::BTreeMap::from([("project", &*value)]))
-                .map_err(|_| Error::Invalid("source encoding"))?;
-        let directory = store.directory.join("sources");
-        super::private_directory(&directory)?;
-        batch.lock(store)?;
-        let path = directory.join(format!("{digest}.json"));
-        if path.exists() {
-            if !super::objects::same_bytes(&path, &bytes)? {
-                return Err(Error::Invalid("retained source was replaced"));
-            }
-        } else {
-            batch.admit(store, &digest, bytes.len() as u64)?;
-            let temporary = path.with_extension(format!(
-                "{}-{}.tmp",
-                std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_nanos()
-            ));
-            let result = (|| -> Result<(), Error> {
-                let mut options = fs::OpenOptions::new();
-                options.write(true).create_new(true);
-                private(&mut options);
-                let mut file = options.open(&temporary)?;
-                file.write_all(&bytes)?;
-                sync(&file)?;
-                drop(file);
-                super::replace(&temporary, &path)?;
-                #[cfg(unix)]
-                sync(&fs::File::open(&directory)?)?;
-                Ok(())
-            })();
-            let _ = fs::remove_file(temporary);
-            result?;
-            batch.added(bytes.len() as u64);
-        }
-        *value = json!({"kind":KIND,"digest":digest,"candidate_digest":candidate_digest,"length":bytes.len()});
-    } else if value["kind"] == KIND {
+        *value = manifest::retain(store, value, batch)?;
+    } else if value["kind"] == KIND || value["kind"] == manifest::KIND {
         check(value)?;
     } else {
         match value {
@@ -156,7 +275,7 @@ fn temporary_writer(name: &str) -> Option<u32> {
     super::stamp_pid(stamp, 2)
 }
 pub(in crate::review) fn candidate_identity(value: &Value) -> String {
-    if value["kind"] == KIND && check(value).is_ok() {
+    if (value["kind"] == KIND || value["kind"] == manifest::KIND) && check(value).is_ok() {
         return value["digest"].as_str().unwrap_or_default().to_owned();
     }
     let _trace = crate::diagnostics::trace::span("source.identity");
@@ -165,6 +284,9 @@ pub(in crate::review) fn candidate_identity(value: &Value) -> String {
 }
 
 fn check(value: &Value) -> Result<(), Error> {
+    if value["kind"] == manifest::KIND {
+        return manifest::check(value);
+    }
     if value.as_object().is_none_or(|fields| fields.len() != 4)
         || ["digest", "candidate_digest"].iter().any(|key| {
             value[key]
@@ -181,8 +303,13 @@ fn check(value: &Value) -> Result<(), Error> {
 }
 
 pub(super) fn hydrate(store: &Store, value: &mut Value) -> Result<(), Error> {
+    hydrate_namespace(&Namespace::project(store), value)
+}
+fn hydrate_namespace(store: &Namespace, value: &mut Value) -> Result<(), Error> {
     let _trace = crate::diagnostics::trace::span("source.hydrate");
-    if value["kind"] == KIND {
+    if value["kind"] == manifest::KIND {
+        *value = manifest::hydrate(store, value)?;
+    } else if value["kind"] == KIND {
         check(value)?;
         let digest = value["digest"]
             .as_str()
@@ -228,12 +355,12 @@ pub(super) fn hydrate(store: &Store, value: &mut Value) -> Result<(), Error> {
         match value {
             Value::Object(map) => {
                 for child in map.values_mut() {
-                    hydrate(store, child)?;
+                    hydrate_namespace(store, child)?;
                 }
             }
             Value::Array(rows) => {
                 for child in rows {
-                    hydrate(store, child)?;
+                    hydrate_namespace(store, child)?;
                 }
             }
             _ => {}

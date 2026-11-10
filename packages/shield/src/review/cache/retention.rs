@@ -23,6 +23,9 @@ fn keep_active(
     {
         keep.insert(format!("{plan}.bin"));
         keep.insert(format!("{plan}.inputs.json"));
+        if let Some(name) = super::inputs::object_name(current) {
+            keep.insert(name);
+        }
     }
     Ok(())
 }
@@ -51,6 +54,7 @@ pub(super) fn publish(
         |name| {
             name.strip_suffix(".bin")
                 .or_else(|| name.strip_suffix(".inputs.json"))
+                .or_else(|| name.strip_suffix(".probe.json"))
                 .is_some_and(digest)
                 || temporary_writer(name).is_some_and(|pid| !storage::writer_running(pid))
         },
@@ -80,6 +84,46 @@ pub(super) fn publish(
             drop(directory.unpinned(&name)?);
             atomic_write(&partition.join(name), bytes)?;
         }
+    }
+    directory.pins(&keep)
+}
+
+/// Optional immutable metadata joins the same physical namespace admission and
+/// pin protocol as plans. Publication itself never scans source files.
+pub(super) fn publish_probe(
+    root: &str,
+    artifact: &Artifact,
+    name: &str,
+    bytes: &[u8],
+) -> Result<Pins, Error> {
+    if !name.strip_suffix(".probe.json").is_some_and(digest) {
+        return Err(Error::Invalid("input metadata object name"));
+    }
+    let partition = artifact
+        .path()
+        .parent()
+        .ok_or(Error::Missing)?
+        .to_path_buf();
+    let mut directory = Directory::enter(&partition)?;
+    let keep = BTreeSet::from([name.to_owned()]);
+    let mut protected = keep.clone();
+    let mut checkpoint = storage::objects::Checkpoint::default();
+    keep_active(root, artifact, &mut protected, &mut checkpoint)?;
+    directory.sweep_refresh(
+        &protected,
+        |name| {
+            name.strip_suffix(".bin")
+                .or_else(|| name.strip_suffix(".inputs.json"))
+                .or_else(|| name.strip_suffix(".probe.json"))
+                .is_some_and(digest)
+                || temporary_writer(name).is_some_and(|pid| !storage::writer_running(pid))
+        },
+        |keep| keep_active(root, artifact, keep, &mut checkpoint),
+    )?;
+    if !storage::objects::same_bytes(&partition.join(name), bytes)? {
+        directory.admit(bytes.len() as u64, 1, false)?;
+        drop(directory.unpinned(name)?);
+        atomic_write(&partition.join(name), bytes)?;
     }
     directory.pins(&keep)
 }

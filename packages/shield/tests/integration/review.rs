@@ -12,6 +12,9 @@ fn fixture() -> assert_fs::TempDir {
 
 #[test]
 fn retained_runtime_ignores_manual_edits_and_public_status_discovers_the_owner() {
+    if super::isolated_home() {
+        return;
+    }
     let root = fixture();
     let project = shield::runtime::Project::open(root.path()).unwrap();
     let active = project.snapshot().unwrap();

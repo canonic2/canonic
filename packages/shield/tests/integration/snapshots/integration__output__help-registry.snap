@@ -7,6 +7,7 @@ List, add, remove or choose registry sources
 Usage: shield registry [OPTIONS] <COMMAND>
 
 Commands:
+  trust    Review delegated root roles and signed revocations for a custom HTTPS source
   list     List effective registry sources
   add      Enroll a local directory or signed HTTPS registry, after confirmation
   remove   Remove a registration, preserving installed policy, after confirmation

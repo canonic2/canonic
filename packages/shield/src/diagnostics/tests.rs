@@ -2,6 +2,12 @@
 use super::*;
 use clap::Parser;
 
+fn flush(log: &Log) {
+    if let Some(recorder) = log.traces.get() {
+        recorder.flush();
+    }
+}
+
 #[test]
 fn hook_and_mcp_metadata_preserve_correlation_without_payloads() {
     let root = assert_fs::TempDir::new().unwrap();
@@ -19,6 +25,7 @@ fn hook_and_mcp_metadata_preserve_correlation_without_payloads() {
         br#"{"id":"acme-call","result":{"isError":false,"content":[{"text":"secret-result"}]}}"#,
     );
     log.hook_output(&json!({"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"secret-reason"}}));
+    flush(&log);
     let text = std::fs::read_to_string(log.path().unwrap()).unwrap();
     let startup: Value = serde_json::from_str(text.lines().next().unwrap()).unwrap();
     assert_eq!(startup["event"], "run_start");
@@ -56,6 +63,7 @@ fn logs_are_unique_disabled_or_unavailable_without_overwriting_files() {
         "status",
     ]);
     let first = Log::open(&cli);
+    flush(&first);
     let before = std::fs::read(first.path().unwrap()).unwrap();
     let second = Log::open(&cli);
     assert_ne!(first.path(), second.path());
@@ -76,14 +84,14 @@ fn logs_are_unique_disabled_or_unavailable_without_overwriting_files() {
 fn log_limit_stops_writes_without_affecting_the_caller() {
     let root = assert_fs::TempDir::new().unwrap();
     let log = Log::create(root.path()).unwrap();
-    log.event(
-        "fixture",
-        json!({"padding":"x".repeat(usize::try_from(LIMIT).unwrap())}),
-    );
+    log.writer.lock().unwrap().as_mut().unwrap().1 = LIMIT - 64;
+    log.event("fixture", || json!({"bounded":"limit marker"}));
+    flush(&log);
     let before = std::fs::read_to_string(log.path().unwrap()).unwrap();
     assert!(before.contains("log_limit_reached"));
     assert!(u64::try_from(before.len()).unwrap() <= LIMIT);
-    log.event("after_limit", json!({}));
+    log.event("after_limit", || json!({}));
+    flush(&log);
     assert_eq!(
         std::fs::read_to_string(log.path().unwrap()).unwrap(),
         before
@@ -97,17 +105,64 @@ fn failed_writes_disable_logging_and_preserve_existing_bytes() {
     std::fs::write(&path, "preserve existing bytes\n").unwrap();
     let log = Log {
         path: Some(path.clone()),
-        started: Instant::now(),
+        started: Some(Instant::now()),
         writer: Arc::new(Mutex::new(Some((File::open(&path).unwrap(), 0)))),
         traces: OnceLock::new(),
+        drain: Duration::from_millis(5),
     };
-    log.event("cannot_write", json!({}));
+    log.event("cannot_write", || json!({}));
+    flush(&log);
     assert!(log.writer.lock().unwrap().is_none());
-    log.event("after_failure", json!({}));
+    log.event("after_failure", || json!({}));
     assert_eq!(
         std::fs::read_to_string(path).unwrap(),
         "preserve existing bytes\n"
     );
+}
+
+#[test]
+fn disabled_event_fields_are_lazy_and_native_events_never_wait_on_the_sink() {
+    let disabled = Log::disabled();
+    disabled.event("disabled", || {
+        panic!("disabled diagnostic fields were allocated")
+    });
+    assert!(disabled.traces.get().is_none());
+    let root = assert_fs::TempDir::new().unwrap();
+    let mut log = Log::create_with_drain(root.path(), Duration::ZERO).unwrap();
+    let writer = log.writer.clone();
+    let held = writer.lock().unwrap();
+    let started = Instant::now();
+    for _ in 0..600 {
+        log.event("native_fixture", || json!({"stage":"bounded"}));
+    }
+    let recorder = log.traces.get().unwrap();
+    let before = recorder.loss();
+    assert!(before > 0);
+    log.event("one_more", || json!({}));
+    assert_eq!(recorder.loss(), before + 1);
+    let worker = Arc::get_mut(log.traces.get_mut().unwrap())
+        .unwrap()
+        .take_worker();
+    drop(log);
+    assert!(started.elapsed() < Duration::from_secs(1));
+    drop(held);
+    worker.join().unwrap();
+}
+
+#[test]
+fn oversized_diagnostic_records_are_counted_without_entering_the_queue() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let log = Log::create(root.path()).unwrap();
+    log.event("oversized", || json!({"padding":"x".repeat(32 * 1024)}));
+    flush(&log);
+    assert_eq!(log.traces.get().unwrap().loss(), 1);
+    assert!(std::fs::read(log.path().unwrap()).unwrap().is_empty());
+    log.event("bounded", || json!({}));
+    flush(&log);
+    let row: Value = serde_json::from_slice(&std::fs::read(log.path().unwrap()).unwrap()).unwrap();
+    assert_eq!(row["event"], "bounded");
+    assert_eq!(row["dropped_records"], 1);
+    assert_eq!(row["dropped_records_total"], 1);
 }
 
 #[test]

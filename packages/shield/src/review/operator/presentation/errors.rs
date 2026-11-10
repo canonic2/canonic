@@ -104,6 +104,12 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
     match error {
         Error::Cancelled => Report::new("Cancelled", "The pending change was not confirmed.", &[]),
         Error::Invalid(reason) => invalid(command, reason),
+        Error::RegistryRevoked {
+            source_identity,
+            pack,
+            version,
+            digest,
+        } => revoked(source_identity, pack, version, digest),
         Error::Ambiguous { .. } => Report::detailed(
             "The pack reference is ambiguous",
             "Several packs match this reference.",
@@ -133,21 +139,7 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             "The request's policy revision is no longer current.",
             &["Inspect shield status, then retry and review the current policy."],
         ),
-        Error::RequiredPack { pack, dependents } => {
-            let name = |id: &String| super::pack_name(&serde_json::Value::String(id.clone()));
-            let mut r = Report::new(
-                &format!(
-                    "{} is still required by {}",
-                    name(pack),
-                    dependents.iter().map(name).collect::<Vec<_>>().join(", ")
-                ),
-                "Removing it would break that dependency.",
-                &["Remove or change the packs that depend on it first; see shield pack list."],
-            );
-            r.field("Pack", pack.clone());
-            r.field("Required by", dependents.join(", "));
-            r
-        }
+        Error::RequiredPack { pack, dependents } => required_pack(pack, dependents),
         Error::UnsupportedReleases(pack) => unsupported_releases(pack),
         Error::StateCorrupt { path } => corrupt_state(path),
         Error::StateFormat { path, observed } => {
@@ -202,6 +194,41 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             limit,
         } => capacity(*kind, *pending, *retained, *limit),
     }
+}
+
+fn required_pack(pack: &str, dependents: &[String]) -> Report {
+    let name = |id: &str| super::pack_name(&serde_json::Value::String(id.to_owned()));
+    let mut report = Report::new(
+        &format!(
+            "{} is still required by {}",
+            name(pack),
+            dependents
+                .iter()
+                .map(|id| name(id))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        "Removing it would break that dependency.",
+        &["Remove or change the packs that depend on it first; see shield pack list."],
+    );
+    report.field("Pack", pack.to_owned());
+    report.field("Required by", dependents.join(", "));
+    report
+}
+
+fn revoked(source: &str, pack: &str, version: &str, digest: &str) -> Report {
+    let mut report = Report::new(
+        "A policy artifact is revoked",
+        "Signed registry metadata revoked this exact artifact; affected policy cannot run.",
+        &[
+            "Use shield pack list to identify the selection, then update or remove the affected pack.",
+            "The policy remains available for inspection and repair; its review is still recorded.",
+        ],
+    );
+    report.field("Source", source.to_owned());
+    report.field("Pack", format!("{pack}@{version}"));
+    report.field("Artifact SHA-256", digest.to_owned());
+    report
 }
 
 fn corrupt_state(path: &std::path::Path) -> Report {
@@ -500,7 +527,7 @@ fn missing(command: &PublicCommand) -> Report {
         ),
         PublicCommand::Pack(Pack {
             command:
-                PackCommand::Remove { reference }
+                PackCommand::Remove { reference, .. }
                 | PackCommand::Update {
                     reference: Some(reference),
                 }
@@ -715,6 +742,7 @@ mod tests {
     fn ambiguous_references_list_bounded_alternatives() {
         let command = pack(PackCommand::Remove {
             reference: "test".into(),
+            local: false,
         });
         let names: Vec<String> = (0..10).map(|i| format!("acme-{i}/acme/test")).collect();
         let error = Error::ambiguous("installed reference is ambiguous", names);

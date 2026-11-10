@@ -23,6 +23,17 @@ a real test name; nextest fails if nothing matches.
 Keep `target/` between iterations to reuse Cargo's cache. Use release builds
 for performance measurements.
 
+To inspect pre-continuity upgrade admission using a separately retained executable:
+
+```sh
+make test-focus FILTER=previous_binary_unreceipted_checkpoint TEST_TARGET=--test=integration PREVIOUS_BINARY=/path/to/previous/shield CARGO_FLAGS='--run-ignored ignored-only'
+```
+
+This opt-in fixture enrolls through that previous binary in an isolated project
+and home. It verifies the missing-origin refusal, unchanged checkpoint and
+available diagnostics; it does not claim successful migration. The supplied
+binary must predate the continuity/private-consent records.
+
 ## Native Linux development
 
 GNU/Linux builds support x64 and ARM64 with the pinned Rust toolchain, a GNU C
@@ -193,13 +204,18 @@ installation folder. Preserve project `.shield` folders to keep policy/history.
 
 ### Supported Windows commands and acceptance
 
-The PowerShell preview supports one literal invocation of `git`, `rg`, `node`,
-`rustc`, `cargo`, `make`, `just` or `shield`. Arguments may be unquoted or use
-single/double quotes without expansion. Empty arguments, embedded double quotes,
-whitespace-containing arguments ending in a backslash,
-compound commands, redirections, cmdlets, aliases and explicit shell overrides
-are outside that grammar. Native handoff blocks unsupported PowerShell and cmd
-source, including when Ask fallback allows ordinary policy Ask requests.
+The Windows parsers admit literal native calls to `git`, `rg`, `node`, `rustc`,
+`cargo`, `make`, `just` and `shield`, preserving each literal executable for policy.
+PowerShell supports non-expanding quotes, semicolon/newline sequences and the
+literal call operator `&`. Cmd supports `&` sequences and `&&`/`||` chains;
+apostrophes stay literal there. Empty arguments, embedded quotes, ambiguous
+trailing backslashes, expansions, redirections, cmdlets, batches and unverified
+explicit shell overrides remain outside coverage. PowerShell chain operators
+remain unclassified without a trusted version/mode contract. Reported versions
+are retained as evidence and do not grant more syntax.
+Native handoff blocks unclassified source, including when Ask fallback allows
+ordinary policy Ask requests. Extended Windows sequence/cmd acceptance needs a
+separately scoped native target; portable parser/hook fixtures do not establish it.
 The [checked native runner](native-run.md) also supports three bounded System32
 leaf forms on AMD64 and ARM64 Windows, requiring matching native PE images.
 Native AMD64 acceptance covers Allow/Deny/Ask, exact
@@ -247,8 +263,8 @@ and operator workflows. Start with the module for the behavior you are changing:
 | Operator commands and routing | `src/cli/public.rs`, `src/cli.rs`, `src/lib.rs` |
 | Policy documents, selectors, requirements | `src/policy.rs`, `policy/model.rs`, `policy/rules.rs`, `policy/argument_rules.rs` |
 | Typed requests and resource-evidence interface | `policy/normalized.rs`, `policy/resources.rs` |
-| Filesystem observations and supported command effects | `src/location.rs`, `location/text.rs`, `location/node.rs` |
-| Shell parsing, expansion, control flow, and PID provenance | `src/shell.rs` and `shell/` |
+| Filesystem observations and supported command effects | `src/location.rs`, `location/directory.rs`, `location/text.rs`, `location/node.rs` |
+| Shell parsing, expansion, control flow, directory outcomes and PID provenance | `src/shell.rs` and `shell/` |
 | Declared directory options | `policy/directories.rs` |
 | Compiled plans, indexes, and policy comparison | `policy/compiled.rs`, `policy/index.rs`, `policy/partition.rs`, `policy/profile_comparison.rs`, `policy/symbolic.rs` |
 | Project composition, captured source, and evaluation | `src/configuration.rs` and `configuration/` |
@@ -411,6 +427,64 @@ make test-adapter-focus FILTER='interactive SDK action approval' TEST_FILE=adapt
 This focused SDK case uses the installed pinned SDK, an owned loopback provider,
 temporary projects and scripted elicitation answers; it makes no cloud model
 requests. The application remains responsible for rendering its human form.
+
+### Generated Copilot/OpenCode acceptance on the selected Mac
+
+The opt-in generated-callback fixture uses installed Copilot CLI **1.0.105** or
+OpenCode V1 **1.14.27**, disposable projects and one isolated test-process home.
+Inspect the installed version/offline contract first without building Shield or
+starting a provider:
+
+```sh
+make -C packages/shield native-acceptance-preflight NATIVE_HOST=copilot
+make -C packages/shield native-acceptance-preflight NATIVE_HOST=opencode
+```
+
+A different version, missing offline route or missing CLI is a prerequisite
+failure, not a reason to install or silently try a cloud provider. Once that
+preflight passes, select one host:
+
+```sh
+make -C packages/shield test-native-acceptance NATIVE_HOST=copilot
+make -C packages/shield test-native-acceptance NATIVE_HOST=opencode
+```
+
+Each command builds the development binary without installing it, then checks
+the generated project registration using native file reads for Allow, Deny and
+Ask. Copilot disables the Shield MCP server through its documented client option
+for these focused file-hook cells, leaving generated hooks active; this avoids
+loading the unrelated MCP tool catalog into the fixture model's context budget.
+It does not establish MCP tool acceptance. Copilot Ask is checked as withheld in
+noninteractive prompt mode; OpenCode
+uses its reviewed standing Deny fallback, not native Ask. Provider tool results
+and Shield history independently establish the observed outcome. The OpenCode
+target also attempts a later plugin argument mutation and requires evidence that
+it actually ran after Shield before attributing the refusal to frozen arguments.
+
+To reproduce against an already retained executable while other source work is
+in progress, use `test-native-acceptance-frozen` with the same `NATIVE_HOST` and
+an absolute `NATIVE_BINARY` path. This target does not compile or install code.
+Record that executable's SHA-256 with the result and preserve it for the entire
+run; its result describes that binary, not later source edits. Optional `FILTER`
+selects a named native case when reproducing a failure.
+
+These targets need an owned loopback listener, operator-confirmation PTYs and
+TERM/KILL of their owned child process groups. Native children inherit an
+explicit credential-free environment, dummy provider keys, local-only provider
+selection and the pinned host's update/telemetry/fetch disable flags. They do
+not read a real account profile or publish global registrations. Environment
+and provider configuration are not OS network confinement; no such isolation
+claim is made. A host without the established local-only route must not run the
+acceptance cells. Native children have a 40-second deadline, bounded output and
+kill/reap cleanup. Run targets separately from Cargo checks and other native
+campaigns; do not replace the binary while registrations pin it.
+
+The fixture is excluded unless this explicit target selects its host, so the
+ordinary SDK suite does not add this native campaign. Prepared fixtures alone
+are not installed-host acceptance evidence. Interactive Ask acceptance/cancel,
+other platforms, OpenCode V2 and hook/plugin startup failure protection remain
+separate targets and limits.
+
 Make prefers `~/.cargo/bin/cargo` so rustup selects the pinned toolchain,
 falling back to Cargo on PATH.
 
@@ -448,8 +522,10 @@ environment and debug default. Shield uses a directory rather than a single
 file because concurrent native callbacks start separate processes.
 
 Files are uniquely created, use mode 0600 on Unix, and stop at 8 MiB with a limit
-marker. Logs remain until you delete them or the OS clears temporary files; total
-directory size is not automatically capped. A logging failure reports a warning
+marker. Startup admission keeps Shield-owned logs within 32 files and 256 MiB,
+reserving each live writer's full allowance and reclaiming oldest completed
+logs. Live writers and unrelated files are preserved; exhausted capacity disables
+optional logging. A logging failure reports a warning
 on stderr and disables logging without changing authorization or transport output.
 
 Records include elapsed milliseconds and PID/version/build type,
@@ -458,7 +534,7 @@ input validity and overflow, project/snapshot preparation, evaluation, native
 handoff and history stage timings, policy decision/fallback/disposition, completion
 history status, response event/decision/context shape, and MCP method/tool/ID,
 request/response sizes and error status. Commands, arguments, tool results,
-policy content, credentials and raw error text are omitted. Large truncated hook
+policy content, project paths, credentials and raw error text are omitted. Large truncated hook
 input cannot supply parsed IDs; its overflow and captured size are still recorded.
 Pair input/output records by PID and MCP messages by request ID to inspect timing.
 These logs are diagnostic evidence, separate from request history and execution
@@ -472,11 +548,13 @@ inclusive of child spans; do not sum nested durations into a request total.
 initialized to zero name instrumented work; absent counters have no reported
 observation and must not be interpreted as zero.
 `request_incomplete` means a request link was dropped without completion, not that
-its mutation rolled back. Request records use a bounded nonblocking queue; loss
-appears as `dropped_records`, `dropped_spans` or a diagnostic stderr warning.
-Request-writer shutdown waits at most 5 ms before reporting an unfinished drain.
-Internal callbacks retain their fixed hook-stage records and do not start the
-asynchronous command-request tracer.
+its mutation rolled back. Fixed events and request records share a nonblocking
+queue capped at 512 records of at most 32 KiB each. Loss appears as
+`dropped_records`, `dropped_records_total`, `dropped_spans` or a diagnostic stderr
+warning. Operator/MCP writer shutdown waits at most 5 ms before reporting an
+unfinished drain. Native callbacks retain fixed hook-stage events without
+creating request spans or waiting for an exit drain; recent events may be lost
+at process exit. Disabled logging does not construct event fields.
 
 The apply trace covers validation, source hydration, policy preparation, cache
 construction, writer-lock wait, publication, projection checks/repair and durable

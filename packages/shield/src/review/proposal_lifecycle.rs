@@ -140,6 +140,9 @@ impl Drop for Lease {
     }
 }
 fn alive(root: &str, connection: &str) -> bool {
+    alive_with(root, connection, true)
+}
+fn alive_with(root: &str, connection: &str, cleanup: bool) -> bool {
     let path = lease_path(root, connection);
     if !path.parent().is_some_and(|dir| {
         fs::symlink_metadata(dir).is_ok_and(|m| m.is_dir() && !m.file_type().is_symlink())
@@ -155,22 +158,49 @@ fn alive(root: &str, connection: &str) -> bool {
     match file.try_lock() {
         Err(std::fs::TryLockError::WouldBlock) => true,
         Ok(()) => {
-            let _ = fs::remove_file(path);
+            if cleanup {
+                let _ = fs::remove_file(path);
+            }
             false
         }
         Err(std::fs::TryLockError::Error(_)) => false,
     }
 }
 
-/// Derive closure without a writer or hydration; the next mutation persists it.
-/// Never reinterpret a committed receipt as an abandoned attempt.
+/// Exact capture freshness is explicit, outside ordinary authority callbacks.
+#[cfg(test)]
 pub(super) fn refresh(state: &mut State) {
+    refresh_inner(state, true);
+}
+
+/// Preflight only the selected live capture. Publication still revalidates its
+/// exact complete file fingerprint inside the serialized commit boundary.
+pub(in crate::review) fn validate_capture(root: &str, row: &Proposal) -> Result<(), Error> {
+    let directory = Path::new(root).join(".shield");
+    for (name, expected) in row.reviewed_paths.iter().flat_map(|paths| paths.iter()) {
+        crate::diagnostics::trace::count("proposal.capture_file_reads", 1);
+        let bytes = super::changes::project_files::read_file(&directory, name)?;
+        let actual = bytes.map(|bytes| {
+            crate::diagnostics::trace::count("proposal.capture_read_bytes", bytes.len() as u64);
+            crate::policy::fingerprint(bytes.as_bytes())
+        });
+        if actual != *expected {
+            return Err(Error::StaleSnapshot);
+        }
+    }
+    Ok(())
+}
+
+/// Derive lifecycle metadata without hashing projections or reclaiming files.
+/// Exact capture freshness remains an apply/mutation precondition.
+pub(super) fn refresh_inspection(state: &mut State) {
+    refresh_inner(state, false);
+}
+
+fn refresh_inner(state: &mut State, exact: bool) {
     let now = clock::best_effort_ms();
     drafts::reclaim(&mut state.policy_drafts, now);
-    let mut metadata = state.operator.clone();
-    if let Some(map) = metadata.as_object_mut() {
-        map.remove("path_access");
-    }
+    let metadata = state.operator.clone();
     for row in &mut state.proposals {
         if row.status != "pending" {
             // Stable original timestamps let even a full legacy checkpoint age
@@ -181,17 +211,8 @@ pub(super) fn refresh(state: &mut State) {
             continue;
         }
         let mut base = row.base_metadata.clone();
-        if let Some(map) = base.as_object_mut() {
-            map.remove("path_access");
-        }
-        let files_changed = row.reviewed_paths.as_ref().is_some_and(|paths| {
-            let directory = Path::new(&state.project_root).join(".shield");
-            paths.iter().any(|(name, expected)| {
-                !super::changes::project_files::read_file(&directory, name)
-                    .map(|bytes| bytes.map(|bytes| crate::policy::fingerprint(bytes.as_bytes())))
-                    .is_ok_and(|hash| hash == *expected)
-            })
-        });
+        super::publication::keep_independent_metadata(&mut base, &metadata);
+        let files_changed = exact && validate_capture(&state.project_root, row).is_err();
         let base_changed =
             row.policy_revision != state.policy_revision || base != metadata || files_changed;
         let reason = if base_changed {
@@ -199,11 +220,14 @@ pub(super) fn refresh(state: &mut State) {
         } else if let Some(interaction) = &row.interaction {
             if now >= interaction.expires_at_ms {
                 Some(("withdrawn", "expired"))
-            } else if interaction
-                .connection
-                .as_ref()
-                .is_some_and(|id| !alive(&state.project_root, id))
-            {
+            } else if interaction.connection.as_ref().is_some_and(|id| {
+                let live = if exact {
+                    alive(&state.project_root, id)
+                } else {
+                    alive_with(&state.project_root, id, false)
+                };
+                !live
+            }) {
                 Some(("withdrawn", "connection_closed"))
             } else {
                 None
@@ -259,6 +283,7 @@ pub(crate) fn settle(
 ) -> Result<Value, Error> {
     let adapter = crate::agents::review::for_context(context);
     Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
+        state.check_operations()?;
         let row = state.proposals.iter_mut().find(|p| adapter.identifies(args, &p.id)).ok_or(Error::Missing)?;
         if row.status == "applied" { return Ok(json!({"proposal_id":row.id,"status":"applied","receipt":row.receipt,"operator":row.operator})); }
         if !owns(row, context) { return Err(Error::ApprovalRequired); }
@@ -270,6 +295,7 @@ pub(crate) fn settle(
 pub(crate) fn end_session(root: &Path, agent: &str, session: &str) -> Result<(), Error> {
     let context = super::open(root)?;
     Store::open(root)?.update_checkpoint_if_changed(&context, &|| Ok(()), |state| {
+        state.check_operations()?;
         let mut changed = false;
         for row in &mut state.proposals {
             if row.status == "pending"

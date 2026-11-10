@@ -4,8 +4,16 @@
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ApprovalBinding {
+    #[serde(default)]
+    schema_version: Option<u8>,
     timeout_ms: u64,
     resources: serde_json::Value,
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+    #[serde(default)]
+    submitted: Option<crate::policy::Request>,
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+    #[serde(default)]
+    launch: Option<super::launch::EffectiveLaunch>,
 }
 #[cfg(not(any(windows, target_os = "linux")))]
 #[derive(serde::Deserialize)]
@@ -32,6 +40,22 @@ pub(crate) fn valid_approval_binding(
     let Ok(binding) = serde_json::from_value::<ApprovalBinding>(value.clone()) else {
         return false;
     };
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+    let request = match (&binding.schema_version, &binding.submitted, &binding.launch) {
+        (None, None, None) if value.as_object().is_some_and(|object| object.len() == 2) => request,
+        (Some(2), Some(submitted), Some(launch))
+            if launch.matches(submitted)
+                && serde_json::to_value(request).ok()
+                    == serde_json::to_value(launch.request()).ok() =>
+        {
+            submitted
+        }
+        _ => return false,
+    };
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+    if binding.schema_version.is_some() {
+        return false;
+    }
     if !(1..=3_600_000).contains(&binding.timeout_ms)
         || !std::path::Path::new(&request.cwd).starts_with(&request.project)
         || super::protected_cwd(
@@ -86,7 +110,16 @@ pub(crate) fn verify_approval_binding(
         let timeout = resource["timeout_ms"]
             .as_u64()
             .ok_or(crate::review::Error::Invalid("missing deadline"))?;
-        if valid_approval_binding(request, resource) && *resource == capture(request, timeout)? {
+        if !valid_current_approval_binding(request, resource) {
+            return Err(crate::review::Error::Invalid(
+                "native launch binding requires a fresh request and review",
+            ));
+        }
+        let submitted = serde_json::from_value::<ApprovalBinding>(resource.clone())
+            .ok()
+            .and_then(|binding| binding.submitted)
+            .ok_or(crate::review::Error::Invalid("missing submitted launch"))?;
+        if *resource == capture(&submitted, timeout)? {
             return Ok(());
         }
     }
@@ -107,5 +140,67 @@ pub(crate) fn capture(
     binding
         .verify()
         .map_err(|_| crate::review::Error::Invalid("native resource changed"))?;
-    Ok(serde_json::json!({"timeout_ms":timeout,"resources":binding.metadata()}))
+    let launch = super::launch::EffectiveLaunch::prepare(request)
+        .map_err(|_| crate::review::Error::Invalid("unsupported effective launch"))?;
+    Ok(resource(request, &launch, timeout, &binding.metadata()))
+}
+
+pub(crate) fn valid_current_approval_binding(
+    request: &crate::policy::Request,
+    value: &serde_json::Value,
+) -> bool {
+    value["schema_version"] == 2 && valid_approval_binding(request, value)
+}
+
+pub(crate) fn valid_evaluated_approval_binding(
+    evidence: &crate::runtime::EvaluatedRequest,
+    value: &serde_json::Value,
+) -> bool {
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+    if valid_current_approval_binding(evidence.request(), value)
+        && let Ok(binding) = serde_json::from_value::<ApprovalBinding>(value.clone())
+        && let (Some(submitted), Some(launch), Some(actual)) =
+            (binding.submitted, binding.launch, evidence.resource())
+    {
+        let expected = launch.resource(&submitted);
+        return serde_json::json!(actual.input) == serde_json::json!(expected.input)
+            && actual.context.cwd == expected.context.cwd
+            && actual.context.environment == expected.context.environment
+            && actual.mcp.is_none();
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+    let _ = (evidence, value);
+    false
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
+pub(super) fn resource(
+    submitted: &crate::policy::Request,
+    launch: &super::launch::EffectiveLaunch,
+    timeout: u64,
+    resources: &serde_json::Value,
+) -> serde_json::Value {
+    serde_json::json!({"schema_version":2,"timeout_ms":timeout,"resources":resources,"submitted":submitted,"launch":launch})
+}
+
+pub(crate) fn evaluate_approval(
+    snapshot: &crate::runtime::Snapshot,
+    request: &crate::policy::Request,
+    value: &serde_json::Value,
+) -> Result<crate::runtime::EvaluatedRequest, crate::review::Error> {
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+    if valid_current_approval_binding(request, value) {
+        let binding: ApprovalBinding = serde_json::from_value(value.clone())
+            .map_err(|_| crate::review::Error::Invalid("invalid launch binding"))?;
+        if let (Some(submitted), Some(launch)) = (binding.submitted, binding.launch) {
+            return snapshot
+                .evaluate_resource(request.clone(), launch.resource(&submitted))
+                .map_err(|_| crate::review::Error::Invalid("request cannot be evaluated"));
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+    let _ = (snapshot, request, value);
+    Err(crate::review::Error::Invalid(
+        "native launch binding requires a fresh request and review",
+    ))
 }

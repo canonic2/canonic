@@ -1,9 +1,188 @@
 //! Publication binding, recovery and projection behavior.
 use super::projections::materialize;
 use super::*;
+thread_local! { static PAYLOAD_OBSERVER: std::cell::RefCell<Option<Box<dyn Fn()>>> = const { std::cell::RefCell::new(None) }; }
+pub(super) fn before_payload() {
+    PAYLOAD_OBSERVER.with_borrow(|observer| {
+        if let Some(observer) = observer {
+            observer();
+        }
+    });
+}
+
+#[cfg(unix)]
+#[test]
+fn projection_writer_repairs_only_owned_runtime_directory_permissions() {
+    use std::os::unix::{fs::PermissionsExt as _, fs::symlink};
+    let (root, _) = fixture();
+    drop(ProjectionLease::acquire(root.path()).unwrap());
+    let review = root.path().join(".shield/review");
+    let publication = review.join("publication");
+    let unrelated = review.join("acme-user-directory");
+    std::fs::create_dir(&unrelated).unwrap();
+    for path in [&review, &publication, &unrelated] {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    drop(ProjectionLease::acquire(root.path()).unwrap());
+    for path in [&review, &publication] {
+        assert_eq!(
+            std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+    }
+    assert_eq!(
+        std::fs::metadata(&unrelated).unwrap().permissions().mode() & 0o777,
+        0o755
+    );
+    std::fs::rename(&publication, review.join("publication-before-link")).unwrap();
+    let outside = assert_fs::TempDir::new().unwrap();
+    std::fs::set_permissions(outside.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+    symlink(outside.path(), &publication).unwrap();
+    assert!(ProjectionLease::acquire(root.path()).is_err());
+    assert_eq!(
+        std::fs::metadata(outside.path())
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o755
+    );
+}
+
+#[test]
+fn owned_projection_payload_does_not_hold_grant_authority_and_competing_policy_stays_stale() {
+    let (root, context, original, digest) = review::read_approval::tests::fixture();
+    let before = load(&context).unwrap();
+    let candidate = changed(&before);
+    let stale_candidate = candidate.clone();
+    let thread_before = load(&context).unwrap();
+    let publisher_context = context.clone();
+    let (ready, waiting) = std::sync::mpsc::channel();
+    let (release, resume) = std::sync::mpsc::channel();
+    let publisher = std::thread::spawn(move || {
+        PAYLOAD_OBSERVER.with(|slot| {
+            *slot.borrow_mut() = Some(Box::new(move || {
+                ready.send(()).unwrap();
+                resume.recv().unwrap();
+            }));
+        });
+        let result = commit(
+            &publisher_context,
+            &thread_before,
+            candidate,
+            metadata(&thread_before),
+            None,
+        );
+        PAYLOAD_OBSERVER.with(|slot| *slot.borrow_mut() = None);
+        result
+    });
+    waiting
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .unwrap();
+    let progress = (|| {
+        assert!(matches!(
+            ProjectionLease::acquire(root.path()),
+            Err(Error::Locked)
+        ));
+        let evidence = crate::runtime::Project::open(root.path())
+            .unwrap()
+            .snapshot()
+            .unwrap()
+            .evaluate_resource(
+                original.request().clone(),
+                original.resource().unwrap().clone(),
+            )
+            .unwrap();
+        let pending = review::read_approval::gate(
+            &context,
+            "acme-factory",
+            &evidence,
+            &digest,
+            None,
+            || true,
+        )?;
+        let id = pending["approval"]["request_id"].as_str().unwrap();
+        review::read_approval::authorize(&context, id, 300, None, false)?;
+        let consumed = review::read_approval::gate(
+            &context,
+            "acme-factory",
+            &evidence,
+            &digest,
+            Some(id),
+            || true,
+        )?;
+        assert_eq!(consumed["allowed"], true);
+        Ok::<_, Error>(())
+    })();
+    release.send(()).unwrap();
+    let receipt = publisher.join().unwrap().unwrap();
+    progress.unwrap();
+    assert_eq!(receipt["repair_needed"], false);
+    assert!(matches!(
+        commit(&context, &before, stale_candidate, metadata(&before), None),
+        Err(Error::StaleSnapshot)
+    ));
+}
+
+#[test]
+#[ignore = "subprocess fixture for interrupted_owned_projection_repair_recovers_without_losing_manual_edits"]
+fn interrupted_projection_child() {
+    let root = std::env::var("SHIELD_TEST_PROJECTION_ROOT").unwrap();
+    let context = review::open(Path::new(&root)).unwrap();
+    let before = load(&context).unwrap();
+    PAYLOAD_OBSERVER.with(|slot| *slot.borrow_mut() = Some(Box::new(|| std::process::exit(77))));
+    commit(&context, &before, changed(&before), metadata(&before), None).unwrap();
+    panic!("payload interruption was not reached");
+}
+
+#[test]
+fn interrupted_owned_projection_repair_recovers_without_losing_manual_edits() {
+    for manual in [false, true] {
+        let (root, context) = fixture();
+        let result = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "review::publication::tests::interrupted_projection_child",
+                "--ignored",
+            ])
+            .env("SHIELD_TEST_PROJECTION_ROOT", root.path())
+            .status()
+            .unwrap();
+        assert_eq!(result.code(), Some(77));
+        let committed = load(&context).unwrap();
+        let activation = committed
+            .active
+            .as_ref()
+            .unwrap()
+            .activation_id()
+            .to_owned();
+        if manual {
+            std::fs::write(root.path().join(".shield/rules.yml"), "Acme manual content").unwrap();
+        }
+        let repaired = reconcile(&context, &committed);
+        assert_eq!(repaired.is_err(), manual);
+        if manual {
+            assert_eq!(
+                std::fs::read_to_string(root.path().join(".shield/rules.yml")).unwrap(),
+                "Acme manual content"
+            );
+        }
+        assert_eq!(
+            load(&context)
+                .unwrap()
+                .active
+                .as_ref()
+                .unwrap()
+                .activation_id(),
+            activation
+        );
+        // A process exit releases the persistent kernel lease automatically.
+        ProjectionLease::acquire(root.path()).unwrap();
+    }
+}
 use std::fs;
 
-fn fixture() -> (assert_fs::TempDir, Context) {
+pub(super) fn fixture() -> (assert_fs::TempDir, Context) {
     let root = assert_fs::TempDir::new().expect("fixture");
     let candidate = json!(
         configuration::Bundle::capture(r#"{"schema_version":1,"packs":[]}"#, &[], None)
@@ -428,11 +607,33 @@ fn proposal_bytes_changed_after_review_cannot_be_committed() {
         .expect("concurrent edit");
     assert!(matches!(
         commit(&context, &before, candidate, metadata(&before), Some(id)),
-        Err(Error::Invalid("proposal changed or is stale"))
+        Err(Error::StaleSnapshot)
     ));
     let after = load(&context).expect("state");
     assert_eq!(json!(after.active), json!(before.active));
     assert_eq!(after.proposals[0].status, "pending");
+}
+
+#[test]
+fn a_reviewed_candidate_losing_publication_cas_reports_typed_staleness() {
+    let (root, context) = fixture();
+    let before = load(&context).unwrap();
+    let candidate = changed(&before);
+    Store::open(root.path())
+        .unwrap()
+        .update_checkpoint(&context, &|| Ok(()), |state| {
+            state.operator["concurrent_local_setting"] = json!(true);
+            Ok(Value::Null)
+        })
+        .unwrap();
+    assert!(matches!(
+        commit(&context, &before, candidate, metadata(&before), None),
+        Err(Error::StaleSnapshot)
+    ));
+    assert_eq!(
+        load(&context).unwrap().operator["concurrent_local_setting"],
+        true
+    );
 }
 
 #[test]
@@ -555,7 +756,7 @@ fn projections_split_the_local_layer_into_its_own_files() {
         )
         .expect("capture")
     );
-    let meta = json!({"installed":[{"id":"acme/shared"},{"id":"acme/mine","layer":"local"}]});
+    let meta = json!({"installed":[{"id":"acme/shared"},{"id":"acme/mine","layer":"local"}],"disabled":[{"id":"acme/off"}]});
     let files = projections(&candidate, &meta).expect("projections");
     let config: Value = policy::parse(&files["config.yml"]).expect("config");
     let ids: Vec<_> = config["packs"]
@@ -570,6 +771,7 @@ fn projections_split_the_local_layer_into_its_own_files() {
     assert!(
         files["shield.lock"].contains("acme/shared") && !files["shield.lock"].contains("acme/mine")
     );
+    assert!(files["shield.lock"].contains("acme/off"));
     assert!(files["shield.local.lock"].contains("acme/mine"));
     assert!(files.contains_key("cache/off.yml") && files.contains_key("cache/mine.yml"));
     let alone = json!({"schema_version":1,"packs":[{"id":"acme/shared","version":"1.0.0","profile":"recommended","path":"cache/shared.yml"}],"rules":"rules.yml"}).to_string();

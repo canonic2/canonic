@@ -17,6 +17,15 @@ struct Server {
     reader: Option<JoinHandle<()>>,
 }
 
+pub(super) fn settle_startup(root: &assert_fs::TempDir) {
+    cargo_bin_cmd!("shield")
+        .args(["__internal", "history-events", "--project"])
+        .arg(root.path())
+        .env("HOME", root.path())
+        .assert()
+        .success();
+}
+
 impl Drop for Server {
     fn drop(&mut self) {
         let _ = self.child.kill();
@@ -37,13 +46,15 @@ impl Server {
     fn start_at(cwd: &std::path::Path, selected: &std::path::Path, launch: &[&str]) -> Self {
         let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin!("shield"));
         let mut child = command
+            .env("HOME", super::fixture_home(cwd))
+            .env("LOCALAPPDATA", super::fixture_home(cwd))
             .current_dir(cwd)
             .args(launch)
             .arg("--project")
             .arg(selected)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::inherit())
             .spawn()
             .expect("spawn owned MCP server");
         let mut reader = BufReader::new(child.stdout.take().expect("piped server stdout"));
@@ -97,7 +108,10 @@ impl Server {
 }
 
 #[test]
-fn bootstrap_real_pinned_launcher_reaches_consent_after_repeated_moves() {
+fn historical_pinned_launcher_reuses_policy_after_repeated_moves() {
+    if super::isolated_home() {
+        return;
+    }
     let original = assert_fs::TempDir::new().unwrap();
     original.child(".shield").create_dir_all().unwrap();
     original
@@ -113,30 +127,22 @@ fn bootstrap_real_pinned_launcher_reaches_consent_after_repeated_moves() {
         let target = destinations.path().join(name);
         std::fs::rename(&previous, &target).unwrap();
         let target = target.canonicalize().unwrap();
-        let bytes = std::fs::read(target.join(".shield/review/state.json")).unwrap();
+        let before: Value = serde_json::from_slice(
+            &std::fs::read(target.join(".shield/review/state.json")).unwrap(),
+        )
+        .unwrap();
         let mut server = Server::start_at(&target, &selected, &["mcp", "serve"]);
         server.initialize_with(&json!({"elicitation":{"form":{}}}));
         server.send(&json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"status","arguments":{}}}));
         let status = server.receive();
-        assert_eq!(
-            status["result"]["structuredContent"]["data"]["bootstrap_required"], true,
-            "{status}"
-        );
-        server.send(&json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"project_enroll","arguments":{}}}));
-        let form = server.receive();
-        assert_eq!(form["method"], "elicitation/create", "{form}");
-        assert_eq!(
-            std::fs::read(target.join(".shield/review/state.json")).unwrap(),
-            bytes
-        );
-        server.send(
-            &json!({"jsonrpc":"2.0","id":form["id"],"result":{"action":"accept","content":{}}}),
-        );
-        let enrolled = server.receive();
-        assert_eq!(enrolled["id"], 3, "{enrolled}");
-        assert_eq!(enrolled["result"]["isError"], false, "{enrolled}");
-        let id = enrolled["result"]["structuredContent"]["data"]["project_id"].clone();
-        assert!(id.is_string(), "{enrolled}");
+        assert_eq!(status["result"]["isError"], false, "{status}");
+        let current = &status["result"]["structuredContent"]["data"];
+        assert_ne!(current["bootstrap_required"], true, "{status}");
+        assert_eq!(current["policy_revision"], before["policy_revision"]);
+        assert_eq!(current["pending_approvals"], 0);
+        let id = current["project_id"].clone();
+        assert!(id.is_string(), "{status}");
+        assert_ne!(id, before["project_id"]);
         assert!(!identities.contains(&id));
         identities.push(id);
         server.send(&json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"status","arguments":{}}}));
@@ -268,6 +274,7 @@ fn historical_cli_inspection_is_read_only_without_manual_setup() {
     let output = cargo_bin_cmd!("shield")
         .args(["status", "--json", "--project"])
         .arg(root.path())
+        .env("HOME", root.path())
         .assert()
         .success();
     let response: Value = serde_json::from_slice(&output.get_output().stdout).unwrap();
@@ -323,6 +330,9 @@ pub(super) fn historical_checkpoint(root: &assert_fs::TempDir) -> Value {
         "policy_drafts",
         "dismissed_reviews",
         "enforcement",
+        "history_owner",
+        "configuration_changes",
+        "terminal_receipts",
     ] {
         raw.as_object_mut()
             .expect("checkpoint object")
@@ -332,6 +342,23 @@ pub(super) fn historical_checkpoint(root: &assert_fs::TempDir) -> Value {
         .as_object_mut()
         .expect("active checkpoint")
         .remove("compiled");
+    raw["active"]
+        .as_object_mut()
+        .expect("active checkpoint")
+        .remove("binding_version");
+    let binding = super::operator::fixture_digest(
+        json!([
+            raw["project_id"],
+            raw["project_root"],
+            raw["active"]["activation_id"],
+            raw["active"]["previous_activation_id"],
+            raw["active"]["policy_revision"],
+            raw["active"]["candidate_digest"]
+        ])
+        .to_string()
+        .as_bytes(),
+    );
+    raw["active"]["binding"] = json!(binding);
     raw["history_generation"] = Value::Null;
     raw["authorization_events"]
         .as_array_mut()
@@ -342,6 +369,7 @@ pub(super) fn historical_checkpoint(root: &assert_fs::TempDir) -> Value {
         .expect("authorization events")
     {
         if event["kind"] == "runtime_activated" {
+            event["details"]["binding"] = json!(binding);
             event["details"]
                 .as_object_mut()
                 .expect("activation details")

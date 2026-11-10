@@ -23,6 +23,13 @@ use std::sync::Mutex;
 pub(crate) use elicitation::PackQuestion;
 pub(crate) use elicitation::Question;
 pub(super) use operator::{Diagnostic, diagnostic as operator_diagnostic, docs as operator_docs};
+pub(in crate::review) fn captured_summary(
+    candidate: &Value,
+    reviewed_files: bool,
+    args: &Value,
+) -> String {
+    confirmation::captured_summary(candidate, reviewed_files, args)
+}
 
 pub(crate) fn question_error(context: &Context, error: &Error) -> Value {
     failure(context, error)
@@ -34,6 +41,8 @@ pub(crate) fn apply_confirmation(
     connection: &Connection,
     args: &Value,
 ) -> Result<Option<String>, Error> {
+    let normalized = connection.runtime_context(context, true)?;
+    let context = &normalized;
     if crate::agents::review::for_context(context).confirmation()
         == crate::agents::review::Confirmation::ToolPermission
         && connection
@@ -87,6 +96,9 @@ pub(crate) fn apply_confirmation(
 pub(crate) fn deny_confirmation(context: &Context, args: &Value) -> Result<String, Error> {
     fields(args, &["request_id"])?;
     let (_, request) = approvals::request_view(context, required(args, "request_id")?)?;
+    if request["terminal"] == true {
+        return Err(Error::Invalid("request is terminal"));
+    }
     let message = format!(
         "Deny this pending request or revoke its unused grant?\n{}",
         serde_json::to_string_pretty(&request)
@@ -201,6 +213,7 @@ impl From<crate::policy::Error> for Failure {
 }
 
 pub(crate) struct Connection {
+    runtime: Mutex<Option<RuntimeBinding>>,
     owner: Mutex<Option<super::proposal_lifecycle::Lease>>,
     views: Mutex<views::Views>,
     admin: Mutex<
@@ -208,7 +221,34 @@ pub(crate) struct Connection {
     >,
     admin_sequence: std::sync::atomic::AtomicU64,
 }
+struct RuntimeBinding {
+    original: String,
+    current: String,
+    root: String,
+}
+pub(crate) fn needs_runtime(name: &str, args: &Value) -> bool {
+    schemas::mutates(name)
+        || name == "policy_evaluate" && args.get("candidate_id").is_none_or(Value::is_null)
+}
 impl Connection {
+    fn bound_context(&self, context: &Context) -> Result<Context, Error> {
+        let runtime = match self.runtime.try_lock() {
+            Ok(runtime) => runtime,
+            Err(std::sync::TryLockError::WouldBlock | std::sync::TryLockError::Poisoned(_)) => {
+                return Err(Error::Locked);
+            }
+        };
+        let mut current = context.clone();
+        if let Some(binding) = runtime.as_ref() {
+            if context.project_root != binding.root
+                || (context.project_id != binding.original && context.project_id != binding.current)
+            {
+                return Err(Error::Invalid("runtime checkout changed; reconnect Shield"));
+            }
+            current.project_id.clone_from(&binding.current);
+        }
+        Ok(current)
+    }
     pub(crate) fn enrolled(context: &Context) -> Result<Self, Error> {
         let views = views::Views::new(
             context
@@ -216,10 +256,12 @@ impl Connection {
                 .clone()
                 .ok_or(Error::Invalid("connection identity required"))?,
         );
-        let (state, _) = super::storage::Store::open(std::path::Path::new(&context.project_root))?
-            .read_diagnostic_checkpoint()?;
+        let (state, _) =
+            super::storage::Store::inspect(std::path::Path::new(&context.project_root))?
+                .read_diagnostic_checkpoint()?;
         state.check(context)?;
         Ok(Self {
+            runtime: Mutex::new(None),
             owner: Mutex::new(None),
             views: Mutex::new(views),
             admin: Mutex::new(BTreeMap::default()),
@@ -229,11 +271,76 @@ impl Connection {
     #[cfg(test)]
     pub(crate) fn new(seed: String) -> Self {
         Self {
+            runtime: Mutex::new(None),
             owner: Mutex::new(None),
             views: Mutex::new(views::Views::new(seed)),
             admin: Mutex::new(BTreeMap::default()),
             admin_sequence: std::sync::atomic::AtomicU64::new(0),
         }
+    }
+    /// A fresh diagnostic connection can adopt its first actual runtime epoch.
+    /// Retained reviews/handles and every later rotation require a new connection.
+    pub(crate) fn runtime_context(
+        &self,
+        context: &Context,
+        allow_rebind: bool,
+    ) -> Result<Context, Error> {
+        let mut runtime = self.runtime.lock().map_err(|_| Error::Locked)?;
+        let reconnect = || {
+            Error::Invalid(
+                "runtime checkout changed; reconnect Shield before continuing retained reviews or handles",
+            )
+        };
+        if let Some(binding) = runtime.as_ref() {
+            if context.project_root != binding.root
+                || (context.project_id != binding.original && context.project_id != binding.current)
+            {
+                return Err(reconnect());
+            }
+            let mut current = context.clone();
+            current.project_id.clone_from(&binding.current);
+            let (state, pending) =
+                super::storage::Store::inspect(std::path::Path::new(&binding.root))?
+                    .read_diagnostic_checkpoint()?;
+            if pending || state.legacy_preview.is_some() {
+                return Err(reconnect());
+            }
+            state.check(&current).map_err(|_| reconnect())?;
+            state.check_operations().map_err(|_| reconnect())?;
+            return Ok(current);
+        }
+        let opened = super::open(std::path::Path::new(&context.project_root))?;
+        if opened.project_root != context.project_root {
+            return Err(reconnect());
+        }
+        if opened.project_id != context.project_id
+            && (!allow_rebind
+                || self.owner.lock().map_err(|_| Error::Locked)?.is_some()
+                || self
+                    .views
+                    .lock()
+                    .map_err(|_| Error::Locked)?
+                    .retained_state()
+                || !self.admin.lock().map_err(|_| Error::Locked)?.is_empty())
+        {
+            return Err(reconnect());
+        }
+        let mut current = context.clone();
+        current.project_id.clone_from(&opened.project_id);
+        let (state, pending) =
+            super::storage::Store::inspect(std::path::Path::new(&current.project_root))?
+                .read_diagnostic_checkpoint()?;
+        if pending {
+            return Err(reconnect());
+        }
+        state.check(&current)?;
+        state.check_operations()?;
+        *runtime = Some(RuntimeBinding {
+            original: context.project_id.clone(),
+            current: current.project_id.clone(),
+            root: current.project_root.clone(),
+        });
+        Ok(current)
     }
     fn ensure_owner(&self, context: &Context) -> Result<(), Error> {
         let Some(id) = &context.connection_id else {
@@ -317,6 +424,8 @@ pub(crate) fn admin_confirmation(
     if !super::admin::supports(name) || unconfirmed_cache_rebuild(name, args) {
         return Ok(None);
     }
+    let normalized = connection.runtime_context(context, true)?;
+    let context = &normalized;
     if (name == "mcp_setup" && args["dry_run"] == true)
         || crate::agents::review::for_context(context).confirmation()
             == crate::agents::review::Confirmation::Terminal
@@ -332,6 +441,7 @@ pub(crate) fn admin_confirmation(
         }
     }
     let prepared = super::admin::prepare(context, name, args, checkpoint)?;
+    let reconciled = prepared.committed_result().is_some();
     checkpoint()?;
     let key = admin_key(name, args);
     let mut pending = connection
@@ -342,11 +452,15 @@ pub(crate) fn admin_confirmation(
     if pending.len() >= 8 {
         return Err(Error::Overloaded);
     }
-    let message = format!(
-        "Confirm this Shield administrative change?\n{}",
-        serde_json::to_string_pretty(&prepared.review())
-            .map_err(|_| Error::Invalid("administrative review encoding"))?
-    );
+    let message = if reconciled {
+        String::new()
+    } else {
+        format!(
+            "Confirm this Shield administrative change?\n{}",
+            serde_json::to_string_pretty(&prepared.review())
+                .map_err(|_| Error::Invalid("administrative review encoding"))?
+        )
+    };
     if message.len() > 48 * 1024 {
         return Err(Error::Invalid(
             "administrative review exceeds the in-session form bound; prepare a smaller change",
@@ -356,7 +470,7 @@ pub(crate) fn admin_confirmation(
         .admin_sequence
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     pending.insert(id, (std::time::Instant::now(), key, prepared));
-    Ok(Some((message, id)))
+    Ok((!reconciled).then_some((message, id)))
 }
 
 fn admin_call(
@@ -378,10 +492,15 @@ fn admin_call(
             .map_err(|_| Error::Invalid("administrative review state invalid"))?
             .remove(&binding)
     } else {
-        None
+        let mut pending = connection.admin.lock().map_err(|_| Error::Locked)?;
+        let key = admin_key(name, args);
+        let completed = pending.iter().find_map(|(id, (_, candidate, prepared))| {
+            (candidate == &key && prepared.committed_result().is_some()).then_some(*id)
+        });
+        completed.and_then(|id| pending.remove(&id))
     };
     if let Some((created, key, prepared)) = retained {
-        if !confirmed {
+        if !confirmed && prepared.committed_result().is_none() {
             return Err(Error::ApprovalRequired);
         }
         if key != admin_key(name, args) {
@@ -433,24 +552,50 @@ pub(crate) fn call_with_bound_confirmation(
     confirmed: bool,
     binding: Option<u64>,
 ) -> Value {
-    let result = (|| -> Result<Value, Failure> {
+    let normalized = if documentation::handles(name) {
+        None
+    } else if needs_runtime(name, args) {
+        match connection.runtime_context(context, true) {
+            Ok(context) => Some(context),
+            Err(error) => return failure(context, &error),
+        }
+    } else {
+        match connection.bound_context(context) {
+            Ok(context) => Some(context),
+            Err(error) => return failure(context, &error),
+        }
+    };
+    let context = normalized.as_ref().unwrap_or(context);
+    let result = (|| -> Result<ToolData, Failure> {
         checkpoint()?;
         // Documentation never waits for connection state held by other calls.
         if documentation::handles(name) {
-            return documentation::call(name, args, checkpoint).map_err(Failure::Documentation);
+            return documentation::call(name, args, checkpoint)
+                .map(ToolData::Raw)
+                .map_err(Failure::Documentation);
         }
-        if !matches!(name, "status" | "doctor") {
+        if schemas::mutates(name) {
             connection.ensure_owner(context)?;
         }
         if super::admin::supports(name) {
-            return Ok(admin_call(
+            return Ok(ToolData::Raw(admin_call(
                 context, connection, name, args, checkpoint, confirmed, binding,
-            )?);
+            )?));
         }
         let mut views = connection
             .views
             .lock()
             .map_err(|_| Error::Invalid("connection state invalid"))?;
+        if name == "policy_evaluate" {
+            return Ok(ToolData::Projected(diagnostics::evaluate(
+                context, &mut views, args, checkpoint,
+            )?));
+        }
+        if name == "policy_compare" {
+            return Ok(ToolData::Projected(diagnostics::compare(
+                context, &mut views, args, checkpoint,
+            )?));
+        }
         let mut data = dispatch(context, &mut views, name, args, checkpoint, confirmed)?;
         if !matches!(
             name,
@@ -479,7 +624,7 @@ pub(crate) fn call_with_bound_confirmation(
         {
             bound_policy_result(&mut data)?;
         }
-        Ok(data)
+        Ok(ToolData::Raw(data))
     })();
     if name == "policy_apply"
         && let Err(Failure::Review(error)) = &result
@@ -487,7 +632,7 @@ pub(crate) fn call_with_bound_confirmation(
     {
         return outcome;
     }
-    result_envelope(context, name, result)
+    result_envelope_data(context, name, result)
 }
 
 /// Pre-form failures and post-confirmation failures close through the same
@@ -537,13 +682,31 @@ pub(crate) fn policy_outcome(context: &Context, args: &Value, code: &str) -> Val
     value
 }
 
+enum ToolData {
+    Raw(Value),
+    Projected(diagnostics::Projected),
+}
+
 fn result_envelope(context: &Context, name: &str, result: Result<Value, Failure>) -> Value {
+    result_envelope_data(context, name, result.map(ToolData::Raw))
+}
+
+fn result_envelope_data(context: &Context, name: &str, result: Result<ToolData, Failure>) -> Value {
     match result {
-        Ok(mut data) => {
+        Ok(data) => {
+            let (mut data, projected) = match data {
+                ToolData::Raw(data) => (data, None),
+                ToolData::Projected(data) => {
+                    let (value, redacted) = data.into_parts();
+                    (value, Some(redacted))
+                }
+            };
             super::reports::attach(context, name, &mut data);
             // Bundled public docs contain no runtime input. Redacting example
             // flags would corrupt their syntax and Markdown line structure.
-            let redacted = if ["history_list", "history_show"].contains(&name) {
+            let redacted = if let Some(redacted) = projected {
+                redacted
+            } else if ["history_list", "history_show"].contains(&name) {
                 super::history::redact_result(&mut data)
             } else {
                 !documentation::handles(name) && super::model::redact(&mut data)
@@ -555,7 +718,9 @@ fn result_envelope(context: &Context, name: &str, result: Result<Value, Failure>
                 .get("truncated")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            json!({"schema_version":1,"project_id":context.project_id,"policy_revision":revision,"data":data,"missing":missing,"truncated":truncated,"redacted":redacted,"error":null})
+            let mut envelope = json!({"schema_version":1,"project_id":context.project_id,"policy_revision":revision,"data":null,"missing":missing,"truncated":truncated,"redacted":redacted,"error":null});
+            envelope["data"] = data;
+            envelope
         }
         Err(Failure::Review(error)) => {
             let mut value = admin_error(context, name, &error);
@@ -624,6 +789,7 @@ pub(crate) fn admin_route(name: &str) -> Option<&'static str> {
         "registry_add" => "shield registry add",
         "registry_remove" => "shield registry remove",
         "registry_default" => "shield registry default",
+        "registry_trust" => "shield registry trust",
         "policy_repair" => "shield policy repair",
         "policy_reject" => "shield policy reject",
         "history_configure" => "shield history configure",
@@ -855,7 +1021,7 @@ fn capacity_message(kind: CapacityKind, pending: usize, retained: usize, limit: 
 fn invalid_input_message(error: &Error) -> String {
     match error {
         Error::StateFormat { .. } | Error::StateCorrupt { .. } => error.to_string(),
-        Error::Policy(error @ crate::policy::Error::McpDefaults { .. }) => {
+        Error::Policy(error @ (crate::policy::Error::McpDefaults { .. } | crate::policy::Error::Resolution { .. })) => {
             format!("Invalid input: {error}")
         }
         // Static reasons name what to correct; they carry no submitted text.
@@ -952,25 +1118,31 @@ fn status(context: &Context, views: &mut views::Views, doctor: bool) -> Result<V
     }
     let mut data = project::status(context)?;
     integration_recovery(context, &mut data);
-    if data["checkpoint_upgrade_pending"] == true {
+    if data["checkpoint_upgrade_pending"] == true
+        || data["runtime_relocation_pending"] == true
+        || data["operation_epoch_pending"] == true
+    {
         data["active_candidate_id"] = Value::Null;
         return Ok(data);
     }
-    if data["repair_needed"] == true
-        && data["coverage"]["repair_needed"] != true
-        && crate::agents::review::for_context(context).confirmation()
-            != crate::agents::review::Confirmation::Terminal
-        && changes::project_files::adoption_available(context)?
+    if crate::agents::review::for_context(context).confirmation()
+        != crate::agents::review::Confirmation::Terminal
     {
-        data["repair_route"] = json!("policy_propose");
-        data["repair_arguments"] = json!({"change":{"kind":"project_files_adopt"}});
+        data["project_file_review"] = json!({"tool":"policy_propose","arguments":{"change":{"kind":"project_files_adopt"}},"inspection":"performed only on explicit capture"});
     }
-    let id = views.active(context)?;
+    let id = match views.active_readonly(context) {
+        Ok(id) => id,
+        Err(error) => {
+            data["active_candidate_id"] = Value::Null;
+            data["diagnostic_snapshot"] = json!({"status":"unavailable","detail":error.to_string(),"next_action":"Retry an explicit policy inspection or evaluation to capture the active policy."});
+            return Ok(data);
+        }
+    };
     let captured = views.get(&id)?;
-    if data["active"]["policy_revision"] != captured.revision()? {
+    if data["active"]["policy_revision"] != captured.revision() {
         return Err(Error::StaleSnapshot);
     }
-    data["policy_revision"] = json!(captured.revision()?);
+    data["policy_revision"] = json!(captured.revision());
     data["active_candidate_id"] = json!(id);
     Ok(data)
 }
@@ -1181,8 +1353,6 @@ fn review_tool(
             proposal["change"] = change;
             propose(context, views, &proposal, checkpoint)
         }
-        "policy_evaluate" => diagnostics::evaluate(context, views, args, checkpoint),
-        "policy_compare" => diagnostics::compare(context, views, args, checkpoint),
         "pack_search" | "pack_info" => discovery(context, views, name, args),
         _ => inspection_tool(context, views, name, args),
     }
@@ -1495,7 +1665,9 @@ pub(crate) fn tools_for(agent: Option<&str>) -> Value {
 }
 
 pub(crate) fn is_tool(name: &str) -> bool {
-    schemas::metadata().any(|(known, _)| known == name) || documentation::handles(name)
+    name == "project_enroll"
+        || schemas::metadata().any(|(known, _)| known == name)
+        || documentation::handles(name)
 }
 
 /// Each tool's name and description, for the setup permissions page.

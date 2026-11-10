@@ -51,20 +51,27 @@ pub(crate) fn verify_mcp_connection_at(
 pub(crate) fn protected_files() -> &'static [&'static str] {
     static PATHS: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
     PATHS.get_or_init(|| {
-        [".shield", ".mcp.json"]
-            .into_iter()
-            .chain(agents::ADAPTERS.iter().flat_map(|a| {
-                std::iter::once(a.spec().hooks_path)
-                    .chain(a.spec().mcp_path)
-                    .chain(a.spec().prefix_rules_path)
-                    .chain(a.spec().settings_paths.iter().copied())
-            }))
-            .chain([
-                box_definition::PATH,
-                box_definition::LOCAL_PATH,
-                legacy::BASE,
-            ])
-            .collect()
+        [
+            ".shield",
+            ".mcp.json",
+            ".opencode/plugins",
+            ".opencode/tool",
+            ".opencode/tools",
+            ".github/hooks",
+        ]
+        .into_iter()
+        .chain(agents::ADAPTERS.iter().flat_map(|a| {
+            std::iter::once(a.spec().hooks_path)
+                .chain(a.spec().mcp_path)
+                .chain(a.spec().prefix_rules_path)
+                .chain(a.spec().settings_paths.iter().copied())
+        }))
+        .chain([
+            box_definition::PATH,
+            box_definition::LOCAL_PATH,
+            legacy::BASE,
+        ])
+        .collect()
     })
 }
 pub(crate) mod box_definition;
@@ -81,9 +88,12 @@ pub(crate) use connections::{mcp_projection, resolve_mcp_token};
 pub(super) mod files;
 mod maintenance;
 pub(super) mod native;
+pub(in crate::review) mod portable;
 pub(super) mod prefix_rules;
 mod privacy;
-pub(in crate::review) const HOST_PATH_WARNING: &str = "Generated host entries contain absolute Shield executable and project paths, which can reveal this machine's home directory and username and will not work unchanged on another machine. Host files may be tracked; review their diff before sharing. Private connector settings remain in Shield's private state.";
+mod rebind;
+pub(in crate::review) use rebind::resume as rebind_launchers;
+pub(in crate::review) const HOST_PATH_WARNING: &str = "Shield project entries use the installed shield command and the host's project working directory. Connector settings you supply may contain machine-specific paths. Host files may be tracked; review their diff before sharing. Private connector settings remain in Shield's private state.";
 mod reconcile;
 pub(in crate::review) mod recovery;
 pub(crate) use prefix_rules::drifted as prefix_rules_drifted;
@@ -396,23 +406,16 @@ pub(crate) fn with_fallback<T>(
     })
 }
 
+#[cfg(test)]
 pub(in crate::review) fn apply(
     context: &Context,
     expected: &Value,
     plan: &Plan,
 ) -> Result<(), Error> {
-    apply_checked(context, expected, plan, &|| Ok(()))
+    apply_owned(context, expected, plan, &|| Ok(()), None)
 }
 
-pub(in crate::review) fn apply_checked(
-    context: &Context,
-    expected: &Value,
-    plan: &Plan,
-    checkpoint: super::Checkpoint<'_>,
-) -> Result<(), Error> {
-    apply_owned(context, expected, plan, checkpoint, None)
-}
-
+#[cfg(test)]
 pub(in crate::review) fn apply_owned(
     context: &Context,
     expected: &Value,
@@ -420,6 +423,28 @@ pub(in crate::review) fn apply_owned(
     checkpoint: super::Checkpoint<'_>,
     activation: Option<&str>,
 ) -> Result<(), Error> {
+    super::project::checkpoint(context)?;
+    let publication =
+        super::publication::ProjectionLease::acquire(Path::new(&context.project_root))?;
+    apply_owned_guarded(
+        context,
+        expected,
+        plan,
+        checkpoint,
+        activation,
+        &publication,
+    )
+}
+
+pub(in crate::review) fn apply_owned_guarded(
+    context: &Context,
+    expected: &Value,
+    plan: &Plan,
+    checkpoint: super::Checkpoint<'_>,
+    activation: Option<&str>,
+    publication: &super::publication::ProjectionLease,
+) -> Result<(), Error> {
+    publication.check(context)?;
     checkpoint()?;
     maintenance::validate(plan)?;
     privacy::validate(Path::new(&context.project_root), plan)?;
@@ -469,6 +494,19 @@ pub(in crate::review) fn apply_owned(
         Ok(json!({}))
     })?;
     privacy::validate(Path::new(&context.project_root), plan)?;
+    // The committed repair plan owns these bytes. All competing output
+    // publishers wait on the projection lease, leaving request authority free.
+    let current = store.read_checkpoint()?;
+    current.check(context)?;
+    activation::check_owner(&current, expected, activation)?;
+    if current.operator["integration_pending"] != json!(plan)
+        || current.operator["integration"] != expected["integration"]
+    {
+        return Err(Error::StaleSnapshot);
+    }
+    files::validate_plan_recovery(Path::new(&context.project_root), plan)?;
+    publish(Path::new(&context.project_root), plan)?;
+    files::publish_plan(Path::new(&context.project_root), plan)?;
     store.update_checkpoint(context, &|| Ok(()), |state| {
         activation::check_owner(state, expected, activation)?;
         if state.operator["integration_pending"] != json!(plan)
@@ -478,8 +516,6 @@ pub(in crate::review) fn apply_owned(
         }
         validate_pending_ownership(&crate::review::project::metadata(state))?;
         files::validate_plan_recovery(Path::new(&context.project_root), plan)?;
-        publish(Path::new(&context.project_root), plan)?;
-        files::publish_plan(Path::new(&context.project_root), plan)?;
         let previous = registration(&state.operator)?;
         super::session_grants::preserve_integration(
             state,
@@ -490,8 +526,12 @@ pub(in crate::review) fn apply_owned(
             metadata.remove("integration_verification");
             metadata.remove("integration_publication");
         }
+        let changed = state.operator["integration"] != json!(plan.desired);
         state.operator["integration"] = json!(plan.desired);
         state.operator["integration_pending"] = Value::Null;
+        if changed {
+            super::configuration_changes::changed(state, context, "agent registrations");
+        }
         Ok(json!({}))
     })?;
     Ok(())
@@ -566,21 +606,57 @@ fn box_status(
 
 fn diagnose_binary(
     registration: &Registration,
+    metadata: &Value,
     diagnostics: &mut Vec<&'static str>,
 ) -> Result<(), Error> {
     // Replacing the installed executable at its registered path is an ordinary
     // upgrade. Old setup bytes/version do not establish policy authority.
     let running = std::env::current_exe()?.canonicalize()?;
+    if current_executable_receipt(registration, metadata, &running) {
+        return Ok(());
+    }
     if registration.binary.canonicalize().ok().as_ref() != Some(&running) {
-        if binary_digest(&registration.binary).ok().as_deref() != Some(&registration.binary_digest)
-        {
-            diagnostics.push("registered binary missing or changed");
+        match std::fs::metadata(&registration.binary) {
+            Ok(metadata) if metadata.is_file() => diagnostics.push(
+                "registered binary path differs from this CLI; content identity and compatibility are unchecked",
+            ),
+            Ok(_) => diagnostics.push("registered binary path is not a regular file"),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                diagnostics.push("registered binary is missing");
+            }
+            Err(_) => diagnostics.push("registered binary presence is unavailable"),
         }
         if registration.version != env!("CARGO_PKG_VERSION") {
-            diagnostics.push("registered binary version differs from this CLI");
+            diagnostics.push(
+                "recorded registered binary version differs; current compatibility is unchecked",
+            );
         }
     }
     Ok(())
+}
+
+/// Derived location evidence only; neither presence nor a saved digest verifies
+/// today's payload. Native handoff and administrative review retain their pins.
+fn current_executable_receipt(
+    registration: &Registration,
+    metadata: &Value,
+    running: &Path,
+) -> bool {
+    let receipt = &metadata["current_executable"];
+    receipt.as_object().is_some_and(|fields| fields.len() == 3)
+        && receipt["schema_version"] == 1
+        && receipt["digest"] == registration.binary_digest
+        && registration.binary_digest.len() == 64
+        && registration
+            .binary_digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+        && receipt["path"].as_str().is_some_and(|path| {
+            let path = Path::new(path);
+            path.is_absolute()
+                && path.canonicalize().ok().as_deref() == Some(running)
+                && std::fs::metadata(path).is_ok_and(|metadata| metadata.is_file())
+        })
 }
 
 fn checked_mcp_config(
@@ -656,7 +732,7 @@ fn diagnose_registered<'a>(
         box_status(root, meta, owned, diagnostics)
     });
     let before = diagnostics.len();
-    if diagnose_binary(r, diagnostics).is_err() {
+    if diagnose_binary(r, meta, diagnostics).is_err() {
         diagnostics.push("registered binary is unreadable");
     }
     if diagnostics.len() != before {
@@ -674,7 +750,7 @@ fn diagnose_registered<'a>(
 fn agent_output_drift(
     root: &Path,
     state: &State,
-    snapshot: Option<&review::runtime::consumer::Snapshot>,
+    snapshot: Option<&review::cache::Inspection>,
     r: &Registration,
     agent: &str,
     connections: &[Value],
@@ -721,7 +797,7 @@ fn diagnose_prefixes(
     root: &Path,
     meta: &Value,
     registered: Option<&Registration>,
-    snapshot: Option<&review::runtime::consumer::Snapshot>,
+    snapshot: Option<&review::cache::Inspection>,
     enabled: bool,
     diagnostics: &mut Vec<&'static str>,
 ) {
@@ -732,7 +808,7 @@ fn diagnose_prefixes(
     });
     // Without a readable activation there is nothing to compare against.
     if let Some(prefixes) = if prefixed {
-        snapshot.map(super::runtime::consumer::Snapshot::codex_prefixes)
+        snapshot.map(super::cache::Inspection::codex_prefixes)
     } else {
         Some([].as_slice())
     } {
@@ -770,26 +846,25 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                 )
             },
         );
-        // Reuse diagnostic authority; reopening it through a consumer could
-        // publish a historical upgrade or recover a cache during inspection.
-        let snapshot = review::runtime::consumer::inspect_cached(state).ok();
+        // Coverage reads only activation-bound descriptions. It never loads a
+        // plan, rebuilds a cache or prepares retained source for presentation.
+        let snapshot = state
+            .active
+            .as_ref()
+            .and_then(|active| active.inspection(state));
         diagnose_prefixes(
             root,
             &meta,
             registered.as_ref(),
-            snapshot.as_ref(),
+            snapshot,
             state.enforcement.enabled,
             &mut diagnostics,
         );
-        let connections = connections::diagnose(
-            root,
-            snapshot.as_ref(),
-            registered.as_ref(),
-            &mut diagnostics,
-        );
+        let connections =
+            connections::diagnose(root, snapshot, registered.as_ref(), &mut diagnostics);
         if let Some(r) = &registered {
             for agent in &agents {
-                if agent_output_drift(root, state, snapshot.as_ref(), r, agent, &connections) {
+                if agent_output_drift(root, state, snapshot, r, agent, &connections) {
                     degraded.insert(*agent);
                 }
             }
@@ -798,14 +873,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                     let agent = adapter.spec().id;
                     adapter.supports_box_hooks()
                         && !r.agents.contains_key(agent)
-                        && agent_output_drift(
-                            root,
-                            state,
-                            snapshot.as_ref(),
-                            r,
-                            agent,
-                            &connections,
-                        )
+                        && agent_output_drift(root, state, snapshot, r, agent, &connections)
                 })
             {
                 if box_integration.get("definition_status").is_none() {
@@ -814,9 +882,15 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                 box_integration["status"] = json!("degraded");
             }
         }
-        let published = reporting::box_hooks(root, registered.as_ref(), &mut diagnostics);
+        let published =
+            reporting::box_hooks(root, registered.as_ref(), &state.operator, &mut diagnostics);
         let healthy = diagnostics.is_empty();
         let mut report = json!({
+            "binary_inspection":registered.as_ref().map(|registration| json!({
+                "current_location_recorded":std::env::current_exe().ok().and_then(|path|path.canonicalize().ok()).is_some_and(|running|current_executable_receipt(registration,&meta,&running)),
+                "payload_integrity":"unchecked","compatibility":"unchecked"
+            })),
+            "policy_inspection":{"availability":if snapshot.is_some() {"recorded"}else{"unavailable"},"source_validation":"not-performed","automatic_matching":"checked-on-interception"},
             "box_integration":box_integration,
             "legacy_interceptor":legacy_interceptor,
             "mcp_connections":connections,

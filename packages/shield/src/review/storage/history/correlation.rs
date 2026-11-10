@@ -7,7 +7,15 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 /// Provenance fields a completion must share with its decision.
-const BINDING: [&str; 5] = ["surface", "agent", "session_id", "tool_use_id", "cwd"];
+const BINDING: [&str; 7] = [
+    "project_id",
+    "project_root",
+    "surface",
+    "agent",
+    "session_id",
+    "tool_use_id",
+    "cwd",
+];
 /// Truncation markers that remove operation or provenance evidence.
 const UNBOUND: [&str; 3] = ["complete_input", "detail_fields", "attribution_fields"];
 
@@ -46,7 +54,7 @@ fn native_binding(event: &Value) -> Option<String> {
     if provenance["surface"] != "hook" || !bound(event) {
         return None;
     }
-    for field in ["agent", "session_id", "tool_use_id", "cwd"] {
+    for field in BINDING {
         if provenance[field].as_str()?.is_empty() {
             return None;
         }
@@ -55,15 +63,7 @@ fn native_binding(event: &Value) -> Option<String> {
     if operation.is_null() {
         return None;
     }
-    Some(
-        json!([
-            provenance["project_id"],
-            provenance["project_root"],
-            BINDING.map(|field| &provenance[field]),
-            operation
-        ])
-        .to_string(),
-    )
+    Some(json!([BINDING.map(|field| &provenance[field]), operation]).to_string())
 }
 
 fn links(events: &[Value], limit: usize) -> Vec<Link> {
@@ -130,6 +130,12 @@ fn matching<'a>(
     limit: usize,
 ) -> Option<(&'a str, &'a Value)> {
     let provenance = &completion["provenance"];
+    if ["project_id", "project_root"]
+        .iter()
+        .any(|field| provenance[*field].as_str().is_none_or(str::is_empty))
+    {
+        return None;
+    }
     let request = if let Some(request) = completion["details"]["reported_request_id"].as_str() {
         request
     } else {
@@ -179,23 +185,55 @@ fn set(event: &mut Value, object: &str, field: &str, value: Value) {
     }
 }
 
+fn project(event: &mut Value, link: &Link) {
+    if event["kind"] == "completion" {
+        // Stored links are never trusted; only the reader derives them.
+        set(event, "links", "request_id", json!(link.request));
+        set(event, "links", "decision_event_id", link.decision.clone());
+        if link.conflict {
+            set(event, "details", "delivery_conflict", json!(true));
+        }
+    }
+}
+
+/// Bound the serialized uncorrelated array, including delimiters. Linked
+/// command evidence never competes for this separate presentation allowance.
+fn uncorrelated_mask(events: &[Value], links: &[Link]) -> Vec<bool> {
+    let mut keep = vec![true; events.len()];
+    let mut count = 0;
+    let mut bytes = 2usize;
+    for (index, (event, link)) in events.iter().zip(links).enumerate().rev() {
+        if event["kind"] != "completion" || link.request.is_some() || link.duplicate {
+            continue;
+        }
+        let mut projected = event.clone();
+        project(&mut projected, link);
+        let size = crate::json::encoded_len(&projected).unwrap_or(usize::MAX);
+        let next = bytes
+            .saturating_add(size)
+            .saturating_add(usize::from(count > 0));
+        if count >= 128 || next > 1024 * 1024 {
+            keep[index] = false;
+        } else {
+            count += 1;
+            bytes = next;
+        }
+    }
+    keep
+}
+
 /// Events as readers show them: completions carry reader-derived links, exact
 /// duplicate deliveries are dropped and conflicting deliveries are marked.
 pub(super) fn view(events: Vec<Value>, limit: usize) -> Vec<Value> {
     let links = links(&events, limit);
+    let keep = uncorrelated_mask(&events, &links);
     events
         .into_iter()
         .zip(links)
-        .filter(|(_, link)| !link.duplicate)
-        .map(|(mut event, link)| {
-            if event["kind"] == "completion" {
-                // Stored links are never trusted; only the reader derives them.
-                set(&mut event, "links", "request_id", json!(link.request));
-                set(&mut event, "links", "decision_event_id", link.decision);
-                if link.conflict {
-                    set(&mut event, "details", "delivery_conflict", json!(true));
-                }
-            }
+        .zip(keep)
+        .filter(|((_, link), keep)| *keep && !link.duplicate)
+        .map(|((mut event, link), _)| {
+            project(&mut event, &link);
             event
         })
         .collect()
@@ -206,6 +244,7 @@ pub(super) fn view(events: Vec<Value>, limit: usize) -> Vec<Value> {
 pub(super) fn retain_raw(events: Vec<Value>, limit: usize) -> Vec<Value> {
     let keep = {
         let links = links(&events, limit);
+        let uncorrelated = uncorrelated_mask(&events, &links);
         let fields: Vec<_> = events
             .iter()
             .zip(&links)
@@ -222,7 +261,8 @@ pub(super) fn retain_raw(events: Vec<Value>, limit: usize) -> Vec<Value> {
         retained_events(&fields, limit)
             .into_iter()
             .zip(&links)
-            .map(|(kept, link)| kept && !link.duplicate)
+            .zip(uncorrelated)
+            .map(|((kept, link), uncorrelated)| kept && !link.duplicate && uncorrelated)
             .collect::<Vec<_>>()
     };
     events
@@ -253,6 +293,67 @@ mod tests {
         event["details"] = json!({"reported_request_id":null,
             "operation":event["details"]["operation"], "status":"unknown"});
         event
+    }
+
+    #[test]
+    fn reported_completions_require_same_checkout_provenance() {
+        for surface in ["hook", "sdk"] {
+            let mut decided = decision("original");
+            let mut completed = completion();
+            decided["provenance"]["surface"] = json!(surface);
+            completed["provenance"]["surface"] = json!(surface);
+            completed["details"]["reported_request_id"] = json!("original");
+            assert_eq!(
+                view(vec![decided.clone(), completed.clone()], 5000)[1]["links"]["request_id"],
+                "original"
+            );
+            for field in ["project_id", "project_root"] {
+                for replacement in [Value::Null, json!(""), json!("another-checkout")] {
+                    let mut foreign = completed.clone();
+                    foreign["provenance"][field] = replacement.clone();
+                    let result = view(vec![decided.clone(), foreign.clone()], 5000);
+                    assert!(
+                        result[1]["links"]["request_id"].is_null(),
+                        "{surface}: {field}={replacement}"
+                    );
+                    assert!(result[1]["links"]["decision_event_id"].is_null());
+                    assert_eq!(result[1]["details"]["reported_request_id"], "original");
+                    if replacement.is_null() || replacement == "" {
+                        let mut missing = decided.clone();
+                        missing["provenance"][field] = replacement;
+                        assert!(
+                            view(vec![missing, foreign], 5000)[1]["links"]["request_id"].is_null()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn uncorrelated_view_and_rewrite_bound_bytes_without_pruning_linked_evidence() {
+        let mut events = vec![decision("retained"), completion()];
+        for index in 0..128 {
+            let mut event = completion();
+            event["event_id"] = json!(format!("unlinked-{index}"));
+            event["details"]["reported_request_id"] = json!("missing");
+            event["details"]["padding"] = json!("x".repeat(8192));
+            events.push(event);
+        }
+        let result = view(events.clone(), 5000);
+        assert_eq!(result[1]["links"]["request_id"], "retained");
+        let unlinked: Vec<_> = result
+            .iter()
+            .filter(|event| event["kind"] == "completion" && event["links"]["request_id"].is_null())
+            .cloned()
+            .collect();
+        assert!(unlinked.len() < 128);
+        assert!(crate::json::encoded_len(&json!(unlinked)).unwrap() <= 1024 * 1024);
+        assert_eq!(result.last().unwrap()["event_id"], "unlinked-127");
+        assert!(!result.iter().any(|event| event["event_id"] == "unlinked-0"));
+        let retained = retain_raw(events, 5000);
+        assert_eq!(view(retained.clone(), 5000), result);
+        assert!(retained[1]["links"].as_object().unwrap().is_empty());
     }
 
     #[test]

@@ -15,6 +15,12 @@ pub enum Command {
     TestPack(PackTest),
     /// Evaluate one normalized host operation from stdin.
     EnforceRequest(EnforceRequest),
+    /// Evaluate the registered read-only general runtime envelope.
+    RuntimeRequest(RuntimeRequest),
+    /// Mint a reviewed read-only SDK context over its owned launch pipe.
+    SdkReadOpen(SdkReadOpen),
+    /// Close the SDK context supplied by the owned launch environment.
+    SdkReadClose(EnforceRequest),
     /// Translate a registered native host event into the core protocol.
     NativeHook(NativeHook),
     /// Retained MCP launch protocol used by earlier installations.
@@ -62,6 +68,28 @@ pub struct EnforceRequest {
     /// Owning enrolled project fixed by the trusted host launcher.
     #[arg(long)]
     pub project: PathBuf,
+}
+
+/// Registered general-runtime callback with a bounded monotonic work deadline.
+#[derive(Args)]
+pub struct RuntimeRequest {
+    /// Project fixed by the trusted SDK factory.
+    #[arg(long)]
+    pub project: PathBuf,
+    /// Callback deadline including validation, evaluation and encoding.
+    #[arg(long, default_value_t = 5000, value_parser = clap::value_parser!(u64).range(1..=60_000))]
+    pub timeout_ms: u64,
+}
+
+/// Reviewed SDK profile selection; the digest is compatibility evidence only.
+#[derive(Args)]
+pub struct SdkReadOpen {
+    /// Project fixed by the trusted SDK factory.
+    #[arg(long)]
+    pub project: PathBuf,
+    /// Exact content identity of the owned adapter modules.
+    #[arg(long)]
+    pub mapping_digest: String,
 }
 
 /// Project-bound native command hook; vendor data cannot choose project authority.

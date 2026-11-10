@@ -228,8 +228,9 @@ impl Console {
             serde_json::to_string(args).expect("fixture arguments"),
         );
         command.env("SHIELD_WINDOWS_CONSOLE_EXIT", expected.to_string());
-        command.env("USERPROFILE", root);
-        command.env("HOME", root);
+        command.env("USERPROFILE", super::fixture_home(root));
+        command.env("HOME", super::fixture_home(root));
+        command.env("LOCALAPPDATA", super::fixture_home(root));
         command.env("NO_COLOR", "1");
         command.env_remove("TERM");
         let mut reader = pair.master.try_clone_reader().expect("console reader");

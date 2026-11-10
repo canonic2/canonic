@@ -1,13 +1,54 @@
 //! Conservative control-flow traversal, scope joins and bounded loop evaluation.
 use super::structure::Node;
 use super::{
-    Analysis, Decision, Dialect, Error, State, bindings, control, positional_words, structure,
-    taint,
+    Analysis, Coverage, Data, Decision, Dialect, Error, Operation, State, bindings, control,
+    positional_words, structure, taint,
 };
-use serde_json::json;
 
 impl Analysis<'_> {
     pub(super) fn visit(
+        &mut self,
+        node: &Node,
+        state: &mut State,
+        depth: usize,
+    ) -> Result<Decision, Error> {
+        if matches!(node, Node::Command { .. } | Node::Redirected { .. })
+            && !state.cwd_unknown
+            && state.cwd_paths.len() > 1
+        {
+            let mut joined: Option<State> = None;
+            let mut decision = Decision::Allow;
+            for directory in state.cwd_paths.clone() {
+                let mut branch = state.clone();
+                branch.cwd_paths = vec![directory];
+                decision = decision.max(self.visit(node, &mut branch, depth)?);
+                if let Some(joined) = &mut joined {
+                    joined.join(&branch);
+                } else {
+                    joined = Some(branch);
+                }
+            }
+            if let Some(joined) = joined {
+                *state = joined;
+            }
+            return Ok(decision);
+        }
+        let previous = self.context.cwd.clone();
+        if !state.cwd_unknown
+            && let [directory] = state.cwd_paths.as_slice()
+        {
+            self.context.cwd.clone_from(&directory.physical);
+        }
+        let result = self.visit_inner(node, state, depth);
+        self.context.cwd = previous;
+        result
+    }
+
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one exhaustive AST dispatch preserves ordered status endpoints and isolated versus shared cwd effects"
+    )]
+    fn visit_inner(
         &mut self,
         node: &Node,
         state: &mut State,
@@ -26,15 +67,29 @@ impl Analysis<'_> {
             self.suppressed = previous;
             return result;
         }
+        if !matches!(
+            node,
+            Node::Sequence { .. }
+                | Node::Binary { .. }
+                | Node::Group { .. }
+                | Node::Decorated { .. }
+                | Node::Redirected { .. }
+        ) {
+            state.command_outcomes();
+        }
         match node {
             Node::Opaque { span } => {
                 self.complete = false;
                 state.brace_expansion = None;
                 state.cwd_unknown = true;
+                state.filesystem_unknown = true;
+                state.command_outcomes();
                 state.environment_unknown = true;
                 state.variables.clear();
                 state.defined_functions.clear();
-                self.record(json!({"span":span,"coverage":"opaque","decision":"ask"}))?;
+                self.record(
+                    Operation::new(Coverage::Opaque, Decision::Ask, Data::Empty {}).at(*span),
+                )?;
                 Ok(Decision::Ask)
             }
             Node::Command {
@@ -42,7 +97,8 @@ impl Analysis<'_> {
                 words,
                 redirections,
             } => {
-                if self.dialect == Dialect::Powershell {
+                let before = state.directories();
+                let decision = if matches!(self.dialect, Dialect::Powershell | Dialect::Cmd) {
                     // The PowerShell parser admits only a whole native command
                     // with resolved arguments and no parent-shell effects. Do
                     // not reinterpret its quoting as POSIX expansion/bindings.
@@ -51,12 +107,19 @@ impl Analysis<'_> {
                         .map(|word| word.literal.clone())
                         .collect::<Option<Vec<_>>>()
                         .ok_or(Error::Contract("unresolved PowerShell native argument"))?;
-                    self.literal_command(*span, &words, state, depth, false)
+                    self.literal_command(*span, &words, state, depth, false)?
                 } else {
-                    self.simple_command(*span, words, redirections, state, depth)
+                    self.simple_command(*span, words, redirections, state, depth)?
+                };
+                if !redirections.is_empty() {
+                    state.include_failure(&before);
                 }
+                Ok(decision)
             }
             Node::Sequence { children } => {
+                if children.is_empty() {
+                    state.command_outcomes();
+                }
                 let mut decision = Decision::Allow;
                 for child in children {
                     decision = decision.max(self.visit(child, state, depth + 1)?);
@@ -65,26 +128,52 @@ impl Analysis<'_> {
             }
             Node::Group { subshell, body } => {
                 if *subshell {
-                    self.isolated(body, &mut state.clone(), depth + 1)
+                    let mut isolated = state.clone();
+                    let decision = self.isolated(body, &mut isolated, depth + 1)?;
+                    if isolated.filesystem_unknown {
+                        state.filesystem_mutation();
+                    }
+                    state.command_outcomes();
+                    Ok(decision)
                 } else {
                     self.visit(body, state, depth + 1)
                 }
             }
             Node::Background { body } => self.background(body, state, depth),
+            Node::Decorated { operator, body } if operator == "!" => {
+                let decision = self.visit(body, state, depth + 1)?;
+                std::mem::swap(&mut state.cwd_success, &mut state.cwd_failure);
+                Ok(decision)
+            }
             Node::Decorated { operator, body } if operator.starts_with("coproc") => {
                 // The command still runs; its pipes, NAME array and PID
                 // variable are not modeled.
                 self.complete = false;
-                let decision = self.visit(body, state, depth + 1)?;
+                let mut launch = state.clone();
+                launch.filesystem_mutation();
+                let decision = self.isolated(body, &mut launch, depth + 1)?;
+                if launch.filesystem_unknown {
+                    state.filesystem_mutation();
+                }
+                state.command_outcomes();
                 state.variables.clear();
                 state.environment_unknown = true;
-                self.record(json!({"coverage":"coprocess","operator":operator,"decision":"ask"}))?;
+                self.record(Operation::new(
+                    Coverage::Coprocess,
+                    Decision::Ask,
+                    Data::Operator {
+                        operator: operator.clone(),
+                    },
+                ))?;
                 Ok(decision.max(Decision::Ask))
             }
             Node::Decorated { body, .. } => self.visit(body, state, depth + 1),
             Node::Redirected { body, redirections } => {
+                let before = state.directories();
                 let redirects = self.redirections(redirections, &[], state, depth)?;
-                Ok(redirects.max(self.visit(body, state, depth + 1)?))
+                let decision = self.visit(body, state, depth + 1)?;
+                state.include_failure(&before);
+                Ok(redirects.max(decision))
             }
             Node::Binary {
                 operator,
@@ -93,8 +182,8 @@ impl Analysis<'_> {
             } => self.binary(operator, left, right, state, depth),
             Node::Conditional { condition, yes, no } => {
                 let a = self.visit(condition, state, depth + 1)?;
-                let mut yes_state = state.clone();
-                let mut no_state = state.clone();
+                let mut yes_state = state.outcome(true);
+                let mut no_state = state.outcome(false);
                 let b = self.visit(yes, &mut yes_state, depth + 1)?;
                 let c = if let Some(no) = no {
                     self.visit(no, &mut no_state, depth + 1)?
@@ -133,6 +222,10 @@ impl Analysis<'_> {
             // propagate the last command's state, so taint the successor.
             let mut lhs = state.clone();
             let mut rhs = state.clone();
+            // Either side may mutate paths concurrently. There is no
+            // serialization proof allowing fresh directory derivation here.
+            lhs.filesystem_mutation();
+            rhs.filesystem_mutation();
             // Only a simple command directly after the pipe is known
             // to read it; groups and subshells are not modeled.
             rhs.stdin_pipe = matches!(right, Node::Command { .. });
@@ -143,12 +236,34 @@ impl Analysis<'_> {
                 state.environment_unknown = true;
             }
             state.join(&rhs);
+            if lhs.filesystem_unknown || rhs.filesystem_unknown {
+                state.filesystem_mutation();
+            }
+            state.command_outcomes();
             Ok(a.max(b))
         } else {
             let a = self.visit(left, state, depth + 1)?;
-            let mut branch = state.clone();
+            let success = operator == "&&";
+            let skipped = state.outcome(!success);
+            let mut branch = state.outcome(success);
             let b = self.visit(right, &mut branch, depth + 1)?;
-            state.join(&branch);
+            let mut combined = skipped.clone();
+            combined.join(&branch);
+            combined.cwd_success = if success {
+                branch.cwd_success.clone()
+            } else {
+                let mut directories = skipped.directories();
+                directories.join(&branch.outcome(true).directories());
+                Some(directories)
+            };
+            combined.cwd_failure = if success {
+                let mut directories = skipped.directories();
+                directories.join(&branch.outcome(false).directories());
+                Some(directories)
+            } else {
+                branch.cwd_failure.clone()
+            };
+            *state = combined;
             Ok(a.max(b))
         }
     }
@@ -160,7 +275,13 @@ impl Analysis<'_> {
         depth: usize,
     ) -> Result<Decision, Error> {
         let launch = self.operations.len();
-        let decision = self.isolated(body, &mut state.clone(), depth + 1)?;
+        let mut launch_state = state.clone();
+        launch_state.filesystem_mutation();
+        let decision = self.isolated(body, &mut launch_state, depth + 1)?;
+        if launch_state.filesystem_unknown {
+            state.filesystem_mutation();
+        }
+        state.command_outcomes();
         state.variables.remove("!");
         if let Node::Command { span, .. } = body {
             let job = super::provenance::Job {
@@ -172,7 +293,12 @@ impl Analysis<'_> {
                 .variables
                 .insert("!".into(), super::provenance::Binding::BackgroundJob(job));
             self.record(
-                json!({"span":span, "coverage":"background-job", "origin":job, "decision":"allow"}),
+                Operation::new(
+                    Coverage::BackgroundJob,
+                    Decision::Allow,
+                    Data::Background { origin: job },
+                )
+                .at(*span),
             )?;
         }
         Ok(decision)
@@ -308,9 +434,13 @@ impl Analysis<'_> {
             // This binding changes which executable each literal name selects.
             // Keep inspecting the body, but do not treat the binding as inert.
             decision = Decision::Ask;
-            self.record(
-                json!({"coverage":"loop-execution-setting","variable":variable,"decision":"ask"}),
-            )?;
+            self.record(Operation::new(
+                Coverage::LoopExecutionSetting,
+                Decision::Ask,
+                Data::Variable {
+                    variable: variable.into(),
+                },
+            ))?;
         } else if !values.is_empty()
             && bindings::inherited_name(variable, self.clients.inherited.as_ref())
         {
@@ -318,9 +448,13 @@ impl Analysis<'_> {
             // every command launched in or after the loop, such as HOME
             // selecting a client's configuration file.
             decision = Decision::Ask;
-            self.record(
-                json!({"coverage":"shell-assignment","variable":variable,"decision":"ask"}),
-            )?;
+            self.record(Operation::new(
+                Coverage::ShellAssignment,
+                Decision::Ask,
+                Data::Variable {
+                    variable: variable.into(),
+                },
+            ))?;
         }
         let mut breaks = Vec::new();
         for value in values {
@@ -358,7 +492,14 @@ impl Analysis<'_> {
         state.environment_unknown = true;
         state.variables.clear();
         let decision = self.expansions(words, state, depth)?.max(Decision::Ask);
-        self.record(json!({"coverage":"opaque-expression","syntax":syntax,"words":words,"decision":decision}))?;
+        self.record(Operation::new(
+            Coverage::OpaqueExpression,
+            decision,
+            Data::Expression {
+                syntax: syntax.into(),
+                words: words.to_vec(),
+            },
+        ))?;
         Ok(decision)
     }
 

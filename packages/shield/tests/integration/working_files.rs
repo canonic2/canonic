@@ -3,7 +3,7 @@ use assert_cmd::cargo::cargo_bin_cmd;
 use serde_json::{Value, json};
 use std::fs;
 
-pub(super) fn initialize(project: &assert_fs::TempDir) {
+pub(super) fn initialize(project: &assert_fs::TempDir, home: &std::path::Path) {
     let initialized = std::process::Command::new("python3")
         .arg(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -12,6 +12,7 @@ pub(super) fn initialize(project: &assert_fs::TempDir) {
         .arg(assert_cmd::cargo::cargo_bin!("shield"))
         .arg(project.path())
         .arg("apply")
+        .env("SHIELD_TEST_HOME", home)
         .output()
         .expect("owned initialization terminal runs");
     assert!(
@@ -47,7 +48,7 @@ fn relocated_agent_configuration_is_protected_with_temporary_access() {
                 "requirements":{"destination":{"within":{"root":"write"}}},"on_unmet":{"decision":"deny"}}
         ]
     }).to_string()).unwrap();
-    initialize(&project);
+    initialize(&project, &home);
     for (agent, variable) in [("claude", "CLAUDE_CONFIG_DIR"), ("codex", "CODEX_HOME")] {
         // The relocated config need not exist yet: creation is protected too.
         let config = scratch.join(format!("acme-{agent}"));

@@ -63,7 +63,10 @@ fn bootstrap_healthy_launcher_remapping_requires_its_confirmed_receipt() {
         &destination,
         &original
     ));
-    assert!(project_path(Some(&original), &destination).is_err());
+    assert_eq!(
+        project_path(Some(&original), &destination).unwrap(),
+        original
+    );
     // A real, explicitly accepted enrollment creates the independent proof.
     fs::copy(original.join(".shield/review/state.json"), &checkpoint).unwrap();
     crate::review::bootstrap::prepare_launch(&destination, &original)
@@ -103,7 +106,7 @@ fn bootstrap_pinned_old_launch_selects_nearest_copy_or_move_for_review() {
 }
 
 #[test]
-fn bootstrap_conflicting_configured_projects_refuse_ambiguous_selection() {
+fn bootstrap_other_enrollments_cannot_replace_explicit_authority() {
     let root = assert_fs::TempDir::new().unwrap();
     let selected = root.path().join("selected");
     let current = root.path().join("current");
@@ -116,16 +119,17 @@ fn bootstrap_conflicting_configured_projects_refuse_ambiguous_selection() {
         json!({"schema_version":1,"project_root":current}).to_string(),
     )
     .unwrap();
-    assert!(project_path(Some(&selected), &current).is_err());
+    assert_eq!(project_path(Some(&selected), &current).unwrap(), selected);
     let nested = current.join("nested");
     configured(&nested);
     assert_eq!(project_path(None, &nested).unwrap(), nested);
     // The nested config has no copied state naming selected; do not cross it.
-    assert!(project_path(Some(&selected), &nested).is_err());
+    assert_eq!(project_path(Some(&selected), &nested).unwrap(), selected);
+    assert_eq!(project_path(Some(&current), &nested).unwrap(), current);
     let pending = current.join("pending");
     fs::create_dir_all(pending.join(".shield/review")).unwrap();
     assert_eq!(project_path(None, &pending).unwrap(), pending);
-    assert!(project_path(Some(&current), &pending).is_err());
+    assert_eq!(project_path(Some(&current), &pending).unwrap(), current);
     // An unconfigured working directory leaves an explicit selection intact.
     assert_eq!(
         project_path(Some(&selected), root.path()).unwrap(),
@@ -134,7 +138,7 @@ fn bootstrap_conflicting_configured_projects_refuse_ambiguous_selection() {
 }
 
 #[test]
-fn bootstrap_corrupt_future_or_linked_discovery_never_opens_original_authority() {
+fn bootstrap_corrupt_or_linked_claims_cannot_redirect_explicit_authority() {
     let root = assert_fs::TempDir::new().unwrap();
     let selected = root.path().join("selected");
     let current = root.path().join("current");
@@ -144,7 +148,7 @@ fn bootstrap_corrupt_future_or_linked_discovery_never_opens_original_authority()
     let current = current.canonicalize().unwrap();
     let state = current.join(".shield/review/state.json");
     fs::write(&state, "broken").unwrap();
-    assert!(project_path(Some(&selected), &current).is_err());
+    assert_eq!(project_path(Some(&selected), &current).unwrap(), selected);
     // A future format can name the old root for diagnostics, but only the
     // copied destination may then be opened; its strict codec refuses it.
     fs::write(
@@ -163,13 +167,13 @@ fn bootstrap_corrupt_future_or_linked_discovery_never_opens_original_authority()
         .unwrap();
         fs::remove_file(&state).unwrap();
         std::os::unix::fs::symlink(other, &state).unwrap();
-        assert!(project_path(Some(&selected), &current).is_err());
+        assert_eq!(project_path(Some(&selected), &current).unwrap(), selected);
     }
 }
 
 #[cfg(unix)]
 #[test]
-fn bootstrap_discovery_canonicalizes_cwd_and_preserves_broken_link_boundaries() {
+fn bootstrap_discovery_canonicalizes_cwd_without_changing_explicit_authority() {
     let root = assert_fs::TempDir::new().unwrap();
     let selected = root.path().join("selected");
     let current = root.path().join("current");
@@ -188,16 +192,10 @@ fn bootstrap_discovery_canonicalizes_cwd_and_preserves_broken_link_boundaries() 
         .to_string(),
     )
     .unwrap();
-    assert!(
-        project_path(Some(&selected), &alias).is_err(),
-        "a cwd alias cannot make a healthy root appear displaced"
-    );
+    assert_eq!(project_path(Some(&selected), &alias).unwrap(), selected);
     assert_eq!(project_path(None, &alias).unwrap(), current);
     fs::remove_file(current.join(".shield/config.yml")).unwrap();
     fs::remove_file(current.join(".shield/review/state.json")).unwrap();
     std::os::unix::fs::symlink("missing-config", current.join(".shield/config.yml")).unwrap();
-    assert!(
-        project_path(Some(&selected), &current).is_err(),
-        "a broken configuration marker cannot expose original authority"
-    );
+    assert_eq!(project_path(Some(&selected), &current).unwrap(), selected);
 }

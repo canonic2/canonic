@@ -60,11 +60,9 @@ fn explicit_project_repair_uses_the_published_schema_and_original_connection_con
     let form = transport.call(json!(22), "mcp_setup", &args);
     let applied = answer(&transport, &form, "accept");
     assert_eq!(applied["result"]["isError"], false, "{applied}");
-    assert!(
-        std::fs::read_to_string(path)
-            .unwrap()
-            .contains(&target.review.project_root)
-    );
+    let entry: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    assert_eq!(entry["mcpServers"]["shield"]["command"], "shield");
+    assert_eq!(entry["mcpServers"]["shield"]["args"][3], ".");
     assert_eq!(state(&source), source_before);
     let status = transport.call(json!(23), "status", &json!({}));
     assert_eq!(

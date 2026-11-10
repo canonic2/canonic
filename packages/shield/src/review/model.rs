@@ -1,5 +1,6 @@
 //! Shared durable provenance, links, reasons and bounded review objects.
 mod approval;
+pub(in crate::review) mod presentation;
 use super::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -145,6 +146,8 @@ pub(crate) struct Proposal {
     pub(crate) candidate_metadata: Value,
     pub(crate) receipt: Value,
     pub(crate) comparison: Value,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub(in crate::review) presentation: Value,
     #[serde(deserialize_with = "nullable")]
     pub(crate) operator: Option<Value>,
     pub(crate) retry_key: String,
@@ -255,7 +258,19 @@ pub(crate) fn redact_comparison(value: &mut Value) -> bool {
     reason = "persisted settings and per-read history flags, each independent"
 )]
 pub(crate) struct State {
+    /// Non-authorizing legacy record display; never accepted from saved state.
+    #[serde(skip)]
+    pub(in crate::review) legacy_preview: Option<super::runtime::LegacyPreview>,
+    /// Request-local publication work; never accepted from saved state.
+    #[serde(skip)]
+    pub(in crate::review) remember_policy: bool,
+    #[serde(skip)]
+    pub(in crate::review) administration_copy: Option<super::storage::administration::CopyProof>,
     pub(crate) history_generation: String,
+    /// Journal ownership survives a checkout epoch change without rewriting
+    /// immutable observations. Absent in legacy checkpoints.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) history_owner: Option<String>,
     #[serde(skip, default = "history_available")]
     pub(crate) history_available: bool,
     #[serde(skip)]
@@ -277,9 +292,16 @@ pub(crate) struct State {
     pub(crate) candidates: BTreeMap<String, Value>,
     pub(crate) registry_checkpoints: BTreeMap<String, Value>,
     #[serde(deserialize_with = "nullable")]
-    pub(crate) active: Option<super::runtime::Active>,
+    pub(in crate::review) active: Option<super::runtime::Active>,
     pub(crate) read_requests: Vec<super::read_approval::ReadRequest>,
     pub(crate) run_requests: Vec<super::run_approval::RunRequest>,
+    /// Non-authorizing terminal outcomes, independent of live grant capacity/history.
+    #[serde(
+        default,
+        deserialize_with = "super::authorization_receipts::Registry::deserialize_optional",
+        skip_serializing_if = "super::authorization_receipts::Registry::is_empty"
+    )]
+    pub(crate) terminal_receipts: super::authorization_receipts::Registry,
     /// Refused native requests awaiting, or holding, in-session approval.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) hook_requests: Vec<super::hook_approval::HookRequest>,
@@ -293,6 +315,13 @@ pub(crate) struct State {
     #[serde(default)]
     pub(crate) dismissed_reviews: Vec<String>,
     pub(crate) events: Vec<Value>,
+    #[serde(
+        default,
+        skip_serializing_if = "super::configuration_changes::Log::is_empty"
+    )]
+    pub(super) configuration_changes: super::configuration_changes::Log,
+    #[serde(skip)]
+    pub(super) configuration_changes_dirty: bool,
     pub(crate) authorization_events: Vec<Value>,
     pub(crate) history_enabled: bool,
     /// Local human-controlled native interception; independent of policy activation.
@@ -301,6 +330,35 @@ pub(crate) struct State {
     pub(crate) history_limit: usize,
 }
 impl State {
+    /// Check retained diagnostic evidence at the selected checkout without
+    /// authorizing its old epoch there. Callers load it through `Store::inspect`;
+    /// operation paths must continue to use the strict check below.
+    pub(crate) fn check_inspection(&self, context: &Context) -> Result<(), Error> {
+        if context.project_root.len() > 4096
+            || context.project_root.contains('\0')
+            || !std::path::Path::new(&context.project_root).is_absolute()
+        {
+            return Err(Error::Invalid("invalid diagnostic project root"));
+        }
+        let mut retained = context.clone();
+        retained.project_root.clone_from(&self.project_root);
+        self.check(&retained)
+    }
+    pub(crate) fn policy_lineage(&self) -> &str {
+        self.operator["policy_lineage"]
+            .as_str()
+            .unwrap_or(&self.project_id)
+    }
+    /// Operation handles require local runtime continuity; policy trust does not.
+    pub(crate) fn check_operations(&self) -> Result<(), Error> {
+        if self.legacy_preview.is_some() {
+            return Err(Error::Invalid(
+                "historical record inspection cannot authorize operations",
+            ));
+        }
+        super::storage::incarnation::check(self)
+    }
+
     pub(crate) fn check(&self, context: &Context) -> Result<(), Error> {
         if !self.operator.is_object()
             || !self.operator["sources"].is_object()
@@ -324,6 +382,11 @@ impl State {
             return Err(Error::Invalid("incomplete proposal capture"));
         }
         if self.schema_version != 1
+            || self.operator.get("policy_lineage").is_some_and(|lineage| {
+                lineage.as_str().is_none_or(|lineage| {
+                    lineage.len() != 64 || !lineage.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+            })
             || self.project_id != context.project_id
             || self.project_root != context.project_root
             || self.proposals.len() > 1024
@@ -381,10 +444,19 @@ impl State {
         value
     }
     pub(crate) fn record(&mut self, event: Value) {
+        if self.configuration_changes.record(
+            &event,
+            self.active.as_ref().map(super::runtime::Active::revision),
+        ) {
+            self.configuration_changes.trim_queue();
+            self.configuration_changes_dirty = true;
+        }
         if event["kind"].as_str().is_some_and(|kind| {
             [
                 "proposal_rejected",
                 "project_enrolled",
+                "policy_reused",
+                "policy_consent_reused",
                 "integration_review_confirmed",
                 "runtime_activated",
                 "compiled_cache_prepared",
@@ -398,6 +470,7 @@ impl State {
                 "hook_grant_consumed",
             ]
             .contains(&kind)
+                || (kind == "proposal_created" && event["details"]["presentation"].is_object())
         }) {
             self.authorization_events.push(event.clone());
         }
@@ -433,9 +506,11 @@ impl State {
         self.compact_authorization_at(time);
     }
     pub(crate) fn compact_authorization_at(&mut self, time: u64) {
+        self.terminal_receipts.compact(&self.project_id, time);
         super::session_grants::compact(self, time);
         self.read_requests.retain(|r| r.live_id(time).is_some());
         self.run_requests.retain(|r| r.live_id(time).is_some());
+        super::hook_approval::compact_receipts(self, time);
         self.hook_requests.retain(|r| r.retained_id(time).is_some());
         let ids: std::collections::BTreeSet<_> = self
             .read_requests
@@ -449,10 +524,24 @@ impl State {
             )
             .collect();
         self.authorization_events.retain(|event| {
-            (event["kind"] == "project_enrolled"
-                && event["provenance"]["project_id"] == self.project_id
-                && event["provenance"]["project_root"] == self.project_root
-                && event["details"]["bootstrap"] == self.operator["bootstrap"])
+            (event["kind"] == "proposal_created"
+                && self.proposals.iter().any(|proposal| {
+                    event["links"]["proposal_id"] == proposal.id
+                        && proposal.presentation.is_object()
+                        && event["details"]["presentation"] == proposal.presentation
+                }))
+                || (event["kind"] == "policy_consent_reused"
+                    && event["provenance"]["project_id"] == self.project_id
+                    && event["provenance"]["project_root"] == self.project_root
+                    && event["details"]["receipt"] == self.operator["policy_consent"])
+                || (event["kind"] == "policy_reused"
+                    && event["provenance"]["project_id"] == self.project_id
+                    && event["provenance"]["project_root"] == self.project_root
+                    && event["details"]["receipt"] == self.operator["policy_reuse"])
+                || (event["kind"] == "project_enrolled"
+                    && event["provenance"]["project_id"] == self.project_id
+                    && event["provenance"]["project_root"] == self.project_root
+                    && event["details"]["bootstrap"] == self.operator["bootstrap"])
                 || (event["kind"] == "integration_review_confirmed"
                     && event["provenance"]["project_id"] == self.project_id
                     && event["provenance"]["project_root"] == self.project_root

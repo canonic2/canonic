@@ -96,6 +96,17 @@ pub fn compose(inputs: &[(Scope, Lock)]) -> Result<Effective, Error> {
 }
 
 impl Effective {
+    /// Exact selected pack identities and byte digests from the compiled lock.
+    /// Metadata inspection is not a substitute for this active artifact binding.
+    pub(crate) fn pack_artifacts(&self) -> impl Iterator<Item = (&str, &str, &str)> {
+        self.packs.iter().map(|pack| {
+            (
+                pack.selection.id.as_str(),
+                pack.selection.version.as_str(),
+                pack.selection.artifact.digest.as_str(),
+            )
+        })
+    }
     /// Select only a known canonical encoding whose digest already matches the
     /// recorded revision. This does not reinterpret or drop another scope.
     pub(super) fn for_revision(mut self, expected: &str) -> Result<Self, Error> {

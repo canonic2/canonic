@@ -101,8 +101,8 @@ pub(super) fn posix_hook_command(binary: &str, project: &str, agent: &str, event
 }
 
 pub(in crate::review) fn hook_command(
-    binary: &Path,
-    root: &Path,
+    _binary: &Path,
+    _root: &Path,
     agent: &str,
     event: &str,
 ) -> Result<String, Error> {
@@ -116,12 +116,12 @@ pub(in crate::review) fn hook_command(
         if !shell.is_file() {
             return Err(Error::Invalid("Windows PowerShell unavailable"));
         }
-        windows_command(&shell, binary, root, agent, event)
+        windows_command(&shell, Path::new("shield"), Path::new("."), agent, event)
     }
     #[cfg(not(windows))]
     Ok(posix_hook_command(
-        &quoted(binary)?,
-        &quoted(root)?,
+        &quoted(Path::new("shield"))?,
+        &quoted(Path::new("."))?,
         agent,
         event,
     ))
@@ -154,16 +154,140 @@ fn installation(
     })
 }
 
+/// Same-binary maintenance preserves the installed event profile and settings.
+/// Box publications are excluded by the caller; their publisher owns those files.
+pub(super) fn migrate_owned(
+    root: &Path,
+    agent: &str,
+    previous: &Installation,
+    binary: &Path,
+    roots: &[&Path],
+    changes: &mut Vec<Change>,
+) -> Result<Installation, Error> {
+    let adapter = lookup(agent)?;
+    let current_events: Vec<_> = adapter
+        .spec()
+        .events
+        .iter()
+        .map(|(event, _)| *event)
+        .collect();
+    let matches = |events: &[&str]| {
+        events.len() == previous.groups.len()
+            && events
+                .iter()
+                .all(|event| previous.groups.contains_key(*event))
+    };
+    if !matches(&current_events)
+        && !adapter
+            .historical_hook_profiles()
+            .iter()
+            .any(|events| matches(events))
+    {
+        return Err(Error::Invalid(
+            "unknown installed hook profile is preserved",
+        ));
+    }
+    let mut desired = installation(adapter, binary, root, &[])?;
+    desired
+        .groups
+        .retain(|event, _| previous.groups.contains_key(event));
+    desired.settings.clone_from(&previous.settings);
+    let permitted = known_groups(adapter, binary, roots, &desired.groups)?;
+    if previous.groups.iter().any(|(event, group)| {
+        !permitted
+            .get(event)
+            .is_some_and(|groups| groups.contains(group))
+    }) {
+        return Err(Error::Invalid(
+            "unknown recorded hook encoding is preserved",
+        ));
+    }
+    files::edit_optional(root, changes, adapter.spec().hooks_path, |source| {
+        let source = source.ok_or(Error::Invalid("owned hook file missing"))?;
+        adapter
+            .migrate_hooks(source, &permitted, &desired.groups)?
+            .map(Some)
+            .ok_or(Error::Invalid("automatic hook migration unsupported"))
+    })?;
+    desired.mcp = previous
+        .mcp
+        .as_ref()
+        .map(|entry| {
+            adapter
+                .portable_mcp_entry(entry, binary, roots)?
+                .ok_or(Error::Invalid("automatic MCP migration unsupported"))
+        })
+        .transpose()?;
+    if let Some(path) = adapter.spec().mcp_path {
+        files::edit_optional(root, changes, path, |source| {
+            if !source.is_some_and(|source| adapter.has_mcp_entry(source).unwrap_or(false)) {
+                return Err(Error::Invalid("owned MCP entry missing"));
+            }
+            Ok(Some(adapter.merge_mcp(
+                source,
+                previous.mcp.as_deref(),
+                desired.mcp.as_deref(),
+            )?))
+        })?;
+    }
+    Ok(desired)
+}
+
+fn known_groups(
+    adapter: &dyn AgentAdapter,
+    binary: &Path,
+    roots: &[&Path],
+    portable: &HookGroups,
+) -> Result<agents::setup::PortableHookGroups, Error> {
+    let mut result: agents::setup::PortableHookGroups = portable
+        .iter()
+        .map(|(event, group)| (event.clone(), vec![group.clone()]))
+        .collect();
+    #[cfg(not(windows))]
+    for root in roots.iter().take(3) {
+        let binary = quoted(binary)?;
+        let root = quoted(root)?;
+        for event in portable.keys() {
+            let commands = [
+                posix_hook_command(&binary, &root, adapter.spec().id, event),
+                format!(
+                    "{binary} __internal native-hook --project {root} --agent {} || exit 2",
+                    adapter.spec().id
+                ),
+            ];
+            for command in commands {
+                let group = adapter.hook_group(&command);
+                let entries = result.get_mut(event).expect("portable event");
+                if !entries.contains(&group) {
+                    entries.push(group);
+                }
+            }
+        }
+    }
+    #[cfg(windows)]
+    let _ = (adapter, binary, roots);
+    Ok(result)
+}
+
 /// Inspect Box's published callbacks without claiming ownership of its files.
 pub(super) fn published_hooks(
     root: &Path,
     agent: &str,
     binary: &Path,
+    previous_roots: &[&Path],
 ) -> Result<Option<bool>, Error> {
     let adapter = lookup(agent)?;
     let expected = installation(adapter, binary, root, &[])?;
     let source = files::read(root, adapter.spec().hooks_path)?;
-    let captured = adapter.capture_hooks(source.as_deref(), &expected.groups)?;
+    let groups = published_groups(
+        adapter,
+        binary,
+        root,
+        previous_roots,
+        source.as_deref(),
+        expected.groups,
+    )?;
+    let captured = adapter.capture_hooks(source.as_deref(), &groups)?;
     if captured.is_empty() {
         return Ok(None);
     }
@@ -176,11 +300,50 @@ pub(super) fn published_hooks(
     let mut diagnostics = Vec::new();
     adapter.diagnose_published_hooks(
         source.as_deref(),
-        &expected.groups,
+        &groups,
         extra.as_deref(),
         &mut diagnostics,
     )?;
-    Ok(Some(captured == expected.groups && diagnostics.is_empty()))
+    Ok(Some(captured == groups && diagnostics.is_empty()))
+}
+
+/// Older Box publications pinned the same executable and a checkout root.
+/// Recognize exact historical callbacks without adopting duplicate or edited
+/// groups, and without asking Box to rewrite working host files.
+fn published_groups(
+    adapter: &dyn AgentAdapter,
+    binary: &Path,
+    root: &Path,
+    previous_roots: &[&Path],
+    source: Option<&str>,
+    portable: HookGroups,
+) -> Result<HookGroups, Error> {
+    match adapter.capture_hooks(source, &portable) {
+        Ok(_) => Ok(portable),
+        Err(error) => {
+            #[cfg(not(windows))]
+            for root in std::iter::once(root).chain(previous_roots.iter().copied().take(2)) {
+                let binary = quoted(binary)?;
+                let project = quoted(root)?;
+                let historical = adapter
+                    .spec()
+                    .events
+                    .iter()
+                    .map(|(event, _)| {
+                        let command =
+                            posix_hook_command(&binary, &project, adapter.spec().id, event);
+                        ((*event).into(), adapter.hook_group(&command))
+                    })
+                    .collect();
+                if adapter.capture_hooks(source, &historical).is_ok() {
+                    return Ok(historical);
+                }
+            }
+            #[cfg(windows)]
+            let _ = (binary, root, previous_roots);
+            Err(error)
+        }
+    }
 }
 
 /// Capture only exact generated entries for initial operator review.
@@ -254,11 +417,19 @@ fn prepare_adapter(
     if previous.is_none() && binary.is_none() {
         return Ok(None);
     }
+    if binary.is_some() {
+        adapter.check_native_setup(root, &|name| {
+            changes
+                .iter()
+                .find(|change| change.path == name)
+                .map(|change| change.after.clone())
+        })?;
+    }
     let mut desired = binary
         .map(|b| installation(adapter, b, root, approved))
         .transpose()?;
     let empty = HookGroups::new();
-    files::edit(root, changes, adapter.spec().hooks_path, |source| {
+    files::edit_optional(root, changes, adapter.spec().hooks_path, |source| {
         let groups = desired.as_ref().map_or(&empty, |p| &p.groups);
         let hooks = if repair_hooks {
             adapter.repair_hooks(source, groups)?
@@ -273,7 +444,7 @@ fn prepare_adapter(
         if let Some(desired) = &mut desired {
             desired.settings = settings.ownership;
         }
-        Ok(settings.source)
+        Ok((desired.is_some() || !settings.source.trim().is_empty()).then_some(settings.source))
     })?;
     if let Some(path) = adapter.spec().mcp_path {
         files::edit_optional(root, changes, path, |source| {
@@ -350,15 +521,7 @@ fn compatible_historical_hooks(
     binary: &Path,
     installed: &Installation,
 ) -> bool {
-    let profiles: &[&[&str]] = match adapter.spec().id {
-        "claude" => &[&["PreToolUse", "PostToolUse", "PostToolUseFailure"]],
-        "codex" => &[
-            &["PreToolUse", "PostToolUse"],
-            &["PreToolUse", "PermissionRequest", "PostToolUse"],
-        ],
-        _ => return false,
-    };
-    let profile = profiles.iter().find(|profile| {
+    let profile = adapter.historical_hook_profiles().iter().find(|profile| {
         installed.groups.len() == profile.len()
             && profile
                 .iter()

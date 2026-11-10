@@ -11,6 +11,10 @@ pub(super) struct State {
     pub(super) stopped: bool,
     pub(super) brace_expansion: Option<bool>,
     pub(super) cwd_unknown: bool,
+    pub(super) cwd_paths: Vec<super::cwd::Directory>,
+    pub(super) cwd_success: Option<super::cwd::Set>,
+    pub(super) cwd_failure: Option<super::cwd::Set>,
+    pub(super) filesystem_unknown: bool,
     pub(super) environment_unknown: bool,
     pub(super) functions: BTreeMap<String, Vec<FunctionBinding>>,
     pub(super) defined_functions: std::collections::BTreeSet<String>,
@@ -42,7 +46,18 @@ impl State {
         if other.stopped && !self.stopped {
             return;
         }
-        self.cwd_unknown |= other.cwd_unknown;
+        let before = self.directories();
+        let other_directories = other.directories();
+        let mut success = self.cwd_success.clone().unwrap_or_else(|| before.clone());
+        success.join(other.cwd_success.as_ref().unwrap_or(&other_directories));
+        let mut failure = self.cwd_failure.clone().unwrap_or_else(|| before.clone());
+        failure.join(other.cwd_failure.as_ref().unwrap_or(&other_directories));
+        let mut directories = before;
+        directories.join(&other_directories);
+        self.set_directories(directories);
+        self.cwd_success = Some(success);
+        self.cwd_failure = Some(failure);
+        self.filesystem_unknown |= other.filesystem_unknown;
         self.environment_unknown |= other.environment_unknown;
         if self.brace_expansion != other.brace_expansion {
             self.brace_expansion = None;
@@ -266,4 +281,5 @@ pub(super) fn taint(node: &Node, state: &mut State) {
         Node::Expression { .. } => state.environment_unknown = true,
         Node::Function { .. } | Node::Group { subshell: true, .. } | Node::Background { .. } => {}
     }
+    state.command_outcomes();
 }

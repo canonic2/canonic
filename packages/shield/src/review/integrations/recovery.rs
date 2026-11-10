@@ -143,6 +143,9 @@ impl Prepared {
         context: &Context,
         checkpoint: Checkpoint<'_>,
     ) -> Result<Value, Error> {
+        crate::review::project::checkpoint(context)?;
+        let publication =
+            crate::review::publication::ProjectionLease::acquire(Path::new(&context.project_root))?;
         if let Some(plan) = &self.plan {
             Store::open(Path::new(&context.project_root))?.update_checkpoint(
                 context,
@@ -172,8 +175,14 @@ impl Prepared {
             )?;
             let mut metadata = self.metadata.clone();
             metadata["integration_pending"] = json!(plan);
-            let mut receipt =
-                setup::finish_checked(context, &metadata, Some(plan), None, checkpoint)?;
+            let mut receipt = setup::finish_guarded(
+                context,
+                &metadata,
+                Some(plan),
+                None,
+                checkpoint,
+                &publication,
+            )?;
             receipt["pending_resolution"] = json!(self.action);
             return Ok(receipt);
         }

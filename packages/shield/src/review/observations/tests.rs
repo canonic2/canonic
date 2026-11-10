@@ -8,6 +8,44 @@ fn operation() -> Value {
 }
 
 #[test]
+fn optional_pack_omission_preserves_prior_diagnostic_counts_and_marks_only_actual_removals() {
+    for with_packs in [false, true] {
+        let (_root, context) = review::tests::enrolled();
+        let mut details = json!({"operation":operation(),"host_decision":"allow",
+            "missing":["matched_rule_diagnostics"],"omitted":{"matches":7},
+            "evaluation":{"evaluation":{"reason":"Acme bounded evidence"}}});
+        if with_packs {
+            details["evaluation"]["evaluation"]["packs"] = json!(["x".repeat(4200)]);
+        } else {
+            details["diagnostic"] = json!("x".repeat(4200));
+        }
+        let receipt = decision(&context, details).unwrap();
+        let state = Store::open(Path::new(&context.project_root))
+            .unwrap()
+            .read_history()
+            .unwrap();
+        let event = state
+            .events
+            .iter()
+            .find(|event| event["event_id"] == receipt["event_id"])
+            .unwrap();
+        assert_eq!(event["details"]["omitted"]["matches"], 7);
+        let missing = event["details"]["missing"].as_array().unwrap();
+        assert!(
+            missing
+                .iter()
+                .any(|value| value == "matched_rule_diagnostics")
+        );
+        assert_eq!(
+            missing
+                .iter()
+                .any(|value| value == "selected_pack_metadata"),
+            with_packs
+        );
+    }
+}
+
+#[test]
 fn pack_candidates_preserve_current_alias_source_and_installed_identity() {
     let (_root, context) = review::tests::enrolled();
     let registry = assert_fs::TempDir::new().unwrap();

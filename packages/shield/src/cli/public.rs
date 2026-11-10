@@ -2,6 +2,8 @@
 use crate::policy::Profile;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
+mod sdk;
+pub(crate) use sdk::{Sdk, SdkCommand};
 
 /// Shield's project policy and approval interface.
 #[derive(Parser)]
@@ -57,12 +59,14 @@ pub enum PublicCommand {
     Enable,
     /// Pause this project's native Shield checks after confirmation, preserving policy and setup.
     Disable,
-    /// Check configuration and installation prerequisites; changes nothing.
+    /// Check configuration and installation prerequisites without changing policy.
     Doctor,
     /// Read and search the documentation bundled with this version, without enrollment.
     Docs(Docs),
     /// Set up agent hooks and MCP, or serve Shield's MCP tools.
     Mcp(Mcp),
+    /// Register an explicitly reviewed read-only SDK mapping.
+    Sdk(Sdk),
     /// Change whether agents may read or change protected settings and policy files.
     Protection(Protection),
     /// Show policy or review pending changes and history settings.
@@ -369,7 +373,12 @@ pub enum PackCommand {
     /// Update one selection or all tracking selections, after confirmation.
     Update { reference: Option<String> },
     /// Remove an installed selection after reviewing its effects.
-    Remove { reference: String },
+    Remove {
+        reference: String,
+        /// Disable shared selections or remove local selections in your local configuration.
+        #[arg(long)]
+        local: bool,
+    },
     /// Change a selection's variable values and rule overrides, after confirmation.
     Configure {
         /// Installed pack name or `pack:<uuid>` selector.
@@ -410,6 +419,8 @@ pub struct Registry {
 /// Registry source operations.
 #[derive(Subcommand)]
 pub enum RegistryCommand {
+    /// Review delegated root roles and signed revocations for a custom HTTPS source.
+    Trust { name: String },
     /// List effective registry sources.
     List,
     /// Enroll a local directory or signed HTTPS registry, after confirmation.
@@ -519,6 +530,41 @@ pub enum HistoryCommand {
 mod mcp_setup_tests {
     use super::*;
     use clap::Parser;
+
+    #[test]
+    fn sdk_setup_requires_the_fixed_adapter_and_has_no_confirmation_bypass() {
+        let cli = Cli::try_parse_from(["shield", "sdk", "setup", "--adapter", "claude-read-only"])
+            .unwrap();
+        assert!(matches!(cli.command, PublicCommand::Sdk(Sdk {
+            command: SdkCommand::Setup { adapter }
+        }) if adapter == "claude-read-only"));
+        for args in [
+            vec!["shield", "sdk", "setup"],
+            vec!["shield", "sdk", "setup", "--adapter", "claude"],
+            vec![
+                "shield",
+                "sdk",
+                "setup",
+                "--adapter",
+                "claude-read-only",
+                "--yes",
+            ],
+        ] {
+            assert!(Cli::try_parse_from(args).is_err());
+        }
+    }
+
+    #[test]
+    fn pack_removal_accepts_the_local_layer_flag() {
+        let cli =
+            Cli::try_parse_from(["shield", "pack", "remove", "acme/tools", "--local"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            PublicCommand::Pack(Pack {
+                command: PackCommand::Remove { local: true, .. }
+            })
+        ));
+    }
 
     #[test]
     fn shield_mode_commands_select_a_project_without_auto_confirmation_flags() {

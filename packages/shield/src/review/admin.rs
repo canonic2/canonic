@@ -20,6 +20,8 @@ pub(in crate::review) mod registries;
 #[derive(Deserialize)]
 #[serde(tag = "operation", deny_unknown_fields)]
 enum Input {
+    #[serde(rename = "registry_trust")]
+    RegistryTrust { name: String },
     #[serde(rename = "enable")]
     Enable {},
     #[serde(rename = "disable")]
@@ -91,10 +93,11 @@ enum Scope {
 }
 
 enum Operation {
+    RegistryTrust(Box<super::registry_trust::Prepared>),
     Mode(super::mode::Prepared),
     Protection(protection::Prepared),
     Cache(Option<PathBuf>),
-    Registry(registries::Prepared, Scope),
+    Registry(Box<registries::Prepared>, Scope),
     Repair(Box<State>),
     History(policy::History),
     Reject(policy::Reject),
@@ -118,6 +121,12 @@ pub(super) struct Prepared {
 }
 
 impl Prepared {
+    pub(super) fn committed_result(&self) -> Option<Value> {
+        match &self.operation {
+            Operation::Registry(plan, _) => plan.committed_result(),
+            _ => None,
+        }
+    }
     pub(super) fn review(&self) -> Value {
         self.review.clone()
     }
@@ -203,6 +212,7 @@ impl Prepared {
         });
         let context = self.target.as_ref().unwrap_or(context);
         let mut receipt = match self.operation {
+            Operation::RegistryTrust(plan) => (*plan).commit(context, checkpoint),
             Operation::Mode(plan) => plan.commit(context, checkpoint),
             Operation::Protection(plan) => plan.commit(context, checkpoint),
             Operation::Cache(directory) => match directory {
@@ -212,7 +222,7 @@ impl Prepared {
                 None => super::cache::prepare_committed(context, checkpoint),
             },
             Operation::Registry(plan, scope) => {
-                plan.commit((scope == Scope::Project).then_some(context), checkpoint)
+                (*plan).commit((scope == Scope::Project).then_some(context), checkpoint)
             }
             Operation::Repair(before) => super::publication::reconcile(context, &before),
             Operation::History(plan) => plan.commit(context, checkpoint),
@@ -272,6 +282,7 @@ pub(super) fn supports(name: &str) -> bool {
             | "disable"
             | "cache_prepare"
             | "registry_add"
+            | "registry_trust"
             | "registry_remove"
             | "registry_default"
             | "policy_repair"
@@ -304,7 +315,7 @@ pub(super) fn prepare(
     let caller = context;
     let context = target.as_ref().unwrap_or(context);
     let dry_run = matches!(input, Input::Setup { dry_run: true, .. });
-    let (operation, review) = prepare_operation(context, input)?;
+    let (operation, review) = prepare_operation(context, input, checkpoint)?;
     checkpoint()?;
     Ok(Prepared {
         project_id: caller.project_id.clone(),
@@ -317,8 +328,17 @@ pub(super) fn prepare(
     })
 }
 
-fn prepare_operation(context: &Context, input: Input) -> Result<(Operation, Value), Error> {
+fn prepare_operation(
+    context: &Context,
+    input: Input,
+    checkpoint: Checkpoint<'_>,
+) -> Result<(Operation, Value), Error> {
     Ok(match input {
+        Input::RegistryTrust { name } => {
+            let plan = super::registry_trust::Prepared::new(context, &name, checkpoint)?;
+            let review = plan.review();
+            (Operation::RegistryTrust(Box::new(plan)), review)
+        }
         Input::Enable {} | Input::Disable {} => {
             let plan = super::mode::Prepared::new(context, matches!(input, Input::Enable {}))?;
             let review = plan.review();
@@ -607,7 +627,7 @@ fn registry(
         change,
     )?;
     let review = plan.review();
-    Ok((Operation::Registry(plan, scope), review))
+    Ok((Operation::Registry(Box::new(plan), scope), review))
 }
 
 #[cfg(test)]

@@ -476,7 +476,13 @@ impl Handler for Bootstrap {
         }
         if call.name == "status" {
             return match crate::review::bootstrap::inspect(&self.project) {
-                Ok(probe) => success(probe.report()),
+                Ok(probe) => {
+                    let mut report = probe.report();
+                    // This connection was explicitly opened for first-use
+                    // review. A diagnostic header alone cannot promote it.
+                    report["bootstrap_required"] = json!(true);
+                    success(report)
+                }
                 Err(error) => failure("enrollment_unavailable", &error.to_string()),
             };
         }
@@ -491,6 +497,13 @@ impl Handler for Bootstrap {
         if let Some(request) = context.request_context() {
             return self.modern(plan, &call, request);
         }
+        self.legacy_review(plan)
+    }
+}
+
+impl Bootstrap {
+    /// The legacy confirmation owns every captured continuation until answered.
+    fn legacy_review(&self, plan: Arc<Plan>) -> Outcome {
         let message = self.message(&plan);
         let pending = self.current.clone();
         let accepted = self.accepted.clone();

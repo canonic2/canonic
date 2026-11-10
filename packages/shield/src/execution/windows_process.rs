@@ -1,6 +1,5 @@
 //! Suspended native launches, independent kill-on-close ownership and bounded Job cleanup.
 use super::Error;
-use crate::policy;
 use process_wrap::std::{ChildWrapper, CommandWrap, CommandWrapper, CreationFlags, JobObject};
 use std::{
     io,
@@ -125,7 +124,8 @@ impl Drop for ConsoleModes {
 }
 
 impl OwnedChild {
-    pub(super) fn spawn(request: &policy::Request) -> Result<Self, Error> {
+    pub(super) fn spawn(launch: &super::launch::EffectiveLaunch) -> Result<Self, Error> {
+        let request = launch.request();
         // This private CLI consumer owns its process lifetime. Windows carries
         // this search policy into unpackaged child processes. Combined with a
         // cleared PATH, a missing OS DLL cannot fall back to the project cwd.
@@ -135,7 +135,7 @@ impl OwnedChild {
         let mut command = Command::new(&request.executable);
         command
             .env_clear()
-            .envs(super::windows_binding::environment_for(request)?)
+            .envs(launch.environment())
             .args(&request.arguments)
             .current_dir(&request.cwd)
             .stdin(Stdio::inherit())

@@ -11,14 +11,38 @@ pub(in crate::review) fn installed(
     config: &Value,
     candidate: &Value,
 ) -> Result<Vec<Value>, crate::review::Error> {
-    let source_identity = crate::policy::fingerprint(b"shield-project-files");
-    let rows = config["packs"]
+    selection_rows(config, candidate, "packs")
+}
+
+/// Disabled shared artifacts retain independent metadata for the shared lock.
+pub(in crate::review) fn disabled(
+    config: &Value,
+    candidate: &Value,
+) -> Result<Vec<Value>, crate::review::Error> {
+    if config.get("disabled").is_none() {
+        return Ok(Vec::new());
+    }
+    selection_rows(config, candidate, "disabled")
+}
+
+fn selection_rows(
+    config: &Value,
+    candidate: &Value,
+    field: &str,
+) -> Result<Vec<Value>, crate::review::Error> {
+    let project_identity = crate::policy::fingerprint(b"shield-project-files");
+    let rows = config[field]
         .as_array()
         .ok_or(crate::review::Error::Invalid("packs missing"))?;
     Ok(rows.iter().enumerate().map(|(index, row)| {
-        let digest = crate::policy::fingerprint(candidate["packs"][index].as_str().unwrap_or_default().as_bytes());
+        let source_identity = row["registry_identity"].as_str().unwrap_or(&project_identity);
+        let digest = crate::policy::fingerprint(candidate[field][index].as_str().unwrap_or_default().as_bytes());
         let seed = crate::policy::fingerprint(format!("{source_identity}:{digest}:{index}").as_bytes());
-        json!({"selector":format!("pack:{}-{}-{}-{}-{}",&seed[..8],&seed[8..12],&seed[12..16],&seed[16..20],&seed[20..32]),"id":row["id"],"version":row["version"],"profile":row["profile"],"digest":digest,"source_identity":source_identity,"source_alias":"project-files","source":{"identity":source_identity,"location":".shield","key":null},"pinned":true,"direct":true})
+        let mut installed = json!({"selector":format!("pack:{}-{}-{}-{}-{}",&seed[..8],&seed[8..12],&seed[12..16],&seed[16..20],&seed[20..32]),"id":row["id"],"version":row["version"],"profile":row["profile"],"digest":digest,"source_identity":source_identity,"source_alias":"project-files","source":{"identity":source_identity,"location":".shield","key":null},"pinned":true,"direct":true});
+        if row["layer"] == "local" {
+            installed["layer"] = json!("local");
+        }
+        installed
     }).collect())
 }
 
@@ -67,6 +91,68 @@ fn read_artifact(root: &Path, path: &str) -> Result<String, Error> {
     application::read(&resolved)
 }
 
+/// Authoring inputs identify an already reviewed policy even when a fresh
+/// checkout does not contain its ignored pack cache.
+pub(in crate::review) fn authored(config: &Path) -> Result<Value, Error> {
+    let source_root = config.parent().ok_or(Error::Context)?.canonicalize()?;
+    let config = regular_file(config)?;
+    let root = config.parent().ok_or(Error::Context)?;
+    if root != source_root {
+        return Err(Error::Context);
+    }
+    let shared = application::read(&config)?;
+    let local = root.join("config.local.yml");
+    let local = if local.exists() {
+        let local = regular_file(&local)?;
+        if !local.starts_with(root) {
+            return Err(Error::Context);
+        }
+        Some(application::read(&local)?)
+    } else {
+        None
+    };
+    let candidate =
+        Candidate::from_yaml(&configuration::layers::merge(&shared, local.as_deref())?)?;
+    let rules = candidate
+        .rules_path()
+        .map(|path| read_artifact(root, path))
+        .transpose()?;
+    let local_rules = candidate
+        .local_rules_path()
+        .map(|path| read_artifact(root, path))
+        .transpose()?;
+    Ok(json!({"config":shared,"local_config":local,"rules":rules,"local_rules":local_rules}))
+}
+
+/// Present artifacts must agree exactly with the private receipt. Missing pack
+/// artifacts use that receipt's retained bytes; source edits cannot do so.
+pub(in crate::review) fn matches_artifacts(config: &Path, saved: &Value) -> Result<bool, Error> {
+    let root = regular_file(config)?
+        .parent()
+        .ok_or(Error::Context)?
+        .to_owned();
+    let candidate = Candidate::from_yaml(&configuration::layers::merge(
+        saved["config"].as_str().ok_or(Error::Context)?,
+        saved["local_config"].as_str(),
+    )?)?;
+    for (paths, field) in [
+        (candidate.pack_paths().collect::<Vec<_>>(), "packs"),
+        (candidate.disabled_paths().collect::<Vec<_>>(), "disabled"),
+    ] {
+        for (index, path) in paths.iter().enumerate() {
+            match std::fs::symlink_metadata(root.join(path)) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+                Ok(_) => {}
+            }
+            if saved[field][index].as_str() != Some(read_artifact(&root, path)?.as_str()) {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
+
 fn regular_file(path: &Path) -> Result<PathBuf, Error> {
     let resolved = path.canonicalize()?;
     if !resolved.is_file() {
@@ -81,6 +167,24 @@ fn regular_file(path: &Path) -> Result<PathBuf, Error> {
 mod tests {
     use super::*;
     use assert_fs::prelude::*;
+
+    #[test]
+    fn source_only_metadata_preserves_shared_and_local_replacement_identities() {
+        let config = json!({"packs":[{"id":"acme/tools","registry_identity":"acme","version":"2.0.0","profile":"strict","layer":"local"}],
+            "disabled":[{"id":"acme/tools","registry_identity":"acme","version":"1.0.0","profile":"recommended"}]});
+        let candidate = json!({"packs":["local artifact"],"disabled":["shared artifact"]});
+        let active = installed(&config, &candidate).unwrap();
+        let shared = disabled(&config, &candidate).unwrap();
+        assert_eq!(active[0]["source_identity"], "acme");
+        assert_eq!(active[0]["source"]["identity"], "acme");
+        assert_eq!(active[0]["layer"], "local");
+        assert_eq!(shared[0]["source_identity"], "acme");
+        assert!(shared[0].get("layer").is_none());
+        assert_eq!(
+            shared[0]["digest"],
+            crate::policy::fingerprint(b"shared artifact")
+        );
+    }
 
     #[test]
     fn capture_retains_each_file_as_written() {

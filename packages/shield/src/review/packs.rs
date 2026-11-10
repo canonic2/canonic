@@ -515,11 +515,27 @@ pub(super) fn rebuild(
         return Err(policy::Error::ArtifactMismatch.into());
     }
     let previous = crate::configuration::layers::merged(candidate)?;
+    let selections = rebuilt_selections(&previous, rows, bytes)?;
+    rebuild_layers(candidate, rows, bytes, rules, &previous, &selections)
+}
+
+fn rebuilt_selections(
+    previous: &Value,
+    rows: &[Value],
+    bytes: &[String],
+) -> Result<Vec<Value>, Error> {
     let mut selections = Vec::new();
     for (index, row) in rows.iter().enumerate() {
-        let mut selection = json!({"id":row["id"],"registry_identity":row["source_identity"],"version":row["version"],"profile":row["profile"],"path":format!("cache/{}.yml",row["digest"].as_str().unwrap_or_default())});
         let artifact = bytes.get(index).map(String::as_str);
-        let earlier = earlier(row, &previous);
+        let earlier = earlier(row, previous);
+        let path = earlier
+            .filter(|entry| entry["version"] == row["version"])
+            .and_then(|entry| entry["path"].as_str())
+            .map_or_else(
+                || format!("cache/{}.yml", row["digest"].as_str().unwrap_or_default()),
+                str::to_owned,
+            );
+        let mut selection = json!({"id":row["id"],"registry_identity":row["source_identity"],"version":row["version"],"profile":row["profile"],"path":path});
         let binding = binding(row, earlier, artifact)?;
         if !binding.variables.is_empty() {
             selection["variables"] = json!(binding.variables);
@@ -527,16 +543,25 @@ pub(super) fn rebuild(
         if !binding.overrides.is_empty() {
             selection["overrides"] = json!(binding.overrides);
         }
-        if row["layer"] == "local"
-            || (row.get("layer").is_none() && earlier.is_some_and(|e| e["layer"] == "local"))
-        {
+        if local_selection(row, previous) {
             selection["layer"] = json!("local");
         } else if let Some(overlay) = overlay(row, earlier, artifact)? {
             selection["local"] = json!(overlay);
         }
         selections.push(selection);
     }
-    // Re-adding a shared selection re-enables it; other disabled ones are kept.
+    Ok(selections)
+}
+
+fn rebuild_layers(
+    candidate: &Value,
+    rows: &mut [Value],
+    bytes: &[String],
+    rules: Option<&str>,
+    previous: &Value,
+    selections: &[Value],
+) -> Result<Value, Error> {
+    // Shared selections re-enable disabled rows; local replacements retain them.
     let mut disabled = Vec::new();
     let mut retained = Vec::new();
     for (index, entry) in previous["disabled"]
@@ -545,7 +570,10 @@ pub(super) fn rebuild(
         .flatten()
         .enumerate()
     {
-        if !rows.iter().any(|row| same_selection(entry, row)) {
+        if !rows
+            .iter()
+            .any(|row| same_selection(entry, row) && !local_selection(row, previous))
+        {
             disabled.push(entry.clone());
             retained.push(
                 candidate["disabled"][index]
@@ -554,6 +582,32 @@ pub(super) fn rebuild(
                     .to_owned(),
             );
         }
+    }
+    for (index, entry) in previous["packs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        if entry["layer"] == "local"
+            || !rows
+                .iter()
+                .any(|row| same_selection(entry, row) && local_selection(row, previous))
+        {
+            continue;
+        }
+        let mut shared = entry.clone();
+        shared
+            .as_object_mut()
+            .ok_or(Error::Invalid("invalid pack selection"))?
+            .remove("local");
+        disabled.push(shared);
+        retained.push(
+            candidate["packs"][index]
+                .as_str()
+                .ok_or(Error::Invalid("pack bytes missing"))?
+                .to_owned(),
+        );
     }
     let mut config = json!({"schema_version":1,"packs":selections});
     for field in [
@@ -625,6 +679,12 @@ fn same_selection(entry: &Value, row: &Value) -> bool {
     entry["id"] == row["id"]
         && (entry["registry_identity"].is_null()
             || entry["registry_identity"] == row["source_identity"])
+}
+
+fn local_selection(row: &Value, previous: &Value) -> bool {
+    row["layer"] == "local"
+        || (row.get("layer").is_none()
+            && earlier(row, previous).is_some_and(|entry| entry["layer"] == "local"))
 }
 
 /// The previous configuration's entry for a row's selection.
@@ -761,20 +821,30 @@ pub(super) fn add_layer(
     local: bool,
 ) -> Result<(Value, Value), Error> {
     if !local {
+        refresh_after_mutation(before, &candidate, &mut meta)?;
         return Ok((candidate, meta));
     }
     let known: Vec<Value> = state::metadata(before)["installed"]
         .as_array()
         .into_iter()
         .flatten()
-        .map(|row| row["selector"].clone())
+        .cloned()
         .collect();
     let rows = meta["installed"]
         .as_array_mut()
         .ok_or(Error::Invalid("installed packs missing"))?;
     let mut added = false;
     for row in rows.iter_mut() {
-        if !known.contains(&row["selector"]) {
+        if known
+            .iter()
+            .find(|old| old["selector"] == row["selector"])
+            .is_none_or(|old| {
+                old["version"] != row["version"]
+                    || old["profile"] != row["profile"]
+                    || old["direct"] != row["direct"]
+                    || old["pinned"] != row["pinned"]
+            })
+        {
             row["layer"] = json!("local");
             added = true;
         }
@@ -786,8 +856,226 @@ pub(super) fn add_layer(
     }
     let artifacts: Vec<String> = serde_json::from_value(candidate["packs"].clone())
         .map_err(|_| Error::Invalid("pack artifacts missing"))?;
-    let candidate = rebuild(&candidate, rows, &artifacts, None)?;
+    let candidate = rebuild(&before.candidates["project"], rows, &artifacts, None)?;
+    retain_disabled_metadata(before, &candidate, &mut meta)?;
+    meta["shared_installed"] = json!(crate::review::publication::projections::shared_rows(
+        &before.candidates["project"],
+        &before.operator
+    )?);
     Ok((candidate, meta))
+}
+
+/// Disabled releases keep the shared lock's original source and selection metadata.
+/// Older source-only states retained their bytes without an operator row. Recover
+/// only that missing description, without assigning registry signing provenance.
+pub(in crate::review) fn repair_disabled_metadata(
+    candidate: &Value,
+    meta: &mut Value,
+) -> Result<(), Error> {
+    let config = crate::configuration::layers::merged(candidate)?;
+    let selections = config["disabled"].as_array().cloned().unwrap_or_default();
+    let artifacts = candidate["disabled"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    if selections.len() != artifacts.len() {
+        return Err(Error::Invalid("disabled pack bytes missing"));
+    }
+    let known: Vec<Value> = meta["disabled"]
+        .as_array()
+        .into_iter()
+        .chain(meta["installed"].as_array())
+        .chain(meta["shared_installed"].as_array())
+        .flatten()
+        .cloned()
+        .collect();
+    let mut recovered_rows = None;
+    let mut rows = Vec::new();
+    for (index, entry) in selections.iter().enumerate() {
+        let bytes = artifacts[index]
+            .as_str()
+            .ok_or(Error::Invalid("disabled pack bytes missing"))?;
+        let digest = policy::fingerprint(bytes.as_bytes());
+        if let Some(row) = known
+            .iter()
+            .find(|row| same_selection(entry, row) && row["version"] == entry["version"])
+        {
+            if row["digest"] != digest {
+                return Err(policy::Error::ArtifactMismatch.into());
+            }
+            let mut row = row.clone();
+            row["profile"] = entry["profile"].clone();
+            row.as_object_mut()
+                .ok_or(Error::Invalid("invalid pack metadata"))?
+                .remove("layer");
+            rows.push(row);
+            continue;
+        }
+        let pack = policy::Pack::from_retained_yaml(bytes)?;
+        if entry["id"] != pack.id() || entry["version"] != pack.version() {
+            return Err(policy::Error::ArtifactMismatch.into());
+        }
+        if recovered_rows.is_none() {
+            recovered_rows = Some(crate::review::integrations::project_sources::disabled(
+                &config, candidate,
+            )?);
+        }
+        let mut recovered = recovered_rows.as_ref().expect("recovered rows")[index].clone();
+        recovered["recovered_project_files"] = json!(true);
+        recovered["trust"] = json!("unverified");
+        rows.push(recovered);
+    }
+    if !rows.is_empty() {
+        meta["disabled"] = json!(rows);
+    }
+    Ok(())
+}
+
+fn retain_disabled_metadata(
+    before: &crate::review::model::State,
+    candidate: &Value,
+    meta: &mut Value,
+) -> Result<(), Error> {
+    let config = crate::configuration::layers::merged(candidate)?;
+    let mut original = before.operator.clone();
+    repair_disabled_metadata(&before.candidates["project"], &mut original)?;
+    let known: Vec<_> = original["disabled"]
+        .as_array()
+        .into_iter()
+        .chain(original["installed"].as_array())
+        .flatten()
+        .collect();
+    let mut disabled = Vec::new();
+    for entry in config["disabled"].as_array().into_iter().flatten() {
+        let mut row = (**known
+            .iter()
+            .find(|row| same_selection(entry, row) && row["version"] == entry["version"])
+            .ok_or(Error::Invalid("disabled pack metadata missing"))?)
+        .clone();
+        row["profile"] = entry["profile"].clone();
+        row.as_object_mut()
+            .ok_or(Error::Invalid("invalid pack metadata"))?
+            .remove("layer");
+        disabled.push(row);
+    }
+    if disabled.is_empty() {
+        meta.as_object_mut()
+            .ok_or(Error::Invalid("invalid operator metadata"))?
+            .remove("disabled");
+    } else {
+        meta["disabled"] = json!(disabled);
+    }
+    Ok(())
+}
+
+/// Refresh shared dependency provenance after a shared graph mutation.
+pub(in crate::review) fn refresh_shared_metadata(
+    candidate: &Value,
+    meta: &mut Value,
+) -> Result<(), Error> {
+    repair_disabled_metadata(candidate, meta)?;
+    meta.as_object_mut()
+        .ok_or(Error::Invalid("invalid operator metadata"))?
+        .remove("shared_installed");
+    let mut rows = crate::review::publication::projections::shared_rows(candidate, meta)?;
+    let effective = crate::configuration::layers::merged(candidate)?;
+    let mut declarations = Vec::new();
+    for (field, artifacts) in [("packs", "packs"), ("disabled", "disabled")] {
+        for (index, selection) in effective[field]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            if selection["layer"] == "local" {
+                continue;
+            }
+            let bytes = candidate[artifacts][index]
+                .as_str()
+                .ok_or(Error::Invalid("pack bytes missing"))?;
+            let parent = rows
+                .iter()
+                .find(|row| same_selection(selection, row))
+                .ok_or(Error::Invalid("shared pack metadata missing"))?
+                .clone();
+            declarations.push((
+                parent,
+                policy::Pack::from_retained_yaml(bytes)?
+                    .dependencies()
+                    .to_vec(),
+            ));
+        }
+    }
+    for row in &mut rows {
+        row["incoming"] = json!(declarations.iter().flat_map(|(parent, edges)| edges.iter().filter(|edge| {
+            row["id"] == edge.pack
+                && edge.registry.as_deref().or_else(|| parent["source_identity"].as_str()) == row["source_identity"].as_str()
+        }).map(|edge| json!({"parent":parent["id"],"registry_identity":parent["source_identity"],"requirement":edge.requirement}))).collect::<Vec<_>>());
+    }
+    meta["shared_installed"] = json!(rows);
+    Ok(())
+}
+
+fn refresh_after_mutation(
+    before: &crate::review::model::State,
+    candidate: &Value,
+    meta: &mut Value,
+) -> Result<(), Error> {
+    let previous = crate::review::publication::projections::shared_rows(
+        &before.candidates["project"],
+        &before.operator,
+    )?;
+    repair_disabled_metadata(candidate, meta)?;
+    let mut actual = meta.clone();
+    actual
+        .as_object_mut()
+        .ok_or(Error::Invalid("invalid operator metadata"))?
+        .remove("shared_installed");
+    let current: Vec<_> = crate::review::publication::projections::shared_rows(candidate, &actual)?
+        .into_iter()
+        .filter(|row| {
+            row["recovered_project_files"] != true
+                || previous.iter().any(|old| {
+                    old["id"] == row["id"]
+                        && old["source_identity"] == row["source_identity"]
+                        && old["version"] == row["version"]
+                })
+        })
+        .collect();
+    let identities = |rows: &[Value]| {
+        rows.iter()
+            .map(|row| {
+                let mut row = row.clone();
+                if let Some(fields) = row.as_object_mut() {
+                    for field in [
+                        "incoming",
+                        "dependencies",
+                        "variables",
+                        "overrides",
+                        "local",
+                    ] {
+                        fields.remove(field);
+                    }
+                }
+                row
+            })
+            .collect::<Vec<_>>()
+    };
+    let shared = |bundle: &Value| -> Result<Value, Error> {
+        Ok(policy::parse(
+            bundle["config"]
+                .as_str()
+                .ok_or(Error::Invalid("candidate config missing"))?,
+        )?)
+    };
+    if shared(candidate)? == shared(&before.candidates["project"])?
+        && identities(&previous) == identities(&current)
+    {
+        meta["shared_installed"] = json!(previous);
+        Ok(())
+    } else {
+        refresh_shared_metadata(candidate, meta)
+    }
 }
 
 fn prepare_shared_add(
@@ -890,21 +1178,88 @@ pub(super) fn prepare_remove(
     before: &crate::review::model::State,
     reference: &str,
 ) -> Result<(Value, Value), Error> {
-    closure::mutations::remove(before, reference)
+    let (candidate, mut meta) = closure::mutations::remove(before, reference)?;
+    refresh_after_mutation(before, &candidate, &mut meta)?;
+    Ok((candidate, meta))
+}
+
+/// Remove effective selections locally, retaining every shared definition.
+pub(super) fn prepare_remove_local(
+    before: &crate::review::model::State,
+    reference: &str,
+) -> Result<(Value, Value), Error> {
+    let (candidate, mut meta) = prepare_remove(before, reference)?;
+    let source = &before.candidates["project"];
+    let previous = crate::configuration::layers::merged(source)?;
+    let mut config = crate::configuration::layers::merged(&candidate)?;
+    let mut disabled = config["disabled"].as_array().cloned().unwrap_or_default();
+    let mut retained: Vec<String> = candidate
+        .get("disabled")
+        .map(|value| serde_json::from_value(value.clone()))
+        .transpose()
+        .map_err(|_| Error::Invalid("disabled pack bytes missing"))?
+        .unwrap_or_default();
+    for (index, entry) in previous["packs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        if entry["layer"] == "local"
+            || config["packs"].as_array().into_iter().flatten().any(|row| {
+                row["id"] == entry["id"] && row["registry_identity"] == entry["registry_identity"]
+            })
+        {
+            continue;
+        }
+        let mut shared = entry.clone();
+        shared
+            .as_object_mut()
+            .ok_or(Error::Invalid("invalid pack selection"))?
+            .remove("local");
+        disabled.push(shared);
+        retained.push(
+            source["packs"][index]
+                .as_str()
+                .ok_or(Error::Invalid("pack bytes missing"))?
+                .to_owned(),
+        );
+    }
+    config["disabled"] = json!(disabled);
+    let bytes: Vec<String> = serde_json::from_value(candidate["packs"].clone())
+        .map_err(|_| Error::Invalid("pack bytes missing"))?;
+    let candidate = json!(Bundle::revise(
+        source,
+        &config,
+        &bytes,
+        candidate["rules"].as_str(),
+        candidate["local_rules"].as_str(),
+        &retained,
+    )?);
+    retain_disabled_metadata(before, &candidate, &mut meta)?;
+    meta["shared_installed"] = json!(crate::review::publication::projections::shared_rows(
+        source,
+        &before.operator
+    )?);
+    Ok((candidate, meta))
 }
 
 pub(super) fn prepare_remove_many(
     before: &super::model::State,
     references: &[String],
 ) -> Result<(Value, Value), Error> {
-    closure::mutations::remove_many(before, references)
+    let (candidate, mut meta) = closure::mutations::remove_many(before, references)?;
+    refresh_after_mutation(before, &candidate, &mut meta)?;
+    Ok((candidate, meta))
 }
 pub(super) fn prepare_update(
     context: &Context,
     before: &crate::review::model::State,
     reference: Option<&str>,
 ) -> Result<(Value, Value), Error> {
-    closure::mutations::update(context, before, reference)
+    let (candidate, mut meta) = closure::mutations::update(context, before, reference)?;
+    refresh_after_mutation(before, &candidate, &mut meta)?;
+    Ok((candidate, meta))
 }
 /// The pinned roots an update of `meta`'s installed packs leaves unchanged,
 /// for the operator's review and the agent's proposal result.

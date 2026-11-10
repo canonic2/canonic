@@ -44,8 +44,9 @@ setup, Claude Code/Codex hooks, bounded System32 checked execution and protected
 Git for Windows inspection. Windows release tooling targets AMD64 and ARM64.
 Portable build/package commands, installation prerequisites and platform coverage
 are in the development guide. Windows signing and publication remain pending.
-PowerShell supports a bounded single native invocation; other PowerShell syntax
-and cmd requests are blocked. See
+PowerShell and cmd have dedicated bounded literal native grammars, including
+PowerShell sequences/call operators and cmd command chains. Unclassified native
+source and unverified explicit shell overrides are blocked. See
 [development](docs/development.md#native-windows-development).
 
 GNU/Linux compatibility is implemented for x64 and ARM64, including the used
@@ -148,7 +149,9 @@ the review shows this setting, and Deny still blocks. In a Box project,
 `.box/local/mcp/shield.yml` that pins this binary instead, and
 `box config sync` publishes Shield to each developer's agents. See
 [connecting Claude and Codex](docs/claude-project.md),
-[connecting Gemini and Antigravity](docs/google-agents.md), and
+[connecting Gemini and Antigravity](docs/google-agents.md),
+[connecting Copilot CLI](docs/copilot-cli.md),
+[connecting OpenCode V1](docs/opencode.md), and
 [setting up through Box](docs/claude-project.md#set-up-through-box).
 
 ## What Shield does not do

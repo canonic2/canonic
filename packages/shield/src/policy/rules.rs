@@ -1,6 +1,7 @@
 //! Structured rule source, requirement branches and immutable preparation.
 use super::{
     Decision, Error, Match, Profile, argument_rules,
+    diagnostics::{RuleReference, TextField},
     model::Matcher,
     normalized::{Context, Input},
     patterns::Provider,
@@ -470,6 +471,15 @@ impl Rule {
         {
             return None;
         }
+        self.comparison_example()
+    }
+    /// A written argv shape for incomplete witness search only. Requirements,
+    /// activation and resource facts still come from full policy evaluation;
+    /// this must never be used to declare a complete matching partition.
+    pub(super) fn comparison_example(&self) -> Option<Matcher> {
+        if self.conditions["domain"] != "argv" {
+            return None;
+        }
         let executable = selectors::exact(&self.conditions["executable"])?;
         let arguments = &self.conditions["arguments"];
         if !matches!(arguments["kind"].as_str(), Some("exact" | "prefix" | "any"))
@@ -672,17 +682,17 @@ fn canonical(value: &str) -> bool {
         && !value.contains('\0')
         && !value.split('/').any(|p| p == "." || p == "..")
 }
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 pub(crate) struct Check {
-    pub(crate) rule_ref: Value,
-    pub(crate) operation_ref: &'static str,
+    pub(crate) rule_ref: RuleReference,
+    pub(crate) operation_ref: String,
     pub(crate) predicate_path: String,
     pub(crate) status: &'static str,
     pub(crate) code: &'static str,
     pub(crate) branch: &'static str,
     pub(crate) applied: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) evidence: Option<Value>,
+    pub(crate) private_input: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -773,6 +783,11 @@ impl Rule {
                     legacy: true,
                     fallback: false,
                     precondition: false,
+                    decision_provenance: None,
+                    operation_ref: None,
+                    executable: TextField::Absent,
+                    rule_ref: None,
+                    private_input: false,
                 }));
         }
         if let Some(legacy) = &self.legacy
@@ -859,11 +874,7 @@ impl Rule {
         } else {
             self.on_unmet.as_ref().and_then(Unmet::guidance)
         };
-        let rule_ref = if tier == 0 {
-            json!({"scope":"custom","rule_id":self.id})
-        } else {
-            json!({"scope":"pack","pack_selector":source,"rule_id":self.id})
-        };
+        let rule_ref = RuleReference::for_rule(source, &self.id, tier);
         let requirement_checks =
             self.requirement_evidence(facts, patterns, &failures, &rule_ref, branch)?;
         let rank = if met {
@@ -889,6 +900,11 @@ impl Rule {
             exact_request: self.conditions["domain"] == "exact_request",
             fallback: self.fallback == Some(true),
             precondition: false,
+            decision_provenance: None,
+            operation_ref: None,
+            executable: TextField::Absent,
+            rule_ref: None,
+            private_input: false,
         }))
     }
     fn requirement_evidence(
@@ -896,7 +912,7 @@ impl Rule {
         facts: &Facts<'_>,
         patterns: &dyn Provider,
         failures: &Failures,
-        rule_ref: &Value,
+        rule_ref: &RuleReference,
         branch: &'static str,
     ) -> Result<Vec<Check>, Error> {
         let mut requirement_checks = Vec::new();
@@ -922,19 +938,20 @@ impl Rule {
                 if failed.is_empty() {
                     requirement_checks.push(Check {
                         rule_ref: rule_ref.clone(),
-                        operation_ref: "request",
+                        operation_ref: "request".into(),
                         predicate_path: path.clone(),
                         status: "met",
                         code: "requirement_met",
                         branch,
                         applied: false,
                         evidence: evidence.clone(),
+                        private_input: false,
                     });
                 }
                 for (_, code) in failed {
                     requirement_checks.push(Check {
                         rule_ref: rule_ref.clone(),
-                        operation_ref: "request",
+                        operation_ref: "request".into(),
                         predicate_path: path.clone(),
                         status: if *code == "evidence_unavailable" {
                             "unknown"
@@ -945,6 +962,7 @@ impl Rule {
                         branch,
                         applied: false,
                         evidence: evidence.clone(),
+                        private_input: false,
                     });
                 }
             }

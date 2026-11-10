@@ -119,7 +119,16 @@ fn atomic_proposal_commit_and_receipts_preserve_origin_when_history_is_purged() 
     assert_eq!(applied["provenance"], proposal["provenance"]);
     assert_eq!(receipt(&mcp, id)["data"].clone(), applied);
     let state = Store::open(root.path()).unwrap().read().unwrap();
-    assert_eq!(state.authorization_events.len(), 1);
+    assert_eq!(
+        state
+            .authorization_events
+            .iter()
+            .filter(
+                |event| event["kind"] == "runtime_activated" && event["links"]["proposal_id"] == id
+            )
+            .count(),
+        1
+    );
     assert_eq!(state.events.len(), 0);
     let request = policy::Request {
         executable: "acme".into(),

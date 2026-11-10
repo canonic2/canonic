@@ -1,6 +1,88 @@
 //! Adapter-owned hook and MCP configuration reconciliation.
 use super::*;
 
+#[cfg(not(windows))]
+#[test]
+fn portable_hooks_accept_exact_legacy_box_callbacks_but_reject_duplicates_and_other_roots() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let old = assert_fs::TempDir::new().unwrap();
+    let binary = std::env::current_exe().unwrap();
+    for agent in ["claude", "codex"] {
+        let adapter = lookup(agent).unwrap();
+        let portable = installation(adapter, &binary, root.path(), &[])
+            .unwrap()
+            .groups;
+        let historical: HookGroups = adapter
+            .spec()
+            .events
+            .iter()
+            .map(|(event, _)| {
+                let command = posix_hook_command(
+                    &quoted(&binary).unwrap(),
+                    &quoted(old.path()).unwrap(),
+                    agent,
+                    event,
+                );
+                ((*event).into(), adapter.hook_group(&command))
+            })
+            .collect();
+        let source = adapter
+            .merge_hooks(None, &HookGroups::new(), &historical)
+            .unwrap();
+        assert!(
+            published_groups(
+                adapter,
+                &binary,
+                root.path(),
+                &[],
+                Some(&source),
+                portable.clone()
+            )
+            .is_err()
+        );
+        assert_eq!(
+            published_groups(
+                adapter,
+                &binary,
+                root.path(),
+                &[old.path()],
+                Some(&source),
+                portable.clone()
+            )
+            .unwrap(),
+            historical
+        );
+        assert_eq!(
+            published_groups(
+                adapter,
+                &binary,
+                old.path(),
+                &[],
+                Some(&source),
+                portable.clone()
+            )
+            .unwrap(),
+            historical
+        );
+        let mut duplicate: Value = serde_json::from_str(&source).unwrap();
+        duplicate["hooks"]["PreToolUse"]
+            .as_array_mut()
+            .unwrap()
+            .push(portable["PreToolUse"].clone());
+        assert!(
+            published_groups(
+                adapter,
+                &binary,
+                root.path(),
+                &[old.path()],
+                Some(&duplicate.to_string()),
+                portable
+            )
+            .is_err()
+        );
+    }
+}
+
 #[test]
 fn historical_native_profiles_keep_actual_coverage_without_requiring_advisory_upgrade() {
     let root = assert_fs::TempDir::new().unwrap();

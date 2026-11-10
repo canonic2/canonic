@@ -290,9 +290,10 @@ fn current_policy_cache_reuse_preserves_source_integrity_and_read_only_fallback(
     let state = store.read_checkpoint().unwrap();
     let source = &state.candidates["project"];
     fs::write(
-        root.path()
-            .join(".shield/review/sources")
-            .join(format!("{}.json", source["digest"].as_str().unwrap())),
+        root.path().join(".shield/review/sources").join(format!(
+            "{}.manifest.json",
+            source["manifest_digest"].as_str().unwrap()
+        )),
         b"changed source",
     )
     .unwrap();
@@ -435,7 +436,14 @@ fn writes_remove_leftover_temporaries_that_no_writer_owns() {
         .unwrap();
     sources::compact(
         &store,
-        &mut json!({"kind":"candidate-bundle","config":"acme"}),
+        &mut json!(
+            crate::configuration::Bundle::capture(
+                "# Acme new source\nschema_version: 1\npacks: []\n",
+                &[],
+                None
+            )
+            .unwrap()
+        ),
     )
     .unwrap();
     for path in &removed {
@@ -522,6 +530,7 @@ fn incomplete_state_and_proposal_records_are_refused_without_mutation() {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Stage {
     UpgradePrepared,
+    RelocationPrepared,
     Created,
     Written,
     Synced,
@@ -532,6 +541,7 @@ impl Stage {
     fn name(self) -> &'static str {
         match self {
             Self::UpgradePrepared => "upgrade-prepared",
+            Self::RelocationPrepared => "relocation-prepared",
             Self::Created => "created",
             Self::Written => "written",
             Self::Synced => "synced",
@@ -598,12 +608,12 @@ fn crash_consumption(operator: &Context) {
     let mut context = operator.clone();
     context.surface = "run".into();
     let request = serde_json::from_value(row["request"].clone()).unwrap();
-    let evidence = crate::runtime::Project::open(Path::new(&context.project_root))
+    let snapshot = crate::runtime::Project::open(Path::new(&context.project_root))
         .unwrap()
         .snapshot()
-        .unwrap()
-        .evaluate(request)
         .unwrap();
+    let evidence =
+        crate::execution::evaluate_approval(&snapshot, &request, &row["resource"]).unwrap();
     OBSERVER.with(|slot| slot.set(Some(barrier)));
     crate::review::run_approval::gate(
         &context,
@@ -652,12 +662,11 @@ fn publication_crashes_never_launch_before_durable_consumption() {
             project: context.project_root.clone(),
         };
         let resource = crate::execution::approval_fixture(&request, 5000).unwrap();
-        let evidence = crate::runtime::Project::open(root.path())
+        let snapshot = crate::runtime::Project::open(root.path())
             .unwrap()
             .snapshot()
-            .unwrap()
-            .evaluate(request)
             .unwrap();
+        let evidence = crate::execution::evaluate_approval(&snapshot, &request, &resource).unwrap();
         let decision = crate::review::run_approval::gate(
             &context,
             &evidence,

@@ -1,4 +1,4 @@
-//! Enrollment drift is a reviewed new identity, never transplanted authority.
+//! Portable policy and launch metadata never transplant local operation authority.
 use super::*;
 use crate::review::{self, storage::Store};
 use std::{fs, sync::Arc};
@@ -28,6 +28,22 @@ fn copy(from: &Path, to: &Path) {
     }
 }
 
+fn assert_no_local_operation_authority(project: &Path) {
+    let (state, _) = Store::inspect(project)
+        .unwrap()
+        .read_diagnostic_checkpoint()
+        .unwrap();
+    let context = Context::new(
+        state.project_id.clone(),
+        project.canonicalize().unwrap().to_str().unwrap().into(),
+        "mcp",
+    );
+    assert!(
+        state.check(&context).is_err() || state.check_operations().is_err(),
+        "portable review metadata cannot authorize this checkout's operations"
+    );
+}
+
 fn files(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     fn visit(root: &Path, at: &Path, files: &mut BTreeMap<PathBuf, Vec<u8>>) {
         for entry in fs::read_dir(at).expect("fixture files") {
@@ -52,14 +68,13 @@ fn files(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
 }
 
 #[test]
-fn bootstrap_move_is_read_only_until_review_and_retries_one_new_enrollment() {
+fn bootstrap_explicit_reenrollment_after_move_is_read_only_until_review_and_idempotent() {
     let parent = assert_fs::TempDir::new().unwrap();
     let (original, old_context) = fixture();
     let original_root = original.path().canonicalize().unwrap();
     let old_state = fs::read(original.path().join(".shield/review/state.json")).unwrap();
     let moved = parent.path().join("moved");
     fs::rename(original.path(), &moved).unwrap();
-    assert!(review::open(&moved).is_err());
     let before = files(&moved);
     let plan = Arc::new(prepare(&moved).unwrap());
     assert_eq!(plan.report()["classification"], "relocation");
@@ -310,7 +325,7 @@ fn bootstrap_cache_choices_bind_exact_paths_and_refuse_relative_input() {
 }
 
 #[test]
-fn bootstrap_confirmed_launch_binding_survives_activation_and_cannot_be_copied() {
+fn bootstrap_confirmed_launch_metadata_survives_copy_without_local_operation_authority() {
     let (original, _) = fixture();
     let copied = assert_fs::TempDir::new().unwrap();
     copy(original.path(), copied.path());
@@ -332,8 +347,9 @@ fn bootstrap_confirmed_launch_binding_survives_activation_and_cannot_be_copied()
     assert!(accepts_launch(copied.path(), &original_path));
     let third = assert_fs::TempDir::new().unwrap();
     copy(copied.path(), third.path());
-    assert!(!accepts_launch(third.path(), &original_path));
-    assert!(!forms_reviewed_at(third.path()));
+    assert!(accepts_launch(third.path(), &original_path));
+    assert!(forms_reviewed_at(third.path()));
+    assert_no_local_operation_authority(third.path());
     store
         .update(&context, &|| Ok(()), |state| {
             state.operator["bootstrap"]["previous_project_root"] = json!("/different");
@@ -353,7 +369,12 @@ fn bootstrap_repeated_moves_keep_the_actual_original_launcher_without_alias_grow
         let destination = parent.path().join(format!("moved-{index}"));
         fs::rename(&current, &destination).unwrap();
         assert!(launch_matches_metadata(&destination, &launcher));
-        assert!(!accepts_launch(&destination, &launcher));
+        assert_eq!(
+            accepts_launch(&destination, &launcher),
+            index > 0,
+            "a retained launch association remains selectable after another move"
+        );
+        assert_no_local_operation_authority(&destination);
         let plan = prepare_launch(&destination, &launcher).unwrap();
         assert!(plan.committed().unwrap().is_none());
         let context = plan.commit().unwrap();
@@ -474,7 +495,10 @@ fn bootstrap_probe_diagnoses_a_copy_with_malformed_policy_without_preparing_it()
     .unwrap();
     let before = files(copied.path());
     let probe = inspect(copied.path()).unwrap();
-    assert!(probe.bootstrap_required());
+    assert!(
+        !probe.bootstrap_required(),
+        "a copied checkpoint no longer requires enrollment solely because its root changed"
+    );
     assert_eq!(probe.project_root(), copied.path().canonicalize().unwrap());
     assert_eq!(probe.report()["classification"], "copy");
     assert_eq!(probe.report()["policy_validated"], false);
@@ -631,9 +655,10 @@ fn integration_review_forms_require_exact_human_proof_and_current_project() {
         let copied = assert_fs::TempDir::new().unwrap();
         copy(root.path(), copied.path());
         assert!(
-            !forms_reviewed_at(copied.path()),
-            "copying proof does not enroll a new location"
+            forms_reviewed_at(copied.path()),
+            "reviewed form capability metadata is portable"
         );
+        assert_no_local_operation_authority(copied.path());
     }
 }
 

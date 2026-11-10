@@ -221,13 +221,22 @@ fn preparation_tasks_recover_interrupted_owners_without_replaying_or_creating_pr
         "working"
     );
     drop(owner);
+    let record_path = store.directory(&record.id).unwrap().join("record.json");
+    let recorded = std::fs::read(&record_path).unwrap();
     assert_eq!(
         observer
-            .store()
+            .observation_store()
             .unwrap()
             .observe(&record.id)
             .unwrap()
             .status,
+        "failed"
+    );
+    assert_eq!(std::fs::read(&record_path).unwrap(), recorded);
+    assert_eq!(store.get(&record.id).unwrap().status, "working");
+    // Actual mutating access still persists recovery after prior observation.
+    assert_eq!(
+        observer.store().unwrap().get(&record.id).unwrap().status,
         "failed"
     );
     let reopened = Runtime::new(&context);
@@ -250,6 +259,40 @@ fn preparation_tasks_recover_interrupted_owners_without_replaying_or_creating_pr
         .unwrap();
     assert_eq!(retry.id, record.id);
     assert!(owner.is_none());
+}
+
+#[test]
+fn preparation_task_observation_never_repairs_missing_mutex_or_stale_epoch() {
+    let (root, context, runtime) = fixture();
+    let store = runtime.store().unwrap();
+    let (record, owner) = store
+        .reserve(&input("acme-observe"), &|| Ok(()))
+        .unwrap()
+        .unwrap();
+    drop(owner);
+    let owner_mutex = store.directory(&record.id).unwrap().join(".objects.lock");
+    std::fs::remove_file(&owner_mutex).unwrap();
+    let record_path = store.directory(&record.id).unwrap().join("record.json");
+    let recorded = std::fs::read(&record_path).unwrap();
+    let observer = Runtime::new(&context).observation_store().unwrap();
+    let recorded_status = observer.observe(&record.id).unwrap();
+    assert_eq!(recorded_status.status, "working");
+    assert!(recorded_status.message.contains("unchecked"));
+    assert!(!owner_mutex.exists());
+    assert_eq!(std::fs::read(&record_path).unwrap(), recorded);
+    let checkpoint_path = root.path().join(".shield/review/state.json");
+    let mut checkpoint: Value =
+        serde_json::from_slice(&std::fs::read(&checkpoint_path).unwrap()).unwrap();
+    checkpoint["operator"]
+        .as_object_mut()
+        .unwrap()
+        .remove("runtime_incarnation");
+    let bytes = serde_json::to_vec(&checkpoint).unwrap();
+    std::fs::write(&checkpoint_path, &bytes).unwrap();
+    assert!(observer.observe(&record.id).is_err());
+    assert_eq!(std::fs::read(&checkpoint_path).unwrap(), bytes);
+    assert_eq!(std::fs::read(&record_path).unwrap(), recorded);
+    assert!(!owner_mutex.exists());
 }
 
 #[test]
@@ -395,9 +438,113 @@ fn preparation_tasks_worker_finishes_private_capture_without_creating_live_autho
     assert_eq!(state.policy_revision, before);
     assert!(state.proposals.is_empty());
     let reopened = Runtime::new(&context);
+    let checkpoint_path = root.path().join(".shield/review/state.json");
+    let checkpoint = std::fs::read(&checkpoint_path).unwrap();
+    let record_path = store.directory(&record.id).unwrap().join("record.json");
+    let recorded = std::fs::read(&record_path).unwrap();
+    let observed = reopened.observation_store().unwrap();
+    let observed_record = observed.observe(&record.id).unwrap();
+    assert!(observed.result(&observed_record).is_ok());
+    assert_eq!(std::fs::read(&checkpoint_path).unwrap(), checkpoint);
+    assert_eq!(std::fs::read(&record_path).unwrap(), recorded);
     assert_eq!(
         reopened.store().unwrap().get(&record.id).unwrap().status,
         "completed"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn copied_task_directories_are_repaired_only_by_owned_writers() {
+    use std::os::unix::fs::{PermissionsExt as _, symlink};
+    fn copy(from: &Path, to: &Path) {
+        std::fs::create_dir(to).unwrap();
+        for entry in std::fs::read_dir(from).unwrap() {
+            let entry = entry.unwrap();
+            let target = to.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                copy(&entry.path(), &target);
+            } else {
+                std::fs::copy(entry.path(), target).unwrap();
+            }
+        }
+    }
+    let (_original, _, original) = fixture();
+    let source = original.store().unwrap();
+    let (old, owner) = source
+        .reserve(&input("acme-before-copy"), &|| Ok(()))
+        .unwrap()
+        .unwrap();
+    drop(owner);
+    let (_copied, current, runtime) = fixture();
+    let target = runtime.observation_store().unwrap();
+    copy(&source.root, &target.root);
+    let old_directory = target.directory(&old.id).unwrap();
+    let neighbor = target.root.join("acme-user-neighbor");
+    std::fs::create_dir(&neighbor).unwrap();
+    std::fs::write(neighbor.join("keep.txt"), b"Acme untouched").unwrap();
+    let outside = assert_fs::TempDir::new().unwrap();
+    std::fs::set_permissions(outside.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let link = target.root.join("e".repeat(64));
+    symlink(outside.path(), &link).unwrap();
+    let record_path = old_directory.join("record.json");
+    let recorded = std::fs::read(&record_path).unwrap();
+    for path in [&target.root, &old_directory, &neighbor] {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    assert!(target.observe(&old.id).is_err());
+    assert_eq!(std::fs::read(&record_path).unwrap(), recorded);
+    for path in [&target.root, &old_directory, &neighbor] {
+        assert_eq!(
+            std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
+    }
+    let writer = runtime.store().unwrap();
+    assert_eq!(
+        std::fs::metadata(&writer.root)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+    assert_eq!(
+        std::fs::metadata(&old_directory)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+    let (fresh, _owner) = writer
+        .reserve(&input("acme-after-copy"), &|| Ok(()))
+        .unwrap()
+        .unwrap();
+    assert_eq!(fresh.project, current.project_id);
+    assert!(writer.observe(&old.id).is_err());
+    assert!(!old_directory.exists());
+    assert_eq!(
+        std::fs::metadata(&neighbor).unwrap().permissions().mode() & 0o777,
+        0o755
+    );
+    assert_eq!(
+        std::fs::read(neighbor.join("keep.txt")).unwrap(),
+        b"Acme untouched"
+    );
+    assert!(
+        std::fs::symlink_metadata(link)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(
+        std::fs::metadata(outside.path())
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o755
     );
 }
 

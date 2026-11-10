@@ -188,6 +188,67 @@ fn parity_admin_history_purge_preserves_authority_and_invalidates_prior_review()
 }
 
 #[test]
+fn registry_replacement_freezes_both_sources_preserves_default_and_refuses_stale_commit() {
+    let (_root, context) = enrolled();
+    let original = assert_fs::TempDir::new().unwrap();
+    let replacement = assert_fs::TempDir::new().unwrap();
+    for directory in [&original, &replacement] {
+        directory
+            .child("catalog.json")
+            .write_str(&json!({"schema_version":1,"packs":[]}).to_string())
+            .unwrap();
+    }
+    prepare(
+        &context,
+        "registry_add",
+        &json!({"name":"acme","location":original.path()}),
+        &|| Ok(()),
+    )
+    .unwrap()
+    .commit(&context, &|| Ok(()))
+    .unwrap();
+    prepare(
+        &context,
+        "registry_default",
+        &json!({"name":"acme"}),
+        &|| Ok(()),
+    )
+    .unwrap()
+    .commit(&context, &|| Ok(()))
+    .unwrap();
+    let before = project::checkpoint(&context).unwrap();
+    let arguments = json!({"name":"acme","location":replacement.path()});
+    let declined = prepare(&context, "registry_add", &arguments, &|| Ok(())).unwrap();
+    let old = before.operator["sources"]["acme"].clone();
+    let review = declined.review();
+    assert_eq!(review["change"], "replace");
+    assert_eq!(review["previous_source"], old);
+    assert_ne!(review["source"]["identity"], old["identity"]);
+    drop(declined);
+    assert_eq!(
+        project::checkpoint(&context).unwrap().operator,
+        before.operator
+    );
+    let plan = prepare(&context, "registry_add", &arguments, &|| Ok(())).unwrap();
+    let stale = prepare(&context, "registry_add", &arguments, &|| Ok(())).unwrap();
+    let expected = plan.review()["source"].clone();
+    // Acceptance publishes the discovered source without fetching it again.
+    replacement
+        .child("catalog.json")
+        .write_str("unavailable after review")
+        .unwrap();
+    let receipt = plan.commit(&context, &|| Ok(())).unwrap();
+    assert_eq!(receipt["change"], "replace");
+    let after = project::checkpoint(&context).unwrap();
+    assert_eq!(after.operator["sources"]["acme"], expected);
+    assert_eq!(after.operator["default"], "acme");
+    assert_eq!(after.operator["installed"], before.operator["installed"]);
+    assert_eq!(after.candidates, before.candidates);
+    assert_eq!(after.policy_revision, before.policy_revision);
+    assert!(stale.commit(&context, &|| Ok(())).is_err());
+}
+
+#[test]
 fn parity_admin_project_registry_add_default_remove_share_exact_trust_review() {
     let (_root, context) = enrolled();
     let source = assert_fs::TempDir::new().unwrap();

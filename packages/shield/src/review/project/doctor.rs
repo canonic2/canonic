@@ -7,24 +7,17 @@ use std::path::{Path, PathBuf};
 
 /// The status report with a `checks` list of the problems found.
 pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
-    let store = crate::review::storage::Store::open(Path::new(&context.project_root))?;
-    let (current, upgrade_pending) = store.read_diagnostics()?;
-    current.check(context)?;
+    let store = crate::review::storage::Store::inspect(Path::new(&context.project_root))?;
+    let (current, upgrade_pending) = store.read_diagnostic_checkpoint()?;
+    current.check_inspection(context)?;
+    if current.legacy_preview.is_some() {
+        let mut value = state::status_from(context, &current);
+        value["checks"] = json!([{"check":"checkpoint_upgrade","detail":"The historical record shape and recorded activation proof were inspected. Policy source, matcher model, cache and history were not validated.","repair":"The next actual runtime operation validates and converts the retained checkpoint without another policy review solely for its format."}]);
+        return Ok(value);
+    }
     let meta = state::metadata(&current);
     let mut checks = storage_checks(context, &current);
-    let complete = state::status_from(context, &current);
-    let mut value = match complete {
-        Ok(value) => value,
-        Err(error) => {
-            checks.push(json!({"check":"status","detail":format!("the complete status report is unavailable: {error}"),"repair":"shield policy review"}));
-            let mut partial = crate::review::runtime::status_from(&current);
-            partial["policy_revision"] = partial["review"]["policy_revision"].clone();
-            partial["missing"] = json!(["complete_status"]);
-            partial["repair_needed"] = json!(true);
-            partial["repair_route"] = json!("shield policy review");
-            partial
-        }
-    };
+    let mut value = state::status_from(context, &current);
     value["enabled"] = json!(current.enforcement.enabled);
     value["checkpoint_upgrade_pending"] = json!(upgrade_pending);
     let mut problem = |check: &str, detail: String, repair: &str| {
@@ -40,27 +33,22 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
         );
     }
 
-    if let Err(error) = store.prepare_diagnostics(&current) {
-        problem(
-            "policy_source",
-            format!("the retained policy source cannot be prepared: {error}"),
-            "shield policy review",
-        );
-    }
-
-    // The active policy must load as hooks load it, compiled plan included.
-    if let Err(error) = crate::review::runtime::consumer::inspect_cached(&current)
-        .map_err(crate::runtime::Error::from)
+    // Presence/compatibility probes are metadata-only. Payload integrity and
+    // source preparation are established by explicit use, never by diagnosis.
+    if !value["active"].is_null()
+        && (value["compiled_cache"]["presence"] != "present"
+            || value["compiled_cache"]["compatibility"] != "current")
     {
-        // Without an activation there is nothing for the cache to rebuild from,
-        // and preparing the cache repairs only an unavailable compiled plan.
-        let repair = policy_route(context, &value["active"], &error);
+        let repair = crate::review::cache::repair_route(&context.project_root);
         problem(
             "policy",
-            format!("the active policy cannot be loaded: {error}"),
+            "The compiled policy is missing or incompatible; payload integrity is checked on use."
+                .into(),
             &repair,
         );
     }
+    value["policy_validation"] =
+        json!({"source":"not-performed","compiled_integrity":"checked-on-use"});
 
     // Pack updates are verified against retained registry checkpoints and the
     // enrolled source each pack came from.
@@ -108,7 +96,7 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
         problem(
             "binary",
             format!(
-                "agents run {}, not this Shield at {}",
+                "Registered executable is {}; this CLI is {}. Content identity and compatibility were not inspected.",
                 registered.display(),
                 binary.display()
             ),
@@ -117,6 +105,7 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
     }
 
     value["checks"] = json!(checks);
+    state::inspection_location(context, &current, &mut value);
     Ok(value)
 }
 
@@ -142,17 +131,6 @@ fn storage_checks(context: &Context, current: &crate::review::model::State) -> V
         }
     }
     checks
-}
-
-/// Cache preparation repairs an unavailable plan; other policy failures need review.
-fn policy_route(context: &Context, active: &Value, error: &crate::runtime::Error) -> String {
-    if active.is_null() {
-        "shield init".into()
-    } else if matches!(error, crate::runtime::Error::CacheUnavailable) {
-        crate::review::cache::repair_route(&context.project_root)
-    } else {
-        "shield policy review".into()
-    }
 }
 
 /// The binary the project's agent integrations run, when any are registered.

@@ -5,11 +5,17 @@
 //! the decisions of the one segment it seals. Readers capture segment handles and
 //! the active boundary under the lock, then verify, correlate and retain outside it.
 mod correlation;
+pub(super) mod inline;
 mod legacy;
 mod locking;
+mod resources;
+#[cfg(test)]
+mod volume;
 use super::{Error, State, Store, Temporary, private, sync};
+#[cfg(test)]
 pub(super) use legacy::inspect as inspect_legacy;
 pub(super) use legacy::upgrade;
+pub(in crate::review::storage) use resources::prepare_readers;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -76,11 +82,14 @@ struct Segment {
 /// Open handles and lengths captured under the lock. Sealed segments never
 /// change, and an evicted segment stays readable through its handle.
 pub(in crate::review) struct View {
+    _reader: File,
     segments: Vec<(u64, File, u64)>,
     complete: bool,
 }
 
-pub(in crate::review) use locking::{lock, lock_control};
+#[cfg(test)]
+pub(in crate::review) use locking::lock_diagnostics;
+pub(in crate::review) use locking::{lock, lock_control, lock_optional};
 fn regular(path: &Path) -> Result<(), Error> {
     let m = fs::symlink_metadata(path)?;
     if !m.is_file() || m.file_type().is_symlink() {
@@ -93,7 +102,7 @@ fn regular(path: &Path) -> Result<(), Error> {
     {
         use std::os::unix::fs::MetadataExt;
         let parent = fs::metadata(path.parent().ok_or(Error::Invalid("history parent"))?)?;
-        if m.mode() & 0o077 != 0 || m.uid() != parent.uid() {
+        if m.mode() & 0o077 != 0 || m.uid() != parent.uid() || m.nlink() != 1 {
             return Err(Error::Invalid("history must be private"));
         }
     }
@@ -101,6 +110,9 @@ fn regular(path: &Path) -> Result<(), Error> {
 }
 pub(in crate::review) fn identifier(kind: &str, project_id: &str) -> Result<String, Error> {
     use ring::rand::{SecureRandom, SystemRandom};
+    if project_id.len() != 64 || !project_id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(Error::Invalid("history identifier owner is invalid"));
+    }
     let mut nonce = [0_u8; 16];
     SystemRandom::new()
         .fill(&mut nonce)
@@ -137,6 +149,14 @@ fn digest(state: &State) -> Result<String, Error> {
     }
     Ok(digest.into())
 }
+
+fn owner(state: &State) -> Result<&str, Error> {
+    let owner = state.history_owner.as_deref().unwrap_or(&state.project_id);
+    if owner.len() != 64 || !owner.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(Error::Invalid("history owner invalid"));
+    }
+    Ok(owner)
+}
 fn segment_path(store: &Store, digest: &str, sequence: u64, decisions: Option<u64>) -> PathBuf {
     store.directory.join(match decisions {
         None => format!("history-{digest}.{sequence:010}.jsonl"),
@@ -161,7 +181,11 @@ fn number(text: &str, width: Option<usize>) -> Result<u64, Error> {
 fn segments(store: &Store, state: &State) -> Result<Vec<Segment>, Error> {
     let prefix = format!("history-{}.", digest(state)?);
     let mut found = Vec::new();
-    for entry in fs::read_dir(&store.directory)? {
+    for (index, entry) in fs::read_dir(&store.directory)?.enumerate() {
+        crate::diagnostics::trace::count("history.directory_entries", 1);
+        if index >= resources::DIRECTORY_LIMIT {
+            return Err(Error::Invalid("history directory entry limit"));
+        }
         let entry = entry?;
         let name = entry.file_name();
         let Some(rest) = name
@@ -196,11 +220,13 @@ fn segments(store: &Store, state: &State) -> Result<Vec<Segment>, Error> {
 /// Captures the current generation's bounded view for reading outside the lock.
 pub(in crate::review) fn capture(store: &Store, state: &State) -> Result<View, Error> {
     crate::diagnostics::trace::count("history.captures", 1);
+    let reader = resources::reader(store)?;
     let list = segments(store, state)?;
     let mut segments = Vec::with_capacity(list.len());
     let mut bytes = 0_u64;
     for segment in &list {
-        let file = File::open(&segment.path)?;
+        let file = super::objects::read_file(&segment.path)?;
+        file.try_lock_shared().map_err(|_| Error::Locked)?;
         let length = file.metadata()?.len();
         bytes += length;
         segments.push((segment.sequence, file, length));
@@ -220,6 +246,7 @@ pub(in crate::review) fn capture(store: &Store, state: &State) -> Result<View, E
         }
     };
     Ok(View {
+        _reader: reader,
         segments,
         complete: tail && !error_path(store, state)?.exists(),
     })
@@ -231,6 +258,7 @@ pub(in crate::review) fn finish(view: Result<View, Error>, state: &mut State) {
         read(view, state).map(|events| (events, complete))
     });
     if let Ok(((events, evicted), complete)) = read {
+        crate::diagnostics::trace::count("history.correlations", 1);
         state.events = correlation::view(events, state.history_limit);
         state.trim();
         state.history_available = complete;
@@ -253,7 +281,11 @@ fn distinct_decisions(events: &[Value]) -> usize {
 /// no longer present. Newest segments are read first so the event bound drops
 /// only the oldest records.
 fn read(view: View, state: &State) -> Result<(Vec<Value>, bool), Error> {
-    let mut evicted = view.segments.first().is_some_and(|(s, _, _)| *s > 0);
+    let mut evicted = view.segments.first().is_some_and(|(s, _, _)| *s > 0)
+        || view
+            .segments
+            .windows(2)
+            .any(|pair| pair[1].0 != pair[0].0 + 1);
     let last = view.segments.len().saturating_sub(1);
     let mut parts = Vec::new();
     let mut count = 0;
@@ -271,6 +303,7 @@ fn read(view: View, state: &State) -> Result<(Vec<Value>, bool), Error> {
             (&mut reader)
                 .take((LINE_LIMIT + 1) as u64)
                 .read_until(b'\n', &mut line)?;
+            crate::diagnostics::trace::count("history.read_bytes", line.len() as u64);
             if line.is_empty() {
                 break;
             }
@@ -282,6 +315,7 @@ fn read(view: View, state: &State) -> Result<(Vec<Value>, bool), Error> {
                 break;
             }
             events.push(decode(&line)?);
+            crate::diagnostics::trace::count("history.decoded_records", 1);
         }
         count += events.len();
         parts.push(events);
@@ -368,7 +402,7 @@ fn header(reader: &mut impl BufRead, state: &State, segment: u64) -> Result<usiz
     let h: Header =
         serde_json::from_slice(&line).map_err(|_| Error::Invalid("corrupt history header"))?;
     if h.format != FORMAT
-        || h.project_id != state.project_id
+        || h.project_id != owner(state)?
         || h.generation != state.history_generation
         || h.segment != segment
     {
@@ -470,9 +504,15 @@ fn write_segment(
     decisions: Option<u64>,
     records: &[u8],
 ) -> Result<PathBuf, Error> {
+    resources::prepare_readers(store)?;
+    resources::admit(
+        store,
+        state,
+        (records.len() + 1024).max(SEGMENT_LIMIT) as u64,
+    )?;
     let h = Header {
         format: FORMAT.into(),
-        project_id: state.project_id.clone(),
+        project_id: owner(state)?.to_owned(),
         generation: state.history_generation.clone(),
         segment: sequence,
     };
@@ -505,14 +545,17 @@ fn write_segment(
 /// when the source was already evicted or the snapshot bound drops commands, so
 /// readers keep reporting the eviction.
 fn replace(store: &Store, state: &State, events: &[Value], evicted: bool) -> Result<(), Error> {
+    crate::diagnostics::trace::count("history.control_rewrites", 1);
     let rows = retained(events)?;
     for old in segments(store, state)? {
-        fs::remove_file(old.path)?;
+        if !resources::remove(&old.path)? {
+            return Err(Error::Locked);
+        }
     }
     let first = u64::from(evicted || rows.len() < events.len());
     let (mut sequence, mut chunk, mut requests) = (first, Vec::new(), BTreeSet::new());
     for (row, request) in rows {
-        if !chunk.is_empty() && chunk.len() + row.len() > SEGMENT_LIMIT {
+        if !chunk.is_empty() && chunk.len() + row.len() + 1024 > SEGMENT_LIMIT {
             write_segment(store, state, sequence, Some(requests.len() as u64), &chunk)?;
             (sequence, chunk, requests) = (sequence + 1, Vec::new(), BTreeSet::new());
         }
@@ -550,7 +593,12 @@ pub(in crate::review) fn encode(
             let previous = correlation::retain_raw(raw, current.history_limit);
             events = correlation::retain_raw(previous, state.history_limit);
         }
-        replace(store, state, &events, evicted)?;
+        // An empty generation needs no segment before publication. This keeps
+        // an explicit clear available at capacity without deleting old bytes
+        // before its checkpoint commits. The next append allocates its segment.
+        if !purge {
+            replace(store, state, &events, evicted)?;
+        }
     } else if locked
         && segments(store, state).is_ok_and(|s| s.is_empty())
         && replace(store, state, &[], false).is_err()
@@ -568,13 +616,16 @@ pub(in crate::review) fn publish(store: &Store, state: &State) -> Result<(), Err
     if !state.history_enabled || state.pending_history.is_empty() {
         return Ok(());
     }
+    if !store.directory.join("history-readers").try_exists()? {
+        resources::prepare_readers(store)?;
+    }
     let records = state
         .pending_history
         .iter()
         .map(line)
         .collect::<Result<Vec<_>, _>>()?
         .concat();
-    if records.len() > SEGMENT_LIMIT {
+    if records.len() + 1024 > SEGMENT_LIMIT {
         return Err(Error::Invalid("history append limit"));
     }
     let mut list = segments(store, state)?;
@@ -599,6 +650,11 @@ pub(in crate::review) fn publish(store: &Store, state: &State) -> Result<(), Err
     }
     file.0.seek(SeekFrom::End(0))?;
     file.0.write_all(&records)?;
+    crate::diagnostics::trace::count("history.appended_bytes", records.len() as u64);
+    crate::diagnostics::trace::count(
+        "history.appended_records",
+        state.pending_history.len() as u64,
+    );
     Ok(())
 }
 /// The active segment opened for append, with its checked header length.
@@ -627,6 +683,7 @@ fn rotate(
     file.seek(SeekFrom::Start(body))?;
     let mut bytes = Vec::new();
     file.take(SEGMENT_LIMIT as u64).read_to_end(&mut bytes)?;
+    crate::diagnostics::trace::count("history.rotation_read_bytes", bytes.len() as u64);
     // A sealed segment reaches stable storage before it is renamed.
     sync(file)?;
     let decisions = count_decisions(&bytes);
@@ -635,6 +692,7 @@ fn rotate(
         return Err(Error::Invalid("history segment exists"));
     }
     super::replace(&active.path, &sealed)?;
+    crate::diagnostics::trace::count("history.rotations", 1);
     list.push(Segment {
         sequence: active.sequence,
         decisions: Some(decisions),
@@ -677,7 +735,7 @@ fn prune(list: &mut Vec<Segment>, limit: usize) -> Result<(), Error> {
         .map(|(size, _)| size)
         .sum();
     for (index, segment) in list.iter().enumerate() {
-        if total + SEGMENT_LIMIT as u64 <= STORE_LIMIT as u64 {
+        if total + 2 * SEGMENT_LIMIT as u64 <= STORE_LIMIT as u64 {
             break;
         }
         if keep[index] && segment.decisions.is_some() {
@@ -685,17 +743,29 @@ fn prune(list: &mut Vec<Segment>, limit: usize) -> Result<(), Error> {
             total -= sizes[index];
         }
     }
-    let mut index = 0;
-    let mut removed = Ok(());
-    list.retain(|segment| {
-        let kept = keep[index];
-        index += 1;
-        if !kept && removed.is_ok() {
-            removed = fs::remove_file(&segment.path);
+    for (index, segment) in list.iter().enumerate() {
+        if !keep[index] && !resources::remove(&segment.path)? {
+            keep[index] = true;
         }
-        kept
+    }
+    let mut index = 0;
+    list.retain(|_| {
+        let retained = keep[index];
+        index += 1;
+        retained
     });
-    removed.map_err(Error::from)
+    let remaining = list
+        .iter()
+        .map(|segment| fs::metadata(&segment.path).map(|m| m.len()))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .sum::<u64>();
+    if remaining + 2 * SEGMENT_LIMIT as u64 > STORE_LIMIT as u64 {
+        return Err(Error::Invalid(
+            "history capacity retained by active readers",
+        ));
+    }
+    Ok(())
 }
 fn recover_tail(recovery: &Path, file: &mut File) -> Result<(), Error> {
     let length = file.metadata()?.len();
@@ -703,6 +773,7 @@ fn recover_tail(recovery: &Path, file: &mut File) -> Result<(), Error> {
     file.seek(SeekFrom::Start(start))?;
     let mut tail = Vec::new();
     file.read_to_end(&mut tail)?;
+    crate::diagnostics::trace::count("history.tail_read_bytes", tail.len() as u64);
     if tail.last() == Some(&b'\n') {
         return Ok(());
     }
@@ -732,6 +803,9 @@ fn recover_tail(recovery: &Path, file: &mut File) -> Result<(), Error> {
     Ok(())
 }
 pub(in crate::review) fn mark_failure(store: &Store, state: &State) {
+    if !resources::failure_fits(store).unwrap_or(false) {
+        return;
+    }
     if let Ok(path) = error_path(store, state) {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
@@ -751,13 +825,14 @@ pub(in crate::review) fn cleanup(store: &Store, state: &State) {
     let Ok(entries) = fs::read_dir(&store.directory) else {
         return;
     };
-    for entry in entries.flatten() {
+    for entry in entries.take(resources::DIRECTORY_LIMIT).flatten() {
+        crate::diagnostics::trace::count("history.directory_entries", 1);
         let name = entry.file_name();
         let Some(name) = name.to_str() else { continue };
         // Shield writes these names, so their extensions match exactly.
         let extension = Path::new(name).extension().and_then(|e| e.to_str());
         if name.starts_with(".history-") && extension == Some("tmp") {
-            let _ = fs::remove_file(entry.path());
+            let _ = resources::remove(&entry.path());
             continue;
         }
         let Some(digest) = name
@@ -776,14 +851,21 @@ pub(in crate::review) fn cleanup(store: &Store, state: &State) {
                 .take(2)
                 .filter_map(Value::as_str)
                 .filter(|pin| pin.len() == 64 && pin.bytes().all(|byte| byte.is_ascii_hexdigit()))
-                .any(|pin| pin == digest)
+                .any(|pin| {
+                    pin == digest
+                        && !state.operator["history_retired_generations"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .any(|retired| retired == pin)
+                })
             && matches!(extension, Some("jsonl" | "error"))
         {
-            let _ = fs::remove_file(entry.path());
+            let _ = resources::remove(&entry.path());
         }
     }
 }
-pub(in crate::review) fn bound_event(mut event: Value) -> Value {
+fn bound_session_authorization(event: &mut Value) {
     if event["details"]["authorization"]["kind"] == "session_grant"
         && !crate::json::fits(&event["details"]["authorization"], 4096)
     {
@@ -797,6 +879,9 @@ pub(in crate::review) fn bound_event(mut event: Value) -> Value {
         event["details"]["authorization"] = json!({"kind":"session_grant","grants":grants,"truncated":true,"missing":["operation_refs","override_denies"]});
         event["truncated"] = json!(true);
     }
+}
+pub(in crate::review) fn bound_event(mut event: Value) -> Value {
+    bound_session_authorization(&mut event);
     if crate::json::fits(&event, 8192) {
         return event;
     }
@@ -840,7 +925,11 @@ pub(in crate::review) fn bound_event(mut event: Value) -> Value {
         .cloned()
         .unwrap_or(Value::Null);
     let matches: Vec<_> = explanation["matches"].as_array().into_iter().flatten().take(8).map(|m| {
-            json!({"source":m["source"],"scope":m["scope"],"pack_id":m["pack_id"],"rule_id":m["rule_id"],"rule_ref":m["rule_ref"],"profile":m["profile"],"decision":m["decision"],"applied":m["applied"],"reason":m["reason"]})
+            let mut matched = json!({"source":m["source"],"scope":m["scope"],"pack_id":m["pack_id"],"rule_id":m["rule_id"],"rule_ref":m["rule_ref"],"profile":m["profile"],"decision":m["decision"],"applied":m["applied"],"reason":m["reason"]});
+            if let Some(origin) = m.get("decision_provenance") {
+                matched["decision_provenance"] = origin.clone();
+            }
+            matched
     }).collect();
     // Keep whole guidance items: shortening a request could propose a rule for
     // different arguments. Bound both their count and total serialized bytes.

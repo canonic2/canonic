@@ -65,6 +65,7 @@ fn historical(bytes: &[u8]) -> Result<(Value, State), Error> {
             ![
                 "schema_version",
                 "history_generation",
+                "history_owner",
                 "operator",
                 "project_id",
                 "project_root",
@@ -85,6 +86,8 @@ fn historical(bytes: &[u8]) -> Result<(Value, State), Error> {
                 "policy_drafts",
                 "dismissed_reviews",
                 "enforcement",
+                "terminal_receipts",
+                "configuration_changes",
             ]
             .contains(&key.as_str())
         })
@@ -100,6 +103,9 @@ fn historical(bytes: &[u8]) -> Result<(Value, State), Error> {
             "policy_drafts",
             "dismissed_reviews",
             "enforcement",
+            "history_owner",
+            "terminal_receipts",
+            "configuration_changes",
         ]
         .iter()
         .any(|key| object.contains_key(*key))
@@ -136,21 +142,41 @@ fn historical(bytes: &[u8]) -> Result<(Value, State), Error> {
 }
 
 pub(super) fn convert(store: &Store, original: &[u8]) -> Result<State, Error> {
+    let observed = super::incarnation::observe(store, true).map_err(|_| {
+        Error::Invalid("operation continuity unavailable; retained checkpoint unchanged")
+    })?;
     let held = *store
         .writer_owned
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         == Some(std::thread::current().id());
+    if held {
+        return Err(Error::StaleSnapshot);
+    }
+    let _publication =
+        crate::review::publication::ProjectionLease::acquire(std::path::Path::new(&store.root))?;
     let mut bytes = original.to_vec();
     loop {
         let (raw, mut state) = recognize(store, &bytes)?;
-        store.validate_checkpoint(&state)?;
+        Store::validate_checkpoint(&state)?;
         crate::review::integrations::registration(&state.operator)?;
         crate::review::integrations::pending(&state.operator)?;
+        // The v1 hash verifies format/content integrity, never reviewed origin.
+        // Authenticate before the historical converter constructs an evaluator
+        // or publishes either a cache artifact or converted checkpoint.
+        crate::review::runtime::inspect_historical(store, &mut state, &raw["active"])?;
+        state.legacy_preview = None;
+        super::portability::authenticate_historical(store, &mut state, &raw["active"], &observed)?;
         let previous = recovery_sources(store, &state.operator)?;
         // Compilation and immutable derived-cache preparation do not require
         // authority ownership. Only publish after checking the same source again.
         crate::review::runtime::restore_historical(store, &mut state, &raw["active"])?;
+        if state.project_root != store.root || !super::incarnation::matches(&state, &observed) {
+            // Authenticated legacy policy still needs a fresh local operation
+            // epoch before the current writer can publish it. Reuse the same
+            // relocation transition without reacquiring our publication lease.
+            state = super::portability::prepare_relocation(store, state, &bytes, &observed)?;
+        }
         #[cfg(test)]
         super::tests::observe(super::tests::Stage::UpgradePrepared);
         let owned = (!held).then(|| store.lock(&|| Ok(()))).transpose()?;
@@ -162,6 +188,9 @@ pub(super) fn convert(store: &Store, original: &[u8]) -> Result<State, Error> {
             drop(owned);
             bytes = latest;
             continue;
+        }
+        if super::incarnation::observe(store, false).ok().as_deref() != Some(observed.as_str()) {
+            return Err(Error::StaleSnapshot);
         }
         let current = crate::policy::fingerprint(&bytes);
         let mut keep = previous.clone();
@@ -182,8 +211,8 @@ pub(super) fn convert(store: &Store, original: &[u8]) -> Result<State, Error> {
         }
         state.operator["upgrade_recovery"] = json!(committed);
         super::history::upgrade(store, &raw, &mut state)?;
-        store.validate_checkpoint(&state)?;
-        store.write(&state)?;
+        Store::validate_checkpoint(&state)?;
+        store.write(&mut state)?;
         let _ = cleanup(store, &committed);
         if let Some(owned) = owned {
             owned.release()?;
@@ -192,16 +221,14 @@ pub(super) fn convert(store: &Store, original: &[u8]) -> Result<State, Error> {
     }
 }
 
-/// Diagnostics validate the same retained authority without publishing any files.
+/// Diagnostics verify the historical record proof, without preparing its policy.
 pub(super) fn inspect(store: &Store, bytes: &[u8]) -> Result<State, Error> {
     let (raw, mut state) = recognize(store, bytes)?;
-    store.validate_checkpoint(&state)?;
+    Store::validate_checkpoint(&state)?;
     crate::review::integrations::registration(&state.operator)?;
     crate::review::integrations::pending(&state.operator)?;
-    recovery_sources(store, &state.operator)?;
     crate::review::runtime::inspect_historical(store, &mut state, &raw["active"])?;
-    super::history::inspect_legacy(store, &raw, &mut state);
-    store.validate_checkpoint(&state)?;
+    Store::validate_checkpoint(&state)?;
     Ok(state)
 }
 
@@ -303,6 +330,7 @@ fn retain(store: &Store, bytes: &[u8], keep: &[String]) -> Result<(), Error> {
         if retained(store, &name)? != bytes {
             return Err(Error::Invalid("upgrade recovery source differs"));
         }
+        super::history::inline::retain(store, bytes, "upgrade");
         cleanup(store, keep)?;
         return Ok(());
     }
@@ -334,6 +362,7 @@ fn retain(store: &Store, bytes: &[u8], keep: &[String]) -> Result<(), Error> {
     sync(&file)?;
     drop(file);
     super::replace(&temporary.path, &target)?;
+    super::history::inline::retain(store, bytes, "upgrade");
     #[cfg(unix)]
     sync(&fs::File::open(&store.directory)?)?;
     Ok(())
@@ -382,6 +411,7 @@ fn cleanup(store: &Store, keep: &[String]) -> Result<(), Error> {
         }
         if retained(store, &name).is_ok_and(|old| crate::policy::fingerprint(&old) == digest) {
             fs::remove_file(entry.path())?;
+            super::history::inline::remove(store, digest, "upgrade");
         }
     }
     Ok(())

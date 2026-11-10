@@ -8,6 +8,8 @@ Change policy
   - acme/parent 0.1.0
   - acme/test 0.1.0
   Permissions: broader, for example acme write: deny → ask
+  Agent guidance changes (separate from permissions):
+    [DIGEST]/acme/test / mutation: {"guidance":null,"on_unmet":null,"reason":"Preview profile choices"} → null
 Review and confirm → Apply change
 Removed acme/parent 0.1.0
 Removed acme/test 0.1.0

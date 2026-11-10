@@ -806,6 +806,11 @@ decision or failing its `when` removes the prefix at the next activation.
 See [project setup](claude-project.md) for when the file is written.
 `shield rule list --json` reports, for each entry that depends on variables or is
 overridden, the values it used and the resolved rule, or why it is inactive.
+Invalid variable references and templates report the owning entry and field,
+the relevant variable names and the selected pack when available. Use that
+location to correct the source or binding. These errors omit configured values;
+an oversized rendered message identifies its field and variables without
+printing the rendered text.
 Project custom rules do not accept variables, `when` or templates.
 
 ## Share rule bodies in a pack

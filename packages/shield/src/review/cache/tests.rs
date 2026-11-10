@@ -3,7 +3,7 @@ use super::*;
 use crate::{configuration::Bundle, review, runtime::Project};
 mod retention;
 
-fn fixture() -> (assert_fs::TempDir, Context) {
+pub(super) fn fixture() -> (assert_fs::TempDir, Context) {
     let root = assert_fs::TempDir::new().unwrap();
     let bundle = Bundle::capture(r#"{"schema_version":1,"packs":[]}"#, &[], None).unwrap();
     let mut context = review::mcp::initialize_fixture(root.path(), &bundle);
@@ -18,6 +18,177 @@ fn artifact(root: &Path) -> Artifact {
         .active
         .unwrap()
         .compiled
+}
+
+#[test]
+fn record_only_default_policy_view_uses_canonical_lock_without_loading_a_plan() {
+    use clap::Parser as _;
+    let (root, context) = fixture();
+    let store = Store::open(root.path()).unwrap();
+    let (state, evaluator) = store.read_current_evaluated().unwrap();
+    let expected = json!(evaluator.effective());
+    let mut tampered = state.candidates["project"].clone();
+    tampered["lock"]["config_digest"] = json!("0".repeat(64));
+    assert!(crate::configuration::recorded_effective(&tampered, &state.policy_revision).is_err());
+    let artifact = artifact(root.path());
+    fs::remove_file(artifact.path()).unwrap();
+    let before = fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let connection = review::mcp::Connection::new("acme-recorded-policy".into());
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    for mcp in [false, true] {
+        let trace = log.request("command", "policy_show", None, None).unwrap();
+        {
+            let _scope = trace.enter();
+            let report = if mcp {
+                let report =
+                    review::mcp::call(&context, &connection, "policy_show", &json!({}), &|| Ok(()));
+                assert!(report["error"].is_null(), "{report}");
+                report["data"].clone()
+            } else {
+                review::project::policy(&context).unwrap()
+            };
+            assert_eq!(report["effective"], expected);
+            assert_eq!(trace.recorded_count("policy.preparations"), 0);
+            assert_eq!(trace.recorded_count("history.captures"), 0);
+        }
+        trace.finish("success");
+    }
+    assert!(!artifact.path().exists());
+    assert_eq!(
+        fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn opaque_coverage_description_preserves_checkpoint_and_policy_authority() {
+    let (root, context) = fixture();
+    let path = root.path().join(".shield/review/state.json");
+    let original: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    let known = original["active"]["compiled"]["inspection"].clone();
+    let mut unknown_field = known.clone();
+    unknown_field["future_field"] = json!({"preserved":[1,"Acme"]});
+    let mut future_schema = known;
+    future_schema["schema_version"] = json!(73);
+    for description in [
+        json!("unsupported descriptor type"),
+        unknown_field,
+        future_schema,
+    ] {
+        let mut raw = original.clone();
+        raw["active"]["compiled"]["inspection"] = description.clone();
+        let bytes = raw.to_string().into_bytes();
+        fs::write(&path, &bytes).unwrap();
+        let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
+        assert!(state.active.as_ref().unwrap().inspection(&state).is_none());
+        assert_eq!(
+            json!(state)["active"]["compiled"]["inspection"],
+            description
+        );
+        assert!(Project::open(root.path()).unwrap().snapshot().is_ok());
+        let report = review::project::status(&context).unwrap();
+        assert_eq!(
+            report["coverage"]["policy_inspection"]["availability"],
+            "unavailable"
+        );
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            bytes,
+            "inspection never rewrites an opaque description"
+        );
+    }
+}
+
+#[test]
+fn record_only_status_and_doctor_do_not_decode_policy_or_compiled_payloads() {
+    use clap::Parser as _;
+    let (root, context) = fixture();
+    let current = artifact(root.path());
+    let mut bytes = fs::read(current.path()).unwrap();
+    bytes[0] ^= 0xff;
+    fs::write(current.path(), bytes).unwrap();
+    for entry in fs::read_dir(root.path().join(".shield/review/sources")).unwrap() {
+        fs::write(entry.unwrap().path(), "unavailable retained source").unwrap();
+    }
+    let checkpoint = root.path().join(".shield/review/state.json");
+    let before = fs::read(&checkpoint).unwrap();
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    for doctor in [false, true] {
+        let trace = log.request("command", "inspection", None, None).unwrap();
+        {
+            let _scope = trace.enter();
+            let report = if doctor {
+                review::project::doctor(&context)
+            } else {
+                review::project::status(&context)
+            }
+            .unwrap();
+            assert_eq!(
+                report["coverage"]["policy_inspection"]["availability"],
+                "recorded"
+            );
+            assert_eq!(report["compiled_cache"]["integrity"], "checked-on-load");
+            assert_eq!(trace.recorded_count("policy.preparations"), 0);
+            assert_eq!(trace.recorded_count("source.hydrated"), 0);
+            assert_eq!(trace.recorded_count("history.captures"), 0);
+            assert_eq!(trace.recorded_count("history.decoded_records"), 0);
+            assert_eq!(trace.recorded_count("history.directory_entries"), 0);
+            assert!(report["history"]["available"].is_null());
+            assert_eq!(report["history"]["integrity"], "unchecked");
+        }
+        trace.finish("success");
+    }
+    assert_eq!(fs::read(checkpoint).unwrap(), before);
+}
+
+#[test]
+fn coverage_descriptions_require_exact_bounded_event_authenticated_identity() {
+    let (root, _) = fixture();
+    let store = Store::open(root.path()).unwrap();
+    let state = store.read_checkpoint().unwrap();
+    assert!(state.active.as_ref().unwrap().inspection(&state).is_some());
+    let original = json!(state);
+    for (field, value) in [
+        ("candidate_digest", json!("0".repeat(64))),
+        ("schema_version", json!(2)),
+        ("automatic_mcp", json!(true)),
+    ] {
+        let mut raw = original.clone();
+        raw["active"]["compiled"]["inspection"][field] = value;
+        let state: State = serde_json::from_value(raw).unwrap();
+        assert!(
+            state.active.as_ref().unwrap().inspection(&state).is_none(),
+            "{field}"
+        );
+    }
+    let mut raw = original.clone();
+    raw["active"]["compiled"]
+        .as_object_mut()
+        .unwrap()
+        .remove("inspection");
+    let state: State = serde_json::from_value(raw).unwrap();
+    assert!(state.active.as_ref().unwrap().inspection(&state).is_none());
+    let mut oversized = artifact(root.path()).inspection().unwrap().clone();
+    oversized.prefixes.push(policy::agent_outputs::CodexPrefix {
+        owner: "custom".into(),
+        rule: "large".into(),
+        pattern: vec![vec!["x".repeat(INSPECTION_LIMIT)]],
+    });
+    assert!(!oversized.matches(&oversized.candidate_digest, &oversized.policy_revision));
 }
 
 #[test]
@@ -218,7 +389,7 @@ fn repair_retains_committed_generation_and_pending_source_objects_share_durable_
     let file = root.path().join(".shield/review/state.json");
     let mut value: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
     assert_eq!(value["candidates"], value["active"]["candidates"]);
-    assert_eq!(value["candidates"]["project"]["kind"], "retained-source-v1");
+    assert_eq!(value["candidates"]["project"]["kind"], "retained-source-v2");
     let rules =
         json!({"schema_version":1,"rules":[{"id":"pending","decision":"allow","reason":"Acme pending","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}}}],"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"]})
         .to_string();
@@ -384,7 +555,7 @@ fn incompatible_plans_rebuild_on_demand_and_preserve_activation() {
     Project::open(root.path()).unwrap().snapshot().unwrap();
     let prepared = artifact(root.path());
     assert!(prepared.digest.starts_with("blake3-v1:"));
-    assert_eq!(&fs::read(prepared.path()).unwrap()[..8], b"SHPLAN14");
+    assert_eq!(&fs::read(prepared.path()).unwrap()[..8], b"SHPLAN15");
     let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
     assert!(state.authorization_events.iter().any(|event| {
         event["kind"] == "compiled_cache_prepared"

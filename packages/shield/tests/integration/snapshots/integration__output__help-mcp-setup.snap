@@ -18,7 +18,7 @@ Options:
       --agent <AGENTS>
           Agent to set up or remove, or box for a Box MCP definition; repeat for several. Omission asks
 
-          [possible values: box, claude, codex, gemini, agy]
+          [possible values: box, claude, codex, gemini, agy, copilot, opencode]
 
       --json
           Print one JSON result; commands that change policy refuse JSON mode

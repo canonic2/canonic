@@ -130,9 +130,11 @@ fn storage_reclamation_reads_committed_references_after_acquiring_the_directory(
     let project = root.path().to_path_buf();
     let worker = std::thread::spawn(move || {
         let store = Store::open(&project).unwrap();
-        let result = Batch::new(&Value::Null, false)
-            .unwrap()
-            .admit(&store, &"a".repeat(64), 1);
+        let result = Batch::new(&Value::Null, false).unwrap().admit(
+            &Namespace::project(&store),
+            &format!("{}.json", "a".repeat(64)),
+            1,
+        );
         sent.send(result).unwrap();
     });
     assert!(matches!(
@@ -177,10 +179,8 @@ fn storage_reclamation_concurrent_preparers_pin_the_published_source_inode() {
         .map(|worker| worker.join().unwrap())
         .collect::<Vec<_>>();
     for (references, pins) in &preparations {
-        let digest = references["project"]["digest"].as_str().unwrap();
-        let path = root
-            .path()
-            .join(format!(".shield/review/sources/{digest}.json"));
+        let name = super::super::manifest::name(&references["project"]).unwrap();
+        let path = root.path().join(".shield/review/sources").join(name);
         let published = fs::metadata(path).unwrap();
         assert_eq!(pins.len(), 1);
         let held = pins[0].metadata().unwrap();

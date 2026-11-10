@@ -1,7 +1,7 @@
 //! Transport-neutral integration planning, exact review and publication.
 use super::{
-    AskFallback, IntegrationChoice, MAX_CONFIG, Plan, Registration, apply, binary_digest,
-    box_definition, confirmed_fallback, files, mcp_after, native, pending, read_file, registration,
+    IntegrationChoice, MAX_CONFIG, Plan, Registration, binary_digest, box_definition,
+    confirmed_fallback, files, mcp_after, native, pending, read_file, registration,
 };
 use crate::{
     agents,
@@ -43,11 +43,22 @@ pub(super) fn resume_plan(
     plan: &Plan,
     activation: Option<&str>,
 ) -> Result<(), Error> {
-    match activation {
-        Some(id) => super::apply_owned(context, metadata, plan, &|| Ok(()), Some(id)),
-        None => apply(context, metadata, plan),
-    }?;
-    sync_prefix_rules_for(context, Some(plan))
+    review::project::checkpoint(context)?;
+    let publication =
+        review::publication::ProjectionLease::acquire(Path::new(&context.project_root))?;
+    resume_plan_guarded(context, metadata, plan, activation, &publication)
+}
+
+pub(in crate::review) fn resume_plan_guarded(
+    context: &Context,
+    metadata: &Value,
+    plan: &Plan,
+    activation: Option<&str>,
+    publication: &review::publication::ProjectionLease,
+) -> Result<(), Error> {
+    plan.check_maintenance_binary()?;
+    super::apply_owned_guarded(context, metadata, plan, &|| Ok(()), activation, publication)?;
+    sync_prefix_rules_for(context, Some(plan), publication)
 }
 
 pub(in crate::review) fn desired(root: &Path) -> Result<Registration, Error> {
@@ -441,6 +452,21 @@ pub(in crate::review) fn prepare_native(
             r.agents.remove(agent);
         }
     }
+    // A later installation can invalidate an omitted adapter's supported
+    // runtime contract. Validate the complete desired set against the final
+    // projected files, including edits staged by another adapter above.
+    if let Some(registration) = desired.as_deref() {
+        for adapter in agents::ADAPTERS {
+            if registration.agents.contains_key(adapter.spec().id) {
+                adapter.check_native_setup(root, &|name| {
+                    files
+                        .iter()
+                        .find(|change| change.path == name)
+                        .map(|change| change.after.clone())
+                })?;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -496,8 +522,8 @@ pub(in crate::review) fn selected_agent(choice: IntegrationChoice, agent: &str) 
     choice.contains(agent)
 }
 
-/// Preserve confirmed Ask fallbacks of the selected agents; default new ones
-/// to Allow so the final review includes their scope.
+/// Preserve confirmed Ask fallbacks; each adapter declares the first-setup
+/// default shown in the final review.
 pub(in crate::review) fn with_fallbacks(
     meta: &Value,
     selected: IntegrationChoice,
@@ -516,7 +542,8 @@ pub(in crate::review) fn with_fallbacks(
         if covered && spec.needs_ask_fallback {
             desired.ask_fallback.insert(
                 spec.id.into(),
-                confirmed_fallback(meta, spec.id)?.unwrap_or(AskFallback::Allow),
+                confirmed_fallback(meta, spec.id)?
+                    .unwrap_or_else(|| adapter.default_ask_fallback()),
             );
         }
     }
@@ -658,8 +685,23 @@ pub(in crate::review) fn finish_checked(
     receipt: Option<Value>,
     checkpoint: crate::review::Checkpoint<'_>,
 ) -> Result<Value, Error> {
+    review::project::checkpoint(context)?;
+    let publication =
+        review::publication::ProjectionLease::acquire(Path::new(&context.project_root))?;
+    finish_guarded(context, meta, plan, receipt, checkpoint, &publication)
+}
+pub(in crate::review) fn finish_guarded(
+    context: &Context,
+    meta: &Value,
+    plan: Option<&Plan>,
+    receipt: Option<Value>,
+    checkpoint: crate::review::Checkpoint<'_>,
+    publication: &review::publication::ProjectionLease,
+) -> Result<Value, Error> {
+    publication.check(context)?;
     if let Some(plan) = plan
-        && let Err(error) = super::apply_checked(context, meta, plan, checkpoint)
+        && let Err(error) =
+            super::apply_owned_guarded(context, meta, plan, checkpoint, None, publication)
     {
         if pending(&crate::review::project::metadata(
             &crate::review::project::checkpoint(context)?,
@@ -676,7 +718,7 @@ pub(in crate::review) fn finish_checked(
         return Ok(receipt);
     }
     let synced = if plan.is_some() {
-        sync_prefix_rules_for(context, plan)
+        sync_prefix_rules_for(context, plan, publication)
     } else {
         Ok(())
     };
@@ -698,29 +740,102 @@ pub(in crate::review) fn finish_checked(
 }
 
 /// Write only the prefix rules covered by this setup's review.
-fn sync_prefix_rules_for(context: &Context, plan: Option<&Plan>) -> Result<(), Error> {
+fn sync_prefix_rules_for(
+    context: &Context,
+    plan: Option<&Plan>,
+    publication: &review::publication::ProjectionLease,
+) -> Result<(), Error> {
+    publication.check(context)?;
     let root = Path::new(&context.project_root);
-    let Ok(snapshot) = crate::runtime::Project::open(root).and_then(|project| project.snapshot())
+    let Ok((state, evaluator)) =
+        super::Store::open(root).and_then(|store| store.read_current_evaluated())
     else {
         return Ok(());
     };
-    super::Store::open(root)?.inspect_checkpoint(context, &|| Ok(()), |state| {
-        if state.policy_revision != snapshot.identity().policy_revision() {
-            return Err(Error::StaleSnapshot);
-        }
-        super::prefix_rules::sync_for(
-            root,
-            &crate::review::project::metadata(state),
-            snapshot.codex_prefixes(),
-            state.enforcement.enabled,
-            plan,
-        )
-    })
+    state.check(context)?;
+    if state
+        .active
+        .as_ref()
+        .is_none_or(|active| active.revision() != evaluator.revision())
+    {
+        return Err(Error::StaleSnapshot);
+    }
+    super::prefix_rules::sync_for(
+        root,
+        &crate::review::project::metadata(&state),
+        evaluator.codex_prefixes(),
+        state.enforcement.enabled,
+        plan,
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn full_registry_selection_refuses_incompatible_copilot_and_claude() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let ids: Vec<_> = crate::agents::ADAPTERS
+            .iter()
+            .map(|adapter| adapter.spec().id)
+            .collect();
+        let selection = IntegrationChoice::Agents(IntegrationChoice::bits(&ids).unwrap());
+        let mut next = desired(root.path()).unwrap();
+        let mut changes = vec![];
+        let error = prepare_native(
+            root.path(),
+            selection,
+            None,
+            Some(&mut next),
+            &[],
+            &mut changes,
+            false,
+        )
+        .err()
+        .unwrap();
+        assert!(error.to_string().contains("separate trusted Copilot"));
+        assert!(!root.path().join(".claude/settings.local.json").exists());
+        assert!(!root.path().join(".github/hooks/shield.json").exists());
+    }
+
+    #[test]
+    fn copilot_existing_registration_refuses_claude_later_and_removal_stays_available() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let mut previous = desired(root.path()).unwrap();
+        previous.agents.insert(
+            "copilot".into(),
+            serde_json::from_value(json!({"groups":{}})).unwrap(),
+        );
+        let mut next = previous.clone();
+        let mut changes = vec![];
+        let error = prepare_native(
+            root.path(),
+            IntegrationChoice::agent("claude"),
+            Some(&previous),
+            Some(&mut next),
+            &[],
+            &mut changes,
+            false,
+        )
+        .err()
+        .unwrap();
+        assert!(error.to_string().contains("separate trusted Copilot"));
+        assert!(!root.path().join(".claude/settings.local.json").exists());
+        let mut next = previous.clone();
+        let mut changes = vec![];
+        prepare_native(
+            root.path(),
+            IntegrationChoice::RemoveAgents(IntegrationChoice::bits(&["copilot"]).unwrap()),
+            Some(&previous),
+            Some(&mut next),
+            &[],
+            &mut changes,
+            false,
+        )
+        .unwrap();
+        assert!(!next.agents.contains_key("copilot"));
+    }
 
     #[test]
     fn shield_mode_setup_preview_refuses_unreadable_or_invalid_enrolled_state() {

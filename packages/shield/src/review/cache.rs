@@ -13,6 +13,9 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
 };
+pub(in crate::review) mod inputs;
+mod ownership;
+mod preparation;
 mod retention;
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -25,6 +28,75 @@ pub(super) struct Artifact {
     plan_key: String,
     pub(super) digest: String,
     length: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    inspection: Option<InspectionRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    input_hints: Option<Value>,
+}
+
+/// Derived metadata never owns activation validity. Unsupported JSON remains
+/// preserved through ordinary authority writes rather than being discarded.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+enum InspectionRecord {
+    Known(Inspection),
+    Opaque(Value),
+}
+
+/// Nonauthorizing coverage facts captured while the evaluator is already owned.
+/// Oversized descriptions are omitted rather than growing the authority checkpoint.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(in crate::review) struct Inspection {
+    schema_version: u8,
+    candidate_digest: String,
+    policy_revision: String,
+    prefixes: Vec<policy::agent_outputs::CodexPrefix>,
+    connections: crate::mcp_connections::Connections,
+    automatic_mcp: bool,
+}
+const INSPECTION_LIMIT: usize = 256 * 1024;
+
+impl Inspection {
+    fn capture(source: Source<'_>, evaluator: &Evaluator) -> Option<Self> {
+        let descriptor = Self {
+            schema_version: 1,
+            candidate_digest: storage::sources::map_digest(source.candidates),
+            policy_revision: source.policy_revision.into(),
+            prefixes: evaluator.codex_prefixes().to_vec(),
+            connections: evaluator.effective().mcp_connections().clone(),
+            automatic_mcp: evaluator.has_mcp_integrations(),
+        };
+        crate::json::fits(&descriptor, INSPECTION_LIMIT).then_some(descriptor)
+    }
+    pub(in crate::review) fn matches(&self, candidate: &str, revision: &str) -> bool {
+        self.schema_version == 1
+            && self.candidate_digest == candidate
+            && self.policy_revision == revision
+            && crate::json::fits(self, INSPECTION_LIMIT)
+    }
+    pub(in crate::review) fn codex_prefixes(&self) -> &[policy::agent_outputs::CodexPrefix] {
+        &self.prefixes
+    }
+    pub(in crate::review) fn mcp_connections(&self) -> &crate::mcp_connections::Connections {
+        &self.connections
+    }
+    pub(in crate::review) fn mcp_connection(
+        &self,
+        agent: &str,
+        alias: &str,
+    ) -> Option<&crate::mcp_connections::Connection> {
+        self.connections.values().find(|connection| {
+            connection.enabled
+                && connection
+                    .agents
+                    .get(agent)
+                    .is_some_and(|name| name == alias)
+        })
+    }
+    pub(in crate::review) fn has_mcp_integrations(&self) -> bool {
+        self.automatic_mcp
+    }
 }
 /// The operator command that prepares this project's compiled cache.
 pub(super) fn repair_route(project_root: &str) -> String {
@@ -51,6 +123,33 @@ fn plan_key(candidate_digest: &str, revision: &str) -> String {
 }
 
 impl Artifact {
+    /// The descriptor retained by a handle is additional to its compiled bytes.
+    pub(in crate::review) fn inspection_byte_len(&self) -> Result<usize, Error> {
+        // Opaque data is bounded by the checkpoint cap and charged in full,
+        // even though it cannot supply usable coverage facts.
+        let inspection = self
+            .inspection
+            .as_ref()
+            .map_or(Ok(0), crate::json::encoded_len)
+            .map_err(|_| Error::Overloaded)?;
+        let inputs = self
+            .input_hints
+            .as_ref()
+            .map_or(Ok(0), crate::json::encoded_len)
+            .map_err(|_| Error::Overloaded)?;
+        inspection.checked_add(inputs).ok_or(Error::Overloaded)
+    }
+    pub(super) fn inspection_digest(&self) -> Option<String> {
+        self.inspection
+            .as_ref()
+            .map(|metadata| crate::json::fingerprint(metadata).expect("inspection serialization"))
+    }
+    pub(super) fn inspection(&self) -> Option<&Inspection> {
+        match self.inspection.as_ref()? {
+            InspectionRecord::Known(metadata) => Some(metadata),
+            InspectionRecord::Opaque(_) => None,
+        }
+    }
     /// Report the artifact without reading it; compatibility compares the stored
     /// plan key with the one this engine derives for the active source and revision.
     pub(super) fn diagnostics(
@@ -299,6 +398,8 @@ fn describe(
         ),
         digest: compiled_digest(bytes),
         length: bytes.len() as u64,
+        inspection: Inspection::capture(state, evaluator).map(InspectionRecord::Known),
+        input_hints: None,
     })
 }
 
@@ -358,6 +459,19 @@ fn build_source(
         manifest.as_bytes(),
         prepared.is_none(),
     )?;
+    if ownership::register(state, &artifact).is_err() {
+        crate::diagnostics::trace::count("cache.ownership_untracked", 1);
+    }
+    if ownership::maintain(
+        &artifact.directory,
+        &artifact.project_key,
+        owner,
+        state.project_root,
+    )
+    .is_err()
+    {
+        crate::diagnostics::trace::count("cache.orphan_cleanup_incomplete", 1);
+    }
     Ok(Artifact {
         _pins: Some(pins),
         ..artifact
@@ -446,11 +560,14 @@ fn check_directory(directory: &Path, private: bool, owner: Option<u32>) -> Resul
     let _ = (private, owner);
     Ok(())
 }
-/// The writer PID of a `<plan>[.inputs].<pid>-<sequence>-<nanoseconds>.tmp`
+/// The writer PID of a `<digest>[.inputs|.probe].<pid>-<sequence>-<nanoseconds>.tmp`
 /// partition temporary.
 fn temporary_writer(name: &str) -> Option<u32> {
     let (plan, stamp) = name.strip_suffix(".tmp")?.rsplit_once('.')?;
-    let plan = plan.strip_suffix(".inputs").unwrap_or(plan);
+    let plan = plan
+        .strip_suffix(".inputs")
+        .or_else(|| plan.strip_suffix(".probe"))
+        .unwrap_or(plan);
     if !digest(plan) {
         return None;
     }
@@ -525,6 +642,22 @@ pub(super) fn recover(context: &Context, checkpoint: super::Checkpoint<'_>) -> R
     rebuild(context, None, checkpoint, "derived-cache").map(|_| ())
 }
 
+fn reusable_current_plan(active: &super::runtime::Active, context: &Context) -> Option<Evaluator> {
+    if active.compiled.plan_key
+        != plan_key(
+            &storage::sources::map_digest(&active.candidates),
+            active.revision(),
+        )
+    {
+        return None;
+    }
+    active
+        .compiled
+        .load(&context.project_root, &context.project_id)
+        .ok()
+        .filter(|evaluator| evaluator.revision() == active.revision())
+}
+
 fn rebuild(
     context: &Context,
     directory: Option<&Path>,
@@ -533,6 +666,17 @@ fn rebuild(
 ) -> Result<Value, Error> {
     checkpoint()?;
     let store = Store::open(Path::new(&context.project_root))?;
+    let initial = store.read_checkpoint()?;
+    initial.check(context)?;
+    let expected = initial
+        .active
+        .as_ref()
+        .ok_or(Error::Invalid("no committed policy to prepare"))?
+        .activation_id()
+        .to_owned();
+    drop(initial);
+    let preparation = preparation::Lease::acquire_cancellable(&context.project_root, checkpoint)?;
+    checkpoint()?;
     let (mut state, _source_pins) = store.read_pinned_checkpoint()?;
     state.check(context)?;
     let active = state
@@ -540,31 +684,59 @@ fn rebuild(
         .as_ref()
         .ok_or(Error::Invalid("no committed policy to prepare"))?;
     let activation = active.activation_id().to_owned();
+    if activation != expected {
+        return Err(Error::StaleSnapshot);
+    }
+    let cached = reusable_current_plan(active, context);
     // Direct edits and pending review candidates cannot enter an active cache.
     state.candidates = std::collections::BTreeMap::from([(
         "project".into(),
-        store.captured_candidate(active.project_candidate()?)?,
+        if cached.is_some() {
+            active.project_candidate()?.clone()
+        } else {
+            store.captured_candidate(active.project_candidate()?)?
+        },
     )]);
     state.policy_revision = active.revision().into();
     // Recovery must keep the active cache location, even if projections changed.
+    let explicit_directory = directory.is_some();
     let directory = directory.unwrap_or(&active.compiled.directory);
     checkpoint()?;
-    let artifact = build(&state, Some(directory)).map_err(|error| match error {
+    let artifact = (if let Some(evaluator) = &cached {
+        build_source(
+            Source {
+                project_root: &state.project_root,
+                project_id: &state.project_id,
+                candidates: &state.candidates,
+                policy_revision: &state.policy_revision,
+                operator: &state.operator,
+            },
+            Some(directory),
+            Some(evaluator),
+        )
+    } else {
+        build(&state, Some(directory))
+    })
+    .map_err(|error| match error {
         // Only this build touches the disposable cache. Authoritative source
         // reads above and checkpoint publication below keep their own errors.
         Error::Io(_) => Error::CacheUnavailable,
         other => other,
     })?;
+    preparation.check()?;
     store.update_checkpoint(context, checkpoint, |current| {
+        preparation.check()?;
         let active = current.active.as_mut().ok_or(Error::StaleSnapshot)?;
         if active.activation_id() != activation {
             return Err(Error::StaleSnapshot);
         }
+        let location_changed = explicit_directory && active.compiled.directory != artifact.directory;
         active.compiled = artifact.clone();
         current.operator["compiled_cache_root"] = json!(artifact.directory);
         if !current.authorization_events.iter().any(|event| {
             event["links"]["activation_id"] == activation
                 && event["details"]["compiled_digest"] == artifact.digest
+                && event["details"]["inspection_digest"] == json!(artifact.inspection_digest())
                 && (event["operator"]["mechanism"] == "operator-cli"
                     || (event["kind"] == "compiled_cache_prepared"
                         && event["operator"]["mechanism"] == "derived-cache"))
@@ -574,11 +746,12 @@ fn rebuild(
                 context,
                 json!({"activation_id":activation}),
                 json!({}),
-                json!({"compiled_digest":artifact.digest}),
+                json!({"compiled_digest":artifact.digest,"inspection_digest":artifact.inspection_digest()}),
             );
             event["operator"] = json!({"mechanism":mechanism});
             current.record(event);
         }
+        if location_changed { super::configuration_changes::changed(current, context, "compiled cache location"); }
         Ok(
             json!({"schema_version":1,"prepared":true,"policy_revision":state.policy_revision,
             "cache_directory":artifact.directory,"compiled_digest":artifact.digest}),

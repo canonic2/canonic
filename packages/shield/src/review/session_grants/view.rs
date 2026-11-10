@@ -125,6 +125,7 @@ pub(crate) fn confirmation(context: &Context, args: &Value) -> Result<Option<Str
     let (id, digest) = apply_fields(args)?;
     let now = super::super::clock::now_ms()?;
     store(context)?.inspect_checkpoint(context, &|| Ok(()), |state| {
+        state.check_operations()?;
         let row = state.session_grants.records.get(id).ok_or(Error::Missing)?;
         if row.digest != digest {
             return Err(Error::Invalid("candidate digest differs"));

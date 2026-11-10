@@ -7,6 +7,8 @@ $ shield rule remove status
 Change policy
   - rule status: allow git status
   Permissions: not fully compared; check the changes above
+  Agent guidance changes (separate from permissions):
+    custom / status: {"guidance":null,"on_unmet":null,"reason":"Read repository state"} → null
 Review and confirm → Apply change
 Removed rule status
 --- exit 0

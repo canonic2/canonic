@@ -3,30 +3,32 @@
 use crate::cli::Cli;
 use serde_json::{Value, json};
 use std::{
-    fs::{File, OpenOptions},
-    io::Write,
+    fs::File,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
-    time::{Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
+mod retention;
 pub(crate) mod trace;
 
 const LIMIT: u64 = 8 * 1024 * 1024;
 
 pub(crate) struct Log {
     path: Option<PathBuf>,
-    started: Instant,
+    started: Option<Instant>,
     writer: Arc<Mutex<Option<(File, u64)>>>,
     traces: OnceLock<Arc<trace::Recorder>>,
+    drain: Duration,
 }
 
 impl Log {
     pub(crate) fn disabled() -> Self {
         Self {
             path: None,
-            started: Instant::now(),
+            started: None,
             writer: Arc::new(Mutex::new(None)),
             traces: OnceLock::new(),
+            drain: Duration::ZERO,
         }
     }
 
@@ -42,10 +44,6 @@ impl Log {
         let Some(directory) = directory else {
             return Self::disabled();
         };
-        let Ok(log) = Self::create(&directory) else {
-            eprintln!("Shield: diagnostic log unavailable; continuing without diagnostics.");
-            return Self::disabled();
-        };
         let transport = match &cli.command {
             crate::cli::PublicCommand::Internal(command) => match command.as_ref() {
                 crate::cli::Command::NativeHook(_) => "native_hook",
@@ -54,11 +52,25 @@ impl Log {
             command if command.mcp_serve().is_some() => "mcp",
             _ => "operator",
         };
-        log.event("run_start", json!({"pid":std::process::id(),"version":env!("CARGO_PKG_VERSION"),"debug_build":cfg!(debug_assertions),"transport":transport}));
+        let drain = if transport == "native_hook" {
+            Duration::ZERO
+        } else {
+            Duration::from_millis(5)
+        };
+        let Ok(log) = Self::create_with_drain(&directory, drain) else {
+            eprintln!("Shield: diagnostic log unavailable; continuing without diagnostics.");
+            return Self::disabled();
+        };
+        log.event("run_start", || json!({"pid":std::process::id(),"version":env!("CARGO_PKG_VERSION"),"debug_build":cfg!(debug_assertions),"transport":transport}));
         log
     }
 
+    #[cfg(test)]
     fn create(directory: &Path) -> std::io::Result<Self> {
+        Self::create_with_drain(directory, Duration::from_millis(5))
+    }
+
+    fn create_with_drain(directory: &Path, drain: Duration) -> std::io::Result<Self> {
         let mut builder = std::fs::DirBuilder::new();
         builder.recursive(true);
         #[cfg(unix)]
@@ -73,26 +85,13 @@ impl Log {
         {
             return Err(std::io::Error::other("diagnostic directory is a symlink"));
         }
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(std::io::Error::other)?
-            .as_nanos();
-        let path = directory.join(format!("shield-{timestamp}-{}.jsonl", std::process::id()));
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let file = options.open(&path)?;
-        #[cfg(windows)]
-        crate::windows_security::make_private(&path)?;
+        let (path, file) = retention::create(directory)?;
         Ok(Self {
             path: Some(path),
-            started: Instant::now(),
+            started: Some(Instant::now()),
             writer: Arc::new(Mutex::new(Some((file, 0)))),
             traces: OnceLock::new(),
+            drain,
         })
     }
 
@@ -108,10 +107,17 @@ impl Log {
         connection: Option<&str>,
     ) -> Option<trace::Request> {
         self.path.as_ref()?;
-        let recorder = self
-            .traces
-            .get_or_init(|| Arc::new(trace::Recorder::new(self.writer.clone(), self.started)));
-        Some(recorder.request(surface, operation, id, connection))
+        Some(self.recorder().request(surface, operation, id, connection))
+    }
+
+    fn recorder(&self) -> &Arc<trace::Recorder> {
+        self.traces.get_or_init(|| {
+            Arc::new(trace::Recorder::new(
+                self.writer.clone(),
+                self.started.expect("enabled diagnostics epoch"),
+                self.drain,
+            ))
+        })
     }
 
     #[cfg(test)]
@@ -119,32 +125,13 @@ impl Log {
         self.writer.lock().unwrap()
     }
 
-    pub(crate) fn event(&self, event: &str, fields: Value) {
-        let Ok(mut writer) = self.writer.lock() else {
+    pub(crate) fn event(&self, event: &str, fields: impl FnOnce() -> Value) {
+        if self.path.is_none() {
             return;
-        };
-        let Some((file, bytes)) = writer.as_mut() else {
-            return;
-        };
-        let mut record = json!({"elapsed_ms":self.started.elapsed().as_millis(),"event":event});
-        record["fields"] = fields;
-        let Ok(mut line) = serde_json::to_vec(&record) else {
-            return;
-        };
-        line.push(b'\n');
-        if bytes
-            .saturating_add(u64::try_from(line.len()).unwrap_or(u64::MAX))
-            .saturating_add(64)
-            > LIMIT
-        {
-            let _ = file.write_all(b"{\"event\":\"log_limit_reached\"}\n");
-            *writer = None;
-        } else if file.write_all(&line).is_ok() {
-            *bytes += u64::try_from(line.len()).unwrap_or(0);
-        } else {
-            *writer = None;
-            eprintln!("Shield: diagnostic logging stopped after a write failure.");
         }
+        let mut record = json!({"elapsed_ms":self.started.expect("enabled diagnostics epoch").elapsed().as_millis(),"event":event});
+        record["fields"] = fields();
+        self.recorder().publish(record);
     }
 
     pub(crate) fn hook_input(&self, agent: &str, bytes: &[u8], read_ok: bool, oversized: bool) {
@@ -153,7 +140,7 @@ impl Log {
         }
         let parsed = crate::json::parse(bytes);
         let host = parsed.as_ref().ok();
-        self.event("hook_input", json!({"agent":agent,"captured_bytes":bytes.len(),"read_ok":read_ok,"oversized":oversized,"valid_json":host.is_some(),
+        self.event("hook_input", || json!({"agent":agent,"captured_bytes":bytes.len(),"read_ok":read_ok,"oversized":oversized,"valid_json":host.is_some(),
             "host_event":host.and_then(|v| label(&v["hook_event_name"])),
             "tool_name":host.and_then(|v| label(&v["tool_name"])),
             "session_id":host.and_then(|v| label(&v["session_id"])),
@@ -169,7 +156,7 @@ impl Log {
             return;
         }
         let hook = &value["hookSpecificOutput"];
-        self.event("hook_output", json!({"bytes":crate::json::encoded_len(value).expect("hook JSON serializes"),"host_event":label(&hook["hookEventName"]),"permission_decision":label(&hook["permissionDecision"]),"decision_behavior":label(&hook["decision"]["behavior"]),"has_context":hook.get("additionalContext").is_some(),"has_system_message":value.get("systemMessage").is_some(),"has_updated_input":hook.get("updatedInput").is_some()}));
+        self.event("hook_output", || json!({"bytes":crate::json::encoded_len(value).expect("hook JSON serializes"),"host_event":label(&hook["hookEventName"]),"permission_decision":label(&hook["permissionDecision"]),"decision_behavior":label(&hook["decision"]["behavior"]),"has_context":hook.get("additionalContext").is_some(),"has_system_message":value.get("systemMessage").is_some(),"has_updated_input":hook.get("updatedInput").is_some()}));
     }
 
     #[cfg(test)]
@@ -200,10 +187,13 @@ impl Log {
         let tool = frame
             .and_then(|v| v["params"]["name"].as_str())
             .filter(|s| tool_names().iter().any(|name| name == *s));
-        let observed_us =
-            u64::try_from(observed.saturating_duration_since(self.started).as_micros())
-                .unwrap_or(u64::MAX);
-        self.event(direction, json!({"observed_us":observed_us,"bytes":bytes.len(),"valid_json":frame.is_some(),"method":method,"tool":tool,"id":frame.and_then(|v|label(&v["id"]).map(Value::String).or_else(||v["id"].as_i64().map(|id|json!(id)))),"error_code":frame.and_then(|v|v["error"]["code"].as_i64()),"tool_error":frame.and_then(|v|v["result"]["isError"].as_bool())}));
+        let observed_us = u64::try_from(
+            observed
+                .saturating_duration_since(self.started.expect("enabled diagnostics epoch"))
+                .as_micros(),
+        )
+        .unwrap_or(u64::MAX);
+        self.event(direction, || json!({"observed_us":observed_us,"bytes":bytes.len(),"valid_json":frame.is_some(),"method":method,"tool":tool,"id":frame.and_then(|v|label(&v["id"]).map(Value::String).or_else(||v["id"].as_i64().map(|id|json!(id)))),"error_code":frame.and_then(|v|v["error"]["code"].as_i64()),"tool_error":frame.and_then(|v|v["result"]["isError"].as_bool())}));
     }
 }
 

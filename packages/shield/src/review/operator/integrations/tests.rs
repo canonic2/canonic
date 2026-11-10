@@ -13,6 +13,41 @@ mod repository_independence;
 mod status_reporting;
 
 #[test]
+fn init_reuses_exact_source_only_consent_without_a_terminal_or_another_policy_review() {
+    let original = assert_fs::TempDir::new().unwrap();
+    let config = "schema_version: 1\npacks: []\nrules: rules.yml\n";
+    let rules =
+        r#"{"schema_version":1,"kind":"custom","capabilities":["structured-rules-v1"],"rules":[]}"#;
+    let bundle = Bundle::capture(config, &[], Some(rules)).unwrap();
+    let before = review::mcp::initialize_fixture(original.path(), &bundle);
+    let clone = assert_fs::TempDir::new().unwrap();
+    fs::create_dir(clone.path().join(".shield")).unwrap();
+    fs::write(clone.path().join(".shield/config.yml"), config).unwrap();
+    fs::write(clone.path().join(".shield/rules.yml"), rules).unwrap();
+    let report = initialize_in_cache(clone.path(), None, true, None, Baseline::Skip).unwrap();
+    assert_eq!(report["policy_reused"], true);
+    assert_ne!(report["project_id"], before.project_id);
+    let state = Store::open(clone.path())
+        .unwrap()
+        .read_checkpoint()
+        .unwrap();
+    assert_eq!(state.policy_lineage(), before.project_id);
+    assert_eq!(
+        fs::read_to_string(clone.path().join(".shield/config.yml")).unwrap(),
+        config
+    );
+    assert_eq!(
+        fs::read_to_string(clone.path().join(".shield/rules.yml")).unwrap(),
+        rules
+    );
+    assert!(
+        state.proposals.is_empty()
+            && state.read_requests.is_empty()
+            && state.run_requests.is_empty()
+    );
+}
+
+#[test]
 fn antigravity_doctor_reports_disabled_hooks_and_removal_deletes_empty_mcp_settings() {
     let (root, context) = fixture();
     let before = meta(&context);
@@ -53,9 +88,19 @@ fn retained_setup_records_preserve_legacy_block_fallback_and_require_file_owners
         .unwrap()
         .unwrap();
     let desired = plan.desired.as_ref().unwrap();
-    assert_eq!(desired.agents.len(), crate::agents::ADAPTERS.len());
+    let choice = IntegrationChoice::all();
+    assert_eq!(
+        desired.agents.len(),
+        crate::agents::ADAPTERS
+            .iter()
+            .filter(|a| choice.contains(a.spec().id))
+            .count()
+    );
     for adapter in crate::agents::ADAPTERS {
-        assert!(desired.agents.contains_key(adapter.spec().id));
+        assert_eq!(
+            desired.agents.contains_key(adapter.spec().id),
+            choice.contains(adapter.spec().id)
+        );
     }
     let mut incomplete_plan = json!(plan);
     incomplete_plan.as_object_mut().unwrap().remove("files");
@@ -185,7 +230,7 @@ fn mcp_setup_targeted_removal_keeps_other_agents_hooks_and_mcp() {
             .keys()
             .map(String::as_str)
             .collect::<Vec<_>>(),
-        ["agy", "gemini"]
+        ["agy", "gemini", "opencode"]
     );
     apply(&context, &before, &plan).unwrap();
     assert!(config(root.path())["mcpServers"].get("shield").is_none());
@@ -300,7 +345,10 @@ fn initial_review_reclaims_only_exact_generated_entries_without_writes() {
         .unwrap();
     assert_eq!(
         captured.previous.as_ref().unwrap().agents.len(),
-        crate::agents::ADAPTERS.len()
+        crate::agents::ADAPTERS
+            .iter()
+            .filter(|adapter| IntegrationChoice::all().contains(adapter.spec().id))
+            .count()
     );
     assert_eq!(
         fs::read_to_string(root.path().join(".mcp.json")).unwrap(),
@@ -432,7 +480,14 @@ fn mcp_connections_box_setup_repairs_bindings_and_retains_handover_ownership() {
                 fs::write(root.path().join(".mcp.json"), "{\"mcpServers\":{}}").unwrap();
                 let doctor = crate::review::project::doctor(&context).unwrap();
                 assert_eq!(doctor["repair_needed"], true, "{doctor}");
-                assert_eq!(doctor["repair_route"], "shield mcp setup --agent box");
+                assert_eq!(
+                    doctor["repair_route"],
+                    if handover {
+                        "shield mcp setup"
+                    } else {
+                        "shield mcp setup --agent box"
+                    }
+                );
                 let preview = workflow::review(&context, Some(choice), true, false).unwrap();
                 assert!(
                     preview["files"].as_array().unwrap().iter().any(|file| {
@@ -620,7 +675,7 @@ fn mcp_connections_private_projection_supports_tracked_destinations_without_priv
             shown["host_path_warning"]
                 .as_str()
                 .unwrap()
-                .contains("absolute")
+                .contains("machine-specific")
         );
         apply(&context, &before, &plan).unwrap();
         assert_private_host_output(root.path());
@@ -1044,7 +1099,14 @@ fn native_project_registration_is_isolated_and_symlink_parents_refuse() {
     install(&b);
     let first_bytes = fs::read(first.path().join(".claude/settings.local.json")).unwrap();
     let second_bytes = fs::read(second.path().join(".claude/settings.local.json")).unwrap();
-    assert_ne!(first_bytes, second_bytes);
+    assert_eq!(
+        first_bytes, second_bytes,
+        "owned launchers are portable across project roots"
+    );
+    assert_ne!(
+        a.project_id, b.project_id,
+        "runtime enrollment identity remains isolated"
+    );
     let before = meta(&a);
     apply(
         &a,

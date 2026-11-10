@@ -32,9 +32,10 @@ pub(crate) const MAX_MESSAGE: usize = 524_288;
 pub(crate) const MAX_OUTPUT: usize = 4_194_304;
 pub(crate) const MAX_MESSAGES: u64 = 1024;
 
-/// One enrolled project connection. The review context is fixed at startup
-/// except for the client name and version recorded during initialization.
+/// One enrolled project connection. A pristine diagnostic connection can adopt
+/// its first runtime epoch; retained authority and later epoch changes cannot.
 pub(crate) struct Server {
+    runtime_transition: Mutex<()>,
     review: RwLock<Arc<crate::review::Context>>,
     connection: Arc<crate::review::mcp::Connection>,
     confirmations: Mutex<confirmation::Confirmations>,
@@ -77,6 +78,7 @@ impl Server {
         let connection = Arc::new(crate::review::mcp::Connection::enrolled(&context)?);
         let preparations = Arc::new(crate::review::preparation_tasks::Runtime::new(&context));
         Ok(Self {
+            runtime_transition: Mutex::new(()),
             review: RwLock::new(Arc::new(context)),
             connection,
             confirmations: Mutex::new(confirmation::Confirmations::default()),
@@ -92,6 +94,40 @@ impl Server {
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
+    }
+    fn normalize_runtime(
+        &self,
+        name: &str,
+        args: &serde_json::Value,
+    ) -> Result<(), crate::review::Error> {
+        if !crate::review::mcp::needs_runtime(name, args) {
+            return Ok(());
+        }
+        let _transition = self
+            .runtime_transition
+            .lock()
+            .map_err(|_| crate::review::Error::Locked)?;
+        let before = self.review();
+        let pristine = self
+            .confirmations
+            .lock()
+            .map_err(|_| crate::review::Error::Locked)?
+            .is_empty()
+            && self
+                .questions
+                .lock()
+                .map_err(|_| crate::review::Error::Locked)?
+                .is_empty()
+            && self.preparations.unused();
+        let current = self.connection.runtime_context(&before, pristine)?;
+        if current.project_id != before.project_id {
+            self.preparations.rebind_unused(&current)?;
+            *self
+                .review
+                .write()
+                .map_err(|_| crate::review::Error::Locked)? = Arc::new(current);
+        }
+        Ok(())
     }
 
     pub(crate) fn with_log(mut self, log: Arc<crate::diagnostics::Log>) -> Self {
@@ -310,6 +346,32 @@ impl Server {
         }
     }
 
+    fn runtime_refusal(
+        &self,
+        call: &ToolCall,
+        context: &stdio::Context,
+        error: &crate::review::Error,
+    ) -> Outcome {
+        if let Some(request) = context.request_context() {
+            let binding = self
+                .confirmations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .discard(request);
+            if let Some(binding) = binding {
+                crate::review::mcp::discard_admin(&self.connection, binding);
+            }
+        }
+        let review = self.review_for_request(context);
+        Outcome::Tool(response::tool_result(
+            &call.name,
+            review.agent.as_deref(),
+            crate::review::mcp::admin_error(&review, &call.name, error),
+            true,
+            &|| Ok(()),
+        ))
+    }
+
     fn resume_confirmation(
         &self,
         review: &crate::review::Context,
@@ -436,6 +498,9 @@ impl stdio::Handler for Server {
             let Request::Tool(call) = request else {
                 return self.non_tool(&request, context);
             };
+            if let Err(error) = self.normalize_runtime(&call.name, &call.arguments) {
+                return self.runtime_refusal(&call, context, &error);
+            }
             let review = self.review_for_request(context);
             let input_form = needs_input_form(&call) || elicitation::owns(self, context);
             if !input_form && let Some(outcome) = self.resume_confirmation(&review, &call, context)

@@ -368,11 +368,7 @@ fn response(
     if receipt["decision"] != "allow" {
         return policy_denial(root, adapter, receipt, operation);
     }
-    Some(permitted(if adapter.spec().id == "claude" {
-        ""
-    } else {
-        "Shield active project policy permits this request."
-    }))
+    Some(permitted(adapter.allow_reason(super::AllowNotice::Runtime)))
 }
 
 fn policy_denial(

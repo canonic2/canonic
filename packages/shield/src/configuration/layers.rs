@@ -145,7 +145,7 @@ pub(crate) fn merge(shared: &str, local: Option<&str>) -> Result<String, Error> 
     // leave the list after every entry has matched, so indices stay stable.
     let mut named = Vec::new();
     let mut disabled = Vec::new();
-    for entry in local.packs {
+    for mut entry in local.packs {
         let matches: Vec<usize> = packs
             .iter()
             .enumerate()
@@ -161,9 +161,16 @@ pub(crate) fn merge(shared: &str, local: Option<&str>) -> Result<String, Error> 
             [index] => {
                 named.push(*index);
                 if entry.version.is_some() || entry.profile.is_some() || entry.path.is_some() {
-                    return Err(Error::Contract(
-                        "local entries for shared selections change only variables, overrides or disabled",
-                    ));
+                    if entry.registry_identity.is_none() {
+                        entry.registry_identity = packs[*index]["registry_identity"]
+                            .as_str()
+                            .map(str::to_owned);
+                    }
+                    let selection = complete(entry)?;
+                    disabled.push(*index);
+                    named.push(packs.len());
+                    packs.push(selection);
+                    continue;
                 }
                 if entry.disabled {
                     disabled.push(*index);
@@ -180,28 +187,7 @@ pub(crate) fn merge(shared: &str, local: Option<&str>) -> Result<String, Error> 
                 }
             }
             [] => {
-                let (Some(version), Some(profile), Some(path)) =
-                    (entry.version, entry.profile, entry.path)
-                else {
-                    return Err(Error::Contract(
-                        "a local entry names no shared selection and is not a complete selection",
-                    ));
-                };
-                if entry.disabled || !entry.unset.is_empty() || !entry.clear_overrides.is_empty() {
-                    return Err(Error::Contract(
-                        "local-only selections hold their own variables and overrides",
-                    ));
-                }
-                let mut selection = json!({"id":entry.id,"version":version,"profile":profile,"path":path,"layer":"local"});
-                if let Some(registry) = entry.registry_identity {
-                    selection["registry_identity"] = json!(registry);
-                }
-                if !entry.variables.is_empty() {
-                    selection["variables"] = json!(entry.variables);
-                }
-                if !entry.overrides.is_empty() {
-                    selection["overrides"] = json!(entry.overrides);
-                }
+                let selection = complete(entry)?;
                 named.push(packs.len());
                 packs.push(selection);
             }
@@ -223,6 +209,32 @@ pub(crate) fn merge(shared: &str, local: Option<&str>) -> Result<String, Error> 
     }
     extra_layers(&mut document, local.rules, &local.access_paths, &local.mcp);
     Ok(document.to_string())
+}
+
+fn complete(entry: LocalEntry) -> Result<Value, Error> {
+    let (Some(version), Some(profile), Some(path)) = (entry.version, entry.profile, entry.path)
+    else {
+        return Err(Error::Contract(
+            "a local selection requires version, profile and path",
+        ));
+    };
+    if entry.disabled || !entry.unset.is_empty() || !entry.clear_overrides.is_empty() {
+        return Err(Error::Contract(
+            "local selections hold their own variables and overrides",
+        ));
+    }
+    let mut selection =
+        json!({"id":entry.id,"version":version,"profile":profile,"path":path,"layer":"local"});
+    if let Some(registry) = entry.registry_identity {
+        selection["registry_identity"] = json!(registry);
+    }
+    if !entry.variables.is_empty() {
+        selection["variables"] = json!(entry.variables);
+    }
+    if !entry.overrides.is_empty() {
+        selection["overrides"] = json!(entry.overrides);
+    }
+    Ok(selection)
 }
 
 fn extra_layers(
@@ -314,9 +326,16 @@ pub(crate) fn split(
         .unwrap_or_default()
     {
         let row = selection.as_object().ok_or(Error::Syntax)?;
-        let mut entry = identity(row);
-        entry.insert("disabled".into(), json!(true));
-        entries.push((Value::Object(entry), true));
+        if let Some((_, names_shared)) = entries.iter_mut().find(|(entry, _)| {
+            entry["id"] == selection["id"]
+                && entry["registry_identity"] == selection["registry_identity"]
+        }) {
+            *names_shared = true;
+        } else {
+            let mut entry = identity(row);
+            entry.insert("disabled".into(), json!(true));
+            entries.push((Value::Object(entry), true));
+        }
         // Before the first selection that came after it, or a new one.
         let at = shared_position(&selection).map_or(shared.len(), |place| {
             shared
@@ -326,6 +345,9 @@ pub(crate) fn split(
         });
         shared.insert(at, selection);
     }
+    // Dependency solvers may enumerate active selections in identity order.
+    // File order belongs to its layer, including during local-only changes.
+    shared.sort_by_key(|selection| shared_position(selection).unwrap_or(usize::MAX));
     let entries = as_written(entries, &local_before, &shared);
     fields.insert("packs".into(), json!(shared));
     let shared = document.to_string();

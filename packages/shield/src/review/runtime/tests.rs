@@ -259,7 +259,17 @@ fn concurrent_initial_activation_has_one_commit_and_abandoned_lock_preserves_sna
         .write_str("abandoned-writer")
         .unwrap();
     assert!(matches!(
-        publish_fixture(&context, "stale", "stale", None, &|| Ok(())),
+        publish_fixture(
+            &context,
+            status(&context).unwrap()["review"]["policy_revision"]
+                .as_str()
+                .unwrap(),
+            status(&context).unwrap()["review"]["candidate_digest"]
+                .as_str()
+                .unwrap(),
+            Some(results[0]["activation_id"].as_str().unwrap()),
+            &|| Ok(())
+        ),
         Err(Error::Locked)
     ));
     assert_eq!(

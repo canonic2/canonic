@@ -196,6 +196,11 @@ pub(super) fn interactive(root: &TempDir, args: &[&str], answers: &str) -> Value
 #[cfg(unix)]
 fn guided(root: &TempDir, args: &[&str], answers: &str) -> Value {
     let binary = assert_cmd::cargo::cargo_bin!("shield");
+    guided_binary(root, args, answers, binary)
+}
+
+#[cfg(unix)]
+fn guided_binary(root: &TempDir, args: &[&str], answers: &str, binary: &std::path::Path) -> Value {
     let script = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/operator_prompts.py"
@@ -224,7 +229,8 @@ fn guided(root: &TempDir, args: &[&str], answers: &str) -> Value {
         .arg(json!(args).to_string())
         .arg(answers)
         .arg("operator")
-        .env("HOME", root.path())
+        .env("HOME", super::fixture_home(root.path()))
+        .env("LOCALAPPDATA", super::fixture_home(root.path()))
         .env("TERM", "xterm-256color")
         .env("NO_COLOR", "1")
         .output()
@@ -248,8 +254,9 @@ pub(super) fn query(root: &TempDir, args: &[&str]) -> Value {
         .args(args)
         .args(["--json", "--project"])
         .arg(root.path())
-        .env("HOME", root.path())
-        .env("USERPROFILE", root.path())
+        .env("HOME", super::fixture_home(root.path()))
+        .env("USERPROFILE", super::fixture_home(root.path()))
+        .env("LOCALAPPDATA", super::fixture_home(root.path()))
         .assert()
         .success()
         .get_output()
@@ -356,7 +363,7 @@ fn invalid_mcp_setup_and_json_requests_never_enroll_or_modify_a_project() {
 
 #[test]
 #[cfg(any(unix, windows))]
-fn setup_defaults_to_allow_and_preserves_saved_fallback_without_reinitializing_policy() {
+fn setup_defaults_to_allow_and_refuses_unreviewed_fallback_edits() {
     let root = TempDir::new().expect("project");
     cargo_bin_cmd!("shield")
         .args(["mcp", "setup", "--agent", "codex", "--project"])
@@ -366,6 +373,7 @@ fn setup_defaults_to_allow_and_preserves_saved_fallback_without_reinitializing_p
         .stderr(predicates::str::contains("shield init"));
     assert!(!root.path().join(".shield/review/state.json").exists());
     assert_eq!(guided(&root, &["init"], "codex\n\nyes\n")["code"], 0);
+    super::mcp::settle_startup(&root);
     let before = query(&root, &["status"]);
     assert_eq!(
         before["coverage"]["installed_integrations"][0]["ask_fallback"],
@@ -415,17 +423,22 @@ fn setup_defaults_to_allow_and_preserves_saved_fallback_without_reinitializing_p
         .arg(root.path())
         .assert()
         .code(1);
-    // Represent a project whose operator previously confirmed Block. A later
-    // setup must refresh the integration without expanding that authorization.
+    // Editing the checkpoint cannot manufacture confirmed administrative intent.
+    // Unit integration tests separately cover genuinely confirmed Block settings.
     let mut saved: Value = serde_json::from_slice(&std::fs::read(&state_path).unwrap()).unwrap();
     saved["operator"]["integration"]["ask_fallback"]["codex"] = json!("block");
     std::fs::write(&state_path, serde_json::to_vec(&saved).unwrap()).unwrap();
-    assert_eq!(interactive(&root, &codex, "\nyes\n")["code"], 0);
+    let forged = std::fs::read(&state_path).unwrap();
+    assert_eq!(interactive(&root, &codex, "")["code"], 1);
+    assert_eq!(std::fs::read(&state_path).unwrap(), forged);
     let after = query(&root, &["status"]);
     assert_eq!(after["active"], before["active"]);
-    assert_eq!(
-        after["coverage"]["installed_integrations"][1]["ask_fallback"],
-        "block"
+    assert!(
+        after["coverage"]["installed_integrations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["agent"] == "codex" && row["ask_fallback"] == "block")
     );
     assert_eq!(
         after["coverage"]["installed_integrations"]
@@ -482,7 +495,10 @@ fn policy_repair_recreates_missing_files_without_using_init_or_changing_active_p
     let config = root.path().join(".shield/config.yml");
     let original = std::fs::read(&config).unwrap();
     std::fs::remove_file(&config).unwrap();
-    assert_eq!(query(&root, &["status"])["repair_needed"], true);
+    assert_eq!(
+        query(&root, &["status"])["project_file_inspection"],
+        "unchecked"
+    );
     let review = ["policy", "review"];
     assert_eq!(interactive(&root, &review, "repair\nno\n")["code"], 130);
     assert!(!config.exists());
@@ -878,6 +894,98 @@ fn confirmed(root: &TempDir, args: &[&str]) {
 
 #[test]
 #[cfg(any(unix, windows))]
+fn fresh_initialization_creates_projection_directory_only_after_confirmation() {
+    let root = TempDir::new().unwrap();
+    let args = ["init", "--no-setup", "--no-baseline", "--no-debug-log"];
+    let cancelled = guided(&root, &args, "no\n");
+    assert_eq!(cancelled["code"], 130, "{cancelled}");
+    assert!(!root.path().join(".shield").exists());
+    let initialized = guided(&root, &args, "yes\n");
+    assert_eq!(initialized["code"], 0, "{initialized}");
+    assert!(root.path().join(".shield/review/state.json").is_file());
+    assert!(root.path().join(".shield/config.yml").is_file());
+    assert_eq!(query(&root, &["doctor"])["repair_needed"], false);
+}
+
+#[test]
+#[cfg(unix)]
+fn fresh_initialization_refuses_linked_or_file_projection_directory() {
+    for linked in [false, true] {
+        let root = TempDir::new().unwrap();
+        let target = TempDir::new().unwrap();
+        let path = root.path().join(".shield");
+        if linked {
+            std::os::unix::fs::symlink(target.path(), &path).unwrap();
+        } else {
+            std::fs::write(&path, "preserved file").unwrap();
+        }
+        let result = guided(
+            &root,
+            &["init", "--no-setup", "--no-baseline", "--no-debug-log"],
+            "yes\n",
+        );
+        assert_ne!(result["code"], 0, "{result}");
+        assert_eq!(std::fs::read_dir(target.path()).unwrap().count(), 0);
+        if linked {
+            assert!(
+                std::fs::symlink_metadata(path)
+                    .unwrap()
+                    .file_type()
+                    .is_symlink()
+            );
+        } else {
+            assert_eq!(std::fs::read_to_string(path).unwrap(), "preserved file");
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires PREVIOUS_BINARY pointing to a pre-continuity Shield executable"]
+fn previous_binary_unreceipted_checkpoint_requires_origin_verification() {
+    let previous = std::env::var_os("SHIELD_PREVIOUS_BINARY").expect("set PREVIOUS_BINARY");
+    let previous = std::path::Path::new(&previous);
+    let root = TempDir::new().unwrap();
+    let initialized = guided_binary(
+        &root,
+        &["init", "--no-setup", "--no-baseline", "--no-debug-log"],
+        "yes\n",
+        previous,
+    );
+    assert_eq!(initialized["code"], 0, "{initialized}");
+    let path = root.path().join(".shield/review/state.json");
+    let bytes = std::fs::read(&path).unwrap();
+    let checkpoint: Value = serde_json::from_slice(&bytes).unwrap();
+    for field in [
+        "runtime_incarnation",
+        "policy_consent_key",
+        "administration_origin",
+    ] {
+        assert!(
+            checkpoint["operator"][field].is_null(),
+            "previous writer already records {field}"
+        );
+    }
+    let refusal = guided(
+        &root,
+        &["init", "--no-setup", "--no-baseline", "--no-debug-log"],
+        "no\n",
+    );
+    assert_ne!(refusal["code"], 0, "{refusal}");
+    assert!(
+        refusal
+            .to_string()
+            .contains("private reviewed-content proof"),
+        "{refusal}"
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    let diagnostic = query(&root, &["status"]);
+    assert!(diagnostic["project_id"].is_string());
+    assert_eq!(std::fs::read(path).unwrap(), bytes);
+}
+
+#[test]
+#[cfg(any(unix, windows))]
 fn registry_short_refs_preserve_pins_profiles_and_unchanged_activation() {
     let root = TempDir::new().expect("project");
     let source = TempDir::new().expect("registry");
@@ -1106,7 +1214,10 @@ fn confirmed_rules_publish_immediately_and_cancellation_preserves_authority() {
     root.child(".shield/rules.yml")
         .write_str("manual edit")
         .expect("manual projection edit");
-    assert_eq!(query(&root, &["status"])["repair_needed"], true);
+    assert_eq!(
+        query(&root, &["status"])["project_file_inspection"],
+        "unchecked"
+    );
     assert_eq!(
         interactive(&root, &["rule", "remove", "status"], "yes\n")["code"],
         1
@@ -1154,7 +1265,7 @@ pub(super) fn local_dependency_source() -> TempDir {
 }
 
 #[cfg(any(unix, windows))]
-fn fixture_digest(bytes: &[u8]) -> String {
+pub(super) fn fixture_digest(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
         .fold(String::new(), |mut out, byte| {

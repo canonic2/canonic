@@ -17,6 +17,9 @@ fn automatic_mcp_notice(candidate: &Value) -> Option<&'static str> {
 pub(super) fn review(value: &Value) -> Option<String> {
     let mut output = String::new();
     match value["operation"].as_str()? {
+        "configuration change history" => {
+            configuration_history(value, &mut output);
+        }
         "inspect policy" => output = policy(value),
         "change policy" | "adopt manual project edits" => {
             let _ = writeln!(
@@ -89,6 +92,39 @@ pub(super) fn review(value: &Value) -> Option<String> {
         _ => return None,
     }
     Some(output)
+}
+
+fn configuration_history(value: &Value, output: &mut String) {
+    let _ = writeln!(output, "Configuration change history");
+    if value["available"] == false {
+        let _ = writeln!(output, "  {}", label(&value["reason"]));
+    } else {
+        let rows = value["configuration_changes"]
+            .as_array()
+            .map_or(&[][..], Vec::as_slice);
+        if rows.is_empty() {
+            let _ = writeln!(output, "  No retained configuration summaries.");
+        }
+        for row in rows {
+            let _ = writeln!(
+                output,
+                "  {} · {} · {} · {} → {} · {}",
+                label(&row["recorded_at"]),
+                label(&row["operation"]),
+                label(&row["commit_outcome"]),
+                short(&row["before_revision"]),
+                short(&row["after_revision"]),
+                label(&row["actor"]["agent"])
+            );
+        }
+    }
+    if value["available"] != false && value["complete"] == false {
+        let _ = writeln!(output, "  {}", label(&value["reason"]));
+    }
+    let _ = writeln!(
+        output,
+        "  These summaries grant no permission. Current status reports projection repair needs."
+    );
 }
 
 /// One line per proposal: identifier, what it changes, who asked and when.
@@ -379,7 +415,7 @@ fn setting(change: &Value) -> String {
         ),
     };
     if change["widens"] == true {
-        text.push_str(" · widens permissions");
+        text.push_str(" · may widen permissions");
     }
     text
 }
@@ -475,6 +511,11 @@ fn permissions(comparison: &Value) -> String {
     let (broader, stricter) = (&comparison["expansion"], &comparison["restriction"]);
     let mut text = String::from("  Permissions: ");
     match comparison["relation"].as_str() {
+        Some("equivalent")
+            if comparison["algorithm"] == "selected-permission-structure-identity-v1" =>
+        {
+            text.push_str("unchanged permission structure across supported request domains");
+        }
         Some("equivalent") => text.push_str("no command decision changes"),
         Some("restrictive") => {
             let _ = write!(text, "stricter, for example {}", example(stricter));
@@ -500,6 +541,42 @@ fn permissions(comparison: &Value) -> String {
         }
     }
     text.push('\n');
+    let feedback = &comparison["feedback_changes"];
+    if feedback["changed"] == true {
+        text.push_str("  Agent guidance changes (separate from permissions):\n");
+        for row in feedback["entries"].as_array().into_iter().flatten() {
+            let _ = writeln!(
+                text,
+                "    {} / {}: {} → {}",
+                label(&row["owner"]),
+                label(&row["entry_id"]),
+                row["before"],
+                row["after"]
+            );
+        }
+    }
+    if feedback["complete"] == false {
+        text.push_str(
+            "  Agent guidance summary is incomplete; its entry, byte or work budget was reached.\n",
+        );
+    }
+    let overrides = &comparison["override_permission_review"];
+    if overrides.is_object() {
+        let effect = if overrides["complete"] == true {
+            match overrides["relation"].as_str() {
+                Some("expansive" | "mixed") => "includes a proven expansion in the compared domain",
+                Some("restrictive") => "is restrictive in the compared domain",
+                Some("equivalent") => "has unchanged decisions in the compared domain",
+                _ => "unknown",
+            }
+        } else {
+            "unknown; the comparison is incomplete"
+        };
+        let _ = writeln!(
+            text,
+            "  Proposal with overrides: {effect}; this describes the whole proposal."
+        );
+    }
     text.push_str(&codex_prefixes(&comparison["codex_prefixes"]));
     text
 }
@@ -820,6 +897,28 @@ fn done(change: &Value) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn terminal_review_separates_guidance_changes_and_model_equivalence() {
+        let text = permissions(
+            &json!({"relation":"equivalent","complete":true,"algorithm":"selected-permission-structure-identity-v1","feedback_changes":{"changed":true,"complete":true,"entries":[{"owner":"custom","entry_id":"read","before":{"reason":"Before guidance"},"after":{"reason":"After guidance"}}]}}),
+        );
+        assert!(text.contains("unchanged permission structure"));
+        assert!(text.contains("Agent guidance changes (separate from permissions)"));
+        assert!(text.contains("Before guidance"));
+        assert!(text.contains("After guidance"));
+        assert!(!text.contains("no command decision changes"));
+    }
+
+    #[test]
+    fn override_terminal_review_names_unknown_composition_and_retains_witness() {
+        let text = permissions(
+            &json!({"relation":"unknown","complete":false,"expansion":{"request":{"executable":"acme","arguments":["status"]},"before":{"decision":"ask"},"after":{"decision":"allow"}},"override_permission_review":{"scope":"proposal","complete":false,"relation":"unknown","widens":null}}),
+        );
+        assert!(text.contains("unknown; the comparison is incomplete"));
+        assert!(text.contains("whole proposal"));
+        assert!(text.contains("acme status: ask → allow"));
+        assert!(!text.contains("no command decision changes"));
+    }
 
     fn pack(change: &str) -> Value {
         json!({"kind":"pack","change":change,"id":"acme/git","version":"1.1.0","from":"1.0.0","profile":"strict","dependency":false,"digest":"0123456789abcdef".repeat(4)})

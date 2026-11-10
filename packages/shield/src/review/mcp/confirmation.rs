@@ -34,6 +34,24 @@ fn text(value: &Value) -> String {
     result
 }
 
+fn override_review(comparison: &Value) -> Option<String> {
+    let overrides = &comparison["override_permission_review"];
+    overrides.as_object()?;
+    let effect = if overrides["complete"] == true {
+        match overrides["relation"].as_str() {
+            Some("expansive" | "mixed") => "includes a proven expansion in the compared domain",
+            Some("restrictive") => "is restrictive in the compared domain",
+            Some("equivalent") => "has unchanged decisions in the compared domain",
+            _ => "unknown",
+        }
+    } else {
+        "unknown because the comparison is incomplete"
+    };
+    Some(format!(
+        "Proposal with overrides: {effect}. This describes the whole proposal, without attributing the result to one override."
+    ))
+}
+
 fn name(value: &Value) -> String {
     value
         .as_str()
@@ -66,8 +84,11 @@ pub(super) fn headline(changes: &Value) -> Option<String> {
 /// The plain-language change summary, without a question or answer labels, for
 /// hosts whose own prompt supplies them.
 pub(super) fn summary(proposal: &Proposal, args: &Value) -> String {
+    captured_summary(&proposal.candidate, proposal.reviewed_files.is_some(), args)
+}
+pub(super) fn captured_summary(candidate: &Value, reviewed_files: bool, args: &Value) -> String {
     let mut lines = Vec::new();
-    if proposal.reviewed_files.is_some() {
+    if reviewed_files {
         lines.push("Adopt the current edits to this project's .shield policy files.".into());
     }
     let changes = args["changes"].as_array().map_or(&[][..], Vec::as_slice);
@@ -91,7 +112,7 @@ pub(super) fn summary(proposal: &Proposal, args: &Value) -> String {
         .filter(|c| c["kind"] == "pack" && c["change"] != "removed" && c["change"] != "disabled")
         .take(2)
     {
-        let pack = proposal.candidate["packs"]
+        let pack = candidate["packs"]
             .as_array()
             .into_iter()
             .flatten()
@@ -106,6 +127,9 @@ pub(super) fn summary(proposal: &Proposal, args: &Value) -> String {
     }
     let comparison = &args["review"]["comparison"];
     lines.push(String::new());
+    if let Some(summary) = override_review(comparison) {
+        lines.push(summary);
+    }
     if comparison["complete"] != true {
         // Name what was not compared, and whether the examples are real changes.
         let examples = !comparison["expansion"].is_null() || !comparison["restriction"].is_null();
@@ -118,8 +142,13 @@ pub(super) fn summary(proposal: &Proposal, args: &Value) -> String {
             (false, false) => "Shield could not compare every command; the summary is not a guarantee for every command.",
         }.into());
     } else if comparison["relation"] == "equivalent" {
-        lines.push("No command decision changes were found in the supported comparison.".into());
+        lines.push(if comparison["algorithm"] == "selected-permission-structure-identity-v1" {
+            "The supported request domains have identical permission structure; this does not establish host effects or approve activation."
+        } else {
+            "No command decision changes were found in the supported comparison."
+        }.into());
     }
+    lines.extend(feedback_lines(comparison));
     for (kind, label) in [
         ("expansion", "More permission"),
         ("restriction", "Less permission"),
@@ -141,6 +170,30 @@ pub(super) fn summary(proposal: &Proposal, args: &Value) -> String {
         lines.push(text(line));
     }
     lines.join("\n").trim_end().to_owned()
+}
+
+fn feedback_lines(comparison: &Value) -> Vec<String> {
+    let mut lines = Vec::new();
+    let feedback = &comparison["feedback_changes"];
+    if feedback["changed"] == true {
+        lines.push("Agent guidance changes (separate from permissions):".into());
+        for row in feedback["entries"].as_array().into_iter().flatten() {
+            lines.push(format!(
+                "{} / {}: {} → {}",
+                text(&row["owner"]),
+                text(&row["entry_id"]),
+                row["before"],
+                row["after"]
+            ));
+        }
+    }
+    if feedback["complete"] == false {
+        lines.push(
+            "The agent guidance summary is incomplete; its entry, byte or work budget was reached."
+                .into(),
+        );
+    }
+    lines
 }
 
 fn change_lines(change: &Value) -> Vec<String> {
@@ -229,7 +282,7 @@ fn change_lines(change: &Value) -> Vec<String> {
             text(&change["before"]),
             text(&change["after"]),
             if change["widens"] == true {
-                " This broadens permission."
+                " This entry may broaden permission."
             } else {
                 ""
             }
@@ -374,6 +427,24 @@ fn pack_lines(pack: &Value, profile: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn confirmation_separates_agent_feedback_from_permission_proof() {
+        let lines=feedback_lines(&json!({"feedback_changes":{"changed":true,"complete":false,"entries":[{"owner":"custom","entry_id":"read","before":{"guidance":{"message":"Before guidance"}},"after":{"guidance":{"message":"After guidance"}}}]}})).join("\n");
+        assert!(lines.contains("separate from permissions"));
+        assert!(lines.contains("Before guidance"));
+        assert!(lines.contains("After guidance"));
+        assert!(lines.contains("summary is incomplete"));
+        assert!(!lines.contains("approved"));
+    }
+
+    #[test]
+    fn override_confirmation_names_incomplete_proposal_wide_composition() {
+        let comparison = json!({"override_permission_review":{"scope":"proposal","complete":false,"relation":"unknown","widens":null}});
+        let text = override_review(&comparison).unwrap();
+        assert!(text.contains("unknown because the comparison is incomplete"));
+        assert!(text.contains("whole proposal"));
+        assert!(!text.contains("unchanged decisions"));
+    }
 
     #[test]
     fn confirmation_leads_with_permission_scope_instead_of_rule_names() {

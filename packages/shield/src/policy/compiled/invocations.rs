@@ -247,11 +247,14 @@ impl Plan {
                 .as_ref()
                 .and_then(|name| self.metadata.packs[owner].document.invocations.get(name))
                 .ok_or(Error::Contract("missing invocation binding"))?;
-            packs[owner]
-                .0
-                .document
-                .rules
-                .push(shared::materialize(&rule, group, route, prefix, member));
+            let materialized = shared::materialize(&rule, group, route, prefix, member);
+            if let Some(origin) = packs[owner].0.origins.get(&rule.id).cloned() {
+                packs[owner]
+                    .0
+                    .origins
+                    .insert(materialized.id.clone(), origin);
+            }
+            packs[owner].0.document.rules.push(materialized);
         }
         Ok(())
     }

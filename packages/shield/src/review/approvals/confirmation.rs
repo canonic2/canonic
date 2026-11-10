@@ -134,8 +134,11 @@ fn question(
 }
 
 pub(crate) fn confirmation(context: &Context, args: &Value) -> Result<String, Error> {
-    let (ids, _) = hook_approval::requested(args)?;
+    let (ids, list) = hook_approval::requested(args)?;
     let state = project::checkpoint(context)?;
+    if terminal(&state, context, &ids, list)?.is_some() {
+        return Err(Error::Invalid("request is terminal"));
+    }
     if only_hooks(&state, &ids) {
         return hook_approval::confirmation_in(&state, context, args);
     }
@@ -146,6 +149,9 @@ pub(crate) fn confirmation(context: &Context, args: &Value) -> Result<String, Er
 pub(crate) fn approve(context: &Context, args: &Value, confirmed: bool) -> Result<Value, Error> {
     let (ids, list) = hook_approval::requested(args)?;
     let before = project::checkpoint(context)?;
+    if let Some(value) = terminal(&before, context, &ids, list)? {
+        return Ok(value);
+    }
     if only_hooks(&before, &ids) {
         return hook_approval::approve(context, args, confirmed);
     }
@@ -155,6 +161,7 @@ pub(crate) fn approve(context: &Context, args: &Value, confirmed: bool) -> Resul
     }
     let snapshot = consumer::load(context, &|| Ok(()))?;
     Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
+        if let Some(value)=terminal(state,context,&ids,list)? {return Ok(value);}
         question(state, context, &ids, &snapshot)?;
         let time = clock::now_ms()?;
         let mut grants = Vec::with_capacity(ids.len());
@@ -177,4 +184,22 @@ pub(crate) fn approve(context: &Context, args: &Value, confirmed: bool) -> Resul
             Ok(value)
         }
     })
+}
+
+fn terminal(
+    state: &State,
+    context: &Context,
+    ids: &[&str],
+    list: bool,
+) -> Result<Option<Value>, Error> {
+    state.check_operations()?;
+    Ok(hook_approval::terminal_registry(state, clock::now_ms()?)
+        .replay_approval_group(context, ids, clock::now_ms()?)?
+        .map(|mut outcomes| {
+            if list {
+                json!({"status":"terminal","grants":outcomes,"replayed":true,"allowed":false})
+            } else {
+                outcomes.remove(0)
+            }
+        }))
 }

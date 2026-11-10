@@ -766,6 +766,195 @@ fn evaluator() -> Evaluator {
 }
 
 #[test]
+fn typed_report_keeps_literal_aliases_and_null_absence_contracts() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let cwd = root.path().to_str().unwrap();
+    let evaluator = evaluator();
+    let report = super::analyze_versioned_report_with_working_files(
+        "acme read",
+        Dialect::Posix,
+        Some("fixture-1"),
+        cwd,
+        None,
+        cwd,
+        &evaluator,
+        &|| Ok(()),
+        None,
+    )
+    .unwrap();
+    assert!(report.complete() && report.supported());
+    assert!(report.coverage == ReportCoverage::SingleLiteralInvocation);
+    assert_eq!(report.decision, Decision::Allow);
+    let operation = &report.operations[0];
+    assert!(matches!(
+        &operation.data,
+        Data::Invocation { detail, .. } if matches!(detail.as_ref(), Invocation::Literal { .. })
+    ));
+    assert_eq!(operation.span(), Some((0, 9)));
+    assert_eq!(operation.request().unwrap().arguments, ["read"]);
+    assert!(operation.evaluation().is_some());
+    assert!(operation.policy_request().is_none());
+    let encoded = serde_json::to_value(&report).unwrap();
+    assert_eq!(encoded["request"], encoded["operations"][0]["request"]);
+    assert_eq!(
+        encoded["evaluation"],
+        encoded["operations"][0]["evaluation"]
+    );
+    let fields = encoded["operations"][0].as_object().unwrap();
+    assert_eq!(fields["policy_request"], Value::Null);
+    assert_eq!(fields["effects"], Value::Null);
+    for absent in ["cwd_success", "cwd_failure", "logical_cwd_success", "stdin"] {
+        assert!(!fields.contains_key(absent), "{absent}");
+    }
+    assert!(fields["context"].get("arguments_known").is_none());
+    assert_eq!(encoded["source_units"][0]["parent"], Value::Null);
+    assert!(encoded["source_units"][0].get("structure").is_none());
+    assert_eq!(encoded["source_units"][0]["dialect_version"], "fixture-1");
+    assert!(encoded.get("native_coverage").is_none());
+}
+
+#[test]
+fn typed_report_retains_nested_deny_source_units_and_unsupported_admission() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let cwd = root.path().to_str().unwrap();
+    let evaluator = evaluator();
+    let report = super::analyze_versioned_report_with_working_files(
+        "sh -c 'acme write'",
+        Dialect::Posix,
+        None,
+        cwd,
+        None,
+        cwd,
+        &evaluator,
+        &|| Ok(()),
+        None,
+    )
+    .unwrap();
+    assert_eq!(report.decision, Decision::Deny);
+    assert_eq!(report.source_units.len(), 2);
+    assert_eq!(report.source_units[1].source, "acme write");
+    assert!(report.operations.iter().any(|operation| {
+        operation.source_unit == 1
+            && operation.decision == Decision::Deny
+            && operation
+                .request()
+                .is_some_and(|request| request.arguments == ["write"])
+    }));
+    let encoded = report.into_value().unwrap();
+    assert_eq!(
+        encoded["source_units"][1]["parent"]["kind"],
+        "shell-c-script"
+    );
+    assert_eq!(encoded["source_units"][1]["parent"]["source_unit"], 0);
+    assert!(encoded["source_units"][1]["structure"].is_object());
+    assert!(encoded["request"].is_null() && encoded["evaluation"].is_null());
+    let mut opaque = super::analyze_versioned_report_with_working_files(
+        "Get-Content 'acme.txt'",
+        Dialect::Powershell,
+        Some("7.4"),
+        cwd,
+        None,
+        cwd,
+        &evaluator,
+        &|| Ok(()),
+        None,
+    )
+    .unwrap();
+    assert!(!opaque.supported());
+    opaque.mark_unsupported();
+    assert!(!opaque.complete());
+    let encoded = opaque.into_value().unwrap();
+    assert_eq!(encoded["decision"], "ask");
+    assert_eq!(encoded["complete"], false);
+    assert_eq!(encoded["unknown"], "shell dialect analysis is unsupported");
+    assert!(encoded.get("native_coverage").is_none());
+}
+
+#[test]
+fn typed_shell_projection_masks_credential_words_and_source_echoes_without_changing_raw_facts() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let cwd = root.path().to_str().unwrap();
+    let evaluator = evaluator();
+    for source in [
+        "acme --token private-evidence",
+        "acme '--token' 'private-evidence'",
+        "sh -c 'acme --token private-evidence'",
+        r#"sh -c "acme '--token' 'private-evidence'""#,
+        "TOKEN='private-evidence' acme read",
+        "[[ --token private-evidence ]]",
+        "sh <<'EOF'\nacme '--token' 'private-evidence'\nEOF",
+        r#"acme --token "$(echo private-evidence)""#,
+        r#"acme --token "$(git -C private-evidence status)""#,
+        r#"acme --token "$(node --check private-evidence)""#,
+    ] {
+        let report = super::analyze_versioned_report_with_working_files(
+            source,
+            Dialect::Bash,
+            None,
+            cwd,
+            None,
+            cwd,
+            &evaluator,
+            &|| Ok(()),
+            None,
+        )
+        .unwrap();
+        assert_eq!(report.source, source);
+        let raw = serde_json::to_value(&report).unwrap();
+        assert!(raw.to_string().contains("private-evidence"));
+        assert!(!raw.to_string().contains("private_evidence"));
+        let sources = report.sensitive_sources();
+        assert!(sources.contains(&source));
+        let (projected, changed) = crate::evidence::projection::encode_controlled_with_sources(
+            &report,
+            4 * 1024 * 1024,
+            &|| Ok(()),
+            &sources,
+        )
+        .unwrap();
+        assert!(changed);
+        assert_eq!(projected["source"], "[REDACTED]");
+        assert!(
+            !projected.to_string().contains("private-evidence"),
+            "{source}: {projected}"
+        );
+        assert_eq!(projected["decision"], raw["decision"]);
+        assert_eq!(projected["span"], raw["span"]);
+        assert_eq!(projected["dialect"], raw["dialect"]);
+        let (legitimate, changed) = crate::evidence::projection::encode_controlled_with_sources(
+            &json!({"expected":"private-evidence","rule_id":"private-evidence"}),
+            4096,
+            &|| Ok(()),
+            &sources,
+        )
+        .unwrap();
+        assert!(!changed);
+        assert_eq!(legitimate["expected"], "private-evidence");
+    }
+    let report = super::analyze_versioned_report_with_working_files(
+        "Write-Output '--token' 'private-evidence'",
+        Dialect::Powershell,
+        None,
+        cwd,
+        None,
+        cwd,
+        &evaluator,
+        &|| Ok(()),
+        None,
+    )
+    .unwrap();
+    assert!(!report.supported());
+    let (value, _) = crate::evidence::projection::encode_controlled_with_sources(
+        &report,
+        4 * 1024 * 1024,
+        &|| Ok(()),
+        &report.sensitive_sources(),
+    )
+    .unwrap();
+    assert!(!value.to_string().contains("private-evidence"));
+}
+
+#[test]
 fn powershell_native_preview_uses_policy_without_posix_reinterpretation() {
     use crate::{configuration::Candidate, policy::Scope};
     let rules = crate::policy::rules::document(&[
@@ -785,7 +974,11 @@ fn powershell_native_preview_uses_policy_without_posix_reinterpretation() {
             "deny",
             "single-literal-invocation",
         ),
-        ("git status; git push", "ask", "partial"),
+        (
+            "git status; git push",
+            "deny",
+            "structured-literal-operations",
+        ),
         ("git $(whoami)", "ask", "partial"),
         ("Get-Content notes.txt", "ask", "partial"),
     ] {

@@ -19,6 +19,17 @@ fn decision(context: &review::Context, name: &str) -> Value {
 fn operation(name: &str) -> Value {
     json!({"kind":"argv","executable":"acme","arguments":[name]})
 }
+#[test]
+fn history_identifiers_refuse_malformed_owners_without_panicking() {
+    for owner in ["host", "", "éééééééééééééééé", &"z".repeat(64)] {
+        assert!(identifier("event", owner).is_err());
+    }
+    assert!(
+        identifier("event", &"a".repeat(64))
+            .unwrap()
+            .starts_with("event-aaaaaaaaaaaaaaaa-")
+    );
+}
 fn completion(
     context: &review::Context,
     delivery: &str,
@@ -95,6 +106,133 @@ fn diagnostic_history_capture_waits_for_the_history_writer() {
         reader.join().unwrap();
     });
     trace.finish("success");
+}
+
+#[test]
+fn diagnostic_history_does_not_create_a_missing_lock_file() {
+    let (root, _) = enrolled();
+    let store = Store::inspect(root.path()).unwrap();
+    fs::remove_file(store.directory.join("history.lock")).unwrap();
+    let before = store.checkpoint_bytes().unwrap();
+    let (state, _) = store.read_diagnostics().unwrap();
+    assert!(!state.history_available);
+    assert!(!store.directory.join("history.lock").exists());
+    assert_eq!(store.checkpoint_bytes().unwrap(), before);
+}
+
+#[test]
+fn corrupt_optional_history_owner_does_not_revoke_policy_and_clear_repairs_it() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let bundle =
+        crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
+    let context = review::mcp::initialize_fixture(root.path(), &bundle);
+    let store = Store::open(root.path()).unwrap();
+    let checkpoint = store.directory.join("state.json");
+    let mut value: Value = serde_json::from_slice(&store.checkpoint_bytes().unwrap()).unwrap();
+    value["history_owner"] = json!("invalid-owner");
+    fs::write(&checkpoint, value.to_string()).unwrap();
+    let before = store.checkpoint_bytes().unwrap();
+    store.read_checkpoint().unwrap();
+    assert!(!store.read_history().unwrap().history_available);
+    assert!(
+        crate::runtime::Project::open(root.path())
+            .unwrap()
+            .snapshot()
+            .is_ok()
+    );
+    assert_eq!(store.checkpoint_bytes().unwrap(), before);
+    review::history_settings(&context, None, None, true, &|| Ok(())).unwrap();
+    let repaired = store.read_history().unwrap();
+    assert!(repaired.history_available);
+    assert!(repaired.history_owner.is_none());
+}
+
+#[test]
+fn callback_work_counters_separate_bounded_append_from_history_inspection() {
+    use clap::Parser as _;
+    let (root, context) = enrolled();
+    let request = decision(&context, "before");
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let callback = log.request("hook", "completion", None, None).unwrap();
+    {
+        let _scope = callback.enter();
+        completion(
+            &context,
+            "acme-delivery",
+            Some(&request["request_id"]),
+            "before",
+            "completed",
+        );
+    }
+    assert_eq!(callback.recorded_count("history.appended_records"), 1);
+    assert!(callback.recorded_count("history.appended_bytes") > 0);
+    assert!(callback.recorded_count("history.tail_read_bytes") <= (LINE_LIMIT + 1) as u64);
+    for name in [
+        "history.captures",
+        "history.read_bytes",
+        "history.decoded_records",
+        "history.correlations",
+        "history.control_rewrites",
+        "policy.preparations",
+    ] {
+        assert_eq!(callback.recorded_count(name), 0, "{name}");
+    }
+    callback.finish("success");
+    let inspection = log.request("command", "history", None, None).unwrap();
+    {
+        let _scope = inspection.enter();
+        Store::open(root.path()).unwrap().read_history().unwrap();
+    }
+    assert_eq!(inspection.recorded_count("history.captures"), 1);
+    assert_eq!(inspection.recorded_count("history.correlations"), 1);
+    assert!(inspection.recorded_count("history.read_bytes") > 0);
+    assert!(inspection.recorded_count("history.decoded_records") >= 2);
+    assert_eq!(inspection.recorded_count("history.appended_records"), 0);
+    inspection.finish("success");
+}
+
+#[test]
+fn optional_history_callbacks_do_not_wait_or_read_state_behind_a_busy_writer() {
+    use clap::Parser as _;
+    let (root, context) = enrolled();
+    let store = Store::open(root.path()).unwrap();
+    let _guard = lock(&store).unwrap();
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let request = log.request("hook", "completion", None, None).unwrap();
+    {
+        let _scope = request.enter();
+        assert!(matches!(
+            observations::completion(
+                &context,
+                &review::EventInput {
+                    delivery_id: "busy-history".into(),
+                    request_id: None,
+                    status: "completed".into(),
+                },
+                &operation("busy")
+            ),
+            Err(Error::Locked)
+        ));
+    }
+    assert_eq!(request.recorded_count("history.lock_attempts"), 1);
+    assert_eq!(request.recorded_count("history.lock_waits"), 1);
+    assert_eq!(request.recorded_count("state.checkpoint_reads"), 0);
+    assert_eq!(request.recorded_count("history.appended_records"), 0);
+    request.finish("dropped");
 }
 
 #[cfg(windows)]
@@ -422,6 +560,11 @@ fn retention_controls_and_late_completion_do_not_restore_pruned_commands() {
     // A segment temporary left by a crashed writer is removed under the lock.
     let leftover = store.directory.join(".history-file-crashed.tmp");
     fs::write(&leftover, b"partial").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&leftover, fs::Permissions::from_mode(0o600)).unwrap();
+    }
     review::history_settings(&context, Some(true), None, true, &|| Ok(())).unwrap();
     assert_eq!(store.read_history().unwrap().events, [] as [Value; 0]);
     assert!(!leftover.exists());
@@ -436,12 +579,12 @@ fn captured_readers_keep_their_snapshot_through_later_appends_rotation_and_pruni
     }
     let mut state = store.read_checkpoint().unwrap();
     let view = capture(&store, &state).unwrap();
-    // Writers rotate past and prune every captured segment before the reader
-    // finishes outside the lock.
+    // Writers rotate past the captured segment. Its shared kernel pin keeps
+    // bytes linked and accounted until this reader finishes outside the lock.
     for n in 0..400 {
         observations::decision(&context, json!({"operation":operation(&format!("later-{n}")),"request":{"padding":"x".repeat(6500)},"evaluation":{"decision":"deny"}})).unwrap();
     }
-    assert!(segments(&store, &state).unwrap()[0].sequence > 0);
+    assert_eq!(segments(&store, &state).unwrap()[0].sequence, 0);
     finish(Ok(view), &mut state);
     assert!(state.history_available && !state.history_evicted);
     let names: Vec<_> = state
@@ -450,6 +593,42 @@ fn captured_readers_keep_their_snapshot_through_later_appends_rotation_and_pruni
         .map(|e| e["details"]["operation"]["arguments"][0].clone())
         .collect();
     assert_eq!(names, [json!("a"), json!("b"), json!("c")]);
+    for n in 400..600 {
+        observations::decision(&context, json!({"operation":operation(&format!("later-{n}")),"request":{"padding":"x".repeat(6500)},"evaluation":{"decision":"deny"}})).unwrap();
+    }
+    assert!(segments(&store, &state).unwrap()[0].sequence > 0);
+}
+
+#[test]
+fn holes_after_a_pinned_oldest_segment_report_byte_pressure_loss() {
+    let (root, context) = enrolled();
+    let store = Store::open(root.path()).unwrap();
+    let mut state = store.read_checkpoint().unwrap();
+    state.history_generation = generation().unwrap();
+    for sequence in [0, 2] {
+        let event = state.event(
+            "decision",
+            &context,
+            json!({"request_id":format!("gap-{sequence}")}),
+            json!({}),
+            json!({}),
+        );
+        write_segment(
+            &store,
+            &state,
+            sequence,
+            (sequence == 0).then_some(1),
+            &line(&event).unwrap(),
+        )
+        .unwrap();
+    }
+    finish(capture(&store, &state), &mut state);
+    assert!(state.history_available);
+    assert!(
+        state.history_evicted,
+        "a pinned sequence zero cannot conceal later gaps"
+    );
+    assert_eq!(distinct_decisions(&state.events), 2);
 }
 #[test]
 fn rotation_seals_counted_segments_and_prunes_commands_outside_retention() {
@@ -489,7 +668,7 @@ fn byte_cap_evicts_oldest_segments_and_reports_fewer_commands() {
     let mut request = 0;
     let mut fill = |state: &mut State| {
         let (mut bytes, mut count) = (Vec::new(), 0);
-        while bytes.len() < SEGMENT_LIMIT {
+        loop {
             let event = state.event(
                 "decision",
                 &context,
@@ -497,9 +676,13 @@ fn byte_cap_evicts_oldest_segments_and_reports_fewer_commands() {
                 json!({}),
                 json!({"operation":{"padding":padding}}),
             );
+            let row = line(&event).unwrap();
+            if bytes.len() + row.len() + 1024 > SEGMENT_LIMIT {
+                break;
+            }
             request += 1;
             count += 1;
-            bytes.extend(line(&event).unwrap());
+            bytes.extend(row);
         }
         (bytes, count)
     };
@@ -513,7 +696,12 @@ fn byte_cap_evicts_oldest_segments_and_reports_fewer_commands() {
     let at_cap = store.read_history().unwrap();
     assert!(at_cap.history_available && !at_cap.history_evicted);
     // The next append seals the full active segment and evicts the oldest.
-    let latest = decision(&context, "latest");
+    let mut latest = decision(&context, "latest");
+    // Several ordinary callbacks cross the fixture's remaining record slack
+    // without relying on an oversized segment.
+    for _ in 0..16 {
+        latest = decision(&context, "latest");
+    }
     let list = segments(&store, &state).unwrap();
     let total: u64 = list
         .iter()
@@ -533,13 +721,91 @@ fn byte_cap_evicts_oldest_segments_and_reports_fewer_commands() {
     assert!(event(&store, &latest).is_some());
     // A limit change rewrites at most the snapshot bound and keeps reporting
     // both that loss and the earlier byte-cap eviction; clearing ends it.
-    review::history_settings(&context, None, Some(9_999), false, &|| Ok(())).unwrap();
+    let checkpoint = store.checkpoint_bytes().unwrap();
+    assert!(
+        review::history_settings(&context, None, Some(9_999), false, &|| Ok(())).is_err(),
+        "a full store cannot allocate a second large control copy"
+    );
+    assert_eq!(store.checkpoint_bytes().unwrap(), checkpoint);
+    review::history_settings(&context, None, Some(3), false, &|| Ok(())).unwrap();
     let rewritten = store.read_history().unwrap();
-    assert!(rewritten.history_available && rewritten.history_evicted);
+    assert!(rewritten.history_available && !rewritten.history_evicted);
+    assert_eq!(distinct_decisions(&rewritten.events), 3);
     assert!(event(&store, &latest).is_some());
+    review::history_settings(&context, None, Some(1000), false, &|| Ok(())).unwrap();
+    let raised = store.read_history().unwrap();
+    assert!(raised.history_available && raised.history_evicted);
+    assert_eq!(
+        distinct_decisions(&raised.events),
+        3,
+        "raising a limit cannot resurrect evicted requests"
+    );
     review::history_settings(&context, None, None, true, &|| Ok(())).unwrap();
     assert!(!store.read_history().unwrap().history_evicted);
 }
+#[test]
+fn copied_history_completion_cannot_claim_an_original_request() {
+    let (original, mut context) = enrolled();
+    context.surface = "sdk".into();
+    context.cwd = Some(context.project_root.clone());
+    context.tool_use_id = Some("acme-call".into());
+    let decided = decision(&context, "read");
+    let source = Store::open(original.path()).unwrap();
+    let checkpoint = source.checkpoint_bytes().unwrap();
+    let history = source.read_history().unwrap().events;
+    let copied = assert_fs::TempDir::new().unwrap();
+    crate::test_support::copy_fixture_directory(original.path(), copied.path());
+    let opened = review::open(copied.path()).unwrap();
+    let mut child = context.clone();
+    child.project_id = opened.project_id;
+    child.project_root = opened.project_root;
+    assert_ne!(child.project_id, context.project_id);
+    let store = Store::open(copied.path()).unwrap();
+    let retained = event(&store, &decided).expect("copied historical decision remains inspectable");
+    assert_eq!(retained["provenance"]["project_id"], context.project_id);
+    assert_eq!(retained["provenance"]["project_root"], context.project_root);
+    let foreign = completion(
+        &child,
+        "copy-old-request",
+        Some(&decided["request_id"]),
+        "read",
+        "completed",
+    );
+    let observed = event(&store, &foreign).unwrap();
+    assert!(observed["links"]["request_id"].is_null());
+    assert!(observed["links"]["decision_event_id"].is_null());
+    assert_eq!(
+        observed["details"]["reported_request_id"],
+        decided["request_id"]
+    );
+    assert_eq!(observed["provenance"]["project_id"], child.project_id);
+    let fresh = decision(&child, "read");
+    let completed = completion(
+        &child,
+        "copy-fresh-request",
+        Some(&fresh["request_id"]),
+        "read",
+        "completed",
+    );
+    assert_eq!(
+        event(&store, &completed).unwrap()["links"]["decision_event_id"],
+        fresh["event_id"]
+    );
+    assert_eq!(source.checkpoint_bytes().unwrap(), checkpoint);
+    assert_eq!(source.read_history().unwrap().events, history);
+    let completed = completion(
+        &context,
+        "original-request",
+        Some(&decided["request_id"]),
+        "read",
+        "completed",
+    );
+    assert_eq!(
+        event(&source, &completed).unwrap()["links"]["decision_event_id"],
+        decided["event_id"]
+    );
+}
+
 #[test]
 fn reader_links_exact_completions_and_marks_duplicate_and_conflicting_deliveries() {
     let (root, context) = enrolled();
@@ -726,6 +992,22 @@ fn compacted_guidance_keeps_exact_requests_or_omits_them() {
             .as_array()
             .unwrap()
             .contains(&json!("guidance"))
+    );
+}
+
+#[test]
+fn compacted_decision_matches_keep_override_provenance() {
+    let provenance = json!({"profile":"recommended","source":"local","default_decision":"deny","before_override":"ask","final_decision":"allow","override_layer":"local"});
+    let event = bound_event(
+        json!({"kind":"decision","details":{"evaluation":{"explanation":{
+            "padding":"x".repeat(9000),"matches":[{"source":"acme/tools","rule_id":"status","decision":"allow","applied":true,"decision_provenance":provenance}]
+        }}}}),
+    );
+    assert!(event.to_string().len() <= 8192);
+    assert_eq!(event["truncated"], true);
+    assert_eq!(
+        event["details"]["evaluation"]["matches"][0]["decision_provenance"],
+        provenance
     );
 }
 

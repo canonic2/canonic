@@ -51,7 +51,7 @@ test('operator-approved read is consumed once across concurrent SDK retries', as
   await fixture.operator(['request', 'approve', next]);
   const retries = await Promise.all([2, 3, 4].map(n => call({ ...input, tool_use_id: `tool-acme-${n}` })));
   assert.equal(retries.filter(value => decision(value) === 'allow').length, 1);
-  await assert.rejects(fixture.cli(['request', 'show', id]));
+  assert.equal((await fixture.cli(['request', 'show', id])).status, 'consumed');
   assert.equal(decision(await call({ ...input, tool_use_id: 'tool-acme-5' })), 'deny');
   const events = (await fixture.events());
   assert.equal(events.filter(e => e.kind === 'read_grant_consumed').length, 2);
@@ -150,7 +150,7 @@ test('invalid host claims, mismatched IDs, changed enrollment and cancelled call
   assert.equal(decision(await call(input, 'another-tool')), 'deny');
   assert.equal(decision(await call(input, input.tool_use_id, { signal: AbortSignal.abort() })), 'deny');
   await rm(join(fixture.root, '.shield'), { recursive: true });
-  await fixture.initialize();
+  await fixture.initialize([]);
   assert.equal(decision(await call(input)), 'deny');
 });
 
@@ -179,7 +179,7 @@ if (variant === 'id') value.request_id = 'another-tool';
 if (variant === 'project') value.identity.project_id = 'another-project';
 if (variant === 'revision') value.identity.policy_revision = '';
 if (variant === 'missing-diagnostics') delete value.diagnostics;
-if (variant === 'history') value.history = { status: 'failed', request_id: null, event_id: null };
+if (variant === 'history') value.history = { ...value.history, status: 'failed', request_id: null, event_id: null };
 if (variant === 'grant') { value.code = 'allowed-once'; value.approval = { status: 'consumed', request_id: 'fabricated', approval_id: 'fabricated' }; }
 if (variant === 'lost-grant' && value.code === 'allowed-once') process.exit(1);
 if (variant === 'crash') process.exit(1);
@@ -233,9 +233,9 @@ test('a lost allowed-once reply leaves the durable grant consumed', { timeout: 1
   const lost = await call({ ...input, tool_use_id: 'tool-acme-retry' });
   assert.equal(decision(lost), 'deny');
   assert.match(lost.hookSpecificOutput.permissionDecisionReason, /protection-failure/);
-  await assert.rejects(fixture.cli(['request', 'show', id]));
+  assert.equal((await fixture.cli(['request', 'show', id])).status, 'consumed');
   assert.equal((await fixture.events()).filter(e => e.kind === 'read_grant_consumed').length, 1);
-  assert.match((await call({ ...input, tool_use_id: 'tool-acme-again' })).hookSpecificOutput.permissionDecisionReason, /approval-unavailable/);
+  assert.match((await call({ ...input, tool_use_id: 'tool-acme-again' })).hookSpecificOutput.permissionDecisionReason, /approval-consumed/);
   await assert.rejects(fixture.operator(['request', 'approve', id]));
 });
 
@@ -360,6 +360,7 @@ test('post-tool history retains the original activation after operator reactivat
   const input = hostInput(fixture.root, 'Read', { file_path: fixture.allowed }, 'tool-original-activation');
   assert.equal(decision(await callback(hooks)(input)), 'allow');
   const active = await fixture.reactivate();
+  assert.equal(typeof active.activation_id, 'string');
   assert.notEqual(active.activation_id, fixture.active.activation_id);
   assert.deepEqual(await hooks.PostToolUseFailure[0].hooks[0]({ ...input, hook_event_name: 'PostToolUseFailure',
     error: 'PRIVATE_ERROR_SENTINEL', is_interrupt: true }), {});

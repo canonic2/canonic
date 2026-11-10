@@ -40,7 +40,7 @@ fn native_http_configuration_environment_requires_command_review_for_both_agents
         .to_string(),
     )
     .unwrap();
-    super::working_files::initialize(&project);
+    super::working_files::initialize(&project, &home);
     for agent in ["claude", "codex"] {
         for source in [
             "curl -fsS https://registry.example.com/",

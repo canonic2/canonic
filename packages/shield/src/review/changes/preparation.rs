@@ -48,6 +48,7 @@ pub(in crate::review) fn capture(
     let store = Store::open(Path::new(&context.project_root))?;
     let before = store.read_checkpoint()?;
     before.check(context)?;
+    before.check_operations()?;
     let (mut before, base, snapshots_before) = store.read_for_comparison(before)?;
     let global_sources = if input.changes()?.iter().any(|change| {
         matches!(

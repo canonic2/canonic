@@ -38,15 +38,42 @@ fn historical_fixture() -> (assert_fs::TempDir, review::Context, Value) {
     ] {
         object.remove(key);
     }
+    legacy_activation(&mut raw);
+    raw["history_generation"] = Value::Null;
+    (root, context, raw)
+}
+
+/// Reproduce the original legacy proof; dropping current required fields alone
+/// must never manufacture an accepted historical activation.
+pub(super) fn legacy_activation(raw: &mut Value) {
+    raw.as_object_mut().unwrap().remove("configuration_changes");
     raw["active"].as_object_mut().unwrap().remove("compiled");
+    raw["active"]
+        .as_object_mut()
+        .unwrap()
+        .remove("binding_version");
+    let binding = crate::policy::fingerprint(
+        json!([
+            raw["project_id"],
+            raw["project_root"],
+            raw["active"]["activation_id"],
+            raw["active"]["previous_activation_id"],
+            raw["active"]["policy_revision"],
+            raw["active"]["candidate_digest"]
+        ])
+        .to_string()
+        .as_bytes(),
+    );
+    raw["active"]["binding"] = json!(binding);
     for event in raw["authorization_events"].as_array_mut().unwrap() {
+        if event["kind"] == "runtime_activated" {
+            event["details"]["binding"] = json!(binding);
+        }
         event["details"]
             .as_object_mut()
             .unwrap()
             .remove("compiled_digest");
     }
-    raw["history_generation"] = Value::Null;
-    (root, context, raw)
 }
 
 fn save(root: &Path, raw: &Value) -> Vec<u8> {
@@ -667,9 +694,12 @@ fn upgrade_diagnostics_remain_read_only_when_publication_is_blocked() {
         );
         let (state, pending) = store.read_diagnostics().unwrap();
         assert!(pending);
-        let active = json!(state.active.as_ref().unwrap());
-        assert_eq!(active["activation_id"], raw["active"]["activation_id"]);
-        assert_eq!(active["binding"], raw["active"]["binding"]);
+        assert!(state.active.is_none());
+        let preview = json!(state.legacy_preview.as_ref().unwrap());
+        assert_eq!(preview["activation_id"], raw["active"]["activation_id"]);
+        assert_eq!(preview["recorded_proof"], "validated");
+        assert_eq!(preview["model"], "unchecked");
+        assert!(state.check_operations().is_err());
         assert!(!cache.exists());
         assert_eq!(store.checkpoint_bytes().unwrap(), bytes);
         assert_eq!(names(), before);
@@ -692,6 +722,75 @@ fn upgrade_diagnostics_remain_read_only_when_publication_is_blocked() {
         false
     );
     assert_eq!(store.checkpoint_bytes().unwrap(), committed);
+}
+
+#[test]
+fn legacy_record_only_diagnostics_do_not_prepare_source_cache_or_history() {
+    use clap::Parser as _;
+    let (root, context, mut raw) = historical_fixture();
+    let invalid_source = json!({"schema_version":999,"kind":"custom","rules":[]}).to_string();
+    raw["active"]["candidates"]["project"]["rules"] = json!(invalid_source);
+    raw["active"]["candidate_digest"] = json!(crate::review::storage::sources::map_digest(
+        &serde_json::from_value(raw["active"]["candidates"].clone()).unwrap()
+    ));
+    raw["candidates"] = raw["active"]["candidates"].clone();
+    legacy_activation(&mut raw);
+    // Unsupported optional derived metadata is opaque to record inspection.
+    raw["active"]["compiled"] = json!({"future_descriptor":true});
+    let cache = root.path().join("unprepared-legacy-cache");
+    raw["operator"]["compiled_cache_root"] = json!(cache);
+    let bytes = save(root.path(), &raw);
+    let logdir = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logdir.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let connection = review::mcp::Connection::new("legacy-record-only".into());
+    for command in ["status", "doctor"] {
+        let trace = log.request("command", command, None, None).unwrap();
+        {
+            let _scope = trace.enter();
+            let report = if command == "status" {
+                review::project::status(&context).unwrap()
+            } else {
+                review::project::doctor(&context).unwrap()
+            };
+            assert_eq!(report["classification"], "historical-reviewed-record");
+            assert_eq!(report["checkpoint_upgrade_pending"], true);
+            assert_eq!(report["legacy_activation"]["recorded_proof"], "validated");
+            assert_eq!(report["policy_validation"]["model"], "unchecked");
+            assert_eq!(report["history"]["integrity"], "unchecked");
+            assert!(report["active"].is_null());
+            let reply = review::mcp::call(&context, &connection, command, &json!({}), &|| Ok(()));
+            assert!(reply["error"].is_null(), "{reply}");
+            assert!(reply["data"]["active_candidate_id"].is_null());
+            for counter in [
+                "policy.preparations",
+                "source.hydrated",
+                "history.captures",
+                "history.lock_attempts",
+                "history.directory_entries",
+                "history.decoded_records",
+            ] {
+                assert_eq!(trace.recorded_count(counter), 0, "{command}: {counter}");
+            }
+        }
+        trace.finish("success");
+    }
+    assert!(!cache.exists());
+    let store = Store::inspect(root.path()).unwrap();
+    let (preview, pending) = store.read_diagnostic_checkpoint().unwrap();
+    assert!(pending);
+    assert!(preview.active.is_none());
+    assert!(preview.check_operations().is_err());
+    assert!(review::project::policy(&context).is_err());
+    assert_eq!(store.checkpoint_bytes().unwrap(), bytes);
+    // Actual use retains strict source/cache validation and original bytes.
+    assert!(store.read_checkpoint().is_err());
+    assert_eq!(store.checkpoint_bytes().unwrap(), bytes);
 }
 
 #[cfg(unix)]

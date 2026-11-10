@@ -59,6 +59,11 @@ impl Prepared {
                 }
                 if self.changed {
                     state.operator["path_access"] = json!(self.after);
+                    crate::review::configuration_changes::changed(
+                        state,
+                        context,
+                        "protected file access",
+                    );
                 }
                 Ok(self.changed)
             },

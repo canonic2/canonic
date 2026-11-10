@@ -17,13 +17,7 @@ fn historical_fixture() -> (assert_fs::TempDir, Value) {
     ] {
         object.remove(key);
     }
-    raw["active"].as_object_mut().unwrap().remove("compiled");
-    for event in raw["authorization_events"].as_array_mut().unwrap() {
-        event["details"]
-            .as_object_mut()
-            .unwrap()
-            .remove("compiled_digest");
-    }
+    super::tests::legacy_activation(&mut raw);
     raw["history_generation"] = Value::Null;
     (root, raw)
 }

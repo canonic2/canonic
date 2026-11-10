@@ -12,7 +12,7 @@ use std::{
 
 pub(in crate::review) const BYTE_LIMIT: u64 = 4 * 1024 * 1024 * 1024;
 pub(in crate::review) const RESERVE: u64 = 1024 * 1024 * 1024;
-const FILE_LIMIT: usize = 4096;
+pub(in crate::review) const FILE_LIMIT: usize = 4096;
 fn full(kind: crate::review::CapacityKind, needed: usize, limit: usize) -> Error {
     Error::Capacity {
         kind,
@@ -22,11 +22,19 @@ fn full(kind: crate::review::CapacityKind, needed: usize, limit: usize) -> Error
     }
 }
 pub(in crate::review) type Pins = Arc<Vec<File>>;
+pub(in crate::review) fn reader_pinned(path: &Path) -> Result<bool, Error> {
+    let file = open(path, true, false)?;
+    match file.try_lock() {
+        Ok(()) => Ok(false),
+        Err(fs::TryLockError::WouldBlock) => Ok(true),
+        Err(fs::TryLockError::Error(error)) => Err(error.into()),
+    }
+}
 type SweepRow = (std::ffi::OsString, PathBuf, u64, Option<File>);
 
 pub(in crate::review) struct Directory {
     path: PathBuf,
-    _guard: File,
+    guard: File,
     bytes: u64,
     files: usize,
 }
@@ -57,6 +65,14 @@ fn open(path: &Path, write: bool, create: bool) -> Result<File, Error> {
 }
 pub(in crate::review) fn read_file(path: &Path) -> Result<File, Error> {
     open(path, false, false)
+}
+
+/// Share the namespace publication mutex through a short final authority guard.
+/// The caller initializes and validates the private directory before acquiring.
+pub(in crate::review) fn read_lease(path: &Path) -> Result<File, Error> {
+    let file = read_file(&path.join(".objects.lock"))?;
+    file.try_lock_shared().map_err(|_| Error::Locked)?;
+    Ok(file)
 }
 
 /// Bounded, read-only diagnostics; unsafe neighbors are never followed or fixed.
@@ -147,22 +163,31 @@ fn checked(path: &Path, file: &File) -> Result<(), Error> {
 }
 
 impl Directory {
+    pub(in crate::review) fn check_owner(&self) -> Result<(), Error> {
+        checked(&self.path.join(".objects.lock"), &self.guard)
+    }
     /// Callers verify/create the private directory before entering. The stable
     /// mutex serializes publication and admission, never ordinary evaluation.
     pub(in crate::review) fn enter(path: &Path) -> Result<Self, Error> {
-        Self::enter_attempts(path, 20)
+        Self::enter_attempts(path, 20, true)
     }
 
     pub(in crate::review) fn try_enter(path: &Path) -> Result<Self, Error> {
-        Self::enter_attempts(path, 1)
+        Self::enter_attempts(path, 1, true)
     }
 
-    fn enter_attempts(path: &Path, attempts: usize) -> Result<Self, Error> {
+    /// Inspection may pin existing objects, but never creates a missing mutex
+    /// or waits behind maintenance merely to expose an optional handle.
+    pub(in crate::review) fn inspect(path: &Path) -> Result<Self, Error> {
+        Self::enter_attempts(path, 1, false)
+    }
+
+    fn enter_attempts(path: &Path, attempts: usize, create: bool) -> Result<Self, Error> {
         let metadata = fs::symlink_metadata(path)?;
         if !metadata.is_dir() || metadata.file_type().is_symlink() {
             return Err(Error::Invalid("object directory cannot be a link"));
         }
-        let guard = open(&path.join(".objects.lock"), true, true)?;
+        let guard = open(&path.join(".objects.lock"), create, create)?;
         let mut acquired = false;
         for _ in 0..attempts {
             match guard.try_lock() {
@@ -184,7 +209,7 @@ impl Directory {
         checked(&path.join(".objects.lock"), &guard)?;
         Ok(Self {
             path: path.into(),
-            _guard: guard,
+            guard,
             bytes: 0,
             files: 0,
         })
@@ -303,6 +328,15 @@ impl Directory {
         files: usize,
         recovery: bool,
     ) -> Result<(), Error> {
+        self.admit_reserved(bytes, files, recovery, 8)
+    }
+    pub(in crate::review) fn admit_reserved(
+        &self,
+        bytes: u64,
+        files: usize,
+        recovery: bool,
+        reserved_entries: usize,
+    ) -> Result<(), Error> {
         let limit = BYTE_LIMIT - if recovery { 0 } else { RESERVE };
         let needed = self.bytes.saturating_add(bytes);
         if needed > limit {
@@ -312,7 +346,7 @@ impl Directory {
                 usize::try_from(limit).unwrap_or(usize::MAX),
             ));
         }
-        let limit = FILE_LIMIT - if recovery { 0 } else { 8 };
+        let limit = FILE_LIMIT - if recovery { 0 } else { reserved_entries };
         let needed = self.files.saturating_add(files);
         if needed > limit {
             return Err(full(
@@ -327,6 +361,21 @@ impl Directory {
     pub(in crate::review) fn added(&mut self, bytes: u64) {
         self.bytes += bytes;
         self.files += 1;
+    }
+    pub(in crate::review) fn charge_external(
+        &mut self,
+        bytes: u64,
+        files: usize,
+    ) -> Result<(), Error> {
+        self.bytes = self
+            .bytes
+            .checked_add(bytes)
+            .ok_or(crate::policy::Error::Limit)?;
+        self.files = self
+            .files
+            .checked_add(files)
+            .ok_or(crate::policy::Error::Limit)?;
+        Ok(())
     }
 
     pub(in crate::review) fn pins(&self, names: &BTreeSet<String>) -> Result<Pins, Error> {

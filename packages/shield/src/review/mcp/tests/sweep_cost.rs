@@ -9,7 +9,7 @@ use std::{
 };
 
 #[test]
-fn current_mcp_startup_reads_no_history_and_cli_status_captures_it_once() {
+fn current_mcp_startup_and_cli_status_read_no_history() {
     let (root, context, _connection) = fixture();
     let logs = assert_fs::TempDir::new().unwrap();
     let cli = crate::cli::Cli::parse_from([
@@ -60,7 +60,7 @@ fn current_mcp_startup_reads_no_history_and_cli_status_captures_it_once() {
         {
             let _scope = trace.enter();
             assert_eq!(review::operator::run(&cli), std::process::ExitCode::SUCCESS);
-            assert_eq!(trace.recorded_count("history.captures"), 1, "{age}");
+            assert_eq!(trace.recorded_count("history.captures"), 0, "{age}");
             assert_eq!(trace.recorded_count("objects.sweeps"), 0, "{age}");
         }
         trace.finish("success");
@@ -322,16 +322,12 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
                     && r["fields"]["stage"] == "history.read"
             })
             .count();
-        let (preparations, sources, history_reads) = match tool {
-            "policy_propose" => (1, 1, 0),
-            "doctor" => (1, 1, 1),
-            "status" => (0, 0, 1),
-            // Rule lookup reuses the base hydrated by the first proposal after
-            // lazy startup; list requests do not load optional history.
-            "pack_list" | "registry_list" | "request_list" | "native_tool_lookup"
-            | "tool_summaries" | "cli_pack_list" | "rule_list" => (0, 0, 0),
-            "selected" => (0, 2, 0),
-            _ => (0, 1, 0),
+        // Inspection reads only selected source fields and metadata, while a
+        // proposal prepares its exact current base. Neither loads history.
+        let (preparations, sources, history_reads) = if tool == "policy_propose" {
+            (1, 1, 0)
+        } else {
+            (0, 0, 0)
         };
         assert_eq!(
             end["fields"]["counts"]["policy.preparations"], preparations,
@@ -366,11 +362,7 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
                         && record["fields"]["stage"] == "cache.load"
                 })
                 .count();
-            assert_eq!(
-                loads,
-                if tool == "doctor" { 2 } else { 1 },
-                "{age} {tool}: active plan load budget"
-            );
+            assert_eq!(loads, 0, "{age} {tool}: active plan load budget");
         }
         if matches!(
             tool,
@@ -424,11 +416,7 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
                 "an unchanged pack's patterns are compiled once and reused for the edit: {age}",
             );
         }
-        let captures = if tool == "policy_propose" {
-            2
-        } else {
-            u64::from(tool == "doctor")
-        };
+        let captures = if tool == "policy_propose" { 2 } else { 0 };
         assert_eq!(
             end["fields"]["counts"]["policy.source_captures"]
                 .as_u64()
@@ -462,8 +450,8 @@ fn unrelated_unavailable_source_does_not_block_selected_reads_or_new_proposals()
         .find(|p| p.id == old["data"]["proposal_id"])
         .unwrap();
     fs::remove_file(root.path().join(".shield/review/sources").join(format!(
-        "{}.json",
-        unrelated.candidate["digest"].as_str().unwrap()
+        "{}.manifest.json",
+        unrelated.candidate["manifest_digest"].as_str().unwrap()
     )))
     .unwrap();
     for tool in ["pack_list", "registry_list", "rule_list", "policy_show"] {

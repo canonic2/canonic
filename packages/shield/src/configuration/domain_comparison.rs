@@ -3,6 +3,7 @@
 use super::{Comparison, Effective, Snapshot, compare, evaluation::Prepared};
 use crate::policy::{self, Error, Request, Scope, partition};
 use serde::Serialize;
+mod feedback;
 mod profiles;
 mod symbolic;
 
@@ -12,6 +13,8 @@ enum Proof {
     Symbolic,
 }
 
+#[cfg(test)]
+mod override_tests;
 #[cfg(test)]
 mod tests;
 
@@ -34,6 +37,9 @@ pub enum Relation {
 /// Read-only comparison over the current literal matcher model.
 #[derive(Debug, Serialize)]
 pub struct DomainComparison {
+    /// Selected effective agent feedback, separate from permission decisions.
+    feedback_changes: policy::feedback::Summary,
+    feedback_permission_identity: serde_json::Value,
     schema_version: u8,
     kind: &'static str,
     mode: &'static str,
@@ -103,19 +109,35 @@ fn comparison(
     let first = Prepared::new(before)?;
     let second = Prepared::new(after)?;
     let (cwd, project) = fixed.unwrap_or((partition::absolute_root(), partition::absolute_root()));
-    let context = Request {
-        executable: "shield-context-validation".into(),
-        arguments: Vec::new(),
-        cwd: cwd.into(),
-        project: project.into(),
-    };
+    let context = validation_context(cwd, project)?;
+    let feedback =
+        policy::feedback::inspect(&first.packs, &first.custom, &second.packs, &second.custom);
+    let identity_status = feedback::equivalent(before, after, &feedback);
+    if identity_status == "proved" {
+        return identity_comparison(
+            first.effective,
+            second.effective,
+            fixed,
+            feedback.summary,
+            identity_status,
+        );
+    }
     // Validate both complete selected policies even if construction hits a budget.
     let first_validation = first.policy(&context)?;
     let second_validation = second.policy(&context)?;
+    let custom_bound = feedback::custom_decision_bound(before, after, feedback.remaining);
     let packs: Vec<_> = first.packs.iter().chain(&second.packs).copied().collect();
     let customs: Vec<_> = first.custom.iter().chain(&second.custom).copied().collect();
-    if has_normalized(&first, &second) {
-        return normalized_comparison(first.effective, second.effective, fixed);
+    let normalized = has_normalized(&first, &second);
+    if normalized && custom_bound.is_none() {
+        return normalized_comparison(
+            first.effective,
+            second.effective,
+            fixed,
+            feedback.summary,
+            identity_status,
+            custom_bound,
+        );
     }
 
     let mut regions = if fixed.is_some() {
@@ -133,13 +155,21 @@ fn comparison(
     if semantic_identity {
         regions.incomplete = None;
     }
-    let profile_bound = profiles::prepare(&first, &second, fixed, &mut regions)?;
-    let symbolic = if profile_bound.is_none() {
+    let custom_bound = custom_bound
+        .filter(|_| regions.incomplete == Some(partition::Incomplete::UnsupportedSemanticDomain));
+    let profile_bound = if custom_bound.is_none() {
+        profiles::prepare(&first, &second, fixed, &mut regions)?
+    } else {
+        None
+    };
+    let symbolic = if profile_bound.is_none() && custom_bound.is_none() {
         symbolic::prepare(&first, &second, fixed, &mut regions)?
     } else {
         None
     };
-    let decision_bound = profile_bound.or(symbolic.map(|(bound, _)| bound));
+    let decision_bound = custom_bound
+        .or(profile_bound)
+        .or(symbolic.map(|(bound, _)| bound));
     // Preconditions or other rule domains leave no complete partition; the
     // command rules still give example requests, decided by both full
     // policies, so the review can show real changes. The result stays incomplete.
@@ -155,32 +185,82 @@ fn comparison(
     // Partitions and bounds cover commands as written. A directory option
     // decides some commands as their rewritten form, so only identical
     // policies keep a proved relation; witnesses above still count.
-    if regions.incomplete.is_none()
-        && !identical
-        && !(first.directory_options.is_empty() && second.directory_options.is_empty())
-    {
-        regions.incomplete = Some(partition::Incomplete::DirectoryOptions);
-    }
-    let complete = regions.incomplete.is_none();
-    let relation = if complete {
-        match (expansion.is_some(), restriction.is_some()) {
-            (false, false) => Relation::Equivalent,
-            (false, true) => Relation::Restrictive,
-            (true, false) => Relation::Expansive,
-            (true, true) => Relation::Mixed,
-        }
-    } else {
-        Relation::Unknown
-    };
-    let (coverage, algorithm) = report_model(
-        profile_bound
-            .map(|_| Proof::Profile)
-            .or(symbolic.map(|_| Proof::Symbolic)),
+    bound_directory_options(&first, &second, identical, &mut regions);
+    literal_report(
+        first.effective,
+        second.effective,
+        fixed,
+        feedback.summary,
+        identity_status,
+        Findings {
+            regions,
+            custom_bound,
+            profile_bound,
+            symbolic,
+            decision_bound,
+            normalized,
+            semantic_identity,
+            expansion,
+            restriction,
+        },
+    )
+}
+
+struct Findings {
+    regions: partition::Partition,
+    custom_bound: Option<policy::profile_comparison::Bound>,
+    profile_bound: Option<policy::profile_comparison::Bound>,
+    symbolic: Option<(policy::profile_comparison::Bound, usize)>,
+    decision_bound: Option<policy::profile_comparison::Bound>,
+    normalized: bool,
+    semantic_identity: bool,
+    expansion: Option<Comparison>,
+    restriction: Option<Comparison>,
+}
+
+fn literal_report(
+    before: Effective,
+    after: Effective,
+    fixed: Option<(&str, &str)>,
+    feedback_changes: policy::feedback::Summary,
+    identity_status: &'static str,
+    findings: Findings,
+) -> Result<DomainComparison, Error> {
+    let Findings {
+        regions,
+        custom_bound,
+        profile_bound,
+        symbolic,
+        decision_bound,
+        normalized,
         semantic_identity,
-        regions.semantic,
-        fixed.is_some(),
-    );
-    let mut result = DomainComparison {
+        expansion,
+        restriction,
+    } = findings;
+    let complete = regions.incomplete.is_none();
+    let relation = witnessed_relation(complete, expansion.is_some(), restriction.is_some());
+    let (coverage, algorithm) = if custom_bound.is_some() {
+        (
+            if normalized {
+                "normalized-request-decision-bound"
+            } else {
+                "argv-v1-same-condition-decision-bound"
+            },
+            "selected-condition-decision-bound-v1",
+        )
+    } else {
+        report_model(
+            profile_bound
+                .map(|_| Proof::Profile)
+                .or(symbolic.map(|_| Proof::Symbolic)),
+            semantic_identity,
+            regions.semantic,
+            fixed.is_some(),
+        )
+    };
+    let result = DomainComparison {
+        feedback_changes,
+        feedback_permission_identity: identity_report(identity_status),
         schema_version: if regions.semantic { 2 } else { 1 },
         kind: if fixed.is_some() {
             "argv-domain-comparison"
@@ -203,13 +283,74 @@ fn comparison(
         incomplete_reason: regions.incomplete,
         expansion,
         restriction,
-        before: first.effective,
-        after: second.effective,
+        before,
+        after,
         revision: String::new(),
     };
+    encode_comparison(result)
+}
+
+fn encode_comparison(mut result: DomainComparison) -> Result<DomainComparison, Error> {
     let bytes = serde_json::to_vec(&result)
         .map_err(|_| Error::Contract("domain comparison serialization failed"))?;
     result.revision = policy::fingerprint(&bytes);
+    Ok(result)
+}
+
+fn bound_directory_options(
+    first: &Prepared<'_>,
+    second: &Prepared<'_>,
+    identical: bool,
+    regions: &mut partition::Partition,
+) {
+    if regions.incomplete.is_none()
+        && !identical
+        && !(first.directory_options.is_empty() && second.directory_options.is_empty())
+    {
+        regions.incomplete = Some(partition::Incomplete::DirectoryOptions);
+    }
+}
+
+fn validation_context(cwd: &str, project: &str) -> Result<Request, Error> {
+    let context = Request {
+        executable: "shield-context-validation".into(),
+        arguments: Vec::new(),
+        cwd: cwd.into(),
+        project: project.into(),
+    };
+    context.validate()?;
+    Ok(context)
+}
+
+fn witnessed_relation(complete: bool, expansion: bool, restriction: bool) -> Relation {
+    if !complete {
+        return Relation::Unknown;
+    }
+    match (expansion, restriction) {
+        (false, false) => Relation::Equivalent,
+        (false, true) => Relation::Restrictive,
+        (true, false) => Relation::Expansive,
+        (true, true) => Relation::Mixed,
+    }
+}
+
+fn identity_comparison(
+    before: Effective,
+    after: Effective,
+    fixed: Option<(&str, &str)>,
+    feedback: policy::feedback::Summary,
+    status: &'static str,
+) -> Result<DomainComparison, Error> {
+    let mut result = normalized_comparison(before, after, fixed, feedback, status, None)?;
+    result.complete = true;
+    result.relation = Relation::Equivalent;
+    result.coverage = "normalized-request-decision-model";
+    result.algorithm = "selected-permission-structure-identity-v1";
+    result.incomplete_reason = None;
+    result.revision.clear();
+    result.revision = policy::fingerprint(
+        &serde_json::to_vec(&result).map_err(|_| Error::Contract("comparison encoding"))?,
+    );
     Ok(result)
 }
 
@@ -316,19 +457,32 @@ fn report_model(
     }
 }
 
+fn identity_report(status: &'static str) -> serde_json::Value {
+    serde_json::json!({"status":status,"aggregate_work_budget_bytes":policy::feedback::WORK_BYTES,"entry_budget_bytes":2*1024*1024,"authorization":"none"})
+}
+
 fn normalized_comparison(
     before: Effective,
     after: Effective,
     fixed: Option<(&str, &str)>,
+    feedback_changes: policy::feedback::Summary,
+    identity_status: &'static str,
+    bound: Option<policy::profile_comparison::Bound>,
 ) -> Result<DomainComparison, Error> {
     let mut result = DomainComparison {
+        feedback_changes,
+        feedback_permission_identity: identity_report(identity_status),
         schema_version: 1,
         kind: "policy-domain-comparison",
         mode: "preview",
         trust: "unverified",
         coverage: "normalized-request-conditions",
-        algorithm: "unsupported-normalized-domain",
-        decision_bound: None,
+        algorithm: if bound.is_some() {
+            "selected-condition-decision-bound-v1"
+        } else {
+            "unsupported-normalized-domain"
+        },
+        decision_bound: bound.map(profiles::label),
         symbolic_regions: None,
         limits: partition::limits(),
         host_os: std::env::consts::OS,

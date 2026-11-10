@@ -9,9 +9,11 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+pub(crate) mod directory;
 mod node;
 mod targets;
 mod text;
+pub(crate) mod touch;
 #[cfg(windows)]
 pub(crate) mod windows;
 mod working_files;

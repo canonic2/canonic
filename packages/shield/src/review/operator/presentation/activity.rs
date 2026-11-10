@@ -66,6 +66,11 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
         "History: {}",
         if history["available"] == false {
             "unavailable".into()
+        } else if history["integrity"] == "unchecked" && history["enabled"] == true {
+            format!(
+                "on, keeping up to {} entries; integrity unchecked",
+                label(&history["limit"])
+            )
         } else if history["enabled"] == true {
             format!("on, keeping up to {} entries", label(&history["limit"]))
         } else {
@@ -105,6 +110,11 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
             )
         );
     }
+    if value["project_file_inspection"] == "unchecked" {
+        output.push_str(
+            "Editable project files are unchecked; inspect them with shield policy review.\n",
+        );
+    }
     if value["repair_needed"] == true {
         let _ = writeln!(
             output,
@@ -131,6 +141,12 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
 fn diagnostics(value: &Value, connected: bool) -> String {
     let coverage = &value["coverage"];
     let mut output = String::new();
+    if connected && coverage["live_host_verification"] == "unchecked" {
+        output.push_str("Hook activity was not inspected. Run shield history list for retained evidence; current host loading remains unverified.\n");
+    }
+    if value["project_file_inspection"] == "unchecked" {
+        output.push_str("Project policy file integrity was not inspected. Review edits with shield policy review.\n");
+    }
     if connected && coverage["live_host_verification"] == "unverified" {
         output.push_str("No retained hook activity found. This does not establish that hooks are inactive. Inspect shield history list; if checks are absent, restart the agent and review project trust and hooks.\n");
     }
@@ -265,6 +281,12 @@ fn requester(provenance: &Value) -> String {
 /// `shield request show`.
 pub(super) fn request(value: &Value) -> String {
     let id = label(&value["request_id"]);
+    if value["terminal"] == true {
+        return format!(
+            "Closed request {id}: {}.\nIts recorded outcome grants no permission.\n",
+            label(&value["status"])
+        );
+    }
     let (status, until) = if value["status"] == "approved" {
         ("approved and unused", &value["grant"]["expires_at_ms"])
     } else {
@@ -341,6 +363,9 @@ pub(super) fn review(value: &Value) -> Option<String> {
 
 /// The receipt of an approval decision.
 pub(super) fn decided(value: &Value) -> String {
+    if value["terminal"] == true {
+        return request(value);
+    }
     let id = label(&value["request_id"]);
     match value["status"].as_str() {
         Some("approved") => format!(

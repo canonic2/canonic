@@ -19,7 +19,7 @@ remain available when you choose to use them directly.
 | A pack proposal reports `candidate_error` | [Inconsistent pack candidate](#a-pack-proposal-reports-candidate_error) |
 | Status reports repair or cache failure | [Policy files](#policy-files-need-repair) or [compiled cache](#the-compiled-policy-cache-cannot-load) |
 | Initialization fails while downloading | [Baseline acquisition](#initialization-cannot-download-the-baseline) |
-| Shield's project folder was moved or copied | [Confirm the new location](#the-project-was-moved-or-copied) |
+| Shield's project folder was moved or copied | [Portable policy](#the-project-was-moved-or-copied) |
 | A change cannot obtain confirmation | [Terminal confirmation](#terminal-confirmation-is-unavailable) |
 
 ## A pack proposal reports `candidate_error`
@@ -31,26 +31,33 @@ recovery for this failure.
 
 ## The project was moved or copied
 
-Ask the agent to call Shield's `status` tool. Shield can keep a restricted MCP
-connection open when the saved enrollment names the old location, including
-when the launch command still names that location. `project_enroll` shows a
-confirmation form for the new folder and its captured policy. Accepting it
-creates a fresh enrollment and continues on the same connection. Declining
-leaves the saved state unchanged.
-If the default compiled-cache location is unavailable, the agent can request a
-fresh `project_enroll` form with an absolute `cache_dir`. The new location appears
-in the review. This changes derived cache storage, not project permissions.
+Shield reuses reviewed policy after a move or copy without asking you to approve
+the new folder. It creates fresh runtime and history identities, rebuilds its
+compiled cache, and leaves temporary request and conversation approvals behind.
+Unreviewed file edits stay inactive. The previous checkpoint remains recovery data.
 
-Moves and copies both require this review. Old approvals, session grants,
-registry trust and agent registrations do not transfer. Shield preserves the
-previous checkpoint and recent history as private recovery data. The agent can
-then request any needed agent setup through its normal confirmation form.
-Do not delete `.shield/review/` or edit project IDs to bypass enrollment.
+On the same developer account, a current private administrative receipt also
+preserves reviewed direct-agent setup and local protection preferences. Shield
+replaces an unchanged, exactly owned private launcher with a fresh local token.
+Edited entries and conflicting aliases still need their own setup review.
+Copies without that private receipt reuse recognized policy with safe local
+settings; they do not inherit another developer's agent registration.
 
-`shield status` and `shield doctor` also explain a location mismatch without
-changing state. If you choose to work directly in the terminal, `shield init`
-offers the enrollment review there.
-An explicit `--cache-dir` is included in that review.
+A fresh clone containing policy files can reuse the exact policy this developer
+already reviewed. Shield keeps private policy receipts under
+`~/.shield/reviewed-policies` on Unix or
+`%LOCALAPPDATA%/.shield/reviewed-policies` on Windows. These also supply reviewed
+pack bytes when the clone omits the ignored pack cache. The user store is private
+runtime state and must never be committed or shared.
+
+If no matching receipt exists, the policy needs its first review. The agent can
+call `project_enroll` for an in-session confirmation, or you can run `shield init`
+in a terminal. Changed configuration, unavailable private receipt storage, corrupt
+state and unsupported formats are separate from folder relocation.
+
+New launch entries resolve `shield` from PATH and the project from the current
+working folder. Restart an older agent to load the current binary. Do not delete
+`.shield/review/` or edit project IDs to repair a move.
 
 ## The agent does not seem to use Shield
 

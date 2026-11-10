@@ -100,6 +100,7 @@ fn validate_with_views(
     let store = crate::review::storage::Store::open(std::path::Path::new(&context.project_root))?;
     let mut before = store.read_checkpoint()?;
     before.check(context)?;
+    before.check_operations()?;
     if before.candidates.len() != 1 || !before.candidates.contains_key("project") {
         return Err(Error::Invalid(
             "operator workflow requires project-only policy",
@@ -185,6 +186,7 @@ fn validate_with_views(
         return Ok((before, id, source));
     }
     validate_live(proposal, context, &before.policy_revision)?;
+    crate::review::proposal_lifecycle::validate_capture(&context.project_root, proposal)?;
     crate::review::changes::historical::validate(&proposal.base_candidate, &proposal.candidate)?;
     let id = proposal.id.clone();
     crate::review::publication::validate_proposal_base(&before, &id)?;
@@ -253,27 +255,39 @@ fn arguments(adapter: &dyn ReviewAdapter, proposal: &Proposal) -> Value {
 }
 
 fn present_arguments(adapter: &dyn ReviewAdapter, proposal: &Proposal, canonical: &Value) -> Value {
+    present_captured_arguments(
+        adapter,
+        canonical,
+        &confirmation::summary(proposal, canonical),
+    )
+}
+fn present_captured_arguments(
+    adapter: &dyn ReviewAdapter,
+    canonical: &Value,
+    summary: &str,
+) -> Value {
     let mut value = if adapter.readable_arguments() {
-        adapter.apply_arguments(canonical, &confirmation::summary(proposal, canonical))
+        adapter.apply_arguments(canonical, summary)
     } else {
         adapter.apply_arguments(canonical, "")
     };
     crate::review::model::redact(&mut value);
     value
 }
-
-pub(super) fn present_proposal(context: &Context, proposal: &Proposal, data: &mut Value) {
-    if proposal.status != "pending" || !crate::review::proposal_lifecycle::owns(proposal, context) {
-        data.as_object_mut()
-            .map(|object| object.remove("apply_arguments"));
-        return;
+pub(super) fn present_cached_proposal(
+    context: &Context,
+    proposal: &Proposal,
+    data: &mut Value,
+    canonical: &Value,
+    summary: &str,
+) {
+    if proposal.status == "pending" && crate::review::proposal_lifecycle::owns(proposal, context) {
+        data["apply_arguments"] = present_captured_arguments(
+            crate::agents::review::for_context(context),
+            canonical,
+            summary,
+        );
     }
-    let canonical = data["apply_arguments"].take();
-    data["apply_arguments"] = present_arguments(
-        crate::agents::review::for_context(context),
-        proposal,
-        &canonical,
-    );
 }
 
 /// Build the response from the exact row already prepared by the workflow.
@@ -311,9 +325,10 @@ pub(super) fn present(context: &Context, data: &mut Value) -> Result<(), Error> 
     }
     // Presentation is read-only: check enrollment and hydrate only the selected
     // retained proposal. Activation still uses validate's full policy checks.
-    let store = crate::review::storage::Store::open(std::path::Path::new(&context.project_root))?;
-    let mut state = store.read_checkpoint()?;
-    state.check(context)?;
+    let store =
+        crate::review::storage::Store::inspect(std::path::Path::new(&context.project_root))?;
+    let (mut state, _) = store.read_diagnostic_checkpoint()?;
+    state.check_inspection(context)?;
     let proposal = state
         .proposals
         .iter_mut()

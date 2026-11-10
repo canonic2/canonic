@@ -3,8 +3,17 @@ source: tests/integration/output/human.rs
 expression: text
 ---
 $ shield registry add acme [REGISTRY]
---- stderr
-Error: This registry alias is already registered
-Each alias names one registry in its scope.
-Choose another alias, or remove the existing one with shield registry remove.
---- exit 1
+--- terminal
+Replace registry acme for this project
+Previous source:
+  [REGISTRY] · local directory
+  Source identity: [DIGEST]
+  Trust basis: Local operator-enrolled directory; unsigned catalog. Trust applies to this canonical directory.
+Replacement source:
+  [REGISTRY] · local directory
+  Source identity: [DIGEST]
+  Trust basis: Local operator-enrolled directory; unsigned catalog. Trust applies to this canonical directory.
+Installed packs keep their source and policy.
+Review and confirm → Apply change
+Replaced registry acme for this project.
+--- exit 0

@@ -103,8 +103,9 @@ impl Store {
         checkpoint: super::super::Checkpoint<'_>,
     ) -> Result<Option<(Record, Option<Directory>)>, Error> {
         self.authority()?;
-        files::directory(&self.root, true)?;
+        files::writer_directory(&self.root, true)?;
         let _lock = Directory::enter(&self.root)?;
+        self.normalize_record_directories()?;
         let now = clock::now_ms()?;
         let base = storage::Store::open(Path::new(&self.project_root))?.read_checkpoint()?;
         base.check(&Context::new(
@@ -112,6 +113,7 @@ impl Store {
             self.project_root.clone(),
             "mcp",
         ))?;
+        base.check_operations()?;
         let base_binding = super::super::changes::prepared_binding(&base);
         let request_digest = files::digest(arguments)?;
         let key = files::digest(
@@ -230,6 +232,7 @@ impl Store {
             let record = self.get(id)?;
             let base = storage::Store::open(Path::new(&self.project_root))?.read_checkpoint()?;
             base.check(context)?;
+            base.check_operations()?;
             if super::super::changes::prepared_binding(&base) != record.base_binding {
                 return Err(Error::StaleSnapshot);
             }
@@ -245,6 +248,7 @@ impl Store {
             let capture =
                 serde_json::to_value(capture).map_err(|_| Error::Invalid("capture encoding"))?;
             let directory = self.directory(id)?;
+            self.authority()?;
             files::write(&directory.join("capture.json"), &capture, CAPTURE_BYTES)?;
             let data = json!({"schema_version":1,"project_id":self.project,"policy_revision":revision,
                 "data":{"preparation_task_id":id,"candidate_digest":candidate_digest,"policy_revision":revision,
@@ -280,8 +284,9 @@ impl Store {
         message: &str,
         result: Option<(String, String)>,
     ) -> Result<(), Error> {
+        self.authority()?;
         let _lock = Directory::enter(&self.root)?;
-        let mut record = self.record(id)?;
+        let mut record = self.control(id)?;
         if record.status != "working" {
             return Ok(());
         }

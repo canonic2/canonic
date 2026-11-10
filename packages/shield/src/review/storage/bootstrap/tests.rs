@@ -46,6 +46,7 @@ fn name(stage: super::super::tests::Stage) -> &'static str {
     use super::super::tests::Stage;
     match stage {
         Stage::UpgradePrepared => "upgrade-prepared",
+        Stage::RelocationPrepared => "relocation-prepared",
         Stage::Created => "created",
         Stage::Written => "written",
         Stage::Synced => "synced",

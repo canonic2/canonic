@@ -21,6 +21,7 @@ fn capture(context: &Context, receipt: &mut Value) -> Result<(), Error> {
     let store = store(context)?;
     let state = store.read_checkpoint()?;
     state.check(context)?;
+    state.check_operations()?;
     if registration(&state, agent).is_err() {
         return Ok(());
     }
@@ -39,6 +40,7 @@ fn capture(context: &Context, receipt: &mut Value) -> Result<(), Error> {
     } else {
         let mut captured = None;
         store.update_checkpoint_if_changed(context, &|| Ok(()), |state| {
+            state.check_operations()?;
             let Ok(reg) = registration(state, agent) else {
                 return Ok(false);
             };
@@ -170,6 +172,7 @@ fn handoff_session(
     }
     let identity = receipt["identity"].clone();
     let covered=store.inspect_checkpoint(context,&||Ok(()),|state| {
+        state.check_operations()?;
         if activation(state)?!=json!([identity["activation_id"],identity["policy_revision"]]) {return Err(Error::StaleSnapshot);}
         let authority=super::Authority::capture(state);
         let ids=state.session_grants.sessions.get(&key).map_or(&[][..],Vec::as_slice);

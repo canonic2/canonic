@@ -443,6 +443,12 @@ fn registry_enrollment_user_scope_child() {
             if action == "accept" {
                 assert_eq!(success(&result)["scope"], "user");
                 assert_eq!(sources(&transport)["local"]["location"], json!(directory));
+                let repeated = begin(&transport, "registry_add", &args, modern);
+                assert_eq!(success(&repeated)["replayed"], true, "{repeated}");
+                assert_eq!(
+                    success(&repeated)["global_generation"],
+                    success(&result)["global_generation"]
+                );
             } else {
                 assert_eq!(error_code(&result), "approval_declined", "{result}");
             }
@@ -457,13 +463,87 @@ fn registry_enrollment_user_scope_child() {
         assert_eq!(sources(&peer)["local"]["location"], json!(directory));
         let remove = json!({"name":"local","scope":"user"});
         let form = begin(&transport, "registry_remove", &remove, modern);
-        success(&answer(
+        let removed = answer(
             &transport,
             "registry_remove",
             &remove,
             &form,
             "accept",
             modern,
-        ));
+        );
+        success(&removed);
+        let repeated = begin(&transport, "registry_remove", &remove, modern);
+        assert_eq!(success(&repeated)["replayed"], true, "{repeated}");
+        assert_eq!(
+            success(&repeated)["global_generation"],
+            success(&removed)["global_generation"]
+        );
+        global_signing_key_replacement(&transport, modern);
     }
+}
+
+fn global_signing_key_replacement(transport: &Transport, modern: bool) {
+    let registry = SignedRegistry::new("acme-global-replay");
+    registry.publish(1, "9999-12-31T00:00:00Z");
+    let args = json!({"name":"signed","location":registry.server().url(),"scope":"user"});
+    let form = begin(transport, "registry_add", &args, modern);
+    let first = answer(transport, "registry_add", &args, &form, "accept", modern);
+    let initial = success(&first).clone();
+    let repeated = begin(transport, "registry_add", &args, modern);
+    assert_eq!(success(&repeated)["replayed"], true, "{repeated}");
+    assert_eq!(
+        success(&repeated)["global_generation"],
+        initial["global_generation"]
+    );
+
+    let changed = SigningKey::generate();
+    let bytes = json!({"schema_version":1,"registry_id":"acme-global-replay","sequence":2,
+        "expires_at":"9999-12-31T00:00:00Z","packs":[]})
+    .to_string();
+    registry
+        .server()
+        .set("catalog-key.pub", Response::ok(changed.public_hex()));
+    registry
+        .server()
+        .set("catalog.json", Response::ok(bytes.clone()));
+    registry.server().set(
+        "catalog.sig",
+        Response::ok(changed.sign_hex(bytes.as_bytes())),
+    );
+    for action in ["decline", "accept"] {
+        let form = begin(transport, "registry_add", &args, modern);
+        let review = reviewed(&form, modern);
+        assert_eq!(review["change"], "replace");
+        assert_eq!(review["previous_source"]["key"], initial["source"]["key"]);
+        assert_eq!(review["source"]["key"], changed.public_hex());
+        assert_ne!(review["source"]["identity"], initial["source"]["identity"]);
+        assert_eq!(
+            sources(transport)["signed"]["key"],
+            initial["source"]["key"]
+        );
+        let result = answer(transport, "registry_add", &args, &form, action, modern);
+        if action == "accept" {
+            assert_ne!(
+                success(&result)["global_generation"],
+                initial["global_generation"]
+            );
+            assert_eq!(sources(transport)["signed"]["key"], changed.public_hex());
+        } else {
+            assert_eq!(error_code(&result), "approval_declined");
+            assert_eq!(
+                sources(transport)["signed"]["key"],
+                initial["source"]["key"]
+            );
+        }
+    }
+    let remove = json!({"name":"signed","scope":"user"});
+    let form = begin(transport, "registry_remove", &remove, modern);
+    success(&answer(
+        transport,
+        "registry_remove",
+        &remove,
+        &form,
+        "accept",
+        modern,
+    ));
 }

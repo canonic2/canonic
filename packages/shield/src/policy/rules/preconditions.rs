@@ -1,7 +1,7 @@
 //! Unranked pack gates: a failed precondition decides its pack before rules compete.
 use super::{
-    Check, Error, Facts, Match, Profile, Unmet, capabilities, checks, domain_matches, valid_id,
-    validation::validate_predicates,
+    Check, Error, Facts, Match, Profile, RuleReference, TextField, Unmet, capabilities, checks,
+    domain_matches, valid_id, validation::validate_predicates,
 };
 use crate::policy::{normalized::Input, patterns::Provider, selectors, variables::Test};
 use serde::{Deserialize, Serialize};
@@ -202,7 +202,7 @@ impl Precondition {
         {
             return Ok(None);
         }
-        let rule_ref = json!({"scope":"pack","pack_selector":source,"rule_id":self.id});
+        let rule_ref = RuleReference::for_rule(source, &self.id, 1);
         let mut requirement_checks = Vec::new();
         for (position, alternative) in self.requires_any.iter().enumerate() {
             let failures = self.alternative(alternative, facts, patterns)?;
@@ -212,7 +212,7 @@ impl Precondition {
             for (key, code) in failures {
                 requirement_checks.push(Check {
                     rule_ref: rule_ref.clone(),
-                    operation_ref: "request",
+                    operation_ref: "request".into(),
                     predicate_path: format!(
                         "/requires_any/{position}/{}",
                         key.replace('~', "~0").replace('/', "~1")
@@ -226,6 +226,7 @@ impl Precondition {
                     branch: "unmet",
                     applied: false,
                     evidence: super::evidence::collect(&alternative[&key], &key, facts, patterns)?,
+                    private_input: false,
                 });
             }
         }
@@ -244,6 +245,11 @@ impl Precondition {
             legacy: false,
             fallback: false,
             precondition: true,
+            decision_provenance: None,
+            operation_ref: None,
+            executable: TextField::Absent,
+            rule_ref: None,
+            private_input: false,
         }))
     }
 

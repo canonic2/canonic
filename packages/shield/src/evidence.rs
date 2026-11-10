@@ -3,6 +3,8 @@ pub(crate) use canonic_registry_kit::timestamp::format_utc;
 use serde_json::{Value, json};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub(crate) mod projection;
+
 pub(crate) fn redact(value: &mut Value) -> bool {
     match value {
         Value::Object(fields) => {

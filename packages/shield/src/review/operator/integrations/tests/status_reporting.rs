@@ -23,15 +23,16 @@ fn status_reporting_published_hooks_inspect_loading_without_claiming_mcp_permiss
 }
 
 #[test]
-fn status_reporting_distinguishes_configuration_and_recorded_hook_activity() {
+fn status_reporting_keeps_activity_unchecked_until_history_is_explicitly_inspected() {
     let (root, context) = fixture();
     let report = crate::review::project::status(&context).unwrap();
     assert_eq!(report["enforcement"], "not-installed");
     install(&context);
     let mut state = crate::review::project::load(&context).unwrap();
-    let report = crate::review::project::status_from(&context, &state).unwrap();
+    let report = crate::review::project::status_from(&context, &state);
     assert_eq!(report["enforcement"], "installed");
-    assert_eq!(report["coverage"]["live_host_verification"], "unverified");
+    assert_eq!(report["coverage"]["live_host_verification"], "unchecked");
+    assert!(report["history"]["available"].is_null());
     let event = |surface: &str, project: &str, at: &str| {
         json!({
         "kind":"decision","recorded_at":at,"event_id":"acme-event",
@@ -43,25 +44,29 @@ fn status_reporting_distinguishes_configuration_and_recorded_hook_activity() {
         event("mcp", &state.project_id, "2026-11-03T10:00:00Z"),
         event("hook", "another-project", "2026-11-04T10:00:00Z"),
     ];
-    let report = crate::review::project::status_from(&context, &state).unwrap();
-    assert_eq!(report["coverage"]["live_host_verification"], "observed");
+    let report = crate::review::project::status_from(&context, &state);
+    assert_eq!(report["coverage"]["live_host_verification"], "unchecked");
+    assert_eq!(report["coverage"]["verification"]["agents"], json!([]));
+    // An explicitly supplied history view retains its existing attribution;
+    // the metadata-only status report never interprets it implicitly.
+    let evidence = crate::review::integrations::status(&context, &state);
+    assert_eq!(evidence["live_host_verification"], "observed");
     assert_eq!(
-        report["coverage"]["verification"]["agents"]
-            .as_array()
-            .unwrap()
-            .len(),
+        evidence["verification"]["agents"].as_array().unwrap().len(),
         1
     );
     assert_eq!(
-        report["coverage"]["verification"]["agents"][0]["recorded_at"],
+        evidence["verification"]["agents"][0]["recorded_at"],
         "2026-11-02T10:00:00Z"
     );
     state.history_available = false;
-    let report = crate::review::project::status_from(&context, &state).unwrap();
-    assert_eq!(report["coverage"]["live_host_verification"], "unverified");
+    let report = crate::review::project::status_from(&context, &state);
+    assert_eq!(report["coverage"]["live_host_verification"], "unchecked");
+    let evidence = crate::review::integrations::status(&context, &state);
+    assert_eq!(evidence["live_host_verification"], "unverified");
     // Retained activity cannot hide a currently missing configuration.
     fs::remove_file(root.path().join(".claude/settings.local.json")).unwrap();
-    let report = crate::review::project::status_from(&context, &state).unwrap();
+    let report = crate::review::project::status_from(&context, &state);
     assert_eq!(report["enforcement"], "degraded");
 }
 

@@ -78,6 +78,70 @@ fn deny_summary(branch: &str) -> Summary {
 }
 
 #[test]
+fn copied_native_authority_hook_grants_and_followups_stay_in_the_original() {
+    for consumed in [false, true] {
+        let original = fixture();
+        let id = pending(original.refuse("acme-copy"));
+        approve(
+            &original.connection("codex"),
+            &json!({"request_id":id}),
+            true,
+        )
+        .unwrap();
+        if consumed {
+            assert!(matches!(original.refuse("acme-copy"), Outcome::Allowed));
+        }
+        let before = state_bytes(&original);
+        let root = assert_fs::TempDir::new().unwrap();
+        crate::test_support::copy_fixture_directory(original.root(), root.path());
+        let opened = review::open(root.path()).unwrap();
+        let mut context = original.context.clone();
+        context.project_id = opened.project_id;
+        context.project_root = opened.project_root;
+        let active = review::runtime::status(&context).unwrap()["active"].clone();
+        let child = Fixture {
+            _root: root,
+            context,
+            active,
+        };
+        assert_ne!(child.context.project_id, original.context.project_id);
+        assert!(
+            refused(
+                child.root(),
+                &key("acme-copy"),
+                &original.identity(),
+                &summary()
+            )
+            .is_err()
+        );
+        assert!(!followup(child.root(), &key("acme-copy"), &original.identity()).unwrap());
+        assert!(!followup(child.root(), &key("acme-copy"), &child.identity()).unwrap());
+        assert!(approve(&child.connection("codex"), &json!({"request_id":id}), true).is_err());
+
+        let fresh = pending(child.refuse("acme-copy"));
+        assert_ne!(fresh, id);
+        approve(
+            &child.connection("codex"),
+            &json!({"request_id":fresh}),
+            true,
+        )
+        .unwrap();
+        assert!(matches!(child.refuse("acme-copy"), Outcome::Allowed));
+        assert!(followup(child.root(), &key("acme-copy"), &child.identity()).unwrap());
+        assert!(!followup(child.root(), &key("acme-copy"), &child.identity()).unwrap());
+        assert!(matches!(child.refuse("acme-copy"), Outcome::Pending(..)));
+        assert_eq!(state_bytes(&original), before);
+
+        if !consumed {
+            assert!(matches!(original.refuse("acme-copy"), Outcome::Allowed));
+        }
+        assert!(followup(original.root(), &key("acme-copy"), &original.identity()).unwrap());
+        assert!(!followup(original.root(), &key("acme-copy"), &original.identity()).unwrap());
+        assert!(matches!(original.refuse("acme-copy"), Outcome::Pending(..)));
+    }
+}
+
+#[test]
 fn native_request_inspection_and_operator_revocation_share_the_request_family() {
     let fixture = fixture();
     let id = pending(fixture.refuse("acme-revocation"));
@@ -491,9 +555,152 @@ fn consumed_grant_covers_one_followup_callback_of_the_same_request() {
     let identity = fixture.identity();
     assert!(!followup(fixture.root(), &key("acme-escalated"), &identity).unwrap());
     assert!(matches!(fixture.refuse("acme-escalated"), Outcome::Allowed));
+    let mut owner = mcp.clone();
+    owner.session_id = Some("acme-session".into());
+    // Reporting the already consumed decision must leave the separate callback
+    // capability intact and must not persist a premature terminal receipt.
+    let replay = review::approvals::approve(&owner, &json!({"request_id":id}), false).unwrap();
+    assert_eq!(replay["status"], "consumed");
+    assert_eq!(replay["allowed"], false);
+    assert!(replay.get("approval_id").is_none());
+    let state = review::project::checkpoint(&owner).unwrap();
+    assert!(
+        state
+            .terminal_receipts
+            .inspect(&owner, &id, now().unwrap())
+            .is_none()
+    );
+    assert!(
+        state
+            .hook_requests
+            .iter()
+            .any(|row| row.request_id == id && row.live_id(now().unwrap()).is_some())
+    );
     assert!(!followup(fixture.root(), &key("acme-other"), &identity).unwrap());
     assert!(followup(fixture.root(), &key("acme-escalated"), &identity).unwrap());
     assert!(!followup(fixture.root(), &key("acme-escalated"), &identity).unwrap());
+    let state = review::project::checkpoint(&owner).unwrap();
+    assert!(state.hook_requests.iter().all(|row| row.request_id != id));
+    assert_eq!(
+        state
+            .terminal_receipts
+            .inspect(&owner, &id, now().unwrap())
+            .unwrap()
+            .1["status"],
+        "consumed"
+    );
+}
+
+#[test]
+fn native_consumed_receipt_deadline_is_anchored_before_delayed_harvest() {
+    let fixture = fixture();
+    let id = pending(fixture.refuse("acme-expiry"));
+    approve(
+        &fixture.connection("codex"),
+        &json!({"request_id":id}),
+        true,
+    )
+    .unwrap();
+    assert!(matches!(fixture.refuse("acme-expiry"), Outcome::Allowed));
+    let mut state = review::project::checkpoint(&fixture.context).unwrap();
+    let at = state
+        .hook_requests
+        .iter()
+        .find(|r| r.request_id == id)
+        .unwrap()
+        .grant
+        .as_ref()
+        .unwrap()
+        .consumed_at_ms
+        .unwrap();
+    assert!(
+        state.hook_requests[0]
+            .live_id(at + FOLLOWUP_MS - 1)
+            .is_some()
+    );
+    state.compact_authorization_at(at + FOLLOWUP_MS);
+    assert!(state.hook_requests.iter().all(|r| r.request_id != id));
+    assert_eq!(
+        state
+            .terminal_receipts
+            .inspect(&fixture.context, &id, at + 599_999)
+            .unwrap()
+            .1["status"],
+        "consumed"
+    );
+    assert!(
+        state
+            .terminal_receipts
+            .inspect(&fixture.context, &id, at + 600_000)
+            .is_none()
+    );
+    let mut foreign = fixture.context.clone();
+    foreign.surface = "mcp".into();
+    foreign.agent = Some("codex".into());
+    foreign.session_id = Some("another-session".into());
+    assert!(
+        state
+            .terminal_receipts
+            .inspect(&foreign, &id, at + FOLLOWUP_MS)
+            .is_none()
+    );
+    foreign.surface = "cli".into();
+    foreign.project_id = "f".repeat(64);
+    assert!(
+        state
+            .terminal_receipts
+            .inspect(&foreign, &id, at + FOLLOWUP_MS)
+            .is_none()
+    );
+}
+
+#[test]
+fn new_native_denials_are_compact_and_replay_without_policy_preparation() {
+    let fixture = fixture();
+    let id = pending(fixture.refuse("acme-denial-receipt"));
+    let mut owner = fixture.connection("codex");
+    owner.session_id = Some("acme-session".into());
+    deny(&owner, &id, true).unwrap();
+    let state = review::project::checkpoint(&owner).unwrap();
+    assert!(state.hook_requests.iter().all(|row| row.request_id != id));
+    assert_eq!(
+        state
+            .terminal_receipts
+            .inspect(&owner, &id, now().unwrap())
+            .unwrap()
+            .1["status"],
+        "revoked"
+    );
+    std::fs::write(fixture.root().join(".shield/shield.yml"), "invalid: [").unwrap();
+    let replay = review::approvals::deny(&owner, &id, false).unwrap();
+    assert_eq!(replay["status"], "revoked");
+    assert_eq!(replay["allowed"], false);
+    assert!(replay.get("approval_id").is_none());
+    assert!(review::approvals::approve(&owner, &json!({"request_id":id}), false).is_err());
+}
+
+#[test]
+fn legacy_native_revoked_rows_keep_their_existing_retention_deadline() {
+    let fixture = fixture();
+    let id = pending(fixture.refuse("acme-legacy-revoked"));
+    let mut state = review::project::checkpoint(&fixture.context).unwrap();
+    let row = state
+        .hook_requests
+        .iter_mut()
+        .find(|row| row.request_id == id)
+        .unwrap();
+    row.status = "revoked".into();
+    let until = row.pending_expires_at_ms + PENDING_MS;
+    state.compact_authorization_at(until - 1);
+    assert!(state.hook_requests.iter().any(|row| row.request_id == id));
+    assert!(
+        state
+            .terminal_receipts
+            .inspect(&fixture.context, &id, until - 1)
+            .is_none()
+    );
+    state.compact_authorization_at(until);
+    assert!(state.hook_requests.is_empty());
 }
 
 #[test]

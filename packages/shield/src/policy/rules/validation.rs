@@ -56,7 +56,10 @@ pub(super) fn validate_predicates(
             "executable" | "source" | "query" | "server" | "tool" => {
                 selectors::text(operand, key != "source" && key != "query")?;
             }
-            "dialect" => enum_selector(operand, &["posix", "bash", "powershell", "cmd"])?,
+            "dialect" => enum_selector(
+                operand,
+                &["posix", "bash", "powershell", "cmd", "unsupported"],
+            )?,
             "dialect_version" => {
                 if selectors::exact(operand).is_none() {
                     return Err(Error::Syntax);

@@ -33,6 +33,32 @@ fn request(arguments: &[&str]) -> Request {
 }
 
 #[test]
+fn historical_display_reports_unsupported_without_changing_retained_runtime_support() {
+    let source = document(&[row("inspect", "exact", &["read"], "allow")]).to_string();
+    assert!(PreparedPack::from_retained_yaml(&source).is_ok());
+    assert!(
+        super::super::inspect_pack_rule(&source, "inspect")
+            .unwrap_err()
+            .to_string()
+            .contains("historical pack display")
+    );
+    assert!(
+        super::super::inspect_resolution(&source, &super::super::Binding::default())
+            .unwrap_err()
+            .to_string()
+            .contains("historical pack display")
+    );
+    let custom = json!({"schema_version":1,"rules":[{"id":"inspect","scope":"project","decision":"allow","matcher":{"executable":"acme","arguments":{"kind":"exact","values":["read"]}},"reason":"Inspect Acme"}]}).to_string();
+    assert!(super::custom(&custom).is_ok());
+    assert!(
+        super::super::inspect_retained_custom(&custom)
+            .unwrap_err()
+            .to_string()
+            .contains("historical custom display")
+    );
+}
+
+#[test]
 fn retained_matcher_sources_keep_exact_digest_and_acquisition_stays_strict() {
     let source = document(&[row("read", "exact", &["read", "a b"], "allow")]).to_string();
     assert!(PreparedPack::from_yaml(&source).is_err());

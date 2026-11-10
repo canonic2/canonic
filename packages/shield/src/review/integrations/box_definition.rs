@@ -29,14 +29,7 @@ const CONFIG: &str = ".box/config.yml";
 const COMMAND: &str = "shield";
 /// The launch arguments Box expands with the project root and agent ID.
 #[cfg(not(windows))]
-const ARGS: [&str; 6] = [
-    "mcp",
-    "serve",
-    "--project",
-    "{project}",
-    "--agent",
-    "{agent}",
-];
+const ARGS: [&str; 6] = ["mcp", "serve", "--project", ".", "--agent", "{agent}"];
 /// The portable hook event names Box accepts.
 #[cfg(not(windows))]
 const EVENTS: &[&str] = &[
@@ -65,6 +58,24 @@ pub(in crate::review) struct Definition {
 impl Definition {
     fn texts(&self) -> [&str; 2] {
         [&self.shared, &self.local]
+    }
+
+    /// The Box pin has its own exact generated codec. Direct installations can
+    /// retain a different historical binary path in the shared registration.
+    pub(in crate::review) fn portable_codec(&self, approved: &[String]) -> bool {
+        let Ok(local) = crate::policy::parse::<serde_json::Value>(&self.local) else {
+            return false;
+        };
+        let Some(command) = local["connection"]["command"].as_str() else {
+            return false;
+        };
+        let binary = Path::new(command);
+        binary.is_absolute() && render(binary, approved).is_ok_and(|expected| expected == *self)
+    }
+
+    pub(in crate::review) fn pinned_to(&self, binary: &Path) -> bool {
+        crate::policy::parse::<serde_json::Value>(&self.local)
+            .is_ok_and(|local| local["connection"]["command"].as_str() == binary.to_str())
     }
 }
 
@@ -112,7 +123,7 @@ fn hook(adapter: &dyn AgentAdapter, binary: &Path) -> Result<Value, Error> {
             "an agent's direct executable hooks have no Box equivalent; set the agent up directly",
         ));
     }
-    let command = super::native::posix_hook_command("{command}", "{project}", "{agent}", "{event}");
+    let command = super::native::posix_hook_command("{command}", ".", "{agent}", "{event}");
     let mut settings = adapter.box_hook(&command).ok_or(Error::Invalid(
         "an agent's hook settings have no Box equivalent; set the agent up directly",
     ))?;

@@ -2,6 +2,25 @@
 use super::*;
 
 #[test]
+fn portable_launch_entries_do_not_embed_installation_or_checkout_locations() {
+    let before = mcp(
+        Path::new("/developers/one/bin/shield"),
+        Path::new("/checkouts/one"),
+        &[],
+    );
+    let after = mcp(
+        Path::new("/developers/two/bin/shield"),
+        Path::new("/checkouts/two"),
+        &[],
+    );
+    assert_eq!(before, after);
+    let doc: DocumentMut = before.parse().unwrap();
+    assert_eq!(doc["command"].as_str(), Some("shield"));
+    let args = doc["args"].as_array().unwrap();
+    assert_eq!(args.get(3).and_then(toml_edit::Value::as_str), Some("."));
+}
+
+#[test]
 fn shield_mcp_approval_upgrade_preserves_other_servers_and_settings() {
     let desired = mcp(
         Path::new("/opt/acme/shield"),

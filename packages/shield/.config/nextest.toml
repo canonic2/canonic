@@ -7,3 +7,8 @@ test-threads = 4
 fail-fast = false
 # Flag a slow test after 30 seconds and stop it after 2 minutes.
 slow-timeout = { period = "30s", terminate-after = 4 }
+
+# Explicit, ignored collector campaign; ordinary tests keep their two-minute bound.
+[profile.history-volume]
+test-threads = 1
+slow-timeout = { period = "30s", terminate-after = 30 }

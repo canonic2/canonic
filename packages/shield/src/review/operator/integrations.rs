@@ -39,6 +39,26 @@ pub(super) fn initialize_in_cache(
     baseline: Baseline,
 ) -> Result<Value, Error> {
     let root = start.canonicalize()?;
+    let reused = !root.join(".shield/review/state.json").exists()
+        && root.join(".shield/config.yml").exists()
+        && cache_dir.is_none()
+        && review::reuse_reviewed_policy(&root).is_ok()
+        && root.join(".shield/review/state.json").is_file();
+    if reused {
+        let context = review::open(&root)?;
+        let mut receipt = crate::review::project::status(&context)?;
+        receipt["policy_reused"] = json!(true);
+        receipt["next_action"] = json!("shield mcp setup");
+        if choice.is_some_and(|choice| {
+            !matches!(
+                choice,
+                IntegrationChoice::Keep | IntegrationChoice::Agents(0)
+            )
+        }) {
+            receipt["agent_setup"] = setup(&context, choice, json_mode, false)?;
+        }
+        return Ok(receipt);
+    }
     if root.join(".shield/review/state.json").exists() {
         let mut terminal = Terminal::required(json_mode)?;
         let context = match review::open(&root) {

@@ -116,6 +116,22 @@ pub(in crate::review) fn resume(
 ) -> Result<bool, Error> {
     let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
     state.check(context)?;
+    state.check_operations()?;
+    let guard =
+        crate::review::publication::ProjectionLease::acquire(Path::new(&context.project_root))?;
+    resume_guarded(context, proposal, activation, &guard)
+}
+
+pub(in crate::review) fn resume_guarded(
+    context: &Context,
+    proposal: Option<&str>,
+    activation: &str,
+    guard: &crate::review::publication::ProjectionLease,
+) -> Result<bool, Error> {
+    guard.check(context)?;
+    let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
+    state.check(context)?;
+    state.check_operations()?;
     if state
         .active
         .as_ref()
@@ -136,7 +152,7 @@ pub(in crate::review) fn resume(
     {
         return Ok(false);
     }
-    setup::resume_plan(context, &state.operator, &plan, Some(activation))?;
+    setup::resume_plan_guarded(context, &state.operator, &plan, Some(activation), guard)?;
     Ok(true)
 }
 
@@ -167,6 +183,7 @@ pub(crate) fn resume_launch(context: &Context, token: &str) -> Result<(), Error>
     crate::mcp_connections::launcher::private_state(Path::new(&context.project_root))?;
     let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
     state.check(context)?;
+    state.check_operations()?;
     let marker = &state.operator["integration_publication"];
     if !marker.is_object() {
         return Ok(());

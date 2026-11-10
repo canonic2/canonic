@@ -17,6 +17,29 @@ const CONNECTION_FIELDS: &[&str] = &[
     "disabled_tools",
 ];
 
+pub(super) fn portable_mcp(source: &str, binary: &Path, roots: &[&Path]) -> Result<String, Error> {
+    let mut document: DocumentMut = source
+        .parse()
+        .map_err(|_| Error::Invalid("invalid owned MCP TOML"))?;
+    let command = document["command"]
+        .as_str()
+        .ok_or(Error::Invalid("MCP command missing"))?;
+    let args = document["args"]
+        .as_array()
+        .ok_or(Error::Invalid("MCP arguments missing"))?
+        .iter()
+        .map(|arg| {
+            arg.as_str()
+                .ok_or(Error::Invalid("MCP argument is not text"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let args =
+        super::super::setup::portable_mcp_args(command, &args, super::SPEC.id, &[], binary, roots)?;
+    document["command"] = value("shield");
+    document["args"] = value(toml_edit::Array::from_iter(args));
+    Ok(document.to_string())
+}
+
 pub(super) fn observe_connection(
     server: &Item,
 ) -> Result<Option<crate::mcp_connections::Transport>, Error> {
@@ -169,14 +192,14 @@ pub(super) fn prefix_rules(prefixes: &[CodexPrefix]) -> Option<String> {
 const ALWAYS_PROMPT: &str = "policy_apply";
 
 /// The server table; `approved` tools run without asking and the rest prompt.
-pub(super) fn mcp(binary: &Path, root: &Path, approved: &[String]) -> String {
+pub(super) fn mcp(_binary: &Path, _root: &Path, approved: &[String]) -> String {
     let mut table = Table::new();
-    table["command"] = value(binary.to_string_lossy().as_ref());
+    table["command"] = value("shield");
     table["args"] = value(toml_edit::Array::from_iter([
         "mcp",
         "serve",
         "--project",
-        root.to_str().expect("validated root"),
+        ".",
         "--agent",
         "codex",
     ]));

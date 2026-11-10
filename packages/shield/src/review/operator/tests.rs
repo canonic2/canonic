@@ -248,8 +248,8 @@ fn doctor_names_packs_whose_registry_is_no_longer_enrolled() {
             .collect::<Vec<_>>()
     };
     assert_eq!(checks(&context, "sources"), Vec::<serde_json::Value>::new());
-    // This fixture was never activated, which doctor reports with its route.
-    assert_eq!(checks(&context, "policy")[0]["repair"], "shield init");
+    // Metadata diagnosis does not treat an inactive preview as broken policy.
+    assert!(checks(&context, "policy").is_empty());
     Store::open(std::path::Path::new(&context.project_root))
         .unwrap()
         .update(&context, &|| Ok(()), |state| {
@@ -270,7 +270,7 @@ fn doctor_names_packs_whose_registry_is_no_longer_enrolled() {
 }
 
 #[test]
-fn doctor_reports_unloadable_source_without_requiring_policy_preparation() {
+fn doctor_keeps_source_and_projection_integrity_unchecked_without_preparing_policy() {
     let root = assert_fs::TempDir::new().unwrap();
     let bundle = Bundle::capture(r#"{"schema_version":1,"packs":[]}"#, &[], None).unwrap();
     let context = review::mcp::initialize_fixture(root.path(), &bundle);
@@ -294,20 +294,22 @@ fn doctor_reports_unloadable_source_without_requiring_policy_preparation() {
         std::fs::write(source.unwrap().path(), "invalid retained source").unwrap();
     }
     let report = crate::review::project::doctor(&context).unwrap();
-    assert_eq!(report["missing"], json!(["complete_status"]));
+    assert_eq!(report["project_file_inspection"], "unchecked");
     assert_eq!(report["enabled"], false);
     assert!(
-        report["checks"]
+        !report["checks"]
             .as_array()
             .unwrap()
             .iter()
             .any(|row| row["check"] == "status")
     );
+    assert_eq!(report["policy_validation"]["source"], "not-performed");
     assert!(
-        report["checks"].as_array().unwrap().iter().any(|row| {
-            row["check"] == "policy_source" && row["repair"] == "shield policy review"
-        }),
-        "{report}"
+        !report["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["check"] == "policy_source")
     );
     assert_eq!(std::fs::read(state_path).unwrap(), before);
 }

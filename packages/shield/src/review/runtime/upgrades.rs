@@ -1,7 +1,7 @@
 //! Admit the historical optional-cache activation without changing authority.
 use super::{Active, Context, Error, State, confirmed_mechanism, digest};
 use crate::review::{cache, storage::Store};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -14,8 +14,21 @@ struct Historical {
     candidate_digest: String,
     candidates: BTreeMap<String, Value>,
     #[serde(default)]
-    compiled: Option<cache::Artifact>,
+    compiled: Option<Value>,
     binding: String,
+    #[serde(default = "super::legacy_binding_version")]
+    binding_version: u8,
+}
+
+#[derive(Serialize)]
+pub(in crate::review) struct LegacyPreview {
+    pub(in crate::review) activation_id: Option<String>,
+    policy_revision: String,
+    candidate_digest: Option<String>,
+    recorded_proof: &'static str,
+    source: &'static str,
+    model: &'static str,
+    cache: &'static str,
 }
 
 pub(in crate::review) fn restore(
@@ -27,22 +40,31 @@ pub(in crate::review) fn restore(
 }
 
 pub(in crate::review) fn inspect(
-    store: &Store,
+    _store: &Store,
     state: &mut State,
     raw: &Value,
 ) -> Result<(), Error> {
-    restore_with_cache(store, state, raw, false)
+    let old = if raw.is_null() {
+        None
+    } else {
+        Some(verified(state, raw)?)
+    };
+    state.legacy_preview = Some(LegacyPreview {
+        activation_id: old.as_ref().map(|old| old.activation_id.clone()),
+        policy_revision: old.as_ref().map_or_else(
+            || state.policy_revision.clone(),
+            |old| old.policy_revision.clone(),
+        ),
+        candidate_digest: old.as_ref().map(|old| old.candidate_digest.clone()),
+        recorded_proof: if old.is_some() { "validated" } else { "absent" },
+        source: "unchecked",
+        model: "unchecked",
+        cache: "unchecked",
+    });
+    Ok(())
 }
 
-fn restore_with_cache(
-    store: &Store,
-    state: &mut State,
-    raw: &Value,
-    publish: bool,
-) -> Result<(), Error> {
-    if raw.is_null() {
-        return Ok(());
-    }
+fn verified(state: &State, raw: &Value) -> Result<Historical, Error> {
     let old: Historical = serde_json::from_value(raw.clone())
         .map_err(|_| Error::Invalid("invalid historical activation"))?;
     let binding = crate::policy::fingerprint(
@@ -57,7 +79,8 @@ fn restore_with_cache(
         .to_string()
         .as_bytes(),
     );
-    if old.candidate_digest != digest(&old.candidates)
+    if old.binding_version != 1
+        || old.candidate_digest != digest(&old.candidates)
         || old.binding != binding
         || !state.authorization_events.iter().any(|event| {
             event["kind"] == "runtime_activated"
@@ -70,8 +93,22 @@ fn restore_with_cache(
             "historical activation authorization differs",
         ));
     }
+    Ok(old)
+}
+
+fn restore_with_cache(
+    store: &Store,
+    state: &mut State,
+    raw: &Value,
+    publish: bool,
+) -> Result<(), Error> {
+    if raw.is_null() {
+        return Ok(());
+    }
+    let old = verified(state, raw)?;
     let compiled = if let Some(compiled) = old.compiled {
-        compiled
+        serde_json::from_value::<cache::Artifact>(compiled)
+            .map_err(|_| Error::Invalid("invalid historical activation"))?
     } else {
         let candidates = old
             .candidates
@@ -128,6 +165,7 @@ fn restore_with_cache(
         candidates: old.candidates,
         compiled,
         binding: old.binding,
+        binding_version: old.binding_version,
     };
     active.validate_binding(state)?;
     state.active = Some(active);

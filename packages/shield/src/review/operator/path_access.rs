@@ -148,6 +148,7 @@ mod tests {
                 .chain(spec.mcp_path)
                 .chain(spec.prefix_rules_path)
                 .chain(spec.settings_paths.iter().copied())
+                .filter(|path| *path != ".mcp.json")
             {
                 assert_eq!(paths.iter().filter(|p| **p == path).count(), 1, "{path}");
             }

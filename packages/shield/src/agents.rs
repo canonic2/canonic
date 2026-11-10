@@ -6,16 +6,20 @@ use std::path::Path;
 mod antigravity;
 mod claude_code;
 mod codex;
+mod copilot;
 pub(crate) mod detection;
 mod feedback;
 mod gemini;
 mod hook;
 mod json_mcp;
 mod mcp_scopes;
+mod opencode;
 pub(crate) use mcp_scopes::Observation as McpObservation;
 pub(crate) mod review;
 pub(crate) mod setup;
 mod working_files;
+#[cfg(test)]
+pub(crate) use hook::finalize_native;
 pub(crate) use hook::run;
 #[cfg(test)]
 pub(crate) use hook::translate_event;
@@ -25,6 +29,8 @@ pub(crate) static ADAPTERS: &[&dyn AgentAdapter] = &[
     &codex::Codex,
     &gemini::Gemini,
     &antigravity::Antigravity,
+    &copilot::Copilot,
+    &opencode::OpenCode,
 ];
 
 pub(crate) fn find(name: &str) -> Option<&'static dyn AgentAdapter> {
@@ -105,6 +111,11 @@ pub(crate) struct Reply {
     /// Guidance for the agent, separate from a user-facing permission reason.
     pub agent_context: Option<String>,
 }
+/// Routine success wording selected by the adapter's presentation contract.
+pub(crate) enum AllowNotice {
+    Runtime,
+    ShieldTool,
+}
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Decision {
     Allow,
@@ -139,6 +150,36 @@ pub(crate) struct SettingsUpdate {
 
 /// Vendor formats and presentation. Policy, authority, aggregation and history stay shared.
 pub(crate) trait AgentAdapter: Sync {
+    /// Refuse unsupported coexistence before staging native registration edits.
+    /// The reader exposes already-planned file contents, including removals.
+    fn check_native_setup(
+        &self,
+        _root: &Path,
+        _pending: &dyn Fn(&str) -> Option<Option<String>>,
+    ) -> Result<(), crate::review::Error> {
+        Ok(())
+    }
+    /// Historical hook launchers can omit their pinned event only when this
+    /// adapter can identify it from a complete native envelope.
+    fn accepts_unpinned_hook_events(&self) -> bool {
+        false
+    }
+    fn default_ask_fallback(&self) -> crate::review::integrations::AskFallback {
+        crate::review::integrations::AskFallback::Allow
+    }
+    /// Exact earlier event sets whose missing advisory callbacks do not require
+    /// an integration upgrade while their registered entry points still match.
+    fn historical_hook_profiles(&self) -> &'static [&'static [&'static str]] {
+        &[]
+    }
+    fn allow_reason(&self, notice: AllowNotice) -> &'static str {
+        match notice {
+            AllowNotice::Runtime => "Shield active project policy permits this request.",
+            AllowNotice::ShieldTool => {
+                "Shield policy and enrollment changes retain their required user confirmation."
+            }
+        }
+    }
     fn merge_connections(
         &self,
         source: &str,
@@ -154,6 +195,10 @@ pub(crate) trait AgentAdapter: Sync {
             source: source.into(),
             ownership: None,
         })
+    }
+    /// This adapter's project MCP entries already use the host's project cwd.
+    fn portable_mcp_launcher(&self) -> bool {
+        false
     }
     fn connection_settings(
         &self,
@@ -297,6 +342,24 @@ pub(crate) trait AgentAdapter: Sync {
         Err(crate::review::Error::Invalid(
             "hook reconciliation is unavailable for this adapter",
         ))
+    }
+    /// Exact same-binary location maintenance; never broad hook adoption.
+    fn migrate_hooks(
+        &self,
+        _source: &str,
+        _permitted: &setup::PortableHookGroups,
+        _desired: &setup::HookGroups,
+    ) -> Result<Option<String>, crate::review::Error> {
+        Ok(None)
+    }
+    /// Rewrite only a known old launcher, retaining every permission field.
+    fn portable_mcp_entry(
+        &self,
+        _source: &str,
+        _binary: &Path,
+        _roots: &[&Path],
+    ) -> Result<Option<String>, crate::review::Error> {
+        Ok(None)
     }
     fn repair_mcp(
         &self,

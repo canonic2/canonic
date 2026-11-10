@@ -233,10 +233,19 @@ pub(super) fn settle(
     Ok(Step::Done((candidate, meta)))
 }
 
-pub(super) fn remove(context: &Context, reference: &str, json_mode: bool) -> Result<Value, Error> {
+pub(super) fn remove(
+    context: &Context,
+    reference: &str,
+    local: bool,
+    json_mode: bool,
+) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
     let (before, base) = crate::review::project::load_prepared(context)?;
-    let (candidate, meta) = prepare_remove(&before, reference)?;
+    let (candidate, meta) = if local {
+        crate::review::packs::prepare_remove_local(&before, reference)?
+    } else {
+        prepare_remove(&before, reference)?
+    };
     finish(context, &before, candidate, meta, &mut tty, &base)
 }
 pub(super) fn update(

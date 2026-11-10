@@ -101,11 +101,15 @@ impl Input {
             }
             .validate(),
             Self::Shell {
-                source, dialect, ..
+                source,
+                dialect,
+                dialect_version,
+                ..
             } if source.len() <= 65536
-                && ["bash", "posix", "powershell", "cmd"].contains(&dialect.as_str()) =>
+                && ["bash", "posix", "powershell", "cmd", "unsupported"]
+                    .contains(&dialect.as_str()) =>
             {
-                Ok(())
+                crate::shell::validate_version(dialect_version.as_deref())
             }
             Self::File {
                 action,

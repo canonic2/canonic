@@ -5,6 +5,9 @@ use crate::review::{
     path_access,
 };
 mod paths;
+pub(crate) use paths::read_allowed as mandatory_read_allowed;
+#[cfg(test)]
+mod tests;
 
 /// Retain the ordinary native path and operator checks without consulting the
 /// project's policy, grants, Ask fallback, or compiled cache. An empty policy
@@ -93,9 +96,10 @@ fn paused_shell(
     let evaluator =
         crate::configuration::Evaluator::new(vec![(crate::policy::Scope::Project, snapshot)])
             .map_err(|_| "protection-failure")?;
-    let analysis = crate::shell::analyze_with_working_files(
+    let analysis = crate::shell::analyze_versioned_with_working_files(
         source,
         dialect,
+        operation["dialect_version"].as_str(),
         cwd.to_str().ok_or("invalid-context")?,
         None,
         root.to_str().ok_or("invalid-context")?,
@@ -107,7 +111,8 @@ fn paused_shell(
     if !matches!(
         analysis["coverage"].as_str(),
         Some("single-literal-invocation" | "structured-literal-operations")
-    ) {
+    ) || !crate::shell::supported_dialect(&analysis)
+    {
         return Err("unsupported-shell");
     }
     Ok(analysis)
@@ -168,8 +173,7 @@ fn deny_rules(value: &Value) -> Value {
 /// Opaque shell grammar has no verified footprint, so it may reach any path.
 fn opaque_shell(value: &Value) -> bool {
     let shell = &value["_shell_analysis"];
-    shell["dialect"] == "cmd"
-        || (shell["dialect"] == "powershell" && shell["coverage"] != "single-literal-invocation")
+    crate::shell::opaque_native(shell)
 }
 
 fn file_access(value: &Value) -> paths::Access {

@@ -75,8 +75,39 @@ fn argv(executable: &str, arguments: &[String], cwd: &Path, alone: bool) -> Targ
     if leaf == "find" {
         return find_argv(arguments, cwd);
     }
-    if ["mkdir", "touch"].contains(&leaf) {
-        return write_argv(leaf, arguments, cwd);
+    if leaf == "touch" {
+        let words: Vec<_> = arguments.iter().map(String::as_str).collect();
+        let footprint = super::touch::parse("touch", &words).expect("known touch name");
+        let mut complete = footprint.complete;
+        let mut items = Vec::new();
+        for (action, role, path) in footprint
+            .reference
+            .into_iter()
+            .map(|path| ("read", "source", path))
+            .chain(
+                footprint
+                    .destinations
+                    .into_iter()
+                    .map(|path| ("write", "destination", path)),
+            )
+        {
+            items.push(Target {
+                action,
+                role,
+                path: super::join_operand(cwd, path, &mut complete),
+                recursive: false,
+                descendants: Descendants::All,
+                follow: true,
+            });
+        }
+        return Targets {
+            items,
+            complete,
+            ..Targets::default()
+        };
+    }
+    if leaf == "mkdir" {
+        return mkdir_argv(arguments, cwd);
     }
     if let Some(targets) = super::writers::collect(leaf, arguments, cwd) {
         return targets;
@@ -488,9 +519,8 @@ fn find_argv(arguments: &[String], cwd: &Path) -> Targets {
     }
 }
 
-// mkdir's missing parents stay below its resolved operand; touch follows leaf
-// links. Options loading dates/reference files or changing modes are unmodeled.
-fn write_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
+// mkdir's missing parents stay below its resolved operand. Modes are unmodeled.
+fn mkdir_argv(arguments: &[String], cwd: &Path) -> Targets {
     let mut items = Vec::new();
     let mut options = true;
     let mut terminated = false;
@@ -500,15 +530,13 @@ fn write_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
             options = false;
             terminated = true;
         } else if options && argument.starts_with('-') && argument != "-" {
-            complete &= portable_flags(argument, if leaf == "mkdir" { "p" } else { "amc" });
+            complete &= portable_flags(argument, "p");
         } else {
             complete &= terminated || !argument.starts_with('-') || argument == "-";
             options = false;
-            complete &= !(leaf == "touch" && argument == "-"
-                || leaf == "mkdir"
-                    && Path::new(argument)
-                        .components()
-                        .any(|c| c == std::path::Component::ParentDir));
+            complete &= !Path::new(argument)
+                .components()
+                .any(|c| c == std::path::Component::ParentDir);
             items.push(Target {
                 action: "write",
                 role: "destination",

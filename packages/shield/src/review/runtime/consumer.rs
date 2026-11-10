@@ -9,10 +9,22 @@ use serde::Serialize;
 #[cfg(test)]
 use serde_json::{Value, json};
 use std::{path::Path, sync::Arc};
+mod authorization;
+pub(crate) use authorization::EvaluatedAuthority;
 
 /// Failure to load, evaluate or revalidate local active policy evidence.
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
+    /// An authenticated, previously observed exact artifact revocation prevents
+    /// use of the affected policy until its source is removed or updated.
+    #[error(
+        "policy artifact {pack}@{version} from {source_identity} is known revoked; remove or update the affected pack"
+    )]
+    RevokedPolicy {
+        source_identity: String,
+        pack: String,
+        version: String,
+    },
     /// Filesystem failure with its original cause.
     #[error("runtime storage I/O failed: {0}")]
     Io(#[source] std::io::Error),
@@ -38,6 +50,16 @@ pub enum RuntimeError {
 impl From<Error> for RuntimeError {
     fn from(error: Error) -> Self {
         match error {
+            Error::RegistryRevoked {
+                source_identity,
+                pack,
+                version,
+                ..
+            } => Self::RevokedPolicy {
+                source_identity,
+                pack,
+                version,
+            },
             Error::Cancelled => Self::Policy(crate::policy::Error::Interrupted),
             Error::Io(error) => Self::Io(error),
             Error::Policy(error) => Self::Policy(error),
@@ -79,6 +101,7 @@ pub struct SnapshotIdentity {
     previous_activation_id: Option<String>,
     policy_revision: String,
     candidate_digest: String,
+    registry_revision: String,
     #[serde(skip)]
     binding: String,
     #[serde(skip)]
@@ -134,7 +157,14 @@ impl Project {
     /// # Errors
     /// Fails for inactive, changed project identity, invalid state or filesystem errors.
     pub fn snapshot(&self) -> Result<Snapshot, RuntimeError> {
-        Ok(load(&self.context, &|| Ok(()))?)
+        self.snapshot_controlled(&|| Ok(()))
+    }
+
+    pub(crate) fn snapshot_controlled(
+        &self,
+        checkpoint: Checkpoint<'_>,
+    ) -> Result<Snapshot, RuntimeError> {
+        Ok(load(&self.context, checkpoint)?)
     }
 
     /// Revalidate exact request evidence and hold the writer lock through a short callback.
@@ -155,44 +185,13 @@ impl Project {
         evaluated: &EvaluatedRequest,
         operation: impl FnOnce(&policy::Request, &CandidateEvaluation) -> T,
     ) -> Result<T, RuntimeError> {
-        let identity = &evaluated.identity;
-        if identity.project_id != self.context.project_id
-            || identity.project_root != self.context.project_root
-        {
-            return Err(RuntimeError::Invalid(
-                "request evidence belongs to another project",
-            ));
-        }
+        let authority = evaluated.authorization(&self.context, &|| Ok(()))?;
         Ok(
             Store::open(Path::new(&self.context.project_root))?.inspect_checkpoint(
                 &self.context,
                 &|| Ok(()),
                 |state| {
-                    let active = state.active.as_ref().ok_or(Error::StaleSnapshot)?;
-                    if active.activation_id != identity.activation_id
-                        || active.binding != identity.binding
-                        || active.compiled.digest != identity.compiled_digest
-                    {
-                        return Err(Error::StaleSnapshot);
-                    }
-                    if evaluated.time_sensitive {
-                        let current = if let Some(resource) = &evaluated.resource {
-                            evaluated.evaluator.evaluate_resource_mcp(
-                                &evaluated.request,
-                                &resource.input,
-                                &resource.context,
-                                resource.mcp.as_deref(),
-                                &|| Ok(()),
-                            )?
-                        } else {
-                            evaluated
-                                .evaluator
-                                .evaluate_controlled(&evaluated.request, &|| Ok(()))?
-                        };
-                        if current.decision != evaluated.evaluation.decision {
-                            return Err(Error::StaleSnapshot);
-                        }
-                    }
+                    authority.check_locked(state, evaluated, &|| Ok(()))?;
                     Ok(operation(&evaluated.request, &evaluated.evaluation))
                 },
             )?,
@@ -205,6 +204,73 @@ pub struct Snapshot {
     identity: SnapshotIdentity,
     evaluator: Arc<Evaluator>,
     working_files: Option<crate::location::WorkingFiles>,
+    input_status: serde_json::Value,
+}
+
+/// Exact authenticated source retained across the native adapter's final
+/// override boundary. JSON receipts and optional installed descriptions cannot
+/// construct this proof or replace the prepared effective artifact lock.
+pub(crate) struct NativeSource {
+    identity: SnapshotIdentity,
+    evaluator: Arc<Evaluator>,
+}
+
+/// Keeps acknowledged registry authority stable until vendor disposition is
+/// finalized. It does not hold project authority or cover external host work.
+pub(crate) struct NativeAuthority {
+    identity: SnapshotIdentity,
+    _registry: crate::review::registry_trust::Guard,
+}
+impl NativeAuthority {
+    pub(crate) fn same_source(&self, other: &Self) -> bool {
+        self.identity == other.identity
+    }
+}
+impl NativeSource {
+    fn check(&self, state: &super::State) -> Result<(), Error> {
+        let active = state.active.as_ref().ok_or(Error::StaleSnapshot)?;
+        if state.project_id != self.identity.project_id
+            || state.project_root != self.identity.project_root
+            || active.activation_id != self.identity.activation_id
+            || active.binding != self.identity.binding
+            || active.compiled.digest != self.identity.compiled_digest
+        {
+            return Err(Error::StaleSnapshot);
+        }
+        Ok(())
+    }
+    /// Acquire shared trust outside project authority, then confirm the exact
+    /// current activation and mode references under the short authority reader.
+    pub(crate) fn acquire(&self, root: &Path) -> Result<NativeAuthority, Error> {
+        let root = root.canonicalize()?;
+        if root != Path::new(&self.identity.project_root) {
+            return Err(Error::StaleSnapshot);
+        }
+        let store = Store::open(&root)?;
+        let state = store.read_checkpoint()?;
+        self.check(&state)?;
+        let registry = crate::review::registry_trust::guard_effective(
+            &state.operator,
+            self.evaluator.effective(),
+        )?;
+        if registry.revision != self.identity.registry_revision {
+            return Err(Error::StaleSnapshot);
+        }
+        let context = Context::new(state.project_id.clone(), state.project_root.clone(), "hook");
+        store.inspect_checkpoint(&context, &|| Ok(()), |current| {
+            self.check(current)?;
+            if current.operator["registry_trust"] != state.operator["registry_trust"]
+                || current.operator["installed"] != state.operator["installed"]
+            {
+                return Err(Error::StaleSnapshot);
+            }
+            Ok(())
+        })?;
+        Ok(NativeAuthority {
+            identity: self.identity.clone(),
+            _registry: registry,
+        })
+    }
 }
 /// Codex skips its sandbox only when every part of a command chain matches an
 /// allow prefix. Its parts are the submitted script's outermost commands:
@@ -254,6 +320,18 @@ pub(crate) fn codex_covers(
 }
 
 impl Snapshot {
+    pub(crate) fn native_source(&self) -> NativeSource {
+        NativeSource {
+            identity: self.identity.clone(),
+            evaluator: Arc::clone(&self.evaluator),
+        }
+    }
+    /// Metadata-only observation of editable inputs at runtime loading. A match
+    /// is a hint, never content validation or permission to use edited source.
+    #[must_use]
+    pub fn input_status(&self) -> &serde_json::Value {
+        &self.input_status
+    }
     pub(crate) fn has_mcp_integrations(&self) -> bool {
         self.evaluator.has_mcp_integrations()
     }
@@ -308,6 +386,7 @@ impl Snapshot {
         &self,
         source: &str,
         dialect: crate::shell::Dialect,
+        dialect_version: Option<&str>,
         cwd: &str,
         original: Option<&serde_json::Value>,
     ) -> Result<serde_json::Value, RuntimeError> {
@@ -317,7 +396,7 @@ impl Snapshot {
                 .as_str()
                 .expect("dialect string")
                 .into(),
-            dialect_version: None,
+            dialect_version: dialect_version.map(str::to_owned),
             original_input: original.cloned().unwrap_or_else(|| serde_json::json!({})),
         };
         let context = policy::normalized::Context {
@@ -358,8 +437,18 @@ impl Snapshot {
     pub(crate) fn evaluate_resource(
         &self,
         request: policy::Request,
-        mut resource: ResourceRequest,
+        resource: ResourceRequest,
     ) -> Result<EvaluatedRequest, RuntimeError> {
+        self.evaluate_resource_controlled(request, resource, &|| Ok(()))
+    }
+
+    pub(crate) fn evaluate_resource_controlled(
+        &self,
+        request: policy::Request,
+        mut resource: ResourceRequest,
+        checkpoint: Checkpoint<'_>,
+    ) -> Result<EvaluatedRequest, RuntimeError> {
+        checkpoint().map_err(RuntimeError::Policy)?;
         if request.project != self.identity.project_root || request.cwd != resource.context.cwd {
             return Err(RuntimeError::Invalid(
                 "resource context differs from runtime request",
@@ -385,7 +474,7 @@ impl Snapshot {
                 &resource.input,
                 &resource.context,
                 resource.mcp.as_deref(),
-                &|| Ok(()),
+                checkpoint,
             )
             .map_err(RuntimeError::Policy)?;
         Ok(EvaluatedRequest {
@@ -473,29 +562,26 @@ pub(in crate::review) fn load(
     context: &Context,
     checkpoint: Checkpoint<'_>,
 ) -> Result<Snapshot, Error> {
-    load_plan(context, checkpoint, true)
-}
-
-/// Inspect the artifact named by an already validated diagnostic checkpoint.
-/// This path never reopens authority or publishes conversion/cache data.
-pub(in crate::review) fn inspect_cached(state: &super::State) -> Result<Snapshot, Error> {
-    let active = state.active.as_ref().ok_or(Error::Invalid(
-        "no active snapshot; initialize the project with shield init",
-    ))?;
-    let evaluator = active
-        .compiled
-        .load(&state.project_root, &state.project_id)?;
-    snapshot_from(state, evaluator)
+    load_plan(context, checkpoint, true, true)
 }
 
 fn load_plan(
     context: &Context,
     checkpoint: Checkpoint<'_>,
     recover: bool,
+    reactivate: bool,
 ) -> Result<Snapshot, Error> {
     checkpoint()?;
     let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
     state.check(context)?;
+    if reactivate && crate::review::registry_trust::may_reactivate(&state) {
+        Store::open(Path::new(&context.project_root))?
+            .reactivate_reviewed(context, state, checkpoint)?;
+        return load_plan(context, checkpoint, recover, false);
+    }
+    if let Some(error) = crate::review::registry_trust::inactive_error(&state) {
+        return Err(error);
+    }
     let active = state.active.as_ref().ok_or(Error::Invalid(
         "no active snapshot; initialize the project with shield init",
     ))?;
@@ -504,11 +590,13 @@ fn load_plan(
         Ok(evaluator) => evaluator,
         Err(_) if recover => {
             super::super::cache::recover(context, checkpoint)?;
-            return load_plan(context, checkpoint, false);
+            return load_plan(context, checkpoint, false, reactivate);
         }
         Err(error) => return Err(error),
     };
-    let snapshot = snapshot_from(&state, evaluator)?;
+    crate::review::registry_trust::recover_effective(&state.operator, evaluator.effective())?;
+    let mut snapshot = snapshot_from(&state, evaluator)?;
+    snapshot.input_status = super::super::cache::inputs::probe(&state);
     checkpoint()?;
     Ok(snapshot)
 }
@@ -517,6 +605,8 @@ fn snapshot_from(
     state: &super::State,
     evaluator: crate::configuration::Evaluator,
 ) -> Result<Snapshot, Error> {
+    let registry_guard =
+        crate::review::registry_trust::guard_effective(&state.operator, evaluator.effective())?;
     let active = state.active.as_ref().ok_or(Error::Invalid(
         "no active snapshot; initialize the project with shield init",
     ))?;
@@ -525,6 +615,7 @@ fn snapshot_from(
     }
     Ok(Snapshot {
         working_files: None,
+        input_status: serde_json::json!({"status":"unchecked","integrity":"unchecked","authorizes":false}),
         identity: SnapshotIdentity {
             project_id: state.project_id.clone(),
             project_root: state.project_root.clone(),
@@ -532,6 +623,7 @@ fn snapshot_from(
             previous_activation_id: active.previous_activation_id.clone(),
             policy_revision: active.policy_revision.clone(),
             candidate_digest: active.candidate_digest.clone(),
+            registry_revision: registry_guard.revision.clone(),
             binding: active.binding.clone(),
             compiled_digest: active.compiled.digest.clone(),
         },

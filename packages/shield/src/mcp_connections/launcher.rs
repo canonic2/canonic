@@ -81,6 +81,21 @@ impl Binding {
         }
         Ok(transport)
     }
+    pub(crate) fn portable_projected(
+        &self,
+        connection: &Connection,
+        binary: &Path,
+        root: &Path,
+    ) -> Result<Transport, crate::review::Error> {
+        let mut transport = self.projected(connection, binary, root)?;
+        if connection.local
+            && let Transport::Stdio { command, args, .. } = &mut transport
+        {
+            *command = "shield".into();
+            args[3] = ".".into();
+        }
+        Ok(transport)
+    }
 }
 
 pub(crate) fn private_state(root: &Path) -> Result<(), crate::review::Error> {
@@ -176,6 +191,25 @@ pub(crate) fn run(input: &crate::cli::McpConnect) -> ExitCode {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn portable_projection_keeps_nonlocal_stdio_arguments_unchanged() {
+        let connection: Connection = serde_json::from_value(json!({"local":false,"transport":{
+            "type":"stdio","command":"acme-connector","args":["short"]
+        }}))
+        .unwrap();
+        let binding = Binding::new(&connection).unwrap();
+        assert_eq!(
+            binding
+                .portable_projected(
+                    &connection,
+                    Path::new("/acme/shield"),
+                    Path::new("/project")
+                )
+                .unwrap(),
+            connection.transport
+        );
+    }
 
     #[test]
     fn connection_publication_locator_launches_only_the_refreshed_reviewed_transport() {

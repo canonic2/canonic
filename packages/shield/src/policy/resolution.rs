@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[cfg(test)]
+mod diagnostics_tests;
 pub(crate) mod targets;
 #[cfg(test)]
 mod tests;
@@ -276,7 +278,9 @@ impl Resolver<'_> {
                     }
                 }
                 references(defaults, &mut integration.default_variables);
-                let available = self.connection_defaults(defaults)?;
+                let available = self.connection_defaults(defaults).map_err(|error| {
+                    error.in_resolution(name, "defaults", &integration.default_variables)
+                })?;
                 if available {
                     // Samples establish transport shape, not endpoint validity:
                     // an unbound string's representative value is just "sample".
@@ -411,19 +415,45 @@ impl Resolver<'_> {
             .as_str()
             .unwrap_or_default()
             .to_owned();
-        let mut trees = vec![&mut rule.conditions];
-        trees.extend(rule.requirements.as_mut());
-        let mut texts: Vec<&mut String> = Vec::new();
-        texts.extend(rule.reason.as_mut());
+        let mut trees = vec![("conditions", &mut rule.conditions)];
+        trees.extend(
+            rule.requirements
+                .as_mut()
+                .map(|value| ("requirements", value)),
+        );
+        let mut texts = Vec::new();
+        texts.extend(rule.reason.as_mut().map(|text| ("reason", text, 4096)));
         if let Some(guidance) = rule.guidance.as_mut() {
-            texts.extend(guidance.message.as_mut());
-            texts.extend(guidance.alternatives.iter_mut().flatten());
+            texts.extend(
+                guidance
+                    .message
+                    .as_mut()
+                    .map(|text| ("guidance.message", text, 512)),
+            );
+            texts.extend(
+                guidance
+                    .alternatives
+                    .iter_mut()
+                    .flatten()
+                    .map(|text| ("guidance.alternatives", text, 256)),
+            );
         }
         if let Some(unmet) = rule.on_unmet.as_mut() {
-            texts.extend(unmet.message.as_mut());
-            texts.extend(unmet.alternatives.iter_mut().flatten());
+            texts.extend(
+                unmet
+                    .message
+                    .as_mut()
+                    .map(|text| ("on_unmet.message", text, 512)),
+            );
+            texts.extend(
+                unmet
+                    .alternatives
+                    .iter_mut()
+                    .flatten()
+                    .map(|text| ("on_unmet.alternatives", text, 256)),
+            );
         }
-        let activity = self.entry(rule.when.take().as_deref(), &domain, trees, texts)?;
+        let activity = self.entry(&rule.id, rule.when.take().as_deref(), &domain, trees, texts)?;
         Ok(activity)
     }
 
@@ -436,7 +466,10 @@ impl Resolver<'_> {
                 }
                 let name = fields["var"].as_str().ok_or(Error::Syntax)?;
                 if !self.declarations.contains_key(name) {
-                    return Err(Error::Contract("MCP defaults name an undeclared variable"));
+                    return Err(Error::binding(
+                        name,
+                        "MCP defaults name an undeclared variable",
+                    ));
                 }
                 self.used.variables = true;
                 let Some(resolved) = self.values.get(name) else {
@@ -465,42 +498,65 @@ impl Resolver<'_> {
 
     fn precondition(&mut self, precondition: &mut Precondition) -> Result<Activity, Error> {
         let domain = precondition.domain().to_owned();
-        let mut trees = vec![&mut precondition.conditions];
-        trees.extend(precondition.requires_any.iter_mut());
-        let mut texts: Vec<&mut String> = Vec::new();
-        texts.extend(precondition.reason.as_mut());
-        texts.extend(precondition.on_unmet.message.as_mut());
-        texts.extend(precondition.on_unmet.alternatives.iter_mut().flatten());
-        self.entry(precondition.when.take().as_deref(), &domain, trees, texts)
+        let mut trees = vec![("conditions", &mut precondition.conditions)];
+        trees.extend(
+            precondition
+                .requires_any
+                .iter_mut()
+                .map(|value| ("requires_any", value)),
+        );
+        let mut texts = Vec::new();
+        texts.extend(
+            precondition
+                .reason
+                .as_mut()
+                .map(|text| ("reason", text, 4096)),
+        );
+        texts.extend(
+            precondition
+                .on_unmet
+                .message
+                .as_mut()
+                .map(|text| ("on_unmet.message", text, 512)),
+        );
+        texts.extend(
+            precondition
+                .on_unmet
+                .alternatives
+                .iter_mut()
+                .flatten()
+                .map(|text| ("on_unmet.alternatives", text, 256)),
+        );
+        self.entry(
+            &precondition.id,
+            precondition.when.take().as_deref(),
+            &domain,
+            trees,
+            texts,
+        )
     }
 
     fn entry(
         &mut self,
+        id: &str,
         when: Option<&[Test]>,
         domain: &str,
-        trees: Vec<&mut Value>,
-        texts: Vec<&mut String>,
+        trees: Vec<(&str, &mut Value)>,
+        texts: Vec<(&str, &mut String, usize)>,
     ) -> Result<Activity, Error> {
         let mut names = BTreeSet::new();
-        if let Some(tests) = when {
-            variables::validate_tests(tests, self.declarations)?;
-            self.used.variables = true;
-            for test in tests {
-                names.insert(test.variable().to_owned());
-                if !self.sample && !test.holds(self.values.get(test.variable())) {
-                    return Ok(Activity::Inactive(format!(
-                        "when test on {} does not hold",
-                        test.variable()
-                    )));
-                }
-            }
+        if let Some(activity) = self.entry_tests(id, when, &mut names)? {
+            return Ok(activity);
         }
         let mut trees = trees;
-        for tree in &mut trees {
-            self.optional_checks(tree, domain, &mut names)?;
+        for (field, tree) in &mut trees {
+            let mut referenced = BTreeSet::new();
+            variables::references(tree, domain, &mut referenced);
+            self.optional_checks(tree, domain, &mut names)
+                .map_err(|error| error.in_resolution(id, field, &referenced))?;
         }
         let mut unset = BTreeSet::new();
-        for tree in trees {
+        for (field, tree) in trees {
             let mut referenced = BTreeSet::new();
             variables::references(tree, domain, &mut referenced);
             if referenced.is_empty() {
@@ -511,9 +567,12 @@ impl Resolver<'_> {
                 let declaration = self
                     .declarations
                     .get(name)
-                    .ok_or(Error::Contract("reference to an undeclared variable"))?;
+                    .ok_or_else(|| Error::binding(name, "reference to an undeclared variable"))?;
                 if declaration.kind == variables::Kind::Boolean {
-                    return Err(Error::Contract("boolean variables cannot be selectors"));
+                    return Err(Error::binding(
+                        name,
+                        "boolean variables cannot be selectors",
+                    ));
                 }
                 Ok(self
                     .values
@@ -521,18 +580,24 @@ impl Resolver<'_> {
                     .and_then(|value| declaration.selector(value)))
             };
             self.used.parts |=
-                variables::substitute(tree, domain, &lookup, &mut unset, self.sample)?;
+                variables::substitute(tree, domain, &lookup, &mut unset, self.sample)
+                    .map_err(|error| error.in_resolution(id, field, &referenced))?;
             names.extend(referenced);
         }
         if self.templates {
-            for text in texts {
+            for (field, text, limit) in texts {
                 if !templates::templated(text) {
                     continue;
                 }
                 self.used.templates = true;
+                let mut referenced = BTreeSet::new();
                 let mut lookup = |name: &str| -> Result<Option<String>, Error> {
+                    referenced.insert(name.to_owned());
                     if !self.declarations.contains_key(name) {
-                        return Err(Error::Contract("template names an undeclared variable"));
+                        return Err(Error::binding(
+                            name,
+                            "template names an undeclared variable",
+                        ));
                     }
                     names.insert(name.to_owned());
                     Ok(if self.sample {
@@ -541,8 +606,16 @@ impl Resolver<'_> {
                         self.values.get(name).map(variables::render)
                     })
                 };
-                match templates::render(text, &mut lookup)? {
-                    Some(rendered) => *text = rendered,
+                let rendered = templates::render(text, &mut lookup)
+                    .map_err(|error| error.in_resolution(id, field, &referenced))?;
+                match rendered {
+                    Some(rendered) => {
+                        if rendered.is_empty() || rendered.len() > limit {
+                            return Err(Error::Contract("rendered text exceeds field bounds")
+                                .in_resolution(id, field, &referenced));
+                        }
+                        *text = rendered;
+                    }
                     None => {
                         unset.extend(
                             names
@@ -558,6 +631,33 @@ impl Resolver<'_> {
             return Ok(Activity::Inactive(format!("{name} unset")));
         }
         Ok(Activity::Active(names))
+    }
+
+    fn entry_tests(
+        &mut self,
+        id: &str,
+        when: Option<&[Test]>,
+        names: &mut BTreeSet<String>,
+    ) -> Result<Option<Activity>, Error> {
+        if let Some(tests) = when {
+            let tested = tests
+                .iter()
+                .map(|test| test.variable().to_owned())
+                .collect();
+            self.tests(tests)
+                .map_err(|error| error.in_resolution(id, "when", &tested))?;
+            self.used.variables = true;
+            for test in tests {
+                names.insert(test.variable().to_owned());
+                if !self.sample && !test.holds(self.values.get(test.variable())) {
+                    return Ok(Some(Activity::Inactive(format!(
+                        "when test on {} does not hold",
+                        test.variable()
+                    ))));
+                }
+            }
+        }
+        Ok(None)
     }
 
     /// Resolve the optional checks of every option grammar in a predicate tree:
@@ -599,6 +699,21 @@ impl Resolver<'_> {
         Ok(())
     }
 
+    fn tests(&self, tests: &[Test]) -> Result<(), Error> {
+        variables::validate_tests(tests, self.declarations).map_err(|error| {
+            // Locate a refused test only on the error path. Cardinality errors
+            // still describe the complete field rather than a valid member.
+            for test in tests {
+                if let Err(Error::Contract(reason)) =
+                    variables::validate_tests(std::slice::from_ref(test), self.declarations)
+                {
+                    return Error::binding(test.variable(), reason);
+                }
+            }
+            error
+        })
+    }
+
     /// An unset variable drops the value match; a set one becomes a plain reference.
     fn option_values(
         &mut self,
@@ -621,14 +736,17 @@ impl Resolver<'_> {
                     continue;
                 };
                 if declaration["match"]["unset"] != "any" {
-                    return Err(Error::Contract("unset accepts only any"));
+                    return Err(Error::binding(&name, "unset accepts only any"));
                 }
                 let declared = self
                     .declarations
                     .get(&name)
-                    .ok_or(Error::Contract("reference to an undeclared variable"))?;
+                    .ok_or_else(|| Error::binding(&name, "reference to an undeclared variable"))?;
                 if declared.kind == variables::Kind::Boolean {
-                    return Err(Error::Contract("boolean variables cannot be selectors"));
+                    return Err(Error::binding(
+                        &name,
+                        "boolean variables cannot be selectors",
+                    ));
                 }
                 self.used.variables = true;
                 if self.sample || self.values.contains_key(&name) {
@@ -671,7 +789,7 @@ impl Resolver<'_> {
             };
             let tests: Vec<Test> =
                 serde_json::from_value(when.clone()).map_err(|_| Error::Syntax)?;
-            variables::validate_tests(&tests, self.declarations)?;
+            self.tests(&tests)?;
             self.used.variables = true;
             names.extend(tests.iter().map(|t| t.variable().to_owned()));
             if self.sample || tests.iter().all(|t| t.holds(self.values.get(t.variable()))) {

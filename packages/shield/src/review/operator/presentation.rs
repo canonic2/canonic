@@ -190,6 +190,12 @@ fn primary_result(command: &PublicCommand, value: &Value) -> String {
             format!("{}Dry run; nothing was written.\n", review(value))
         }
         PublicCommand::Mcp(_) => setup::configured(value),
+        PublicCommand::Sdk(_) => format!(
+            "Registered the reviewed read-only SDK profile.\nBinary SHA-256: {}\nAdapter mapping SHA-256: {}\nPolicy lineage: {}\nSave the reviewed binary SHA-256 as binaryDigest in trusted application configuration. Policy permissions are unchanged.\n",
+            label(&value["binary_digest"]),
+            label(&value["mapping_digest"]),
+            label(&value["policy_lineage"])
+        ),
         PublicCommand::Protection(_) => setup::protection(value),
         PublicCommand::Enable | PublicCommand::Disable => {
             let mut output = format!(

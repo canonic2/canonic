@@ -162,7 +162,7 @@ pub(super) fn create(
                 .preparations
                 .store()
                 .map_err(|error| failure(&error))
-                .and_then(|store| snapshot(store, &record))
+                .and_then(|store| snapshot(&store, &record))
                 .map(TaskResult::Created),
         )),
         Err(error) => Some(Outcome::Task(Err(failure(&error)))),
@@ -174,15 +174,17 @@ pub(super) fn manage(server: &Server, request: &TaskRequest, context: &Context) 
         context
             .check()
             .map_err(|_| RpcError::new(rpc::REQUEST_CANCELLED, "Request cancelled"))?;
-        let store = server
-            .preparations
-            .store()
-            .map_err(|error| failure(&error))?;
+        let store = if matches!(request, TaskRequest::Cancel { .. }) {
+            server.preparations.store()
+        } else {
+            server.preparations.observation_store()
+        }
+        .map_err(|error| failure(&error))?;
         let id = request.id().as_str();
         let record = store.observe(id).map_err(|error| failure(&error))?;
         match request {
             TaskRequest::Get { .. } => {
-                let snapshot = snapshot(store, &record)?;
+                let snapshot = snapshot(&store, &record)?;
                 schema(server)?.validate_snapshot(&snapshot).map_err(|_| {
                     RpcError::new(
                         rpc::INTERNAL_ERROR,

@@ -22,6 +22,7 @@ mod policy_files;
 mod proposal_draft;
 mod review;
 pub mod runtime;
+mod runtime_protocol;
 pub mod shell;
 #[cfg(test)]
 mod test_support;
@@ -61,7 +62,7 @@ pub fn run(cli: &cli::Cli) -> std::process::ExitCode {
     };
     log.event(
         "run_end",
-        serde_json::json!({"success":exit == std::process::ExitCode::SUCCESS}),
+        || serde_json::json!({"success":exit == std::process::ExitCode::SUCCESS}),
     );
     if let Some(trace) = &trace {
         trace.finish(if exit == std::process::ExitCode::SUCCESS {
@@ -81,6 +82,25 @@ fn run_internal(
         cli::Command::Mcp(_) => unreachable!("MCP launches are routed by PublicCommand::mcp_serve"),
         cli::Command::Run(input) => return execution::run(input),
         cli::Command::EnforceRequest(input) => return enforcement::protocol::run(&input.project),
+        cli::Command::RuntimeRequest(input) => {
+            return runtime_protocol::run(&input.project, input.timeout_ms);
+        }
+        cli::Command::SdkReadOpen(input) => {
+            return match review::sdk_read::mint(&input.project, &input.mapping_digest) {
+                Ok(context) => {
+                    println!("{}", context.launch_value());
+                    std::process::ExitCode::SUCCESS
+                }
+                Err(_) => std::process::ExitCode::from(2),
+            };
+        }
+        cli::Command::SdkReadClose(input) => {
+            return if review::sdk_read::close(&input.project).is_ok() {
+                std::process::ExitCode::SUCCESS
+            } else {
+                std::process::ExitCode::from(2)
+            };
+        }
         cli::Command::NativeHook(input) => return agents::run(input, log),
         cli::Command::McpConnect(input) => return mcp_connections::launcher::run(input),
         cli::Command::HistoryEvents(input) => {

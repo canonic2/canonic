@@ -502,7 +502,7 @@ fn prepared_patterns_match_unicode_boundaries_and_glob_byte_semantics() {
         let expected =
             json!(crate::policy::evaluate_selected(&[], &[&c], &request(&[value])).unwrap());
         let plan = Plan::compile(vec![], Some(c), json!({})).unwrap();
-        assert_eq!(&plan.bytes()[..8], b"SHPLAN14");
+        assert_eq!(&plan.bytes()[..8], b"SHPLAN15");
         let restored = Plan::load_authenticated(plan.bytes().to_vec()).unwrap();
         let actual = json!(
             restored
@@ -1327,6 +1327,50 @@ fn find_walks_check_present_exclusions_and_fail_actions() {
             (&[".aws"], Decision::Deny),
         ],
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn touch_reference_reads_and_every_destination_write_share_location_checks() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    let outside = assert_fs::TempDir::new().unwrap();
+    std::fs::write(root.join("reference"), "Acme").unwrap();
+    std::fs::write(outside.path().join("reference"), "Outside").unwrap();
+    std::os::unix::fs::symlink(outside.path().join("reference"), root.join("escape")).unwrap();
+    let within = json!({"within":{"root":"project"},"exclude":[{"root":"project","path":".git"}]});
+    let evaluator = prepared(vec![
+        json!({"id":"touch","decision":"allow","conditions":{"domain":"argv","executable":"touch","arguments":{"kind":"any"}},"requirements":{"targets":[{"action":"read","all":within},{"action":"write","all":within}]},"on_unmet":{"decision":"deny"}}),
+    ]);
+    for (words, expected) in [
+        (vec!["-r", "reference", "one", "two"], Decision::Allow),
+        (
+            vec!["-amc", "-r", "reference", "--", "-one", "two"],
+            Decision::Allow,
+        ),
+        (vec!["-r", "escape", "one"], Decision::Deny),
+        (
+            vec!["-r", "reference", "one", ".git/config"],
+            Decision::Deny,
+        ),
+        (vec!["-r", "reference", "one", "../outside"], Decision::Deny),
+        (
+            vec!["-r", "reference", "-r", "escape", "one"],
+            Decision::Deny,
+        ),
+    ] {
+        let request = Request {
+            executable: "touch".into(),
+            arguments: words.iter().map(|word| (*word).into()).collect(),
+            cwd: root.to_string_lossy().into_owned(),
+            project: root.to_string_lossy().into_owned(),
+        };
+        assert_eq!(
+            evaluator.evaluate(&request).unwrap().decision,
+            expected,
+            "{words:?}"
+        );
+    }
 }
 
 #[test]

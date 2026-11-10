@@ -12,6 +12,7 @@ use crate::{
 };
 
 pub(crate) mod protocol;
+pub(crate) mod read_consumer;
 pub(crate) mod read_text;
 
 /// Host-established access classification; never deserialize agent authority claims.

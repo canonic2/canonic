@@ -160,6 +160,16 @@ pub(super) enum RequestKind {
 pub(super) fn request_view(context: &Context, id: &str) -> Result<(RequestKind, Value), Error> {
     let state = super::project::checkpoint(context)?;
     let time = super::clock::now_ms()?;
+    if let Some((kind, value)) =
+        super::hook_approval::terminal_registry(&state, time).inspect(context, id, time)
+    {
+        let kind = match kind {
+            super::authorization_receipts::Kind::Read => RequestKind::Read,
+            super::authorization_receipts::Kind::Execution => RequestKind::Execution,
+            super::authorization_receipts::Kind::Hook => RequestKind::Hook,
+        };
+        return Ok((kind, value));
+    }
     match super::read_approval::inspect_from(&state, Some(id), time) {
         Ok(value) => Ok((RequestKind::Read, value)),
         Err(Error::Missing) => match super::run_approval::inspect_from(&state, Some(id), time) {
@@ -175,7 +185,24 @@ pub(super) fn request_view(context: &Context, id: &str) -> Result<(RequestKind, 
 /// The terminal has confirmed this exact request; native issuance still needs
 /// its host's explicit refusal/override review rather than the Ask-only CLI.
 pub(super) fn authorize(context: &Context, id: &str, deny: bool) -> Result<Value, Error> {
-    match request_view(context, id)?.0 {
+    let (kind, view) = request_view(context, id)?;
+    if !deny && view["terminal"] == true {
+        super::project::checkpoint(context)?.check_operations()?;
+        return super::hook_approval::terminal_registry(
+            &super::project::checkpoint(context)?,
+            super::clock::now_ms()?,
+        )
+        .replay_operator(super::authorization_receipts::OperatorReplay {
+            context,
+            id,
+            decision: super::authorization_receipts::Decision::Approve,
+            ttl_seconds: Some(300),
+            reason: None,
+            at: super::clock::now_ms()?,
+        })?
+        .ok_or(Error::Missing);
+    }
+    match kind {
         RequestKind::Read => super::read_approval::authorize(context, id, 300, None, deny),
         RequestKind::Execution => super::run_approval::authorize(context, id, 300, None, deny),
         RequestKind::Hook if deny => super::hook_approval::deny(context, id, true),

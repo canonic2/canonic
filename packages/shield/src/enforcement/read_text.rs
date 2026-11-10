@@ -45,6 +45,9 @@ impl Binding {
             return Err(());
         }
         let canonical = path.canonicalize().map_err(|_| ())?;
+        if !super::protocol::mandatory_read_allowed(&canonical, None) {
+            return Err(());
+        }
         let roots = crate::location::Observer::readable_roots(root, cwd, paths).ok_or(())?;
         if canonical != path
             || !roots.iter().any(|root| canonical.starts_with(root))
@@ -100,9 +103,14 @@ impl Binding {
     }
 
     pub(crate) fn verify(&self) -> Result<(), ()> {
-        if crate::location::Observer::readable_roots(&self.project, &self.cwd, &self.access_paths)
+        if !super::protocol::mandatory_read_allowed(&self.path, None)
+            || crate::location::Observer::readable_roots(
+                &self.project,
+                &self.cwd,
+                &self.access_paths,
+            )
             .as_ref()
-            != Some(&self.roots)
+                != Some(&self.roots)
             || self.path.canonicalize().map_err(|_| ())? != self.path
             || self.cwd.canonicalize().map_err(|_| ())? != self.cwd
             || !self.cwd.is_dir()
@@ -295,5 +303,58 @@ mod windows_tests {
         let replacement = Binding::open(&canonical, &canonical, path.to_str().unwrap()).unwrap();
         assert_ne!(replacement.digest, binding.digest);
         replacement.verify().unwrap();
+    }
+}
+
+#[cfg(test)]
+mod private_namespace_tests {
+    use super::Binding;
+
+    #[test]
+    fn explicitly_readable_user_state_root_never_opens_private_sdk_proofs() {
+        if !crate::test_support::isolated_home(concat!(
+            module_path!(),
+            "::explicitly_readable_user_state_root_never_opens_private_sdk_proofs"
+        )) {
+            return;
+        }
+        #[cfg(windows)]
+        let home = std::env::var_os("LOCALAPPDATA").unwrap();
+        #[cfg(not(windows))]
+        let home = std::env::var_os("HOME").unwrap();
+        let home = std::path::PathBuf::from(home).canonicalize().unwrap();
+        let private = home.join(".shield/sdk-read-profiles");
+        let ordinary = home.join(".shield-example");
+        std::fs::create_dir_all(&private).unwrap();
+        std::fs::create_dir_all(&ordinary).unwrap();
+        std::fs::write(private.join("profile.txt"), "private proof").unwrap();
+        std::fs::write(ordinary.join("notes.txt"), "ordinary text").unwrap();
+        let project = assert_fs::TempDir::new().unwrap();
+        let root = project.path().canonicalize().unwrap();
+        let paths = crate::configuration::AccessPaths {
+            read: vec![
+                home.join(".shield").to_str().unwrap().into(),
+                ordinary.to_str().unwrap().into(),
+            ],
+            write: vec![],
+        };
+        assert!(
+            Binding::open_scoped(
+                &root,
+                &root,
+                private.join("profile.txt").to_str().unwrap(),
+                &paths
+            )
+            .is_err()
+        );
+        assert!(
+            Binding::open_scoped(
+                &root,
+                &root,
+                ordinary.join("notes.txt").to_str().unwrap(),
+                &paths
+            )
+            .is_ok()
+        );
     }
 }

@@ -49,6 +49,13 @@ fn expiring_allow_is_revalidated_before_retained_evidence_reaches_a_consumer() {
     let evaluated = snapshot.evaluate(request(&context)).unwrap();
     assert_eq!(evaluated.evaluation().decision, policy::Decision::Allow);
     project.with_current(&evaluated, |_, _| ()).unwrap();
+    let authority = evaluated.authorization(&context, &|| Ok(())).unwrap();
+    let store = Store::open(root.path()).unwrap();
+    store
+        .inspect_checkpoint(&context, &|| Ok(()), |state| {
+            authority.check_locked(state, &evaluated, &|| Ok(()))
+        })
+        .unwrap();
     while SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -63,6 +70,12 @@ fn expiring_allow_is_revalidated_before_retained_evidence_reaches_a_consumer() {
         Err(RuntimeError::StaleSnapshot)
     ));
     assert!(!invoked.get());
+    assert!(matches!(
+        store.inspect_checkpoint(&context, &|| Ok(()), |state| {
+            authority.check_locked(state, &evaluated, &|| Ok(()))
+        }),
+        Err(Error::StaleSnapshot)
+    ));
     assert_eq!(
         snapshot
             .evaluate(request(&context))

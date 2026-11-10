@@ -1,5 +1,5 @@
 //! Active project connection diagnostics, separate from native hook ownership.
-use super::{Path, Registration, Value, json, review, verify_mcp_connection};
+use super::{Path, Registration, Value, agents, json, review, verify_mcp_connection};
 use crate::mcp_connections::{Connection, Transport, launcher::Binding};
 
 #[cfg(test)]
@@ -97,6 +97,23 @@ pub(super) fn projected(
         None
     };
     match binding {
+        Some(binding)
+            if agents::find(agent)
+                .is_some_and(crate::agents::AgentAdapter::portable_mcp_launcher) =>
+        {
+            let portable = binding.portable_projected(connection, &registration.binary, root)?;
+            if connection
+                .agents
+                .get(agent)
+                .is_some_and(|alias| verify_mcp_connection(root, agent, alias, &portable).is_ok())
+            {
+                Ok(portable)
+            } else {
+                // Exact old owned launchers remain valid until reviewed setup
+                // or epoch maintenance replaces their historical path codec.
+                binding.projected(connection, &registration.binary, root)
+            }
+        }
         Some(binding) => binding.projected(connection, &registration.binary, root),
         None => Ok(connection.projected(&registration.binary, root, None)?),
     }
@@ -108,11 +125,15 @@ pub(crate) fn mcp_projection(
     id: &str,
     connection: &Connection,
 ) -> Result<Transport, super::Error> {
-    if !connection.local || native_matches(root, agent, connection) {
+    if !connection.local {
+        return Ok(connection.transport.clone());
+    }
+    let state = review::storage::Store::open(root)?.read_checkpoint()?;
+    state.check_operations()?;
+    if native_matches(root, agent, connection) {
         return Ok(connection.transport.clone());
     }
     crate::mcp_connections::launcher::private_state(root)?;
-    let state = review::project::checkpoint(&review::open(root)?)?;
     let registration = super::registration(&state.operator)?.ok_or(super::Error::Invalid(
         "private MCP launch is not registered",
     ))?;
@@ -128,7 +149,8 @@ pub(crate) fn resolve_mcp_token(
         return Err(super::Error::Invalid("invalid private MCP token"));
     }
     crate::mcp_connections::launcher::private_state(root)?;
-    let state = review::project::checkpoint(&review::open(root)?)?;
+    let state = review::storage::Store::open(root)?.read_checkpoint()?;
+    state.check_operations()?;
     let registration = super::registration(&state.operator)?.ok_or(super::Error::Invalid(
         "private MCP launch is not registered",
     ))?;
@@ -147,7 +169,7 @@ pub(crate) fn resolve_mcp_token(
 
 pub(super) fn diagnose(
     root: &Path,
-    snapshot: Option<&review::runtime::consumer::Snapshot>,
+    snapshot: Option<&review::cache::Inspection>,
     registered: Option<&Registration>,
     diagnostics: &mut Vec<&'static str>,
 ) -> Vec<Value> {
@@ -204,7 +226,7 @@ pub(super) fn diagnose(
 
 fn automatic(
     root: &Path,
-    snapshot: &review::runtime::consumer::Snapshot,
+    snapshot: &review::cache::Inspection,
     registered: Option<&Registration>,
     diagnostics: &mut Vec<&'static str>,
     rows: &mut Vec<Value>,
@@ -216,7 +238,6 @@ fn automatic(
             rows.push(json!({"agent":agent,"mode":"automatic","configuration":"discovery unavailable","effective_connection_identity":"unverified"}));
             continue;
         };
-        let connections = observation.connections(snapshot.mcp_connections(), agent);
         let hooks = if registered.is_some_and(|r| r.agents.contains_key(agent)) {
             "registered; host loading unverified"
         } else if registered.is_some_and(|r| r.box_definition.is_some()) {
@@ -232,24 +253,16 @@ fn automatic(
             {
                 continue;
             }
-            let resolution = observation.get(alias).and_then(|_| {
-                snapshot
-                    .resolve_mcp(&format!("host:{alias}"), &connections, entry.source)
-                    .map_err(|_| super::Error::Invalid("MCP predicates or mappings conflict"))
-            });
-            let (configuration, matches) = match resolution {
-                Ok(_) if entry.transport.as_ref().is_ok_and(Option::is_none) => (
-                    "unsupported discovery scope; host permissions apply",
-                    vec![],
-                ),
-                Ok(resolved) if resolved.matches.is_empty() => {
-                    ("no matching installed pack", vec![])
+            let resolution = observation.get(alias);
+            let configuration = match resolution {
+                Ok(_) if entry.transport.as_ref().is_ok_and(Option::is_none) => {
+                    "unsupported discovery scope; host permissions apply"
                 }
-                Ok(resolved) => ("matched pack criteria", resolved.matches),
-                Err(_) => ("ambiguous or unsupported configuration", vec![]),
+                Ok(_) => "policy matching checked on interception",
+                Err(_) => "ambiguous or unsupported configuration",
             };
             rows.push(json!({"agent":agent,"alias":alias,"mode":"automatic","source":entry.source,
-                "configuration":configuration,"matches":matches,"hooks":hooks,
+                "configuration":configuration,"matches":[],"matching":"unchecked","hooks":hooks,
                 "credential_readiness":"unverified","host_loading":"unverified","effective_connection_identity":"unverified"}));
         }
     }

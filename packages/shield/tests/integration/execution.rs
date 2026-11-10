@@ -91,6 +91,7 @@ mod macos {
             (vec!["log", "-n", "1"], "Acme initial"),
         ] {
             cargo_bin_cmd!("shield")
+                .env("HOME", root.path())
                 .arg("__internal")
                 .args(["run", "--project"])
                 .arg(root.path())
@@ -111,6 +112,7 @@ mod macos {
         git(&root, &["config", "--unset", "filter.acme.process"]);
         git(&root, &["add", "acme.txt"]);
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -126,6 +128,7 @@ mod macos {
         let id = request(&root, &[GIT, "status"]);
         cli(&root, &["request", "approve", &id]);
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -134,6 +137,7 @@ mod macos {
             .code(3)
             .stdout("");
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -142,6 +146,7 @@ mod macos {
             .success()
             .stdout(predicates::str::contains(" M acme.txt"));
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -153,6 +158,7 @@ mod macos {
         cli(&root, &["request", "approve", &id]);
         git(&root, &["config", "acme.changed", "true"]);
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -166,6 +172,7 @@ mod macos {
     fn git_deny_and_unrecognized_forms_never_launch() {
         let root = repository("deny");
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -182,6 +189,7 @@ mod macos {
             vec!["status", "--porcelain"],
         ] {
             cargo_bin_cmd!("shield")
+                .env("HOME", root.path())
                 .arg("__internal")
                 .args(["run", "--project"])
                 .arg(root.path())
@@ -197,6 +205,7 @@ mod macos {
             .write_str("*.txt filter=acme\n")
             .expect("fixture");
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -223,6 +232,7 @@ mod macos {
             return super::super::operator::query(root, &["request", "show", args[2]]);
         }
         let output = cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .args(args)
             .arg("--json")
             .arg("--project")
@@ -241,6 +251,7 @@ mod macos {
     /// The history reader's event view, with reader-derived completion links.
     fn events(root: &assert_fs::TempDir) -> Vec<Value> {
         let output = cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .args(["__internal", "history-events", "--project"])
             .arg(root.path())
             .assert()
@@ -274,6 +285,7 @@ mod macos {
     fn direct_literals_stdout_exit_codes_and_linked_history_are_real() {
         let root = fixture("allow");
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -290,6 +302,7 @@ mod macos {
         assert!(!root.child("marker").path().exists());
         for (exe, code) in [("/usr/bin/true", 0), ("/usr/bin/false", 1)] {
             cargo_bin_cmd!("shield")
+                .env("HOME", root.path())
                 .arg("__internal")
                 .args(["run", "--project"])
                 .arg(root.path())
@@ -326,6 +339,7 @@ mod macos {
             vec!["/bin/sleep", "nan"],
         ] {
             cargo_bin_cmd!("shield")
+                .env("HOME", root.path())
                 .arg("__internal")
                 .args(["run", "--project"])
                 .arg(root.path())
@@ -336,6 +350,7 @@ mod macos {
         }
         assert!(!root.child("marker").path().exists());
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -349,6 +364,7 @@ mod macos {
         for (decision, code) in [("ask", 3), ("deny", 4)] {
             let root = fixture(decision);
             cargo_bin_cmd!("shield")
+                .env("HOME", root.path())
                 .arg("__internal")
                 .args(["run", "--project"])
                 .arg(root.path())
@@ -376,6 +392,7 @@ mod macos {
     }
     fn request_options(root: &assert_fs::TempDir, options: &[&str], argv: &[&str]) -> String {
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -426,6 +443,7 @@ mod macos {
             vec!["--", "/bin/echo", "changed"],
         ] {
             cargo_bin_cmd!("shield")
+                .env("HOME", root.path())
                 .arg("__internal")
                 .args(["run", "--project"])
                 .arg(root.path())
@@ -436,6 +454,7 @@ mod macos {
                 .stdout("");
         }
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -452,6 +471,7 @@ mod macos {
             .stdout("Acme spaces $(touch marker);*\n");
         assert!(!root.child("marker").path().exists());
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -485,10 +505,7 @@ mod macos {
             allowed["event_id"]
         );
         assert_eq!(completion["details"]["exit_code"], 0);
-        assert_eq!(
-            cli(&root, &["request", "show", &id])["error"]["code"],
-            "not-found"
-        );
+        assert_eq!(cli(&root, &["request", "show", &id])["status"], "consumed");
     }
 
     #[test]
@@ -496,6 +513,7 @@ mod macos {
         let root = fixture("ask");
         // A read grant selector cannot select native authority.
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -511,6 +529,7 @@ mod macos {
             .stdout("");
         let denied = fixture("deny");
         cargo_bin_cmd!("shield")
+            .env("HOME", denied.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(denied.path())
@@ -527,6 +546,7 @@ mod macos {
         assert_eq!(cli(&denied, &["request", "list"])["requests"], json!([]));
         let allowed = fixture("allow");
         cargo_bin_cmd!("shield")
+            .env("HOME", allowed.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(allowed.path())
@@ -552,6 +572,7 @@ mod macos {
         let children = (0..4)
             .map(|_| {
                 Command::new(assert_cmd::cargo::cargo_bin!("shield"))
+                    .env("HOME", root.path())
                     .arg("__internal")
                     .args(["run", "--project"])
                     .arg(root.path())
@@ -585,6 +606,7 @@ mod macos {
                     "unexpected failure: {result:?}"
                 );
                 *result = Command::new(assert_cmd::cargo::cargo_bin!("shield"))
+                    .env("HOME", root.path())
                     .arg("__internal")
                     .args(["run", "--project"])
                     .arg(root.path())
@@ -603,16 +625,14 @@ mod macos {
         );
         assert!(results.iter().all(|r| r.stdout.is_empty()));
         history_settings(&root, true, true);
-        assert_eq!(
-            cli(&root, &["request", "show", &id])["error"]["code"],
-            "not-found"
-        );
+        assert_eq!(cli(&root, &["request", "show", &id])["status"], "consumed");
     }
 
     #[test]
     fn approved_native_sleep_times_out_and_never_restores_grant() {
         let root = fixture("ask");
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -627,6 +647,7 @@ mod macos {
             .expect("pending sleep");
         cli(&root, &["request", "approve", id]);
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -642,11 +663,9 @@ mod macos {
             .assert()
             .code(124)
             .stdout("");
-        assert_eq!(
-            cli(&root, &["request", "show", id])["error"]["code"],
-            "not-found"
-        );
+        assert_eq!(cli(&root, &["request", "show", id])["status"], "consumed");
         cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())
@@ -680,6 +699,7 @@ mod macos {
         };
         let root = fixture(decision);
         let mut command = Command::new(assert_cmd::cargo::cargo_bin!("shield"));
+        command.env("HOME", root.path());
         command.arg("__internal");
         if decision == "ask" {
             let id = request_options(&root, &["--timeout-ms", "3000"], &["/bin/sleep", "10"]);
@@ -732,6 +752,7 @@ mod macos {
     fn native_timeout_kills_and_records_actual_signal_without_output() {
         let root = fixture("allow");
         let output = cargo_bin_cmd!("shield")
+            .env("HOME", root.path())
             .arg("__internal")
             .args(["run", "--project"])
             .arg(root.path())

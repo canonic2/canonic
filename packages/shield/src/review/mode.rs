@@ -110,6 +110,9 @@ impl Prepared {
         }
         let root = Path::new(&context.project_root);
         let store = Store::open(root)?;
+        store.read_checkpoint()?.check(context)?;
+        let publication = super::publication::ProjectionLease::acquire(root)?;
+        publication.check(context)?;
         let changed = self.before.enabled != self.enabled;
         let after = Mode {
             enabled: self.enabled,
@@ -122,6 +125,30 @@ impl Prepared {
                 self.before.generation
             },
         };
+        if !self.enabled {
+            store.inspect_checkpoint(context, checkpoint, |state| {
+                if state.enforcement != self.before
+                    || state.policy_revision != self.revision
+                    || project::metadata(state) != self.metadata
+                {
+                    return Err(Error::StaleSnapshot);
+                }
+                Ok(())
+            })?;
+            integrations::files::validate_before(root, &self.files)?;
+            integrations::files::publish(root, &self.files)?;
+        }
+        let expected_files: Vec<_> = self
+            .files
+            .iter()
+            .cloned()
+            .map(|mut file| {
+                if !self.enabled {
+                    file.before.clone_from(&file.after);
+                }
+                file
+            })
+            .collect();
         store.update_checkpoint_if_changed(context, checkpoint, |state| {
             if state.enforcement != self.before
                 || state.policy_revision != self.revision
@@ -129,13 +156,13 @@ impl Prepared {
             {
                 return Err(Error::StaleSnapshot);
             }
-            integrations::files::validate_before(root, &self.files)?;
+            integrations::files::validate_before(root, &expected_files)?;
             // Remove derived permissions before bypassing native checks. A
             // failed state write then leaves enforcement on with fewer grants.
-            if !self.enabled {
-                integrations::files::publish(root, &self.files)?;
-            }
             state.enforcement = after;
+            if changed {
+                super::configuration_changes::changed(state, context, "native enforcement");
+            }
             Ok(changed)
         })?;
         let mut receipt = json!({"schema_version":1,"enabled":self.enabled,"changed":changed,
@@ -143,15 +170,22 @@ impl Prepared {
         if self.enabled && !self.files.is_empty() {
             // Enable checks before restoring derived grants. Failure remains
             // restrictive, and a competing toggle cannot restore these files.
-            let repair = store.inspect_checkpoint(context, &|| Ok(()), |state| {
+            let repair = (|| {
+                let state = store.read_checkpoint()?;
+                state.check(context)?;
+                let mut expected_metadata = self.metadata.clone();
+                // This transaction rotated the private administration receipt.
+                // Generation and every other metadata field still fence repair.
+                expected_metadata["administration_origin"]["token"] =
+                    state.operator["administration_origin"]["token"].clone();
                 if state.enforcement != after
                     || state.policy_revision != self.revision
-                    || project::metadata(state) != self.metadata
+                    || project::metadata(&state) != expected_metadata
                 {
                     return Err(Error::StaleSnapshot);
                 }
                 integrations::files::publish(root, &self.files)
-            });
+            })();
             if let Err(error) = repair {
                 receipt["repair_needed"] = json!(true);
                 receipt["setup_error"] = json!(error.to_string());
@@ -178,7 +212,7 @@ mod tests {
     #[test]
     fn shield_mode_is_local_preserves_authority_and_rejects_stale_reviews() {
         let (root, context) = fixture();
-        let before = project::checkpoint(&context).unwrap();
+        let mut before = project::checkpoint(&context).unwrap();
         let stale = Prepared::new(&context, false).unwrap();
         let plan = Prepared::new(&context, false).unwrap();
         assert!(current(root.path()).unwrap());
@@ -195,6 +229,11 @@ mod tests {
         let after = project::checkpoint(&context).unwrap();
         assert_eq!(before.policy_revision, after.policy_revision);
         assert_eq!(json!(before.active), json!(after.active));
+        assert_ne!(
+            before.operator["administration_origin"]["token"],
+            after.operator["administration_origin"]["token"]
+        );
+        before.operator["administration_origin"] = after.operator["administration_origin"].clone();
         assert_eq!(before.operator, after.operator);
         assert_eq!(before.read_requests.len(), after.read_requests.len());
         assert_eq!(before.run_requests.len(), after.run_requests.len());

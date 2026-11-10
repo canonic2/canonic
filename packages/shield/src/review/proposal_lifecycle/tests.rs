@@ -13,6 +13,28 @@ fn fixture() -> (assert_fs::TempDir, Context, Connection) {
     context.connection_id = Some("acme-connection".into());
     (root, context, Connection::new("acme-connection".into()))
 }
+
+#[test]
+fn record_only_lifecycle_leaves_reviewed_paths_and_orphan_leases_untouched() {
+    let (root, context, connection) = fixture();
+    prepare(&context, &connection, "metadata-review");
+    let store = Store::open(root.path()).unwrap();
+    let mut state = store.read_checkpoint().unwrap();
+    state.proposals[0].reviewed_paths = Some(std::collections::BTreeMap::from([(
+        "rules.yml".into(),
+        Some(crate::policy::fingerprint(b"different reviewed bytes")),
+    )]));
+    refresh_inspection(&mut state);
+    assert_eq!(state.proposals[0].status, "pending");
+    refresh(&mut state);
+    assert_eq!(state.proposals[0].status, "stale");
+    let orphan = lease_path(&context.project_root, "metadata-orphan");
+    fs::write(&orphan, "preserved orphan").unwrap();
+    assert!(!alive_with(&context.project_root, "metadata-orphan", false));
+    assert_eq!(fs::read_to_string(&orphan).unwrap(), "preserved orphan");
+    assert!(!alive(&context.project_root, "metadata-orphan"));
+    assert!(!orphan.exists());
+}
 fn prepare(context: &Context, connection: &Connection, id: &str) -> Value {
     let result = mcp::call(
         context,
@@ -36,6 +58,96 @@ fn receipt(context: &Context, connection: &Connection, id: &Value) -> Value {
     );
     assert!(result["error"].is_null(), "{result}");
     result["data"].clone()
+}
+
+#[test]
+fn copied_policy_workflow_proposal_continuations_require_fresh_owned_review() {
+    let (original, context, connection) = fixture();
+    let proposed = prepare(&context, &connection, "acme-copy-change");
+    let path = original.path().join(".shield/review/state.json");
+    let before = fs::read(&path).unwrap();
+    let copy = assert_fs::TempDir::new().unwrap();
+    crate::test_support::copy_fixture_directory(original.path(), copy.path());
+    let opened = crate::review::open(copy.path()).unwrap();
+    let mut child = context.clone();
+    child.project_id = opened.project_id;
+    child.project_root = opened.project_root;
+    child.connection_id = Some("copy-connection".into());
+    let child_connection = Connection::new("copy-connection".into());
+    let child_revision = crate::review::inspect(&child).unwrap()["policy_revision"].clone();
+    assert_ne!(child.project_id, context.project_id);
+    let refused = mcp::call_with_confirmation(
+        &child,
+        &child_connection,
+        "policy_apply",
+        &proposed["apply_arguments"],
+        &|| Ok(()),
+        true,
+    );
+    assert!(refused["error"].is_object(), "{refused}");
+    let missing = mcp::call(
+        &child,
+        &child_connection,
+        "policy_receipt",
+        &json!({"proposal_id":proposed["proposal_id"]}),
+        &|| Ok(()),
+    );
+    assert!(missing["error"].is_object(), "{missing}");
+    assert_eq!(
+        crate::review::inspect(&child).unwrap()["policy_revision"],
+        child_revision
+    );
+
+    let fresh = prepare(&child, &child_connection, "acme-copy-change");
+    assert_ne!(fresh["proposal_id"], proposed["proposal_id"]);
+    assert_eq!(
+        crate::review::inspect(&child).unwrap()["policy_revision"],
+        child_revision
+    );
+    let applied = mcp::call_with_confirmation(
+        &child,
+        &child_connection,
+        "policy_apply",
+        &fresh["apply_arguments"],
+        &|| Ok(()),
+        true,
+    );
+    assert!(applied["error"].is_null(), "{applied}");
+    assert_eq!(
+        receipt(&child, &child_connection, &fresh["proposal_id"])["status"],
+        "applied"
+    );
+    assert_ne!(
+        crate::review::inspect(&child).unwrap()["policy_revision"],
+        child_revision
+    );
+    assert_eq!(fs::read(&path).unwrap(), before);
+    let original_state = Store::open(original.path())
+        .unwrap()
+        .read_checkpoint()
+        .unwrap();
+    assert_eq!(
+        original_state
+            .proposals
+            .iter()
+            .find(|row| row.id == proposed["proposal_id"])
+            .unwrap()
+            .status,
+        "pending"
+    );
+    let applied = mcp::call_with_confirmation(
+        &context,
+        &connection,
+        "policy_apply",
+        &proposed["apply_arguments"],
+        &|| Ok(()),
+        true,
+    );
+    assert!(applied["error"].is_null(), "{applied}");
+    assert_eq!(
+        receipt(&context, &connection, &proposed["proposal_id"])["status"],
+        "applied"
+    );
 }
 
 #[test]
@@ -450,4 +562,115 @@ fn transient_apply_failures_keep_the_review_live_and_retryable() {
         true,
     );
     assert!(result["error"].is_null(), "{result}");
+}
+
+#[test]
+fn typed_stale_failures_persist_and_a_concurrent_commit_wins_reconciliation() {
+    let (root, context, connection) = fixture();
+    let proposed = prepare(&context, &connection, "stale-race");
+    assert!(
+        mcp::settle_apply_failure(
+            &context,
+            &proposed["apply_arguments"],
+            &Error::StaleSnapshot
+        )
+        .is_none()
+    );
+    let raw: Value =
+        serde_json::from_slice(&fs::read(root.path().join(".shield/review/state.json")).unwrap())
+            .unwrap();
+    assert_eq!(raw["proposals"][0]["status"], "stale");
+    let proposed = prepare(&context, &connection, "commit-race");
+    let applied = mcp::call_with_confirmation(
+        &context,
+        &connection,
+        "policy_apply",
+        &proposed["apply_arguments"],
+        &|| Ok(()),
+        true,
+    );
+    assert!(applied["error"].is_null(), "{applied}");
+    let reconciled = mcp::settle_apply_failure(
+        &context,
+        &proposed["apply_arguments"],
+        &Error::StaleSnapshot,
+    )
+    .unwrap();
+    assert_eq!(
+        reconciled["data"]["receipt"]["activation_id"],
+        applied["data"]["receipt"]["activation_id"]
+    );
+    let mut changed = proposed["apply_arguments"].clone();
+    changed["unexpected"] = json!(true);
+    let refused = mcp::call_with_confirmation(
+        &context,
+        &connection,
+        "policy_apply",
+        &changed,
+        &|| Ok(()),
+        true,
+    );
+    assert!(refused["error"].is_object(), "{refused}");
+    assert_eq!(
+        receipt(&context, &connection, &proposed["proposal_id"])["status"],
+        "applied"
+    );
+}
+
+#[test]
+fn ordinary_authority_callbacks_do_not_read_proposal_payloads_or_unlink_orphans() {
+    use clap::Parser as _;
+    let (root, context, connection) = fixture();
+    let proposed = prepare(&context, &connection, "callback-cost");
+    let store = Store::open(root.path()).unwrap();
+    store
+        .update_checkpoint(&context, &|| Ok(()), |state| {
+            state.proposals[0].reviewed_paths = Some(std::collections::BTreeMap::from([(
+                "rules.yml".into(),
+                Some(crate::policy::fingerprint(b"reviewed")),
+            )]));
+            Ok(Value::Null)
+        })
+        .unwrap();
+    fs::write(
+        root.path().join(".shield/rules.yml"),
+        "Acme changed payload".repeat(32_768),
+    )
+    .unwrap();
+    let orphan = lease_path(&context.project_root, "unrelated-orphan");
+    fs::write(&orphan, "preserved").unwrap();
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let trace = log
+        .request("command", "callback-fixture", None, None)
+        .unwrap();
+    {
+        let _scope = trace.enter();
+        store
+            .update_checkpoint(&context, &|| Ok(()), |_| Ok(Value::Null))
+            .unwrap();
+        assert_eq!(trace.recorded_count("proposal.capture_file_reads"), 0);
+        assert_eq!(trace.recorded_count("source.hydrated"), 0);
+        assert_eq!(trace.recorded_count("policy.preparations"), 0);
+        assert!(orphan.exists());
+        let state = store.read_checkpoint().unwrap();
+        let row = state
+            .proposals
+            .iter()
+            .find(|row| row.id == proposed["proposal_id"])
+            .unwrap();
+        assert_eq!(row.status, "pending");
+        assert!(matches!(
+            validate_capture(&context.project_root, row),
+            Err(Error::StaleSnapshot)
+        ));
+        assert_eq!(trace.recorded_count("proposal.capture_file_reads"), 1);
+    }
+    trace.finish("success");
 }

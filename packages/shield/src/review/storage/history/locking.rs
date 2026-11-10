@@ -3,18 +3,33 @@ use super::{Error, File, OpenOptions, Path, Store, fs, private};
 use std::{thread, time::Duration};
 
 pub(in crate::review) fn lock(store: &Store) -> Result<File, Error> {
-    acquire(store, false)
+    acquire(store, false, 500, true)
+}
+
+#[cfg(test)]
+pub(in crate::review) fn lock_diagnostics(store: &Store) -> Result<File, Error> {
+    acquire(store, false, 500, false)
+}
+
+/// Optional callbacks never wait behind a reader/control. Losing observation
+/// evidence cannot occupy an operation's permission deadline.
+pub(in crate::review) fn lock_optional(store: &Store) -> Result<File, Error> {
+    acquire(store, false, 1, true)
 }
 
 /// Called only while publishing a human-confirmed history control. Never
 /// replace/unlink a lock file: existing holders and contenders keep one inode.
 pub(in crate::review) fn lock_control(store: &Store) -> Result<File, Error> {
-    acquire(store, true)
+    acquire(store, true, 500, true)
 }
 
-fn open(path: &Path, control: bool) -> Result<File, Error> {
+fn open(path: &Path, control: bool, create: bool) -> Result<File, Error> {
     let mut options = OpenOptions::new();
-    options.read(true).write(true).create(true).truncate(false);
+    options
+        .read(true)
+        .write(true)
+        .create(create)
+        .truncate(false);
     private(&mut options);
     #[cfg(unix)]
     {
@@ -70,7 +85,7 @@ fn open(path: &Path, control: bool) -> Result<File, Error> {
     }
 }
 
-fn acquire(store: &Store, control: bool) -> Result<File, Error> {
+fn acquire(store: &Store, control: bool, attempts: usize, create: bool) -> Result<File, Error> {
     crate::diagnostics::trace::count("history.lock_attempts", 1);
     let path = store.directory.join("history.lock");
     if let Ok(metadata) = fs::symlink_metadata(&path)
@@ -78,9 +93,9 @@ fn acquire(store: &Store, control: bool) -> Result<File, Error> {
     {
         return Err(Error::Invalid("history lock must be a regular file"));
     }
-    let mut file = open(&path, control)?;
+    let mut file = open(&path, control, create)?;
     checked(&path, &file, !control)?;
-    for _ in 0..500 {
+    for _ in 0..attempts {
         match file.try_lock() {
             Ok(()) => {
                 checked(&path, &file, !control)?;
@@ -92,7 +107,9 @@ fn acquire(store: &Store, control: bool) -> Result<File, Error> {
             }
             Err(std::fs::TryLockError::WouldBlock) => {
                 crate::diagnostics::trace::count("history.lock_waits", 1);
-                thread::sleep(Duration::from_millis(1));
+                if attempts > 1 {
+                    thread::sleep(Duration::from_millis(1));
+                }
             }
             Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),
         }

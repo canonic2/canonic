@@ -240,6 +240,7 @@ pub(super) fn applied_retry(context: &Context, input: &Input) -> Result<bool, Er
     };
     let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
     state.check(context)?;
+    state.check_operations()?;
     let request = policy::fingerprint(json!(input).to_string().as_bytes());
     Ok(state.proposals.iter().any(|row| {
         row.retry_owner == context.retry_owner()
@@ -299,6 +300,7 @@ pub(super) fn propose(
     let store = Store::open(Path::new(&context.project_root))?;
     let mut before = store.read_checkpoint()?;
     before.check(context)?;
+    before.check_operations()?;
     if input
         .expected_policy_revision
         .as_ref()
@@ -422,6 +424,11 @@ pub(super) fn propose(
         .progress
         .stage(super::progress::Stage::PrepareReview);
     compare_prefixes(&base_plan, &next_plan, &mut comparison);
+    if let Some(summary) =
+        diff::override_permission_review(&before.candidates["project"], &candidate, &comparison)
+    {
+        comparison["override_permission_review"] = summary;
+    }
     if let Some(lines) = super::formatting_changes(&before.candidates["project"], &candidate) {
         comparison["formatting"] = lines;
     }
@@ -455,7 +462,24 @@ pub(super) fn propose(
     // The complete base was validated above. Under the writer lock, bind to
     // those exact source bytes and metadata instead of hydrating every retained
     // proposal and preparing the same active policy again.
+    let presentation = super::model::presentation::capture(
+        &store,
+        &before,
+        &candidate,
+        &meta,
+        &comparison,
+        reviewed_files.is_some(),
+    )
+    .ok()
+    .flatten();
+    let presentation_ref = presentation
+        .as_ref()
+        .map_or(Value::Null, |(reference, _)| reference.clone());
+    let presentation_before =
+        super::storage::sources::candidate_identity(&before.candidates["project"]);
+    let presentation_after = super::storage::sources::candidate_identity(&candidate);
     store.update_checkpoint(context, checkpoint, |state| {
+        state.check_operations()?;
         if state.policy_revision != before.policy_revision
             || state.operator != before.operator
             || super::storage::sources::map_digest(&state.candidates)
@@ -493,7 +517,10 @@ pub(super) fn propose(
         let event = state.event("proposal_created", context, json!({"proposal_id":id,"source_entry_id":input.source_entry_id,"supersedes_proposal_id":input.supersedes_proposal_id}),json!({"agent_reason":input.agent_reason}),json!({"operation":kind,"policy_revision":state.policy_revision}));
         let mut event = event;
         event["links"]["review_ids"] = json!(input.review_ids);
-        let row = Proposal { id, created_at:event["recorded_at"].as_str().ok_or(Error::Invalid("timestamp unavailable"))?.into(), status:"pending".into(), provenance:context.provenance(), links:event["links"].clone(), reasons:event["reasons"].clone(), policy_revision:state.policy_revision.clone(),target_scope:"project".into(),operation:kind,rule_id,candidate,base_candidate:before.candidates["project"].clone(),base_metadata:before.operator.clone(),candidate_metadata:meta,receipt:Value::Null,comparison,operator:None,retry_key:retry_key.clone(),retry_owner:context.retry_owner(),signature,reviewed_files, reviewed_paths, interaction:Some(super::proposal_lifecycle::Interaction::new(context)?), closed_reason:None };
+        event["details"]["presentation"] = presentation_ref.clone();
+        event["details"]["before_candidate"] = json!(presentation_before);
+        event["details"]["after_candidate"] = json!(presentation_after);
+        let row = Proposal { id, created_at:event["recorded_at"].as_str().ok_or(Error::Invalid("timestamp unavailable"))?.into(), status:"pending".into(), provenance:context.provenance(), links:event["links"].clone(), reasons:event["reasons"].clone(), policy_revision:state.policy_revision.clone(),target_scope:"project".into(),operation:kind,rule_id,candidate,base_candidate:before.candidates["project"].clone(),base_metadata:before.operator.clone(),candidate_metadata:meta,receipt:Value::Null,comparison,presentation:presentation_ref,operator:None,retry_key:retry_key.clone(),retry_owner:context.retry_owner(),signature,reviewed_files, reviewed_paths, interaction:Some(super::proposal_lifecycle::Interaction::new(context)?), closed_reason:None };
         let result = {
             let _trace = crate::diagnostics::trace::span("proposal.present");
             present(&row)
@@ -617,7 +644,7 @@ pub(super) fn custom_rule(
     let field = if local { "local_rules" } else { "rules" };
     let mut document: Value = candidate[field].as_str().map_or_else(
         || Ok(policy::rules::document(&[])?),
-        |s| super::inspection::project_rules(s, &context.project_root),
+        |s| policy::normalize_retained_custom(s).map_err(Error::from),
     )?;
     let rows = document["rules"]
         .as_array_mut()

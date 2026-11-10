@@ -44,6 +44,51 @@ fn native_hook_rejects_an_unknown_pinned_event() {
 }
 
 #[test]
+fn relative_native_hook_project_is_anchored_before_vendor_cwd() {
+    use serde_json::{Value, json};
+    let launch = assert_fs::TempDir::new().unwrap();
+    let other = assert_fs::TempDir::new().unwrap();
+    other.child(".shield").create_dir_all().unwrap();
+    other
+        .child(".shield/config.yml")
+        .write_str("schema_version: 1\npacks: []\nrules: rules.yml\n")
+        .unwrap();
+    other.child(".shield/rules.yml").write_str(&json!({
+        "schema_version":1,"kind":"custom","capabilities":["structured-rules-v1","argument-rules-v1"],
+        "rules":[{"id":"inspect","decision":"allow","conditions":{"domain":"argv","executable":"git","arguments":{"kind":"any"}}}]
+    }).to_string()).unwrap();
+    assert_eq!(
+        super::operator::interactive(&other, &["init"], "yes\n")["code"],
+        0
+    );
+    let host = json!({"hook_event_name":"PreToolUse","tool_name":"Bash","session_id":"acme-relative","tool_use_id":"acme-relative","cwd":other.path(),"tool_input":{"command":"git status"}});
+    for (cwd, expected) in [(other.path(), "allow"), (launch.path(), "deny")] {
+        let output = cargo_bin_cmd!("shield")
+            .current_dir(cwd)
+            .env("HOME", other.path())
+            .args([
+                "--no-debug-log",
+                "__internal",
+                "native-hook",
+                "--project",
+                ".",
+                "--agent",
+                "claude",
+                "--event",
+                "PreToolUse",
+            ])
+            .write_stdin(host.to_string())
+            .assert()
+            .success();
+        let value: Value = serde_json::from_slice(&output.get_output().stdout).unwrap();
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], expected,
+            "{value}"
+        );
+    }
+}
+
+#[test]
 fn historical_hooks_continue_without_an_event_argument_and_fail_closed() {
     let project = assert_fs::TempDir::new().unwrap();
     for agent in ["claude", "codex"] {
@@ -128,7 +173,8 @@ fn historical_hooks_preserve_active_policy_decisions() {
                 let mut command = cargo_bin_cmd!("shield");
                 command
                     .args(["__internal", "native-hook", "--agent", agent, "--project"])
-                    .arg(project.path());
+                    .arg(project.path())
+                    .env("HOME", project.path());
                 if pinned {
                     command.args(["--event", "PreToolUse"]);
                 }

@@ -1,7 +1,9 @@
 //! Durable references and live reader leases protect immutable source objects.
 #[cfg(test)]
+use super::Store;
+#[cfg(test)]
 use super::fs;
-use super::{BTreeSet, Error, KIND, Store, Value, check, temporary_writer};
+use super::{BTreeSet, Error, KIND, Namespace, Value, check, temporary_writer};
 use crate::review::storage::objects::{Directory, Pins};
 #[cfg(test)]
 use std::path::Path;
@@ -9,6 +11,10 @@ use std::path::Path;
 pub(super) fn collect(value: &Value, keep: &mut BTreeSet<String>) -> Result<(), Error> {
     if value["kind"] == "candidate-bundle" {
         return Ok(());
+    } else if value["kind"] == super::manifest::KIND {
+        keep.insert(super::manifest::name(value)?);
+    } else if value["kind"] == super::manifest::JSON_KIND {
+        keep.insert(super::manifest::json_name(value)?);
     } else if value["kind"] == KIND {
         check(value)?;
         keep.insert(format!(
@@ -17,6 +23,11 @@ pub(super) fn collect(value: &Value, keep: &mut BTreeSet<String>) -> Result<(), 
                 .as_str()
                 .ok_or(Error::Invalid("source digest"))?
         ));
+    } else if value["kind"]
+        .as_str()
+        .is_some_and(|kind| kind.starts_with("retained-source-"))
+    {
+        return Err(Error::Invalid("unsupported retained source reference"));
     } else {
         match value {
             Value::Object(map) => {
@@ -51,11 +62,16 @@ struct Committed {
     recovery: std::collections::BTreeMap<String, crate::review::storage::objects::Checkpoint>,
 }
 impl Committed {
-    fn read(&mut self, store: &Store, keep: &mut BTreeSet<String>) -> Result<Option<Value>, Error> {
+    fn read(
+        &mut self,
+        store: &Namespace,
+        keep: &mut BTreeSet<String>,
+    ) -> Result<Option<Value>, Error> {
         let Some(state) = self.main.read(&store.directory.join("state.json"), None)? else {
             return Ok(None);
         };
-        checkpoint_refs(state, keep)?;
+        let mut required = BTreeSet::new();
+        checkpoint_refs(state, &mut required)?;
         for (prefix, pins) in [
             ("upgrade", &state["operator"]["upgrade_recovery"]),
             (
@@ -75,9 +91,11 @@ impl Committed {
                     .or_default()
                     .read(&store.directory.join(name), Some(digest))?
                     .ok_or(Error::Missing)?;
-                checkpoint_refs(recovery, keep)?;
+                checkpoint_refs(recovery, &mut required)?;
             }
         }
+        super::manifest::expand_names(store, &mut required)?;
+        keep.extend(required);
         Ok(Some(state["active"]["activation_id"].clone()))
     }
 }
@@ -110,21 +128,27 @@ impl Batch {
             activating,
         })
     }
-    pub(super) fn protect(&mut self, digest: &str) {
-        self.keep.insert(format!("{digest}.json"));
-        self.pin_names.insert(format!("{digest}.json"));
+    pub(super) fn protect_name(&mut self, name: &str, pin: bool) {
+        self.keep.insert(name.into());
+        if pin {
+            self.pin_names.insert(name.into());
+        }
     }
-    pub(super) fn lock(&mut self, store: &Store) -> Result<(), Error> {
+    pub(super) fn lock(&mut self, store: &Namespace) -> Result<(), Error> {
         if self.directory.is_none() {
             self.directory = Some(Directory::enter(&store.directory.join("sources"))?);
         }
         Ok(())
     }
-    pub(super) fn admit(&mut self, store: &Store, digest: &str, bytes: u64) -> Result<(), Error> {
+    pub(super) fn admit(&mut self, store: &Namespace, name: &str, bytes: u64) -> Result<(), Error> {
         self.lock(store)?;
         if !self.inventoried {
             let mut committed = Committed::default();
             let current = committed.read(store, &mut self.keep)?;
+            super::manifest::expand_names(store, &mut self.keep)?;
+            // Complete this inventory before ANY blob can be deleted. Pins on
+            // later manifest entries protect their descendants without N FDs.
+            super::manifest::pinned_descendants(store, &mut self.keep)?;
             self.activating |= current
                 .as_ref()
                 .is_none_or(|current| current != &self.activation && !self.activation.is_null());
@@ -134,27 +158,36 @@ impl Batch {
                 .sweep_refresh(
                     &self.keep,
                     |name| {
-                        name.strip_suffix(".json").is_some_and(|s| {
-                            s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
-                        }) || temporary_writer(name)
-                            .is_some_and(|pid| !super::super::writer_running(pid))
+                        name.strip_suffix(".manifest.json")
+                            .or_else(|| name.strip_suffix(".blob"))
+                            .or_else(|| name.strip_suffix(".json"))
+                            .is_some_and(|s| {
+                                s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
+                            })
+                            || temporary_writer(name)
+                                .is_some_and(|pid| !super::super::writer_running(pid))
                     },
                     |keep| committed.read(store, keep).map(|_| ()),
                 )?;
+            let (bytes, files) = store.external_usage()?;
+            self.directory
+                .as_mut()
+                .ok_or(Error::Locked)?
+                .charge_external(bytes, files)?;
             self.inventoried = true;
         }
-        self.keep.insert(format!("{digest}.json"));
+        self.keep.insert(name.into());
         self.directory
             .as_ref()
             .ok_or(Error::Locked)?
-            .admit(bytes, 1, self.activating)
+            .admit_reserved(bytes, 1, self.activating, super::manifest::RESERVE_ENTRIES)
     }
     pub(super) fn added(&mut self, bytes: u64) {
         if let Some(directory) = &mut self.directory {
             directory.added(bytes);
         }
     }
-    pub(super) fn finish(self, store: &Store) -> Result<Pins, Error> {
+    pub(super) fn finish(self, store: &Namespace) -> Result<Pins, Error> {
         if self.pin_names.is_empty() {
             return Ok(std::sync::Arc::new(Vec::new()));
         }
@@ -165,13 +198,30 @@ impl Batch {
     }
 }
 
-pub(in crate::review) fn pin(store: &Store, candidate: &Value) -> Result<Pins, Error> {
+pub(in crate::review) fn pin(store: &Namespace, candidate: &Value) -> Result<Pins, Error> {
+    pin_with(store, candidate, false)
+}
+
+pub(in crate::review) fn pin_inspection(
+    store: &Namespace,
+    candidate: &Value,
+) -> Result<Pins, Error> {
+    pin_with(store, candidate, true)
+}
+
+fn pin_with(store: &Namespace, candidate: &Value, readonly: bool) -> Result<Pins, Error> {
     let mut names = BTreeSet::new();
     collect(candidate, &mut names)?;
     if names.is_empty() {
         return Ok(std::sync::Arc::new(Vec::new()));
     }
-    Directory::enter(&store.directory.join("sources"))?.pins(&names)
+    let directory = store.directory.join("sources");
+    if readonly {
+        Directory::inspect(&directory)?
+    } else {
+        Directory::enter(&directory)?
+    }
+    .pins(&names)
 }
 
 #[cfg(test)]

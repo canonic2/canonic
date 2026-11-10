@@ -10,33 +10,84 @@ use crate::{
         normalized::{Context as RequestContext, Input},
     },
 };
+use serde::Serialize;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path};
+
+/// Only this module can construct an already-redacted diagnostic result.
+pub(super) struct Projected {
+    value: Value,
+    redacted: bool,
+}
+impl Projected {
+    fn encode_sources<T: Serialize + ?Sized>(
+        value: &T,
+        checkpoint: Checkpoint<'_>,
+        sources: &[&str],
+    ) -> Result<Self, Error> {
+        let interrupted = std::cell::RefCell::new(None);
+        let result = crate::evidence::projection::encode_controlled_with_sources(
+            value,
+            4 * 1024 * 1024,
+            &|| {
+                checkpoint().map_err(|error| {
+                    *interrupted.borrow_mut() = Some(error);
+                    <serde_json::Error as serde::ser::Error>::custom(
+                        "diagnostic encoding interrupted",
+                    )
+                })
+            },
+            sources,
+        );
+        if let Some(error) = interrupted.into_inner() {
+            return Err(error.into());
+        }
+        let (value, redacted) = result.map_err(|_| Error::Policy(policy::Error::Limit))?;
+        Ok(Self { value, redacted })
+    }
+    pub(super) fn into_parts(self) -> (Value, bool) {
+        (self.value, self.redacted)
+    }
+}
 
 pub(super) fn evaluate(
     context: &Context,
     views: &mut Views,
     args: &Value,
     checkpoint: Checkpoint<'_>,
-) -> Result<Value, Error> {
+) -> Result<Projected, Error> {
+    #[derive(Serialize)]
+    struct Report<'a> {
+        #[serde(flatten)]
+        evaluation: configuration::NormalizedEvaluation,
+        candidate_id: &'a str,
+        policy_revision: &'a str,
+    }
     fields(args, &["input", "context", "candidate_id"])?;
     let (input, request_context) = request(context, args)?;
     let id = match text(args, "candidate_id")? {
         Some(id) => id.into(),
         None => views.active(context)?,
     };
-    let captured = views.get(&id)?;
-    let mut value = evaluate_captured(context, &captured, &input, &request_context, checkpoint)?;
-    value["candidate_id"] = json!(id);
-    value["policy_revision"] = json!(captured.evaluator()?.revision());
-    Ok(value)
+    let captured = views.prepare(context, &id)?;
+    let evaluation = evaluate_captured(context, &captured, &input, &request_context, checkpoint)?;
+    checkpoint()?;
+    let report = Report {
+        evaluation,
+        candidate_id: &id,
+        policy_revision: captured.evaluator()?.revision(),
+    };
+    let projected =
+        Projected::encode_sources(&report, checkpoint, &report.evaluation.sensitive_sources())?;
+    checkpoint()?;
+    Ok(projected)
 }
 pub(super) fn compare(
     context: &Context,
     views: &mut Views,
     args: &Value,
     checkpoint: Checkpoint<'_>,
-) -> Result<Value, Error> {
+) -> Result<Projected, Error> {
     fields(
         args,
         &[
@@ -58,15 +109,7 @@ pub(super) fn compare(
         return Err(Error::Invalid("only sample accepts input/context"));
     }
     let mut value = match required(args, "domain")? {
-        "sample" => {
-            let (input, ctx) = request(context, args)?;
-            context
-                .progress
-                .stage(crate::review::progress::Stage::ComparePolicy);
-            let a = evaluate_captured(context, &before, &input, &ctx, checkpoint)?;
-            let b = evaluate_captured(context, &after, &input, &ctx, checkpoint)?;
-            json!({"domain":"sample","complete":false,"relation":"unknown","coverage":"one request witness; no whole-policy proof","context":ctx,"witnesses":[{"input":input,"relation":if a["decision"]==b["decision"] {"equivalent"}else if rank(&b["decision"])>rank(&a["decision"]) {"restrictive"}else{"expansive"},"before":a,"after":b}]})
-        }
+        "sample" => sample_compare(context, views, args, before_id, after_id, checkpoint)?,
         "literal_argv" => {
             context
                 .progress
@@ -90,8 +133,76 @@ pub(super) fn compare(
     value["domain"] = args["domain"].clone();
     value["engine_version"] = json!(env!("CARGO_PKG_VERSION"));
     value["model"] = json!("normalized-request-v1");
+    let redacted = if args["domain"] == "sample" {
+        value["redacted"] == true
+    } else {
+        crate::review::model::redact(&mut value) || value["redacted"] == true
+    };
+    Ok(Projected { value, redacted })
+}
+fn sample_compare(
+    context: &Context,
+    views: &mut Views,
+    args: &Value,
+    before_id: &str,
+    after_id: &str,
+    checkpoint: Checkpoint<'_>,
+) -> Result<Value, Error> {
+    #[derive(Serialize)]
+    struct Witness<'a> {
+        input: &'a Input,
+        relation: &'static str,
+        before: configuration::NormalizedEvaluation,
+        after: configuration::NormalizedEvaluation,
+    }
+    #[derive(Serialize)]
+    struct Sample<'a> {
+        domain: &'static str,
+        complete: bool,
+        relation: &'static str,
+        coverage: &'static str,
+        context: &'a RequestContext,
+        witnesses: [Witness<'a>; 1],
+    }
+
+    let (input, ctx) = request(context, args)?;
+    let before = views.prepare(context, before_id)?;
+    let after = views.prepare(context, after_id)?;
+    context
+        .progress
+        .stage(crate::review::progress::Stage::ComparePolicy);
+    let a = evaluate_captured(context, &before, &input, &ctx, checkpoint)?;
+    let b = evaluate_captured(context, &after, &input, &ctx, checkpoint)?;
+    let relation = match b.decision.cmp(&a.decision) {
+        std::cmp::Ordering::Equal => "equivalent",
+        std::cmp::Ordering::Greater => "restrictive",
+        std::cmp::Ordering::Less => "expansive",
+    };
+    let sample = Sample {
+        domain: "sample",
+        complete: false,
+        relation: "unknown",
+        coverage: "one request witness; no whole-policy proof",
+        context: &ctx,
+        witnesses: [Witness {
+            input: &input,
+            relation,
+            before: a,
+            after: b,
+        }],
+    };
+    let mut sources = sample.witnesses[0].before.sensitive_sources();
+    sources.extend(sample.witnesses[0].after.sensitive_sources());
+    sources.sort_unstable();
+    sources.dedup();
+    let projected = Projected::encode_sources(&sample, checkpoint, &sources)?;
+    let (mut value, redacted) = projected.into_parts();
+    if redacted {
+        value["redacted"] = json!(true);
+    }
     Ok(value)
 }
+
 fn snapshots(captured: &Captured) -> Result<Vec<(policy::Scope, configuration::Snapshot)>, Error> {
     crate::review::snapshots(&BTreeMap::from([("project".into(), captured.source()?)]))
 }
@@ -116,9 +227,9 @@ fn evaluate_captured(
     input: &Input,
     ctx: &RequestContext,
     checkpoint: Checkpoint<'_>,
-) -> Result<Value, Error> {
+) -> Result<configuration::NormalizedEvaluation, Error> {
     let executable = resolve(input, ctx);
-    let mut value = captured.evaluator()?.evaluate_normalized(
+    let mut value = captured.evaluator()?.evaluate_normalized_report(
         input,
         ctx,
         &context.project_root,
@@ -126,7 +237,7 @@ fn evaluate_captured(
         &crate::review::model::now(),
         checkpoint,
     )?;
-    inspection_refs(&mut value, &captured.metadata);
+    value.annotate_rule_references(&selectors(&captured.metadata));
     Ok(value)
 }
 fn resolve(input: &Input, ctx: &RequestContext) -> Option<String> {
@@ -172,99 +283,369 @@ fn launch_path(path: &Path) -> Option<std::path::PathBuf> {
     }
     Some(path)
 }
-fn rank(value: &Value) -> u8 {
-    match value.as_str() {
-        Some("allow") => 0,
-        Some("deny") => 2,
-        _ => 1,
-    }
-}
-/// The installed `pack:` selector of an evaluation source naming a pack by
-/// `publisher/name` or `identity/publisher/name`.
-fn installed_selector(metadata: &Value, source: &str) -> Option<Value> {
-    metadata["installed"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .find(|p| {
-            p["id"] == source
-                || format!(
-                    "{}/{}",
-                    p["source_identity"].as_str().unwrap_or_default(),
-                    p["id"].as_str().unwrap_or_default()
-                ) == source
-        })
-        .map(|p| p["selector"].clone())
-}
-/// Give every rule reference in an evaluation, from matches, requirement
-/// checks and guidance alike, the installed `pack:` selector of its pack.
-fn inspection_refs(value: &mut Value, metadata: &Value) {
-    match value {
-        Value::Object(fields) => {
-            if let (Some(source), Some(rule)) = (
-                fields.get("source").and_then(Value::as_str),
-                fields.get("rule_id").and_then(Value::as_str),
-            ) {
-                let reference = if source == "custom:project" {
-                    json!({"scope":"custom","rule_id":rule})
-                } else {
-                    installed_selector(metadata, source).map_or(
-                        Value::Null,
-                        |selector| json!({"scope":"pack","pack_selector":selector,"rule_id":rule}),
-                    )
-                };
-                fields.insert("rule_ref".into(), reference);
-            } else if let Some(reference) = fields.get_mut("rule_ref")
-                && reference["scope"] == "pack"
-                && let Some(source) = reference["pack_selector"].as_str()
-                && !source.starts_with("pack:")
+fn selectors(metadata: &Value) -> BTreeMap<String, String> {
+    let mut selectors = BTreeMap::new();
+    let mut ambiguous = std::collections::BTreeSet::new();
+    for installed in metadata["installed"].as_array().into_iter().flatten() {
+        if let (Some(id), Some(selector)) =
+            (installed["id"].as_str(), installed["selector"].as_str())
+        {
+            if selectors
+                .get(id)
+                .is_some_and(|previous| previous != selector)
             {
-                match installed_selector(metadata, source) {
-                    Some(selector) => reference["pack_selector"] = selector,
-                    None => *reference = Value::Null,
-                }
+                ambiguous.insert(id.to_owned());
+            } else {
+                selectors.insert(id.into(), selector.into());
             }
-            for v in fields.values_mut() {
-                inspection_refs(v, metadata);
-            }
-        }
-        Value::Array(rows) => {
-            for v in rows {
-                inspection_refs(v, metadata);
+            if let Some(identity) = installed["source_identity"].as_str() {
+                selectors.insert(format!("{identity}/{id}"), selector.into());
             }
         }
-        _ => {}
     }
+    for id in ambiguous {
+        selectors.remove(&id);
+    }
+    selectors
 }
 
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
+    fn reference_fixture() -> (
+        configuration::Evaluator,
+        Value,
+        BTreeMap<&'static str, Value>,
+    ) {
+        let first = "pack:123e4567-e89b-42d3-a456-426614174000";
+        let second = "pack:123e4567-e89b-42d3-a456-426614174001";
+        let metadata = json!({"installed":[
+            {"id":"acme/plain","source_identity":"plain-origin","selector":first},
+            {"id":"acme/known","source_identity":"known-origin","selector":second}
+        ]});
+        let mut selections = Vec::new();
+        let mut packs = Vec::new();
+        for (id, origin) in [
+            ("acme/plain", None),
+            ("acme/known", Some("known-origin")),
+            ("acme/missing", None),
+        ] {
+            let mut selection = json!({"id":id,"version":"1.0.0","profile":"recommended","path":format!("{}.yml", id.replace('/', "-"))});
+            if let Some(origin) = origin {
+                selection["registry_identity"] = json!(origin);
+            }
+            selections.push(selection);
+            packs.push(json!({"schema_version":1,"kind":"pack","id":id,"version":"1.0.0",
+                "description":"Acme diagnostic reference fixture","license":"MIT","maintainers":["Acme"],
+                "engines":{"shield":env!("CARGO_PKG_VERSION")},
+                "capabilities":["argument-rules-v1","requirements-v1","structured-rules-v1"],
+                "rules":[{"id":"guard","decision":"allow","conditions":{"domain":"argv","executable":"acme"},
+                    "requirements":{"arguments":{"kind":"exact","values":["safe"]}},
+                    "on_unmet":{"decision":"deny","message":"Use the safe operation.","alternatives":["acme safe"]}}]
+            }).to_string());
+        }
+        let source = configuration::Candidate::from_yaml(
+            &json!({"schema_version":1,"packs":selections}).to_string(),
+        )
+        .expect("valid reference fixture")
+        .capture(&packs, None)
+        .expect("valid reference fixture");
+        let evaluator = configuration::Evaluator::new(vec![(policy::Scope::Project, source)])
+            .expect("valid reference fixture");
+        let expected = BTreeMap::from([
+            (
+                "acme/plain",
+                json!({"scope":"pack","pack_selector":first,"rule_id":"guard"}),
+            ),
+            (
+                "known-origin/acme/known",
+                json!({"scope":"pack","pack_selector":second,"rule_id":"guard"}),
+            ),
+            ("acme/missing", Value::Null),
+        ]);
+        (evaluator, metadata, expected)
+    }
+
     #[test]
-    fn every_pack_rule_reference_names_the_installed_selector() {
-        let selector = "pack:123e4567-e89b-42d3-a456-426614174000";
-        let metadata = json!({"installed":[{"id":"acme/tools","source_identity":"acme-identity","selector":selector}]});
-        let pack = |name: &str| json!({"scope":"pack","pack_selector":name,"rule_id":"build"});
-        let custom = json!({"scope":"custom","rule_id":"local"});
-        let mut evaluation = json!({
-            "matches":[{"source":"acme/tools","rule_id":"build"}],
-            "requirement_checks":[{"rule_ref":pack("acme/tools")},{"rule_ref":custom}],
-            "explanation":{"guidance":[
-                {"rule_ref":pack("acme-identity/acme/tools")},
-                {"rule_ref":pack(selector)},
-                {"rule_ref":pack("acme/missing")}
-            ]}
-        });
-        inspection_refs(&mut evaluation, &metadata);
-        let installed = pack(selector);
-        assert_eq!(evaluation["matches"][0]["rule_ref"], installed);
-        assert_eq!(evaluation["requirement_checks"][0]["rule_ref"], installed);
-        assert_eq!(evaluation["requirement_checks"][1]["rule_ref"], custom);
-        let guidance = &evaluation["explanation"]["guidance"];
-        assert_eq!(guidance[0]["rule_ref"], installed);
-        assert_eq!(guidance[1]["rule_ref"], installed);
-        assert_eq!(guidance[2]["rule_ref"], Value::Null);
+    fn typed_evaluations_project_all_owned_references_without_annotating_submitted_json() {
+        let (evaluator, metadata, expected) = reference_fixture();
+        let root = assert_fs::TempDir::new().unwrap();
+        let cwd = root.path().to_str().unwrap();
+        let context = RequestContext {
+            cwd: cwd.into(),
+            environment: None,
+            working_files: None,
+        };
+        let original = json!({"source":"acme/plain","rule_id":"submitted-data",
+            "rule_ref":{"scope":"pack","pack_selector":"acme/known","rule_id":"submitted-reference"},
+            "authorization":null,"nested":[{"source":"acme/known","rule_id":"also-submitted"}]});
+        for input in [
+            Input::Argv {
+                executable: "acme".into(),
+                arguments: vec!["--token".into(), "private-value".into()],
+                original_input: original.clone(),
+            },
+            Input::Shell {
+                source: "acme --token private-value".into(),
+                dialect: "posix".into(),
+                dialect_version: None,
+                original_input: original.clone(),
+            },
+        ] {
+            let shell = matches!(&input, Input::Shell { .. });
+            let mut report = evaluator
+                .evaluate_normalized_report(
+                    &input,
+                    &context,
+                    cwd,
+                    None,
+                    "2030-01-01T00:00:00Z",
+                    &|| Ok(()),
+                )
+                .unwrap();
+            report.annotate_rule_references(&selectors(&metadata));
+            // The legacy projection is an independent parity oracle here;
+            // production encoding never materializes this unredacted tree.
+            let mut legacy = serde_json::to_value(&report).unwrap();
+            let legacy_redacted = crate::evidence::redact(&mut legacy);
+            if shell {
+                // Typed privacy annotations repair the legacy AST-word leak.
+                // Whole source withholding is deliberate; policy scalars and
+                // unrelated submitted objects are not inferred to be secrets.
+                for pointer in [
+                    "/normalized_request/source",
+                    "/analysis_coverage/source",
+                    "/analysis_coverage/source_units/0/source",
+                    "/analysis_coverage/structure/words/2/raw",
+                    "/analysis_coverage/structure/words/2/literal",
+                    "/analysis_coverage/structure/words/2/fragments/0/raw",
+                ] {
+                    *legacy.pointer_mut(pointer).unwrap() = json!("[REDACTED]");
+                }
+            }
+            let (value, redacted) =
+                Projected::encode_sources(&report, &|| Ok(()), &report.sensitive_sources())
+                    .unwrap()
+                    .into_parts();
+            assert_eq!(value, legacy);
+            assert_eq!(redacted, legacy_redacted);
+            assert!(redacted);
+            assert!(
+                !value.to_string().contains("private-value"),
+                "secret evidence paths: {:?}",
+                secret_paths(&value, "private-value")
+            );
+            assert_eq!(value["decision"], "deny");
+            assert_eq!(value["normalized_request"]["original_input"], original);
+            assert!(value["approval_request_id"].is_null());
+            check_owned_references(&value["explanation"], &expected);
+            if shell {
+                assert_eq!(value["normalized_request"]["source"], "[REDACTED]");
+                let operation = &value["analysis_coverage"]["operations"][0];
+                assert_eq!(
+                    operation["request"]["arguments"],
+                    json!(["--token", "[REDACTED]"])
+                );
+                assert!(operation["policy_request"].is_null());
+                assert!(operation.get("stdin").is_none());
+                check_owned_references(&operation["evaluation"]["evaluation"], &expected);
+                assert_eq!(value["analysis_coverage"]["request"], operation["request"]);
+                assert_eq!(
+                    value["analysis_coverage"]["evaluation"],
+                    operation["evaluation"]
+                );
+            } else {
+                assert_eq!(
+                    value["normalized_request"]["arguments"],
+                    json!(["--token", "[REDACTED]"])
+                );
+            }
+        }
+    }
+
+    fn secret_paths(value: &Value, secret: &str) -> Vec<String> {
+        fn visit(value: &Value, path: &str, secret: &str, found: &mut Vec<String>) {
+            match value {
+                Value::String(text) if text.contains(secret) => found.push(path.into()),
+                Value::Object(fields) => {
+                    for (key, value) in fields {
+                        visit(
+                            value,
+                            &format!("{path}/{}", key.replace('~', "~0").replace('/', "~1")),
+                            secret,
+                            found,
+                        );
+                    }
+                }
+                Value::Array(items) => {
+                    for (index, value) in items.iter().enumerate() {
+                        visit(value, &format!("{path}/{index}"), secret, found);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut found = Vec::new();
+        visit(value, "", secret, &mut found);
+        found
+    }
+
+    #[test]
+    fn typed_ask_projection_keeps_policy_metadata_and_masks_private_source_descendants() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let cwd = root.path().to_str().unwrap();
+        let custom = crate::policy::rules::document(&[
+            json!({"id":"guard","decision":"ask","conditions":{"domain":"argv","executable":"echo"},
+                "requirements":{"arguments":{"kind":"exact","values":["safe"]}},
+                "on_unmet":{"decision":"ask","message":"Use the safe operation.","alternatives":["echo safe"]}}),
+            json!({"id":"outer","decision":"ask","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}}})
+        ]).unwrap().to_string();
+        let source =
+            configuration::Candidate::from_yaml("schema_version: 1\npacks: []\nrules: rules.yml\n")
+                .unwrap()
+                .capture(&[], Some(&custom))
+                .unwrap();
+        let evaluator =
+            configuration::Evaluator::new(vec![(policy::Scope::Project, source)]).unwrap();
+        let context = RequestContext {
+            cwd: cwd.into(),
+            environment: None,
+            working_files: None,
+        };
+        for (source, dialect) in [
+            ("echo '--token' 'private-value'", "posix"),
+            (
+                r#"acme --token "$(echo private-value)"; echo visible"#,
+                "bash",
+            ),
+            (r#"acme --token "$(git -C private-value status)""#, "bash"),
+            ("Write-Output '--token' 'private-value'", "powershell"),
+        ] {
+            let original =
+                json!({"command":source,"data":{"source":"acme/source","rule_id":"submitted"}});
+            let input = Input::Shell {
+                source: source.into(),
+                dialect: dialect.into(),
+                dialect_version: None,
+                original_input: original.clone(),
+            };
+            let mut report = evaluator
+                .evaluate_normalized_report(
+                    &input,
+                    &context,
+                    cwd,
+                    None,
+                    "2030-01-01T00:00:00Z",
+                    &|| Ok(()),
+                )
+                .unwrap();
+            report.annotate_rule_references(&BTreeMap::new());
+            let raw = serde_json::to_value(&report).unwrap();
+            assert_eq!(raw["normalized_request"]["source"], source);
+            assert_eq!(raw["normalized_request"]["original_input"], original);
+            assert!(raw.to_string().contains("private-value"));
+            let (value, changed) =
+                Projected::encode_sources(&report, &|| Ok(()), &report.sensitive_sources())
+                    .unwrap()
+                    .into_parts();
+            assert!(changed);
+            assert_ask_projection(&value, &original, source, dialect);
+        }
+    }
+
+    fn assert_ask_projection(value: &Value, original: &Value, source: &str, dialect: &str) {
+        let leaks = secret_paths(value, "private-value");
+        assert!(leaks.is_empty(), "secret evidence paths: {leaks:?}");
+        assert_eq!(value["decision"], "ask");
+        assert!(value["approval_request_id"].is_null());
+        assert_eq!(
+            value["normalized_request"]["original_input"]["command"],
+            "[REDACTED]"
+        );
+        assert_eq!(
+            value["normalized_request"]["original_input"]["data"],
+            original["data"]
+        );
+        if dialect != "powershell" && !source.contains("git -C") {
+            assert!(
+                value["explanation"]["matches"]
+                    .as_array()
+                    .expect("complete projected evidence")
+                    .iter()
+                    .any(|matched| matched["rule_id"] == "guard"
+                        && matched["rule_ref"]["scope"] == "custom")
+            );
+            assert!(
+                value["explanation"]["guidance"]
+                    .as_array()
+                    .expect("complete projected evidence")
+                    .iter()
+                    .any(|guidance| guidance["message"] == "Use the safe operation.")
+            );
+        }
+        if source.ends_with("echo visible") {
+            let operations = value["analysis_coverage"]["operations"]
+                .as_array()
+                .expect("complete projected evidence");
+            assert!(
+                operations
+                    .iter()
+                    .any(|operation| operation["source_unit"] == 0
+                        && operation["request"]["arguments"] == json!(["visible"]))
+            );
+            assert!(
+                operations
+                    .iter()
+                    .filter(|operation| operation["source_unit"] == 1)
+                    .all(|operation| operation["decision"] == "ask")
+            );
+            assert!(
+                operations
+                    .iter()
+                    .any(|operation| operation["source_unit"] == 1
+                        && operation["request"]["arguments"] == "[REDACTED]")
+            );
+        }
+    }
+
+    fn check_owned_references(evaluation: &Value, expected: &BTreeMap<&str, Value>) {
+        let matches = evaluation["matches"]
+            .as_array()
+            .expect("complete projected evidence");
+        assert_eq!(matches.len(), expected.len());
+        let mut checks = 0;
+        for matched in matches {
+            let source = matched["source"]
+                .as_str()
+                .expect("complete projected evidence");
+            assert_eq!(matched["rule_ref"], expected[source], "{source}");
+            let local = matched["requirement_checks"]
+                .as_array()
+                .expect("complete projected evidence");
+            assert!(!local.is_empty());
+            for check in local {
+                assert_eq!(check["rule_ref"], expected[source]);
+                checks += 1;
+            }
+        }
+        let top = evaluation["requirement_checks"]
+            .as_array()
+            .expect("complete projected evidence");
+        assert_eq!(top.len(), checks);
+        for reference in expected.values() {
+            assert!(
+                top.iter()
+                    .any(|check| check.get("rule_ref") == Some(reference))
+            );
+            assert!(
+                evaluation["guidance"]
+                    .as_array()
+                    .expect("complete projected evidence")
+                    .iter()
+                    .any(|item| item.get("rule_ref") == Some(reference))
+            );
+        }
     }
 
     #[test]

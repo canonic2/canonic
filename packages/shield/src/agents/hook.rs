@@ -15,15 +15,12 @@ pub(crate) fn run(input: &NativeHook, log: &crate::diagnostics::Log) -> ExitCode
     let Some(adapter) = find(&input.agent) else {
         return ExitCode::from(2);
     };
-    let legacy = input.event.is_empty() && matches!(input.agent.as_str(), "claude" | "codex");
+    let legacy = input.event.is_empty() && adapter.accepts_unpinned_hook_events();
     let pinned = adapter.event(&input.event);
     if pinned.is_none() && !legacy {
         return ExitCode::from(2);
     }
-    log.event(
-        "hook_start",
-        json!({"project":input.project,"agent":input.agent}),
-    );
+    log.event("hook_start", || json!({"agent":input.agent}));
     let (bytes, oversized) = read_input(&mut std::io::stdin().lock());
     let read_ok = bytes.is_ok();
     let bytes = bytes.unwrap_or_default();
@@ -154,6 +151,19 @@ pub(crate) fn translate_event(
             deny("invalid-host-input")
         };
     };
+    // Cwd supplies context, not policy authority. Only a recorded relocation
+    // association can redirect an explicitly selected launch project.
+    let Ok(launch) = std::path::absolute(root) else {
+        return if event.post() {
+            json!({})
+        } else {
+            deny("runtime-unavailable")
+        };
+    };
+    let resolved = host["cwd"]
+        .as_str()
+        .and_then(|cwd| crate::mcp_io::project_path(Some(&launch), Path::new(cwd)).ok());
+    let root = resolved.as_deref().unwrap_or(&launch);
     let actual = adapter.input_event_for(&host, event);
     if actual != Some(event) {
         return match actual {
@@ -215,7 +225,7 @@ fn handle(
     request: &Request<'_>,
     log: &crate::diagnostics::Log,
 ) -> Option<Value> {
-    log.event("hook_stage", json!({"stage":"project_open_start"}));
+    log.event("hook_stage", || json!({"stage":"project_open_start"}));
     let (context, paused) = match crate::review::open_native(root) {
         Ok(opened) => opened,
         // A recognized name keeps inspection/recovery reachable, but the alias
@@ -223,14 +233,14 @@ fn handle(
         Err(_) if request.shield_tool.is_some() => return Some(json!({})),
         Err(_) => return None,
     };
-    log.event("hook_stage", json!({"stage":"project_open_ready"}));
+    log.event("hook_stage", || json!({"stage":"project_open_ready"}));
     if let Some(paused) = paused {
         return Some(paused_reply(adapter, request, &paused));
     }
     if let Some(name) = request.shield_tool {
         return Some(shield_tool_reply(adapter, request, name, log));
     }
-    log.event("hook_stage", json!({"stage":"registration_ready"}));
+    log.event("hook_stage", || json!({"stage":"registration_ready"}));
     if request.operation.is_none() && request.harmless && request.event == Event::Permission {
         return Some(allow(adapter, request.event, String::new()));
     }
@@ -244,11 +254,11 @@ fn handle(
     let Some(operation) = operation else {
         log.event(
             "hook_internal_bypass",
-            json!({"tool_name":request.tool,"post":request.event.post()}),
+            || json!({"tool_name":request.tool,"post":request.event.post()}),
         );
         return Some(json!({}));
     };
-    let mut prepared = if operation["kind"] == "mcp" {
+    let prepared = if operation["kind"] == "mcp" {
         match prepare_mcp(root, adapter, request, operation["alias"].as_str()?, log) {
             Ok(prepared) => Some(prepared),
             Err(response) => return Some(response),
@@ -261,6 +271,29 @@ fn handle(
     } else {
         vec![operation.clone()]
     };
+    decide_operations(
+        adapter,
+        request,
+        &context,
+        operations,
+        prepared,
+        log,
+        operation["unmodeled"] == true,
+    )
+}
+
+/// One native batch retains a single exact source authority through every
+/// override and the final vendor callback. Individual observations are optional.
+fn decide_operations(
+    adapter: &dyn AgentAdapter,
+    request: &Request<'_>,
+    context: &crate::review::Context,
+    operations: Vec<Value>,
+    mut prepared: Option<protocol::Prepared>,
+    log: &crate::diagnostics::Log,
+    mut unmodeled: bool,
+) -> Option<Value> {
+    let root = Path::new(&context.project_root);
     let local_id = if request.event.post() {
         request.tool_id.map_or_else(invocation_id, str::to_owned)
     } else {
@@ -268,7 +301,7 @@ fn handle(
     };
     let mut strictest: Option<Reply> = None;
     let mut refusals = Vec::new();
-    let mut unmodeled = operation["unmodeled"] == true;
+    let mut authorities: Vec<crate::review::runtime::consumer::NativeAuthority> = Vec::new();
     for (index, operation) in operations.into_iter().enumerate() {
         if request.event.post()
             && !["read-text", "shell", "file", "web", "mcp"]
@@ -282,15 +315,32 @@ fn handle(
         } else {
             format!("{local_id}:{index}")
         };
-        let (reply, refusal) = decide(
+        let NativeDecision {
+            reply,
+            refusal,
+            authority,
+        } = decide(
             adapter,
             request,
-            &context,
+            context,
             &id,
             operation,
             prepared.take(),
             log,
         )?;
+        if let Some(authority) = authority {
+            if let Some(current) = authorities.first() {
+                if !current.same_source(&authority) {
+                    return Some(finalize_native(authorities, || {
+                        adapter.reply(request.event, &feedback::deny("runtime-unavailable"))
+                    }));
+                }
+                // One exact source guard covers the whole batch. Do not
+                // multiply retained head/file ownership per operation.
+            } else {
+                authorities.push(authority);
+            }
+        }
         if reply.decision != Decision::Allow {
             refusals.push(refusal);
         }
@@ -301,23 +351,36 @@ fn handle(
             strictest = Some(reply);
         }
     }
-    if request.event.post() {
-        Some(completion_reply(root, adapter, request, unmodeled))
-    } else {
-        let mut reply = strictest?;
-        if blocks(adapter, request.event, &reply)
-            && let Some(allowed) =
-                approval::in_session(root, adapter, request, &refusals, &mut reply)
-        {
-            reply = allowed;
+    finalize_native(authorities, || {
+        if request.event.post() {
+            Some(completion_reply(root, adapter, request, unmodeled))
+        } else {
+            let mut reply = strictest?;
+            if blocks(adapter, request.event, &reply)
+                && let Some(allowed) =
+                    approval::in_session(root, adapter, request, &refusals, &mut reply)
+            {
+                reply = allowed;
+            }
+            if unmodeled && reply.decision == Decision::Allow {
+                // A reply covers the whole call; leave unmodeled actions under
+                // host permissions even when every modeled operation may proceed.
+                return Some(json!({}));
+            }
+            Some(adapter.reply(request.event, &reply))
         }
-        if unmodeled && reply.decision == Decision::Allow {
-            // A reply covers the whole call; leave unmodeled actions under
-            // host permissions even when every modeled operation may proceed.
-            return Some(json!({}));
-        }
-        Some(adapter.reply(request.event, &reply))
-    }
+    })
+}
+
+/// Exact source trust stays stable through override consumption and the final
+/// vendor-disposition callback, never through external host execution.
+pub(crate) fn finalize_native<T>(
+    authorities: Vec<crate::review::runtime::consumer::NativeAuthority>,
+    disposition: impl FnOnce() -> T,
+) -> T {
+    let response = disposition();
+    drop(authorities);
+    response
 }
 
 fn completion_reply(
@@ -382,15 +445,15 @@ fn shield_tool_reply(
 ) -> Value {
     log.event(
         "hook_mcp_bypass",
-        json!({"tool_name":request.tool,"post":request.event.post()}),
+        || json!({"tool_name":request.tool,"post":request.event.post()}),
     );
     if request.event.post() {
         return adapter.completion(request.event_name, None);
     }
     if name == "policy_apply" {
-        // Neither native Codex event may preapprove policy activation; its
-        // configured tool prompt decides. Claude's MCP form confirms the candidate.
-        return if adapter.spec().id == "codex" {
+        // A tool-permission review needs the host's own prompt at either hook
+        // event. Form review remains owned by the MCP server.
+        return if adapter.review().confirmation() == super::review::Confirmation::ToolPermission {
             json!({})
         } else {
             allow(adapter, request.event, String::new())
@@ -399,11 +462,7 @@ fn shield_tool_reply(
     allow(
         adapter,
         request.event,
-        if adapter.spec().id == "claude" {
-            String::new()
-        } else {
-            "Shield inspection and proposal tools do not activate policy; policy_apply requires user approval.".into()
-        },
+        adapter.allow_reason(super::AllowNotice::ShieldTool).into(),
     )
 }
 
@@ -414,7 +473,7 @@ fn prepare_mcp(
     alias: &str,
     log: &crate::diagnostics::Log,
 ) -> Result<protocol::Prepared, Value> {
-    let mut prepared = protocol::Prepared::load(root, &|stage| log.event("hook_stage",json!({"stage":stage})))
+    let mut prepared = protocol::Prepared::load(root, &|stage| log.event("hook_stage", || json!({"stage":stage})))
         .map_err(|_| {
             if request.event.post() {
                 return json!({"systemMessage":"Shield completion history unavailable; MCP bindings could not be checked."});
@@ -434,7 +493,7 @@ fn prepare_mcp(
         Ok(false) => {
             log.event(
                 "hook_mcp_external",
-                json!({"alias":alias,"reason":"no matching configured MCP policy"}),
+                || json!({"alias":alias,"reason":"no matching configured MCP policy"}),
             );
             Err(json!({}))
         }
@@ -465,6 +524,12 @@ fn invocation_id() -> String {
     )
 }
 
+struct NativeDecision {
+    reply: Reply,
+    refusal: Value,
+    authority: Option<crate::review::runtime::consumer::NativeAuthority>,
+}
+
 fn decide(
     adapter: &dyn AgentAdapter,
     request: &Request<'_>,
@@ -473,7 +538,7 @@ fn decide(
     mut operation: Value,
     prepared: Option<protocol::Prepared>,
     log: &crate::diagnostics::Log,
-) -> Option<(Reply, Value)> {
+) -> Option<NativeDecision> {
     let root = Path::new(&context.project_root);
     let decided = operation.clone();
     if request.event.post() {
@@ -488,15 +553,19 @@ fn decide(
         context_complete: request.context_complete,
         working_files: request.working_files.as_ref(),
     };
-    let (receipt, exit) = protocol::evaluate_native(
+    let protocol::NativeOutcome {
+        receipt,
+        code: exit,
+        authority,
+    } = protocol::evaluate_native_guarded(
         root,
         &serde_json::to_vec(&normalized).ok()?,
         request.input,
         native,
         prepared,
-        &|stage| log.event("hook_stage", json!({"stage":stage})),
+        &|stage| log.event("hook_stage", || json!({"stage":stage})),
     );
-    log.event("hook_evaluation",json!({"exit":exit,"decision":receipt["decision"],"disposition":receipt["disposition"],"code":receipt["code"],"ask_fallback":receipt["ask_fallback"],"policy_revision":receipt["identity"]["policy_revision"],"history_status":receipt["history"]["status"]}));
+    log.event("hook_evaluation", || json!({"exit":exit,"decision":receipt["decision"],"disposition":receipt["disposition"],"code":receipt["code"],"ask_fallback":receipt["ask_fallback"],"policy_revision":receipt["identity"]["policy_revision"],"history_status":receipt["history"]["status"]}));
     if request.event.post() {
         return (exit == 0 && receipt["history"]["status"] != "failed").then(|| {
             let reply = Reply {
@@ -504,7 +573,11 @@ fn decide(
                 reason: String::new(),
                 agent_context: None,
             };
-            (reply, Value::Null)
+            NativeDecision {
+                reply,
+                refusal: Value::Null,
+                authority,
+            }
         });
     }
     // What in-session approval needs from a refusal; failures carry none of it.
@@ -516,7 +589,11 @@ fn decide(
     if exit != 0 {
         let code = receipt["code"].as_str().unwrap_or("protection-failure");
         let reply = feedback::deny(code);
-        return Some((reply, refusal));
+        return Some(NativeDecision {
+            reply,
+            refusal,
+            authority,
+        });
     }
     feedback::respond(
         root,
@@ -526,5 +603,9 @@ fn decide(
         &decided,
         request.session,
     )
-    .map(|reply| (reply, refusal))
+    .map(|reply| NativeDecision {
+        reply,
+        refusal,
+        authority,
+    })
 }

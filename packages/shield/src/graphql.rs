@@ -112,26 +112,24 @@ pub(crate) fn take_counts() -> [usize; 4] {
 /// Move admitted immutable models out of eagerly loaded compiled metadata.
 pub(crate) fn detach(
     value: &mut Value,
-    images: &mut BTreeMap<String, Vec<u8>>,
+    image: &mut impl FnMut(&Value) -> Result<String, Error>,
 ) -> Result<(), Error> {
     match value {
         Value::Object(fields) => {
             for (key, child) in fields {
                 if key == "graphql" {
                     if let Some(model) = child.get_mut("selection") {
-                        let bytes = serde_json::to_vec(model).map_err(|_| Error::Syntax)?;
-                        let key = format!("graphql:{}", crate::policy::fingerprint(&bytes));
-                        images.entry(key.clone()).or_insert(bytes);
+                        let key = image(model)?;
                         *model = serde_json::json!({"prepared_graphql":key});
                     }
                 } else if !matches!(key.as_str(), "exact" | "input" | "context") {
-                    detach(child, images)?;
+                    detach(child, image)?;
                 }
             }
         }
         Value::Array(items) => {
             for item in items {
-                detach(item, images)?;
+                detach(item, image)?;
             }
         }
         _ => {}

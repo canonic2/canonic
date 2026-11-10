@@ -31,6 +31,15 @@ static SPEC: AgentSpec = AgentSpec {
     approval_action: "Allow this request?",
 };
 impl AgentAdapter for ClaudeCode {
+    fn accepts_unpinned_hook_events(&self) -> bool {
+        true
+    }
+    fn historical_hook_profiles(&self) -> &'static [&'static [&'static str]] {
+        &[&["PreToolUse", "PostToolUse", "PostToolUseFailure"]]
+    }
+    fn allow_reason(&self, _: super::AllowNotice) -> &'static str {
+        ""
+    }
     fn discover_mcp(
         &self,
         root: &Path,
@@ -54,6 +63,9 @@ impl AgentAdapter for ClaudeCode {
         desired: &std::collections::BTreeMap<String, crate::mcp_connections::Transport>,
     ) -> Result<super::SettingsUpdate, Error> {
         connections::merge(source, previous, desired)
+    }
+    fn portable_mcp_launcher(&self) -> bool {
+        true
     }
     fn connection_settings(
         &self,
@@ -169,15 +181,15 @@ impl AgentAdapter for ClaudeCode {
         json!({"matcher":".*","hooks":[{"type":"command","command":command,"timeout":10,"statusMessage":"Shield project enforcement"}]})
     }
     #[cfg(windows)]
-    fn direct_hook_group(&self, binary: &Path, root: &Path, event: &str) -> Option<Value> {
+    fn direct_hook_group(&self, _binary: &Path, _root: &Path, event: &str) -> Option<Value> {
         Some(
-            json!({"matcher":".*","hooks":[{"type":"command","command":binary.to_str()?,
-            "args":["__internal","native-hook","--project",root.to_str()?,"--agent",SPEC.id,"--event",event],
+            json!({"matcher":".*","hooks":[{"type":"command","command":"shield",
+            "args":["__internal","native-hook","--project",".","--agent",SPEC.id,"--event",event],
             "onFailure":"block","timeout":10,"statusMessage":"Shield project enforcement"}]}),
         )
     }
-    fn mcp_entry(&self, binary: &Path, root: &Path, _approved: &[String]) -> String {
-        json!({"type":"stdio","command":binary,"args":["mcp","serve","--project",root,"--agent",SPEC.id]}).to_string()
+    fn mcp_entry(&self, _binary: &Path, _root: &Path, _approved: &[String]) -> String {
+        json!({"type":"stdio","command":"shield","args":["mcp","serve","--project",".","--agent",SPEC.id]}).to_string()
     }
     fn has_mcp_entry(&self, source: &str) -> Result<bool, Error> {
         let config = crate::json::parse(source.as_bytes())
@@ -210,6 +222,22 @@ impl AgentAdapter for ClaudeCode {
         desired: &super::setup::HookGroups,
     ) -> Result<String, Error> {
         super::setup::repair(source, desired)
+    }
+    fn migrate_hooks(
+        &self,
+        source: &str,
+        permitted: &super::setup::PortableHookGroups,
+        desired: &super::setup::HookGroups,
+    ) -> Result<Option<String>, Error> {
+        super::setup::migrate(source, permitted, desired).map(Some)
+    }
+    fn portable_mcp_entry(
+        &self,
+        source: &str,
+        binary: &Path,
+        roots: &[&Path],
+    ) -> Result<Option<String>, Error> {
+        super::setup::portable_json_mcp(source, SPEC.id, &["claude-code"], binary, roots).map(Some)
     }
     fn merge_mcp(
         &self,

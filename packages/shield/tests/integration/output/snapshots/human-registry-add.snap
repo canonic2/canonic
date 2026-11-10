@@ -6,7 +6,9 @@ $ shield registry add acme [REGISTRY]
 --- terminal
 Register acme for this project
   [REGISTRY] · local directory
-Installed packs are not affected.
+  Source identity: [DIGEST]
+  Trust basis: Local operator-enrolled directory; unsigned catalog. Trust applies to this canonical directory.
+Installed packs keep their source and policy.
 Review and confirm → Apply change
 Registered acme for this project.
 --- exit 0

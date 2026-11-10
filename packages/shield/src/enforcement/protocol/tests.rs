@@ -1,6 +1,7 @@
 //! Real file bindings reject replacement and malformed normalized authority claims.
 use super::*;
 mod bootstrap;
+mod deferred;
 #[cfg(unix)]
 use assert_fs::prelude::*;
 

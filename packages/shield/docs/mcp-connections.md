@@ -194,7 +194,7 @@ Setup also preserves these entries and their existing ownership. Removing Shield
 leaves them in place. This verification does not require a Git repository.
 
 When Shield writes local stdio settings, it uses private indirection. Host files
-contain a Shield launcher, project path and opaque random token; the connection ID, transport
+contain a Shield launcher, project selector and opaque random token; the connection ID, transport
 digest, command, arguments and environment stay in private review state. Tokens
 retain the same locator for the same connection, agent and alias; approved
 transport changes rotate a separate random host-entry generation. Cached launch
@@ -208,10 +208,14 @@ already running connector depends on the agent host.
 Launcher setup works without Git and with tracked host files, including
 `.mcp.json` and `.codex/config.toml`. It does not change repository tracking or
 ignore rules. Private transport settings remain in private review state; generated
-host entries contain only launcher information. The generated executable and
-project paths are absolute: they can reveal a local home folder or username and
-will not work unchanged on a teammate's machine. Setup shows this warning before
-approval. Review the host-file diff before committing or sharing it; Shield does
+host entries contain only launcher information. Supported project MCP launchers
+use the installed `shield` command and `--project .`. Copying or moving a workspace
+closes its old private tokens. On runtime startup, Shield replaces an exactly
+owned launcher with a fresh token when the reviewed binary and connector settings
+still match. This needs no new permission review. Edited or missing entries stay
+untouched and unavailable until resolved; other matching entries can recover.
+Connector settings you supply can still contain machine-specific paths.
+Review the host-file diff before committing or sharing it; Shield does
 not inspect Git tracking or alter it. Local HTTP overrides work when
 an existing native entry matches exactly; generating a new private HTTP entry is
 unsupported and refuses before host writes. Shield never drops a local override

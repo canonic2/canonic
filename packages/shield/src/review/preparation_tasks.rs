@@ -82,26 +82,61 @@ pub(crate) struct Store {
 }
 
 pub(crate) struct Runtime {
-    store: Store,
+    store: Mutex<RuntimeStore>,
     workers: Mutex<Vec<JoinHandle<()>>>,
+}
+struct RuntimeStore {
+    store: Store,
+    used: bool,
+    recovered: bool,
 }
 
 impl Runtime {
     pub(crate) fn new(context: &Context) -> Self {
         let store = Store::new(context);
-        if store.root.exists() {
-            let _ = store.recover();
-        }
         Self {
-            store,
+            store: Mutex::new(RuntimeStore {
+                store,
+                used: false,
+                recovered: false,
+            }),
             workers: Mutex::new(Vec::new()),
         }
     }
-    pub(crate) fn store(&self) -> Result<&Store, Error> {
-        if self.store.root.exists() {
-            files::directory(&self.store.root, false)?;
+    pub(crate) fn store(&self) -> Result<Store, Error> {
+        let mut current = self.store.lock().map_err(|_| Error::Locked)?;
+        if current.store.root.exists() {
+            current.store.authority()?;
+            files::writer_directory(&current.store.root, false)?;
+            if !current.recovered {
+                current.store.recover()?;
+            }
         }
-        Ok(&self.store)
+        current.recovered = true;
+        current.used = true;
+        Ok(current.store.clone())
+    }
+    /// Retaining a task reference prevents epoch adoption, but never recovers
+    /// workers or creates storage merely to inspect their recorded result.
+    pub(crate) fn observation_store(&self) -> Result<Store, Error> {
+        let mut current = self.store.lock().map_err(|_| Error::Locked)?;
+        current.used = true;
+        Ok(current.store.clone())
+    }
+    pub(crate) fn unused(&self) -> bool {
+        self.workers.lock().is_ok_and(|workers| workers.is_empty())
+            && self.store.lock().is_ok_and(|store| !store.used)
+    }
+    pub(crate) fn rebind_unused(&self, context: &Context) -> Result<(), Error> {
+        let workers = self.workers.lock().map_err(|_| Error::Locked)?;
+        let mut store = self.store.lock().map_err(|_| Error::Locked)?;
+        if !workers.is_empty() || store.used || store.store.project_root != context.project_root {
+            return Err(Error::Invalid(
+                "preparation runtime changed; reconnect Shield",
+            ));
+        }
+        store.store = Store::new(context);
+        Ok(())
     }
     #[cfg(test)]
     pub(crate) fn join(&self) {
@@ -125,7 +160,23 @@ impl Store {
             self.project.clone(),
             self.project_root.clone(),
             "mcp",
-        ))
+        ))?;
+        state.check_operations()
+    }
+    fn observation_authority(&self) -> Result<(), Error> {
+        let (state, pending) =
+            storage::Store::inspect(Path::new(&self.project_root))?.read_diagnostic_checkpoint()?;
+        if pending {
+            return Err(Error::Missing);
+        }
+        state
+            .check(&Context::new(
+                self.project.clone(),
+                self.project_root.clone(),
+                "mcp",
+            ))
+            .map_err(|_| Error::Missing)?;
+        state.check_operations().map_err(|_| Error::Missing)
     }
     fn directory(&self, id: &str) -> Result<PathBuf, Error> {
         if id.len() != 64
@@ -144,6 +195,10 @@ impl Store {
         let record: Record =
             serde_json::from_value(files::read(&directory.join("record.json"), META_BYTES)?)
                 .map_err(|_| Error::Invalid("preparation record invalid"))?;
+        Self::validate_record(&record, id)?;
+        Ok(record)
+    }
+    fn validate_record(record: &Record, id: &str) -> Result<(), Error> {
         if record.schema != 1
             || record.tool != "policy_propose"
             || record.ttl_ms == 0
@@ -157,7 +212,7 @@ impl Store {
         {
             return Err(Error::Invalid("preparation record identity invalid"));
         }
-        Ok(record)
+        Ok(())
     }
     pub(crate) fn get(&self, id: &str) -> Result<Record, Error> {
         self.authority()?;
@@ -190,6 +245,13 @@ impl Store {
         )
     }
     pub(crate) fn result(&self, record: &Record) -> Result<Value, Error> {
+        self.observation_authority()?;
+        if record.project != self.project {
+            return Err(Error::Missing);
+        }
+        if !record.live(&self.project, clock::now_ms()?) {
+            return Err(Error::Missing);
+        }
         let value = files::read(
             &self.directory(&record.id)?.join("result.json"),
             RESULT_BYTES,
@@ -230,11 +292,38 @@ impl Store {
         Ok(())
     }
     pub(crate) fn observe(&self, id: &str) -> Result<Record, Error> {
-        self.authority()?;
-        self.control(id)?;
-        let _lock = Directory::enter(&self.root)?;
+        self.observation_authority()?;
+        // The existing namespace mutex supplies a coherent view when present;
+        // absence is never repaired by observation.
+        let namespace = match Directory::inspect(&self.root) {
+            Ok(lock) => Some(lock),
+            Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
         let mut record = self.control(id)?;
-        self.reconcile(&mut record)?;
+        if record.status == "working" {
+            let owner = if namespace.is_some() {
+                match Directory::inspect(&self.directory(id)?) {
+                    Ok(owner) => Some(owner),
+                    Err(Error::Locked) => return Ok(record),
+                    Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(error) => return Err(error),
+                }
+            } else {
+                None
+            };
+            if owner.is_some() {
+                record.status = if record.cancel_requested {
+                    "cancelled"
+                } else {
+                    "failed"
+                }
+                .into();
+                record.message = "Preparation owner stopped; no policy was activated. Observed without changing the retained record; prepare with a new idempotency_key if still needed".into();
+            } else {
+                record.message = "Stored preparation status; owner liveness is unchecked because its existing mutex is unavailable".into();
+            }
+        }
         Ok(record)
     }
     fn reconcile(&self, record: &mut Record) -> Result<(), Error> {
@@ -296,10 +385,50 @@ impl Store {
         }
         Ok(ids)
     }
+    /// The namespace is already private and exclusively owned by this writer.
+    /// Lost record-directory privacy is repaired only with a valid owned codec.
+    fn normalize_record_directories(&self) -> Result<(), Error> {
+        for (index, entry) in std::fs::read_dir(&self.root)?
+            .take(MAX_RECORDS + 66)
+            .enumerate()
+        {
+            if index >= MAX_RECORDS + 65 {
+                return Err(Error::Invalid("preparation directory exceeds scan bound"));
+            }
+            let entry = entry?;
+            let Some(id) = entry.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            if self.directory(&id).is_err() {
+                continue;
+            }
+            let metadata = std::fs::symlink_metadata(entry.path())?;
+            if !metadata.is_dir() || metadata.file_type().is_symlink() {
+                continue;
+            }
+            if files::directory(&entry.path(), false).is_ok() {
+                continue;
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt as _;
+                if metadata.uid() != std::fs::symlink_metadata(&self.root)?.uid() {
+                    return Err(Error::Invalid("task record directory owner differs"));
+                }
+            }
+            let record: Record =
+                serde_json::from_value(files::read(&entry.path().join("record.json"), META_BYTES)?)
+                    .map_err(|_| Error::Invalid("preparation record invalid"))?;
+            Self::validate_record(&record, &id)?;
+            files::writer_directory(&entry.path(), false)?;
+        }
+        Ok(())
+    }
     fn recover(&self) -> Result<(), Error> {
         self.authority()?;
-        files::directory(&self.root, false)?;
+        files::writer_directory(&self.root, false)?;
         let _lock = Directory::enter(&self.root)?;
+        self.normalize_record_directories()?;
         for id in self.entries()? {
             let Some(mut record) = self.record_or_recover(&id)? else {
                 continue;

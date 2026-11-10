@@ -13,6 +13,14 @@ pub(super) fn validate(root: &Path, plan: &Plan) -> Result<(), Error> {
                 .flatten()
                 .filter(|row| row["source"] == "local" && row["enabled"] == true)
             {
+                if super::rebind::unchanged(
+                    plan,
+                    agent,
+                    row["id"].as_str().unwrap_or_default(),
+                    row["alias"].as_str().unwrap_or_default(),
+                ) {
+                    continue;
+                }
                 if row["projection"] == "existing native entry" {
                     let alias = row["alias"]
                         .as_str()

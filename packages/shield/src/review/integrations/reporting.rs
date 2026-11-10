@@ -6,11 +6,20 @@ use std::{collections::BTreeMap, path::Path};
 pub(super) fn box_hooks(
     root: &Path,
     registered: Option<&Registration>,
+    metadata: &Value,
     diagnostics: &mut Vec<&'static str>,
 ) -> Vec<Value> {
     let Some(registration) = registered.filter(|r| r.box_definition.is_some()) else {
         return Vec::new();
     };
+    let previous_roots: Vec<_> = metadata["portable_launch_roots"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .take(2)
+        .filter_map(Value::as_str)
+        .map(Path::new)
+        .collect();
     agents::ADAPTERS
         .iter()
         .filter_map(|adapter| {
@@ -18,21 +27,23 @@ pub(super) fn box_hooks(
             if !adapter.supports_box_hooks() || registration.agents.contains_key(agent) {
                 return None;
             }
-            let status = match native::published_hooks(root, agent, &registration.binary) {
-                Ok(None) => return None,
-                Ok(Some(true)) => "installed",
-                Ok(Some(false)) => {
-                    diagnostics.push(
+            let status =
+                match native::published_hooks(root, agent, &registration.binary, &previous_roots) {
+                    Ok(None) => return None,
+                    Ok(Some(true)) => "installed",
+                    Ok(Some(false)) => {
+                        diagnostics.push(
                         "Box-published native hooks or agent settings are incomplete or disabled",
                     );
-                    "degraded"
-                }
-                Err(_) => {
-                    diagnostics
-                        .push("Box-published native hooks are unreadable, conflicting or changed");
-                    "degraded"
-                }
-            };
+                        "degraded"
+                    }
+                    Err(_) => {
+                        diagnostics.push(
+                            "Box-published native hooks are unreadable, conflicting or changed",
+                        );
+                        "degraded"
+                    }
+                };
             Some(
                 json!({"agent":agent,"surface":"native-hooks","managed_by":"box","status":status,
                 "ask_fallback":registration.ask_fallback.get(agent)}),

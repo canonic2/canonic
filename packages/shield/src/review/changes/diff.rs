@@ -6,6 +6,51 @@
 //! receipts carry them.
 use serde_json::{Value, json};
 
+/// One proposal-wide composition result. Entry flags do not establish causality
+/// in a batch, and an incomplete comparison cannot prove absence of widening.
+pub(in crate::review) fn override_permission_review(
+    before: &Value,
+    after: &Value,
+    comparison: &Value,
+) -> Option<Value> {
+    let overridden = |candidate: &Value| {
+        crate::configuration::layers::merged(candidate)
+            .ok()
+            .is_some_and(|config| {
+                config["packs"].as_array().into_iter().flatten().any(|row| {
+                    [&row["overrides"], &row["local"]["overrides"]]
+                        .iter()
+                        .any(|overrides| {
+                            overrides
+                                .as_object()
+                                .is_some_and(|entries| !entries.is_empty())
+                        })
+                })
+            })
+    };
+    if !overridden(before) && !overridden(after) {
+        return None;
+    }
+    let complete = comparison["complete"] == true
+        && matches!(
+            comparison["relation"].as_str(),
+            Some("equivalent" | "restrictive" | "expansive" | "mixed")
+        );
+    let relation = if complete {
+        comparison["relation"].clone()
+    } else {
+        json!("unknown")
+    };
+    Some(
+        json!({"schema_version":1,"scope":"proposal","complete":complete,"relation":relation,
+        "widens":if complete { json!(matches!(relation.as_str(), Some("expansive" | "mixed"))) } else { Value::Null },
+        "coverage":comparison["coverage"],"incomplete_reason":comparison["incomplete_reason"],
+        "comparison_revision":comparison["revision"],
+        "expansion_witness":if comparison["expansion"].is_null() { Value::Null } else { json!("/comparison/expansion") },
+        "restriction_witness":if comparison["restriction"].is_null() { Value::Null } else { json!("/comparison/restriction") }}),
+    )
+}
+
 /// Changes from `before` (installed rows and project candidate) to `after`.
 pub(in crate::review) fn between(
     before_meta: &Value,
@@ -274,6 +319,32 @@ fn rules(before: &Value, after: &Value) -> Vec<Value> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn override_composition_summary_preserves_unknown_and_witness_scope() {
+        let candidate = json!({"config":json!({"schema_version":1,"packs":[{"id":"acme/tools","overrides":{"inspect":"allow"}}]}).to_string()});
+        let incomplete = json!({"complete":false,"relation":"equivalent","coverage":"examples","incomplete_reason":"unsupported-semantic-domain","revision":"captured-comparison","expansion":{"request":{"executable":"acme","arguments":["status"]}}});
+        let summary = override_permission_review(&candidate, &candidate, &incomplete).unwrap();
+        assert_eq!(summary["scope"], "proposal");
+        assert_eq!(summary["relation"], "unknown");
+        assert!(summary["widens"].is_null());
+        assert_eq!(summary["comparison_revision"], "captured-comparison");
+        assert_eq!(summary["expansion_witness"], "/comparison/expansion");
+        for (relation, widens) in [
+            ("expansive", true),
+            ("mixed", true),
+            ("restrictive", false),
+            ("equivalent", false),
+        ] {
+            let mut comparison = incomplete.clone();
+            comparison["complete"] = json!(true);
+            comparison["relation"] = json!(relation);
+            assert_eq!(
+                override_permission_review(&candidate, &candidate, &comparison).unwrap()["widens"],
+                widens
+            );
+        }
+    }
+
     fn row(id: &str, version: &str, profile: &str, direct: bool) -> Value {
         json!({"source_identity":"acme-source","id":id,"version":version,"profile":profile,"direct":direct,"digest":"0".repeat(64)})
     }
@@ -495,5 +566,12 @@ mod tests {
         let before = candidate("loose", json!({"gate":{"on_unmet":"deny"}}), &gated);
         let after = candidate("loose", json!({}), &gated);
         assert_eq!(settings(&before, &after)[0]["widens"], true);
+        let before = candidate("recommended", json!({"inspect":"off"}), &source);
+        let after = candidate("recommended", json!({"inspect":"allow"}), &source);
+        assert_eq!(
+            settings(&before, &after)[0]["widens"],
+            true,
+            "reactivation restores a ranked contribution"
+        );
     }
 }

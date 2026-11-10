@@ -563,7 +563,7 @@ fn pack_installation_refuses_more_than_four_mib_of_retained_source_without_propo
 }
 
 #[test]
-fn pack_installation_local_batch_refuses_profiles_for_preexisting_packs() {
+fn pack_installation_local_batch_preserves_shared_profiles_and_prepares_replacements() {
     let (transport, project, source) = fresh(false, VERSION, &json!({"elicitation":{"form":{}}}));
     let root: Value =
         serde_json::from_str(&std::fs::read_to_string(source.join("pack.yml")).unwrap()).unwrap();
@@ -587,7 +587,6 @@ fn pack_installation_local_batch_refuses_profiles_for_preexisting_packs() {
     let folder = std::path::Path::new(&project.review.project_root).join(".shield");
     let shared_before = std::fs::read(folder.join("config.yml")).unwrap();
     let revision = project.revision();
-    let count = proposals(&project);
     for profile in ["recommended", "strict"] {
         for existing_first in [true, false] {
             let existing = json!({"reference":"fixture/acme/settings","profile":profile});
@@ -597,29 +596,23 @@ fn pack_installation_local_batch_refuses_profiles_for_preexisting_packs() {
             } else {
                 json!([new, existing])
             };
-            let refused = transport.call(
+            let prepared = transport.call(
                 json!(12),
                 "pack_add",
                 &json!({"packs":packs,"layer":"local"}),
             );
-            assert_eq!(
-                data(&refused)["error"]["code"],
-                "invalid_input",
-                "{refused}"
-            );
-            assert!(
-                data(&refused)["error"]["message"]
-                    .as_str()
-                    .unwrap()
-                    .contains("cannot change its profile"),
-                "{refused}"
-            );
+            assert!(data(&prepared)["error"].is_null(), "{prepared}");
             assert_eq!(project.revision(), revision);
-            assert_eq!(proposals(&project), count);
             assert_eq!(
                 std::fs::read(folder.join("config.yml")).unwrap(),
                 shared_before
             );
+            let withdrawn = transport.call(
+                json!(120),
+                "policy_withdraw",
+                &json!({"proposal_id":data(&prepared)["data"]["proposal_id"]}),
+            );
+            assert!(data(&withdrawn)["error"].is_null(), "{withdrawn}");
         }
     }
     // Without a profile, an existing selection can still receive personal values.
@@ -690,8 +683,8 @@ fn pack_installation_local_settings_for_an_existing_shared_dependency_use_its_ov
     approve(&transport, 11, &proposal);
     let proposal = transport.call(json!(12), "policy_propose", &json!({"change":{"kind":"pack_configure","reference":"acme/child","set":{"enabled":true}}}));
     approve(&transport, 13, &proposal);
-    // The new local root needs a newer transitive release. Its additional required
-    // setting belongs to the existing shared selection's local overlay.
+    // The new local root needs a newer transitive release. Its complete local
+    // replacement retains shared settings without rewriting the shared selection.
     let old_child = child.to_string();
     child["version"] = json!("1.1.0");
     child["variables"]["manager"] = json!({"type":"choice","description":"Build manager","values":["make","just"],"required":true});
@@ -731,7 +724,7 @@ fn pack_installation_local_settings_for_an_existing_shared_dependency_use_its_ov
         .iter()
         .find(|row| row["id"] == "acme/child")
         .unwrap();
-    assert_eq!(child["version"], "1.1.0");
+    assert_eq!(child["version"], "1.0.0");
     assert_eq!(child["variables"], json!({"enabled":true}));
     let local: Value =
         crate::policy::parse(&std::fs::read_to_string(folder.join("config.local.yml")).unwrap())
@@ -741,10 +734,13 @@ fn pack_installation_local_settings_for_an_existing_shared_dependency_use_its_ov
         .iter()
         .find(|row| row["id"] == "acme/child")
         .unwrap();
-    assert_eq!(overlay["variables"], json!({"manager":"just"}));
-    for field in ["version", "profile", "path"] {
-        assert!(overlay.get(field).is_none(), "{overlay}");
-    }
+    assert_eq!(
+        overlay["variables"],
+        json!({"enabled":true,"manager":"just"})
+    );
+    assert_eq!(overlay["version"], "1.1.0");
+    assert_eq!(overlay["profile"], "recommended");
+    assert!(overlay["path"].is_string());
     assert_eq!(
         local_rows
             .iter()

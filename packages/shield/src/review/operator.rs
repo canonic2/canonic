@@ -7,6 +7,7 @@ mod presentation;
 mod project_files;
 mod registries;
 mod rules;
+mod sdk;
 mod session_grants;
 mod state;
 mod terminal;
@@ -207,6 +208,9 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
         }
     }
     let mut value = match &input.command {
+        PublicCommand::Sdk(crate::cli::public::Sdk {
+            command: crate::cli::public::SdkCommand::Setup { adapter },
+        }) => sdk::setup(&context, adapter, input.json),
         PublicCommand::Mcp(crate::cli::public::Mcp {
             command: McpCommand::Setup(setup),
         }) => {
@@ -314,7 +318,9 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
             PackCommand::Update { reference } => {
                 packs::update(&context, reference.as_deref(), input.json)
             }
-            PackCommand::Remove { reference } => packs::remove(&context, reference, input.json),
+            PackCommand::Remove { reference, local } => {
+                packs::remove(&context, reference, *local, input.json)
+            }
         },
         PublicCommand::Request(request) => match &request.command {
             RequestCommand::List => approvals::inspect(&context, None),
@@ -459,8 +465,11 @@ fn configured(root: &Path) -> bool {
 }
 
 fn decide(context: &Context, id: &str, deny: bool, json_mode: bool) -> Result<Value, Error> {
-    let mut tty = terminal::Terminal::required(json_mode)?;
     let (_, value) = approvals::request_view(context, id)?;
+    if value["terminal"] == true {
+        return Err(Error::Missing);
+    }
+    let mut tty = terminal::Terminal::required(json_mode)?;
     tty.confirm(
         &json!({"operation":if deny {"deny/revoke"} else {"approve once"},"request":value,"scope":if deny {"Deny the pending request or revoke an unused grant"} else {"One use; five-minute expiry; the exact stored request and resource binding"}}),
     )?;

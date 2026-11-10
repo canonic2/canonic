@@ -63,10 +63,10 @@ fn review_resources_redact_private_evidence_and_require_retained_identity() {
     }).unwrap();
     let state = store.read_checkpoint().unwrap();
     let selected = &state.proposals[0];
-    let source = selected.candidate["digest"].as_str().unwrap();
+    let source = selected.candidate["manifest_digest"].as_str().unwrap();
     std::fs::remove_file(
         root.path()
-            .join(format!(".shield/review/sources/{source}.json")),
+            .join(format!(".shield/review/sources/{source}.manifest.json")),
     )
     .unwrap();
     let logs = assert_fs::TempDir::new().unwrap();

@@ -46,13 +46,19 @@ impl History {
             if json!({"enabled":state.history_enabled,"limit":state.history_limit,"generation":state.history_generation}) != self.before { return Err(Error::StaleSnapshot); }
             if let Some(enabled) = self.enabled { state.history_enabled = enabled; }
             if let Some(limit) = self.limit { state.history_limit = limit; }
-            if self.purge { state.events.clear(); }
+            if self.purge {
+                state.events.clear();
+                state.operator["history_retired_generations"] = json!(state.operator["bootstrap"]["history_recovery"]
+                    .as_array().into_iter().flatten().take(2).cloned().collect::<Vec<_>>());
+            }
             state.trim();
             state.history_control = true;
             if self.purge || self.limit.is_some() {
                 state.history_generation = history::generation()?;
+                state.history_owner = None;
                 state.history_rewrite = Some(self.purge);
             }
+            crate::review::configuration_changes::changed(state, context, "request history settings");
             Ok(json!({"schema_version":1,"enabled":state.history_enabled,"limit":state.history_limit,"purged":self.purge}))
         })
     }

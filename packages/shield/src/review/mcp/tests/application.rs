@@ -166,9 +166,11 @@ fn project_files_adopt_recovers_hand_edits_through_both_host_approvals() {
             status["data"]["coverage"]["repair_needed"], false,
             "{status}"
         );
-        assert_eq!(status["data"]["repair_route"], "policy_propose");
+        assert_eq!(status["data"]["repair_route"], "shield policy review");
+        assert_eq!(status["data"]["project_file_inspection"], "unchecked");
+        assert_eq!(status["data"]["repair_assessment"]["complete"], false);
         assert_eq!(
-            status["data"]["repair_arguments"]["change"]["kind"],
+            status["data"]["project_file_review"]["arguments"]["change"]["kind"],
             "project_files_adopt"
         );
         let before = Store::open(root.path())
@@ -332,7 +334,7 @@ fn project_files_adopt_refuses_local_file_created_after_review() {
 }
 
 #[test]
-fn project_files_adopt_status_keeps_repair_for_a_deleted_rules_file() {
+fn project_files_adopt_status_leaves_deleted_source_unchecked_until_explicit_review() {
     let (root, mut context, connection) = fixture();
     context.agent = Some("codex".into());
     let first = prepare(
@@ -348,7 +350,12 @@ fn project_files_adopt_status_keeps_repair_for_a_deleted_rules_file() {
         status["data"]["coverage"]["repair_needed"], false,
         "{status}"
     );
-    assert_eq!(status["data"]["repair_needed"], true);
+    assert_eq!(
+        status["data"]["repair_needed"], false,
+        "no known integration repair is required; source was not inspected"
+    );
+    assert_eq!(status["data"]["project_file_inspection"], "unchecked");
+    assert_eq!(status["data"]["repair_assessment"]["complete"], false);
     assert_eq!(status["data"]["repair_route"], "shield policy review");
     assert!(status["data"].get("repair_arguments").is_none());
 }
@@ -432,10 +439,10 @@ fn prepared_apply_verifies_source_bytes_and_reconnect_can_prepare_its_own_plan()
     let store = Store::open(root.path()).unwrap();
     let state = store.read_checkpoint().unwrap();
     let source = &state.proposals[0].candidate;
-    let path = root
-        .path()
-        .join(".shield/review/sources")
-        .join(format!("{}.json", source["digest"].as_str().unwrap()));
+    let path = root.path().join(".shield/review/sources").join(format!(
+        "{}.manifest.json",
+        source["manifest_digest"].as_str().unwrap()
+    ));
     let original = std::fs::read(&path).unwrap();
     let mut changed = original.clone();
     changed[0] ^= 1;

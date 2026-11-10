@@ -367,8 +367,20 @@ grant. Request resources, origin, project and active policy must still match.
 Policy denials cannot be approved. Deny cancels a pending request or revokes an
 unused grant. A consumed grant cannot authorize another execution.
 
-Approval is available only through a controlling terminal. Redirected stdin,
-JSON mode and intercepted agent tool calls do not supply operator confirmation.
+Read, checked-run and native-hook terminal outcomes remain available for up to ten minutes
+within a separate bounded receipt store. Repeating the original decision returns
+the closed outcome without issuing permission. All-terminal groups can reconcile
+without another form; approve only the live IDs when a group mixes live and closed
+requests. Older or evicted IDs report unavailable.
+For native hooks, reporting a consumed outcome leaves its separate one-use
+follow-up callback available for the original 60-second window. Reporting never
+renews that window or authorizes another execution. Unreadable optional outcome
+metadata stays preserved locally and unavailable; it does not prevent valid policy
+or live grants from loading.
+
+Fresh approval requires a controlling terminal or the registered host's Shield
+confirmation form. Redirected stdin, JSON flags and intercepted tool input do not
+supply operator confirmation.
 
 ## Request history
 
@@ -382,6 +394,13 @@ shield history show ENTRY
 ```
 
 Entries combine request decisions, operator decisions, and reported completion.
+The policy menu's **Configuration change history** shows the latest retained
+configuration summaries independently of request recording. Clearing request
+history preserves these summaries. They identify confirmed changes and rejected
+proposals, with actor evidence and before/after policy revisions; they grant no
+permission. An incomplete-history notice means some summaries could not be
+exported or decoded. Check current status for projection repair needs.
+
 Configuration changes are not request entries. Shell entries show the submitted
 source: the list shows its first line, and `show` prints the full command and
 deciding rule. File entries show the action and path, such as

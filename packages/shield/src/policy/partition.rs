@@ -267,7 +267,13 @@ pub(crate) fn examples(
     customs: &[&CustomRules],
     fixed: Option<(&str, &str)>,
 ) -> Vec<Request> {
-    let matchers = matchers(packs, customs);
+    let owned: Vec<_> = packs
+        .iter()
+        .flat_map(|(pack, _)| &pack.document.rules)
+        .chain(customs.iter().flat_map(|custom| &custom.document.rules))
+        .filter_map(|rule| rule.matcher.clone().or_else(|| rule.comparison_example()))
+        .collect();
+    let matchers: Vec<_> = owned.iter().collect();
     let shapes = if let Some((cwd, project)) = fixed {
         build_matcher_shapes(&matchers, cwd, project, false)
     } else {
@@ -279,7 +285,17 @@ pub(crate) fn examples(
 }
 
 pub(crate) fn witness_budget(packs: &[(&Pack, Profile)], customs: &[&CustomRules]) -> usize {
-    MAX_REGIONS.min(MAX_RULE_CHECKS / matchers(packs, customs).len().max(1))
+    let checks = packs
+        .iter()
+        .map(|(pack, _)| {
+            pack.document
+                .rules
+                .len()
+                .saturating_add(pack.document.preconditions.len())
+        })
+        .chain(customs.iter().map(|custom| custom.document.rules.len()))
+        .fold(0usize, usize::saturating_add);
+    MAX_REGIONS.min(MAX_RULE_CHECKS / checks.max(1))
 }
 
 pub(crate) fn absolute_root() -> &'static str {

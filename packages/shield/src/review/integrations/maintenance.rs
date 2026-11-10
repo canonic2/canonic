@@ -6,6 +6,31 @@ use std::collections::BTreeSet;
 mod status_tests;
 
 impl Plan {
+    /// Equivalent maintenance never authorizes a different executable payload,
+    /// regardless of which automatic or explicit resume path reaches it.
+    pub(super) fn check_maintenance_binary(&self) -> Result<(), Error> {
+        if !matches!(
+            self.scope_reason.as_deref(),
+            Some(super::portable::REASON | super::rebind::REASON)
+        ) {
+            return Ok(());
+        }
+        let Some(expected) = self
+            .previous
+            .as_ref()
+            .zip(self.desired.as_ref())
+            .filter(|(before, after)| before.binary_digest == after.binary_digest)
+            .map(|(_, after)| after.binary_digest.as_str())
+        else {
+            return Err(Error::StaleSnapshot);
+        };
+        if super::binary_digest(&std::env::current_exe()?.canonicalize()?)? != expected {
+            return Err(Error::Invalid(
+                "automatic maintenance executable changed; review setup",
+            ));
+        }
+        Ok(())
+    }
     pub(in crate::review) fn affects(&self, agent: &str) -> bool {
         self.targets.as_ref().is_none_or(|targets| {
             targets.iter().any(|target| target == agent)

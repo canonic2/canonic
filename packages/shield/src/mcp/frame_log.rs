@@ -97,7 +97,7 @@ mod tests {
     use clap::Parser as _;
 
     #[test]
-    fn a_busy_log_drops_excess_frames_and_delivers_accepted_metadata_while_running() {
+    fn frame_metadata_stays_nonblocking_and_delivers_accepted_records_while_running() {
         let root = assert_fs::TempDir::new().unwrap();
         let cli = crate::cli::Cli::parse_from([
             "shield",
@@ -107,17 +107,19 @@ mod tests {
         ]);
         let log = Arc::new(crate::diagnostics::Log::open(&cli));
         let frames = FrameLog::start(log.clone()).unwrap();
-        // The writer cannot progress until released, so the bounded queue must
-        // overflow without waiting for the writer.
+        // Parsing may continue into the separate bounded event sink while its
+        // writer is stalled. Dispatcher delivery must never wait for either.
         let guard = log.hold_writer();
         let mut accepted = 0;
+        let started = Instant::now();
         for _ in 0..CAPACITY + 2 {
             accepted += usize::from(frames.submit(
                 Direction::Input,
                 br#"{"id":7,"method":"tools/call","params":{"name":"status","secret":"private-payload"}}"#,
             ));
         }
-        assert!(accepted <= CAPACITY + 1);
+        assert!(accepted > 0 && accepted <= CAPACITY + 2);
+        assert!(started.elapsed() < Duration::from_secs(1));
         drop(guard);
         // Bounded shutdown may detach a delayed writer. Establish live delivery
         // before closing the observer; the stalled-writer test owns shutdown.

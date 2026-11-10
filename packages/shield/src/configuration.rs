@@ -11,7 +11,93 @@ mod composition;
 mod connections;
 pub(crate) mod layers;
 pub use composition::{Effective, compose};
+
+/// Render an immutable retained bundle's canonical lock without constructing
+/// policy matchers. The caller verifies its source object; this grants no trust.
+pub(crate) fn recorded_effective(
+    candidate: &serde_json::Value,
+    expected: &str,
+) -> Result<Effective, Error> {
+    recorded_composition(candidate)?.for_revision(expected)
+}
+
+pub(crate) fn recorded_revision(candidate: &serde_json::Value) -> Result<String, Error> {
+    recorded_composition(candidate)?.revision()
+}
+
+/// Verify only the source fields present in a partial display against the
+/// canonical recorded lock. This never verifies an omitted bundle field.
+pub(crate) fn verify_recorded_fields(
+    candidate: &serde_json::Value,
+    expected: &str,
+) -> Result<Effective, Error> {
+    let effective = recorded_effective(candidate, expected)?;
+    let lock: LockDocument =
+        serde_json::from_value(candidate["lock"].clone()).map_err(|_| Error::Syntax)?;
+    for (field, artifact) in [("rules", &lock.rules), ("local_rules", &lock.local_rules)] {
+        if let Some(value) = candidate.get(field) {
+            match (value.as_str(), artifact) {
+                (Some(source), Some(artifact))
+                    if policy::fingerprint(source.as_bytes()) == artifact.digest => {}
+                (None, None) if value.is_null() => {}
+                _ => return Err(Error::ArtifactMismatch),
+            }
+        }
+    }
+    if let Some(config) = candidate.get("config") {
+        let config = config.as_str().ok_or(Error::Syntax)?;
+        let local = match candidate.get("local_config") {
+            None | Some(serde_json::Value::Null) => None,
+            Some(value) => Some(value.as_str().ok_or(Error::Syntax)?),
+        };
+        let merged = layers::merge(config, local)?;
+        if policy::fingerprint(merged.as_bytes()) != lock.config_digest {
+            return Err(Error::ArtifactMismatch);
+        }
+        let selection = Candidate::from_yaml(&merged)?;
+        if let Some(packs) = candidate.get("packs") {
+            let packs = packs.as_array().ok_or(Error::Syntax)?;
+            if packs.len() != selection.packs.len() {
+                return Err(Error::ArtifactMismatch);
+            }
+            for (source, selected) in packs.iter().zip(&selection.packs) {
+                if source.is_null() {
+                    continue;
+                }
+                let selected =
+                    serde_json::to_value(selected.locked(source.as_str().ok_or(Error::Syntax)?))
+                        .map_err(|_| Error::Syntax)?;
+                if !lock
+                    .packs
+                    .iter()
+                    .any(|pack| serde_json::to_value(pack).ok().as_ref() == Some(&selected))
+                {
+                    return Err(Error::ArtifactMismatch);
+                }
+            }
+        }
+    } else if candidate.get("packs").is_some() {
+        return Err(Error::ArtifactMismatch);
+    }
+    Ok(effective)
+}
+
+fn recorded_composition(candidate: &serde_json::Value) -> Result<Effective, Error> {
+    if candidate["schema_version"] != 1
+        || candidate["kind"] != "candidate-bundle"
+        || candidate["trust"] != "unverified"
+    {
+        return Err(Error::Contract("invalid retained bundle metadata"));
+    }
+    let document: LockDocument =
+        serde_json::from_value(candidate["lock"].clone()).map_err(|_| Error::Syntax)?;
+    if document.schema_version != 1 || document.kind != "local-candidate" {
+        return Err(Error::Contract("invalid retained lock metadata"));
+    }
+    compose(&[(policy::Scope::Project, Lock { document })])
+}
 mod evaluation;
+pub(crate) use evaluation::NormalizedEvaluation;
 pub use evaluation::{CandidateEvaluation, Evaluator, evaluate};
 mod bundle;
 pub use bundle::{Bundle, MAX_BUNDLE_BYTES};
@@ -313,9 +399,22 @@ impl Candidate {
             return Err(Error::Limit);
         }
         let mut ids = BTreeSet::new();
-        for selection in candidate.packs.iter().chain(&candidate.disabled) {
+        for selection in &candidate.packs {
             selection.validate()?;
             if !ids.insert((&selection.registry_identity, &selection.id)) {
+                return Err(Error::Contract("duplicate configuration pack identity"));
+            }
+        }
+        let mut disabled_ids = BTreeSet::new();
+        for selection in &candidate.disabled {
+            selection.validate()?;
+            if !disabled_ids.insert((&selection.registry_identity, &selection.id))
+                || candidate.packs.iter().any(|active| {
+                    active.registry_identity == selection.registry_identity
+                        && active.id == selection.id
+                        && active.layer != Some(Layer::Local)
+                })
+            {
                 return Err(Error::Contract("duplicate configuration pack identity"));
             }
         }
@@ -419,6 +518,11 @@ impl Candidate {
                 return Err(Error::ArtifactMismatch);
             }
             pack.bind_identity(&entry.id);
+            pack.bind_override_layers(
+                selection.layer == Some(Layer::Local),
+                &selection.overrides,
+                selection.local.as_ref().map(|overlay| &overlay.overrides),
+            );
             locked.push(entry);
             captured.push(pack);
         }
@@ -481,9 +585,22 @@ fn custom_rules(shared: Option<&str>, local: Option<&str>) -> Result<Option<Cust
     let Some(local) = local else {
         return shared.map(CustomRules::from_retained_yaml).transpose();
     };
-    let normalized = |source: &str| CustomRules::from_retained_yaml(source)?.normalized_document();
-    let local = normalized(local)?;
+    let normalized = |source: &str| {
+        let custom = CustomRules::from_retained_yaml(source)?;
+        Ok::<_, Error>((custom.normalized_document()?, custom.comparison_sources))
+    };
+    let (local, local_sources) = normalized(local)?;
     let shared = shared.map(normalized).transpose()?;
+    let comparison_sources = match (&shared, local_sources) {
+        (Some((_, Some(shared))), Some(mut local)) => {
+            let mut sources = shared.clone();
+            sources.append(&mut local);
+            Some(sources)
+        }
+        (None, local) => local,
+        _ => None,
+    };
+    let shared = shared.map(|(document, _)| document);
     let field = |document: &serde_json::Value, name: &str| -> Vec<serde_json::Value> {
         document[name].as_array().cloned().unwrap_or_default()
     };
@@ -510,8 +627,11 @@ fn custom_rules(shared: Option<&str>, local: Option<&str>) -> Result<Option<Cust
         .ok()
         .and_then(|values| values.as_array().cloned())
         .ok_or(Error::Syntax)?;
-    CustomRules::from_yaml(&policy::rules::document_with(&merged, &directory_options)?.to_string())
-        .map(Some)
+    let mut custom = CustomRules::from_yaml(
+        &policy::rules::document_with(&merged, &directory_options)?.to_string(),
+    )?;
+    custom.comparison_sources = comparison_sources;
+    Ok(Some(custom))
 }
 
 impl Lock {

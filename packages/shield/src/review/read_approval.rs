@@ -10,6 +10,8 @@ use serde_json::{Value, json};
 use std::path::Path;
 
 mod legacy;
+mod receipts;
+pub(crate) mod runtime;
 #[cfg(test)]
 pub(crate) mod tests;
 
@@ -38,6 +40,10 @@ pub(crate) struct ReadRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     resource: Option<super::runtime::consumer::ResourceRequest>,
     resource_digest: String,
+    /// General-runtime rows require their private, admitted consumer context.
+    /// Absence retains the exact legacy binding and consumption contract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    runtime_context: Option<String>,
     origin: Origin,
     provenance: Value,
     binding: String,
@@ -99,6 +105,12 @@ impl ReadRequest {
                 .expect("binding array")
                 .push(json!(resource));
         }
+        if let Some(context) = &self.runtime_context {
+            binding
+                .as_array_mut()
+                .expect("binding array")
+                .push(json!({"runtime_context":context}));
+        }
         hash(&binding)
     }
     fn grant_binding(&self, grant: &Grant) -> String {
@@ -143,6 +155,10 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
             legacy::resource(&row.request)?;
         }
         if row.project_id != state.project_id
+            || row
+                .runtime_context
+                .as_ref()
+                .is_some_and(|value| !canonic_registry_kit::digest::is_sha256_hex(value))
             || row.request.project != state.project_root
             || !crate::enforcement::read_text::valid_request(&row.request)
             || row.binding != row.binding()
@@ -259,20 +275,27 @@ pub(crate) fn gate(
         session_id: context.session_id.clone(),
         consumer_id: consumer.into(),
     };
+    let authority = evidence.authorization(context, &|| Ok(()))?;
     Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
-        if !state
-            .active
-            .as_ref()
-            .is_some_and(|a| a.matches(evidence.identity()))
-        {
-            return Err(Error::StaleSnapshot);
+        if reference.is_some() || evidence.evaluation().decision == Decision::Ask {
+            state.check_operations()?;
         }
+        authority.check_locked(state, evidence, &|| Ok(()))?;
         if !verify() {
             return Ok(result("read-changed", false, None, "none", None));
         }
+        if let Some(reference) = reference
+            && let Some(receipt) =
+                receipts::replay(state, &origin, evidence, resource, reference, now()?)
+        {
+            return Ok(receipt);
+        }
         match evidence.evaluation().decision {
             Decision::Deny => Ok(result("policy-deny", false, None, "none", None)),
-            Decision::Allow => Ok(result("allowed", true, None, "none", None)),
+            Decision::Allow if reference.is_none() => {
+                Ok(result("allowed", true, None, "none", None))
+            }
+            Decision::Allow => Err(Error::Invalid("approval requires current Ask policy")),
             Decision::Ask => ask(
                 state,
                 context,
@@ -306,11 +329,17 @@ fn ask(
     time: u64,
 ) -> Result<Value, Error> {
     if let Some(reference) = reference {
-        return consume(state, context, origin, evidence, resource, reference, time);
+        return consume(
+            state, context, origin, evidence, resource, reference, time, None,
+        );
     }
     capture(state, context, origin, evidence, resource, time)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the private runtime context extends the existing exact read claim without changing legacy rows"
+)]
 fn consume(
     state: &mut State,
     context: &Context,
@@ -319,7 +348,9 @@ fn consume(
     resource: &str,
     reference: &str,
     time: u64,
+    runtime_context: Option<&str>,
 ) -> Result<Value, Error> {
+    state.check_operations()?;
     let Some(index) = state
         .read_requests
         .iter()
@@ -337,6 +368,15 @@ fn consume(
         ));
     };
     let row = &state.read_requests[index];
+    if row.runtime_context.as_deref() != runtime_context {
+        return Ok(result(
+            "approval-unavailable",
+            false,
+            None,
+            "unavailable",
+            None,
+        ));
+    }
     if !row.matches(evidence, resource, origin) {
         return Ok(result(
             "approval-stale",
@@ -346,23 +386,12 @@ fn consume(
             None,
         ));
     }
-    if row.status == "consumed" {
-        return Ok(result(
-            "approval-consumed",
-            false,
-            Some(reference),
-            "consumed",
-            None,
-        ));
-    }
-    if row.status == "revoked" {
-        return Ok(result(
-            "approval-revoked",
-            false,
-            Some(reference),
-            "revoked",
-            None,
-        ));
+    if let Some((code, status)) = match row.status.as_str() {
+        "consumed" => Some(("approval-consumed", "consumed")),
+        "revoked" => Some(("approval-revoked", "revoked")),
+        _ => None,
+    } {
+        return Ok(result(code, false, Some(reference), status, None));
     }
     if let Some(grant) = &row.grant {
         if time < grant.issued_at_ms || time >= grant.expires_at_ms {
@@ -377,6 +406,13 @@ fn consume(
         let approval = grant.approval_id.clone();
         let grant_binding = grant.binding.clone();
         let binding = row.binding.clone();
+        receipts::capture(
+            state,
+            index,
+            super::authorization_receipts::Status::Consumed,
+            time,
+            None,
+        )?;
         state.read_requests[index].status = "consumed".into();
         let event = state.event("read_grant_consumed", context, json!({"request_id":reference,"approval_id":approval}), json!({}),
                 json!({"request_binding":binding,"grant_binding":grant_binding,"consumed_at_ms":time,"execution":"unobserved"}));
@@ -415,9 +451,22 @@ fn capture(
     resource: &str,
     time: u64,
 ) -> Result<Value, Error> {
+    capture_context(state, context, origin, evidence, resource, time, None)
+}
+
+fn capture_context(
+    state: &mut State,
+    context: &Context,
+    origin: &Origin,
+    evidence: &EvaluatedRequest,
+    resource: &str,
+    time: u64,
+    runtime_context: Option<&str>,
+) -> Result<Value, Error> {
     state.compact_authorization_at(time);
     if let Some(row) = state.read_requests.iter().find(|r| {
         r.status == "pending"
+            && r.runtime_context.as_deref() == runtime_context
             && time >= r.created_at_ms
             && time < r.pending_expires_at_ms
             && r.matches(evidence, resource, origin)
@@ -458,6 +507,7 @@ fn capture(
                 .ok_or(Error::Invalid("read resource missing"))?,
         ),
         resource_digest: resource.into(),
+        runtime_context: runtime_context.map(str::to_owned),
         origin: origin.clone(),
         provenance: context.provenance(),
         binding: String::new(),
@@ -479,6 +529,16 @@ fn capture(
 
 /// Explicit denial-only entry point; MCP cannot use it to issue a grant.
 pub(super) fn deny(context: &Context, id: &str, confirmed: bool) -> Result<Value, Error> {
+    if let Some(value) = receipts::operator(
+        context,
+        id,
+        super::authorization_receipts::Decision::Deny,
+        None,
+        None,
+        now()?,
+    )? {
+        return Ok(value);
+    }
     Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
         let index = state
             .read_requests
@@ -502,7 +562,7 @@ pub(super) fn deny(context: &Context, id: &str, confirmed: bool) -> Result<Value
         if row.status == "revoked" {
             return Ok(json!({"request_id":id,"status":"revoked"}));
         }
-        Ok(revoke_request(state, context, index, None))
+        revoke_request(state, context, index, None, now()?)
     })
 }
 
@@ -530,6 +590,20 @@ fn authorize_with_clock(
     if !(1..=3600).contains(&ttl) || reason.is_some_and(|r| r.len() > 4096) {
         return Err(Error::Invalid("invalid grant lifetime or reason"));
     }
+    if let Some(value) = receipts::operator(
+        context,
+        id,
+        if revoke {
+            super::authorization_receipts::Decision::Deny
+        } else {
+            super::authorization_receipts::Decision::Approve
+        },
+        (!revoke).then_some(ttl),
+        reason,
+        clock()?,
+    )? {
+        return Ok(value);
+    }
     let snapshot = if revoke {
         None
     } else {
@@ -548,7 +622,7 @@ fn authorize_with_clock(
             ) {
                 return Err(Error::Invalid("request is terminal"));
             }
-            return Ok(revoke_request(state, context, index, reason));
+            return revoke_request(state, context, index, reason, clock()?);
         }
         issue_checked(
             state,
@@ -569,6 +643,7 @@ fn check(
     snapshot: &super::runtime::consumer::Snapshot,
     time: u64,
 ) -> Result<usize, Error> {
+    state.check_operations()?;
     let index = state
         .read_requests
         .iter()
@@ -719,7 +794,15 @@ fn revoke_request(
     context: &Context,
     index: usize,
     reason: Option<&str>,
-) -> Value {
+    time: u64,
+) -> Result<Value, Error> {
+    receipts::capture(
+        state,
+        index,
+        super::authorization_receipts::Status::Revoked,
+        time,
+        reason,
+    )?;
     let row = &mut state.read_requests[index];
     row.status = "revoked".into();
     let id = row.request_id.clone();
@@ -735,7 +818,7 @@ fn revoke_request(
         json!({"request_binding":binding}),
     );
     state.record(event);
-    json!({"request_id":id,"status":"revoked"})
+    Ok(json!({"request_id":id,"status":"revoked"}))
 }
 fn operator_event(
     state: &mut State,

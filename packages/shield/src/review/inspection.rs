@@ -2,6 +2,7 @@
 use super::{Context, Error, project};
 use serde::Deserialize;
 use serde_json::{Value, json};
+pub(in crate::review) mod source;
 
 #[cfg(test)]
 mod tests;
@@ -36,19 +37,26 @@ impl RuleRef {
     }
 }
 
-/// Lists or selects rules of the verified review state, for the operator CLI.
+/// Lists or selects lock-bound source fields of the recorded review state.
 pub(super) fn rules(context: &Context, selector: Option<&Value>) -> Result<Value, Error> {
-    let state = project::captured(context)?;
-    captured_rules(
+    let state = project::captured_inspection(context)?;
+    let candidate = source::rules(
         context,
         &state.candidates["project"],
+        &state.operator,
+        &state.policy_revision,
+        selector,
+    )?;
+    captured_rules(
+        context,
+        &candidate,
         &state.operator,
         &state.policy_revision,
         selector,
     )
 }
 
-/// Lists or selects rules of one already validated captured candidate.
+/// Lists or selects rules of one selected, lock-bound display capture.
 ///
 /// MCP supplies the selected retained capture; CLI uses the current review state.
 /// This constructs no evaluator: a lookup reads only the requested pack.
@@ -58,6 +66,29 @@ pub(super) fn captured_rules(
     metadata: &Value,
     revision: &str,
     selector: Option<&Value>,
+) -> Result<Value, Error> {
+    captured_rules_with_resolution(
+        context,
+        candidate,
+        metadata,
+        revision,
+        selector,
+        |index, artifact| resolution(artifact, candidate, index).map(std::sync::Arc::new),
+    )
+}
+
+/// A connection can reuse only display rows bound to this immutable capture.
+pub(super) fn captured_rules_with_resolution(
+    context: &Context,
+    candidate: &Value,
+    metadata: &Value,
+    revision: &str,
+    selector: Option<&Value>,
+    mut resolve: impl FnMut(
+        usize,
+        &str,
+    )
+        -> Result<std::sync::Arc<std::collections::BTreeMap<String, Value>>, Error>,
 ) -> Result<Value, Error> {
     let selected: Option<RuleRef> = selector
         .map(|value| {
@@ -118,7 +149,7 @@ pub(super) fn captured_rules(
             },
             |rule| vec![rule],
         );
-        let resolution = resolution(artifact, candidate, index)?;
+        let resolution = resolve(index, artifact)?;
         for rule in rules {
             let mut rule = public_pack_rule(rule, &pack["profile"]);
             rule["rule_ref"] =
@@ -191,7 +222,7 @@ fn custom_rows(source: &str, project: &str) -> Result<Vec<Value>, Error> {
 
 /// Variable values and overrides of the candidate's selection at `index`.
 /// How a selection's entries resolve, with the layer that supplied each value.
-fn resolution(
+pub(super) fn resolution(
     artifact: &str,
     candidate: &Value,
     index: usize,
@@ -300,7 +331,7 @@ pub(super) fn selection_settings(candidate: &Value, index: usize) -> Result<Sett
 }
 
 pub(super) fn project_rules(source: &str, _project: &str) -> Result<Value, Error> {
-    crate::policy::normalize_retained_custom(source).map_err(Into::into)
+    crate::policy::inspect_retained_custom(source).map_err(Into::into)
 }
 pub(super) fn public_pack_rule(rule: &Value, profile: &Value) -> Value {
     let mut result = rule.clone();

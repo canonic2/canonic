@@ -64,7 +64,7 @@ pub(in crate::review) fn plan_for(
 }
 
 /// Write, update or remove each adapter's prefix rules for the given policy.
-/// The caller holds the writer lock and supplies that checkpoint's mode.
+/// The caller holds the projection-publication lease and supplies the checked mode.
 pub(crate) fn sync(
     root: &Path,
     meta: &Value,

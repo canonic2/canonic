@@ -2,6 +2,9 @@
 
 use super::{Error, State};
 
+#[cfg(test)]
+mod tests;
+
 pub(super) fn special_builtin(name: &str) -> bool {
     matches!(
         name,
@@ -208,6 +211,9 @@ fn capture(
         + state.exported.iter().map(String::len).sum::<usize>()
         + state.arg0.as_ref().map_or(0, String::len)
         + 128;
+    let size = size
+        .checked_add(state.retained_directory_bytes()?)
+        .ok_or(Error::Limit)?;
     *bytes = bytes.checked_add(size).ok_or(Error::Limit)?;
     if *bytes > super::budget::MAX_EVIDENCE_BYTES {
         return Err(Error::Limit);

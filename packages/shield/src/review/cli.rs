@@ -12,7 +12,7 @@ pub(crate) fn context(input: &cli::ReviewContext) -> Result<Context, Error> {
             return Err(Error::Invalid("invalid attribution"));
         }
     }
-    let mut context = super::open_diagnostics(&input.project)?;
+    let mut context = super::open_connection(&input.project)?;
     // A declared agent selects its review adapter only when protected project
     // state records its integration; otherwise it is attribution alone.
     let agent = input.agent.as_deref().map(|agent| match agent {
@@ -43,7 +43,7 @@ fn recorded(context: &Context, agent: &str) -> bool {
     let Some(adapter) = crate::agents::find(agent) else {
         return false;
     };
-    super::storage::Store::open(Path::new(&context.project_root))
+    super::storage::Store::inspect(Path::new(&context.project_root))
         .and_then(|store| store.read_diagnostic_checkpoint().map(|(state, _)| state))
         .and_then(|state| {
             state.check(context)?;

@@ -50,6 +50,13 @@ pub(super) fn main_source() -> Result<Source, Error> {
 /// Authenticates a source's catalog and admits it to the project's retained checkpoints.
 pub(super) fn checked_catalog(context: &Context, source: &Source) -> Result<Catalog, Error> {
     context.progress.stage(super::progress::Stage::Catalog);
+    let current = state::checkpoint(context)?;
+    if let Some(catalog) =
+        crate::review::registry_trust::checked_catalog(context, source, &current)?
+    {
+        super::pack_updates::retain(context, source, &catalog);
+        return Ok(catalog);
+    }
     let catalog = catalog(&context.fetcher, source)?;
     retain_catalog(context, &catalog)?;
     super::pack_updates::retain(context, source, &catalog);
@@ -142,6 +149,9 @@ pub(super) fn retained(checkpoints: &Checkpoints) -> Result<BTreeMap<String, Val
 
 /// Authenticates a source's current catalog without retaining it.
 pub(super) fn catalog(fetcher: &Fetcher, source: &Source) -> Result<Catalog, Error> {
+    if let Some(catalog) = crate::review::registry_trust::catalog(fetcher, source)? {
+        return Ok(catalog);
+    }
     fetcher
         .catalog(source, SystemTime::now())
         .map_err(|error| acquisition_error(error, source.is_signed()))
@@ -149,6 +159,7 @@ pub(super) fn catalog(fetcher: &Fetcher, source: &Source) -> Result<Catalog, Err
 
 /// Reads one release and checks it against its catalog digest, as UTF-8 text.
 pub(super) fn artifact(fetcher: &Fetcher, source: &Source, entry: &Entry) -> Result<String, Error> {
+    crate::review::registry_trust::check_entry(source, entry, true)?;
     let limit = if source.is_signed() {
         MAX_HOSTED_ARTIFACT
     } else {
@@ -240,15 +251,15 @@ pub(super) fn enrollment(fetcher: &Fetcher, location: &str) -> Result<Source, Er
         .map_err(|error| acquisition_error(error, location.starts_with("https://")))
 }
 
-/// Refuses an alias that cannot be added, before any network access.
+/// Refuses an alias that cannot be enrolled or replaced, before network access.
 pub(super) fn addable(registrations: &Registrations, alias: &str) -> Result<(), Error> {
     if !names::is_identifier(alias) {
         Err(Error::Invalid("invalid registry alias"))
     } else if alias == BUILTIN {
         Err(Error::Invalid("main is reserved"))
-    } else if registrations.sources.contains_key(alias) {
-        Err(Error::Invalid("registry alias already enrolled"))
-    } else if registrations.sources.len() >= MAX_REGISTRATIONS {
+    } else if !registrations.sources.contains_key(alias)
+        && registrations.sources.len() >= MAX_REGISTRATIONS
+    {
         Err(policy::Error::Limit.into())
     } else {
         Ok(())
@@ -269,9 +280,15 @@ pub(super) fn registration_error(error: RegistrationError) -> Error {
         RegistrationError::Link => Error::Invalid("global registry configuration cannot be a link"),
         RegistrationError::Path => Error::Invalid("global configuration parent"),
         RegistrationError::Changed => Error::Invalid("global registries changed; review again"),
+        RegistrationError::CommittedRepair => Error::Invalid(
+            "global registry change committed; configuration projection needs repair",
+        ),
         RegistrationError::Locked(lock) => Error::Io(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
-            format!("global registries are locked: {}", lock.display()),
+            format!(
+                "global registries have a live or unverifiable legacy owner: {}; close other registry writers and inspect the marker's ownership before repairing it; an unknown owner is never removed automatically",
+                lock.display()
+            ),
         )),
         RegistrationError::NotDurable(error)
         | RegistrationError::LockRemains(_, error)
@@ -283,6 +300,9 @@ pub(super) fn registration_error(error: RegistrationError) -> Error {
 /// Maps a read or discovery refusal; `signed` selects HTTPS wording.
 fn acquisition_error(error: AcquisitionError, signed: bool) -> Error {
     let message = match error {
+        AcquisitionError::Cancelled => return Error::Cancelled,
+        AcquisitionError::Trust(_) => "versioned registry trust refused",
+        AcquisitionError::Checkpoint(error) => return checkpoint_error(&error),
         AcquisitionError::Location if signed => "HTTPS registry requires a safe URL ending in /",
         AcquisitionError::Location => "registry directory required",
         AcquisitionError::Path => "invalid registry artifact path",
@@ -313,6 +333,7 @@ fn acquisition_error(error: AcquisitionError, signed: bool) -> Error {
 
 fn catalog_error(error: &CatalogError) -> Error {
     Error::Invalid(match error {
+        CatalogError::Trust(_) => "versioned registry trust refused",
         CatalogError::Limit => return policy::Error::Limit.into(),
         CatalogError::SignatureMissing => "registry signature missing",
         CatalogError::SignatureInvalid => "registry catalog signature invalid",

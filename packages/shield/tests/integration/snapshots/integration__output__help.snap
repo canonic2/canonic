@@ -11,9 +11,10 @@ Commands:
   status         Show policy, integrations and pending requests
   enable         Resume this project's native Shield checks after confirmation
   disable        Pause this project's native Shield checks after confirmation, preserving policy and setup
-  doctor         Check configuration and installation prerequisites; changes nothing
+  doctor         Check configuration and installation prerequisites without changing policy
   docs           Read and search the documentation bundled with this version, without enrollment
   mcp            Set up agent hooks and MCP, or serve Shield's MCP tools
+  sdk            Register an explicitly reviewed read-only SDK mapping
   protection     Change whether agents may read or change protected settings and policy files
   policy         Show policy or review pending changes and history settings
   pack           Install, update, configure, remove, find or inspect permission packs

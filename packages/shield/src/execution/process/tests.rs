@@ -1,5 +1,52 @@
 use super::*;
 
+#[test]
+fn spawner_uses_the_exact_prepared_argv_and_environment() {
+    let submitted = request();
+    let launch = super::super::launch::EffectiveLaunch::prepare(&submitted).unwrap();
+    let command = command(&launch);
+    assert_eq!(
+        command.get_program(),
+        std::ffi::OsStr::new(&launch.request().executable)
+    );
+    assert_eq!(
+        command.get_args().collect::<Vec<_>>(),
+        launch
+            .request()
+            .arguments
+            .iter()
+            .map(std::ffi::OsStr::new)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        command
+            .get_envs()
+            .map(|(key, value)| (
+                key.to_str().unwrap().to_owned(),
+                value.unwrap().to_str().unwrap().to_owned()
+            ))
+            .collect::<std::collections::BTreeMap<_, _>>(),
+        *launch.environment()
+    );
+
+    // Inspecting get_envs alone would miss a removed env_clear: it reports only
+    // explicit changes. Observe an actual child's environment without printing
+    // inherited values if this protection ever regresses.
+    let mut probe = submitted;
+    probe.executable = "/usr/bin/env".into();
+    probe.arguments.clear();
+    let probe = super::super::launch::EffectiveLaunch::process_fixture(&probe);
+    let output = super::command(&probe.expect("captured fixture launch"))
+        .stdout(Stdio::piped())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "owned environment probe failed");
+    assert!(
+        output.stdout == b"LC_ALL=C\n",
+        "child environment was not exactly the prepared environment"
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn linux_proc_stat_ignores_zombies_and_handles_parentheses_in_names() {
@@ -42,11 +89,11 @@ fn timeout_and_drop_kill_only_owned_children_and_reap_them() {
         flag: Arc::new(AtomicUsize::new(0)),
         ids: vec![],
     };
-    let mut child = OwnedChild::spawn(&request()).unwrap();
+    let mut child = OwnedChild::spawn_fixture(&request()).unwrap();
     let pid = Pid::from_raw(i32::try_from(child.child.id()).unwrap());
     assert_eq!(child.wait(&signals, Instant::now(), 20).unwrap().code, 124);
     assert_eq!(killpg(pid, None), Err(nix::errno::Errno::ESRCH));
-    let child = OwnedChild::spawn(&request()).unwrap();
+    let child = OwnedChild::spawn_fixture(&request()).unwrap();
     let pid = Pid::from_raw(i32::try_from(child.child.id()).unwrap());
     drop(child);
     assert_eq!(killpg(pid, None), Err(nix::errno::Errno::ESRCH));
@@ -57,7 +104,7 @@ fn cancellation_forwards_signal_and_reports_it() {
         flag: Arc::new(AtomicUsize::new(signal_hook::consts::SIGINT as usize)),
         ids: vec![],
     };
-    let mut child = OwnedChild::spawn(&request()).unwrap();
+    let mut child = OwnedChild::spawn_fixture(&request()).unwrap();
     let outcome = child.wait(&signals, Instant::now(), 5000).unwrap();
     assert_eq!(outcome.code, 130);
     assert_eq!(outcome.signal, Some(2));
@@ -76,7 +123,7 @@ fn ignored_term_escalates_to_kill_and_reaps() {
         "acme".into(),
         ready.to_str().unwrap().into(),
     ];
-    let mut child = OwnedChild::spawn(&request).unwrap();
+    let mut child = OwnedChild::spawn_fixture(&request).unwrap();
     let start = Instant::now();
     while !ready.exists() {
         assert!(start.elapsed() < Duration::from_secs(3));
@@ -112,7 +159,7 @@ fn tree(root: &std::path::Path, exit_leader: bool) -> OwnedChild {
         root.to_str().expect("temporary path").into(),
         if exit_leader { "exit" } else { "wait" }.into(),
     ];
-    let child = OwnedChild::spawn(&input).expect("owned process tree");
+    let child = OwnedChild::spawn_fixture(&input).expect("owned process tree");
     let start = Instant::now();
     while !root.join("leader-ready").exists() {
         assert!(start.elapsed() < Duration::from_secs(3), "tree ready");
@@ -142,7 +189,7 @@ fn assert_tree_gone(root: &std::path::Path) {
 #[test]
 fn group_cleanup_survives_leader_exit_and_preserves_unrelated_child() {
     let root = assert_fs::TempDir::new().expect("temporary tree");
-    let unrelated = OwnedChild::spawn(&request()).expect("separate group");
+    let unrelated = OwnedChild::spawn_fixture(&request()).expect("separate group");
     let mut child = tree(root.path(), true);
     let signals = Signals {
         flag: Arc::new(AtomicUsize::new(0)),
@@ -239,7 +286,7 @@ fn moved_leader_cleanup(with_descendant: bool) {
         "exited-abort",
     ] {
         let root = assert_fs::TempDir::new().expect("owned leader fixture");
-        let unrelated = OwnedChild::spawn(&request()).expect("destination group");
+        let unrelated = OwnedChild::spawn_fixture(&request()).expect("destination group");
         std::fs::write(root.path().join("leader-group"), unrelated.id().to_string())
             .expect("owned destination identity");
         if with_descendant {
@@ -383,7 +430,7 @@ fn moved_leader(root: &std::path::Path) -> OwnedChild {
         !super::super::supported(&input),
         "harness remains blocked by public binding"
     );
-    let child = OwnedChild::spawn(&input).expect("owned moving leader");
+    let child = OwnedChild::spawn_fixture(&input).expect("owned moving leader");
     let start = Instant::now();
     while !root.join("leader-ready").exists() {
         assert!(start.elapsed() < Duration::from_secs(3), "leader ready");
@@ -490,7 +537,7 @@ fn escaped_tree(kind: &str, delayed_start: bool) {
         !super::super::supported(&input),
         "test harness cannot cross the checked launch boundary"
     );
-    let mut child = OwnedChild::spawn(&input).expect("owned fixture leader");
+    let mut child = OwnedChild::spawn_fixture(&input).expect("owned fixture leader");
     let start = Instant::now();
     while !root.path().join("escaped-ready").exists() {
         // Harness readiness is a precondition, not a launch-latency guarantee.

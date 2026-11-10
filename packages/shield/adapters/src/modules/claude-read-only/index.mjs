@@ -2,7 +2,7 @@ import { realpath } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import { transport } from '../process-transport/index.mjs';
 import { randomUUID } from 'node:crypto';
-import { response } from '../enforcement-response/index.mjs';
+import { response, PROTOCOL_VERSION } from '../enforcement-response/index.mjs';
 import { ApprovalReferences, PendingReads, denialReason } from './state.mjs';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -27,11 +27,13 @@ export async function createClaudeReadOnlyHooks(options) {
   const consumerId = randomUUID();
   const approvals = new ApprovalReferences();
   const invoke = (id, cwd, operation, projectId, signal, host, reference) => {
-    const input = Buffer.from(JSON.stringify({ protocol_version: 1, request_id: id,
+    const input = Buffer.from(JSON.stringify({ protocol_version: PROTOCOL_VERSION, request_id: id,
       expected_project_id: projectId ?? null, cwd, operation, host, approval_request_id: reference ?? null }));
     if (input.length > 65_536) throw Error('Shield request limit');
     return transport({ binary, args: ['__internal', 'enforce-request', '--project', project], timeoutMs, signal, input,
-      expected: { id, project, projectId, reference, phase: operation.kind, operation: operation.kind === 'read-text' ? { ...operation, path: resolve(operation.path) } : undefined } },
+      expected: { id, project, projectId, reference, phase: operation.kind,
+        reportedRequestId: operation.kind === 'completion' ? operation.request_id : undefined,
+        operation: operation.kind === 'read-text' ? { ...operation, path: resolve(operation.path) } : undefined } },
     response);
   };
   const registered = await invoke('registration', project, { kind: 'register' });

@@ -11,8 +11,29 @@ impl Views {
         plans: Option<(configuration::Evaluator, configuration::Evaluator)>,
     ) -> Result<(String, String), Error> {
         let (base_plan, next_plan) = plans.map_or((None, None), |(a, b)| (Some(a), Some(b)));
-        let base = self.retain_prepared(context, before.0, before.1, base_plan, None)?;
-        let next = self.retain_prepared(context, after.0, after.1, next_plan, Some(&base))?;
+        let base = self.retain_prepared(context, before.0, before.1, base_plan, None, None)?;
+        let next = self.retain_prepared(context, after.0, after.1, next_plan, None, Some(&base))?;
+        Ok((base, next))
+    }
+
+    pub(in crate::review::mcp) fn retain_recorded_pair(
+        &mut self,
+        context: &Context,
+        before: (&Value, &Value),
+        after: (&Value, &Value),
+        before_revision: &str,
+        after_revision: Option<&str>,
+    ) -> Result<(String, String), Error> {
+        let base = self.retain_prepared(
+            context,
+            before.0,
+            before.1,
+            None,
+            Some(before_revision),
+            None,
+        )?;
+        let next =
+            self.retain_prepared(context, after.0, after.1, None, after_revision, Some(&base))?;
         Ok((base, next))
     }
 
@@ -31,8 +52,9 @@ impl Views {
         }
         // Read required authority only under pressure. A handle cache never owns
         // proposal lifetime and cannot decide that an outstanding review ended.
-        let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
-        state.check(context)?;
+        let (state, _) =
+            Store::inspect(Path::new(&context.project_root))?.read_diagnostic_checkpoint()?;
+        state.check_inspection(context)?;
         let pinned: BTreeSet<_> = state
             .proposals
             .iter()

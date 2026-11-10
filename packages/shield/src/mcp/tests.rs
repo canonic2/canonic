@@ -58,6 +58,47 @@ pub(crate) fn fixture(agent: Option<&str>) -> (Server, Project) {
     (server, Project { root, review })
 }
 
+#[test]
+fn fresh_connection_adopts_one_runtime_epoch_after_readonly_status_and_never_a_later_rotation() {
+    let (server, project) = fixture(Some("claude"));
+    let path = project.root.path().join(".shield/review/state.json");
+    let clear = || {
+        let mut raw: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        raw["operator"]
+            .as_object_mut()
+            .unwrap()
+            .remove("runtime_incarnation");
+        std::fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
+    };
+    clear();
+    let original = std::fs::read(&path).unwrap();
+    let old = server.review();
+    let status =
+        crate::review::mcp::call(&old, &server.connection, "status", &json!({}), &|| Ok(()));
+    assert!(status["error"].is_null(), "{status}");
+    assert_eq!(status["data"]["operation_epoch_pending"], true);
+    assert!(status["data"]["active_candidate_id"].is_null());
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+    server
+        .normalize_runtime("policy_propose", &json!({}))
+        .unwrap();
+    let current = server.review();
+    assert_ne!(current.project_id, old.project_id);
+    assert_eq!(current.connection_id, old.connection_id);
+    assert!(server.preparations.unused());
+    server
+        .normalize_runtime("policy_propose", &json!({}))
+        .unwrap();
+    clear();
+    let second = std::fs::read(&path).unwrap();
+    let error = server
+        .normalize_runtime("policy_propose", &json!({}))
+        .unwrap_err();
+    assert!(error.to_string().contains("reconnect Shield"));
+    assert_eq!(server.review().project_id, current.project_id);
+    assert_eq!(std::fs::read(&path).unwrap(), second);
+}
+
 pub(crate) fn initialize(capabilities: &Value, client: &str) -> [Value; 2] {
     [
         json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":VERSION,
@@ -339,6 +380,7 @@ fn catalog_publishes_every_tool_and_marks_all_state_changes_as_mutations() {
             "registry_add",
             "registry_default",
             "registry_remove",
+            "registry_trust",
             "request_approve",
             "request_deny",
             "review_defer",
