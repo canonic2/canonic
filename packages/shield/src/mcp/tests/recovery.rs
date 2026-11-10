@@ -93,8 +93,16 @@ fn recovery_stale_hooks_reach_reviewed_reconciliation_and_native_retry() {
                 std::fs::write(&mcp_path, doc.to_string()).unwrap();
             }
             let input = json!({"command":"pwd","workdir":project.review.project_root});
-            let denied = native_at(&stale, &project, agent, "Bash", input.clone());
-            assert_eq!(denied["hookSpecificOutput"]["permissionDecision"], "deny");
+            // Without a session folder (Claude here has no CLAUDE_PROJECT_DIR)
+            // the stale launch cannot open policy; Codex's session folder is
+            // the project, so its stale hook follows it the way Git would.
+            let stale_hook = native_at(&stale, &project, agent, "Bash", input.clone());
+            let decision = &stale_hook["hookSpecificOutput"]["permissionDecision"];
+            if agent == "codex" {
+                assert_ne!(decision, "deny", "{stale_hook}");
+            } else {
+                assert_eq!(decision, "deny", "{stale_hook}");
+            }
             let recovery = native_at(&stale, &project, agent, "mcp__shield__mcp_setup", json!({}));
             assert_ne!(recovery["hookSpecificOutput"]["permissionDecision"], "deny");
             let conflict = transport.call(json!(8), "mcp_setup", &args);

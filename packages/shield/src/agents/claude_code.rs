@@ -104,6 +104,17 @@ impl AgentAdapter for ClaudeCode {
     fn working_file_categories(&self) -> &'static [&'static str] {
         &["temporary", "session_tool_results", "skills"]
     }
+    /// Claude gives hooks the folder whose settings it loaded; the hook
+    /// input's `cwd` instead follows the agent's `cd`.
+    fn session_dir(
+        &self,
+        _host: &Value,
+        env: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+    ) -> Option<std::path::PathBuf> {
+        env("CLAUDE_PROJECT_DIR")
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.is_absolute())
+    }
     fn working_files(&self, host: &Value, project: &Path) -> crate::location::WorkingFiles {
         let config = super::working_files::configuration("CLAUDE_CONFIG_DIR", ".claude");
         let mut scope = super::working_files::temporary(config.as_deref());

@@ -83,6 +83,17 @@ impl AgentAdapter for Codex {
     fn working_file_categories(&self) -> &'static [&'static str] {
         &["temporary", "skills"]
     }
+    /// Codex's hook `cwd` is the session folder, never a command's workdir.
+    fn session_dir(
+        &self,
+        host: &Value,
+        _env: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+    ) -> Option<std::path::PathBuf> {
+        host["cwd"]
+            .as_str()
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.is_absolute())
+    }
     fn working_files(&self, _: &Value, project: &Path) -> crate::location::WorkingFiles {
         let config = super::working_files::configuration("CODEX_HOME", ".codex");
         let mut scope = super::working_files::temporary(config.as_deref());

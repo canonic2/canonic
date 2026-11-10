@@ -39,7 +39,8 @@ pub(crate) fn run(
         };
     }
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let target = match project_path(project, &cwd) {
+    let session = session_dir(input.agent.as_deref());
+    let target = match serve_project(project, &cwd, session.as_deref()) {
         Ok(target) => target,
         Err(error) => {
             eprintln!("Cannot start Shield MCP server: {error}");
@@ -151,14 +152,7 @@ pub(crate) fn project_path(
     cwd: &Path,
 ) -> Result<PathBuf, crate::review::Error> {
     let cwd = cwd.canonicalize()?;
-    let nearest = cwd.ancestors().find(|path| {
-        [".shield/config.yml", ".shield/review"].iter().any(|name| {
-            match fs::symlink_metadata(path.join(name)) {
-                Ok(_) => true,
-                Err(error) => error.kind() != io::ErrorKind::NotFound,
-            }
-        })
-    });
+    let nearest = nearest_project(&cwd);
     let Some(project) = project.filter(|path| *path != Path::new(".")) else {
         return Ok(nearest.unwrap_or(&cwd).into());
     };
@@ -177,6 +171,48 @@ pub(crate) fn project_path(
         return Ok(selected);
     }
     Ok(selected)
+}
+
+/// The agent's session folder from this process's host-set environment.
+fn session_dir(agent: Option<&str>) -> Option<PathBuf> {
+    crate::agents::find(agent?)?
+        .session_dir(&serde_json::Value::Null, &|name| std::env::var_os(name))
+}
+
+/// The project an MCP server serves, chosen like a native hook's: the nearest
+/// project holding the folder the host started the session in (the agent's
+/// session folder, else the server's launch folder), so the server and hooks
+/// agree after a move or in a worktree that inherited an absolute `--project`.
+/// Outside every project the launch selection stands.
+pub(crate) fn serve_project(
+    project: Option<&Path>,
+    cwd: &Path,
+    session: Option<&Path>,
+) -> Result<PathBuf, crate::review::Error> {
+    match session_project(session.unwrap_or(cwd)) {
+        Some(found) => Ok(found),
+        None => project_path(project, cwd),
+    }
+}
+
+/// The nearest folder at or above a canonical `cwd` that holds Shield project files.
+fn nearest_project(cwd: &Path) -> Option<&Path> {
+    cwd.ancestors().find(|path| {
+        [".shield/config.yml", ".shield/review"].iter().any(|name| {
+            match fs::symlink_metadata(path.join(name)) {
+                Ok(_) => true,
+                Err(error) => error.kind() != io::ErrorKind::NotFound,
+            }
+        })
+    })
+}
+
+/// The project holding the folder a host started its session in, found the way
+/// Git finds a repository. A native hook uses it instead of its `--project`:
+/// after a move, or in a worktree that inherited ignored agent settings, an
+/// absolute `--project` names a folder that does not hold the session.
+pub(crate) fn session_project(session: &Path) -> Option<PathBuf> {
+    nearest_project(&session.canonicalize().ok()?).map(Path::to_path_buf)
 }
 
 fn absolute_project(project: &Path, cwd: &Path) -> PathBuf {

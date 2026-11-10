@@ -106,6 +106,44 @@ fn bootstrap_pinned_old_launch_selects_nearest_copy_or_move_for_review() {
 }
 
 #[test]
+fn serve_project_agrees_with_hooks_in_a_worktree_awaiting_enrollment() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let parent = root.path().join("acme");
+    configured(&parent);
+    let parent = parent.canonicalize().unwrap();
+    // A fresh worktree has the committed config but no ignored review state.
+    let worktree = parent.join(".gate/workspaces/feature");
+    fs::create_dir_all(worktree.join(".shield")).unwrap();
+    fs::write(
+        worktree.join(".shield/config.yml"),
+        "schema_version: 1\npacks: []\n",
+    )
+    .unwrap();
+    let worktree = worktree.canonicalize().unwrap();
+    // The inherited server entry names the parent; the server still serves
+    // the worktree, from its launch folder or the agent's session folder.
+    let served = serve_project(Some(&parent), &worktree, None).unwrap();
+    assert_eq!(served, worktree);
+    assert_eq!(
+        serve_project(Some(&parent), &parent, Some(&worktree)).unwrap(),
+        worktree
+    );
+    assert_eq!(session_project(&worktree).as_ref(), Some(&served));
+    // So its enrollment review, the recovery for hooks that cannot open the
+    // unenrolled worktree, runs in the worktree rather than the parent.
+    assert!(
+        crate::review::bootstrap::inspect(&served)
+            .unwrap()
+            .bootstrap_required()
+    );
+    // Outside every project the explicit selection stands.
+    assert_eq!(
+        serve_project(Some(&parent), root.path(), None).unwrap(),
+        parent
+    );
+}
+
+#[test]
 fn bootstrap_other_enrollments_cannot_replace_explicit_authority() {
     let root = assert_fs::TempDir::new().unwrap();
     let selected = root.path().join("selected");

@@ -362,7 +362,7 @@ fn native_host_plugin_and_hook_directories_require_administrative_access() {
 }
 
 #[test]
-fn native_cwd_cannot_select_a_nested_or_sibling_policy() {
+fn native_tool_cwd_cannot_select_a_policy_but_a_codex_session_folder_does() {
     let (root, outer) = fixture();
     let sibling = assert_fs::TempDir::new().unwrap();
     let nested = root.path().join("nested");
@@ -378,18 +378,80 @@ fn native_cwd_cannot_select_a_nested_or_sibling_policy() {
         let inner = review::mcp::initialize_fixture(cwd, &bundle);
         assert_ne!(outer.project_id, inner.project_id);
     }
-    for cwd in [
-        nested.as_path(),
-        sibling.path(),
-        root.path().parent().unwrap(),
-    ] {
+    let decide = |agent: &str, cwd: &Path| {
         let host = json!({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_use_id":"authority","session_id":"test","cwd":cwd,"tool_input":{"command":"git reset --hard"}});
-        let value = translate(root.path(), "codex", &serde_json::to_vec(&host).unwrap());
+        translate(root.path(), agent, &serde_json::to_vec(&host).unwrap())
+    };
+    let outside = root.path().parent().unwrap();
+    // Claude's cwd follows the agent's cd, so it never selects a project.
+    for cwd in [nested.as_path(), sibling.path(), outside] {
+        let value = decide("claude", cwd);
         assert_eq!(
             value["hookSpecificOutput"]["permissionDecision"], "deny",
             "{value}"
         );
     }
+    // Codex's cwd is the folder the person started the session in; like Git,
+    // its nearest project decides, and outside every project nothing changes.
+    assert_permitted(&decide("codex", &nested), "codex");
+    assert_permitted(&decide("codex", sibling.path()), "codex");
+    let value = decide("codex", outside);
+    assert_eq!(
+        value["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{value}"
+    );
+}
+
+#[test]
+fn claude_hooks_follow_the_session_folder_after_a_move_or_into_a_worktree() {
+    let (root, _) = fixture();
+    // A worktree inside the checkout holds its own committed project and the
+    // parent's ignored agent settings, whose hooks name the parent.
+    let worktree = root.path().join(".gate/workspaces/feature");
+    fs::create_dir_all(&worktree).unwrap();
+    let rules = json!({"schema_version":1,"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"],"rules":[{"id":"loose","decision":"allow","conditions":{"domain":"argv","executable":"git","arguments":{"kind":"any"}}}]}).to_string();
+    let bundle = Bundle::capture(
+        "schema_version: 1\npacks: []\nrules: custom.json\n",
+        &[],
+        Some(&rules),
+    )
+    .unwrap();
+    review::mcp::initialize_fixture(&worktree, &bundle);
+    let moved = root.path().join("moved-away");
+    let decide = |launch: &Path, session: &Path, cwd: &Path| {
+        let host = json!({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_use_id":"session","session_id":"test","cwd":cwd,"tool_input":{"command":"git reset --hard"}});
+        let session = session.as_os_str().to_owned();
+        let value = translate_hook(
+            launch,
+            find("claude").unwrap(),
+            &serde_json::to_vec(&host).unwrap(),
+            Event::Before,
+            &|name| (name == "CLAUDE_PROJECT_DIR").then(|| session.clone()),
+            &crate::diagnostics::Log::disabled(),
+        );
+        value["hookSpecificOutput"]["permissionDecision"].clone()
+    };
+    // The worktree's own policy decides, whether its hooks name the parent or
+    // a folder the checkout was moved away from.
+    for launch in [root.path(), moved.as_path()] {
+        assert_eq!(decide(launch, &worktree, &worktree), "allow");
+    }
+    // A session started in the parent cannot reach the worktree's policy by cd.
+    assert_eq!(decide(root.path(), root.path(), &worktree), "deny");
+    // A worktree awaiting enrollment fails closed rather than borrowing the
+    // parent's policy; its MCP server serves the same worktree for enrollment.
+    let fresh = root.path().join(".gate/workspaces/fresh");
+    fs::create_dir_all(fresh.join(".shield")).unwrap();
+    fs::write(
+        fresh.join(".shield/config.yml"),
+        "schema_version: 1\npacks: []\n",
+    )
+    .unwrap();
+    assert_eq!(decide(root.path(), &fresh, &fresh), "deny");
+    assert_eq!(
+        crate::mcp_io::serve_project(Some(root.path()), &fresh, Some(&fresh)).unwrap(),
+        fresh.canonicalize().unwrap()
+    );
 }
 
 #[test]

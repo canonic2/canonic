@@ -302,6 +302,16 @@ pub(crate) trait AgentAdapter: Sync {
     fn invalid_input_guidance(&self) -> Option<&'static str> {
         None
     }
+    /// The folder the host started the session in, from hook input or
+    /// environment the host sets and the agent cannot change. Hosts without
+    /// one keep the project their hook command names.
+    fn session_dir(
+        &self,
+        _host: &Value,
+        _env: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+    ) -> Option<std::path::PathBuf> {
+        None
+    }
     fn working_files(&self, host: &Value, project: &Path) -> crate::location::WorkingFiles;
     fn working_file_categories(&self) -> &'static [&'static str] {
         &[]

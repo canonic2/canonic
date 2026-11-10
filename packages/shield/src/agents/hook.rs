@@ -42,7 +42,14 @@ pub(crate) fn run(input: &NativeHook, log: &crate::diagnostics::Log) -> ExitCode
             adapter.reply(expected, &feedback::deny("protection-input-failure"))
         }
     } else {
-        translate_event(&input.project, adapter, &bytes, expected, log)
+        translate_hook(
+            &input.project,
+            adapter,
+            &bytes,
+            expected,
+            &|name| std::env::var_os(name),
+            log,
+        )
     };
     log.hook_output(&value);
     println!("{value}");
@@ -133,11 +140,24 @@ fn translate_logged(
     )
 }
 
+#[cfg(test)]
 pub(crate) fn translate_event(
     root: &Path,
     adapter: &dyn AgentAdapter,
     bytes: &[u8],
     event: Event,
+    log: &crate::diagnostics::Log,
+) -> Value {
+    translate_hook(root, adapter, bytes, event, &|_| None, log)
+}
+
+/// `env` reads the hook's environment, which locates the host's session folder.
+fn translate_hook(
+    root: &Path,
+    adapter: &dyn AgentAdapter,
+    bytes: &[u8],
+    event: Event,
+    env: &dyn Fn(&str) -> Option<std::ffi::OsString>,
     log: &crate::diagnostics::Log,
 ) -> Value {
     let host = crate::json::parse(bytes);
@@ -151,8 +171,6 @@ pub(crate) fn translate_event(
             deny("invalid-host-input")
         };
     };
-    // Cwd supplies context, not policy authority. Only a recorded relocation
-    // association can redirect an explicitly selected launch project.
     let Ok(launch) = std::path::absolute(root) else {
         return if event.post() {
             json!({})
@@ -160,6 +178,15 @@ pub(crate) fn translate_event(
             deny("runtime-unavailable")
         };
     };
+    // Like Git, the folder the host started the session in finds its project,
+    // so a moved checkout or a worktree that inherited the hook's absolute
+    // `--project` keeps working. The agent cannot change that folder.
+    let launch = adapter
+        .session_dir(&host, env)
+        .and_then(|session| crate::mcp_io::session_project(&session))
+        .unwrap_or(launch);
+    // Cwd supplies context, not policy authority. Only a recorded relocation
+    // association can redirect the launch project.
     let resolved = host["cwd"]
         .as_str()
         .and_then(|cwd| crate::mcp_io::project_path(Some(&launch), Path::new(cwd)).ok());
