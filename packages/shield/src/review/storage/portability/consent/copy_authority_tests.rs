@@ -15,7 +15,7 @@ fn original() -> (assert_fs::TempDir, Context) {
     (root, context)
 }
 
-fn copied(from: &Path, to: &Path) {
+pub(super) fn copied(from: &Path, to: &Path) {
     // Preserve private modes so the regression isolates authority rather than
     // incidental copy permission normalization. All paths are test-owned.
     for entry in fs::read_dir(from).expect("source directory inventory") {
@@ -209,15 +209,19 @@ fn forged_copied_activation_cannot_launder_unreviewed_source_into_private_consen
     );
 }
 
+/// Accepted trade-off: Shield cannot tell an authentic pre-continuity
+/// checkpoint from a legacy-shaped record planted at the same root in its
+/// owner-only review directory. Both upgrade in place and keep their authority;
+/// copies at another root still need private proof (tests above).
 #[test]
-fn same_root_owned_legacy_shape_cannot_mint_private_policy_consent() {
+fn same_root_owned_legacy_shape_upgrades_in_place_with_its_authority() {
     use std::os::unix::fs::MetadataExt as _;
     let home = assert_fs::TempDir::new().unwrap();
     let _consent = scoped_directory(home.path().join("consent"));
     let (root, _) = original();
     let store = Store::open(root.path()).unwrap();
     let mut forged = store.read_checkpoint().unwrap();
-    let source = forged_activation(&mut forged);
+    forged_activation(&mut forged);
     for field in [
         "runtime_incarnation",
         "administration_origin",
@@ -235,14 +239,29 @@ fn same_root_owned_legacy_shape_cannot_mint_private_policy_consent() {
     let path = store.directory.join("state.json");
     let bytes = serde_json::to_vec(&forged).unwrap();
     fs::write(&path, &bytes).unwrap();
-    assert!(matches!(
-        store.read_checkpoint(),
-        Err(Error::Invalid(
-            "retained policy has no private reviewed-content proof; checkpoint unchanged"
-        ))
-    ));
-    assert_eq!(fs::read(&path).unwrap(), bytes);
-    assert!(retained_record(&source).unwrap().is_none());
+    let upgraded = store.read_checkpoint().unwrap();
+    assert_eq!(upgraded.project_id, forged.project_id);
+    assert_eq!(
+        upgraded
+            .active
+            .as_ref()
+            .map(review::runtime::Active::activation_id),
+        forged
+            .active
+            .as_ref()
+            .map(review::runtime::Active::activation_id)
+    );
+    assert!(upgraded.operator["runtime_incarnation"].is_object());
+    // The original bytes remain as the recovery copy.
+    let recovery = store
+        .directory
+        .join(format!("bootstrap-{}.json", policy::fingerprint(&bytes)));
+    assert!(recovery.is_file());
+    // Repeated access is the ordinary current-state read.
+    assert_eq!(
+        store.read_checkpoint().unwrap().project_id,
+        forged.project_id
+    );
 }
 
 #[test]

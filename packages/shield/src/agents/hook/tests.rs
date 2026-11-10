@@ -1398,6 +1398,8 @@ fn diagnostic_evaluation_records_core_decision_without_command_source() {
         &log,
     );
     assert_permitted(&response, "codex");
+    // Records reach the file through the diagnostic writer thread.
+    log.flush();
     let text = fs::read_to_string(log.path().unwrap()).unwrap();
     let records: Vec<Value> = text
         .lines()

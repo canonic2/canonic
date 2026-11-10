@@ -139,6 +139,12 @@ pub(super) fn relocate(store: &Store, mut state: State) -> Result<State, Error> 
     if state.project_root == store.root && super::incarnation::matches(&state, &observed) {
         return Ok(state);
     }
+    if upgraded_in_place(store, &state) {
+        let state = adopt_in_place(store, &observed)?;
+        // Proven continuity lets the ordinary seeding export this installation's
+        // existing policy consent and administration to the private stores.
+        return super::administration::seed(store, state);
+    }
     let owned = *store
         .writer_owned
         .lock()
@@ -232,6 +238,70 @@ pub(super) fn relocate(store: &Store, mut state: State) -> Result<State, Error> 
         return Ok(prepared);
     }
     Err(Error::StaleSnapshot)
+}
+
+/// A checkpoint written before runtime continuity existed, still at its
+/// recorded root inside its owner-only review directory, is this installation
+/// upgraded in place rather than a copy. Any continuity or private-origin
+/// marker means a later writer produced it, so it never takes this path.
+pub(super) fn upgraded_in_place(store: &Store, state: &State) -> bool {
+    state.project_root == store.root
+        && [
+            "runtime_incarnation",
+            "administration_origin",
+            "policy_consent_key",
+        ]
+        .iter()
+        .all(|field| state.operator.get(*field).is_none())
+        && private_files::directory(&store.directory, false).is_ok()
+}
+
+/// Stamp the current incarnation on a pre-continuity checkpoint, keeping its
+/// project ID, activation, administration, integrations and history. The
+/// original bytes stay as a recovery copy until a later bootstrap cleanup.
+fn adopt_in_place(store: &Store, observed: &str) -> Result<State, Error> {
+    if *store
+        .writer_owned
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        == Some(std::thread::current().id())
+    {
+        // Same lock-order rule as relocation: an outer writer retries after release.
+        return Err(Error::StaleSnapshot);
+    }
+    let lock = store.lock(&|| Ok(()))?;
+    let bytes = store.checkpoint_bytes()?;
+    let mut current = super::upgrades::checkpoint(&bytes)?;
+    if super::incarnation::matches(&current, observed) {
+        // A concurrent first access already upgraded it.
+        lock.release()?;
+        return Ok(current);
+    }
+    if !upgraded_in_place(store, &current) {
+        return Err(Error::StaleSnapshot);
+    }
+    Store::validate_checkpoint(&current)?;
+    bootstrap::retain(store, &bytes)?;
+    adopt_incarnation(store, &mut current, &bytes, observed);
+    Store::validate_checkpoint(&current)?;
+    store.write(&mut current)?;
+    lock.release()?;
+    Ok(current)
+}
+
+/// Record this host's incarnation on a checkpoint `upgraded_in_place` admitted,
+/// with an audit event naming the original checkpoint bytes.
+pub(super) fn adopt_incarnation(store: &Store, state: &mut State, bytes: &[u8], observed: &str) {
+    super::incarnation::stamp(state, observed);
+    let context = Context::new(state.project_id.clone(), store.root.clone(), "cli");
+    let event = state.event(
+        "runtime_incarnation_adopted",
+        &context,
+        json!({}),
+        json!({}),
+        json!({"previous_checkpoint":crate::policy::fingerprint(bytes)}),
+    );
+    state.record(event);
 }
 
 #[expect(

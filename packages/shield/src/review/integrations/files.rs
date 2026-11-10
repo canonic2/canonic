@@ -231,6 +231,37 @@ fn create_parent(name: &str, parent: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+/// Whether Box's private local file grants group or other access, which Box
+/// refuses. Absent files and non-Unix hosts report no exposure.
+pub(super) fn private_exposed(root: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::symlink_metadata(root.join(super::box_definition::LOCAL_PATH))
+            .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o077 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = root;
+        false
+    }
+}
+
+/// Make an existing private-layer file owner-only without rewriting it.
+fn restrict_private(path: &Path) -> Result<(), Error> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = fs::symlink_metadata(path)?;
+        if metadata.is_file() && metadata.permissions().mode() & 0o077 != 0 {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
+}
+
 pub(in crate::review) fn publish(root: &Path, files: &[Change]) -> Result<(), Error> {
     publish_with(root, files, false)
 }
@@ -255,6 +286,10 @@ fn publish_with(root: &Path, files: &[Change], legacy: bool) -> Result<(), Error
             current.as_deref(),
         )?;
         if current == after {
+            // An earlier setup may have left the right text with a mode Box refuses.
+            if current.is_some() && f.path == super::box_definition::LOCAL_PATH {
+                restrict_private(&checked_path(root, &f.path, legacy)?)?;
+            }
             continue;
         }
         let path = checked_path(root, &f.path, legacy)?;
@@ -266,8 +301,11 @@ fn publish_with(root: &Path, files: &[Change], legacy: bool) -> Result<(), Error
         if let Some(after) = &after {
             let tmp = parent.join(format!(".shield-{}.tmp", std::process::id()));
             let mut file = create_like(&tmp, &path)?;
+            // Box refuses its private local layer unless it is owner-only.
             #[cfg(unix)]
-            if super::legacy::asset_path(&f.path) && f.before.is_none() {
+            if f.path == super::box_definition::LOCAL_PATH
+                || (super::legacy::asset_path(&f.path) && f.before.is_none())
+            {
                 use std::os::unix::fs::PermissionsExt;
                 file.set_permissions(fs::Permissions::from_mode(0o600))?;
             }

@@ -95,12 +95,15 @@ impl Server {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
+    /// `adopt` normalizes for a read-only call that found another process's
+    /// checkout epoch; it follows the same pristine-connection rule.
     fn normalize_runtime(
         &self,
         name: &str,
         args: &serde_json::Value,
+        adopt: bool,
     ) -> Result<(), crate::review::Error> {
-        if !crate::review::mcp::needs_runtime(name, args) {
+        if !adopt && !crate::review::mcp::needs_runtime(name, args) {
             return Ok(());
         }
         let _transition = self
@@ -128,6 +131,81 @@ impl Server {
                 .map_err(|_| crate::review::Error::Locked)? = Arc::new(current);
         }
         Ok(())
+    }
+
+    fn call_tool(&self, call: ToolCall, context: &stdio::Context, adopt: bool) -> Outcome {
+        if let Err(error) = self.normalize_runtime(&call.name, &call.arguments, adopt) {
+            return self.runtime_refusal(&call, context, &error);
+        }
+        let review = self.review_for_request(context);
+        let input_form = needs_input_form(&call) || elicitation::owns(self, context);
+        if !input_form && let Some(outcome) = self.resume_confirmation(&review, &call, context) {
+            return outcome;
+        }
+        // NULs are refused before dispatch or confirmation, so no tool stores one.
+        if crate::json::contains_nul(&call.arguments) {
+            return nul_arguments(&review, &call);
+        }
+        if let Some(outcome) = self.maintain_setup(&review, &call, context) {
+            return outcome;
+        }
+        if input_form {
+            return elicitation::call(self, review, call, context);
+        }
+        if let Some(outcome) = tasks::create(self, &review, &call, context) {
+            return outcome;
+        }
+        match crate::review::mcp::admin_confirmation(
+            &review,
+            &self.connection,
+            &call.name,
+            &call.arguments,
+            &|| {
+                context
+                    .check()
+                    .map_err(|_| crate::policy::Error::Interrupted)
+            },
+        ) {
+            Ok(Some((message, binding))) => {
+                return self.confirm_bound(review, call, context, message, Some(binding));
+            }
+            Err(error) => {
+                return Outcome::Tool(response::tool_result(
+                    &call.name,
+                    review.agent.as_deref(),
+                    crate::review::mcp::admin_error(&review, &call.name, &error),
+                    true,
+                    &|| Ok(()),
+                ));
+            }
+            Ok(None) => {}
+        }
+        if call.name == "request_approve" {
+            return self.confirm_request(review, call, context);
+        }
+        if call.name == "request_deny"
+            && let Ok(message) = crate::review::mcp::deny_confirmation(&review, &call.arguments)
+        {
+            return self.confirm_apply(review, call, context, message);
+        }
+        if matches!(call.name.as_str(), "session_grant_approve")
+            && let Ok(Some(message)) =
+                crate::review::session_grants::confirmation(&review, &call.arguments)
+        {
+            return self.confirm_apply(review, call, context, message);
+        }
+        // Connection edits always show their private settings in a form;
+        // ordinary policy retains the adapter's existing approval mechanism.
+        if call.name == "policy_apply" {
+            return self.policy_apply(review, call, context);
+        }
+        Outcome::Tool(reply(
+            &review,
+            &self.connection,
+            &call,
+            context,
+            Answer::None,
+        ))
     }
 
     pub(crate) fn with_log(mut self, log: Arc<crate::diagnostics::Log>) -> Self {
@@ -498,79 +576,16 @@ impl stdio::Handler for Server {
             let Request::Tool(call) = request else {
                 return self.non_tool(&request, context);
             };
-            if let Err(error) = self.normalize_runtime(&call.name, &call.arguments) {
-                return self.runtime_refusal(&call, context, &error);
+            // Another process may rotate the checkout epoch after this
+            // connection opened. A read-only call whose own result reports it
+            // replays once after adoption; successful calls read nothing extra.
+            let replay = (!crate::review::mcp::needs_runtime(&call.name, &call.arguments))
+                .then(|| call.clone());
+            let outcome = self.call_tool(call, context, false);
+            match replay {
+                Some(call) if checkout_changed(&outcome) => self.call_tool(call, context, true),
+                _ => outcome,
             }
-            let review = self.review_for_request(context);
-            let input_form = needs_input_form(&call) || elicitation::owns(self, context);
-            if !input_form && let Some(outcome) = self.resume_confirmation(&review, &call, context)
-            {
-                return outcome;
-            }
-            // NULs are refused before dispatch or confirmation, so no tool stores one.
-            if crate::json::contains_nul(&call.arguments) {
-                return nul_arguments(&review, &call);
-            }
-            if let Some(outcome) = self.maintain_setup(&review, &call, context) {
-                return outcome;
-            }
-            if input_form {
-                return elicitation::call(self, review, call, context);
-            }
-            if let Some(outcome) = tasks::create(self, &review, &call, context) {
-                return outcome;
-            }
-            match crate::review::mcp::admin_confirmation(
-                &review,
-                &self.connection,
-                &call.name,
-                &call.arguments,
-                &|| {
-                    context
-                        .check()
-                        .map_err(|_| crate::policy::Error::Interrupted)
-                },
-            ) {
-                Ok(Some((message, binding))) => {
-                    return self.confirm_bound(review, call, context, message, Some(binding));
-                }
-                Err(error) => {
-                    return Outcome::Tool(response::tool_result(
-                        &call.name,
-                        review.agent.as_deref(),
-                        crate::review::mcp::admin_error(&review, &call.name, &error),
-                        true,
-                        &|| Ok(()),
-                    ));
-                }
-                Ok(None) => {}
-            }
-            if call.name == "request_approve" {
-                return self.confirm_request(review, call, context);
-            }
-            if call.name == "request_deny"
-                && let Ok(message) = crate::review::mcp::deny_confirmation(&review, &call.arguments)
-            {
-                return self.confirm_apply(review, call, context, message);
-            }
-            if matches!(call.name.as_str(), "session_grant_approve")
-                && let Ok(Some(message)) =
-                    crate::review::session_grants::confirmation(&review, &call.arguments)
-            {
-                return self.confirm_apply(review, call, context, message);
-            }
-            // Connection edits always show their private settings in a form;
-            // ordinary policy retains the adapter's existing approval mechanism.
-            if call.name == "policy_apply" {
-                return self.policy_apply(review, call, context);
-            }
-            Outcome::Tool(reply(
-                &review,
-                &self.connection,
-                &call,
-                context,
-                Answer::None,
-            ))
         })();
         if let Some(trace) = &trace {
             match &outcome {
@@ -594,6 +609,16 @@ impl stdio::Handler for Server {
             crate::review::mcp::invalid_arguments(&review, &call.name, &error.path, &error.message);
         response::tool_result(&call.name, review.agent.as_deref(), value, true, &|| Ok(()))
     }
+}
+
+/// Whether this call's own result refused because another process rotated the
+/// checkout epoch, so the server may adopt it and replay the read-only call.
+fn checkout_changed(outcome: &Outcome) -> bool {
+    matches!(outcome, Outcome::Tool(result) if result.is_error
+        && result
+            .structured_content
+            .as_ref()
+            .is_some_and(|value| value["error"]["code"] == "checkout_changed"))
 }
 
 fn needs_input_form(call: &ToolCall) -> bool {

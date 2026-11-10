@@ -98,7 +98,10 @@ writes two Box files:
   the command it launches for the server.
 - `.box/local/mcp/shield.yml` is in Box's private local layer. It pins the
   Shield binary you ran setup with, so Box launches that binary and its hooks
-  call it. Shield creates the folder owner-only when it is missing.
+  call it. Box accepts this layer only when it is private, so Shield keeps the
+  file readable by you alone and creates the folder owner-only when it is
+  missing. If `shield status` reports the Box integration as `changed` because
+  others can read this file, run `shield mcp setup --agent box` to restrict it.
 
 With both files Box writes the same hook entries a direct setup writes. After
 confirming, run `box setup` the first time or `box config sync` later, then

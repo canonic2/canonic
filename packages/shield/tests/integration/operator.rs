@@ -942,7 +942,7 @@ fn fresh_initialization_refuses_linked_or_file_projection_directory() {
 #[test]
 #[cfg(unix)]
 #[ignore = "requires PREVIOUS_BINARY pointing to a pre-continuity Shield executable"]
-fn previous_binary_unreceipted_checkpoint_requires_origin_verification() {
+fn previous_binary_unreceipted_checkpoint_upgrades_in_place() {
     let previous = std::env::var_os("SHIELD_PREVIOUS_BINARY").expect("set PREVIOUS_BINARY");
     let previous = std::path::Path::new(&previous);
     let root = TempDir::new().unwrap();
@@ -966,22 +966,38 @@ fn previous_binary_unreceipted_checkpoint_requires_origin_verification() {
             "previous writer already records {field}"
         );
     }
-    let refusal = guided(
-        &root,
-        &["init", "--no-setup", "--no-baseline", "--no-debug-log"],
-        "no\n",
-    );
-    assert_ne!(refusal["code"], 0, "{refusal}");
-    assert!(
-        refusal
-            .to_string()
-            .contains("private reviewed-content proof"),
-        "{refusal}"
-    );
-    assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    // Diagnostics read the older record without converting it.
     let diagnostic = query(&root, &["status"]);
-    assert!(diagnostic["project_id"].is_string());
-    assert_eq!(std::fs::read(path).unwrap(), bytes);
+    assert_eq!(diagnostic["project_id"], checkpoint["project_id"]);
+    assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    // The first command that opens the runtime upgrades in place and continues.
+    let prepared = query(&root, &["cache", "prepare"]);
+    assert!(
+        prepared.get("error").is_none_or(Value::is_null),
+        "{prepared}"
+    );
+    let upgraded: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(upgraded["project_id"], checkpoint["project_id"]);
+    assert_eq!(
+        upgraded["active"]["activation_id"],
+        checkpoint["active"]["activation_id"]
+    );
+    assert!(upgraded["operator"]["runtime_incarnation"].is_object());
+    let digest = Sha256::digest(&bytes)
+        .iter()
+        .fold(String::new(), |mut output, byte| {
+            write!(output, "{byte:02x}").unwrap();
+            output
+        });
+    assert!(
+        root.path()
+            .join(format!(".shield/review/bootstrap-{digest}.json"))
+            .is_file()
+    );
+    assert_eq!(
+        query(&root, &["status"])["project_id"],
+        checkpoint["project_id"]
+    );
 }
 
 #[test]

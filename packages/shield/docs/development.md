@@ -23,15 +23,17 @@ a real test name; nextest fails if nothing matches.
 Keep `target/` between iterations to reuse Cargo's cache. Use release builds
 for performance measurements.
 
-To inspect pre-continuity upgrade admission using a separately retained executable:
+To check the in-place upgrade of a pre-continuity checkpoint written by a
+separately retained executable:
 
 ```sh
 make test-focus FILTER=previous_binary_unreceipted_checkpoint TEST_TARGET=--test=integration PREVIOUS_BINARY=/path/to/previous/shield CARGO_FLAGS='--run-ignored ignored-only'
 ```
 
 This opt-in fixture enrolls through that previous binary in an isolated project
-and home. It verifies the missing-origin refusal, unchanged checkpoint and
-available diagnostics; it does not claim successful migration. The supplied
+and home. It verifies that status reads the record unchanged, and that the
+first ordinary command keeps the project ID and activation, records the runtime
+incarnation and retains the original bytes as a recovery copy. The supplied
 binary must predate the continuity/private-consent records.
 
 ## Native Linux development

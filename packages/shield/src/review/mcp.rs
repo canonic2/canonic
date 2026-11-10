@@ -659,7 +659,10 @@ pub(crate) fn settle_apply_failure(
     };
     super::proposal_lifecycle::settle(context, args, status, reason)
         .ok()
-        .filter(|outcome| outcome["status"] == "applied" && !matches!(error, Error::Invalid(_)))
+        .filter(|outcome| {
+            outcome["status"] == "applied"
+                && !matches!(error, Error::Invalid(_) | Error::CheckoutChanged)
+        })
         .map(|outcome| result_envelope(context, "policy_apply", Ok(outcome)))
 }
 
@@ -1088,6 +1091,10 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
         Error::StaleSnapshot => (
             "stale_revision",
             "Policy or review context changed. Call status for fresh handles, reassess and re-propose any still-needed change. For a preparation task, submit the original concrete changes again instead of the old preparation_task_id; if you supplied an idempotency_key, use a new key for fresh preparation",
+        ),
+        Error::CheckoutChanged => (
+            "checkout_changed",
+            "This checkout's Shield runtime changed after this connection started, and the connection holds reviews or handles from before. Ask the user to restart this agent session so Shield reconnects, then retry",
         ),
         Error::Cancelled | Error::Policy(crate::policy::Error::Interrupted) => (
             "cancelled",

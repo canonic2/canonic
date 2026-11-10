@@ -168,3 +168,75 @@ fn inactive_legacy_and_moved_previews_reset_runtime_without_inventing_activation
         assert_eq!(review::open(target).unwrap().project_id, next.project_id);
     }
 }
+
+/// A checkpoint written before runtime continuity, at its own root, is the
+/// same installation: the upgrade keeps its identity, activation and local
+/// administration, and concurrent first readers convert it once.
+#[test]
+fn pre_continuity_checkpoint_upgrades_in_place_once_and_keeps_administration() {
+    let home = assert_fs::TempDir::new().unwrap();
+    let _host = host(&home.path().join("runtime"));
+    let (root, context, _, _) = review::read_approval::tests::fixture();
+    let checkpoint = root.path().join(".shield/review/state.json");
+    let mut old: Value = serde_json::from_slice(&fs::read(&checkpoint).unwrap()).unwrap();
+    for field in [
+        "runtime_incarnation",
+        "administration_origin",
+        "policy_consent_key",
+    ] {
+        old["operator"].as_object_mut().unwrap().remove(field);
+    }
+    let access = json!({"agent_settings_change":"block","agent_settings_read":"allow","shield_config_change":"block"});
+    old["operator"]["path_access"] = access.clone();
+    let original = old.to_string().into_bytes();
+    fs::write(&checkpoint, &original).unwrap();
+    let activation = old["active"]["activation_id"].clone();
+    let directory = home.path().join("runtime");
+    let readers: Vec<_> = (0..4)
+        .map(|_| {
+            let (root, directory) = (root.path().to_owned(), directory.clone());
+            std::thread::spawn(move || {
+                let _host = host(&directory);
+                Store::open(&root).unwrap().read_checkpoint().unwrap()
+            })
+        })
+        .collect();
+    for reader in readers {
+        let state = reader.join().unwrap();
+        assert_eq!(state.project_id, context.project_id);
+        assert_eq!(state.operator["path_access"], access);
+        assert_eq!(
+            serde_json::to_value(state.active.as_ref().unwrap()).unwrap()["activation_id"],
+            activation
+        );
+        assert!(state.operator.get("portable_admin_unverified").is_none());
+        state.check_operations().unwrap();
+    }
+    let adopted: usize = fs::read_dir(root.path().join(".shield/review"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "jsonl")
+        })
+        .map(|path| {
+            fs::read_to_string(path)
+                .unwrap()
+                .matches("\"runtime_incarnation_adopted\"")
+                .count()
+        })
+        .sum();
+    assert_eq!(adopted, 1, "the upgrade must convert exactly once");
+    assert!(
+        root.path()
+            .join(format!(
+                ".shield/review/bootstrap-{}.json",
+                crate::policy::fingerprint(&original)
+            ))
+            .is_file()
+    );
+    assert_eq!(
+        review::open(root.path()).unwrap().project_id,
+        context.project_id
+    );
+}

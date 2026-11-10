@@ -3,9 +3,7 @@ use super::*;
 use clap::Parser;
 
 fn flush(log: &Log) {
-    if let Some(recorder) = log.traces.get() {
-        recorder.flush();
-    }
+    log.flush();
 }
 
 #[test]

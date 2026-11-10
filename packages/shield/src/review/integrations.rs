@@ -590,7 +590,14 @@ fn box_status(
     owned: &box_definition::Definition,
     diagnostics: &mut Vec<&'static str>,
 ) -> Value {
-    let state = box_definition::diagnose(root, owned, diagnostics);
+    let mut state = box_definition::diagnose(root, owned, diagnostics);
+    // Ownership compares text only; Box also refuses a private pin others can
+    // read, which `shield mcp setup --agent box` repairs in place.
+    if state == "installed" && files::private_exposed(root) {
+        diagnostics
+            .push("Box's private Shield definition is readable by other users, so Box refuses it");
+        state = "changed";
+    }
     let fallbacks: serde_json::Map<String, Value> = agents::ADAPTERS
         .iter()
         .filter(|a| a.spec().needs_ask_fallback)

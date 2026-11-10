@@ -166,6 +166,11 @@ pub(super) fn convert(store: &Store, original: &[u8]) -> Result<State, Error> {
         // or publishes either a cache artifact or converted checkpoint.
         crate::review::runtime::inspect_historical(store, &mut state, &raw["active"])?;
         state.legacy_preview = None;
+        // An older writer's record at its own root is this installation upgraded
+        // in place: it keeps its identity and authority without relocation.
+        if super::portability::upgraded_in_place(store, &state) {
+            super::portability::adopt_incarnation(store, &mut state, &bytes, &observed);
+        }
         super::portability::authenticate_historical(store, &mut state, &raw["active"], &observed)?;
         let previous = recovery_sources(store, &state.operator)?;
         // Compilation and immutable derived-cache preparation do not require

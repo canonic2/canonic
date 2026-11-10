@@ -267,22 +267,30 @@ fn upgrade_authentic_sources_preserve_original_authority_and_all_entry_points() 
             let store = Store::open(root.path()).unwrap();
             let context = current_context(root.path(), context);
             let state = store.read_checkpoint().unwrap();
-            assert_ne!(state.project_id, raw["project_id"]);
+            // At its own root the older writer's record upgrades in place: the
+            // same project, lineage and original activation evidence.
+            assert_eq!(state.project_id, raw["project_id"].as_str().unwrap());
             assert_eq!(state.policy_lineage(), raw["project_id"].as_str().unwrap());
-            assert_eq!(state.history_owner.as_deref(), raw["project_id"].as_str());
             assert_eq!(state.policy_revision, raw["policy_revision"]);
+            assert!(state.operator["runtime_incarnation"].is_object());
             let active = serde_json::to_value(state.active.as_ref().unwrap()).unwrap();
             for field in ["policy_revision", "candidate_digest"] {
                 assert_eq!(active[field], raw["active"][field]);
             }
-            assert_ne!(active["activation_id"], raw["active"]["activation_id"]);
-            assert_eq!(active["binding_version"], 2);
+            for field in ["activation_id", "binding"] {
+                assert_eq!(active[field], raw["active"][field]);
+            }
             assert!(
                 state
                     .authorization_events
                     .iter()
-                    .any(|event| event["kind"] == "runtime_activated"
-                        && event["operator"]["mechanism"] == "reviewed-policy-reuse")
+                    .any(|event| event["event_id"] == "event-legacy-source")
+            );
+            assert!(
+                !state
+                    .authorization_events
+                    .iter()
+                    .any(|event| event["operator"]["mechanism"] == "reviewed-policy-reuse")
             );
             assert_eq!(retained(&store, &source_name(&original)).unwrap(), original);
             let revision = raw["policy_revision"].as_str().unwrap();

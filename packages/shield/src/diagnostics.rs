@@ -120,6 +120,14 @@ impl Log {
         })
     }
 
+    /// Wait until records published so far reach the file, for tests that read it.
+    #[cfg(test)]
+    pub(crate) fn flush(&self) {
+        if let Some(recorder) = self.traces.get() {
+            recorder.flush();
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn hold_writer(&self) -> impl Drop + '_ {
         self.writer.lock().unwrap()

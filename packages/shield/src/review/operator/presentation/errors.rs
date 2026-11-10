@@ -139,6 +139,11 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             "The request's policy revision is no longer current.",
             &["Inspect shield status, then retry and review the current policy."],
         ),
+        Error::CheckoutChanged => Report::new(
+            "This checkout's Shield runtime changed",
+            "Another Shield process started a new local runtime for this checkout while this command ran.",
+            &["Retry the command."],
+        ),
         Error::RequiredPack { pack, dependents } => required_pack(pack, dependents),
         Error::UnsupportedReleases(pack) => unsupported_releases(pack),
         Error::StateCorrupt { path } => corrupt_state(path),

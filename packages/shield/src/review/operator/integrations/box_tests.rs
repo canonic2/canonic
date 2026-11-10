@@ -209,6 +209,25 @@ fn box_setup_refuses_projects_without_box_configuration() {
     assert!(meta(&context)["integration"].is_null());
 }
 
+/// An earlier setup left the exact private pin readable by others, which Box
+/// refuses. Status reports it and setup repairs the mode without rewriting it.
+#[test]
+fn box_setup_restricts_an_unchanged_private_pin_left_readable() {
+    use std::os::unix::fs::PermissionsExt;
+    let (root, context) = fixture();
+    box_project(root.path());
+    setup(&context, choice(&["box"])).unwrap();
+    let pin = root.path().join(box_definition::LOCAL_PATH);
+    let text = local(root.path()).unwrap();
+    fs::set_permissions(&pin, fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(coverage(&context)["box_integration"]["status"], "changed");
+    setup(&context, choice(&["box"])).unwrap();
+    let mode = fs::metadata(&pin).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o600, "{mode:o}");
+    assert_eq!(local(root.path()).unwrap(), text);
+    assert_eq!(coverage(&context)["box_integration"]["status"], "installed");
+}
+
 #[test]
 fn box_definition_renders_the_hooks_and_server_shield_installs_directly() {
     let (root, context) = fixture();
@@ -238,11 +257,14 @@ fn box_definition_renders_the_hooks_and_server_shield_installs_directly() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mode = fs::metadata(root.path().join(".box/local/mcp"))
-            .unwrap()
-            .permissions()
-            .mode();
-        assert_eq!(mode & 0o077, 0, "{mode:o}");
+        for path in [".box/local/mcp", box_definition::LOCAL_PATH] {
+            let mode = fs::metadata(root.path().join(path))
+                .unwrap()
+                .permissions()
+                .mode();
+            // Box refuses its private layer unless it is owner-only.
+            assert_eq!(mode & 0o077, 0, "{path}: {mode:o}");
+        }
     }
     let allowed: Vec<_> = crate::review::mcp::default_approved();
     // Every tool has a decision; unapproved tools and policy_apply ask.

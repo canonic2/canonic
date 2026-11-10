@@ -387,7 +387,6 @@ impl State {
                     lineage.len() != 64 || !lineage.bytes().all(|byte| byte.is_ascii_hexdigit())
                 })
             })
-            || self.project_id != context.project_id
             || self.project_root != context.project_root
             || self.proposals.len() > 1024
             || self.policy_drafts.len() > 128
@@ -403,6 +402,11 @@ impl State {
             || !(1..=10000).contains(&self.history_limit)
         {
             return Err(Error::Invalid("invalid project state"));
+        }
+        // The same root with another ID is a rotated checkout epoch, which a
+        // pristine MCP connection may adopt; it is never a different project.
+        if self.project_id != context.project_id {
+            return Err(Error::CheckoutChanged);
         }
         Ok(())
     }

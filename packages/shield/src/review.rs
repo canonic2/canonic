@@ -126,6 +126,9 @@ pub(crate) enum Error {
     ApprovalRequired,
     #[error("active snapshot changed; reload and evaluate the request again")]
     StaleSnapshot,
+    /// The checkout's local runtime epoch changed after this context was opened.
+    #[error("this checkout's runtime epoch changed; reconnect Shield")]
+    CheckoutChanged,
     #[error("diagnostic candidate is unavailable in this connection")]
     CandidateUnavailable,
     #[error("cursor is unavailable or belongs to another query")]
@@ -229,6 +232,7 @@ impl Error {
             Self::Missing => "not-found",
             Self::ApprovalRequired => "approval-required",
             Self::StaleSnapshot => "stale-snapshot",
+            Self::CheckoutChanged => "checkout-changed",
             Self::CandidateUnavailable => "candidate_unavailable",
             Self::CursorUnavailable => "cursor_unavailable",
             Self::Overloaded => "overloaded",
