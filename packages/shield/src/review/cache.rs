@@ -747,7 +747,11 @@ fn rebuild(
         }
         let location_changed = explicit_directory && active.compiled.directory != artifact.directory;
         active.compiled = artifact.clone();
-        current.operator["compiled_cache_root"] = json!(artifact.directory);
+        // An absent root selects the default location. Recovery into the active
+        // location records nothing, so pending reviews keep their base metadata.
+        if explicit_directory || current.operator["compiled_cache_root"].is_string() {
+            current.operator["compiled_cache_root"] = json!(artifact.directory);
+        }
         if !current.authorization_events.iter().any(|event| {
             event["links"]["activation_id"] == activation
                 && event["details"]["compiled_digest"] == artifact.digest

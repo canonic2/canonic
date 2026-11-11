@@ -869,6 +869,54 @@ fn withdrawing_a_proposal_after_its_base_changed_reports_the_stale_revision() {
 }
 
 #[test]
+fn derived_cache_recovery_during_review_keeps_the_proposal_applicable() {
+    let (root, mut context, connection) = fixture();
+    context.agent = Some("claude".into());
+    let store = Store::open(root.path()).unwrap();
+    store
+        .update_checkpoint(&context, &|| Ok(()), |state| {
+            if let Some(fields) = state.operator.as_object_mut() {
+                fields.remove("compiled_cache_root");
+            }
+            Ok(Value::Null)
+        })
+        .unwrap();
+    let recorded_root = || {
+        store
+            .read()
+            .unwrap()
+            .operator
+            .get("compiled_cache_root")
+            .cloned()
+    };
+    let pending = proposal(&context, &connection, "acme-during-cache");
+    // A hook's first evaluation recovers the disposable cache in the default location.
+    crate::review::cache::recover(&context, &|| Ok(())).unwrap();
+    assert_eq!(recorded_root(), None);
+    apply(&context, &connection, &pending["data"]["apply_arguments"]);
+    assert_eq!(recorded_root(), None);
+}
+
+#[test]
+fn a_cache_location_change_during_review_still_refuses_the_proposal() {
+    let (root, mut context, connection) = fixture();
+    context.agent = Some("claude".into());
+    let pending = proposal(&context, &connection, "acme-before-relocation");
+    let relocated = assert_fs::TempDir::new().unwrap();
+    let cache = relocated.path().join("cache");
+    crate::review::cache::relocate_committed(&context, &cache, &|| Ok(())).unwrap();
+    let refused = invoke(
+        &context,
+        &connection,
+        "policy_apply",
+        pending["data"]["apply_arguments"].clone(),
+    );
+    assert_eq!(refused["error"]["code"], "stale_revision", "{refused}");
+    let state = Store::open(root.path()).unwrap().read().unwrap();
+    assert!(state.operator["compiled_cache_root"].is_string());
+}
+
+#[test]
 fn a_pending_proposal_whose_base_changed_has_a_stale_receipt() {
     let (root, mut context, connection) = fixture();
     context.agent = Some("claude".into());
