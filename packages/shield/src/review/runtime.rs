@@ -85,10 +85,14 @@ impl Active {
                 .as_bytes(),
             );
         }
+        // Version 1 bound activations to the root the earlier format recorded.
         policy::fingerprint(
             json!([
                 state.project_id,
-                state.project_root,
+                state
+                    .recorded_root
+                    .as_deref()
+                    .unwrap_or(&state.project_root),
                 self.activation_id,
                 self.previous_activation_id,
                 self.policy_revision,
@@ -125,6 +129,38 @@ impl Active {
                 "active revision differs from retained snapshot",
             ));
         }
+        Ok(())
+    }
+
+    /// Convert a version-1 activation, bound to the root the earlier format
+    /// recorded, to the root-free version 2. The original confirmation is
+    /// verified first and its evidence is carried to the new binding.
+    pub(in crate::review) fn rebind_without_root(state: &mut State) -> Result<(), Error> {
+        let Some(active) = state
+            .active
+            .as_ref()
+            .filter(|active| active.binding_version == 1)
+        else {
+            return Ok(());
+        };
+        active.validate_binding(state)?;
+        let mut converted = state.active.take().expect("checked activation");
+        let old = converted.binding.clone();
+        converted.binding_version = 2;
+        converted.binding = converted.binding(state);
+        // Only the activation event carries the binding. It keeps its human
+        // confirmation and records the binding it was converted from;
+        // compiled-plan evidence is matched by activation ID and digest.
+        for event in &mut state.authorization_events {
+            if event["kind"] == "runtime_activated"
+                && event["links"]["activation_id"] == converted.activation_id
+                && event["details"]["binding"] == old
+            {
+                event["details"]["binding"] = json!(converted.binding);
+                event["details"]["converted_from_binding"] = json!(old);
+            }
+        }
+        state.active = Some(converted);
         Ok(())
     }
 
@@ -285,7 +321,7 @@ pub(super) fn publish_confirmed(
     result["committed"] = json!(true);
     state.active = Some(active);
     if mechanism == "reviewed-policy-reuse" {
-        let receipt = json!({"project_id":state.project_id,"project_root":state.project_root});
+        let receipt = json!({"project_id":state.project_id});
         state.operator["policy_reuse"] = receipt.clone();
         let mut event = state.event(
             "policy_reused",

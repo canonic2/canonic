@@ -262,8 +262,8 @@ fn preparation_tasks_recover_interrupted_owners_without_replaying_or_creating_pr
 }
 
 #[test]
-fn preparation_task_observation_never_repairs_missing_mutex_or_stale_epoch() {
-    let (root, context, runtime) = fixture();
+fn preparation_task_observation_never_repairs_a_missing_mutex() {
+    let (_root, context, runtime) = fixture();
     let store = runtime.store().unwrap();
     let (record, owner) = store
         .reserve(&input("acme-observe"), &|| Ok(()))
@@ -280,17 +280,7 @@ fn preparation_task_observation_never_repairs_missing_mutex_or_stale_epoch() {
     assert!(recorded_status.message.contains("unchecked"));
     assert!(!owner_mutex.exists());
     assert_eq!(std::fs::read(&record_path).unwrap(), recorded);
-    let checkpoint_path = root.path().join(".shield/review/state.json");
-    let mut checkpoint: Value =
-        serde_json::from_slice(&std::fs::read(&checkpoint_path).unwrap()).unwrap();
-    checkpoint["operator"]
-        .as_object_mut()
-        .unwrap()
-        .remove("runtime_incarnation");
-    let bytes = serde_json::to_vec(&checkpoint).unwrap();
-    std::fs::write(&checkpoint_path, &bytes).unwrap();
-    assert!(observer.observe(&record.id).is_err());
-    assert_eq!(std::fs::read(&checkpoint_path).unwrap(), bytes);
+    assert!(observer.observe(&record.id).is_ok());
     assert_eq!(std::fs::read(&record_path).unwrap(), recorded);
     assert!(!owner_mutex.exists());
 }

@@ -59,76 +59,8 @@ pub(crate) fn fixture(agent: Option<&str>) -> (Server, Project) {
 }
 
 #[test]
-fn fresh_connection_adopts_one_runtime_epoch_after_readonly_status_and_never_a_later_rotation() {
+fn readonly_tools_keep_the_project_and_handles_when_another_process_opens_it() {
     let (server, project) = fixture(Some("claude"));
-    let path = project.root.path().join(".shield/review/state.json");
-    let clear = || {
-        let mut raw: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        raw["operator"]
-            .as_object_mut()
-            .unwrap()
-            .remove("runtime_incarnation");
-        std::fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
-    };
-    clear();
-    let original = std::fs::read(&path).unwrap();
-    let old = server.review();
-    let status =
-        crate::review::mcp::call(&old, &server.connection, "status", &json!({}), &|| Ok(()));
-    assert!(status["error"].is_null(), "{status}");
-    assert_eq!(status["data"]["operation_epoch_pending"], true);
-    assert!(status["data"]["active_candidate_id"].is_null());
-    assert_eq!(std::fs::read(&path).unwrap(), original);
-    server
-        .normalize_runtime("policy_propose", &json!({}), false)
-        .unwrap();
-    let current = server.review();
-    assert_ne!(current.project_id, old.project_id);
-    assert_eq!(current.connection_id, old.connection_id);
-    assert!(server.preparations.unused());
-    server
-        .normalize_runtime("policy_propose", &json!({}), false)
-        .unwrap();
-    clear();
-    let second = std::fs::read(&path).unwrap();
-    let error = server
-        .normalize_runtime("policy_propose", &json!({}), false)
-        .unwrap_err();
-    assert!(error.to_string().contains("reconnect Shield"));
-    assert_eq!(server.review().project_id, current.project_id);
-    assert_eq!(std::fs::read(&path).unwrap(), second);
-}
-
-#[test]
-fn readonly_tools_adopt_an_epoch_rotated_by_another_process() {
-    let (server, project) = fixture(Some("claude"));
-    let path = project.root.path().join(".shield/review/state.json");
-    let mut raw: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-    raw["operator"]
-        .as_object_mut()
-        .unwrap()
-        .remove("runtime_incarnation");
-    std::fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
-    let old = server.review().project_id.clone();
-    // A hook or CLI process opens the runtime first and rotates the epoch.
-    let rotated = crate::review::open(project.root.path()).unwrap().project_id;
-    assert_ne!(rotated, old);
-    let mut messages = initialize(&json!({}), "claude-code").to_vec();
-    for (id, name) in [(2, "status"), (3, "pack_list"), (4, "doctor")] {
-        messages.push(tool(json!(id), name, &json!({})));
-    }
-    let outputs = exchange(server, &messages);
-    for id in [2, 3, 4] {
-        let result = &reply(&outputs, &json!(id))["result"];
-        assert_eq!(result["isError"], false, "{result}");
-        assert_eq!(result["structuredContent"]["project_id"], rotated.as_str());
-    }
-}
-
-#[test]
-fn readonly_tools_with_retained_handles_refuse_another_process_epoch() {
-    let (server, project) = fixture(Some("claude"));
-    let path = project.root.path().join(".shield/review/state.json");
     let old = server.review();
     // The first status retains a connection-scoped diagnostic handle.
     let status =
@@ -137,23 +69,24 @@ fn readonly_tools_with_retained_handles_refuse_another_process_epoch() {
         status["data"]["active_candidate_id"].is_string(),
         "{status}"
     );
-    let mut raw: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-    raw["operator"]
-        .as_object_mut()
-        .unwrap()
-        .remove("runtime_incarnation");
-    std::fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
-    crate::review::open(project.root.path()).unwrap();
+    // A hook or CLI process opening the project changes no identity.
+    assert_eq!(
+        crate::review::open(project.root.path()).unwrap().project_id,
+        old.project_id
+    );
     let mut messages = initialize(&json!({}), "claude-code").to_vec();
-    messages.push(tool(json!(2), "status", &json!({})));
-    // A refusal leaves nothing behind that could replace a later call's result.
-    messages.push(tool(json!(3), "docs_list", &json!({})));
+    for (id, name) in [(2, "status"), (3, "pack_list"), (4, "doctor")] {
+        messages.push(tool(json!(id), name, &json!({})));
+    }
     let outputs = exchange(server, &messages);
-    let result = &reply(&outputs, &json!(2))["result"];
-    assert_eq!(result["isError"], true, "{result}");
-    assert!(result.to_string().contains("reconnect Shield"), "{result}");
-    let docs = &reply(&outputs, &json!(3))["result"];
-    assert_eq!(docs["isError"], false, "{docs}");
+    for id in [2, 3, 4] {
+        let result = &reply(&outputs, &json!(id))["result"];
+        assert_eq!(result["isError"], false, "{result}");
+        assert_eq!(
+            result["structuredContent"]["project_id"],
+            old.project_id.as_str()
+        );
+    }
 }
 
 pub(crate) fn initialize(capabilities: &Value, client: &str) -> [Value; 2] {

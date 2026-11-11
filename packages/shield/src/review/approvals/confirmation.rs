@@ -92,7 +92,13 @@ fn question(
             Kind::Hook => String::new(),
         };
         let row = if matches!(kind, Kind::Hook) {
-            let (text, deny, settings) = hook_approval::group_row(state, context, id)?;
+            let (text, deny, settings) =
+                hook_approval::group_row(state, context, id).map_err(|error| match error {
+                    Error::AgentNotConnected if ids.len() > 1 => {
+                        hook_approval::not_connected_in_group(id)
+                    }
+                    error => error,
+                })?;
             Row {
                 text,
                 deny,

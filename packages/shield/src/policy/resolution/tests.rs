@@ -148,6 +148,87 @@ fn variable_parts_bind_literal_selectors_and_unset_keeps_gates_inactive() {
     assert!(Pack::from_yaml(&invalid.to_string()).is_err());
 }
 
+/// The prefix part list of the first precondition's second argument selector.
+fn parts(invalid: &mut Value) -> &mut Value {
+    &mut invalid["preconditions"][0]["requires_any"][0]["arguments"]["values"][1]["prefix"]
+}
+
+#[test]
+fn variable_prefixes_join_literal_and_bound_parts_into_one_literal_prefix() {
+    let path = json!({"prefix":["repos/",{"var":"repository"},"/"]});
+    let source = document(
+        &[
+            "structured-rules-v1",
+            "argument-rules-v1",
+            "variables-v1",
+            "variable-prefixes-v1",
+            "preconditions-v1",
+        ],
+        json!({"repository":{"type":"string","description":"Explicit OWNER/REPO"}}),
+        json!([rule(
+            "inspect",
+            json!("acme"),
+            json!({"kind":"any"}),
+            "allow"
+        )]),
+        json!([{"id":"repository","conditions":argv("acme",json!({"kind":"prefix","values":["api"]})),
+            "requires_any":[{"arguments":{"kind":"prefix","values":["api",path]}}],
+            "on_unmet":{"decision":"deny"}}]),
+    );
+    let unset = Pack::from_yaml(&source).unwrap();
+    assert_eq!(
+        decide(&unset, &["acme", "api", "repos/other/web/pulls"]),
+        Decision::Allow
+    );
+    let pack =
+        Pack::from_yaml_bound(&source, &bound(json!({"repository":"team/web"})), true).unwrap();
+    assert_eq!(
+        decide(&pack, &["acme", "api", "repos/team/web/pulls/12"]),
+        Decision::Allow
+    );
+    // The literal separator after the bound value keeps sibling names out.
+    for target in [
+        "repos/team/web-other/pulls",
+        "repos/team/web",
+        "repos/other/web/pulls",
+        "team/web/pulls",
+    ] {
+        assert_eq!(
+            decide(&pack, &["acme", "api", target]),
+            Decision::Deny,
+            "{target}"
+        );
+    }
+    let refused = |change: &dyn Fn(&mut Value)| {
+        let mut invalid: Value = serde_json::from_str(&source).unwrap();
+        change(&mut invalid);
+        Pack::from_yaml(&invalid.to_string()).is_err()
+    };
+    assert!(refused(&|invalid| invalid["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|cap| cap != "variable-prefixes-v1")));
+    assert!(refused(
+        &|invalid| *parts(invalid) = json!(["repos/", "team/"])
+    ));
+    assert!(refused(&|invalid| *parts(invalid) = json!([])));
+    assert!(refused(
+        &|invalid| *parts(invalid) = json!(["repos/", {"exact":"team"}, {"var":"repository"}])
+    ));
+    assert!(refused(
+        &|invalid| *parts(invalid) = json!(vec![json!({"var":"repository"}); 17])
+    ));
+    assert!(refused(
+        &|invalid| invalid["variables"]["repository"] =
+            json!({"type":"list","description":"Names","items":{"type":"string"}})
+    ));
+    // Without variables the list form is not a selector, in packs or custom documents.
+    let mut literal: Value = serde_json::from_str(&source).unwrap();
+    literal["variables"] = json!({});
+    *parts(&mut literal) = json!(["repos/", "team/"]);
+    assert!(Pack::from_yaml(&literal.to_string()).is_err());
+}
+
 fn node_pack() -> String {
     document(
         NODE_CAPABILITIES,

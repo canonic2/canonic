@@ -14,7 +14,20 @@ fn fixture() -> (assert_fs::TempDir, review::Context) {
     fs::write(root.path().join(".codex/config.toml"), "# Acme\n").unwrap();
     fs::create_dir_all(root.path().join(".claude")).unwrap();
     fs::write(root.path().join(".claude/settings.json"), "{}").unwrap();
+    enroll(root.path());
     (root, context)
+}
+
+/// Record Claude Code and Codex integrations, whose MCP connections can ask
+/// the person.
+fn enroll(root: &Path) {
+    review::operator::integrations::configure_fixture(
+        root,
+        review::integrations::IntegrationChoice::Agents(
+            review::integrations::IntegrationChoice::bits(&["claude", "codex"]).unwrap(),
+        ),
+        review::integrations::AskFallback::Block,
+    );
 }
 
 /// A policy that denies `acme` through rule `acme-config` and asks for `acme-push`.
@@ -33,7 +46,56 @@ fn policy_fixture() -> (assert_fs::TempDir, review::Context) {
     )
     .unwrap();
     let context = review::mcp::initialize_fixture(root.path(), &bundle);
+    enroll(root.path());
     (root, context)
+}
+
+#[test]
+fn an_unenrolled_agent_is_routed_to_setup_instead_of_request_approve() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let rules = json!({"schema_version":1,"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"],
+        "rules":[{"id":"acme-config","decision":"deny","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}}}]})
+    .to_string();
+    let bundle = Bundle::capture(
+        "schema_version: 1\npacks: []\nrules: rules.yml\n",
+        &[],
+        Some(&rules),
+    )
+    .unwrap();
+    let context = review::mcp::initialize_fixture(root.path(), &bundle);
+    let root = Path::new(&context.project_root);
+    review::operator::integrations::configure_fixture(
+        root,
+        review::integrations::IntegrationChoice::agent("codex"),
+        review::integrations::AskFallback::Block,
+    );
+
+    // Claude Code has no recorded integration here; Codex does.
+    let refused = shell(root, "claude", "acme config set claude");
+    assert_eq!(refused["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert!(offered_id(&refused).is_none(), "{refused}");
+    assert!(
+        !refused.to_string().contains("request_approve"),
+        "{refused}"
+    );
+    assert!(!reason(&refused).contains(super::OFFER), "{refused}");
+    assert!(
+        agent_context(&refused).contains("shield mcp setup"),
+        "{refused}"
+    );
+    // Nothing is stored that no connection could approve.
+    let listed = review::mcp::call_with_confirmation(
+        &mcp(root, "codex"),
+        &review::mcp::Connection::new("acme-connection".into()),
+        "request_list",
+        &json!({}),
+        &|| Ok(()),
+        false,
+    );
+    assert_eq!(listed["data"]["requests"], json!([]), "{listed}");
+
+    let offered = shell(root, "codex", "acme config set codex");
+    assert!(offered_id(&offered).is_some(), "{offered}");
 }
 
 fn mcp(root: &Path, agent: &str) -> review::Context {

@@ -15,13 +15,8 @@ pub(crate) fn context(input: &cli::ReviewContext) -> Result<Context, Error> {
     let mut context = super::open_connection(&input.project)?;
     // A declared agent selects its review adapter only when protected project
     // state records its integration; otherwise it is attribution alone.
-    let agent = input.agent.as_deref().map(|agent| match agent {
-        // Historical Claude MCP entries used this label. Enrollment remains
-        // the authority for adapter selection, including for this spelling.
-        "claude-code" => "claude",
-        other => other,
-    });
-    if let Some(agent) = agent.filter(|agent| recorded(&context, agent)) {
+    let agent = input.agent.as_deref().map(agent_id);
+    if let Some(agent) = agent.filter(|agent| enrolled(&context, agent)) {
         context.agent = Some(agent.into());
     } else {
         context.declared_agent.clone_from(&input.agent);
@@ -29,6 +24,16 @@ pub(crate) fn context(input: &cli::ReviewContext) -> Result<Context, Error> {
     context.session_id.clone_from(&input.session_id);
     context.tool_use_id.clone_from(&input.tool_use_id);
     Ok(context)
+}
+
+/// The agent ID a launch label names. Historical Claude MCP entries used
+/// `claude-code`; enrollment remains the authority for adapter selection,
+/// including for this spelling.
+pub(crate) fn agent_id(label: &str) -> &str {
+    match label {
+        "claude-code" => "claude",
+        other => other,
+    }
 }
 
 /// Whether the project's integration record includes this agent ID,
@@ -39,19 +44,21 @@ pub(crate) fn context(input: &cli::ReviewContext) -> Result<Context, Error> {
 /// make a connection start without its adapter. State that cannot be read
 /// records nothing; the generic adapter then needs terminal activation, and
 /// the server's tools report the state problem.
-fn recorded(context: &Context, agent: &str) -> bool {
+pub(crate) fn enrolled(context: &Context, agent: &str) -> bool {
+    registered(context, agent).unwrap_or(false)
+}
+
+/// [`enrolled`], keeping a failure to read the project distinct from a
+/// missing registration.
+pub(crate) fn registered(context: &Context, agent: &str) -> Result<bool, Error> {
     let Some(adapter) = crate::agents::find(agent) else {
-        return false;
+        return Ok(false);
     };
-    super::storage::Store::inspect(Path::new(&context.project_root))
-        .and_then(|store| store.read_diagnostic_checkpoint().map(|(state, _)| state))
-        .and_then(|state| {
-            state.check(context)?;
-            super::integrations::registration(&state.operator)
-        })
-        .ok()
-        .flatten()
-        .is_some_and(|registration| registration.covers(adapter.spec().id))
+    let store = super::storage::Store::inspect(Path::new(&context.project_root))?;
+    let (state, _) = store.read_diagnostic_checkpoint()?;
+    state.check(context)?;
+    Ok(super::integrations::registration(&state.operator)?
+        .is_some_and(|registration| registration.covers(adapter.spec().id)))
 }
 
 #[cfg(test)]

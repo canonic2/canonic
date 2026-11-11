@@ -18,13 +18,21 @@ fn fixture_with_recovery(
     let copy = root.path().join("copy");
     let config = "schema_version: 1\npacks: []\n";
     let bundle = Bundle::capture(config, &[], None).expect("fixture policy");
-    for path in [&original, &copy] {
-        fs::create_dir(path).expect("fixture project");
-        crate::review::mcp::initialize_fixture(path, &bundle);
-        fs::write(path.join(".shield/config.yml"), config).expect("fixture config");
-    }
+    // `original` is an enrolled project; `copy` holds only committed policy
+    // this user never reviewed, so it awaits its own first enrollment.
+    fs::create_dir(&original).expect("fixture project");
+    crate::review::mcp::initialize_fixture(&original, &bundle);
+    fs::write(original.join(".shield/config.yml"), config).expect("fixture config");
+    fs::create_dir_all(copy.join(".shield")).expect("fixture project");
+    // Unique per fixture: consent from an earlier fixture in this process
+    // would otherwise cover identical content.
+    let marker = root.path().file_name().unwrap().to_string_lossy();
+    fs::write(
+        copy.join(".shield/config.yml"),
+        format!("# Acme unreviewed {marker}\n{config}"),
+    )
+    .expect("fixture config");
     let bytes = fs::read(original.join(".shield/review/state.json")).expect("original state");
-    fs::write(copy.join(".shield/review/state.json"), &bytes).expect("copied state");
     let old = serde_json::from_slice(&bytes).expect("checkpoint fixture");
     let attribution = ReviewContext {
         project: copy.clone(),
@@ -83,7 +91,7 @@ fn review_resources_require_enrollment_consent_and_work_without_reconnecting() {
         |id, uri| json!({"jsonrpc":"2.0","id":id,"method":"resources/read","params":{"uri":uri}});
     let refused = transport.request(&request(2, uri.as_str()));
     assert_eq!(refused["error"]["code"], rpc::RESOURCE_NOT_FOUND);
-    assert_eq!(checkpoint(&project), old);
+    assert!(unenrolled(&project));
     let form = transport.call(json!(3), "project_enroll", &json!({}));
     let enrolled = transport.request(&answer(&form, "accept"));
     assert!(data(&enrolled)["error"].is_null(), "{enrolled}");
@@ -106,6 +114,11 @@ fn begin(transport: &Transport, capabilities: &Value, agent: &str) {
         transport.send(&message);
     }
     assert!(transport.receive()["result"].is_object());
+}
+
+/// Nothing enrolled the folder: it still has no checkpoint.
+fn unenrolled(path: &Path) -> bool {
+    !path.join(".shield/review/state.json").exists()
 }
 
 fn checkpoint(path: &Path) -> Value {
@@ -168,7 +181,7 @@ fn bootstrap_legacy_confirmation_keeps_consent_and_normal_review_on_one_connecti
                     .contains(&format!("Also connect this MCP session as {agent}"))
             );
         }
-        assert_eq!(checkpoint(&project), old);
+        assert!(unenrolled(&project));
         let enrolled = transport.request(&answer(&review, "accept"));
         assert!(data(&enrolled)["error"].is_null(), "{enrolled}");
         assert_ne!(checkpoint(&project)["project_id"], old["project_id"]);
@@ -201,8 +214,7 @@ fn bootstrap_legacy_confirmation_keeps_consent_and_normal_review_on_one_connecti
 
 #[test]
 fn bootstrap_decline_missing_forms_and_model_confirmation_preserve_original_bytes() {
-    let (_root, project, old, transport) = fixture(Some("codex"));
-    let bytes = fs::read(project.join(".shield/review/state.json")).unwrap();
+    let (_root, project, _old, transport) = fixture(Some("codex"));
     begin(&transport, &json!({"elicitation":{"form":{}}}), "codex");
     let forged = transport.call(json!(2), "project_enroll", &json!({"confirmed":true}));
     assert!(
@@ -213,20 +225,16 @@ fn bootstrap_decline_missing_forms_and_model_confirmation_preserve_original_byte
     assert_eq!(review["method"], "elicitation/create", "{review}");
     let declined = transport.request(&answer(&review, "decline"));
     assert_eq!(data(&declined)["error"]["code"], "approval_declined");
-    assert_eq!(checkpoint(&project), old);
-    assert_eq!(
-        fs::read(project.join(".shield/review/state.json")).unwrap(),
-        bytes
-    );
+    assert!(unenrolled(&project));
     let retry = transport.call(json!(4), "project_enroll", &json!({}));
     assert_eq!(retry["method"], "elicitation/create", "{retry}");
     let _ = transport.request(&answer(&retry, "cancel"));
     transport.close().1.unwrap();
-    let (_root, project, old, transport) = fixture(Some("claude"));
+    let (_root, project, _old, transport) = fixture(Some("claude"));
     begin(&transport, &json!({}), "claude");
     let unavailable = transport.call(json!(2), "project_enroll", &json!({}));
     assert!(!data(&unavailable)["error"].is_null(), "{unavailable}");
-    assert_eq!(checkpoint(&project), old);
+    assert!(unenrolled(&project));
     transport.close().1.unwrap();
 }
 
@@ -243,11 +251,11 @@ fn bootstrap_modern_reviews_retain_exact_plans_and_reject_changed_sources() {
     let retry = transport.request(&modern(2, None, None));
     let stale = transport.request(&modern(3, Some(token), Some("accept")));
     assert!(!data(&stale)["error"].is_null(), "{stale}");
-    assert_eq!(checkpoint(&project), old);
+    assert!(unenrolled(&project));
     let token = retry["result"]["requestState"].as_str().unwrap();
     let declined = transport.request(&modern(4, Some(token), Some("decline")));
     assert!(!data(&declined)["error"].is_null(), "{declined}");
-    assert_eq!(checkpoint(&project), old);
+    assert!(unenrolled(&project));
     let fresh = transport.request(&modern(5, None, None));
     let token = fresh["result"]["requestState"].as_str().unwrap();
     let accepted = transport.request(&modern(6, Some(token), Some("accept")));
@@ -328,11 +336,11 @@ fn bootstrap_failed_cache_choice_can_reach_a_fresh_in_session_cache_review() {
         "enrollment_failed",
         "{failed}"
     );
-    assert_eq!(checkpoint(&project), old);
+    assert!(unenrolled(&project));
     let cache = root.path().join("working-cache");
     let retry = transport.call(json!(3), "project_enroll", &json!({"cache_dir":cache}));
     assert_eq!(retry["method"], "elicitation/create", "{retry}");
-    assert_eq!(checkpoint(&project), old);
+    assert!(unenrolled(&project));
     let accepted = transport.request(&answer(&retry, "accept"));
     assert!(data(&accepted)["error"].is_null(), "{accepted}");
     let committed = checkpoint(&project);
@@ -348,7 +356,6 @@ fn bootstrap_failed_cache_choice_can_reach_a_fresh_in_session_cache_review() {
 fn bootstrap_cancelled_accepted_enrollment_cannot_publish_on_a_later_status() {
     let (_root, project, old, initial) = fixture(None);
     initial.close().1.unwrap();
-    let bytes = fs::read(project.join(".shield/review/state.json")).unwrap();
     let (transport, pending_cancellation) =
         Transport::bootstrap_before_publication_cancellation(ReviewContext {
             project: project.clone(),
@@ -382,11 +389,7 @@ fn bootstrap_cancelled_accepted_enrollment_cannot_publish_on_a_later_status() {
         true,
         "{status}"
     );
-    assert_eq!(
-        fs::read(project.join(".shield/review/state.json")).unwrap(),
-        bytes
-    );
-    assert_eq!(checkpoint(&project), old);
+    assert!(unenrolled(&project));
     let fresh = transport.call(json!(4), "project_enroll", &json!({}));
     assert_eq!(fresh["method"], "elicitation/create", "{fresh}");
     let accepted = transport.request(&answer(&fresh, "accept"));
@@ -397,15 +400,8 @@ fn bootstrap_cancelled_accepted_enrollment_cannot_publish_on_a_later_status() {
 
 #[test]
 fn bootstrap_invalid_local_policy_keeps_metadata_and_consent_reachable_without_preparation() {
-    let (_root, project, old, transport) = fixture(None);
+    let (_root, project, _old, transport) = fixture(None);
     fs::write(project.join(".shield/config.yml"), "not valid: [\n").unwrap();
-    let bytes = fs::read(project.join(".shield/review/state.json")).unwrap();
-    let artifact = &old["active"]["compiled"];
-    let cache = PathBuf::from(artifact["directory"].as_str().unwrap())
-        .join("compiled")
-        .join(artifact["project_key"].as_str().unwrap())
-        .join(format!("{}.bin", artifact["plan_key"].as_str().unwrap()));
-    fs::remove_file(&cache).unwrap();
     begin(&transport, &json!({"elicitation":{"form":{}}}), "acme");
     let status = transport.call(json!(2), "status", &json!({}));
     assert!(data(&status)["error"].is_null(), "{status}");
@@ -419,14 +415,7 @@ fn bootstrap_invalid_local_policy_keeps_metadata_and_consent_reachable_without_p
         project.canonicalize().unwrap().to_str().unwrap(),
         "{status}"
     );
-    assert!(
-        !cache.exists(),
-        "metadata inspection must not rebuild inherited plans"
-    );
-    assert_eq!(
-        fs::read(project.join(".shield/review/state.json")).unwrap(),
-        bytes
-    );
+    assert!(unenrolled(&project), "metadata inspection writes nothing");
     let refused = transport.call(json!(3), "project_enroll", &json!({}));
     assert_eq!(
         data(&refused)["error"]["code"],
@@ -437,11 +426,7 @@ fn bootstrap_invalid_local_policy_keeps_metadata_and_consent_reachable_without_p
         refused["method"].is_null(),
         "invalid source must not obtain a confirmation"
     );
-    assert_eq!(
-        fs::read(project.join(".shield/review/state.json")).unwrap(),
-        bytes
-    );
-    assert!(!cache.exists());
+    assert!(unenrolled(&project));
     transport.close().1.unwrap();
 }
 

@@ -754,6 +754,33 @@ fn diagnose_registered<'a>(
     (agents, box_integration, legacy_interceptor)
 }
 
+/// Whether this folder's agent files hold exactly what the registration in
+/// `meta` owns. The installed binary's location is not part of the match.
+pub(in crate::review) fn matches_files(root: &Path, meta: &Value) -> bool {
+    let Ok(Some(registered)) = registration(meta) else {
+        return false;
+    };
+    let mut diagnostics = Vec::new();
+    let Ok(config) = checked_mcp_config(root, true, &mut diagnostics) else {
+        return false;
+    };
+    let mut degraded = std::collections::BTreeSet::new();
+    let (agents, _, _) = diagnose_registered(
+        root,
+        meta,
+        &registered,
+        &config,
+        None,
+        &mut diagnostics,
+        &mut degraded,
+    );
+    !agents.is_empty()
+        && diagnostics.iter().all(|reason| {
+            reason.starts_with("registered binary")
+                || reason.starts_with("recorded registered binary")
+        })
+}
+
 fn agent_output_drift(
     root: &Path,
     state: &State,

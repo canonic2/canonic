@@ -145,8 +145,10 @@ fn copied_checkout_reuses_profile_but_never_original_context_while_original_rema
             let probe = Secret::parse(old.launch_value().into())?;
             copy_tree(root.path(), &copied);
             assert!(RegisteredReadConsumer::admit_secret(&copied, probe).is_err());
+            // The copy is the same project, but an SDK read context is a
+            // short-lived handle for the folder it was minted for.
             let moved = super::super::open(&copied)?;
-            assert_ne!(moved.project_id, original.project_id);
+            assert_eq!(moved.project_id, original.project_id);
             // The independently retained profile is already reviewed. A copy
             // obtains a new local context without registering the profile again.
             let fresh = mint(&copied, mapping::digest())?;

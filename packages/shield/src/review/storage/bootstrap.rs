@@ -52,11 +52,18 @@ fn location_header(store: &Store, bytes: &[u8]) -> Result<String, Error> {
             observed: schema.to_string(),
         });
     }
-    raw["project_root"]
-        .as_str()
-        .filter(|root| root.len() <= 4096 && !root.contains('\0') && Path::new(root).is_absolute())
-        .map(str::to_owned)
-        .ok_or(Error::StateCorrupt { path })
+    // Current checkpoints record no location: the folder is where it was found.
+    // An earlier format's recorded root is only validated, never trusted.
+    match &raw["project_root"] {
+        Value::Null => Ok(store.root.clone()),
+        recorded => recorded
+            .as_str()
+            .filter(|root| {
+                root.len() <= 4096 && !root.contains('\0') && Path::new(root).is_absolute()
+            })
+            .map(|_| store.root.clone())
+            .ok_or(Error::StateCorrupt { path }),
+    }
 }
 
 pub(in crate::review) fn inspect(project: &Path) -> Result<Previous, Error> {
@@ -84,7 +91,7 @@ pub(in crate::review) fn inspect(project: &Path) -> Result<Previous, Error> {
         root: root.clone(),
         writer_owned: std::sync::Mutex::new(None),
     };
-    let state = match super::upgrades::checkpoint(&bytes) {
+    let state = match saved.decode(&bytes) {
         Ok(state) => {
             Store::validate_checkpoint(&state)?;
             state
@@ -201,13 +208,10 @@ pub(in crate::review) fn commit(
     }
     checkpoint()?;
     let mut state = fresh(plan)?;
-    if let Ok(observed) = super::incarnation::observe(&store, true) {
-        super::incarnation::stamp(&mut state, &observed);
-    }
+    // The receipt names no folder: the enrollment is wherever these files are.
     let receipt = json!({"review_fingerprint":plan.fingerprint,"project_id":state.project_id,
-        "project_root":state.project_root,"previous_project_root":plan.previous.root,
         "previous_checkpoint":plan.previous.digest,"history_recovery":plan.previous.history_pins,
-        "checkpoint_recovery":checkpoint_pins,"launch_roots":plan.launch_roots(),"cache_dir":plan.requested_cache});
+        "checkpoint_recovery":checkpoint_pins,"cache_dir":plan.requested_cache});
     state.operator["bootstrap"] = receipt.clone();
     let context = Context::new(
         state.project_id.clone(),
@@ -279,7 +283,7 @@ pub(in crate::review) fn commit(
         let committed = store
             .checkpoint_bytes()
             .ok()
-            .and_then(|bytes| super::upgrades::checkpoint(&bytes).ok())
+            .and_then(|bytes| store.decode(&bytes).ok())
             .is_some_and(|saved| {
                 Store::validate_checkpoint(&saved).is_ok()
                     && saved.project_id == state.project_id
@@ -308,7 +312,6 @@ fn fresh(plan: &Plan) -> Result<State, Error> {
     Ok(State {
         legacy_preview: None,
         remember_policy: false,
-        administration_copy: None,
         history_generation: history::generation()?,
         history_owner: None,
         history_available: true,
@@ -324,6 +327,7 @@ fn fresh(plan: &Plan) -> Result<State, Error> {
             .to_str()
             .ok_or(Error::Invalid("project must be UTF-8"))?
             .into(),
+        recorded_root: None,
         sequence: 0,
         policy_revision: plan.revision.clone(),
         candidates: BTreeMap::from([("project".into(), plan.candidate.clone())]),
@@ -351,7 +355,7 @@ fn fresh(plan: &Plan) -> Result<State, Error> {
 /// conversion, optional observations or filesystem publication.
 pub(in crate::review) fn current_enrollment(project: &Path) -> Result<State, Error> {
     let store = Store::open(project)?;
-    let state = super::upgrades::checkpoint(&store.checkpoint_bytes()?)?;
+    let state = store.decode(&store.checkpoint_bytes()?)?;
     Store::validate_checkpoint(&state)?;
     Ok(state)
 }
@@ -359,11 +363,9 @@ pub(in crate::review) fn current_enrollment(project: &Path) -> Result<State, Err
 pub(in crate::review) fn enrollment(state: &State, receipt: &Value) -> bool {
     receipt.is_object()
         && receipt["project_id"] == state.project_id
-        && receipt["project_root"] == state.project_root
         && state.authorization_events.iter().any(|event| {
             event["kind"] == "project_enrolled"
                 && event["provenance"]["project_id"] == state.project_id
-                && event["provenance"]["project_root"] == state.project_root
                 && event["details"]["bootstrap"] == *receipt
                 && ["host-elicitation", "operator-cli"]
                     .contains(&event["operator"]["mechanism"].as_str().unwrap_or(""))
@@ -446,7 +448,7 @@ pub(in crate::review) fn committed(plan: &Plan) -> Result<Option<Context>, Error
         Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error),
     };
-    let Ok(state) = super::upgrades::checkpoint(&bytes) else {
+    let Ok(state) = store.decode(&bytes) else {
         return Ok(None);
     };
     if Store::validate_checkpoint(&state).is_err()

@@ -251,7 +251,13 @@ pub(super) fn pending_count(state: &State, time: u64) -> usize {
 
 /// Inspect retained records without exposing private grant/binding material.
 /// Terminal records stay selectable so repeated denial can return its receipt.
-pub(super) fn inspect_from(state: &State, id: Option<&str>, time: u64) -> Result<Value, Error> {
+/// A live request this MCP connection cannot approve says so and why.
+pub(super) fn inspect_from(
+    state: &State,
+    context: &Context,
+    id: Option<&str>,
+    time: u64,
+) -> Result<Value, Error> {
     let view = |row: &HookRequest| {
         if row.status == "consumed" {
             return Err(Error::Missing);
@@ -277,6 +283,12 @@ pub(super) fn inspect_from(state: &State, id: Option<&str>, time: u64) -> Result
             "approval_id":row.grant.as_ref().map(|g|&g.approval_id)});
         let redacted = super::model::redact(&mut value);
         value["redacted"] = json!(redacted);
+        if status == "pending"
+            && let Some(route) = approval_route(context, &row.agent)
+        {
+            value["approvable"] = json!(false);
+            value["approval_route"] = json!(route);
+        }
         Ok::<_, Error>(value)
     };
     if let Some(id) = id {
@@ -320,6 +332,9 @@ pub(super) fn deny(context: &Context, id: &str, confirmed: bool) -> Result<Value
         if let Some(value) = replay(state)? { return Ok(value); }
         let index = state.hook_requests.iter().position(|row| row.request_id == id).ok_or(Error::Missing)?;
         let row = &state.hook_requests[index];
+        if unenrolled_owner(context, &row.agent) {
+            return Err(Error::AgentNotConnected);
+        }
         if context.surface != "cli" && (context.surface != "mcp" || !agent_matches(context, row)
             || context.session_id.as_ref().is_some_and(|session| *session != row.session_id)) {
             return Err(Error::Missing);
@@ -422,8 +437,16 @@ pub(crate) fn refused(
         state.compact_authorization_at(time);
         match lookup(state, key, identity, time)? {
             Some(Found::Grant(index)) => {
-                consume(state, &context, index, time);
-                return Ok(json!({"allowed":true}));
+                let grant = state.hook_requests[index]
+                    .grant
+                    .as_ref()
+                    .expect("approved requests hold a grant");
+                // A copy of this folder holds the same grant; it is spent once.
+                if super::storage::authority::claim(&grant.binding, grant.expires_at_ms)? {
+                    consume(state, &context, index, time);
+                    return Ok(json!({"allowed":true}));
+                }
+                state.hook_requests.remove(index);
             }
             Some(Found::Pending(id)) => {
                 let others = others_pending(state, key, &id, time)?;
@@ -540,9 +563,15 @@ pub(crate) fn followup(root: &Path, key: &Key<'_>, identity: &Identity<'_>) -> R
             return Ok(json!(false));
         };
         let row = &mut state.hook_requests[index];
-        if let Some(grant) = row.grant.as_mut() {
-            grant.followup_used = true;
+        let Some(grant) = row.grant.as_mut() else {
+            return Ok(json!(false));
+        };
+        // The follow-up is spent once too, whichever copy reaches it first.
+        let cover = format!("followup:{}", grant.binding);
+        if !super::storage::authority::claim(&cover, grant.expires_at_ms + FOLLOWUP_MS)? {
+            return Ok(json!(false));
         }
+        grant.followup_used = true;
         Ok(json!(true))
     })?;
     Ok(value == json!(true))
@@ -550,6 +579,41 @@ pub(crate) fn followup(root: &Path, key: &Key<'_>, identity: &Identity<'_>) -> R
 
 fn agent_matches(context: &Context, row: &HookRequest) -> bool {
     context.agent.as_deref() == Some(row.agent.as_str())
+}
+
+/// Whether the connection was launched for the agent that made this request
+/// but the project records no integration for it. It gains no authority; the
+/// refusal only names the cause and the route.
+fn unenrolled_owner(context: &Context, agent: &str) -> bool {
+    context.surface == "mcp"
+        && context.agent.is_none()
+        && context.declared_agent.as_deref().map(super::cli::agent_id) == Some(agent)
+}
+
+/// The recovery when the agent that made a request is not enrolled here.
+pub(super) const NOT_CONNECTED: &str = "This agent is not connected to Shield in this project, so it cannot approve or deny requests here. Ask the user to run `shield mcp setup` in this project and restart this agent session, then repeat the refused call to get a new request_id";
+const NOT_CONNECTED_REASON: &str = "this agent is not connected to Shield in this project";
+const NOT_CONNECTED_RECOVERY: &str = "Ask the user to run `shield mcp setup` in this project and restart this agent session, then repeat each refused call to get new request IDs";
+
+/// A group refusal for a request whose agent is not enrolled here.
+pub(super) fn not_connected_in_group(request: &str) -> Error {
+    Error::Grouped {
+        request: request.to_owned(),
+        reason: NOT_CONNECTED_REASON,
+        recovery: NOT_CONNECTED_RECOVERY,
+    }
+}
+
+/// Why this MCP connection cannot approve a request made by `agent`, so a
+/// listing never offers what `request_approve` refuses.
+fn approval_route(context: &Context, agent: &str) -> Option<&'static str> {
+    if context.surface != "mcp" || context.agent.as_deref() == Some(agent) {
+        None
+    } else if unenrolled_owner(context, agent) {
+        Some(NOT_CONNECTED)
+    } else {
+        Some("Another agent made this request; only that agent's connection can approve it")
+    }
 }
 
 /// The request IDs a call names, and whether it names a group. Exactly one of
@@ -651,11 +715,15 @@ fn selected<'a>(
     };
     let mut rows: Vec<&HookRequest> = Vec::with_capacity(ids.len());
     for (position, id) in ids.iter().enumerate() {
-        let Some(row) = state
-            .hook_requests
-            .iter()
-            .find(|row| row.request_id == *id && agent_matches(context, row))
-        else {
+        let stored = state.hook_requests.iter().find(|row| row.request_id == *id);
+        if let Some(row) = stored.filter(|row| unenrolled_owner(context, &row.agent)) {
+            return Err(if group {
+                not_connected_in_group(&row.request_id)
+            } else {
+                Error::AgentNotConnected
+            });
+        }
+        let Some(row) = stored.filter(|row| agent_matches(context, row)) else {
             // An unknown ID is the agent's text; name its position instead.
             return Err(if group {
                 refuse(
@@ -745,6 +813,28 @@ pub(super) fn group_row(
     ))
 }
 
+/// The session folder relative to the project, as stored requests keep it, so
+/// a request and its grant hold no project path and keep matching after the
+/// folder moves. A folder outside the project stays as the host gave it.
+pub(crate) fn relative_cwd(root: &std::path::Path, cwd: &str) -> String {
+    let within = |cwd: &std::path::Path, root: &std::path::Path| {
+        cwd.strip_prefix(root).ok().map(|relative| {
+            if relative.as_os_str().is_empty() {
+                ".".to_owned()
+            } else {
+                relative.to_string_lossy().replace('\\', "/")
+            }
+        })
+    };
+    let given = std::path::Path::new(cwd);
+    within(given, root)
+        .or_else(|| {
+            let (cwd, root) = (given.canonicalize().ok()?, root.canonicalize().ok()?);
+            within(&cwd, &root)
+        })
+        .unwrap_or_else(|| cwd.to_owned())
+}
+
 /// Whether the form can show this request whole; a longer one is not offered.
 pub(crate) fn fits(summary: &Summary, cwd: &str) -> bool {
     message(summary, cwd).len() <= MAX_FORM
@@ -826,8 +916,16 @@ fn describe(text: &mut String, summary: &Summary, cwd: &str) {
             "\nChanging agent settings can turn off Shield's protection or the confirmation this question relies on.",
         );
     }
+    // Folders inside the project are stored relative to it.
     text.push_str("\nFolder: ");
-    text.push_str(&one_line(cwd));
+    if cwd == "." {
+        text.push_str("the project folder");
+    } else if std::path::Path::new(cwd).is_absolute() {
+        text.push_str(&one_line(cwd));
+    } else {
+        text.push_str(&one_line(cwd));
+        text.push_str(" in the project folder");
+    }
     text.push_str("\n\nThe agent's request, exactly:\n");
     for line in summary.action.split('\n') {
         text.push_str("    ");

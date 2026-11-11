@@ -272,14 +272,12 @@ fn upgrade_authentic_sources_preserve_original_authority_and_all_entry_points() 
             assert_eq!(state.project_id, raw["project_id"].as_str().unwrap());
             assert_eq!(state.policy_lineage(), raw["project_id"].as_str().unwrap());
             assert_eq!(state.policy_revision, raw["policy_revision"]);
-            assert!(state.operator["runtime_incarnation"].is_object());
+            assert!(state.operator.get("runtime_incarnation").is_none());
             let active = serde_json::to_value(state.active.as_ref().unwrap()).unwrap();
-            for field in ["policy_revision", "candidate_digest"] {
+            for field in ["policy_revision", "candidate_digest", "activation_id"] {
                 assert_eq!(active[field], raw["active"][field]);
             }
-            for field in ["activation_id", "binding"] {
-                assert_eq!(active[field], raw["active"][field]);
-            }
+            super::tests::assert_converted_binding(&state, &raw);
             assert!(
                 state
                     .authorization_events

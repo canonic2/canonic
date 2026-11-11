@@ -6,10 +6,10 @@ use crate::review::model::retained_events;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
-/// Provenance fields a completion must share with its decision.
-const BINDING: [&str; 7] = [
+/// Provenance fields a completion must share with its decision. The working
+/// folder is recorded relative to the project, so a moved project keeps links.
+const BINDING: [&str; 6] = [
     "project_id",
-    "project_root",
     "surface",
     "agent",
     "session_id",
@@ -130,10 +130,7 @@ fn matching<'a>(
     limit: usize,
 ) -> Option<(&'a str, &'a Value)> {
     let provenance = &completion["provenance"];
-    if ["project_id", "project_root"]
-        .iter()
-        .any(|field| provenance[*field].as_str().is_none_or(str::is_empty))
-    {
+    if provenance["project_id"].as_str().is_none_or(str::is_empty) {
         return None;
     }
     let request = if let Some(request) = completion["details"]["reported_request_id"].as_str() {
@@ -279,9 +276,9 @@ mod tests {
     fn decision(request: &str) -> Value {
         json!({"kind":"decision", "event_id":format!("event-{request}"),
             "links":{"request_id":request},
-            "provenance":{"project_id":"acme-project", "project_root":"/acme",
+            "provenance":{"project_id":"acme-project",
                 "surface":"hook", "agent":"codex", "session_id":"acme-session",
-                "tool_use_id":"acme-call", "cwd":"/acme", "host_event_name":"PreToolUse"},
+                "tool_use_id":"acme-call", "cwd":".", "host_event_name":"PreToolUse"},
             "details":{"host_decision":"allow", "operation":{"kind":"shell", "source":"git status"}}})
     }
 
@@ -307,7 +304,7 @@ mod tests {
                 view(vec![decided.clone(), completed.clone()], 5000)[1]["links"]["request_id"],
                 "original"
             );
-            for field in ["project_id", "project_root"] {
+            for field in ["project_id"] {
                 for replacement in [Value::Null, json!(""), json!("another-checkout")] {
                     let mut foreign = completed.clone();
                     foreign["provenance"][field] = replacement.clone();
@@ -407,7 +404,6 @@ mod tests {
     fn native_completion_requires_complete_matching_identity_and_operation() {
         for field in [
             "project_id",
-            "project_root",
             "surface",
             "agent",
             "session_id",

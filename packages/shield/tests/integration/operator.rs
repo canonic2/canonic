@@ -423,22 +423,24 @@ fn setup_defaults_to_allow_and_refuses_unreviewed_fallback_edits() {
         .arg(root.path())
         .assert()
         .code(1);
-    // Editing the checkpoint cannot manufacture confirmed administrative intent.
-    // Unit integration tests separately cover genuinely confirmed Block settings.
+    // Editing the checkpoint cannot manufacture confirmed administrative
+    // intent: the edited registration has no consent and is ignored, and the
+    // folder's agent files bring back the reviewed one. Unit integration tests
+    // separately cover genuinely confirmed Block settings.
     let mut saved: Value = serde_json::from_slice(&std::fs::read(&state_path).unwrap()).unwrap();
     saved["operator"]["integration"]["ask_fallback"]["codex"] = json!("block");
     std::fs::write(&state_path, serde_json::to_vec(&saved).unwrap()).unwrap();
     let forged = std::fs::read(&state_path).unwrap();
-    assert_eq!(interactive(&root, &codex, "")["code"], 1);
-    assert_eq!(std::fs::read(&state_path).unwrap(), forged);
     let after = query(&root, &["status"]);
+    assert_eq!(std::fs::read(&state_path).unwrap(), forged);
     assert_eq!(after["active"], before["active"]);
     assert!(
         after["coverage"]["installed_integrations"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|row| row["agent"] == "codex" && row["ask_fallback"] == "block")
+            .any(|row| row["agent"] == "codex" && row["ask_fallback"] == "allow"),
+        "{after}"
     );
     assert_eq!(
         after["coverage"]["installed_integrations"]

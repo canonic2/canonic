@@ -173,14 +173,9 @@ impl Prepared {
             let repair = (|| {
                 let state = store.read_checkpoint()?;
                 state.check(context)?;
-                let mut expected_metadata = self.metadata.clone();
-                // This transaction rotated the private administration receipt.
-                // Generation and every other metadata field still fence repair.
-                expected_metadata["administration_origin"]["token"] =
-                    state.operator["administration_origin"]["token"].clone();
                 if state.enforcement != after
                     || state.policy_revision != self.revision
-                    || project::metadata(&state) != expected_metadata
+                    || project::metadata(&state) != self.metadata
                 {
                     return Err(Error::StaleSnapshot);
                 }
@@ -212,7 +207,7 @@ mod tests {
     #[test]
     fn shield_mode_is_local_preserves_authority_and_rejects_stale_reviews() {
         let (root, context) = fixture();
-        let mut before = project::checkpoint(&context).unwrap();
+        let before = project::checkpoint(&context).unwrap();
         let stale = Prepared::new(&context, false).unwrap();
         let plan = Prepared::new(&context, false).unwrap();
         assert!(current(root.path()).unwrap());
@@ -229,11 +224,6 @@ mod tests {
         let after = project::checkpoint(&context).unwrap();
         assert_eq!(before.policy_revision, after.policy_revision);
         assert_eq!(json!(before.active), json!(after.active));
-        assert_ne!(
-            before.operator["administration_origin"]["token"],
-            after.operator["administration_origin"]["token"]
-        );
-        before.operator["administration_origin"] = after.operator["administration_origin"].clone();
         assert_eq!(before.operator, after.operator);
         assert_eq!(before.read_requests.len(), after.read_requests.len());
         assert_eq!(before.run_requests.len(), after.run_requests.len());

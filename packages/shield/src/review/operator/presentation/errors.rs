@@ -115,7 +115,8 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             "Several packs match this reference.",
             &["Retry with one of the listed references."],
         ),
-        Error::Missing => missing(command),
+        // Only agent connections receive this; the terminal is the operator.
+        Error::Missing | Error::AgentNotConnected => missing(command),
         Error::CacheUnavailable => Report::new(
             "Compiled policy is not ready",
             "Shield needs a valid compiled plan for the committed policy.",

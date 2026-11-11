@@ -80,6 +80,7 @@ pub(crate) const CAPABILITIES: &[&str] = &[
     "command-sets-v1",
     "variables-v1",
     "variable-parts-v1",
+    "variable-prefixes-v1",
     "preconditions-v1",
     "directory-options-v1",
     "templates-v1",

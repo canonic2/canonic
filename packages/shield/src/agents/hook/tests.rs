@@ -227,13 +227,7 @@ fn shield_mode_pause_blocks_forged_authority_and_operator_commands() {
     assert_eq!(fs::read(&path).unwrap(), before);
     confirm_mode(&context, &connection, "enable");
     let after: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
-    let mut before: Value = serde_json::from_slice(&before).unwrap();
-    assert_ne!(
-        before["operator"]["administration_origin"]["token"],
-        after["operator"]["administration_origin"]["token"]
-    );
-    before["operator"]["administration_origin"] =
-        after["operator"]["administration_origin"].clone();
+    let before: Value = serde_json::from_slice(&before).unwrap();
     assert_eq!(after["operator"], before["operator"]);
     assert_eq!(after["session_grants"], before["session_grants"]);
 }
@@ -1163,6 +1157,12 @@ fn uncertain_search_footprints_explain_narrowing_and_sensitive_reads_explain_con
     );
     let root = argv_fixture("rg", "allow");
     fs::write(root.path().join(".mcp.json"), "{}").unwrap();
+    // In-session approval needs the agent's recorded integration.
+    review::operator::integrations::configure_fixture(
+        root.path(),
+        crate::cli::public::IntegrationChoice::agent("codex"),
+        crate::review::integrations::AskFallback::Block,
+    );
     let result = call(root.path(), "codex", "rg --no-config Acme .mcp.json");
     assert_eq!(result["hookSpecificOutput"]["permissionDecision"], "deny");
     // Codex cannot prompt; the user can allow this read once in the session.

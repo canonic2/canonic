@@ -143,7 +143,7 @@ pub(super) fn dynamic(document: &PackDocument) -> bool {
 /// Capabilities that a dynamic source document uses beyond its resolved rules.
 pub(super) struct Features {
     pub(super) variables: bool,
-    pub(super) parts: bool,
+    pub(super) selectors: variables::Usage,
     pub(super) templates: bool,
     pub(super) patterns: BTreeSet<String>,
 }
@@ -165,7 +165,7 @@ pub(super) fn sample(document: &PackDocument) -> Result<(PackDocument, Features)
         used: Used {
             variables: !document.variables.is_empty(),
             templates: false,
-            parts: false,
+            features: variables::Usage::default(),
         },
     };
     let output = resolver.document(document.clone(), &BTreeMap::new(), &mut Vec::new())?;
@@ -173,7 +173,7 @@ pub(super) fn sample(document: &PackDocument) -> Result<(PackDocument, Features)
         output,
         Features {
             variables: resolver.used.variables,
-            parts: resolver.used.parts,
+            selectors: resolver.used.features,
             templates: resolver.used.templates,
             patterns: document
                 .variables
@@ -244,7 +244,7 @@ struct Resolver<'a> {
 struct Used {
     variables: bool,
     templates: bool,
-    parts: bool,
+    features: variables::Usage,
 }
 
 enum Activity {
@@ -579,7 +579,7 @@ impl Resolver<'_> {
                     .get(name)
                     .and_then(|value| declaration.selector(value)))
             };
-            self.used.parts |=
+            self.used.features |=
                 variables::substitute(tree, domain, &lookup, &mut unset, self.sample)
                     .map_err(|error| error.in_resolution(id, field, &referenced))?;
             names.extend(referenced);

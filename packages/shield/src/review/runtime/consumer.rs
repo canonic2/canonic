@@ -86,6 +86,9 @@ impl From<Error> for RuntimeError {
             Error::CheckoutChanged => Self::Invalid("checkout runtime changed; reconnect Shield"),
             Error::CleanupPending | Error::CacheUnavailable => Self::CacheUnavailable,
             Error::ApprovalRequired => Self::Invalid("operator approval is required"),
+            Error::AgentNotConnected => {
+                Self::Invalid("this agent is not connected to Shield in this project")
+            }
             Error::CandidateUnavailable | Error::CursorUnavailable => {
                 Self::Invalid("diagnostic view is unavailable")
             }

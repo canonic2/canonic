@@ -28,6 +28,7 @@ fn historical_fixture() -> (assert_fs::TempDir, review::Context, Value) {
     let context = review::mcp::initialize_fixture(root.path(), &bundle);
     let mut raw =
         serde_json::to_value(Store::open(root.path()).unwrap().read_current().unwrap()).unwrap();
+    raw["project_root"] = json!(context.project_root);
     let object = raw.as_object_mut().unwrap();
     for key in [
         "hook_requests",
@@ -46,6 +47,10 @@ fn historical_fixture() -> (assert_fs::TempDir, review::Context, Value) {
 /// Reproduce the original legacy proof; dropping current required fields alone
 /// must never manufacture an accepted historical activation.
 pub(super) fn legacy_activation(raw: &mut Value) {
+    assert!(
+        raw["project_root"].is_string(),
+        "the earlier format always recorded its root"
+    );
     raw.as_object_mut().unwrap().remove("configuration_changes");
     raw["active"].as_object_mut().unwrap().remove("compiled");
     raw["active"]
@@ -144,10 +149,10 @@ fn upgrade_historical_active_source_preserves_identity_decisions_and_evidence() 
         "previous_activation_id",
         "policy_revision",
         "candidate_digest",
-        "binding",
     ] {
         assert_eq!(active[field], raw["active"][field]);
     }
+    assert_converted_binding(&state, &raw);
     assert_eq!(
         state
             .authorization_events
@@ -216,16 +221,29 @@ fn cache_fault(cache: &Path, scratch: &Path, fault: &str) -> bool {
     true
 }
 
+/// A converted activation keeps its identity and confirmation; its binding no
+/// longer names the folder, and its activation event records the original.
+pub(super) fn assert_converted_binding(state: &State, raw: &Value) {
+    let active = serde_json::to_value(state.active.as_ref().unwrap()).unwrap();
+    assert_eq!(active["binding_version"], 2);
+    assert_ne!(active["binding"], raw["active"]["binding"]);
+    assert!(state.authorization_events.iter().any(|event| {
+        event["kind"] == "runtime_activated"
+            && event["details"]["binding"] == active["binding"]
+            && event["details"]["converted_from_binding"] == raw["active"]["binding"]
+    }));
+}
+
 fn assert_historical_cache_binding(raw: &Value, active: &Value, selected: &Path, fault: &str) {
     for field in [
         "activation_id",
         "previous_activation_id",
         "policy_revision",
         "candidate_digest",
-        "binding",
     ] {
         assert_eq!(active[field], raw["active"][field], "{fault}: {field}");
     }
+    assert_eq!(active["binding_version"], 2, "{fault}: binding");
     assert!(
         active["compiled"]["digest"]
             .as_str()
@@ -381,10 +399,21 @@ fn upgrade_full_authorization_journal_keeps_original_evidence() {
     let store = Store::open(root.path()).unwrap();
     let converted = store.read_checkpoint().unwrap();
     assert_eq!(converted.authorization_events.len(), 1025);
-    assert_eq!(
-        json!(converted.authorization_events[..1024]),
-        raw["authorization_events"]
-    );
+    // Every original record is kept; the activation's own record carries its
+    // converted binding beside the original one.
+    let mut expected = raw["authorization_events"].clone();
+    for event in expected.as_array_mut().unwrap() {
+        if event["kind"] == "runtime_activated" {
+            event["details"]["converted_from_binding"] = event["details"]["binding"].clone();
+            event["details"]["binding"] = json!(
+                converted
+                    .active
+                    .as_ref()
+                    .map(|active| { serde_json::to_value(active).unwrap()["binding"].clone() })
+            );
+        }
+    }
+    assert_eq!(json!(converted.authorization_events[..1024]), expected);
     assert_policy(root.path(), &context);
 }
 

@@ -188,7 +188,8 @@ impl Artifact {
     pub(super) fn load(&self, root: &str, project_id: &str) -> Result<Evaluator, Error> {
         let _trace = crate::diagnostics::trace::span("cache.load");
         if !self.directory.is_absolute()
-            || self.project_key != project_key(root, project_id)
+            || (self.project_key != project_key(root, project_id)
+                && self.project_key != legacy_project_key(root, project_id))
             || [&self.project_key, &self.plan_key]
                 .iter()
                 .any(|s| !digest(s))
@@ -244,7 +245,21 @@ fn unavailable() -> Error {
 fn digest(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())
 }
-fn project_key(root: &str, project_id: &str) -> String {
+/// The cache namespace of a project, by its ID alone: a moved, renamed or
+/// copied folder keeps its cache. Plans inside are keyed by content and
+/// verified by digest on load, so copies sharing a namespace cannot confuse
+/// each other. `_root` is accepted for the earlier key below.
+fn project_key(_root: &str, project_id: &str) -> String {
+    policy::fingerprint(
+        json!(["shield-project-cache-v2", project_id])
+            .to_string()
+            .as_bytes(),
+    )
+}
+
+/// The earlier namespace, which also bound the folder's absolute root. An
+/// artifact recorded under it still loads in place.
+fn legacy_project_key(root: &str, project_id: &str) -> String {
     policy::fingerprint(
         json!(["shield-project-cache-v1", root, project_id])
             .to_string()

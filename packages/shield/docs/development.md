@@ -32,9 +32,10 @@ make test-focus FILTER=previous_binary_unreceipted_checkpoint TEST_TARGET=--test
 
 This opt-in fixture enrolls through that previous binary in an isolated project
 and home. It verifies that status reads the record unchanged, and that the
-first ordinary command keeps the project ID and activation, records the runtime
-incarnation and retains the original bytes as a recovery copy. The supplied
-binary must predate the continuity/private-consent records.
+first ordinary command keeps the project ID and activation ID, rewrites the
+checkpoint without its recorded root, records the installation's authority as
+the user's consent and retains the original bytes as a recovery copy. The
+supplied binary must predate the private-consent records.
 
 ## Native Linux development
 

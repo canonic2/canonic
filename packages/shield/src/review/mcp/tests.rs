@@ -30,47 +30,23 @@ fn fixture() -> (assert_fs::TempDir, Context, Connection) {
     fixture_with(&Bundle::capture(r#"{"schema_version":1,"packs":[]}"#, &[], None).unwrap())
 }
 
-fn invalidate_incarnation(root: &Path) {
-    let path = root.join(".shield/review/state.json");
-    let mut raw: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-    raw["operator"]
-        .as_object_mut()
-        .unwrap()
-        .remove("runtime_incarnation");
-    std::fs::write(path, serde_json::to_vec(&raw).unwrap()).unwrap();
-}
-
 #[test]
-fn first_runtime_use_keeps_same_epoch_diagnostic_handles_but_refuses_retained_epoch_change() {
-    for rotate in [false, true] {
-        let (root, context, connection) = fixture();
-        let status = call(&context, &connection, "status", &json!({}), &|| Ok(()));
-        let handle = status["data"]["active_candidate_id"]
-            .as_str()
-            .unwrap()
-            .to_owned();
-        if rotate {
-            invalidate_incarnation(root.path());
-        }
-        let proposed = call(
-            &context,
-            &connection,
-            "policy_propose",
-            &json!({"change":{"kind":"rule_add","rule":rule("after-diagnostics","allow")}}),
-            &|| Ok(()),
-        );
-        if rotate {
-            assert!(
-                proposed["error"]["message"]
-                    .as_str()
-                    .is_some_and(|message| message.contains("reconnect Shield")),
-                "{proposed}"
-            );
-        } else {
-            assert!(proposed["error"].is_null(), "{proposed}");
-            assert!(connection.views.lock().unwrap().get(&handle).is_ok());
-        }
-    }
+fn first_runtime_use_keeps_diagnostic_handles() {
+    let (_root, context, connection) = fixture();
+    let status = call(&context, &connection, "status", &json!({}), &|| Ok(()));
+    let handle = status["data"]["active_candidate_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let proposed = call(
+        &context,
+        &connection,
+        "policy_propose",
+        &json!({"change":{"kind":"rule_add","rule":rule("after-diagnostics","allow")}}),
+        &|| Ok(()),
+    );
+    assert!(proposed["error"].is_null(), "{proposed}");
+    assert!(connection.views.lock().unwrap().get(&handle).is_ok());
 }
 
 #[test]

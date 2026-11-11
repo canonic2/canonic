@@ -83,7 +83,8 @@ fn copied_workspace_run_grant_cannot_replay_and_original_remains_usable() {
     child.project_id = opened.project_id;
     child.project_root = opened.project_root;
     child.cwd = Some(child.project_root.clone());
-    assert_ne!(child.project_id, context.project_id);
+    // The copy is the same project; its requests name the original's files.
+    assert_eq!(child.project_id, context.project_id);
     assert!(
         gate(
             &child,
@@ -729,7 +730,7 @@ fn revocation_expiry_missing_and_pending_limits_fail_closed() {
 }
 
 #[test]
-fn publication_failure_withholds_callback_and_release_failure_keeps_consumption() {
+fn publication_failure_withholds_the_callback_and_leaves_the_grant_spent() {
     let (_root, context, evidence, resource) = fixture();
     let id = pending(&context, &evidence, &resource);
     authorize(&operator(&context), &id, 300, None, false).expect("native approval fixture");
@@ -770,6 +771,27 @@ fn publication_failure_withholds_callback_and_release_failure_keeps_consumption(
             Ok(json!({}))
         })
         .expect("restore owned fixture capacity");
+    // The grant was claimed in the per-user ledger before publication failed;
+    // it is never usable again, so the person approves a fresh request.
+    let retry = gate(
+        &context,
+        &evidence,
+        &resource,
+        Some(&id),
+        || true,
+        |_| panic!("a spent grant never launches"),
+    )
+    .expect("native approval fixture")
+    .0;
+    assert_eq!(retry["allowed"], false);
+}
+
+#[test]
+fn release_failure_after_launch_keeps_consumption() {
+    let (_root, context, evidence, resource) = fixture();
+    let id = pending(&context, &evidence, &resource);
+    authorize(&operator(&context), &id, 300, None, false).expect("native approval fixture");
+    let store = Store::open(Path::new(&context.project_root)).expect("native approval fixture");
     let effect = Path::new(&context.project_root).join("handoff-effect");
     assert!(
         gate(

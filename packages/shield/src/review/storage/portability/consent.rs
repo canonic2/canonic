@@ -448,7 +448,6 @@ type RestoredConsent = (
 pub(super) struct RetainedConsent {
     pub(super) candidate: Value,
     pub(super) metadata: Value,
-    pub(super) checkpoints: BTreeMap<String, Value>,
 }
 pub(super) fn retained_record(candidate: &Value) -> Result<Option<RetainedConsent>, Error> {
     let user = match partitions::select(&key(candidate)?, false) {
@@ -483,12 +482,11 @@ pub(super) fn retained_record(candidate: &Value) -> Result<Option<RetainedConsen
     {
         return Err(Error::Invalid("private consent lineage unavailable"));
     }
-    let checkpoints = serde_json::from_value(body["registry_checkpoints"].clone())
+    serde_json::from_value::<BTreeMap<String, Value>>(body["registry_checkpoints"].clone())
         .map_err(|_| Error::Invalid("private consent checkpoints invalid"))?;
     Ok(Some(RetainedConsent {
         candidate: raw,
         metadata,
-        checkpoints,
     }))
 }
 
@@ -559,6 +557,12 @@ pub(super) fn restore_record(
         pins,
     )))
 }
+/// Whether this user reviewed this exact retained policy content before.
+pub(in crate::review::storage) fn presence_for(candidate: &Value) -> bool {
+    retained_record(candidate).is_ok_and(|record| {
+        record.is_some_and(|record| record.candidate == *candidate && record.metadata.is_object())
+    })
+}
 pub(in crate::review) fn presence(state: &State) -> Value {
     let Some(key) = state.operator["policy_consent_key"].as_str() else {
         return json!({"present":false,"integrity":"unchecked"});
@@ -614,7 +618,5 @@ pub(in crate::review::storage) fn refresh(store: &Store) -> bool {
     }
     result.is_ok()
 }
-#[cfg(all(test, unix))]
-mod copy_authority_tests;
 #[cfg(test)]
 mod tests;

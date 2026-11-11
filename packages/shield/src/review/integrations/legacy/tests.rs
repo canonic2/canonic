@@ -138,6 +138,9 @@ fn historical_interceptor_folder_protection_requires_ownership_at_its_own_root()
             Ok(json!({}))
         })
         .unwrap();
+    // Files still matching a registration this user reviewed could register
+    // this folder again; removing the owned files ends the protection.
+    fs::remove_dir_all(root.path().join(BASE)).unwrap();
     assert!(!integrations::protects_legacy_path(&path));
 }
 

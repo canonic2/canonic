@@ -78,7 +78,7 @@ fn deny_summary(branch: &str) -> Summary {
 }
 
 #[test]
-fn copied_native_authority_hook_grants_and_followups_stay_in_the_original() {
+fn a_copied_hook_grant_and_its_followup_are_each_spent_once_across_copies() {
     for consumed in [false, true] {
         let original = fixture();
         let id = pending(original.refuse("acme-copy"));
@@ -91,7 +91,6 @@ fn copied_native_authority_hook_grants_and_followups_stay_in_the_original() {
         if consumed {
             assert!(matches!(original.refuse("acme-copy"), Outcome::Allowed));
         }
-        let before = state_bytes(&original);
         let root = assert_fs::TempDir::new().unwrap();
         crate::test_support::copy_fixture_directory(original.root(), root.path());
         let opened = review::open(root.path()).unwrap();
@@ -104,40 +103,29 @@ fn copied_native_authority_hook_grants_and_followups_stay_in_the_original() {
             context,
             active,
         };
-        assert_ne!(child.context.project_id, original.context.project_id);
-        assert!(
-            refused(
-                child.root(),
-                &key("acme-copy"),
-                &original.identity(),
-                &summary()
-            )
-            .is_err()
-        );
-        assert!(!followup(child.root(), &key("acme-copy"), &original.identity()).unwrap());
-        assert!(!followup(child.root(), &key("acme-copy"), &child.identity()).unwrap());
-        assert!(approve(&child.connection("codex"), &json!({"request_id":id}), true).is_err());
-
-        let fresh = pending(child.refuse("acme-copy"));
+        // A copy is the same project with the same state.
+        assert_eq!(child.context.project_id, original.context.project_id);
+        if consumed {
+            // The consumed grant's one follow-up is spent once, in either folder.
+            assert!(followup(child.root(), &key("acme-copy"), &child.identity()).unwrap());
+            assert!(!followup(original.root(), &key("acme-copy"), &original.identity()).unwrap());
+            assert!(matches!(child.refuse("acme-copy"), Outcome::Pending(..)));
+        } else {
+            // The unused grant allows one retry, in whichever folder retries first.
+            assert!(matches!(child.refuse("acme-copy"), Outcome::Allowed));
+            assert!(matches!(original.refuse("acme-copy"), Outcome::Pending(..)));
+            assert!(!followup(original.root(), &key("acme-copy"), &original.identity()).unwrap());
+        }
+        // Either folder can still ask for and use a fresh approval.
+        let fresh = pending(original.refuse("acme-copy"));
         assert_ne!(fresh, id);
         approve(
-            &child.connection("codex"),
+            &original.connection("codex"),
             &json!({"request_id":fresh}),
             true,
         )
         .unwrap();
-        assert!(matches!(child.refuse("acme-copy"), Outcome::Allowed));
-        assert!(followup(child.root(), &key("acme-copy"), &child.identity()).unwrap());
-        assert!(!followup(child.root(), &key("acme-copy"), &child.identity()).unwrap());
-        assert!(matches!(child.refuse("acme-copy"), Outcome::Pending(..)));
-        assert_eq!(state_bytes(&original), before);
-
-        if !consumed {
-            assert!(matches!(original.refuse("acme-copy"), Outcome::Allowed));
-        }
-        assert!(followup(original.root(), &key("acme-copy"), &original.identity()).unwrap());
-        assert!(!followup(original.root(), &key("acme-copy"), &original.identity()).unwrap());
-        assert!(matches!(original.refuse("acme-copy"), Outcome::Pending(..)));
+        assert!(matches!(original.refuse("acme-copy"), Outcome::Allowed));
     }
 }
 
@@ -743,6 +731,102 @@ fn only_the_requesting_agent_over_mcp_can_ask_the_person() {
     ));
     let extra = json!({"request_id":id,"approved":true});
     assert!(confirmation(&fixture.connection("codex"), &extra).is_err());
+}
+
+#[test]
+fn an_unenrolled_connection_of_the_requesting_agent_is_told_why_it_cannot_approve() {
+    let fixture = fixture();
+    let first = pending(fixture.refuse("acme-discard"));
+    let second = pending(fixture.refuse("acme-other"));
+    // The connection was launched for codex, but the project records no
+    // integration for it, as in an unenrolled combined worktree.
+    let mut unenrolled = fixture.context.clone();
+    unenrolled.surface = "mcp".into();
+    unenrolled.agent = None;
+    unenrolled.declared_agent = Some("codex".into());
+    let single = json!({"request_id":first});
+    let call = |args: &Value| {
+        review::mcp::call_with_confirmation(
+            &unenrolled,
+            &review::mcp::Connection::new("acme-connection".into()),
+            "request_approve",
+            args,
+            &|| Ok(()),
+            true,
+        )
+    };
+
+    let refused = call(&single);
+    assert_eq!(refused["error"]["code"], "agent_not_connected", "{refused}");
+    assert!(
+        refused["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("shield mcp setup"),
+        "{refused}"
+    );
+    let group = json!({"request_ids":[first, second]});
+    let grouped = call(&group);
+    assert_eq!(grouped["error"]["code"], "invalid_input", "{grouped}");
+    let message = grouped["error"]["message"].as_str().unwrap();
+    assert!(message.contains(&first), "{message}");
+    assert!(message.contains("not connected to Shield"), "{message}");
+    assert!(message.contains("shield mcp setup"), "{message}");
+    assert!(matches!(
+        review::approvals::confirmation(&unenrolled, &group),
+        Err(Error::Grouped { request, .. }) if request == first
+    ));
+    assert!(matches!(
+        deny(&unenrolled, &first, true),
+        Err(Error::AgentNotConnected)
+    ));
+
+    // The listing marks what this connection cannot approve, and why.
+    let listed = review::approvals::inspect(&unenrolled, None).unwrap();
+    for row in listed["requests"].as_array().unwrap() {
+        assert_eq!(row["approvable"], false, "{row}");
+        assert!(
+            row["approval_route"]
+                .as_str()
+                .unwrap()
+                .contains("shield mcp setup"),
+            "{row}"
+        );
+    }
+    // The enrolled connection is offered both and still reaches the form.
+    let enrolled = fixture.connection("codex");
+    let listed = review::approvals::inspect(&enrolled, None).unwrap();
+    assert!(
+        listed["requests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row.get("approvable").is_none()),
+        "{listed}"
+    );
+    assert!(confirmation(&enrolled, &single).is_ok());
+
+    // A different agent, enrolled or not, and an unknown ID stay not found.
+    let mut other = unenrolled.clone();
+    other.declared_agent = Some("claude".into());
+    for context in [&other, &fixture.connection("claude")] {
+        assert!(matches!(
+            confirmation(context, &single),
+            Err(Error::Missing)
+        ));
+    }
+    assert!(matches!(
+        review::approvals::inspect(&fixture.connection("claude"), None).unwrap()["requests"][0]
+            ["approval_route"]
+            .as_str(),
+        Some(route) if !route.contains("shield mcp setup")
+    ));
+    assert!(matches!(
+        confirmation(&unenrolled, &json!({"request_id":"hook-request-acme"})),
+        Err(Error::Missing)
+    ));
+    // Nothing was issued.
+    assert_eq!(pending(fixture.refuse("acme-discard")), first);
 }
 
 #[test]

@@ -171,8 +171,6 @@ impl RegisteredReadConsumer {
             || self.profile.mapping_digest != mapping::digest()
             || self.record.profile != self.profile.key()?
             || self.record.binary.digest() != self.profile.binary_digest
-            || state.operator["runtime_incarnation"]["digest"].as_str()
-                != Some(self.record.incarnation.as_str())
             || time < self.record.created_at_ms
             || time >= self.record.expires_at_ms
         {
@@ -224,10 +222,7 @@ pub(crate) fn mint(project: &Path, mapping_digest: &str) -> Result<IssuedReadCon
     let record = ContextRecord {
         consumer_id: Secret::generate()?.hash(),
         project_id: state.project_id.clone(),
-        incarnation: state.operator["runtime_incarnation"]["digest"]
-            .as_str()
-            .ok_or(Error::Invalid("SDK read incarnation unavailable"))?
-            .into(),
+        incarnation: None,
         project_root: state.project_root.clone(),
         profile: profile_key,
         created_at_ms: time,
@@ -237,12 +232,9 @@ pub(crate) fn mint(project: &Path, mapping_digest: &str) -> Result<IssuedReadCon
         binary,
     };
     record.validate()?;
-    // Recheck operation continuity before publishing the private context.
+    // Recheck the project before publishing the private context.
     let after = current(Path::new(&context.project_root))?;
-    if after.project_id != state.project_id
-        || after.policy_lineage() != state.policy_lineage()
-        || after.operator["runtime_incarnation"] != state.operator["runtime_incarnation"]
-    {
+    if after.project_id != state.project_id || after.policy_lineage() != state.policy_lineage() {
         return Err(Error::StaleSnapshot);
     }
     contexts.contexts.insert(secret.hash(), record);

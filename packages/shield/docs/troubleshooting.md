@@ -31,17 +31,20 @@ recovery for this failure.
 
 ## The project was moved or copied
 
-Shield reuses reviewed policy after a move or copy without asking you to approve
-the new folder. It creates fresh runtime and history identities, rebuilds its
-compiled cache, and leaves temporary request and conversation approvals behind.
-Unreviewed file edits stay inactive. The previous checkpoint remains recovery data.
+A Shield project is its files. After a move, rename or copy, and in a worktree or
+clone, Shield keeps working with no follow-up command. A moved or copied folder
+keeps its project ID, history, policy and pending in-session approval requests.
+Pending text-read and checked-run requests are dropped; the agent repeats the
+request. Unreviewed file edits stay inactive.
 
-On the same developer account, a current private administrative receipt also
-preserves reviewed direct-agent setup and local protection preferences. Shield
-replaces an unchanged, exactly owned private launcher with a fresh local token.
-Edited entries and conflicting aliases still need their own setup review.
-Copies without that private receipt reuse recognized policy with safe local
-settings; they do not inherit another developer's agent registration.
+Your approvals are recorded under your home directory, keyed by their exact
+content, so they apply in any folder with the same content: reviewed policy,
+paused protection or protected-path choices, and agent setup for the same policy.
+A worktree or clone whose Shield agent entries match your setup is registered
+automatically. Edited entries need `shield mcp setup` again. Another user, or a
+folder whose content you never reviewed, gets enabled protection, default
+settings and no agent registration. A one-time approval is used once, whichever
+folder uses it first.
 
 A fresh clone containing policy files can reuse the exact policy this developer
 already reviewed. Shield keeps private policy receipts under
@@ -53,11 +56,11 @@ runtime state and must never be committed or shared.
 If no matching receipt exists, the policy needs its first review. The agent can
 call `project_enroll` for an in-session confirmation, or you can run `shield init`
 in a terminal. Changed configuration, unavailable private receipt storage, corrupt
-state and unsupported formats are separate from folder relocation.
+state and unsupported formats are separate problems with their own recovery.
 
-New launch entries resolve `shield` from PATH and the project from the current
-working folder. Restart an older agent to load the current binary. Do not delete
-`.shield/review/` or edit project IDs to repair a move.
+New launch entries resolve `shield` from PATH and the project from the agent's
+session folder. Restart an older agent to load the current binary. Do not delete
+`.shield/review/` or edit project IDs after a move.
 
 ## The agent does not seem to use Shield
 

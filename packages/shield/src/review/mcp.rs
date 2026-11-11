@@ -1083,6 +1083,7 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
             "not_found",
             "The requested record is unavailable. List current records before selecting another ID",
         ),
+        Error::AgentNotConnected => ("agent_not_connected", super::hook_approval::NOT_CONNECTED),
         // Replaced by the resolved adapter's guidance in `failure`.
         Error::ApprovalRequired => (
             "operator_review_required",
@@ -1125,10 +1126,7 @@ fn status(context: &Context, views: &mut views::Views, doctor: bool) -> Result<V
     }
     let mut data = project::status(context)?;
     integration_recovery(context, &mut data);
-    if data["checkpoint_upgrade_pending"] == true
-        || data["runtime_relocation_pending"] == true
-        || data["operation_epoch_pending"] == true
-    {
+    if data["checkpoint_upgrade_pending"] == true {
         data["active_candidate_id"] = Value::Null;
         return Ok(data);
     }

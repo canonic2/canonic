@@ -138,6 +138,22 @@ impl ReadRequest {
     }
 }
 
+/// Drop requests captured for another folder, such as in a copied checkout:
+/// their evidence names that folder's files, so they can never be satisfied
+/// here. They are request state, not authority.
+pub(super) fn retain_local(state: &mut State) {
+    let root = state.project_root.clone();
+    state
+        .read_requests
+        .retain(|row| row.request.project == root);
+}
+
+/// Close requests from the historical codec that lack the resource binding a
+/// current consumer requires; their grants are never honored after upgrade.
+pub(super) fn drop_unbound(state: &mut State) {
+    state.read_requests.retain(|row| row.resource.is_some());
+}
+
 pub(super) fn validate(state: &State) -> Result<(), Error> {
     let mut ids = std::collections::BTreeSet::new();
     for row in &state.read_requests {
@@ -406,6 +422,16 @@ fn consume(
         let approval = grant.approval_id.clone();
         let grant_binding = grant.binding.clone();
         let binding = row.binding.clone();
+        // A copy of this folder holds the same grant; it is spent once.
+        if !super::storage::authority::claim(&grant_binding, grant.expires_at_ms)? {
+            return Ok(result(
+                "approval-consumed",
+                false,
+                Some(reference),
+                "consumed",
+                None,
+            ));
+        }
         receipts::capture(
             state,
             index,

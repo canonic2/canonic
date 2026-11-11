@@ -318,7 +318,7 @@ pub(in crate::review) fn record_inactive_reuse(
         } => json!({"source_identity":source_identity,"id":pack,"version":version,"digest":digest}),
         _ => Value::Null,
     };
-    let proof = json!({"schema_version":1,"kind":"reviewed-private-consent","project_id":state.project_id,"project_root":state.project_root,"policy_revision":state.policy_revision,"candidate_digest":super::storage::sources::map_digest(&state.candidates),"activated":false,"reason":reason,"revoked":revoked,"next_action":next_action});
+    let proof = json!({"schema_version":1,"kind":"reviewed-private-consent","project_id":state.project_id,"policy_revision":state.policy_revision,"candidate_digest":super::storage::sources::map_digest(&state.candidates),"activated":false,"reason":reason,"revoked":revoked,"next_action":next_action});
     state.active = None;
     state.operator["policy_consent"] = proof.clone();
     let mut event = state.event(
@@ -340,14 +340,12 @@ pub(in crate::review) fn inactive_reviewed(state: &State) -> bool {
         && proof["kind"] == "reviewed-private-consent"
         && proof["activated"] == false
         && proof["project_id"] == state.project_id
-        && proof["project_root"] == state.project_root
         && proof["policy_revision"] == state.policy_revision
         && proof["candidate_digest"] == super::storage::sources::map_digest(&state.candidates)
         && state.authorization_events.iter().any(|event| {
             event["kind"] == "policy_consent_reused"
                 && event["operator"]["mechanism"] == "reviewed-private-consent"
                 && event["provenance"]["project_id"] == state.project_id
-                && event["provenance"]["project_root"] == state.project_root
                 && event["details"]["receipt"] == *proof
         })
 }

@@ -1,7 +1,8 @@
 //! One bounded atomic project-state owner; locks are never stolen from writers.
-pub(in crate::review) mod administration;
+mod administration;
+pub(in crate::review) mod authority;
 pub(in crate::review) mod bootstrap;
-pub(in crate::review) mod incarnation;
+mod incarnation;
 mod locking;
 mod portability;
 pub(in crate::review) use portability::consent::{
@@ -235,7 +236,6 @@ impl Store {
         let mut state = State {
             legacy_preview: None,
             remember_policy: false,
-            administration_copy: None,
             history_generation: history::generation()?,
             history_owner: None,
             history_available: true,
@@ -247,6 +247,7 @@ impl Store {
             schema_version: 1,
             project_id: project_id.clone(),
             project_root: store.root.clone(),
+            recorded_root: None,
             sequence: 0,
             policy_revision: revision.into(),
             candidates,
@@ -268,9 +269,6 @@ impl Store {
             enforcement: super::mode::Mode::default(),
             history_limit: if activation.is_some() { 5000 } else { 500 },
         };
-        if let Ok(observed) = incarnation::observe(&store, true) {
-            incarnation::stamp(&mut state, &observed);
-        }
         let mut _registry_guard = None;
         if let Some(activation) = activation {
             let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
@@ -376,7 +374,7 @@ impl Store {
                 .map(super::runtime::Active::activation_id),
         );
         Ok(
-            json!({"schema_version":1,"project_id":project_id,"project_root":store.root,"policy_revision":revision,"mode":"local-review","enforcement":"not-installed","policy_reuse_recorded":consent_recorded}),
+            json!({"schema_version":1,"project_id":project_id,"policy_revision":revision,"mode":"local-review","enforcement":"not-installed","policy_reuse_recorded":consent_recorded}),
         )
     }
     #[cfg(test)]
@@ -531,7 +529,10 @@ impl Store {
         let mut value =
             serde_json::to_value(state).map_err(|_| Error::Invalid("state encoding"))?;
         sources::checkpoint(self, &mut value, true)?;
-        serde_json::from_value(value).map_err(|_| Error::Invalid("source checkpoint decoding"))
+        let mut state: State = serde_json::from_value(value)
+            .map_err(|_| Error::Invalid("source checkpoint decoding"))?;
+        state.project_root.clone_from(&self.root);
+        Ok(state)
     }
     pub(in crate::review) fn captured_candidate(&self, reference: &Value) -> Result<Value, Error> {
         let mut value = reference.clone();
@@ -554,7 +555,7 @@ impl Store {
         for attempt in 0..2 {
             let state = if readonly {
                 let (state, pending) = self.read_diagnostic_checkpoint()?;
-                if pending || state.project_root != self.root {
+                if pending {
                     return Err(Error::CandidateUnavailable);
                 }
                 state
@@ -630,15 +631,24 @@ impl Store {
         let _trace = crate::diagnostics::trace::span("state.checkpoint");
         crate::diagnostics::trace::count("state.checkpoint_reads", 1);
         let bytes = self.checkpoint_bytes()?;
-        let (mut state, pending) = match upgrades::checkpoint(&bytes) {
-            Ok(state) => {
-                Self::validate_checkpoint(&state)?;
-                (state, false)
-            }
+        let (state, pending) = match self.decode(&bytes) {
+            Ok(state) => (state, false),
             Err(_) => (upgrades::inspect(self, &bytes)?, true),
         };
+        // Admitted in memory only; a legacy checkpoint converts on its next
+        // runtime read, never through diagnostics.
+        let mut state = portability::admit(self, state, false)?;
+        Self::validate_checkpoint(&state)?;
         super::proposal_lifecycle::refresh_inspection(&mut state);
         Ok((state, pending))
+    }
+
+    /// Decode a current-format checkpoint read from this folder. The folder is
+    /// where it was found, never where the checkpoint says it was.
+    fn decode(&self, bytes: &[u8]) -> Result<State, Error> {
+        let mut state = upgrades::checkpoint(bytes)?;
+        state.project_root.clone_from(&self.root);
+        Ok(state)
     }
 
     // Current enrollment, authorization and source identities, without preparing policy.
@@ -646,13 +656,16 @@ impl Store {
         let _trace = crate::diagnostics::trace::span("state.checkpoint");
         crate::diagnostics::trace::count("state.checkpoint_reads", 1);
         let bytes = self.checkpoint_bytes()?;
-        let mut state = match upgrades::checkpoint(&bytes) {
+        let state = match self.decode(&bytes) {
             Ok(state) => state,
             Err(_) => upgrades::convert(self, &bytes)?,
         };
-        state = portability::relocate(self, state)?;
+        let mut state = if portability::legacy(&state) {
+            portability::convert(self)?
+        } else {
+            portability::admit(self, state, false)?
+        };
         Self::validate_checkpoint(&state)?;
-        state = portability::seed(self, state)?;
         super::proposal_lifecycle::refresh_inspection(&mut state);
         Ok(state)
     }
@@ -743,12 +756,13 @@ impl Store {
             let _trace = crate::diagnostics::trace::span("state.checkpoint");
             crate::diagnostics::trace::count("state.checkpoint_reads", 1);
             let bytes = self.checkpoint_bytes()?;
-            if let Ok(mut state) = upgrades::checkpoint(&bytes) {
-                if state.project_root != self.root {
+            if let Ok(state) = self.decode(&bytes) {
+                if portability::legacy(&state) {
                     drop(guard);
                     self.read_checkpoint()?;
                     continue;
                 }
+                let mut state = portability::admit(self, state, false)?;
                 Self::validate_checkpoint(&state)?;
                 super::proposal_lifecycle::refresh_inspection(&mut state);
                 return Ok((state, guard));
@@ -969,7 +983,8 @@ impl Store {
     }
     fn write(&self, state: &mut State) -> Result<(), Error> {
         let _trace = crate::diagnostics::trace::span("state.write");
-        let administration_pending = administration::publish(self, state)?;
+        // This user's consent precedes the checkpoint that asserts it.
+        authority::record(state)?;
         if state.remember_policy {
             state.operator["portable_policy"] = json!(
                 state
@@ -1034,9 +1049,6 @@ impl Store {
         tests::observe(tests::Stage::Renamed);
         #[cfg(unix)]
         sync(&fs::File::open(&self.directory)?)?;
-        if administration_pending {
-            administration::finish(state)?;
-        }
         #[cfg(test)]
         tests::observe(tests::Stage::Complete);
         // Every state writer holds the writer lock, so no other `.state-*.tmp`

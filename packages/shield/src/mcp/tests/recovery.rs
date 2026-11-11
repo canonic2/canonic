@@ -335,6 +335,12 @@ fn recovery_policy_denial_reaches_exact_approval_and_consumed_native_retry() {
     for agent in ["claude", "codex"] {
         for modern in [false, true] {
             let (server, project) = fixture(Some(agent));
+            // In-session approval needs the agent's recorded integration.
+            crate::review::operator::integrations::configure_fixture(
+                project.root.path(),
+                crate::review::integrations::IntegrationChoice::agent(agent),
+                crate::review::integrations::AskFallback::Block,
+            );
             let mut context = (*server.review()).clone();
             context.session_id = Some("acme-session".into());
             drop(server);

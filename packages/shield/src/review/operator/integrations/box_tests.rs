@@ -45,7 +45,7 @@ fn coverage(context: &Context) -> Value {
 }
 
 #[test]
-fn box_portability_copy_preserves_review_and_rebinds_only_owned_local_pin() {
+fn box_portability_copy_keeps_its_registration_and_local_pin() {
     let (root, context) = fixture();
     box_project(root.path());
     let plan = setup(&context, choice(&["box"])).unwrap();
@@ -77,14 +77,11 @@ fn box_portability_copy_preserves_review_and_rebinds_only_owned_local_pin() {
     assert!(current.covers("codex"));
     assert!(current.covers("claude"));
     assert_eq!(definition(copied.path()).unwrap(), previous.shared);
-    let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
-    assert_eq!(current.binary, executable);
-    let pinned: Value = crate::policy::parse(&local(copied.path()).unwrap()).unwrap();
-    assert_eq!(
-        pinned["connection"]["command"],
-        executable.to_str().unwrap()
-    );
-    assert_eq!(pinned["connection"]["args"][3], ".");
+    // The copy is the same project: its maintained registration and private
+    // pin are copied as they are.
+    assert_eq!(child.project_id, context.project_id);
+    assert_eq!(current.binary, owned.binary);
+    assert_eq!(local(copied.path()).unwrap(), previous.local);
     assert_eq!(
         fs::read_to_string(copied.path().join(".mcp.json")).unwrap(),
         unrelated
@@ -105,86 +102,6 @@ fn box_portability_copy_preserves_review_and_rebinds_only_owned_local_pin() {
     crate::review::open(edited.path()).unwrap();
     assert_eq!(local(edited.path()).unwrap(), text);
     assert_eq!(definition(edited.path()).unwrap(), previous.shared);
-}
-
-#[test]
-fn box_portability_missing_pin_retries_and_mixed_registration_can_repin_again() {
-    let (root, context) = fixture();
-    box_project(root.path());
-    setup(&context, choice(&["codex"])).unwrap();
-    let before = meta(&context);
-    let plan = crate::review::integrations::setup::prepare_approving(
-        root.path(),
-        &before,
-        choice(&["box"]),
-        false,
-        None,
-        false,
-    )
-    .unwrap()
-    .unwrap();
-    apply(&context, &before, &plan).unwrap();
-    let mut owned = registration(&meta(&context)).unwrap().unwrap();
-    assert!(owned.agents.contains_key("codex"));
-    owned.binary = Path::new("/acme/old-install/shield").to_path_buf();
-    let definition =
-        box_definition::render(&owned.binary, &crate::review::mcp::default_approved()).unwrap();
-    fs::write(root.path().join(box_definition::PATH), &definition.shared).unwrap();
-    fs::write(
-        root.path().join(box_definition::LOCAL_PATH),
-        &definition.local,
-    )
-    .unwrap();
-    owned.box_definition = Some(definition.clone());
-    crate::review::update_operator_fixture(&context, |operator| {
-        operator["integration"] = json!(owned);
-        operator["portable_registration_epoch"] = json!(context.project_id);
-    })
-    .unwrap();
-    let copied = assert_fs::TempDir::new().unwrap();
-    crate::test_support::copy_fixture_directory(root.path(), copied.path());
-    fs::remove_file(copied.path().join(box_definition::LOCAL_PATH)).unwrap();
-    let child = crate::review::open(copied.path()).unwrap();
-    assert!(local(copied.path()).is_none());
-    assert_ne!(
-        meta(&child)["portable_registration_epoch"],
-        child.project_id
-    );
-    fs::write(
-        copied.path().join(box_definition::LOCAL_PATH),
-        &definition.local,
-    )
-    .unwrap();
-    crate::review::open(copied.path()).unwrap();
-    let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
-    let current = registration(&meta(&child)).unwrap().unwrap();
-    assert!(
-        current
-            .box_definition
-            .as_ref()
-            .unwrap()
-            .pinned_to(&executable)
-    );
-    assert_eq!(current.binary, owned.binary);
-    let state = crate::review::project::load(&child).unwrap();
-    // A later same-content executable relocation must recognize the Box pin
-    // independently of the historical direct-registration executable path.
-    let next = crate::review::integrations::portable::prepare_box(
-        copied.path(),
-        &state,
-        Path::new("/acme/next-install/shield"),
-    )
-    .unwrap()
-    .unwrap();
-    assert_eq!(next.files.len(), 1);
-    assert_eq!(next.files[0].path, box_definition::LOCAL_PATH);
-    assert!(
-        next.files[0]
-            .after
-            .as_ref()
-            .unwrap()
-            .contains("/acme/next-install/shield")
-    );
 }
 
 #[test]

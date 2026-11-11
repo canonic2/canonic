@@ -284,6 +284,7 @@ Declare exactly the capabilities used anywhere in the document, once each.
 | `interleaved-leading-v1` | `interleaved: true` in a `leading` grammar, on `prefix` or `options` selectors. |
 | `variables-v1` | Pack variables, variable selectors, or activation tests. |
 | `variable-parts-v1` | Literal parts of string/choice variables selected with `split`. |
+| `variable-prefixes-v1` | A `prefix` text selector joined from literal text and string/choice variables. |
 | `preconditions-v1` | Pack preconditions. |
 | `directory-options-v1` | Directory option declarations. |
 | `templates-v1` | Variable templates in pack explanation text. |

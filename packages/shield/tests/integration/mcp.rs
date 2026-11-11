@@ -122,7 +122,6 @@ fn historical_pinned_launcher_reuses_policy_after_repeated_moves() {
     let selected = original.path().canonicalize().unwrap();
     let destinations = assert_fs::TempDir::new().unwrap();
     let mut previous = selected.clone();
-    let mut identities = Vec::new();
     for name in ["first", "second"] {
         let target = destinations.path().join(name);
         std::fs::rename(&previous, &target).unwrap();
@@ -140,11 +139,8 @@ fn historical_pinned_launcher_reuses_policy_after_repeated_moves() {
         assert_ne!(current["bootstrap_required"], true, "{status}");
         assert_eq!(current["policy_revision"], before["policy_revision"]);
         assert_eq!(current["pending_approvals"], 0);
-        let id = current["project_id"].clone();
-        assert!(id.is_string(), "{status}");
-        assert_ne!(id, before["project_id"]);
-        assert!(!identities.contains(&id));
-        identities.push(id);
+        // A moved project is the same project.
+        assert_eq!(current["project_id"], before["project_id"], "{status}");
         server.send(&json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"status","arguments":{}}}));
         let continued = server.receive();
         assert_eq!(continued["result"]["isError"], false, "{continued}");
@@ -160,7 +156,7 @@ fn historical_pinned_launcher_reuses_policy_after_repeated_moves() {
 
 #[cfg(unix)]
 #[test]
-fn bootstrap_cli_init_requires_confirmation_and_preserves_state_on_decline() {
+fn cli_init_in_a_moved_project_reports_it_set_up_without_writing() {
     let original = assert_fs::TempDir::new().unwrap();
     original.child(".shield").create_dir_all().unwrap();
     original
@@ -173,18 +169,17 @@ fn bootstrap_cli_init_requires_confirmation_and_preserves_state_on_decline() {
     let state_path = destination.path().join(".shield/review/state.json");
     let bytes = std::fs::read(&state_path).unwrap();
     let before: Value = serde_json::from_slice(&bytes).unwrap();
-    let declined = super::operator::interactive(&destination, &["init"], "no\n");
-    assert_eq!(declined["code"], 130, "{declined}");
-    assert_eq!(std::fs::read(&state_path).unwrap(), bytes);
-    let accepted = super::operator::interactive(&destination, &["init"], "yes\n");
-    assert_eq!(accepted["code"], 0, "{accepted}");
-    let after: Value = serde_json::from_slice(&std::fs::read(&state_path).unwrap()).unwrap();
-    assert_ne!(after["project_id"], before["project_id"]);
-    assert_eq!(
-        after["project_root"],
-        json!(destination.path().canonicalize().unwrap())
+    let init = super::operator::interactive(&destination, &["init"], "no\n");
+    assert_eq!(init["code"], 0, "{init}");
+    assert!(
+        init["stdout"]
+            .as_str()
+            .unwrap()
+            .contains("Shield is set up"),
+        "{init}"
     );
-    assert!(after["read_requests"].as_array().unwrap().is_empty());
+    assert_eq!(std::fs::read(&state_path).unwrap(), bytes);
+    assert!(before.get("project_root").is_none());
 }
 
 #[test]
@@ -258,7 +253,9 @@ fn historical_mcp_launch_forms_continue_to_serve_project_tools() {
             target["active"]["activation_id"],
             original["active"]["activation_id"]
         );
-        assert_eq!(target["active"]["binding"], original["active"]["binding"]);
+        // Conversion re-binds the activation without the folder's root.
+        assert_eq!(target["active"]["binding_version"], 2);
+        assert!(target.get("project_root").is_none());
         assert!(target["active"]["compiled"].is_object());
         assert_eq!(target["policy_revision"], original["policy_revision"]);
     }
@@ -346,6 +343,14 @@ pub(super) fn historical_checkpoint(root: &assert_fs::TempDir) -> Value {
         .as_object_mut()
         .expect("active checkpoint")
         .remove("binding_version");
+    // The earlier format always recorded its absolute root.
+    raw["project_root"] = json!(
+        root.path()
+            .canonicalize()
+            .expect("fixture root")
+            .to_str()
+            .expect("UTF-8 fixture root")
+    );
     let binding = super::operator::fixture_digest(
         json!([
             raw["project_id"],

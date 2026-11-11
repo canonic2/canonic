@@ -4,9 +4,10 @@ fn historical_fixture() -> (assert_fs::TempDir, Value) {
     let root = assert_fs::TempDir::new().unwrap();
     let bundle =
         crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
-    crate::review::mcp::initialize_fixture(root.path(), &bundle);
+    let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
     let mut raw =
         serde_json::to_value(Store::open(root.path()).unwrap().read_current().unwrap()).unwrap();
+    raw["project_root"] = json!(context.project_root);
     let object = raw.as_object_mut().unwrap();
     for key in [
         "hook_requests",

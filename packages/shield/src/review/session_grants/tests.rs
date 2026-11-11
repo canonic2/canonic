@@ -106,7 +106,7 @@ fn arguments(pr: &str) -> Vec<String> {
 }
 
 #[test]
-fn copied_native_authority_session_grants_require_fresh_context_and_review() {
+fn a_copied_session_grant_serves_the_same_conversation_and_each_folder_revokes_its_own() {
     let (original, context, reference) = fixture();
     let proposed = proposal(&context, &reference);
     let granted = apply(&context, &proposed["apply_arguments"], true).unwrap();
@@ -117,55 +117,19 @@ fn copied_native_authority_session_grants_require_fresh_context_and_review() {
     let mut child = context.clone();
     child.project_id = opened.project_id;
     child.project_root = opened.project_root;
-    assert_ne!(child.project_id, context.project_id);
-    assert!(
-        propose(
-            &child,
-            &json!({"session_ref":reference,"idempotency_key":"copy-old","scope":scope()})
-        )
-        .is_err()
+    assert_eq!(child.project_id, context.project_id);
+    // Session grants are keyed by the host conversation, which a copy shares.
+    let mut request = receipt(&child, arguments("42"));
+    handoff(&child, &mut request, Some(&json!({"command":"acme merge"}))).unwrap();
+    assert_eq!(
+        request["authorization"]["grants"][0]["grant_id"],
+        granted["grant_id"]
     );
-    assert!(apply(&child, &proposed["apply_arguments"], true).is_err());
-    let mut refused = receipt(&child, arguments("42"));
-    handoff(&child, &mut refused, Some(&json!({"command":"acme merge"}))).unwrap();
-    assert!(refused["authorization"].is_null());
-    assert_ne!(refused["session_context"]["session_ref"], reference);
-    assert_eq!(refused["disposition"], "approval_required");
-
-    // The independent private administration receipt retains registration,
-    // while the copy must capture a new conversation context.
-    let mut observed = json!({"code":"policy-allow","decision":"allow","disposition":"allowed"});
-    handoff(&child, &mut observed, None).unwrap();
-    let fresh = observed["session_context"]["session_ref"].as_str().unwrap();
-    assert_ne!(fresh, reference);
-    assert!(
-        propose(
-            &child,
-            &json!({"session_ref":reference,"idempotency_key":"copy-old-again","scope":scope()})
-        )
-        .is_err()
-    );
-    let proposed = proposal(&child, fresh);
-    assert!(matches!(
-        apply(&child, &proposed["apply_arguments"], false),
-        Err(Error::ApprovalRequired)
-    ));
-    let child_grant = apply(&child, &proposed["apply_arguments"], true).unwrap();
-    assert_ne!(child_grant["grant_id"], granted["grant_id"]);
-    for pr in ["42", "43"] {
-        let mut request = receipt(&child, arguments(pr));
-        handoff(&child, &mut request, Some(&json!({"command":"acme merge"}))).unwrap();
-        assert_eq!(request["authorization"]["kind"], "session_grant");
-        assert_eq!(
-            request["authorization"]["grants"][0]["grant_id"],
-            child_grant["grant_id"]
-        );
-        assert_eq!(request["decision"], "ask");
-    }
-    revoke(&child, &json!({"grant_id":child_grant["grant_id"]})).unwrap();
+    revoke(&child, &json!({"grant_id":granted["grant_id"]})).unwrap();
     let mut revoked = receipt(&child, arguments("42"));
     handoff(&child, &mut revoked, Some(&json!({"command":"acme merge"}))).unwrap();
     assert!(revoked["authorization"].is_null());
+    // Revoking in the copy changes only the copy's state.
     assert_eq!(
         std::fs::read(original.path().join(".shield/review/state.json")).unwrap(),
         before

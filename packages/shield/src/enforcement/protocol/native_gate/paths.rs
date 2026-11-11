@@ -60,6 +60,7 @@ fn state_component(part: &std::ffi::OsStr) -> bool {
         "review",
         "cache",
         "reviewed-policies",
+        "authority",
         "runtime-incarnation",
         "registry-trust",
         "sdk-read-profiles",
@@ -1115,6 +1116,8 @@ mod portable_policy_guards {
             },
         };
         for name in [
+            "authority/registration/acme.json",
+            "authority/consumed/acme.json",
             "runtime-incarnation/host.json",
             "registry-trust/active.json",
             "sdk-read-profiles/index.json",

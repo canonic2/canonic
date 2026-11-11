@@ -744,7 +744,7 @@ fn byte_cap_evicts_oldest_segments_and_reports_fewer_commands() {
     assert!(!store.read_history().unwrap().history_evicted);
 }
 #[test]
-fn copied_history_completion_cannot_claim_an_original_request() {
+fn copied_history_is_the_copys_own_journal_and_leaves_the_original_alone() {
     let (original, mut context) = enrolled();
     context.surface = "sdk".into();
     context.cwd = Some(context.project_root.clone());
@@ -759,26 +759,13 @@ fn copied_history_completion_cannot_claim_an_original_request() {
     let mut child = context.clone();
     child.project_id = opened.project_id;
     child.project_root = opened.project_root;
-    assert_ne!(child.project_id, context.project_id);
+    child.cwd = Some(child.project_root.clone());
+    assert_eq!(child.project_id, context.project_id);
     let store = Store::open(copied.path()).unwrap();
     let retained = event(&store, &decided).expect("copied historical decision remains inspectable");
     assert_eq!(retained["provenance"]["project_id"], context.project_id);
-    assert_eq!(retained["provenance"]["project_root"], context.project_root);
-    let foreign = completion(
-        &child,
-        "copy-old-request",
-        Some(&decided["request_id"]),
-        "read",
-        "completed",
-    );
-    let observed = event(&store, &foreign).unwrap();
-    assert!(observed["links"]["request_id"].is_null());
-    assert!(observed["links"]["decision_event_id"].is_null());
-    assert_eq!(
-        observed["details"]["reported_request_id"],
-        decided["request_id"]
-    );
-    assert_eq!(observed["provenance"]["project_id"], child.project_id);
+    assert_eq!(retained["provenance"]["cwd"], ".");
+    assert!(retained["provenance"].get("project_root").is_none());
     let fresh = decision(&child, "read");
     let completed = completion(
         &child,

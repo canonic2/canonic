@@ -60,7 +60,7 @@ fn accept_task_review(transport: &Transport, task: &Value, id: i64, before_accep
 }
 
 #[test]
-fn copied_policy_workflow_preparation_tasks_cannot_be_polled_cancelled_or_reviewed() {
+fn copied_preparation_tasks_are_the_copys_own_and_leave_the_original_alone() {
     let (server, original) = fixture(Some("claude"));
     let jobs = server.preparations.clone();
     let source = connect(server);
@@ -85,31 +85,13 @@ fn copied_policy_workflow_preparation_tasks_cannot_be_polled_cancelled_or_review
         review: server.review(),
     };
     let transport = connect(server);
-    assert_ne!(child.review.project_id, original.review.project_id);
+    // The copy is the same project with the same state.
+    assert_eq!(child.review.project_id, original.review.project_id);
     let revision = child.revision();
-    let copied_record = std::fs::read(child.root.path().join(&record)).unwrap();
-    assert_eq!(
-        get(&transport, 2, &old)["error"]["code"],
-        rpc::INVALID_PARAMS
-    );
-    assert_eq!(
-        std::fs::read(child.root.path().join(&record)).unwrap(),
-        copied_record
-    );
-    let refused = transport.call(
-        json!(3),
-        "policy_propose",
-        &json!({"preparation_task_id":old}),
-    );
-    assert_eq!(refused["result"]["isError"], true, "{refused}");
-    assert!(refused["result"]["structuredContent"]["data"]["apply_arguments"].is_null());
-    let cancelled = transport.request(&modern(4, "tasks/cancel", json!({"taskId":old})));
-    assert_eq!(cancelled["error"]["code"], rpc::INVALID_PARAMS);
-    assert_eq!(child.revision(), revision);
-
-    let fresh = completed_task(&transport, &child_jobs, 5, &arguments);
+    // A fresh task in the copy is reviewed and applied there only. Identical
+    // arguments would name the copied task, so the fresh one differs.
+    let fresh = completed_task(&transport, &child_jobs, 5, &rule("acme-copy-fresh", "acme"));
     assert_ne!(fresh, old);
-    assert_eq!(child.revision(), revision);
     accept_task_review(&transport, &fresh, 10, || {
         assert_eq!(child.revision(), revision);
     });
@@ -119,6 +101,7 @@ fn copied_policy_workflow_preparation_tasks_cannot_be_polled_cancelled_or_review
         std::fs::read(original.root.path().join(&record)).unwrap(),
         original_record
     );
+    // The original's task still completes and applies in the original.
     assert_eq!(get(&source, 4, &old)["result"]["status"], "completed");
     let revision = original.revision();
     accept_task_review(&source, &old, 10, || {

@@ -713,6 +713,27 @@ complete setting's shape. Separators contain 1–16 bytes without NUL; indexes a
 the referencing entry inactive, as with ordinary variable selectors. Parts apply
 to string and choice settings; lists, booleans and paths cannot be split.
 
+### Prefixes built from a variable
+
+A setting is often one piece of a longer argument, such as the repository in a
+GitHub API path. With `variable-prefixes-v1`, a `prefix` text selector can list
+parts: literal text and string or choice `{var}` references, including `split`
+parts. Shield joins them into one literal prefix when it prepares the pack:
+
+```yaml
+arguments:
+  kind: options
+  prefix: [api]
+  flags: [--paginate]
+  values: []
+  operands: {match: {prefix: [repos/, {var: repository}, /]}, min: 1, max: 1}
+```
+
+For `repository: acme/web`, the operand must start with `repos/acme/web/`; end the
+parts with a separator so `repos/acme/web-other/` does not match. The joined text
+is never a pattern. A part list holds 1–16 parts and at least one reference; an
+unset reference leaves the entry inactive. Lists, booleans and paths cannot be parts.
+
 ### Optional checks
 
 A `{var}` reference turns its whole entry off while the variable is unset. To

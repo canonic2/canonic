@@ -1,6 +1,9 @@
-//! Private operation continuity, independent of portable policy consent.
-use super::{Error, State, Store, history, objects, private_directory, private_files};
-use serde_json::{Value, json};
+//! Recognize a checkpoint written by an earlier format that bound operations
+//! to the folder's native identity. Read only, for one conversion: matching
+//! means this is the installation that earlier format recorded, upgraded in
+//! place. Nothing here is persisted or used as authority afterwards.
+use super::{Error, State, Store, private_files};
+use serde_json::json;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -65,27 +68,9 @@ fn identity(path: &Path) -> Result<(u64, u64), Error> {
     }
 }
 
-fn nonce(directory: &Path, create: bool) -> Result<(String, (u64, u64)), Error> {
-    if create {
-        if let Some(parent) = directory.parent()
-            && !parent.exists()
-        {
-            private_directory(parent)?;
-        }
-        private_files::directory(directory, true)?;
-    } else {
-        private_files::directory(directory, false)?;
-    }
+fn nonce(directory: &Path) -> Result<(String, (u64, u64)), Error> {
+    private_files::directory(directory, false)?;
     let path = directory.join("host.json");
-    if create && !path.try_exists()? {
-        let _guard = objects::Directory::enter(directory)?;
-        if !path.try_exists()? {
-            let value = crate::policy::fingerprint(
-                history::identifier("runtime", &crate::policy::fingerprint(b"host"))?.as_bytes(),
-            );
-            private_files::write(&path, &json!({"schema_version":1,"nonce":value}), LIMIT)?;
-        }
-    }
     let value = private_files::read(&path, LIMIT)?;
     let nonce = value["nonce"]
         .as_str()
@@ -104,14 +89,10 @@ fn valid(value: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
-pub(super) fn observe(store: &Store, create: bool) -> Result<String, Error> {
-    observe_at(store, &directory()?, create)
-}
-
-fn observe_at(store: &Store, directory: &Path, create: bool) -> Result<String, Error> {
+fn observe(store: &Store) -> Result<String, Error> {
     let root = identity(Path::new(&store.root))?;
     let review = identity(&store.directory)?;
-    let host = nonce(directory, create)?;
+    let host = nonce(&directory()?)?;
     crate::json::fingerprint(&json!([
         "shield-operation-incarnation-v1",
         root,
@@ -121,37 +102,10 @@ fn observe_at(store: &Store, directory: &Path, create: bool) -> Result<String, E
     .map_err(|_| Error::Invalid("operation continuity encoding"))
 }
 
-pub(super) fn matches(state: &State, observed: &str) -> bool {
+/// Whether a checkpoint carrying the earlier format's identity stamp is the
+/// installation it was stamped for. Unavailable evidence proves nothing.
+pub(super) fn recorded_here(store: &Store, state: &State) -> bool {
     state.operator["runtime_incarnation"]["schema_version"] == 1
-        && state.operator["runtime_incarnation"]["digest"] == observed
+        && observe(store)
+            .is_ok_and(|observed| state.operator["runtime_incarnation"]["digest"] == observed)
 }
-
-pub(super) fn stamp(state: &mut State, observed: &str) {
-    state.operator["runtime_incarnation"] = json!({"schema_version":1,"digest":observed});
-}
-
-pub(in crate::review) fn check(state: &State) -> Result<(), Error> {
-    let store = Store::inspect(Path::new(&state.project_root))?;
-    let observed = observe(&store, false).map_err(|_| {
-        Error::Invalid("operation continuity unavailable; policy remains available")
-    })?;
-    if matches(state, &observed) {
-        Ok(())
-    } else {
-        Err(Error::StaleSnapshot)
-    }
-}
-
-pub(in crate::review) fn readiness(state: &State, root: &Path) -> Value {
-    let result = Store::inspect(root).and_then(|store| observe(&store, false));
-    match result {
-        Ok(observed) if matches(state, &observed) => json!({"available":true}),
-        Ok(_) => {
-            json!({"available":false,"reason":"runtime incarnation changed","next_action":"The next runtime operation establishes a fresh local operation epoch without another policy review"})
-        }
-        Err(_) => json!({"available":false,"reason":"private operation continuity unavailable"}),
-    }
-}
-
-#[cfg(test)]
-mod tests;

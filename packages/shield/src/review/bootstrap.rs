@@ -343,7 +343,6 @@ pub(crate) fn accepts_launch(project: &Path, requested: &Path) -> bool {
         .take(2)
         .filter_map(Value::as_str)
         .any(|path| Path::new(path) == requested)
-        && receipt["project_root"] == state.project_root
         && storage::bootstrap::enrollment(&state, receipt)
 }
 
@@ -363,7 +362,6 @@ pub(crate) fn forms_reviewed_at(project: &Path) -> bool {
                 event["kind"] == "policy_reused"
                     && event["operator"]["mechanism"] == "reviewed-policy-reuse"
                     && event["provenance"]["project_id"] == state.project_id
-                    && event["provenance"]["project_root"] == state.project_root
                     && event["details"]["receipt"] == state.operator["policy_reuse"]
             })
     })
@@ -373,14 +371,12 @@ fn integration_forms_reviewed(state: &super::model::State) -> bool {
     let receipt = &state.operator["integration_review"];
     receipt.is_object()
         && receipt["project_id"] == state.project_id
-        && receipt["project_root"] == state.project_root
         && receipt["review_id"]
             .as_str()
             .is_some_and(|id| !id.is_empty())
         && state.authorization_events.iter().any(|event| {
             event["kind"] == "integration_review_confirmed"
                 && event["provenance"]["project_id"] == state.project_id
-                && event["provenance"]["project_root"] == state.project_root
                 && event["details"]["review_channel"] == *receipt
                 && ["host-elicitation", "operator-cli"]
                     .contains(&event["operator"]["mechanism"].as_str().unwrap_or(""))

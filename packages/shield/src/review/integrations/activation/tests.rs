@@ -88,66 +88,6 @@ fn copy_project(from: &Path, to: &Path) {
     }
 }
 
-#[test]
-fn copied_workspace_rebinds_exact_old_private_launcher_without_changing_edited_neighbors() {
-    let (original, context) = fixture(true);
-    let original_state = state(&context);
-    let mut previous = registered(&context);
-    let configured = connections(&original_state);
-    let old = launch(&previous, "claude", "cloud");
-    let adapter = agents::find("claude").unwrap();
-    let path = original.path().join(".mcp.json");
-    let source = std::fs::read_to_string(&path).unwrap();
-    let absolute = old
-        .projected(
-            &configured["cloud"],
-            &previous.binary,
-            Path::new(&context.project_root),
-        )
-        .unwrap();
-    let update = adapter
-        .merge_connections(
-            &source,
-            &json!({"acme_cloud":previous.connections["claude"]["entries"]["acme_cloud"]}),
-            &BTreeMap::from([("acme_cloud".into(), absolute)]),
-        )
-        .unwrap();
-    previous.connections.get_mut("claude").unwrap()["entries"]["acme_cloud"] =
-        update.ownership.unwrap()["acme_cloud"].clone();
-    std::fs::write(&path, &update.source).unwrap();
-    Store::open(original.path())
-        .unwrap()
-        .update_checkpoint(&context, &|| Ok(()), |state| {
-            state.operator["integration"] = json!(previous);
-            Ok(json!({}))
-        })
-        .unwrap();
-    let copied = assert_fs::TempDir::new().unwrap();
-    copy_project(original.path(), copied.path());
-    let copy_path = copied.path().join(".mcp.json");
-    let mut native: Value =
-        serde_json::from_str(&std::fs::read_to_string(&copy_path).unwrap()).unwrap();
-    native["mcpServers"]["acme_neighbor"]["command"] = json!("acme-user-custom");
-    let edited_neighbor = native["mcpServers"]["acme_neighbor"].clone();
-    let manual = native["mcpServers"]["manual"].clone();
-    std::fs::write(&copy_path, serde_json::to_vec_pretty(&native).unwrap()).unwrap();
-    let copied_context = review::open(copied.path()).unwrap();
-    let current = registered(&copied_context);
-    let next = launch(&current, "claude", "cloud");
-    assert_ne!(old.token, next.token);
-    assert!(integrations::resolve_mcp_token(copied.path(), &old.token).is_err());
-    assert!(integrations::resolve_mcp_token(copied.path(), &next.token).is_ok());
-    assert!(integrations::resolve_mcp_token(original.path(), &old.token).is_ok());
-    assert!(current.connections["claude"]["launches"]["neighbor"].is_null());
-    let after: Value = serde_json::from_str(&std::fs::read_to_string(&copy_path).unwrap()).unwrap();
-    assert_eq!(after["mcpServers"]["manual"], manual);
-    assert_eq!(after["mcpServers"]["acme_neighbor"], edited_neighbor);
-    assert_eq!(after["mcpServers"]["acme_cloud"]["command"], "shield");
-    assert_eq!(after["mcpServers"]["acme_cloud"]["args"][3], ".");
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), update.source);
-    assert!(state(&copied_context).operator["integration_review"].is_null());
-}
-
 fn commit(context: &Context, local: bool, operation: &str) -> Value {
     let before = state(context);
     review::publication::commit(

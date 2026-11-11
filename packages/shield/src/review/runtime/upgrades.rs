@@ -70,7 +70,11 @@ fn verified(state: &State, raw: &Value) -> Result<Historical, Error> {
     let binding = crate::policy::fingerprint(
         json!([
             state.project_id,
-            state.project_root,
+            // The earlier format bound activations to the root it recorded.
+            state
+                .recorded_root
+                .as_deref()
+                .unwrap_or(&state.project_root),
             old.activation_id,
             old.previous_activation_id,
             old.policy_revision,

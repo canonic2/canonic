@@ -706,6 +706,12 @@ fn observation_isolation_check(context: &review::Context) {
 
 fn transport_approval_check(context: &review::Context) {
     let root = Path::new(&context.project_root);
+    // In-session approval needs the agent's recorded integration.
+    review::operator::integrations::configure_fixture(
+        root,
+        crate::cli::public::IntegrationChoice::agent("codex"),
+        crate::review::integrations::AskFallback::Block,
+    );
     // An exact one-time approval cannot transfer to another matched transport
     // just because its host alias and tool arguments stay the same.
     configure(root, "codex", "grant_connector", "acme-connector");

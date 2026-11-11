@@ -13,15 +13,12 @@ pub(super) fn retained(candidate: &Value) -> Result<Option<RetainedConsent>, Err
         return Ok(None);
     }
     let metadata = metadata(&receipt["metadata"])?;
-    let checkpoints = receipt
-        .get("registry_checkpoints")
-        .map(|value| serde_json::from_value(value.clone()))
-        .transpose()
-        .map_err(|_| Error::Invalid("private legacy consent checkpoints invalid"))?
-        .unwrap_or_default();
+    if let Some(value) = receipt.get("registry_checkpoints") {
+        serde_json::from_value::<std::collections::BTreeMap<String, Value>>(value.clone())
+            .map_err(|_| Error::Invalid("private legacy consent checkpoints invalid"))?;
+    }
     Ok(Some(RetainedConsent {
         candidate: candidate.clone(),
         metadata,
-        checkpoints,
     }))
 }

@@ -73,8 +73,8 @@ impl Context {
             .or(self.client.as_ref())
     }
     pub(crate) fn provenance(&self) -> Value {
-        let mut value = json!({"project_id":self.project_id,"project_root":self.project_root,
-            "cwd":self.cwd,"surface":self.surface,"agent":self.attributed_agent(),"host_version":self.host_version,
+        let mut value = json!({"project_id":self.project_id,
+            "cwd":self.relative_cwd(),"surface":self.surface,"agent":self.attributed_agent(),"host_version":self.host_version,
             "session_id":self.session_id,"tool_use_id":self.tool_use_id,"connection_id":self.connection_id,"host_event_name":self.host_event_name});
         let mut sources = serde_json::Map::new();
         for (key, field) in value.as_object().into_iter().flatten() {
@@ -82,7 +82,7 @@ impl Context {
                 "unavailable"
             } else {
                 match key.as_str() {
-                    "project_id" | "project_root" | "surface" => "registration",
+                    "project_id" | "surface" => "registration",
                     "agent" if self.surface == "hook" => "registration",
                     "connection_id" => "shield",
                     _ => &self.source,
@@ -92,6 +92,21 @@ impl Context {
         }
         value["sources"] = json!(sources);
         value
+    }
+    /// The reported working folder relative to the project (`.` for its
+    /// root), so recorded evidence never holds where the project is. A folder
+    /// outside the project is recorded as reported.
+    fn relative_cwd(&self) -> Option<String> {
+        let cwd = self.cwd.as_deref()?;
+        let relative = std::path::Path::new(cwd)
+            .strip_prefix(&self.project_root)
+            .ok()
+            .filter(|_| !self.project_root.is_empty());
+        Some(match relative {
+            Some(path) if path.as_os_str().is_empty() => ".".into(),
+            Some(path) => path.to_string_lossy().replace('\\', "/"),
+            None => cwd.into(),
+        })
     }
     pub(crate) fn retry_owner(&self) -> String {
         json!([
@@ -264,8 +279,6 @@ pub(crate) struct State {
     /// Request-local publication work; never accepted from saved state.
     #[serde(skip)]
     pub(in crate::review) remember_policy: bool,
-    #[serde(skip)]
-    pub(in crate::review) administration_copy: Option<super::storage::administration::CopyProof>,
     pub(crate) history_generation: String,
     /// Journal ownership survives a checkout epoch change without rewriting
     /// immutable observations. Absent in legacy checkpoints.
@@ -286,7 +299,14 @@ pub(crate) struct State {
     pub(crate) operator: Value,
     pub(crate) schema_version: u8,
     pub(crate) project_id: String,
+    /// The folder this state was read from, found by discovery each time.
+    /// Runtime only: a checkpoint never records where its folder is.
+    #[serde(skip)]
     pub(crate) project_root: String,
+    /// The absolute root earlier formats recorded. Read once to recognize an
+    /// installation upgraded in place; never written.
+    #[serde(rename = "project_root", default, skip_serializing)]
+    pub(in crate::review) recorded_root: Option<String>,
     pub(crate) sequence: u64,
     pub(crate) policy_revision: String,
     pub(crate) candidates: BTreeMap<String, Value>,
@@ -349,14 +369,14 @@ impl State {
             .as_str()
             .unwrap_or(&self.project_id)
     }
-    /// Operation handles require local runtime continuity; policy trust does not.
+    /// A historical record preview is display only and cannot authorize work.
     pub(crate) fn check_operations(&self) -> Result<(), Error> {
         if self.legacy_preview.is_some() {
             return Err(Error::Invalid(
                 "historical record inspection cannot authorize operations",
             ));
         }
-        super::storage::incarnation::check(self)
+        Ok(())
     }
 
     pub(crate) fn check(&self, context: &Context) -> Result<(), Error> {
@@ -536,19 +556,15 @@ impl State {
                 }))
                 || (event["kind"] == "policy_consent_reused"
                     && event["provenance"]["project_id"] == self.project_id
-                    && event["provenance"]["project_root"] == self.project_root
                     && event["details"]["receipt"] == self.operator["policy_consent"])
                 || (event["kind"] == "policy_reused"
                     && event["provenance"]["project_id"] == self.project_id
-                    && event["provenance"]["project_root"] == self.project_root
                     && event["details"]["receipt"] == self.operator["policy_reuse"])
                 || (event["kind"] == "project_enrolled"
                     && event["provenance"]["project_id"] == self.project_id
-                    && event["provenance"]["project_root"] == self.project_root
                     && event["details"]["bootstrap"] == self.operator["bootstrap"])
                 || (event["kind"] == "integration_review_confirmed"
                     && event["provenance"]["project_id"] == self.project_id
-                    && event["provenance"]["project_root"] == self.project_root
                     && self.operator["integration_review"].is_object()
                     && event["details"]["review_channel"] == self.operator["integration_review"])
                 || event["links"]["request_id"]

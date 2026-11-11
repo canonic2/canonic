@@ -85,9 +85,6 @@ pub(super) fn status_from(context: &Context, state: &State) -> Value {
         value["action_authority"] = json!(
             "unavailable until actual runtime validates and converts the historical checkpoint"
         );
-        value["operation_readiness"] =
-            json!({"available":false,"reason":"historical checkpoint upgrade pending"});
-        value["operation_epoch_pending"] = json!(true);
         value["coverage"] = json!({"registered_integrations":[],"installed_integrations":[],"tool_interception":"unchecked","live_host_verification":"unchecked","verification":{"state":"unchecked","basis":"historical-record-only-inspection"},"policy_inspection":{"availability":"unavailable","source_validation":"not-performed"}});
         value["repair_needed"] = json!(false);
         value["repair_assessment"] =
@@ -95,8 +92,6 @@ pub(super) fn status_from(context: &Context, state: &State) -> Value {
         value["repair_route"] = json!(
             "The next actual runtime operation validates and converts this historical checkpoint; no new policy consent is required solely for its format."
         );
-        value["runtime_relocation_pending"] = json!(state.project_root != context.project_root);
-        value["retained_project_root"] = json!(state.project_root);
         value["project_root"] = json!(context.project_root);
         return value;
     }
@@ -164,39 +159,10 @@ fn history_metadata(context: &Context, state: &State) -> Value {
         "integrity":if incomplete {"incomplete"}else{"unchecked"},"inspect":"shield history list"})
 }
 
-/// A copied checkpoint is evidence of its old epoch, not usable action authority.
-pub(super) fn inspection_location(context: &Context, state: &State, value: &mut Value) {
-    let pending = state.project_root != context.project_root;
-    value["runtime_relocation_pending"] = json!(pending);
-    let readiness = super::storage::incarnation::readiness(state, Path::new(&context.project_root));
-    let operations_pending = readiness["available"] != true;
-    value["operation_readiness"] = readiness;
-    value["operation_epoch_pending"] = json!(operations_pending);
-    value["portable_administration"] = if state.operator["portable_admin_unverified"] == true {
-        json!({"integrity":"unverified","effective":"safe defaults","next_action":"Review administrative preferences and agent registration; policy content does not require another review"})
-    } else {
-        json!({"integrity":"unchecked"})
-    };
-    if state.operator["portable_lineage_unverified"] == true {
-        value["portable_lineage"] = json!({"origin":"unverified","effective":"fresh lineage","reason":"The private exact-content record belongs to another recorded lineage"});
-    }
-    if pending || operations_pending {
-        value["retained_policy_authority"] = json!(
-            "unverified until native continuity or private reviewed-content consent is established"
-        );
-        value["retained_administration"] =
-            json!({"enabled":state.enforcement.enabled,"integrity":"unverified"});
-        value["retained_project_root"] = json!(state.project_root);
-        value["project_root"] = json!(context.project_root);
-        if value.get("retained_pending_approvals").is_none() {
-            value["retained_pending_approvals"] = value["pending_approvals"].clone();
-        }
-        value["pending_approvals"] = json!(0);
-        value["session_grants"] =
-            json!({"available":false,"reason":"operation continuity unavailable"});
-        value["action_authority"] =
-            json!("unavailable until runtime operation continuity is verified");
-    }
+/// The folder being inspected, as discovered now. Checkpoints record no
+/// location, so a moved, renamed or copied project needs no follow-up.
+pub(super) fn inspection_location(context: &Context, _state: &State, value: &mut Value) {
+    value["project_root"] = json!(context.project_root);
 }
 
 /// The command that repairs integration coverage diagnostics. `shield mcp

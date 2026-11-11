@@ -786,21 +786,103 @@ impl Test {
     }
 }
 
-/// Replace variable selectors, recording unset names and returning whether the
-/// tree uses a component projection. Unset selectors remain in place so the
-/// caller can treat the whole entry as inactive. Sample resolution checks the
-/// projection's shape and type without requiring representative text to split.
+/// Source features a substitution used, for the capability inventory.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Usage {
+    /// A `split` component projection (`variable-parts-v1`).
+    pub(crate) parts: bool,
+    /// A `prefix` assembled from literal and variable parts (`variable-prefixes-v1`).
+    pub(crate) prefixes: bool,
+}
+
+impl std::ops::BitOrAssign for Usage {
+    fn bitor_assign(&mut self, other: Self) {
+        self.parts |= other.parts;
+        self.prefixes |= other.prefixes;
+    }
+}
+
+const MAX_PREFIX_PARTS: usize = 16;
+
+/// `{prefix: [PART, ...]}`: a prefix text selector whose operand lists parts.
+fn prefix_parts(value: &mut Value) -> Option<&mut Vec<Value>> {
+    let fields = value.as_object_mut()?;
+    if fields.len() != 1 {
+        return None;
+    }
+    fields.get_mut("prefix")?.as_array_mut()
+}
+
+/// Join literal parts and resolved string/choice references into one literal
+/// prefix. Unset references stay in place so the entry becomes inactive.
+fn substitute_prefix(
+    value: &mut Value,
+    domain: &str,
+    resolve: &dyn Fn(&str) -> Result<Option<Value>, Error>,
+    unset: &mut BTreeSet<String>,
+    sample: bool,
+) -> Result<Usage, Error> {
+    let mut usage = Usage {
+        parts: false,
+        prefixes: true,
+    };
+    let Some(parts) = prefix_parts(value) else {
+        return Ok(usage);
+    };
+    if parts.is_empty() || parts.len() > MAX_PREFIX_PARTS {
+        return Err(Error::Contract("prefix parts list 1-16 parts"));
+    }
+    if !parts.iter().any(|part| reference(part).is_some()) {
+        return Err(Error::Contract("prefix parts need a variable reference"));
+    }
+    let mut pending = false;
+    for part in parts.iter_mut() {
+        if part.is_string() {
+            continue;
+        }
+        let Some(name) = reference(part).map(str::to_owned) else {
+            return Err(Error::Contract(
+                "prefix parts are literal text or variable references",
+            ));
+        };
+        usage.parts |= substitute(part, domain, resolve, unset, sample)?.parts;
+        if part.is_string() {
+            continue;
+        }
+        if !unset.contains(&name) {
+            return Err(Error::Contract(
+                "prefix parts require string or choice variables",
+            ));
+        }
+        pending = true;
+    }
+    if pending {
+        return Ok(usage);
+    }
+    let joined: String = parts.iter().filter_map(Value::as_str).collect();
+    selectors::literal(&joined, true)?;
+    *value = json!({ "prefix": joined });
+    Ok(usage)
+}
+
+/// Replace variable selectors, recording unset names and returning the source
+/// features used. Unset selectors remain in place so the caller can treat the
+/// whole entry as inactive. Sample resolution checks the projection's shape and
+/// type without requiring representative text to split.
 pub(crate) fn substitute(
     value: &mut Value,
     domain: &str,
     resolve: &dyn Fn(&str) -> Result<Option<Value>, Error>,
     unset: &mut BTreeSet<String>,
     sample: bool,
-) -> Result<bool, Error> {
+) -> Result<Usage, Error> {
     if optional_reference(value).is_some() {
         return Err(Error::Contract(
             "unset: any applies only to an option value's match",
         ));
+    }
+    if prefix_parts(value).is_some() {
+        return substitute_prefix(value, domain, resolve, unset, sample);
     }
     if let Some(name) = reference(value) {
         let name = name.to_owned();
@@ -828,35 +910,38 @@ pub(crate) fn substitute(
                 unset.insert(name);
             }
         }
-        return Ok(part.is_some());
+        return Ok(Usage {
+            parts: part.is_some(),
+            prefixes: false,
+        });
     }
-    let mut parts = false;
+    let mut usage = Usage::default();
     match value {
         Value::Object(fields) => {
             for (key, child) in fields {
                 if key == "graphql" {
                     for selector in crate::graphql::selectors_mut(child) {
-                        parts |= substitute(selector, domain, resolve, unset, sample)?;
+                        usage |= substitute(selector, domain, resolve, unset, sample)?;
                     }
                 } else if key == "environment" {
                     for selector in selectors::environment_selectors_mut(child) {
-                        parts |= substitute(selector, domain, resolve, unset, sample)?;
+                        usage |= substitute(selector, domain, resolve, unset, sample)?;
                     }
                 } else if !(["exact", "input", "context"].contains(&key.as_str())
                     || domain == "mcp" && key == "arguments")
                 {
-                    parts |= substitute(child, domain, resolve, unset, sample)?;
+                    usage |= substitute(child, domain, resolve, unset, sample)?;
                 }
             }
         }
         Value::Array(items) => {
             for item in items {
-                parts |= substitute(item, domain, resolve, unset, sample)?;
+                usage |= substitute(item, domain, resolve, unset, sample)?;
             }
         }
         _ => {}
     }
-    Ok(parts)
+    Ok(usage)
 }
 
 /// Names referenced through `{var}` selectors, without changing the tree.

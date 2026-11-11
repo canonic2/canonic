@@ -122,6 +122,10 @@ pub(crate) enum Error {
     CleanupPending,
     #[error("review object was not found")]
     Missing,
+    /// The connection's agent made the request, but the project records no
+    /// integration for that agent, so this connection cannot ask the person.
+    #[error("this agent is not connected to Shield in this project")]
+    AgentNotConnected,
     #[error("proposal requires operator approval")]
     ApprovalRequired,
     #[error("active snapshot changed; reload and evaluate the request again")]
@@ -230,6 +234,7 @@ impl Error {
             Self::Locked => "review-locked",
             Self::CleanupPending => "cleanup-pending",
             Self::Missing => "not-found",
+            Self::AgentNotConnected => "agent-not-connected",
             Self::ApprovalRequired => "approval-required",
             Self::StaleSnapshot => "stale-snapshot",
             Self::CheckoutChanged => "checkout-changed",

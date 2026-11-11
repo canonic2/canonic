@@ -687,7 +687,6 @@ pub(in crate::review) fn keep_independent_metadata(meta: &mut Value, current: &V
         "path_access",
         "registry_trust",
         "history_retired_generations",
-        "administration_origin",
     ] {
         match current.get(field) {
             Some(access) => meta[field] = access.clone(),

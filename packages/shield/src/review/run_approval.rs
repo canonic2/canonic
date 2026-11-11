@@ -116,6 +116,14 @@ impl RunRequest {
     }
 }
 
+/// Drop requests captured for another folder, such as in a copied checkout:
+/// their evidence names that folder's files, so they can never be satisfied
+/// here. They are request state, not authority.
+pub(super) fn retain_local(state: &mut State) {
+    let root = state.project_root.clone();
+    state.run_requests.retain(|row| row.request.project == root);
+}
+
 pub(super) fn validate(state: &State) -> Result<(), Error> {
     let mut ids = std::collections::BTreeSet::new();
     for row in &state.run_requests {
@@ -153,7 +161,6 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
                         row.origin.session_id.as_deref(),
                     ))
                 || grant.operator_provenance["project_id"] != state.project_id
-                || grant.operator_provenance["project_root"] != state.project_root
                 || grant
                     .expires_at_ms
                     .checked_sub(grant.issued_at_ms)
@@ -336,6 +343,10 @@ fn ask(
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one transaction checks every grant state, including the per-user single-use claim, before durable consumption"
+)]
 fn consume(
     state: &mut State,
     context: &Context,
@@ -403,6 +414,16 @@ fn consume(
         let approval = grant.approval_id.clone();
         let grant_binding = grant.binding.clone();
         let binding = row.binding.clone();
+        // A copy of this folder holds the same grant; it is spent once.
+        if !super::storage::authority::claim(&grant_binding, grant.expires_at_ms)? {
+            return Ok(result(
+                "approval-consumed",
+                false,
+                Some(reference),
+                "consumed",
+                None,
+            ));
+        }
         receipts::capture(
             state,
             index,

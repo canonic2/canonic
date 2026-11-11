@@ -113,7 +113,7 @@ pub(super) fn inspect(context: &Context, id: Option<&str>) -> Result<Value, Erro
         ),
         (
             "hook",
-            super::hook_approval::inspect_from(&state, None, time)?,
+            super::hook_approval::inspect_from(&state, context, None, time)?,
         ),
     ] {
         let Value::Array(rows) = value["requests"].take() else {
@@ -174,8 +174,10 @@ pub(super) fn request_view(context: &Context, id: &str) -> Result<(RequestKind, 
         Ok(value) => Ok((RequestKind::Read, value)),
         Err(Error::Missing) => match super::run_approval::inspect_from(&state, Some(id), time) {
             Ok(value) => Ok((RequestKind::Execution, value)),
-            Err(Error::Missing) => super::hook_approval::inspect_from(&state, Some(id), time)
-                .map(|v| (RequestKind::Hook, v)),
+            Err(Error::Missing) => {
+                super::hook_approval::inspect_from(&state, context, Some(id), time)
+                    .map(|v| (RequestKind::Hook, v))
+            }
             Err(error) => Err(error),
         },
         Err(error) => Err(error),

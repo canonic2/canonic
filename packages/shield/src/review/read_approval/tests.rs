@@ -120,7 +120,8 @@ fn copied_workspace_read_grant_cannot_replay_and_original_remains_usable() {
     let mut child = context.clone();
     child.project_id = opened.project_id;
     child.project_root = opened.project_root;
-    assert_ne!(child.project_id, context.project_id);
+    // The copy is the same project; its requests name the original's files.
+    assert_eq!(child.project_id, context.project_id);
     assert!(
         gate(
             &child,
@@ -586,32 +587,7 @@ fn approval_is_atomic_once_and_survives_history_opt_out_and_purge() {
     assert_eq!(authorize(&context, &id, 300, None, false).unwrap(), grant);
     assert!(authorize(&context, &id, 301, None, false).is_err());
     let store = Store::open(Path::new(&context.project_root)).unwrap();
-    let mut consumed = store.read().unwrap();
-    let origin = consumed.read_requests[0].origin.clone();
-    assert_eq!(
-        consume(
-            &mut consumed,
-            &context,
-            &origin,
-            &evidence,
-            &resource,
-            &id,
-            now().unwrap(),
-            None
-        )
-        .unwrap()["allowed"],
-        true
-    );
-    assert_eq!(
-        consumed
-            .authorization_events
-            .iter()
-            .filter(|e| e["kind"] == "read_grant_consumed")
-            .count(),
-        1
-    );
-    consumed.read_requests[0].status = "approved".into();
-    assert!(validate(&consumed).is_err());
+    let mut earlier = store.read().unwrap();
     let results = std::thread::scope(|scope| {
         let handles = (0..4)
             .map(|_| scope.spawn(|| consume_with_retry(&context, &evidence, &resource, &id)))
@@ -621,7 +597,27 @@ fn approval_is_atomic_once_and_survives_history_opt_out_and_purge() {
             .map(|h| h.join().unwrap())
             .collect::<Vec<_>>()
     });
-    assert_eq!(results.iter().filter(|v| v["allowed"] == true).count(), 1);
+    assert_eq!(
+        results.iter().filter(|v| v["allowed"] == true).count(),
+        1,
+        "{results:?}"
+    );
+    // A snapshot taken before consumption still holds the approved row, as a
+    // copied checkout would; the per-user ledger refuses spending it again.
+    let origin = earlier.read_requests[0].origin.clone();
+    let replay = consume(
+        &mut earlier,
+        &context,
+        &origin,
+        &evidence,
+        &resource,
+        &id,
+        now().unwrap(),
+        None,
+    )
+    .unwrap();
+    assert_eq!(replay["allowed"], false);
+    assert_eq!(replay["code"], "approval-consumed");
     review::history_settings(&context, None, None, true, &|| Ok(())).unwrap();
     assert_eq!(
         gate(
@@ -871,6 +867,8 @@ fn full_read_requests_refuse_with_pending_and_retained_counts() {
 /// Encode the historical pre-resource issuer's exact binding, independently of
 /// `ReadRequest::binding`. The intermediate codec also accepted explicit null.
 fn historical_read_state(mut state: Value, explicit_null: bool) -> Value {
+    // The earlier format always recorded its absolute root.
+    state["project_root"] = state["read_requests"][0]["request"]["project"].clone();
     let row = &mut state["read_requests"][0];
     row.as_object_mut().unwrap().remove("policy");
     if explicit_null {
@@ -1015,6 +1013,7 @@ fn legacy_read_terminal_receipts_remain_terminal_and_keep_original_proof() {
         let grant = wire["read_requests"][0]["grant"].clone();
         let events = wire["authorization_events"].clone();
         let mut loaded: State = serde_json::from_value(wire).unwrap();
+        loaded.project_root.clone_from(&context.project_root);
         validate(&loaded).unwrap();
         assert_eq!(json!(loaded.read_requests[0].binding), binding);
         assert_eq!(json!(loaded.read_requests[0].grant), grant);
@@ -1120,7 +1119,7 @@ fn legacy_read_checkpoint_upgrade_preserves_policy_and_closes_unbound_operation_
         std::fs::write(&state_path, wire.to_string()).unwrap();
         let loaded = store.read_checkpoint().unwrap();
         validate(&loaded).unwrap();
-        assert_ne!(loaded.project_id, context.project_id, "{status}");
+        assert_eq!(loaded.project_id, context.project_id, "{status}");
         assert_eq!(loaded.policy_lineage(), context.project_id, "{status}");
         assert!(loaded.read_requests.is_empty(), "{status}");
         assert!(loaded.terminal_receipts.is_empty(), "{status}");

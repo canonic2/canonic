@@ -1,4 +1,6 @@
-//! Policy follows moves and source-only clones; transient grants do not.
+//! A project folder is its files: a move, rename or copy keeps its policy,
+//! state and history with no follow-up, and source-only clones reuse exact
+//! reviewed policy.
 use super::*;
 use crate::{configuration::Bundle, review};
 use std::{fs, path::Path};
@@ -21,21 +23,14 @@ fn fixture() -> (assert_fs::TempDir, Context) {
 }
 
 fn copy(from: &Path, to: &Path) {
-    for entry in fs::read_dir(from).unwrap() {
-        let entry = entry.unwrap();
-        let target = to.join(entry.file_name());
-        if entry.file_type().unwrap().is_dir() {
-            fs::create_dir(&target).unwrap();
-            copy(&entry.path(), &target);
-        } else {
-            fs::copy(entry.path(), target).unwrap();
-        }
-    }
+    crate::test_support::copy_fixture_directory(from, to);
 }
 
 #[test]
-fn portable_policy_move_opens_without_confirmation_and_keeps_policy() {
+fn portable_policy_move_opens_without_writing_and_keeps_identity_and_policy() {
     let (original, before) = fixture();
+    let checkpoint = original.path().join(".shield/review/state.json");
+    let bytes = fs::read(&checkpoint).unwrap();
     let parent = assert_fs::TempDir::new().unwrap();
     let destination = parent.path().join("moved");
     fs::rename(original.path(), &destination).unwrap();
@@ -44,257 +39,112 @@ fn portable_policy_move_opens_without_confirmation_and_keeps_policy() {
         Path::new(&context.project_root),
         destination.canonicalize().unwrap()
     );
-    assert_ne!(context.project_id, before.project_id);
+    assert_eq!(context.project_id, before.project_id);
     let state = Store::open(&destination).unwrap().read_current().unwrap();
     assert_eq!(state.candidates["project"]["rules"], RULES);
-    assert_eq!(
-        fs::read_to_string(destination.join(".shield/rules.yml")).unwrap(),
-        RULES
-    );
+    assert!(state.active.is_some());
     assert!(
         crate::runtime::Project::open(&destination)
             .unwrap()
             .snapshot()
             .is_ok()
     );
-    let again = review::open(&destination).unwrap();
+    // Nothing about the move is recorded: the checkpoint is unchanged.
     assert_eq!(
-        again.project_id, context.project_id,
-        "ordinary reopen is stable"
+        fs::read(destination.join(".shield/review/state.json")).unwrap(),
+        bytes
     );
-    let checkpoint = destination.join(".shield/review/state.json");
-    let bytes = fs::read(&checkpoint).unwrap();
-    let modified = fs::metadata(&checkpoint).unwrap().modified().unwrap();
-    let receipt_key = key(&state.candidates["project"]).unwrap();
-    let receipt = consent::record(&receipt_key).unwrap();
-    for _ in 0..3 {
-        review::open(&destination).unwrap();
-    }
-    assert_eq!(fs::read(&checkpoint).unwrap(), bytes);
-    assert_eq!(
-        fs::metadata(&checkpoint).unwrap().modified().unwrap(),
-        modified
-    );
-    assert_eq!(consent::record(&receipt_key).unwrap(), receipt);
 }
 
 #[test]
-fn portable_policy_diagnostics_preview_a_move_without_publishing_or_following_the_old_root() {
+fn portable_policy_copy_keeps_its_state_and_leaves_the_original_alone() {
     let (original, before) = fixture();
-    let parent = assert_fs::TempDir::new().unwrap();
-    let destination = parent.path().join("moved");
-    fs::create_dir(&destination).unwrap();
-    copy(original.path(), &destination);
-    let checkpoint = destination.join(".shield/review/state.json");
-    let bytes = fs::read(&checkpoint).unwrap();
-    let context = review::open_diagnostics(&destination).unwrap();
-    assert_eq!(
-        Path::new(&context.project_root),
-        destination.canonicalize().unwrap()
-    );
-    assert_eq!(context.project_id, before.project_id);
-    let state = Store::inspect(&destination)
-        .unwrap()
-        .read_diagnostic_checkpoint()
-        .unwrap()
-        .0;
-    state.check_inspection(&context).unwrap();
-    assert!(
-        state.check(&context).is_err(),
-        "a diagnostic preview cannot authorize the old epoch here"
-    );
-    let status = review::project::status(&context).unwrap();
-    assert_eq!(status["runtime_relocation_pending"], true);
-    assert_eq!(status["project_root"], context.project_root);
-    assert_eq!(status["retained_project_root"], before.project_root);
-    review::project::doctor(&context).unwrap();
-    assert_eq!(fs::read(&checkpoint).unwrap(), bytes);
-    assert_eq!(
-        review::open(original.path()).unwrap().project_id,
-        before.project_id
-    );
-    let runtime = review::open(&destination).unwrap();
-    assert_ne!(runtime.project_id, before.project_id);
-}
-
-#[test]
-fn portable_policy_diagnostics_neither_seed_receipts_nor_adopt_source_only_clones() {
-    let (original, context) = fixture();
-    let checkpoint = original.path().join(".shield/review/state.json");
-    let mut raw: Value = serde_json::from_slice(&fs::read(&checkpoint).unwrap()).unwrap();
-    raw["operator"]
-        .as_object_mut()
-        .unwrap()
-        .remove("portable_policy");
-    fs::write(&checkpoint, raw.to_string()).unwrap();
-    let bytes = fs::read(&checkpoint).unwrap();
-    let state = Store::inspect(original.path())
-        .unwrap()
-        .read_diagnostic_checkpoint()
-        .unwrap()
-        .0;
-    let candidate = Store::inspect(original.path())
-        .unwrap()
-        .captured_candidate(state.active.as_ref().unwrap().project_candidate().unwrap())
-        .unwrap();
-    let receipt = key(&candidate).unwrap();
-    consent::remove_record(&receipt);
-    review::project::status(&context).unwrap();
-    review::project::doctor(&context).unwrap();
-    let mut caller = context.clone();
-    caller.surface = "mcp".into();
-    caller.connection_id = Some("portable-readonly".into());
-    let connection = review::mcp::Connection::new("portable-readonly".into());
-    let report = review::mcp::call(&caller, &connection, "status", &json!({}), &|| Ok(()));
-    assert!(report["error"].is_null(), "{report}");
-    assert_eq!(fs::read(&checkpoint).unwrap(), bytes);
-    assert!(consent::record(&receipt).is_none());
-    let mutex = original.path().join(".shield/review/sources/.objects.lock");
-    fs::remove_file(&mutex).unwrap();
-    let report = review::mcp::call(&caller, &connection, "status", &json!({}), &|| Ok(()));
-    assert!(report["error"].is_null(), "{report}");
-    assert!(report["data"]["active_candidate_id"].is_null());
-    assert!(
-        !mutex.exists(),
-        "status never creates a missing source mutex"
-    );
-    drop(connection);
-    // Actual use seeds the developer's receipt; later source-only diagnosis
-    // still cannot turn that content consent into a new active checkpoint.
-    Store::open(original.path())
-        .unwrap()
-        .read_checkpoint()
-        .unwrap();
-    assert!(consent::record(&receipt).is_some());
-    let clone = assert_fs::TempDir::new().unwrap();
-    fs::create_dir(clone.path().join(".shield")).unwrap();
-    fs::write(clone.path().join(".shield/config.yml"), CONFIG).unwrap();
-    fs::write(clone.path().join(".shield/rules.yml"), RULES).unwrap();
-    assert!(review::open_diagnostics(clone.path()).is_err());
-    assert!(
-        review::bootstrap::inspect(clone.path())
-            .unwrap()
-            .bootstrap_required()
-    );
-    assert!(!clone.path().join(".shield/review").exists());
-    assert!(review::open(clone.path()).is_ok());
-}
-
-#[test]
-fn portable_policy_move_preserves_lineage_mode_and_existing_journal() {
-    let (original, context) = fixture();
     let store = Store::open(original.path()).unwrap();
     let mut state = store.read_current().unwrap();
-    let lineage = state.policy_lineage().to_owned();
     let generation = state.history_generation.clone();
     state.enforcement = serde_json::from_value(json!({"enabled":false,"generation":3})).unwrap();
     let request_id = state.id("request");
     let event = state.event(
         "decision",
-        &context,
+        &before,
         json!({"request_id":request_id}),
         json!({}),
         json!({"marker":"portable-history"}),
     );
     state.record(event);
     store.write(&mut state).unwrap();
+    let original_bytes = fs::read(original.path().join(".shield/review/state.json")).unwrap();
     let destination = assert_fs::TempDir::new().unwrap();
     copy(original.path(), destination.path());
-    let moved = Store::open(destination.path())
+    // An edit in the copy's files does not change its reviewed policy.
+    fs::write(
+        destination.path().join(".shield/rules.yml"),
+        RULES.replace("allow", "deny"),
+    )
+    .unwrap();
+    let context = review::open(destination.path()).unwrap();
+    assert_eq!(context.project_id, before.project_id);
+    let copied = Store::open(destination.path())
         .unwrap()
         .read_history()
         .unwrap();
-    assert_ne!(moved.project_id, context.project_id);
-    assert_eq!(moved.policy_lineage(), lineage);
-    assert_eq!(
-        moved.history_owner.as_deref(),
-        Some(context.project_id.as_str())
-    );
-    assert_eq!(moved.history_generation, generation);
-    assert!(!moved.enforcement.enabled);
-    assert!(moved.history_available);
+    assert_eq!(copied.history_generation, generation);
     assert!(
-        moved
-            .events
-            .iter()
-            .any(|event| event["links"]["request_id"] == request_id
-                && event["details"]["marker"] == "portable-history")
+        !copied.enforcement.enabled,
+        "this user's consented pause applies to identical content in any folder"
     );
-    let active = json!(moved.active);
-    assert_eq!(active["binding_version"], 2);
-    let unchanged = store.read_current().unwrap();
-    assert_eq!(unchanged.project_id, context.project_id);
-    assert_eq!(unchanged.policy_lineage(), lineage);
-}
-
-thread_local! {
-    static RELOCATION: std::cell::RefCell<(PathBuf, usize)> = const {
-        std::cell::RefCell::new((PathBuf::new(), 0))
-    };
-}
-
-fn relocation_prepared(stage: super::super::tests::Stage) {
-    if stage != super::super::tests::Stage::RelocationPrepared {
-        return;
-    }
-    RELOCATION.with(|slot| {
-        let mut capture = slot.borrow_mut();
-        let store = Store::open(&capture.0).unwrap();
-        let guard = store
-            .lock(&|| Ok(()))
-            .expect("preparation holds no authority lock");
-        if capture.1 == 0 {
-            let mut value: Value =
-                serde_json::from_slice(&store.checkpoint_bytes().unwrap()).unwrap();
-            value["history_limit"] = json!(17);
-            fs::write(store.directory.join("state.json"), value.to_string()).unwrap();
-        }
-        capture.1 += 1;
-        guard.release().unwrap();
-    });
+    assert!(copied.events.iter().any(|event| {
+        event["links"]["request_id"] == request_id
+            && event["details"]["marker"] == "portable-history"
+    }));
+    assert_eq!(
+        Store::open(destination.path())
+            .unwrap()
+            .read_current()
+            .unwrap()
+            .candidates["project"]["rules"],
+        RULES
+    );
+    assert_eq!(
+        fs::read(original.path().join(".shield/review/state.json")).unwrap(),
+        original_bytes
+    );
 }
 
 #[test]
-fn portable_policy_relocation_stops_after_repeated_checkpoint_changes() {
-    fn always_changes(stage: super::super::tests::Stage) {
-        if stage != super::super::tests::Stage::RelocationPrepared {
-            return;
-        }
-        RELOCATION.with(|slot| {
-            let mut capture = slot.borrow_mut();
-            let store = Store::open(&capture.0).unwrap();
-            let mut bytes = store.checkpoint_bytes().unwrap();
-            bytes.push(b'\n');
-            fs::write(store.directory.join("state.json"), bytes).unwrap();
-            capture.1 += 1;
-        });
-    }
-    let (original, _) = fixture();
+fn portable_policy_diagnostics_of_a_copy_report_the_folder_without_writing() {
+    let (original, before) = fixture();
     let destination = assert_fs::TempDir::new().unwrap();
     copy(original.path(), destination.path());
-    RELOCATION.with(|slot| *slot.borrow_mut() = (destination.path().to_owned(), 0));
-    super::super::tests::set_observer(Some(always_changes));
-    let result = Store::open(destination.path()).unwrap().read_checkpoint();
-    super::super::tests::set_observer(None);
-    assert!(matches!(result, Err(Error::StaleSnapshot)));
-    RELOCATION.with(|slot| assert_eq!(slot.borrow().1, RELOCATION_ATTEMPTS));
-    crate::review::publication::ProjectionLease::acquire(destination.path()).unwrap();
+    let checkpoint = destination.path().join(".shield/review/state.json");
+    let bytes = fs::read(&checkpoint).unwrap();
+    let context = review::open_diagnostics(destination.path()).unwrap();
+    assert_eq!(context.project_id, before.project_id);
+    let status = review::project::status(&context).unwrap();
+    assert_eq!(status["project_root"], context.project_root);
+    assert!(status.get("runtime_relocation_pending").is_none());
+    review::project::doctor(&context).unwrap();
+    assert_eq!(fs::read(&checkpoint).unwrap(), bytes);
 }
 
 #[test]
-fn portable_policy_relocation_rechecks_competing_changes_after_unlocked_preparation() {
-    let (original, _) = fixture();
-    let destination = assert_fs::TempDir::new().unwrap();
-    copy(original.path(), destination.path());
-    RELOCATION.with(|slot| *slot.borrow_mut() = (destination.path().to_owned(), 0));
-    super::super::tests::set_observer(Some(relocation_prepared));
-    let state = Store::open(destination.path())
-        .unwrap()
-        .read_checkpoint()
-        .unwrap();
-    super::super::tests::set_observer(None);
-    assert_eq!(state.history_limit, 17);
-    RELOCATION.with(|slot| assert_eq!(slot.borrow().1, 2));
+fn portable_policy_repeated_moves_keep_working() {
+    let (original, before) = fixture();
+    let parent = assert_fs::TempDir::new().unwrap();
+    let mut current = original.path().to_owned();
+    for index in 0..4 {
+        let destination = parent.path().join(format!("move-{index}"));
+        fs::rename(&current, &destination).unwrap();
+        let context = review::open(&destination).unwrap();
+        assert_eq!(context.project_id, before.project_id);
+        assert!(
+            crate::runtime::Project::open(&destination)
+                .unwrap()
+                .snapshot()
+                .is_ok()
+        );
+        current = destination;
+    }
 }
 
 #[test]
@@ -335,61 +185,6 @@ fn portable_policy_source_clone_reuses_missing_pack_bytes_but_refuses_changed_ar
         context.project_id
     );
 }
-
-#[test]
-fn portable_policy_existing_installation_registers_reviewed_source_once() {
-    let (original, _) = fixture();
-    let checkpoint = original.path().join(".shield/review/state.json");
-    let mut state: Value = serde_json::from_slice(&fs::read(&checkpoint).unwrap()).unwrap();
-    state["operator"]
-        .as_object_mut()
-        .unwrap()
-        .remove("portable_policy");
-    fs::write(&checkpoint, serde_json::to_vec(&state).unwrap()).unwrap();
-    let context = review::open(original.path()).unwrap();
-    assert_eq!(context.project_id, state["project_id"]);
-    let seeded = fs::read(&checkpoint).unwrap();
-    review::open(original.path()).unwrap();
-    assert_eq!(fs::read(&checkpoint).unwrap(), seeded);
-}
-
-#[test]
-fn portable_policy_repeated_moves_bound_recovery_and_keep_latest_runtime() {
-    let (original, _) = fixture();
-    let parent = assert_fs::TempDir::new().unwrap();
-    let mut current = original.path().to_owned();
-    for index in 0..4 {
-        let destination = parent.path().join(format!("move-{index}"));
-        fs::rename(&current, &destination).unwrap();
-        let context = review::open(&destination).unwrap();
-        assert_eq!(
-            Path::new(&context.project_root),
-            destination.canonicalize().unwrap()
-        );
-        let backups = fs::read_dir(destination.join(".shield/review"))
-            .unwrap()
-            .filter_map(Result::ok)
-            .filter(|entry| {
-                entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with("bootstrap-")
-            })
-            .count();
-        assert!(
-            backups <= 2,
-            "predecessor checkpoints stay bounded: {backups}"
-        );
-        assert!(
-            crate::runtime::Project::open(&destination)
-                .unwrap()
-                .snapshot()
-                .is_ok()
-        );
-        current = destination;
-    }
-}
-
 #[cfg(unix)]
 #[test]
 fn portable_policy_linked_external_configuration_does_not_borrow_its_receipt() {
@@ -409,61 +204,6 @@ fn portable_policy_linked_external_configuration_does_not_borrow_its_receipt() {
             .exists()
     );
 }
-
-#[test]
-fn portable_policy_copy_does_not_activate_unreviewed_edits_or_change_original() {
-    let (original, before) = fixture();
-    let path = original.path().canonicalize().unwrap().join("acme.txt");
-    fs::write(&path, "Acme text").unwrap();
-    let request = json!({"protocol_version":1,"request_id":"portable-read","expected_project_id":before.project_id,
-        "cwd":before.project_root,"operation":{"kind":"read-text","path":path,"offset":null,"limit":null},
-        "host":{"agent":"claude-mod","session_id":"acme-session","tool_use_id":"acme-tool","event":"PreToolUse","consumer_id":"acme-session"}});
-    let (receipt, code) = crate::enforcement::protocol::evaluate(
-        original.path(),
-        &serde_json::to_vec(&request).unwrap(),
-    );
-    assert_eq!(code, 0, "{receipt}");
-    review::read_approval::authorize(
-        &before,
-        receipt["approval"]["request_id"].as_str().unwrap(),
-        300,
-        None,
-        false,
-    )
-    .unwrap();
-    assert!(
-        !Store::open(original.path())
-            .unwrap()
-            .read_checkpoint()
-            .unwrap()
-            .read_requests
-            .is_empty()
-    );
-    let destination = assert_fs::TempDir::new().unwrap();
-    copy(original.path(), destination.path());
-    let original_state = fs::read(original.path().join(".shield/review/state.json")).unwrap();
-    fs::write(
-        destination.path().join(".shield/rules.yml"),
-        RULES.replace("allow", "deny"),
-    )
-    .unwrap();
-    let context = review::open(destination.path()).unwrap();
-    assert_ne!(context.project_id, before.project_id);
-    let state = Store::open(destination.path())
-        .unwrap()
-        .read_current()
-        .unwrap();
-    assert_eq!(state.candidates["project"]["rules"], RULES);
-    assert!(state.read_requests.is_empty());
-    assert!(state.run_requests.is_empty());
-    assert!(state.hook_requests.is_empty());
-    assert!(state.proposals.is_empty());
-    assert_eq!(
-        fs::read(original.path().join(".shield/review/state.json")).unwrap(),
-        original_state
-    );
-}
-
 #[test]
 fn portable_policy_reuse_keeps_reviewed_source_when_disposable_cache_is_unavailable() {
     let (_original, before) = fixture();
@@ -592,7 +332,7 @@ fn portable_policy_source_edit_and_forged_receipt_stay_unreviewed() {
 }
 
 #[test]
-fn portable_policy_corrupt_activation_is_not_relocated() {
+fn portable_policy_corrupt_activation_in_a_copy_is_refused_unchanged() {
     let (original, _) = fixture();
     let destination = assert_fs::TempDir::new().unwrap();
     copy(original.path(), destination.path());

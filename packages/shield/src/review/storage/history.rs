@@ -15,7 +15,6 @@ use super::{Error, State, Store, Temporary, private, sync};
 #[cfg(test)]
 pub(super) use legacy::inspect as inspect_legacy;
 pub(super) use legacy::upgrade;
-pub(in crate::review::storage) use resources::prepare_readers;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{

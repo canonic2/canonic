@@ -530,7 +530,6 @@ fn incomplete_state_and_proposal_records_are_refused_without_mutation() {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Stage {
     UpgradePrepared,
-    RelocationPrepared,
     Created,
     Written,
     Synced,
@@ -541,7 +540,6 @@ impl Stage {
     fn name(self) -> &'static str {
         match self {
             Self::UpgradePrepared => "upgrade-prepared",
-            Self::RelocationPrepared => "relocation-prepared",
             Self::Created => "created",
             Self::Written => "written",
             Self::Synced => "synced",
@@ -705,6 +703,9 @@ fn publication_crashes_never_launch_before_durable_consumption() {
             usize::from(committed)
         );
         // Retrying after the owned writer exits needs no lock-file cleanup.
+        // The grant was claimed in the per-user ledger before the crash, so it
+        // stays spent even where the checkpoint did not record it: a crash
+        // never makes a one-time grant usable twice.
         let retry = crate::review::run_approval::gate(
             &context,
             &evidence,
@@ -715,7 +716,7 @@ fn publication_crashes_never_launch_before_durable_consumption() {
         )
         .unwrap()
         .0;
-        assert_eq!(retry["allowed"], !committed);
+        assert_eq!(retry["allowed"], false);
     }
 }
 

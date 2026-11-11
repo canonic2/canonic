@@ -142,9 +142,6 @@ fn historical(bytes: &[u8]) -> Result<(Value, State), Error> {
 }
 
 pub(super) fn convert(store: &Store, original: &[u8]) -> Result<State, Error> {
-    let observed = super::incarnation::observe(store, true).map_err(|_| {
-        Error::Invalid("operation continuity unavailable; retained checkpoint unchanged")
-    })?;
     let held = *store
         .writer_owned
         .lock()
@@ -166,36 +163,25 @@ pub(super) fn convert(store: &Store, original: &[u8]) -> Result<State, Error> {
         // or publishes either a cache artifact or converted checkpoint.
         crate::review::runtime::inspect_historical(store, &mut state, &raw["active"])?;
         state.legacy_preview = None;
-        // An older writer's record at its own root is this installation upgraded
-        // in place: it keeps its identity and authority without relocation.
-        if super::portability::upgraded_in_place(store, &state) {
-            super::portability::adopt_incarnation(store, &mut state, &bytes, &observed);
-        }
-        super::portability::authenticate_historical(store, &mut state, &raw["active"], &observed)?;
         let previous = recovery_sources(store, &state.operator)?;
         // Compilation and immutable derived-cache preparation do not require
         // authority ownership. Only publish after checking the same source again.
         crate::review::runtime::restore_historical(store, &mut state, &raw["active"])?;
-        if state.project_root != store.root || !super::incarnation::matches(&state, &observed) {
-            // Authenticated legacy policy still needs a fresh local operation
-            // epoch before the current writer can publish it. Reuse the same
-            // relocation transition without reacquiring our publication lease.
-            state = super::portability::prepare_relocation(store, state, &bytes, &observed)?;
-        }
+        // Admit authority by this user's content-keyed consent, recording it
+        // for an installation the old evidence proves was upgraded in place.
+        let mut state = super::portability::admit(store, state, true)?;
+        crate::review::read_approval::drop_unbound(&mut state);
         #[cfg(test)]
         super::tests::observe(super::tests::Stage::UpgradePrepared);
         let owned = (!held).then(|| store.lock(&|| Ok(()))).transpose()?;
         let latest = store.checkpoint_bytes()?;
-        if let Ok(state) = checkpoint(&latest) {
+        if let Ok(state) = store.decode(&latest) {
             return Ok(state);
         }
         if latest != bytes {
             drop(owned);
             bytes = latest;
             continue;
-        }
-        if super::incarnation::observe(store, false).ok().as_deref() != Some(observed.as_str()) {
-            return Err(Error::StaleSnapshot);
         }
         let current = crate::policy::fingerprint(&bytes);
         let mut keep = previous.clone();
@@ -238,7 +224,11 @@ pub(super) fn inspect(store: &Store, bytes: &[u8]) -> Result<State, Error> {
 }
 
 fn recognize(store: &Store, bytes: &[u8]) -> Result<(Value, State), Error> {
-    historical(bytes).map_err(|error| {
+    let recognized = historical(bytes).map(|(raw, mut state)| {
+        state.project_root.clone_from(&store.root);
+        (raw, state)
+    });
+    recognized.map_err(|error| {
         if matches!(
             error,
             Error::Invalid("unsupported review state format; original checkpoint preserved")

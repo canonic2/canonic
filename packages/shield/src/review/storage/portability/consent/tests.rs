@@ -219,19 +219,14 @@ fn retained_upgrade_uses_legacy_receipt_with_an_empty_index() {
             .candidates
             .is_empty()
     );
-    // At its own root this record upgrades in place; a moved copy is what
-    // needs the private receipt.
+    // The legacy receipt alone admits this exact policy in a copy.
+    assert!(presence_for(&raw));
     let moved = assert_fs::TempDir::new().unwrap();
-    super::copy_authority_tests::copied(root.path(), moved.path());
+    crate::test_support::copy_fixture_directory(root.path(), moved.path());
     let store = Store::open(moved.path()).unwrap();
     let migrated = store.read_checkpoint().unwrap();
     assert!(migrated.active.is_some());
     assert_eq!(migrated.policy_revision, state.policy_revision);
-    assert_eq!(migrated.operator["portable_lineage_unverified"], true);
-    assert_eq!(
-        migrated.operator["runtime_incarnation"]["schema_version"],
-        1
-    );
     assert_eq!(
         private_files::read(&path, super::super::LIMIT).unwrap(),
         receipt

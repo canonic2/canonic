@@ -71,7 +71,9 @@ impl Profiles {
 pub(super) struct ContextRecord {
     pub consumer_id: String,
     pub project_id: String,
-    pub incarnation: String,
+    /// Written by an earlier format; such a context is refused as stale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub incarnation: Option<String>,
     pub project_root: String,
     pub profile: String,
     pub created_at_ms: u64,
@@ -81,14 +83,10 @@ pub(super) struct ContextRecord {
 
 impl ContextRecord {
     pub(super) fn validate(&self) -> Result<(), Error> {
-        if ![
-            &self.consumer_id,
-            &self.project_id,
-            &self.incarnation,
-            &self.profile,
-        ]
-        .into_iter()
-        .all(|value| digest(value))
+        if ![&self.consumer_id, &self.project_id, &self.profile]
+            .into_iter()
+            .all(|value| digest(value))
+            || self.incarnation.is_some()
             || self.project_root.len() > 4096
             || self.project_root.contains('\0')
             || !std::path::Path::new(&self.project_root).is_absolute()

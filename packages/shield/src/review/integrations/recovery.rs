@@ -229,7 +229,7 @@ impl Prepared {
 
 fn record_review(state: &mut crate::review::model::State, context: &Context) {
     let review_id = state.id("integration-review");
-    let marker = json!({"project_id":state.project_id,"project_root":state.project_root,"review_id":review_id});
+    let marker = json!({"project_id":state.project_id,"review_id":review_id});
     state.operator["integration_review"] = marker.clone();
     let mut event = state.event(
         "integration_review_confirmed",

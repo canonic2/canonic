@@ -54,10 +54,11 @@ pub(super) fn in_session(
         policy_revision: first["identity"]["policy_revision"].as_str()?,
         candidate_digest: first["identity"]["candidate_digest"].as_str()?,
     };
+    let cwd = hook_approval::relative_cwd(root, request.cwd.as_ref());
     let key = Key {
         agent: adapter.spec().id,
         session: request.session,
-        cwd: request.cwd.as_ref(),
+        cwd: &cwd,
         tool: request.tool,
         input_digest: if refusals.iter().any(|r| !r["mcp_match"].is_null()) {
             crate::json::fingerprint(&(
@@ -74,6 +75,12 @@ pub(super) fn in_session(
     };
     match request.event {
         Event::Before => {
+            // A failed read is not a missing registration; recording the
+            // request below reports it with a retry.
+            if enrolled(root, key.agent) == Some(false) {
+                append(&mut reply.agent_context, NOT_CONNECTED);
+                return None;
+            }
             let Some(summary) = summary(request, refusals) else {
                 append(
                     &mut reply.agent_context,
@@ -103,6 +110,18 @@ pub(super) fn in_session(
             .map(|_| allowed()),
         Event::Completed | Event::Failed | Event::Ended => None,
     }
+}
+
+/// What the agent reads when this project records no integration for it:
+/// its MCP connection cannot ask the person, so no request is stored.
+const NOT_CONNECTED: &str = "Shield cannot ask the user to allow this here: this agent is not connected to Shield in this project. If it is needed, ask the user to run `shield mcp setup` in this project and restart this agent session, then repeat this exact call.";
+
+/// Whether the project records an integration for this agent, the
+/// condition its MCP connection needs to ask the person; `None` when the
+/// project could not be read.
+fn enrolled(root: &Path, agent: &str) -> Option<bool> {
+    let context = crate::review::open(root).ok()?;
+    crate::review::cli::registered(&context, agent).ok()
 }
 
 fn allowed() -> Reply {

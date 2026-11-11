@@ -40,6 +40,14 @@ fn raw(fixture: &Fixture) -> Value {
     .unwrap()
 }
 fn approved(fixture: &Fixture) -> Value {
+    // In-session approval needs Codex's recorded integration.
+    if raw(fixture)["operator"]["integration"].is_null() {
+        crate::review::operator::integrations::configure_fixture(
+            fixture.project.path(),
+            crate::review::integrations::IntegrationChoice::agent("codex"),
+            crate::review::integrations::AskFallback::Block,
+        );
+    }
     let refusal = hook(fixture);
     assert_eq!(refusal["hookSpecificOutput"]["permissionDecision"], "deny");
     let row = raw(fixture)["hook_requests"][0].clone();

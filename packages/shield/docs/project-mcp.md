@@ -141,6 +141,15 @@ refuse; inspect the result before requesting a fresh review.
 and execution requests. `request_deny` asks the user to deny a pending request
 or revoke its unused grant; consumption and revocation are mutually exclusive.
 
+Only the agent that made a native hook request can approve it, and only when
+this project has that agent's integration. A Git worktree, clone or copy
+whose Shield agent entries match a registration you set up for the same policy
+is registered for you automatically. Otherwise, or when an entry was edited,
+refusals there do not offer `request_approve`, the tool returns
+`agent_not_connected`, and listed requests show `approvable: false` with an
+`approval_route`. Run `shield mcp setup` in that folder, restart the agent
+session, and repeat the refused call.
+
 Pack installation accepts known typed settings through a `set` object, also
 inside each batch selection. Forms collect remaining required or requested
 values. `pack_update` collects settings introduced by a release; an unchanged
@@ -936,9 +945,10 @@ evaluation over stdio using MCP `2025-06-18`, `2025-11-25`, and per-request
 launch `shield mcp serve --project /workspace/acme` explicitly, replacing
 the example path with an initialized project. Startup failure exits 1 with a
 fixed stderr diagnostic and empty stdout.
-Launch from the selected project's directory. When the working directory is
-inside a different configured project, Shield refuses the conflicting selection
-unless a reviewed move/copy launch binding resolves it.
+Launch from the selected project's directory. Shield serves the nearest
+configured project holding the agent's session folder, or else its working
+directory; `--project` applies only when no configured project holds that
+folder. A moved, copied or worktree folder therefore serves itself.
 
 A launch may supply an agent and an explicitly mapped host session through
 internal registration arguments; tool input cannot appoint either. Client names

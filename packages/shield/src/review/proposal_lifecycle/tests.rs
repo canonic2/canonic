@@ -75,7 +75,9 @@ fn copied_policy_workflow_proposal_continuations_require_fresh_owned_review() {
     child.connection_id = Some("copy-connection".into());
     let child_connection = Connection::new("copy-connection".into());
     let child_revision = crate::review::inspect(&child).unwrap()["policy_revision"].clone();
-    assert_ne!(child.project_id, context.project_id);
+    // A copy is the same project; another connection still cannot continue
+    // this connection's workflow.
+    assert_eq!(child.project_id, context.project_id);
     let refused = mcp::call_with_confirmation(
         &child,
         &child_connection,
@@ -92,13 +94,17 @@ fn copied_policy_workflow_proposal_continuations_require_fresh_owned_review() {
         &json!({"proposal_id":proposed["proposal_id"]}),
         &|| Ok(()),
     );
-    assert!(missing["error"].is_object(), "{missing}");
+    // The copy carries the proposal record; another connection finds it
+    // withdrawn, never applicable.
+    assert_eq!(missing["data"]["status"], "withdrawn", "{missing}");
     assert_eq!(
         crate::review::inspect(&child).unwrap()["policy_revision"],
         child_revision
     );
 
-    let fresh = prepare(&child, &child_connection, "acme-copy-change");
+    // The copied record keeps its idempotency key in this conversation, so a
+    // fresh review uses a new key.
+    let fresh = prepare(&child, &child_connection, "acme-copy-fresh");
     assert_ne!(fresh["proposal_id"], proposed["proposal_id"]);
     assert_eq!(
         crate::review::inspect(&child).unwrap()["policy_revision"],
