@@ -185,6 +185,8 @@ const VALUED: &[&str] = &[
     "-M",
     "-l",
     "-X",
+    // A flag for `ls-files` and `grep`, but `format-patch` and `archive` name a file.
+    "-o",
 ];
 /// Known no-value options, including optional values accepted only with `=`.
 /// Anything outside this vocabulary keeps the complete output footprint.
@@ -245,6 +247,97 @@ const FLAGS: &[&str] = &[
     "--all-match",
     "--heading",
     "--break",
+    "--graph",
+    "--decorate",
+    "--no-decorate",
+    "--all",
+    "--branches",
+    "--tags",
+    "--remotes",
+    "--reverse",
+    "--first-parent",
+    "--merges",
+    "--no-merges",
+    "--topo-order",
+    "--date-order",
+    "--author-date-order",
+    "--left-right",
+    "--left-only",
+    "--right-only",
+    "--cherry-pick",
+    "--cherry-mark",
+    "--cherry",
+    "--boundary",
+    "--parents",
+    "--children",
+    "--follow",
+    "--source",
+    "--abbrev-commit",
+    "--no-abbrev-commit",
+    "--relative-date",
+    "--walk-reflogs",
+    "--no-walk",
+    "--do-walk",
+    "--ancestry-path",
+    "--full-history",
+    "--simplify-by-decoration",
+    "--simplify-merges",
+    "--show-pulls",
+    "--dense",
+    "--sparse",
+    "--exclude-first-parent-only",
+    "--show-linear-break",
+    "--log-size",
+    "--full-diff",
+    "--show-signature",
+    "--no-show-signature",
+    "--notes",
+    "--no-notes",
+    "--show-notes",
+    "--use-mailmap",
+    "--mailmap",
+    "--no-mailmap",
+    "--invert-grep",
+    "--regexp-ignore-case",
+    "--basic-regexp",
+    "--extended-regexp",
+    "--fixed-strings",
+    "--perl-regexp",
+    "--pickaxe-regex",
+    "--pickaxe-all",
+    "--count",
+    "--merge-base",
+    "--find-renames",
+    "--find-copies",
+    "--renames",
+    "--submodule",
+    "--ignore-submodules",
+    "--check",
+    "--ws-error-highlight",
+    "--indent-heuristic",
+    "--no-indent-heuristic",
+    "--ita-invisible-in-index",
+    "--no-commit-id",
+    "--root",
+    "--directory",
+    "--no-empty-directory",
+    "--recurse-submodules",
+    "--no-recurse-submodules",
+    "--killed",
+    "--line-number",
+    "--files-with-matches",
+    "--files-without-match",
+    "--ignore-case",
+    "--word-regexp",
+    "--invert-match",
+    "--untracked",
+    "--no-exclude-standard",
+    "--only-matching",
+    "--no-filename",
+    "--null",
+    "--show-function",
+    "--recursive",
+    "--no-recursive",
 ];
 /// Options that print patches.
 const PATCH: &[&str] = &[
@@ -765,6 +858,10 @@ fn consumes_next(option: &str) -> Option<bool> {
         return (FLAGS.contains(&name) || PATCH.contains(&name) || SUMMARY.contains(&name))
             .then_some(false);
     }
+    // `-<n>` limits the commit count.
+    if option[1..].bytes().all(|b| b.is_ascii_digit()) {
+        return Some(false);
+    }
     for (index, letter) in option.char_indices().skip(1) {
         let end = index + letter.len_utf8();
         if VALUED
@@ -773,7 +870,7 @@ fn consumes_next(option: &str) -> Option<bool> {
         {
             return Some(end == option.len());
         }
-        if !"puWcswbzaqvRiEFHPt".contains(letter) {
+        if !"puWcswbzaqvRiEFHPtrgdDhk".contains(letter) {
             return None;
         }
     }
@@ -845,6 +942,116 @@ mod tests {
         let unknown = content(&["show", "HEAD:notes.txt"], &root, &root, false, guard);
         assert!(unknown.0 == Protection::Sensitive);
     }
+
+    #[test]
+    fn history_graphs_print_no_settings_unless_they_print_patches() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let root = root.path().canonicalize().unwrap();
+        std::fs::write(root.join(".mcp.json"), "{}").unwrap();
+        std::fs::create_dir(root.join("src")).unwrap();
+        let guard = Guard {
+            cache: None,
+            allow: crate::review::path_access::PathAccess::default(),
+            working_files: None,
+        };
+        let level = |arguments: &[&str]| content(arguments, &root, &root, true, guard).0;
+        for arguments in [
+            &["log", "--oneline", "--graph", "-8", "HEAD", "origin/main"][..],
+            &["log", "--graph", "--decorate", "--all", "-20"],
+            &[
+                "log",
+                "--first-parent",
+                "--no-merges",
+                "--reverse",
+                "--stat",
+            ],
+        ] {
+            assert!(level(arguments) == Protection::None, "{arguments:?}");
+        }
+        for arguments in [
+            &["log", "--graph", "-8", "-p"][..],
+            &["log", "-8", "--graph", "--patch", "HEAD"],
+            &["log", "--graph", "--future-option"],
+            // `-o` names an output folder here, never a pathspec.
+            &["format-patch", "-o", "src", "HEAD~1"],
+            &["log", "-g", "-r", "-p"],
+        ] {
+            assert!(level(arguments) == Protection::Sensitive, "{arguments:?}");
+        }
+    }
+
+    #[test]
+    fn common_listings_and_summaries_print_no_settings() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let root = root.path().canonicalize().unwrap();
+        std::fs::write(root.join(".mcp.json"), "{}").unwrap();
+        std::fs::create_dir(root.join("src")).unwrap();
+        let guard = Guard {
+            cache: None,
+            allow: crate::review::path_access::PathAccess::default(),
+            working_files: None,
+        };
+        let failing: Vec<&str> = COMMON_LISTINGS
+            .iter()
+            .copied()
+            .filter(|command| {
+                let arguments: Vec<&str> = command.split(' ').collect();
+                content(&arguments, &root, &root, true, guard).0 != Protection::None
+            })
+            .collect();
+        assert!(failing.is_empty(), "{failing:#?}");
+    }
+
+    /// Everyday listings and summaries, each word separated by one space.
+    const COMMON_LISTINGS: &[&str] = &[
+        "log --oneline -n 20",
+        "log --pretty=format:%h -10",
+        "log --format=%H -1 --no-color",
+        "log --abbrev-commit --oneline main..HEAD",
+        "log --stat -5",
+        "log --name-status HEAD~3..HEAD",
+        "log --author=Acme --since=2.weeks --date=short",
+        "log --grep=fix -i --invert-grep --oneline",
+        "log --regexp-ignore-case --extended-regexp --grep x",
+        "log -g --oneline",
+        "log --walk-reflogs --oneline",
+        "log --oneline --no-walk --do-walk HEAD",
+        "log --left-right --cherry --oneline main...HEAD",
+        "log --ancestry-path --full-history --simplify-by-decoration",
+        "log --show-signature --no-notes --use-mailmap -1",
+        "log --oneline --follow -- src",
+        "log -S needle --oneline --pickaxe-regex",
+        "log --count --oneline",
+        "show --stat HEAD",
+        "show -s --format=%B HEAD",
+        "show --abbrev-commit --no-patch --oneline HEAD",
+        "show --name-only --pretty= HEAD",
+        "diff --stat --merge-base main",
+        "diff --name-only -w HEAD~1",
+        "diff --cached --numstat --find-renames",
+        "diff --dirstat=files --shortstat",
+        "diff -R --stat --submodule=log --ignore-submodules",
+        "diff-tree --no-commit-id --name-only -r HEAD",
+        "diff-tree -r --name-status --root HEAD",
+        "status -sb",
+        "status --short --branch --untracked-files=all",
+        "status -s -uno --ignore-submodules=dirty --renames",
+        "status --porcelain=v1 -z --find-renames=50",
+        "ls-files -o --exclude-standard",
+        "ls-files --others --directory --no-empty-directory",
+        "ls-files -m -d -c -t -z",
+        "ls-files --recurse-submodules --sparse",
+        "reflog -n 10 --date=iso",
+        "reflog show --oneline -20",
+        "stash list --oneline --date=relative",
+        "-C src grep --line-number needle",
+        "-C src grep -n -i -w -I needle",
+        "-C src grep --count --files-with-matches needle",
+        "-C src grep -l -E -F -P needle",
+        "-C src grep --ignore-case --word-regexp --untracked x",
+        "-C src grep -o -h -H --only-matching needle",
+        "-C src grep --fixed-strings --perl-regexp --recurse-submodules x",
+    ];
 
     #[test]
     fn revision_paths_name_blobs_but_not_message_searches() {
