@@ -375,6 +375,56 @@ fn operator_review_retains_its_plan_but_still_refuses_changed_files() {
     }
 }
 
+/// A fresh worktree lacks the ignored pack cache. Reused reviewed policy then
+/// carries only the combined digest, as consent records no per-file hashes.
+#[test]
+fn missing_pack_artifacts_are_rewritten_not_treated_as_edits() {
+    let pack = |version: &str| {
+        json!({"schema_version":1,"kind":"pack","id":"acme/tools","version":version,"description":"Acme","license":"MIT","maintainers":["Acme"],"engines":{"shield":"*"},"capabilities":["structured-rules-v1"],"rules":[]}).to_string()
+    };
+    let candidate = |version: &str| {
+        let config = json!({"schema_version":1,"packs":[{"id":"acme/tools","version":version,"profile":"recommended","path":"cache/acme.yml"}]}).to_string();
+        json!(configuration::Bundle::capture(&config, &[pack(version)], None).unwrap())
+    };
+    for file_hashes in [false, true] {
+        let root = assert_fs::TempDir::new().unwrap();
+        let initial = candidate("1.0.0");
+        let mut meta = json!({"sources":{},"default":null,"installed":[],"projection":null});
+        let files = projections(&initial, &meta).unwrap();
+        meta["projection"] = json!(digest(&files));
+        if file_hashes {
+            meta["projection_file_hashes"] = json!(super::projections::file_hashes(&files));
+        }
+        let candidates = BTreeMap::from([("project".to_owned(), initial)]);
+        let evaluator =
+            configuration::Evaluator::new(review::snapshots(&candidates).unwrap()).unwrap();
+        Store::initialize_active(root.path(), candidates, evaluator.revision(), meta).unwrap();
+        let context = review::open(root.path()).unwrap();
+        materialize(&context, &files).unwrap();
+        let shield = root.path().join(".shield");
+        fs::remove_dir_all(shield.join("cache")).unwrap();
+
+        let before = load(&context).unwrap();
+        assert!(!projection_changed(&context, &before).unwrap());
+        commit(
+            &context,
+            &before,
+            candidate("1.1.0"),
+            metadata(&before),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(shield.join("cache/acme.yml")).unwrap(),
+            pack("1.1.0")
+        );
+
+        // An authored file deleted by hand still counts as drift.
+        fs::remove_file(shield.join("rules.yml")).unwrap();
+        assert!(projection_changed(&context, &load(&context).unwrap()).unwrap());
+    }
+}
+
 #[test]
 fn unchanged_projection_bytes_cannot_skip_path_validation() {
     let (root, context) = fixture();

@@ -202,6 +202,7 @@ pub(in crate::review) fn edited_projections(
     };
     let directory = root(context).join(".shield");
     let mut edited = BTreeSet::new();
+    let mut artifacts = None;
     // A local file created by hand is an edit too.
     for name in ["config.local.yml", "rules.local.yml"] {
         if !expected.contains_key(name) && directory.join(name).exists() {
@@ -210,6 +211,9 @@ pub(in crate::review) fn edited_projections(
     }
     for (name, hash) in expected {
         let path = directory.join(name);
+        if missing_artifact(context, state, &path, name, &mut artifacts)? {
+            continue;
+        }
         if !path.is_file()
             || fs::symlink_metadata(&path)?.file_type().is_symlink()
             || json!(policy::fingerprint(
@@ -239,8 +243,12 @@ pub(in crate::review) fn projection_changed(
     let captured = Store::open(Path::new(&context.project_root))?
         .captured_candidate(&state.candidates["project"])?;
     let mut actual = projections(&captured, &metadata(state))?;
+    let artifacts = artifact_paths(&captured)?;
     for (name, bytes) in &mut actual {
         let path = root(context).join(".shield").join(name);
+        if artifacts.contains(name) && is_absent(&path)? {
+            continue;
+        }
         if !path.is_file() || fs::symlink_metadata(&path)?.file_type().is_symlink() {
             return Ok(true);
         }
@@ -248,6 +256,49 @@ pub(in crate::review) fn projection_changed(
             .map_err(|_| Error::Invalid("project projection unreadable"))?;
     }
     Ok(digest(&actual) != expected)
+}
+
+/// Pack artifacts are verified registry bytes in an ignored folder, so a fresh
+/// checkout or worktree lacks them. Their absence is missing output that
+/// publication rewrites, not an operator edit.
+fn missing_artifact(
+    context: &Context,
+    state: &State,
+    path: &Path,
+    name: &str,
+    artifacts: &mut Option<BTreeSet<String>>,
+) -> Result<bool, Error> {
+    if !is_absent(path)? {
+        return Ok(false);
+    }
+    if artifacts.is_none() {
+        let captured = Store::open(Path::new(&context.project_root))?
+            .captured_candidate(&state.candidates["project"])?;
+        *artifacts = Some(artifact_paths(&captured)?);
+    }
+    Ok(artifacts.as_ref().is_some_and(|paths| paths.contains(name)))
+}
+
+fn artifact_paths(candidate: &Value) -> Result<BTreeSet<String>, Error> {
+    let config = configuration::layers::merged(candidate)?;
+    ["packs", "disabled"]
+        .iter()
+        .flat_map(|selections| config[*selections].as_array().into_iter().flatten())
+        .map(|row| {
+            row["path"]
+                .as_str()
+                .map(str::to_owned)
+                .ok_or(Error::Invalid("pack path missing"))
+        })
+        .collect()
+}
+
+fn is_absent(path: &Path) -> Result<bool, Error> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(false),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+        Err(error) => Err(error.into()),
+    }
 }
 pub(in crate::review) fn file_hashes(files: &BTreeMap<String, String>) -> BTreeMap<String, String> {
     files
