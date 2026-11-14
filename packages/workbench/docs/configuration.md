@@ -1,13 +1,15 @@
 # workbench.yaml reference
 
-`workbench.yaml` at the project root is the whole of a project's Workbench
-setup. This page lists every key. For a guided introduction, start with
+`workbench.yaml` is the whole of a project's Workbench setup. This page lists
+every key. For a guided introduction, start with
 [Getting started](getting-started.md).
 
-The project root is the folder that holds `workbench.yaml`. In VS Code, it has
-to be the top of an open folder; see
+The project root is the folder that holds `workbench.yaml`, or holds it as
+`.config/workbench.yaml`; see [Where the file lives](#where-the-file-lives).
+In VS Code, it has to be the top of an open folder; see
 [Projects in a subfolder](extension.md#projects-in-a-subfolder).
 
+- [Where the file lives](#where-the-file-lives)
 - [A complete example](#a-complete-example)
 - [Top level](#top-level)
 - [Previews](#previews)
@@ -25,6 +27,51 @@ to be the top of an open folder; see
 - [YAML that the reader accepts](#yaml-that-the-reader-accepts)
 - [How problems are reported](#how-problems-are-reported)
 - [Editing with the form](#editing-with-the-form)
+
+## Where the file lives
+
+Workbench reads one manifest per project, chosen in this order:
+
+1. The file you name with `--config PATH`, on any `workbench` command that
+   reads the configuration (`start`, `check`, `list`, `build`, `init`,
+   `config show`, `page`, `view`, `mcp serve` and the other agent commands).
+   A relative path is resolved against the folder you run the command in.
+2. `workbench.yaml` at the project root.
+3. `.config/workbench.yaml`, for projects that keep tool configuration in a
+   `.config` folder.
+
+```sh
+workbench start --config review/workbench.review.yaml
+```
+
+The first that exists is the only one read; the two default files are never
+merged. If both default files exist, `workbench.yaml` is read, even when it
+doesn't parse, and a problem names the `.config` file that isn't. A
+`--config` file that is missing, or isn't a file, is an error: Workbench
+doesn't fall back to the project's own manifest.
+
+Wherever the manifest is, paths in it stay relative to the project root:
+`src`, `root`, `include`, `docs`, icons and implementation roots mean the
+same in `.config/workbench.yaml` or a `--config` file as in a root
+`workbench.yaml`. [Local overrides](#local-overrides) come from the
+`workbench.local.yaml` beside the chosen manifest only.
+
+Commands that look for the project (`check`, `list`, `build`, `config show`,
+`page`, `view`, `image`, `manager` and `mcp serve`) walk up from the current
+folder and check both default locations in each folder before moving up;
+`--project PATH` names the project instead, and is never moved to a folder
+above it. `workbench start` doesn't look: it serves the folders you give it,
+or the current folder, so run it, with or without `--config`, from the
+project root or name the root. `workbench init` writes a root `workbench.yaml`
+only when neither default file exists, or the `--config` file when it is
+missing; it never replaces a manifest. Moving a default manifest between the
+two locations keeps the project's spaces, their canvases and their
+annotations; a `--config` file makes spaces of their own.
+
+In VS Code, the extension uses the default locations, and creating, moving
+or deleting either file refreshes the space list. To give an agent's
+[MCP server](agent-tools.md) a manifest of its own, register it with
+`workbench mcp serve --config` and an absolute path.
 
 ## A complete example
 
@@ -130,7 +177,7 @@ collections:
 | `previews` | map or `false` | no | Where [TypeScript previews](#previews) are discovered. `false` turns them off. |
 | `implementations` | map of name to [implementation](#implementations) | no | Where pages also exist as running code, and what renders the examples in pages' docs. |
 | `spaces` | map of id to [space](#spaces) | no | Several spaces in this one file. Without it, the file is one space. |
-| `node` | string | no | Only in `workbench.local.yaml` ([local overrides](#local-overrides)): the Node 24 or later program your project's code runs on, absolute or relative to this folder. Defaults to the Node the extension ships. In `workbench.yaml` it is reported and not used. |
+| `node` | string | no | Only in `workbench.local.yaml` ([local overrides](#local-overrides)): the Node 24 or later program your project's code runs on, absolute or relative to the project root. Defaults to the Node the extension ships. In `workbench.yaml` it is reported and not used. |
 
 With `previews: false` and no usable collection, the config fails
 with *nothing to show — a config needs at least one collection with one page in
@@ -373,7 +420,7 @@ implementations:
 | `adapter` | `docs` | yes | What renders the examples in a page's docs: `html`, `react`, `vue`, `astro`, `react-native-web`, or an adapter registered in `workbench.config.ts`. |
 | `styles` | `docs` | no | Stylesheets loaded with the examples, relative to the project root. |
 | `environment` | `docs` | no | An [environment](preview-data.md#environments) around the examples, relative to the project root. |
-| `root` | all but `workbench` and `docs` | no | The folder where this implementation's code lives, relative to `workbench.yaml` or absolute. Needed for [code pointers](#code-pointers) and Storybook source paths. Must be a path, not a URL. |
+| `root` | all but `workbench` and `docs` | no | The folder where this implementation's code lives, relative to the space's root (the project root unless the space sets its own) or absolute. Needed for [code pointers](#code-pointers) and Storybook source paths. Must be a path, not a URL. |
 | `start` | `url`, `storybook` with `url` | no | A command that starts the implementation in VS Code. See [Start commands](#start-commands). |
 
 Box is a private, unpublished CLI. This optional integration is for users who
@@ -502,7 +549,7 @@ start:
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
 | `command` | string | yes | A shell command. |
-| `cwd` | path | no | Where to run it, relative to `workbench.yaml`. Defaults to `.`. |
+| `cwd` | path | no | Where to run it, relative to the space's root (the project root unless the space sets its own). Defaults to `.`. |
 | `check` | probe | yes | How to tell whether it is already running. |
 | `ready` | probe | no | How to tell that it has finished starting. Defaults to `check`. |
 | `timeout` | integer, 1–300 | no | Seconds to wait for `ready`. Defaults to 60. |
@@ -557,7 +604,7 @@ spaces:
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
 | *id* | kebab-case string | yes | The space's id in this file, such as `web`. Renaming it makes it a different space to Workbench, which forgets the window's choice of it. |
-| `root` | string | no | The folder the space serves and resolves its paths against, relative to this file's folder, or absolute. Defaults to this file's folder, so several spaces can share one. |
+| `root` | string | no | The folder the space serves and resolves its paths against, relative to the project root (also for `.config/workbench.yaml` and a `--config` file), or absolute. Defaults to the project root, so several spaces can share one. |
 | `name`, `color`, `icon` | | no | As at the [top level](#top-level), for this space. They aren't inherited: a space without a `name` is named after its id, such as *Design system*. |
 | `collections`, `previews`, `implementations` | | no | As at the top level, for this space. |
 
@@ -581,7 +628,9 @@ its top-level keys, and the problem is reported.
 
 `workbench.local.yaml` beside `workbench.yaml` holds what belongs to one
 machine: a port, an absolute `root`, a different start command. Add it to
-`.gitignore`.
+`.gitignore`. With `.config/workbench.yaml` it is
+`.config/workbench.local.yaml`, and with a `--config` file it is the
+`workbench.local.yaml` in that file's folder; one anywhere else is not read.
 
 ```yaml
 # workbench.local.yaml
@@ -619,8 +668,8 @@ Common uses:
 | You want your own collections and pages for a while | A `collections` list, which replaces the committed one |
 | You tell spaces apart differently in the [space switcher](spaces.md) | Your own `name`, `color`, or `icon` |
 
-Saving **Configure pages** edits `workbench.yaml`, not the local file. Saving
-`workbench.local.yaml` refreshes the sidebar and canvas in VS Code, as
+Saving **Configure pages** edits the chosen manifest, not the local file.
+Saving `workbench.local.yaml` refreshes the sidebar and canvas in VS Code, as
 saving `workbench.yaml` does.
 
 ## YAML that the reader accepts
@@ -661,6 +710,8 @@ everything else:
 **Configure pages**, in the top bar's **More** menu, edits collections,
 groups, pages, labels, source paths, and sizes in a form. See
 [Configure pages](canvas.md#configure-pages). Saving rewrites only the
-`collections` block of `workbench.yaml`. Implementations, scenarios, implementation
+`collections` block of the chosen manifest: `workbench.yaml`,
+`.config/workbench.yaml` or the `--config` file. It never creates a root
+`workbench.yaml` for a project whose manifest is elsewhere. Implementations, scenarios, implementation
 mappings, and code pointers are preserved. Comments outside `collections` are
 kept; comments inside it are not.

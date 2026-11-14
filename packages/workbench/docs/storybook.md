@@ -54,7 +54,7 @@ or have VS Code [start it](#start-storybook-automatically).
 | --- | --- |
 | `kind` | `storybook`. |
 | `url` | Optional. The origin of a Storybook you run, or `auto` to [detect it](#detect-the-port-with-url-auto). Leave it out to [let Workbench run Storybook](#let-workbench-run-storybook). |
-| `root` | The folder Storybook runs from: the one containing `.storybook/`, relative to `workbench.yaml` or absolute. Without `url`, the folder Workbench runs it in, and the space's folder when left out. With `url`, optional, but needed for source links and exports. |
+| `root` | The folder Storybook runs from: the one containing `.storybook/`, relative to the space's root (the project root unless the space sets its own) or absolute. Without `url`, the folder Workbench runs it in, and the space's folder when left out. With `url`, optional, but needed for source links and exports. |
 | `label` | The lens button's label. Defaults to the name in sentence case, *Storybook*. |
 | `start` | With `url`: a command that [starts Storybook](#start-storybook-automatically). Without `url` it is reported, since Workbench runs Storybook itself. |
 

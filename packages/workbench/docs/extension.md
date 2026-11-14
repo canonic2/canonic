@@ -39,9 +39,10 @@ either:
 - add it to the workspace with **File** › **Add Folder to Workspace…**, so the
   rest of the repository stays open beside it.
 
-The folder that holds `workbench.yaml` is the project root: every `src`,
-`root`, and `cwd` in it is relative to that folder, and the server serves only
-that folder. Implementation code elsewhere in the repository is reached
+The folder that holds `workbench.yaml`, or holds it as
+`.config/workbench.yaml`, is the project root: every `src`, `root`, and `cwd`
+in it is relative to that folder, and the server serves only that folder. See
+[Where the file lives](configuration.md#where-the-file-lives). Implementation code elsewhere in the repository is reached
 through an implementation's [`root`](configuration.md#implementations), such as
 `root: ../../packages/ui`.
 

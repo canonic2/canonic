@@ -11,8 +11,9 @@ never need to add anything.
 ## Describe several spaces in one file
 
 A `workbench.yaml` is one space, unless it lists several under `spaces`.
-Their folders don't matter: spaces can share the file's folder, or each serve
-a folder of its own with `root`.
+Their folders don't matter: spaces can share the project root, or each serve
+a folder of its own with `root`, relative to the project root even when the
+file is `.config/workbench.yaml`.
 
 ```yaml
 spaces:

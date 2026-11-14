@@ -112,7 +112,8 @@ serves it.
 
 ## 4. Open the canvas
 
-Open the project folder in VS Code. When a folder contains `workbench.yaml`, the
+Open the project folder in VS Code. When a folder contains `workbench.yaml` (or
+[`.config/workbench.yaml`](configuration.md#where-the-file-lives)), the
 **Workbench** icon appears in the activity bar. Its view, the sidebar, shows
 your collections and pages where a file tree usually goes.
 

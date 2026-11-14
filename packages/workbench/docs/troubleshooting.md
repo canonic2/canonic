@@ -228,7 +228,7 @@ To check every preview without the canvas, run the extension's checker on the
 project. It builds each preview and lists the failures:
 
 ```sh
-~/.vscode/extensions/canonic.canonic-workbench-*/server/bin/*/workbench check path/to/project
+~/.vscode/extensions/canonic.canonic-workbench-*/server/bin/*/workbench check --project path/to/project
 ```
 
 See [TypeScript Workbench previews](workbench-previews.md).

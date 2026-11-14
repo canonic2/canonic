@@ -118,8 +118,8 @@ implementations:
   you set `label`.
 - `base` is the server's origin, plus a base path if every page lives under
   one (`https://example.com/app`).
-- `root` is where the implementation's code is, relative to `workbench.yaml` or
-  absolute. It is optional, and only needed for [code pointers](#point-at-the-code).
+- `root` is where the implementation's code is, relative to the space's root
+  (the project root unless the space sets its own) or absolute. It is optional, and only needed for [code pointers](#point-at-the-code).
 
 Box is a private, unpublished CLI with no public distribution channel. If you
 already have access to it, the optional Box integration lets you set

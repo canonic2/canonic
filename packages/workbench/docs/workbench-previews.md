@@ -387,15 +387,22 @@ the Node your `workbench.local.yaml` names with `node`
 ([Extension](extension.md)).
 
 ```sh
-~/.vscode/extensions/canonic.canonic-workbench-<version>/server/bin/darwin-arm64/workbench check .
+~/.vscode/extensions/canonic.canonic-workbench-<version>/server/bin/darwin-arm64/workbench check
 ```
+
+Each command works on the project at `--project <path>`, or else the nearest
+folder at or above the current one that holds `workbench.yaml` or
+`.config/workbench.yaml`; `--config <path>` reads another manifest (see
+[Where the file lives](configuration.md#where-the-file-lives)). `init` uses
+the current folder when you leave out `--project`. Run `workbench --help`, or
+`workbench <command> --help`, for every command and flag.
 
 | Command | What it does |
 | --- | --- |
-| `init <project>` | Writes `workbench-env.d.ts`, the types for `@canonic2/workbench`, and a `workbench.yaml` named after the folder. Existing files are left alone. |
-| `list <project>` | Prints, as JSON, the previews, docs pages and definition errors Workbench finds. |
-| `check <project>` | Finds and compiles every preview without opening a browser. Prints `Built <id>` for each, lists every failure, and exits with an error if there were any. |
-| `build <project> [output]` | Writes the [standalone viewer](#portable-exports) to `output`, or `workbench-static` in the project. The folder must be empty or missing. Successful previews are written even when others fail; failures are listed and the exit code is nonzero. |
+| `init` | Writes `workbench-env.d.ts`, the types for `@canonic2/workbench`, and a `workbench.yaml` named after the folder. Existing files are left alone. |
+| `list` | Prints, as JSON, the previews, docs pages and definition errors Workbench finds. |
+| `check` | Finds and compiles every preview without opening a browser. Prints `Built <id>` for each, lists every failure, and exits with an error if there were any. |
+| `build [--out <folder>]` | Writes the [standalone viewer](#portable-exports) to `--out`, or `workbench-static` in the project. The folder must be empty or missing. Successful previews are written even when others fail; failures are listed and the exit code is nonzero. |
 
 ## Portable exports
 

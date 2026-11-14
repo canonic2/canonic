@@ -6,7 +6,8 @@ browser pages. `view set` is the command that changes the user's canvas.
 
 ## Connect an agent
 
-Run setup from a project containing `workbench.yaml`:
+Run setup from a project containing `workbench.yaml` or
+`.config/workbench.yaml`:
 
 ```sh
 workbench mcp setup
@@ -68,8 +69,13 @@ A hook with no open canvas prints nothing. A failed host connection, a missing
 canvas and a successful registration are separate states.
 
 Configure your MCP client to run `workbench mcp serve` from a folder inside
-the project. The server finds `workbench.yaml` in that folder or an ancestor.
-To choose a project explicitly, pass `--project /path/to/project`.
+the project. The server finds `workbench.yaml` or `.config/workbench.yaml` in
+that folder or an ancestor. To choose a project explicitly, pass
+`--project /path/to/project`; to use another manifest, pass
+`--config /path/to/workbench.yaml` with an absolute path. A `--config` file
+that is missing fails each tool with `config_not_found` rather than falling
+back. The CLI agent commands (`workbench page`, `workbench config show` and
+the others) take the same two options.
 The `workbench` command must be on `PATH`. Page rendering requires the
 Workbench browser runtime on the host; `capture_unavailable` explains a
 missing runtime or unsupported host.
@@ -201,6 +207,81 @@ the first failure. A handle closes after 10 minutes without a call; CLI
 handles also close when the manager stops, including its idle shutdown.
 MCP handles belong to their connection, while CLI handles belong to the project.
 Pass handles to `page_compare` to compare states already reached through input.
+
+## Inspect and edit images
+
+Images handed over for a page are rarely ready to use. Workbench reads and
+writes them itself, with no image tools to install:
+
+```sh
+workbench image inspect assets/banner.png --json
+workbench image list pages/home.html --sizes mobile,laptop --json
+workbench image edit assets/banner.png \
+  --steps '[{"trim":{}},{"fit":{"ratio":"16:9"}},{"round":{"radius":12}}]' \
+  --outputs '[{"format":"webp","width":320,"densities":[1,2,3]}]' \
+  --out public/images
+```
+
+`image_inspect` reports an image's format, size and aspect ratio, bits per
+channel, colour profile, frame count and file size; its transparency; the box
+its content fills and the padding around it; its edge, corner and dominant
+colours; and a preview over a checkerboard. It reads PNG, JPEG, WebP, GIF,
+TIFF, BMP and ICO files up to 64 MiB, 16,384 pixels an edge and 32
+megapixels. AVIF can be written but not read.
+
+`image_list` renders a page privately at each requested size and lists every
+`<img>`, `<picture>` and CSS background image: its element, the file it
+loads, the size it is shown at and its own pixels. Findings name what to fix:
+`undersized` (blurry at one of `densities`, 1 and 2 by default), `oversized`
+(more than twice the pixels the largest density needs), `no_density_variants`
+(no `srcset` or `image-set()`), `aspect_mismatch` (stretched or cropped by
+`object-fit`), `heavy` (over 50 KiB and more than 1 byte a pixel for JPEG,
+WebP and AVIF, or 3 for other formats) and `not_found`. An image inside a
+shadow root has no `selector`; `shadowHost` names the element that hosts it,
+and `image_edit` cannot show an edit in its place.
+
+`image_edit` runs a list of steps, then writes each output:
+
+| Step | Arguments |
+| --- | --- |
+| `crop` | `x`, `y`, `width`, `height` in pixels |
+| `trim` | `tolerance`, 0–255: crop to the content box |
+| `pad` | `all`, `top`, `right`, `bottom`, `left`, `colour` |
+| `fit` | `ratio` such as `16:9`, `mode` `pad` or `crop`, `anchor`, `colour` |
+| `resize` | `width`, `height` (one keeps the ratio), `filter` |
+| `rotate`, `flip` | `turns` 1–3 clockwise; `axis` `horizontal` or `vertical` |
+| `round` | `radius` in pixels, for rounded corners |
+| `mask` | `file`, `channel` `alpha` or `luminance` |
+| `remove_background` | `colour` (the top-left pixel's by default), `tolerance`, `softness` |
+| `adjust` | `brightness`, `contrast`, `saturation`, each −1 to 1 |
+| `convert_colour` | `to` `srgb` or `display-p3` |
+
+Colours are `#rrggbb`, `#rrggbbaa` or `transparent`. An output names its
+`format` (`png`, `jpeg`, `webp`, `avif`, `gif`, `ico`, `tiff` or `bmp`) and
+optionally `quality`, `lossless` (WebP), `colors` (a smaller palette PNG),
+`effort` (PNG and AVIF) and `background` (behind transparency in JPEG); an
+option the format does not use is refused. Give `width` or `height` in CSS
+pixels with `densities` for `@2x` files, or `widths` for a `srcset` with
+width descriptors. Without outputs, the source's format is written at its
+size. An edit writes at most 12 files, each within 16,384 pixels an edge and
+32 megapixels (WebP 16,383 an edge, ICO 256).
+
+The result lists each file with its size and any change the format required,
+such as transparency flattened for JPEG, a before/after picture, and the
+`srcset` text for the files. Add `--page` and `--selector` (`target` and
+`selector` for MCP) to see the edited image in its element on the page, before
+and after; the pictures cover the element at both its old and new size. An
+MCP call that reaches its `timeout` keeps nothing it finished later. A format
+that cannot carry the image's colour profile, such as
+lossy WebP for a Display P3 image, is refused until a `convert_colour` step
+converts it.
+
+Nothing is saved until you give `--out` (`out`): a file for one output,
+otherwise a folder where files are named after the source, or `--name`, with
+`@2x` or `-640w`. Existing files are kept unless you add `--replace`. MCP
+paths are relative to the project; CLI paths to the working directory.
+`--steps` and `--outputs` also take `@file` for a JSON or YAML file, so a
+recipe can live beside its images.
 
 ## Change the canvas
 
