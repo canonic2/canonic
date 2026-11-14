@@ -1,6 +1,6 @@
 //! Deterministic owned-process crashes at the actual store publication boundaries.
 use super::*;
-use crate::review::{runtime, tests::enrolled};
+use crate::review::tests::enrolled;
 use std::{
     cell::Cell,
     process::{Child, Command, Stdio},
@@ -255,55 +255,6 @@ fn authority_lock_writer_process() {
 }
 
 #[test]
-fn current_policy_cache_reuse_preserves_source_integrity_and_read_only_fallback() {
-    let (root, context) = enrolled();
-    let status = runtime::status(&context).unwrap();
-    runtime::publish_fixture(
-        &context,
-        status["review"]["policy_revision"].as_str().unwrap(),
-        status["review"]["candidate_digest"].as_str().unwrap(),
-        None,
-        &|| Ok(()),
-    )
-    .unwrap();
-    let status = runtime::status(&context).unwrap();
-    let cache = &status["compiled_cache"];
-    let path = std::path::PathBuf::from(cache["directory"].as_str().unwrap())
-        .join("compiled")
-        .join(cache["project_key"].as_str().unwrap())
-        .join(format!("{}.bin", cache["plan_key"].as_str().unwrap()));
-    let compiled = fs::read(&path).unwrap();
-    let store = Store::open(root.path()).unwrap();
-    let checkpoint = fs::read(root.path().join(".shield/review/state.json")).unwrap();
-    fs::write(&path, b"invalid derived plan").unwrap();
-    let (_, evaluator) = store.read_current_evaluated().unwrap();
-    assert_eq!(
-        evaluator.revision(),
-        status["review"]["policy_revision"].as_str().unwrap()
-    );
-    assert_eq!(fs::read(&path).unwrap(), b"invalid derived plan");
-    assert_eq!(
-        fs::read(root.path().join(".shield/review/state.json")).unwrap(),
-        checkpoint
-    );
-    fs::write(&path, compiled).unwrap();
-    let state = store.read_checkpoint().unwrap();
-    let source = &state.candidates["project"];
-    fs::write(
-        root.path().join(".shield/review/sources").join(format!(
-            "{}.manifest.json",
-            source["manifest_digest"].as_str().unwrap()
-        )),
-        b"changed source",
-    )
-    .unwrap();
-    assert!(
-        store.read_current_evaluated().is_err(),
-        "a valid compiled artifact must not hide changed source bytes"
-    );
-}
-
-#[test]
 fn optional_session_capture_skips_unchanged_publication() {
     let (root, context) = enrolled();
     let store = Store::open(root.path()).unwrap();
@@ -401,26 +352,13 @@ fn writes_remove_leftover_temporaries_that_no_writer_owns() {
     let (root, context) = enrolled();
     let store = Store::open(root.path()).unwrap();
     let review = root.path().join(".shield/review");
-    let sources = review.join("sources");
-    fs::create_dir_all(&sources).unwrap();
     let dead = super::exited_pid();
-    let digest = "0".repeat(64);
-    // Windows' reserved PID zero cannot establish the exit of a writer;
-    // Unix's init process remains live. Both entries must be retained.
-    let unverified = i32::from(!cfg!(windows));
     // The writer lock serializes state writers, so every state leftover goes.
     let removed = [
         review.join(format!(".state-{dead}-1.tmp")),
         review.join(".state-1-1.tmp"),
-        sources.join(format!("{digest}.{dead}-1.tmp")),
     ];
-    let kept = [
-        review.join(".state-acme.tmp"),
-        review.join("acme.tmp"),
-        sources.join(format!("{digest}.{unverified}-1.tmp")),
-        sources.join(format!("{digest}.{}-1.tmp", std::process::id())),
-        sources.join(format!("acme.{dead}-1.tmp")),
-    ];
+    let kept = [review.join(".state-acme.tmp"), review.join("acme.tmp")];
     for path in removed.iter().chain(&kept) {
         fs::write(path, b"partial").unwrap();
         #[cfg(unix)]
@@ -434,18 +372,6 @@ fn writes_remove_leftover_temporaries_that_no_writer_owns() {
     store
         .update_checkpoint(&context, &|| Ok(()), |_| Ok(Value::Null))
         .unwrap();
-    sources::compact(
-        &store,
-        &mut json!(
-            crate::configuration::Bundle::capture(
-                "# Acme new source\nschema_version: 1\npacks: []\n",
-                &[],
-                None
-            )
-            .unwrap()
-        ),
-    )
-    .unwrap();
     for path in &removed {
         assert!(!path.exists(), "{}", path.display());
     }
@@ -472,18 +398,11 @@ fn incomplete_state_and_proposal_records_are_refused_without_mutation() {
                 "read_requests",
                 "run_requests",
                 "history_generation",
-                "active",
             ][..],
         ),
         (
             true,
-            &[
-                "base_candidate",
-                "base_metadata",
-                "candidate_metadata",
-                "receipt",
-                "operator",
-            ][..],
+            &["base_metadata", "candidate_metadata", "receipt", "operator"][..],
         ),
     ] {
         for &field in fields {
@@ -505,12 +424,7 @@ fn incomplete_state_and_proposal_records_are_refused_without_mutation() {
     let mut missing_generation = value.clone();
     missing_generation["history_generation"] = serde_json::Value::Null;
     assert!(serde_json::from_value::<State>(missing_generation).is_err());
-    for field in [
-        "base_candidate",
-        "candidate",
-        "base_metadata",
-        "candidate_metadata",
-    ] {
+    for field in ["files", "base_metadata", "candidate_metadata"] {
         let mut incomplete = value.clone();
         incomplete["proposals"][0][field] = serde_json::Value::Null;
         let bytes = serde_json::to_vec(&incomplete).unwrap();
@@ -518,6 +432,16 @@ fn incomplete_state_and_proposal_records_are_refused_without_mutation() {
         assert!(store.read().is_err(), "null proposal {field}");
         assert_eq!(fs::read(&path).unwrap(), bytes, "null proposal {field}");
     }
+    // The texts of a proposal always include the configuration it writes.
+    let mut without_config = value.clone();
+    without_config["proposals"][0]["files"]
+        .as_object_mut()
+        .unwrap()
+        .remove("config.yml");
+    let bytes = serde_json::to_vec(&without_config).unwrap();
+    fs::write(&path, &bytes).unwrap();
+    assert!(store.read().is_err(), "proposal files without config.yml");
+    assert_eq!(fs::read(&path).unwrap(), bytes);
     let mut null_operator = value;
     null_operator["operator"] = serde_json::Value::Null;
     let bytes = serde_json::to_vec(&null_operator).unwrap();
@@ -571,7 +495,7 @@ fn barrier(stage: Stage) {
 }
 
 #[test]
-#[ignore = "subprocess fixture invoked explicitly by publication_crashes_keep_complete_authorized_snapshots"]
+#[ignore = "subprocess fixture invoked explicitly by publication_crashes_keep_complete_checkpoints"]
 fn crash_writer_process() {
     let root = std::env::var("SHIELD_TEST_PUBLICATION_ROOT").unwrap();
     let context = crate::review::open(Path::new(&root)).unwrap();
@@ -580,17 +504,23 @@ fn crash_writer_process() {
         crash_consumption(&context);
         return;
     }
-    let status = runtime::status(&context).unwrap();
     OBSERVER.with(|slot| slot.set(Some(barrier)));
-    runtime::publish_fixture(
-        &context,
-        status["review"]["policy_revision"].as_str().unwrap(),
-        status["review"]["candidate_digest"].as_str().unwrap(),
-        status["active"]["activation_id"].as_str(),
-        &|| Ok(()),
-    )
-    .unwrap();
+    mark(&context).unwrap();
     panic!("writer did not reach the requested publication barrier");
+}
+
+/// One ordinary checkpoint change: a marker in the operator metadata.
+fn mark(context: &Context) -> Result<Value, Error> {
+    Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
+        state.operator["acme_crash_marker"] = json!(true);
+        Ok(Value::Null)
+    })
+}
+
+/// The committed checkpoint's marker, read without the writer lock.
+fn marked(root: &Path) -> bool {
+    let bytes = fs::read(root.join(".shield/review/state.json")).unwrap();
+    serde_json::from_slice::<Value>(&bytes).unwrap()["operator"]["acme_crash_marker"] == true
 }
 
 #[cfg(target_os = "macos")]
@@ -639,15 +569,6 @@ fn publication_crashes_never_launch_before_durable_consumption() {
         Stage::Complete,
     ] {
         let (root, operator) = enrolled();
-        let status = runtime::status(&operator).unwrap();
-        runtime::publish_fixture(
-            &operator,
-            status["review"]["policy_revision"].as_str().unwrap(),
-            status["review"]["candidate_digest"].as_str().unwrap(),
-            None,
-            &|| Ok(()),
-        )
-        .unwrap();
         let mut context = operator.clone();
         context.surface = "run".into();
         // Match the child harness's intentionally absent origin attribution.
@@ -762,7 +683,7 @@ fn consumption_writer_at(root: &Path, stage: Stage) -> OwnedChild {
 }
 
 #[test]
-fn publication_crashes_keep_complete_authorized_snapshots() {
+fn publication_crashes_keep_complete_checkpoints() {
     for stage in [
         Stage::Created,
         Stage::Written,
@@ -771,12 +692,6 @@ fn publication_crashes_keep_complete_authorized_snapshots() {
         Stage::Complete,
     ] {
         let (root, context) = enrolled();
-        let status = runtime::status(&context).unwrap();
-        let revision = status["review"]["policy_revision"].as_str().unwrap();
-        let digest = status["review"]["candidate_digest"].as_str().unwrap();
-        let initial =
-            runtime::publish_fixture(&context, revision, digest, None, &|| Ok(())).unwrap();
-        let previous = initial["activation_id"].as_str().unwrap();
         let state_path = root.path().join(".shield/review/state.json");
         let before = fs::read(&state_path).unwrap();
         let mut child = OwnedChild(
@@ -811,67 +726,36 @@ fn publication_crashes_keep_complete_authorized_snapshots() {
             assert!(Instant::now() < deadline, "writer did not reach {stage:?}");
             thread::sleep(Duration::from_millis(10));
         }
-        let visible = runtime::status(&context).unwrap();
         let committed = matches!(stage, Stage::Renamed | Stage::Complete);
-        assert_eq!(
-            visible["active"] == initial,
-            !committed,
-            "visibility at {stage:?}"
-        );
-        assert!(matches!(
-            runtime::publish_fixture(&context, revision, digest, Some(previous), &|| Ok(())),
-            Err(Error::Locked)
-        ));
+        assert_eq!(marked(root.path()), committed, "visibility at {stage:?}");
+        assert!(matches!(mark(&context), Err(Error::Locked)));
         child.0.kill().unwrap();
         assert!(!child.0.wait().unwrap().success());
-        assert_eq!(runtime::status(&context).unwrap(), visible);
-        let store = Store::open(root.path()).unwrap();
-        assert_eq!(store.read().unwrap().authorization_events.len(), 1);
+        assert_eq!(marked(root.path()), committed);
         if !committed {
             assert_eq!(fs::read(&state_path).unwrap(), before);
         }
-        // The kernel releases the writer's ownership. Recovery must be an
-        // ordinary retry, preserving the committed outcome and consumed grants.
-        let recovered =
-            runtime::publish_fixture(&context, revision, digest, Some(previous), &|| Ok(()))
-                .unwrap();
-        if committed {
-            assert_eq!(recovered, visible["active"]);
-        }
+        // The kernel releases the writer's ownership. Recovery is an ordinary
+        // retry, preserving the committed outcome.
+        mark(&context).unwrap();
+        assert!(marked(root.path()));
         assert!(
             !names(&root.path().join(".shield/review"))
                 .iter()
                 .any(|name| name.starts_with(".state-")),
             "killed writer's temporary remains after {stage:?}"
         );
-        let state = store.read().unwrap();
-        assert_eq!(state.authorization_events.len(), 1);
-        assert_eq!(
-            state.authorization_events[0]["links"]["activation_id"],
-            recovered["activation_id"]
-        );
-        assert_eq!(
-            runtime::publish_fixture(&context, revision, digest, Some(previous), &|| Ok(()))
-                .unwrap(),
-            recovered
-        );
-        assert_eq!(store.read().unwrap().authorization_events.len(), 1);
-        reconnect_and_prepare_cache(&context, stage);
-        assert_eq!(runtime::status(&context).unwrap()["active"], recovered);
+        reconnect(&context, stage);
     }
 }
 
-/// A fresh MCP connection must start after the crash and prepare the committed
-/// cache through its normal tool, without manual lock repair.
-fn reconnect_and_prepare_cache(context: &Context, stage: Stage) {
+/// A fresh MCP connection must start after the crash and read the policy
+/// through its normal tools, without manual lock repair.
+fn reconnect(context: &Context, stage: Stage) {
     let mut context = context.clone();
     context.surface = "mcp".into();
     context.connection_id = Some(format!("crash-reconnect-{stage:?}"));
     let connection = crate::review::mcp::Connection::enrolled(&context).unwrap();
-    let prepared =
-        crate::review::mcp::call(&context, &connection, "cache_prepare", &json!({}), &|| {
-            Ok(())
-        });
-    assert!(prepared["error"].is_null(), "{prepared}");
-    assert_eq!(prepared["data"]["prepared"], true, "{prepared}");
+    let status = crate::review::mcp::call(&context, &connection, "status", &json!({}), &|| Ok(()));
+    assert!(status["error"].is_null(), "{status}");
 }

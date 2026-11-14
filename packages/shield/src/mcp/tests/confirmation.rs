@@ -4,14 +4,6 @@ use super::*;
 
 const FORM: &str = r#"{"elicitation":{"form":{}}}"#;
 
-fn assert_form(form: &Value, modern: bool) {
-    if modern {
-        assert_eq!(form["result"]["resultType"], "input_required", "{form}");
-    } else {
-        assert_eq!(form["method"], "elicitation/create", "{form}");
-    }
-}
-
 fn peer_transport(project: &Project) -> Transport {
     let transport = Transport::start(Server::for_review((*project.review).clone()).unwrap());
     for message in initialize(&capabilities(FORM), "claude-code") {
@@ -19,259 +11,6 @@ fn peer_transport(project: &Project) -> Transport {
     }
     assert!(transport.receive()["result"].is_object());
     transport
-}
-
-/// Adopt a local connection without exposing its settings in model-visible args.
-fn connection_proposal(transport: &Transport, project: &Project, local: bool) -> Value {
-    let first = propose(transport, json!(2), &rule("acme-read", "acme"));
-    commit_elsewhere(project, &first);
-    let path = project.root.path().join(if local {
-        ".shield/config.local.yml"
-    } else {
-        ".shield/config.yml"
-    });
-    let mut config: Value = if local {
-        json!({"schema_version":1})
-    } else {
-        crate::policy::parse(&std::fs::read_to_string(&path).unwrap()).unwrap()
-    };
-    config["mcp"] = json!({"cloud":{
-        "transport":{"type":"stdio","command":"acme-connector",
-            "args":["--profile","acme-private-profile"]},
-        "agents":{"codex":"cloud","claude":"cloud"}
-    }});
-    std::fs::write(path, config.to_string()).unwrap();
-    let args = propose(
-        transport,
-        json!(3),
-        &json!({"change":{"kind":"project_files_adopt"}}),
-    );
-    if local {
-        assert!(!args.to_string().contains("acme-private-profile"), "{args}");
-    }
-    args
-}
-
-#[test]
-fn mcp_connection_approval_stays_in_session_for_both_protocols_and_hosts() {
-    for agent in ["codex", "claude"] {
-        for modern in [false, true] {
-            for action in ["accept", "decline", "cancel", "unavailable", "stale"] {
-                let (server, project) = fixture(Some(agent));
-                let transport = Transport::start(server);
-                for message in initialize(
-                    &if action == "unavailable" {
-                        json!({})
-                    } else {
-                        capabilities(FORM)
-                    },
-                    agent,
-                ) {
-                    transport.send(&message);
-                }
-                assert!(transport.receive()["result"].is_object());
-                let args = connection_proposal(&transport, &project, true);
-                let before = project.revision();
-                let form = if modern {
-                    transport.request(&modern_apply(
-                        10,
-                        &args,
-                        None,
-                        None,
-                        action != "unavailable",
-                    ))
-                } else {
-                    transport.call(json!(10), "policy_apply", &args)
-                };
-                assert_eq!(project.revision(), before);
-                if action == "unavailable" {
-                    assert_eq!(error_code(&form), "approval_unavailable", "{form}");
-                    let message = form["result"]["structuredContent"]["error"]["message"]
-                        .as_str()
-                        .unwrap();
-                    assert!(!message.contains("in their terminal"), "{form}");
-                    assert!(
-                        message.contains(if agent == "codex" {
-                            "/permissions"
-                        } else {
-                            "confirmation"
-                        }),
-                        "{form}"
-                    );
-                    continue;
-                }
-                assert_form(&form, modern);
-                assert!(form.to_string().contains("acme-private-profile"), "{form}");
-                assert!(form.to_string().contains("acme-connector"), "{form}");
-                if action == "stale" {
-                    std::fs::write(
-                        project.root.path().join(".shield/config.local.yml"),
-                        "schema_version: 1\n",
-                    )
-                    .unwrap();
-                }
-                let answer_action = if action == "stale" { "accept" } else { action };
-                let result = if modern {
-                    transport.request(&modern_apply(
-                        11,
-                        &args,
-                        Some(&form["result"]["requestState"]),
-                        Some(answer_action),
-                        true,
-                    ))
-                } else {
-                    transport.request(&answer(
-                        &form,
-                        &json!({"action":answer_action,"content":{}}),
-                    ))
-                };
-                assert_eq!(project.revision() != before, action == "accept", "{result}");
-                match action {
-                    "accept" => {
-                        assert_eq!(result["result"]["isError"], false, "{result}");
-                        assert!(
-                            result["result"]["structuredContent"]["data"]["next_action"]
-                                .as_str()
-                                .unwrap()
-                                .contains("mcp_setup"),
-                            "{result}"
-                        );
-                        assert_eq!(
-                            result["result"]["structuredContent"]["data"]["operator"]["mechanism"],
-                            "host-elicitation"
-                        );
-                        assert!(
-                            !result.to_string().contains("acme-private-profile"),
-                            "{result}"
-                        );
-                    }
-                    "stale" => assert_eq!(error_code(&result), "stale_revision", "{result}"),
-                    "cancel" => assert_eq!(error_code(&result), "approval_cancelled", "{result}"),
-                    _ => assert_eq!(error_code(&result), "approval_declined", "{result}"),
-                }
-            }
-        }
-    }
-}
-
-#[test]
-fn mcp_connection_setup_publishes_after_two_in_session_reviews() {
-    for modern in [false, true] {
-        let (server, project) = fixture(Some("codex"));
-        let transport = Transport::start(server);
-        for message in initialize(&capabilities(FORM), "codex") {
-            transport.send(&message);
-        }
-        assert!(transport.receive()["result"].is_object());
-        let args = connection_proposal(&transport, &project, false);
-        let form = transport.call(json!(10), "policy_apply", &args);
-        assert_eq!(form["method"], "elicitation/create", "{form}");
-        let result = transport.request(&answer(&form, &json!({"action":"accept","content":{}})));
-        assert_eq!(result["result"]["isError"], false, "{result}");
-        let args = json!({"agents":["claude"]});
-        let form = if modern {
-            transport.request(&super::skills::modern(
-                11,
-                "tools/call",
-                json!({"name":"mcp_setup","arguments":args}),
-                capabilities(FORM),
-            ))
-        } else {
-            transport.call(json!(11), "mcp_setup", &args)
-        };
-        assert!(form.to_string().contains("acme-connector"), "{form}");
-        assert!(!project.root.path().join(".mcp.json").exists());
-        let result = if modern {
-            transport.request(&super::skills::modern(12, "tools/call", json!({"name":"mcp_setup","arguments":args,
-                "requestState":form["result"]["requestState"],"inputResponses":{"confirmation":{"action":"accept"}}}), capabilities(FORM)))
-        } else {
-            transport.request(&answer(&form, &json!({"action":"accept","content":{}})))
-        };
-        assert_eq!(result["result"]["isError"], false, "{result}");
-        let published: Value =
-            serde_json::from_slice(&std::fs::read(project.root.path().join(".mcp.json")).unwrap())
-                .unwrap();
-        assert_eq!(
-            published["mcpServers"]["cloud"]["command"],
-            "acme-connector"
-        );
-    }
-}
-
-fn install_connection_agents(transport: &Transport) {
-    let form = transport.call(
-        json!(20),
-        "mcp_setup",
-        &json!({"agents":["claude","codex"]}),
-    );
-    assert_form(&form, false);
-    let result = transport.request(&answer(&form, &json!({"action":"accept","content":{}})));
-    assert_eq!(result["result"]["isError"], false, "{result}");
-}
-
-#[test]
-fn connection_publication_registered_hosts_use_one_form_for_both_protocols() {
-    for modern in [false, true] {
-        for action in ["accept", "decline"] {
-            let (server, project) = fixture(Some("codex"));
-            let transport = Transport::start(server);
-            for message in initialize(&capabilities(FORM), "codex") {
-                transport.send(&message);
-            }
-            assert!(transport.receive()["result"].is_object());
-            install_connection_agents(&transport);
-            let args = connection_proposal(&transport, &project, false);
-            let before = std::fs::read(project.root.path().join(".mcp.json")).unwrap();
-            let form = if modern {
-                transport.request(&modern_apply(10, &args, None, None, true))
-            } else {
-                transport.call(json!(10), "policy_apply", &args)
-            };
-            assert_form(&form, modern);
-            assert!(form.to_string().contains("owned connection entries"));
-            assert_eq!(
-                std::fs::read(project.root.path().join(".mcp.json")).unwrap(),
-                before
-            );
-            let result = if modern {
-                transport.request(&modern_apply(
-                    11,
-                    &args,
-                    Some(&form["result"]["requestState"]),
-                    Some(action),
-                    true,
-                ))
-            } else {
-                transport.request(&answer(&form, &json!({"action":action,"content":{}})))
-            };
-            if action == "accept" {
-                assert_eq!(result["result"]["isError"], false, "{result}");
-                assert_eq!(
-                    result["result"]["structuredContent"]["data"]["connection_publication"],
-                    "published"
-                );
-                let host: Value = serde_json::from_slice(
-                    &std::fs::read(project.root.path().join(".mcp.json")).unwrap(),
-                )
-                .unwrap();
-                assert_eq!(host["mcpServers"]["cloud"]["command"], "acme-connector");
-                let status = transport.call(json!(12), "status", &json!({}));
-                assert_eq!(status["result"]["isError"], false, "{status}");
-                let replay = transport.call(json!(13), "policy_apply", &args);
-                assert_eq!(
-                    replay["result"]["structuredContent"]["data"]["receipt"]["activation_id"],
-                    result["result"]["structuredContent"]["data"]["receipt"]["activation_id"]
-                );
-            } else {
-                assert_eq!(error_code(&result), "approval_declined", "{result}");
-                assert_eq!(
-                    std::fs::read(project.root.path().join(".mcp.json")).unwrap(),
-                    before
-                );
-            }
-            assert!(transport.close().1.is_ok());
-        }
-    }
 }
 
 #[test]
@@ -568,12 +307,6 @@ fn cancelled_confirmation_persists_withdrawal_and_cannot_be_applied_later() {
         outcomes["proposals"][0]["closed_reason"], "approval_cancelled",
         "{outcomes}"
     );
-    let id = &outcomes["proposals"][0]["proposal_id"];
-    let receipt = transport.call(json!(4), "policy_receipt", &json!({"proposal_id":id}));
-    assert_eq!(
-        receipt["result"]["structuredContent"]["data"]["status"], "withdrawn",
-        "{receipt}"
-    );
     let retry = transport.call(json!(5), "policy_apply", &args);
     assert_eq!(
         retry["id"], 5,
@@ -607,15 +340,11 @@ fn modern_confirmation_rejects_forgery_changed_arguments_and_lost_capability() {
         assert!(response["error"].is_object(), "{variant}: {response}");
         assert_eq!(project.revision(), before);
         if variant != "forged" {
-            let receipt = transport.call(
-                json!(12),
-                "policy_receipt",
-                &json!({"proposal_id":args["proposal_id"]}),
+            let outcome = crate::review::proposal_outcome(
+                project.root.path(),
+                args["proposal_id"].as_str().unwrap(),
             );
-            assert_eq!(
-                receipt["result"]["structuredContent"]["data"]["status"], "withdrawn",
-                "{receipt}"
-            );
+            assert_eq!(outcome["status"], "withdrawn", "{outcome}");
         }
     }
 }
@@ -712,14 +441,12 @@ fn host_answers_close_the_proposal_with_their_disposition() {
                 "{response}"
             );
         }
-        let receipt = transport.call(
-            json!(5),
-            "policy_receipt",
-            &json!({"proposal_id":args["proposal_id"]}),
+        let outcome = crate::review::proposal_outcome(
+            project.root.path(),
+            args["proposal_id"].as_str().unwrap(),
         );
-        assert_eq!(receipt["result"]["isError"], false, "{receipt}");
         assert_eq!(
-            receipt["result"]["structuredContent"]["data"]["status"],
+            outcome["status"],
             if accepted {
                 "applied"
             } else if result["action"] == "decline" {
@@ -837,7 +564,7 @@ fn codex_applies_after_its_own_tool_permission_without_a_form() {
 fn pending_hook_requests(project: &Project, action: String, count: usize) -> Vec<String> {
     use crate::review::hook_approval::{Identity, Key, Outcome, Summary, refused};
     let root = std::path::Path::new(&project.review.project_root);
-    let active = crate::review::runtime::status(&project.review).unwrap()["active"].clone();
+    let active = crate::review::runtime::current_identity(&project.review);
     let identity = Identity {
         activation_id: active["activation_id"].as_str().unwrap(),
         policy_revision: active["policy_revision"].as_str().unwrap(),
@@ -990,18 +717,12 @@ fn inspection_runs_while_a_form_is_open_and_a_second_form_is_unavailable() {
             .contains("prepare a fresh change"),
         "{applied}"
     );
-    let receipt = transport.call(
-        json!(8),
-        "policy_receipt",
-        &json!({"proposal_id":args["proposal_id"]}),
-    );
+    let outcome =
+        crate::review::proposal_outcome(project.root.path(), args["proposal_id"].as_str().unwrap());
+    assert_eq!(outcome["status"], "withdrawn", "{outcome}");
     assert_eq!(
-        receipt["result"]["structuredContent"]["data"]["status"], "withdrawn",
-        "{receipt}"
-    );
-    assert_eq!(
-        receipt["result"]["structuredContent"]["data"]["closed_reason"], "approval_unavailable",
-        "{receipt}"
+        outcome["closed_reason"], "approval_unavailable",
+        "{outcome}"
     );
     assert_eq!(project.revision(), before);
 }

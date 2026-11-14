@@ -204,7 +204,10 @@ fn sample_compare(
 }
 
 fn snapshots(captured: &Captured) -> Result<Vec<(policy::Scope, configuration::Snapshot)>, Error> {
-    crate::review::snapshots(&BTreeMap::from([("project".into(), captured.source()?)]))
+    crate::review::snapshots(&BTreeMap::from([(
+        "project".into(),
+        captured.candidate.clone(),
+    )]))
 }
 fn request(context: &Context, args: &Value) -> Result<(Input, RequestContext), Error> {
     let input: Input = serde_json::from_value(args["input"].clone())

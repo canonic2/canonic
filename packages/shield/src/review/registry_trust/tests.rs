@@ -442,16 +442,9 @@ fn stale_or_cancelled_delegation_reviews_grant_no_mode() {
         Err(Error::Cancelled)
     ));
     let plan = Prepared::new(&fixture.context, "acme", &|| Ok(())).unwrap();
-    Store::open(fixture.project.path())
-        .unwrap()
-        .update_checkpoint(&fixture.context, &|| Ok(()), |state| {
-            state.operator["sources"]
-                .as_object_mut()
-                .unwrap()
-                .remove("acme");
-            Ok(json!({}))
-        })
-        .unwrap();
+    crate::review::settings::registries_fixture(&fixture.context, |registries| {
+        registries.sources.remove("acme");
+    });
     assert!(matches!(
         plan.commit(&fixture.context, &|| Ok(())),
         Err(Error::StaleSnapshot)
@@ -525,10 +518,10 @@ fn trust_head_cas_rejects_equal_value_aba_without_forgetting_catalog_pins() {
 }
 
 #[test]
-fn source_only_reuse_keeps_revoked_policy_reviewed_but_inactive() {
+fn copied_policy_files_still_refuse_a_revoked_pack() {
     if !crate::test_support::isolated_home(concat!(
         module_path!(),
-        "::source_only_reuse_keeps_revoked_policy_reviewed_but_inactive"
+        "::copied_policy_files_still_refuse_a_revoked_pack"
     )) {
         return;
     }
@@ -549,21 +542,7 @@ fn source_only_reuse_keeps_revoked_policy_reviewed_but_inactive() {
         .unwrap();
     }
     let context = super::super::open(clone.path()).unwrap();
-    let state = super::super::project::checkpoint(&context).unwrap();
-    assert!(state.active.is_none());
-    assert!(inactive_reviewed(&state));
-    assert_eq!(state.operator["policy_consent"]["reason"], "known-revoked");
-    assert!(super::super::bootstrap::forms_reviewed_at(clone.path()));
-    let status = super::super::runtime::status_from(&state);
-    assert!(status["active"].is_null());
-    assert!(status["compiled_cache"].is_null());
-    assert!(
-        status["next_action"]
-            .as_str()
-            .unwrap()
-            .contains("Update or remove")
-    );
-    assert!(!state.registry_checkpoints.is_empty());
+    super::super::project::checkpoint(&context).unwrap();
     assert!(matches!(
         crate::runtime::Project::open(clone.path())
             .unwrap()
@@ -573,10 +552,10 @@ fn source_only_reuse_keeps_revoked_policy_reviewed_but_inactive() {
 }
 
 #[test]
-fn missing_adopted_head_preserves_inspection_and_inactive_private_consent() {
+fn missing_adopted_head_preserves_inspection_of_the_project_and_its_copies() {
     if !crate::test_support::isolated_home(concat!(
         module_path!(),
-        "::missing_adopted_head_preserves_inspection_and_inactive_private_consent"
+        "::missing_adopted_head_preserves_inspection_of_the_project_and_its_copies"
     )) {
         return;
     }
@@ -621,14 +600,7 @@ fn missing_adopted_head_preserves_inspection_and_inactive_private_consent() {
         .unwrap();
     }
     let context = super::super::open(clone.path()).unwrap();
-    let state = super::super::project::checkpoint(&context).unwrap();
-    assert!(state.active.is_none());
-    assert!(inactive_reviewed(&state));
-    assert_eq!(
-        state.operator["policy_consent"]["reason"],
-        "authority-unavailable"
-    );
-    assert!(super::super::bootstrap::forms_reviewed_at(clone.path()));
+    super::super::project::checkpoint(&context).unwrap();
 }
 
 #[test]

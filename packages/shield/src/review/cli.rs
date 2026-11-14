@@ -88,11 +88,7 @@ mod tests {
         );
         let state =
             super::super::project::checkpoint(&super::super::open(root.path()).unwrap()).unwrap();
-        assert!(
-            state.operator["integration"]["ask_fallback"]
-                .get("codex")
-                .is_none()
-        );
+        assert!(!state.settings.ask_fallback.contains_key("codex"));
         let enrolled = context(&input).unwrap();
         assert_eq!(enrolled.agent.as_deref(), Some("claude"));
         assert_eq!(enrolled.session_id, input.session_id);

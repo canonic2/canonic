@@ -10,11 +10,11 @@ pub(super) fn pack_fixture() -> Bundle {
     if let Some(project) = std::env::var_os("SHIELD_APPLY_PROFILE_PROJECT") {
         // Read immutable artifacts only. No settings, rules, history, integration,
         // credentials or project identity are copied into the temporary project.
-        let store = Store::open(Path::new(&project)).unwrap();
-        let state = store.read_checkpoint().unwrap();
-        let candidate = store
-            .captured_candidate(&state.candidates["project"])
+        let state = Store::open(Path::new(&project))
+            .unwrap()
+            .read_current()
             .unwrap();
+        let candidate = &state.candidates["project"];
         for bytes in candidate["packs"].as_array().unwrap() {
             let bytes = bytes.as_str().unwrap();
             let pack: Value = crate::policy::parse(bytes).unwrap();
@@ -136,14 +136,15 @@ fn assert_apply_traces(records: &[Value], timings: &[u128]) {
             .all(|v| v["fields"]["outcome"] == "success")
     );
     // A connection already prepared both immutable plans during proposal review.
-    // Apply verifies only current and selected sources, independently of old proposals.
+    // Apply captures the policy files once and rebuilds the selected proposal
+    // from its own file texts, independently of old proposals.
     for summary in &summaries {
         assert_eq!(
             summary["fields"]["counts"]["policy.preparations"], 0,
             "{summary}"
         );
         assert_eq!(
-            summary["fields"]["counts"]["source.hydrated"], 2,
+            summary["fields"]["counts"]["policy.captures"], 1,
             "{summary}"
         );
     }

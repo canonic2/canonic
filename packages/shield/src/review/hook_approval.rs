@@ -3,7 +3,7 @@
 //! identical retry consumes the one-time grant. Minimum authority is
 //! independent of history.
 use super::clock::now_ms as now;
-use super::{Context, Error, model::State, path_access, storage::Store};
+use super::{Context, Error, model::State, storage::Store};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::Path;
@@ -174,8 +174,8 @@ impl HookRequest {
             && &self.path_access == access
     }
     /// The protection choice is the one it was refused under.
-    fn current(&self, state: &State) -> Result<bool, Error> {
-        Ok(self.current_with(&access(state)?))
+    fn current(&self, state: &State) -> bool {
+        self.current_with(&access(state))
     }
     /// [`Self::current`] with the protection choice already loaded.
     fn current_with(&self, access: &Value) -> bool {
@@ -183,8 +183,8 @@ impl HookRequest {
     }
 }
 
-fn access(state: &State) -> Result<Value, Error> {
-    Ok(json!(path_access::load(&state.operator)?))
+fn access(state: &State) -> Value {
+    json!(super::settings::path_access(&state.settings))
 }
 
 pub(super) fn validate(state: &State) -> Result<(), Error> {
@@ -258,7 +258,7 @@ pub(super) fn inspect_from(
             return Err(Error::Missing);
         }
         let status = if matches!(row.status.as_str(), "pending" | "approved") {
-            if !row.current(state)? {
+            if !row.current(state) {
                 "stale"
             } else if row.live_id(time).is_none() {
                 "expired"
@@ -362,7 +362,7 @@ enum Found {
 /// generation and protection choice.
 fn lookup(state: &State, key: &Key<'_>, time: u64) -> Result<Option<Found>, Error> {
     state.check_operations()?;
-    let access = access(state)?;
+    let access = access(state);
     if let Some(index) = state.hook_requests.iter().position(|row| {
         row.status == "approved"
             && row.matches(key, &access)
@@ -397,7 +397,7 @@ pub(crate) fn refused(
         let time = now()?;
         Ok(match lookup(state, key, time)? {
             Some(Found::Pending(id)) => {
-                let others = others_pending(state, key, &id, time)?;
+                let others = others_pending(state, key, &id, time);
                 Some(Outcome::Pending(id, others))
             }
             _ => None,
@@ -423,12 +423,12 @@ pub(crate) fn refused(
                 state.hook_requests.remove(index);
             }
             Some(Found::Pending(id)) => {
-                let others = others_pending(state, key, &id, time)?;
+                let others = others_pending(state, key, &id, time);
                 return Ok(json!({"request_id":id,"others":others}));
             }
             None => {}
         }
-        let access = access(state)?;
+        let access = access(state);
         if state.hook_requests.len() >= MAX_REQUESTS {
             // Terminal receipts and pending requests hold no authority. Prefer
             // reclaiming a receipt so revocations cannot exhaust the store.
@@ -470,7 +470,7 @@ pub(crate) fn refused(
         row.binding = row.binding();
         let id = row.request_id.clone();
         state.hook_requests.push(row);
-        let others = others_pending(state, key, &id, time)?;
+        let others = others_pending(state, key, &id, time);
         Ok(json!({"request_id":id,"others":others}))
     })?;
     Ok(match value["request_id"].as_str() {
@@ -482,16 +482,16 @@ pub(crate) fn refused(
 /// Whether the session holds another pending request that could still be
 /// approved with `id`. Shield cannot tell which ones serve the same task, so
 /// the hint names none.
-fn others_pending(state: &State, key: &Key<'_>, id: &str, time: u64) -> Result<bool, Error> {
-    let access = access(state)?;
-    Ok(state.hook_requests.iter().any(|row| {
+fn others_pending(state: &State, key: &Key<'_>, id: &str, time: u64) -> bool {
+    let access = access(state);
+    state.hook_requests.iter().any(|row| {
         row.request_id != id
             && row.status == "pending"
             && time < row.pending_expires_at_ms
             && row.agent == key.agent
             && row.session_id == key.session
             && row.current_with(&access)
-    }))
+    })
 }
 
 fn consume(state: &mut State, context: &Context, index: usize, time: u64) {
@@ -514,7 +514,7 @@ pub(crate) fn followup(root: &Path, key: &Key<'_>) -> Result<bool, Error> {
     // request it was consumed for.
     let covering = |state: &State, time: u64| -> Result<Option<usize>, Error> {
         state.check_operations()?;
-        let access = access(state)?;
+        let access = access(state);
         Ok(state.hook_requests.iter().position(|row| {
             row.status == "consumed" && row.matches(key, &access) && row.live_id(time).is_some()
         }))
@@ -633,12 +633,8 @@ const WITHOUT_IT: &str = "Call request_approve again without it";
 const RENEW_IT: &str =
     "Repeat its call to get a new request_id, then call request_approve with that ID";
 
-fn unapprovable(
-    row: &HookRequest,
-    state: &State,
-    time: u64,
-) -> Result<Option<Unapprovable>, Error> {
-    Ok(if row.status != "pending" {
+fn unapprovable(row: &HookRequest, state: &State, time: u64) -> Option<Unapprovable> {
+    if row.status != "pending" {
         Some(Unapprovable {
             single: "this request was already answered; repeat the identical call once if it was approved, otherwise continue without it",
             reason: "it was already answered",
@@ -650,7 +646,7 @@ fn unapprovable(
             reason: "it has expired",
             recovery: RENEW_IT,
         })
-    } else if !row.current(state)? {
+    } else if !row.current(state) {
         Some(Unapprovable {
             single: "policy or protection settings changed since this request; repeat the call to get a new request_id",
             reason: "policy or protection settings changed since it was refused",
@@ -658,7 +654,7 @@ fn unapprovable(
         })
     } else {
         None
-    })
+    }
 }
 
 /// The pending requests an MCP call selects, in submitted order, if every one
@@ -704,7 +700,7 @@ fn selected<'a>(
                 Error::Missing
             });
         };
-        if let Some(found) = unapprovable(row, state, time)? {
+        if let Some(found) = unapprovable(row, state, time) {
             return Err(if group {
                 refuse(row.request_id.clone(), found.reason, found.recovery)
             } else {

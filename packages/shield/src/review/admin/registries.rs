@@ -1,10 +1,7 @@
 //! Reviewed registry trust changes, independent of presentation and transport.
 use crate::review::{
     Checkpoint, Context, Error, project,
-    registries::{
-        BUILTIN, addable, enrollment, global_file, merge, project as project_registrations,
-        registration_error,
-    },
+    registries::{BUILTIN, addable, enrollment, global_file, merge, registration_error},
     storage::Store,
 };
 use canonic_registry_kit::{
@@ -65,8 +62,9 @@ impl Prepared {
                 ));
             }
         }
+        // A project's registrations are the `registries` key of its files.
         let metadata = context
-            .map(|c| project::checkpoint(c).map(|state| project::metadata(&state)))
+            .map(|c| project::checkpoint(c).map(|state| json!(state.settings.registries)))
             .transpose()?;
         let mut plan = Self::captured(
             context.map(|c| c.project_root.clone()),
@@ -93,9 +91,13 @@ impl Prepared {
         fetcher: &Fetcher,
         change: Change<'_>,
     ) -> Result<Self, Error> {
-        let before = metadata
-            .as_ref()
-            .map_or_else(|| Ok(global.clone()), project_registrations)?;
+        let before = metadata.as_ref().map_or_else(
+            || Ok(global.clone()),
+            |registries| {
+                serde_json::from_value(registries.clone())
+                    .map_err(|_| Error::Invalid("invalid project sources"))
+            },
+        )?;
         let mut after = before.clone();
         let intent = intent(change)?;
         let (kind, alias, source) = match change {
@@ -242,18 +244,16 @@ impl Prepared {
                 {
                     return Err(Error::StaleSnapshot);
                 }
-                if project::metadata(current) != before_meta {
+                if json!(current.settings.registries) != before_meta {
                     return Err(Error::StaleSnapshot);
                 }
-                current.operator["sources"] = json!(self.after.sources);
-                current.operator["default"] = json!(self.after.default);
-                crate::review::configuration_changes::changed(
-                    current,
+                crate::review::settings::write(
                     context,
-                    "project registries",
-                );
+                    &crate::review::settings::registries(self.after.clone()),
+                )?;
+                current.settings.registries = self.after.clone();
                 let mut receipt = self.receipt;
-                receipt["registries"] = current.operator["sources"].clone();
+                receipt["registries"] = json!(self.after.sources);
                 Ok(receipt)
             },
         )

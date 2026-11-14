@@ -90,7 +90,7 @@ fn copy_project(from: &Path, to: &Path) {
 
 fn commit(context: &Context, local: bool, operation: &str) -> Value {
     let before = state(context);
-    review::publication::commit(
+    review::files::write::commit_fixture(
         context,
         &before,
         json!(bundle(local, operation)),
@@ -210,28 +210,22 @@ fn interrupted(context: &Context) -> (Plan, String) {
     )
     .unwrap()
     .unwrap();
+    let revision = evaluator.revision().to_owned();
     let mut metadata = before.operator.clone();
     stage(&mut metadata, &plan, None).unwrap();
-    let compiled = review::cache::build_candidate(
-        context,
-        &source,
-        evaluator.revision(),
-        &metadata,
-        &evaluator,
-    )
-    .unwrap();
-    let receipt = Store::open(Path::new(&context.project_root))
+    own(&mut metadata, &revision);
+    // The new policy is its files; the staged publication is review state.
+    let files = crate::review::publication::projections::projections(&source["project"], &metadata)
+        .unwrap();
+    crate::review::publication::projections::materialize(context, &files).unwrap();
+    Store::open(Path::new(&context.project_root))
         .unwrap()
         .update_checkpoint(context, &|| Ok(()), |state| {
-            state.candidates = source;
-            state.policy_revision = evaluator.revision().into();
-            state.operator = metadata.clone();
-            let receipt = review::runtime::publish(state, context, None, compiled);
-            super::bind(state, &mut metadata, &receipt);
-            Ok(receipt)
+            state.operator = metadata;
+            Ok(Value::Null)
         })
         .unwrap();
-    (plan, receipt["activation_id"].as_str().unwrap().into())
+    (plan, revision)
 }
 
 #[test]
@@ -259,7 +253,7 @@ fn connection_publication_resumes_after_activation_and_partial_host_write_withou
     let configured = connections(&current);
     let (_, binding) = integrations::resolve_mcp_token(root.path(), &old.token).unwrap();
     assert!(binding.matches(&configured["cloud"]));
-    assert_eq!(current.active.as_ref().unwrap().activation_id(), activation);
+    assert_eq!(current.policy_revision, activation);
     let sequence = current.sequence;
     assert!(resume(&context, None, &activation).unwrap());
     assert_eq!(state(&context).sequence, sequence);
@@ -301,19 +295,18 @@ fn connection_publication_conflicts_preserve_pending_work_and_refuse_stale_activ
 }
 
 #[test]
-fn connection_publication_revalidates_activation_inside_the_host_publication_writer() {
+fn connection_publication_revalidates_policy_revision_inside_the_host_publication_writer() {
     let (root, context) = fixture(true);
     let (plan, activation) = interrupted(&context);
     let expected = state(&context).operator;
     let before = std::fs::read(root.path().join(".mcp.json")).unwrap();
-    Store::open(root.path())
-        .unwrap()
-        .update_checkpoint(&context, &|| Ok(()), |state| {
-            let compiled = state.active.as_ref().unwrap().compiled.clone();
-            review::runtime::publish(state, &context, None, compiled);
-            Ok(json!({}))
-        })
-        .unwrap();
+    // The policy files change between staging and the host write.
+    let files = crate::review::publication::projections::projections(
+        &json!(bundle(true, "alias")),
+        &expected,
+    )
+    .unwrap();
+    crate::review::publication::projections::materialize(&context, &files).unwrap();
     assert!(matches!(
         integrations::apply_owned(&context, &expected, &plan, &|| Ok(()), Some(&activation)),
         Err(Error::StaleSnapshot)

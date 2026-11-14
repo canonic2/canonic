@@ -71,11 +71,11 @@ fn plan_recorded(path: &Path, key: &str) -> bool {
         .is_ok_and(|()| recorded == key.as_bytes())
 }
 
-/// The digest of the policy files under `root`, the one requests are decided
-/// by, without validating or compiling them.
+/// The digest of the policy files' exact bytes under `root`, settings
+/// included, without validating or compiling them.
 pub(in crate::review) fn digest(root: &Path) -> Result<String, Error> {
     let sources = project_sources::read(&root.join(".shield/config.yml")).map_err(error)?;
-    Ok(key(&sources))
+    Ok(bytes_key(&sources))
 }
 
 /// Make the review state's copy of the policy follow the policy files, so CLI
@@ -94,43 +94,111 @@ pub(in crate::review) fn sync(
     }
     let invalid = |error: Error| Error::PolicyFiles(error.to_string());
     let digest = digest(root).map_err(invalid)?;
-    if state.followed_files.as_deref() == Some(digest.as_str()) {
+    if state.followed_files.as_deref() == Some(digest.as_str())
+        && state.candidates.contains_key("project")
+    {
         return Ok(false);
     }
-    // Adoption compares with the stored candidate's own files; the stored
-    // form of the candidate stays as it is unless the content changes.
-    let Some(stored) = state.candidates.get("project").cloned() else {
-        return Ok(false);
+    // A fresh read of the same files and metadata captures what the last one
+    // did; a process keeps that one capture instead of repeating it.
+    let key = (!state.candidates.contains_key("project"))
+        .then(|| crate::json::fingerprint(&state.operator).ok())
+        .flatten()
+        .map(|operator| (root.to_path_buf(), digest.clone(), operator));
+    let remembered = key.as_ref().and_then(|key| {
+        let last = LAST_CAPTURE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        last.as_ref()
+            .filter(|(last, _)| last == key)
+            .map(|(_, capture)| capture.clone())
+    });
+    let Captured {
+        candidate,
+        metadata,
+        revision,
+        hashes,
+    } = if let Some(capture) = remembered {
+        capture
+    } else {
+        let capture = follow(context, state, root).map_err(invalid)?;
+        if let Some(key) = key {
+            *LAST_CAPTURE
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((key, capture.clone()));
+        }
+        capture
     };
-    let capture = super::storage::Store::open(root)
-        .and_then(|store| store.captured_candidate(&stored))
-        .and_then(|hydrated| {
-            state.candidates.insert("project".into(), hydrated);
-            super::changes::project_files::capture(context, state)
-        });
-    state.candidates.insert("project".into(), stored);
-    let capture = capture.map_err(invalid)?;
-    let candidates = std::collections::BTreeMap::from([("project".into(), capture.candidate)]);
+    let candidates = std::collections::BTreeMap::from([("project".into(), candidate)]);
+    // The copy follows every change to the files' bytes, including edits that
+    // keep the policy the same, such as a comment or a setting: a later write
+    // renders the files from it and must not drop them. The checkpoint keeps
+    // only operator metadata, which follows a change to what it records, so
+    // settings and formatting edits leave it, and the reviews bound to it, as
+    // they are. Only that change is reported: the rest lives in memory.
+    // The capture records the files' packs; no packs is the same as none
+    // recorded.
+    let packs = |metadata: &serde_json::Value, key: &str| match &metadata[key] {
+        serde_json::Value::Null => serde_json::json!([]),
+        rows => rows.clone(),
+    };
+    let changed = ["installed", "disabled", "shared_installed"]
+        .iter()
+        .any(|key| packs(&metadata, key) != packs(&state.operator, key));
+    if changed {
+        state.operator = metadata;
+        state.operator["projection_file_hashes"] = hashes.into();
+    }
+    state.candidates = candidates;
+    state.policy_revision = revision;
+    state.followed_files = Some(digest);
+    Ok(changed)
+}
+
+/// What following one version of the files gives review state.
+#[derive(Clone)]
+struct Captured {
+    candidate: serde_json::Value,
+    metadata: serde_json::Value,
+    revision: String,
+    hashes: serde_json::Map<String, serde_json::Value>,
+}
+
+/// The last capture: its folder, files digest and the metadata it started from.
+type CaptureKey = (PathBuf, String, String);
+static LAST_CAPTURE: std::sync::Mutex<Option<(CaptureKey, Captured)>> = std::sync::Mutex::new(None);
+
+/// Capture the policy files under `root` into review state's terms. A
+/// checkpoint holds no copy of the policy: a load starts from the files' own
+/// capture, and the metadata capture then reconciles pack records.
+fn follow(
+    context: &super::Context,
+    state: &mut super::model::State,
+    root: &Path,
+) -> Result<Captured, Error> {
+    crate::diagnostics::trace::count("policy.captures", 1);
+    if !state.candidates.contains_key("project") {
+        let fresh = project_sources::capture(&root.join(".shield/config.yml")).map_err(error)?;
+        state
+            .candidates
+            .insert("project".into(), serde_json::json!(fresh));
+    }
+    let capture = super::changes::project_files::capture(context, state)?;
+    let candidates =
+        std::collections::BTreeMap::from([("project".into(), capture.candidate.clone())]);
     let revision = super::snapshots(&candidates)
-        .and_then(|snapshots| Evaluator::revision_of(&snapshots).map_err(Error::from))
-        .map_err(invalid)?;
-    let hashes: serde_json::Map<String, serde_json::Value> = capture
+        .and_then(|snapshots| Evaluator::revision_of(&snapshots).map_err(Error::from))?;
+    let hashes = capture
         .paths
         .into_iter()
         .filter_map(|(name, hash)| hash.map(|hash| (name, serde_json::Value::String(hash))))
         .collect();
-    // Files that say what the state already holds change only the record of
-    // which files it followed; operator metadata and proposals stay as they are.
-    if revision != state.policy_revision
-        || capture.metadata["installed"] != state.operator["installed"]
-    {
-        state.operator = capture.metadata;
-        state.operator["projection_file_hashes"] = hashes.into();
-        state.candidates = candidates;
-        state.policy_revision = revision;
-    }
-    state.followed_files = Some(digest);
-    Ok(true)
+    Ok(Captured {
+        candidate: capture.candidate,
+        metadata: capture.metadata,
+        revision,
+        hashes,
+    })
 }
 
 /// Releases a fetch stored, and those it could not, each with its reason.
@@ -145,7 +213,7 @@ pub(in crate::review) struct Fetched {
 /// stop the others. CLI and MCP call this; hooks never use the network.
 pub(in crate::review) fn fetch_missing(
     root: &Path,
-    meta: &serde_json::Value,
+    settings: &crate::configuration::settings::Values,
 ) -> Result<Fetched, Error> {
     let shield = root.join(".shield");
     let store = artifact_store()?;
@@ -176,7 +244,7 @@ pub(in crate::review) fn fetch_missing(
     if missing.is_empty() {
         return Ok(outcome);
     }
-    let sources = super::registries::effective_from_metadata(meta)?;
+    let sources = super::registries::effective_from(settings)?;
     let client = super::registries::fetcher();
     for row in missing {
         let release = format!(
@@ -226,12 +294,12 @@ fn fetch_release(
     write_private(&store.join(format!("{digest}.yml")), text.as_bytes())
 }
 
-/// The compiled plan of the policy files under `root` if one is cached; never
-/// compiles.
-pub(in crate::review) fn cached(root: &Path) -> Option<Evaluator> {
+/// The compiled plan of the policy files under `root` if one is cached in
+/// `cache`; never compiles.
+pub(in crate::review) fn cached_in(root: &Path, cache: &Path) -> Option<Evaluator> {
     let sources = project_sources::read(&root.join(".shield/config.yml")).ok()?;
     let digest = key(&sources);
-    read_plan(&plan_path(&cache_of(root).ok()?, &digest), &digest)
+    read_plan(&plan_path(cache, &digest), &digest)
 }
 
 /// Capture and validate the policy files under `root`.
@@ -250,14 +318,52 @@ fn error(error: application::Error) -> Error {
     }
 }
 
+/// The key requests are decided by: the policy files without their settings,
+/// which compile into nothing, so a settings change keeps the compiled plan,
+/// the snapshot identity and approvals bound to it.
 fn key(sources: &project_sources::Sources) -> String {
+    let (shared, local) = sources.config_layers();
+    let shared = without_settings(shared).unwrap_or_else(|| shared.to_owned());
+    let local = local.and_then(|local| match without_settings(local) {
+        // A layer holding only settings adds no policy, like an absent one.
+        Some(policy) if policy == SETTINGS_ONLY => None,
+        Some(policy) => Some(policy),
+        None => Some(local.to_owned()),
+    });
+    let mut rest = sources.parts();
+    let _ = (rest.next(), rest.next());
+    hash(
+        "shield-files-plan-v2",
+        [Some(shared.as_str()), local.as_deref()]
+            .into_iter()
+            .chain(rest),
+    )
+}
+
+/// A configuration document emptied of settings, as `key` sees it.
+const SETTINGS_ONLY: &str = "{\"schema_version\":1}";
+
+/// The configuration text without its settings keys, or `None` for text that
+/// is not a configuration document, which validation refuses separately.
+fn without_settings(text: &str) -> Option<String> {
+    let mut document: serde_json::Value = policy::parse(text).ok()?;
+    let fields = document.as_object_mut()?;
+    for key in crate::configuration::settings::KEYS {
+        fields.remove(key);
+    }
+    Some(document.to_string())
+}
+
+/// The digest of the policy files' exact bytes, settings included, so a
+/// reader notices any edit to them.
+fn bytes_key(sources: &project_sources::Sources) -> String {
+    hash("shield-files-bytes-v1", sources.parts())
+}
+
+fn hash<'a>(label: &'a str, parts: impl Iterator<Item = Option<&'a str>>) -> String {
     let mut hasher = blake3::Hasher::new();
-    let header = [
-        "shield-files-plan-v1",
-        env!("CARGO_PKG_VERSION"),
-        policy::compiled::FORMAT,
-    ];
-    for part in header.into_iter().map(Some).chain(sources.parts()) {
+    let header = [label, env!("CARGO_PKG_VERSION"), policy::compiled::FORMAT];
+    for part in header.into_iter().map(Some).chain(parts) {
         match part {
             Some(bytes) => {
                 hasher.update(&[1]);
@@ -280,6 +386,29 @@ pub(in crate::review) fn cache_for(operator: &serde_json::Value) -> Result<PathB
         Some(directory) => Ok(PathBuf::from(directory)),
         None => super::cache::default_directory(),
     }
+}
+
+/// Keep this project's compiled plans in `directory` from now on. Plans
+/// compile there on the next request that misses one; nothing is rebuilt now.
+pub(in crate::review) fn relocate_cache(
+    context: &super::Context,
+    directory: &Path,
+) -> Result<serde_json::Value, Error> {
+    if !directory.is_absolute() {
+        return Err(Error::Invalid("--cache-dir must be an absolute directory"));
+    }
+    let location = serde_json::json!(directory);
+    let store = super::storage::Store::open(Path::new(&context.project_root))?;
+    // The same location changes nothing, so nothing is written.
+    if store.read_checkpoint()?.operator["compiled_cache_root"] == location {
+        return Ok(serde_json::json!({"schema_version":1,"cache_directory":directory}));
+    }
+    store.update_checkpoint_if_changed(context, &|| Ok(()), |state| {
+        let changed = state.operator["compiled_cache_root"] != location;
+        state.operator["compiled_cache_root"] = location.clone();
+        Ok(changed)
+    })?;
+    Ok(serde_json::json!({"schema_version":1,"cache_directory":directory}))
 }
 
 /// [`cache_for`] the project at `root`; a folder without review state uses the
@@ -407,6 +536,8 @@ pub(in crate::review) fn write_private(path: &Path, bytes: &[u8]) -> Result<(), 
     }
     Ok(result?)
 }
+
+pub(in crate::review) mod write;
 
 #[cfg(test)]
 mod tests;

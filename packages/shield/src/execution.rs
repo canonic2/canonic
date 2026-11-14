@@ -41,6 +41,8 @@ use windows_process as process;
 
 mod approval;
 mod git;
+#[cfg(not(windows))]
+pub(crate) use git::{EXECUTABLE as GIT_EXECUTABLE, SETTINGS as GIT_SETTINGS};
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
 mod launch;
 #[cfg(all(test, any(target_os = "macos", target_os = "linux", windows)))]
@@ -290,8 +292,8 @@ fn request_line(id: &str, decision: &serde_json::Value, in_session: bool) -> Str
 fn runtime_failure(error: crate::runtime::Error, project_root: &str) -> Box<dyn std::error::Error> {
     if matches!(error, crate::runtime::Error::CacheUnavailable) {
         let route = crate::agent_message::cache_repair(project_root)
-            .unwrap_or_else(|| "shield cache prepare".into());
-        format!("compiled policy unavailable; run {route} in an operator terminal").into()
+            .unwrap_or_else(|| "shield doctor".into());
+        format!("compiled policy folder unusable; run {route} to find the cause").into()
     } else {
         error.into()
     }
@@ -417,7 +419,7 @@ mod tests {
         let project = crate::test_support::absolute("/workspace/acme");
         let message = runtime_failure(Error::CacheUnavailable, &project).to_string();
         assert!(
-            message.contains(&format!("shield cache prepare --project '{project}'")),
+            message.contains(&format!("shield doctor --project '{project}'")),
             "{message}"
         );
         assert_eq!(

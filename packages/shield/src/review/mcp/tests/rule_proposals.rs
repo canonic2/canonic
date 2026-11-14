@@ -176,15 +176,15 @@ fn development_rule_proposals_complete_without_activating_policy() {
         assert!(proposed["error"].is_null(), "{proposed}");
         assert_eq!(proposed["data"]["status"], "pending");
         assert!(proposed["data"]["apply_arguments"]["reference"].is_string());
-        // Neither creation nor receipt inspection can activate either rule.
-        let receipt = transport.call(
+        // Neither creation nor inspection can write either rule.
+        let shown = transport.call(
             json!(index + 4),
-            "policy_receipt",
+            "policy_show",
             &json!({"proposal_id":proposed["data"]["proposal_id"]}),
         );
         assert_eq!(
-            receipt["result"]["structuredContent"]["error"]["code"],
-            "operator_review_required"
+            shown["result"]["structuredContent"]["data"]["status"],
+            "pending"
         );
         assert_eq!(
             Store::open(root.path())

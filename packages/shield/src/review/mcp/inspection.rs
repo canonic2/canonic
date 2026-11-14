@@ -39,14 +39,22 @@ pub(super) fn rules(
 }
 fn proposal(context: &Context, views: &mut Views, id: &str) -> Result<Value, Error> {
     let store = Store::inspect(Path::new(&context.project_root))?;
-    let (state, _) = store.read_diagnostic_checkpoint()?;
+    let (mut state, _) = store.read_diagnostic_checkpoint()?;
     state.check_inspection(context)?;
-    let row = state
+    let index = state
         .proposals
         .iter()
-        .find(|row| row.id == id)
+        .position(|row| row.id == id)
         .ok_or(Error::Missing)?;
-    if row.status != "pending" && row.reasons["historical_capture"].is_object() {
+    // A proposal an earlier release prepared stores no file texts to rebuild
+    // its candidates from; texts that no longer rebuild them refuse.
+    let hydrated = match store.hydrate_proposal(&mut state.proposals[index]) {
+        Ok(()) => true,
+        Err(Error::CandidateUnavailable) => false,
+        Err(error) => return Err(error),
+    };
+    let row = &state.proposals[index];
+    if !hydrated || (row.status != "pending" && row.reasons["historical_capture"].is_object()) {
         let mut value = row.public(false);
         value["before_candidate_id"] = Value::Null;
         value["after_candidate_id"] = Value::Null;
@@ -66,9 +74,7 @@ fn proposal(context: &Context, views: &mut Views, id: &str) -> Result<Value, Err
             .map(|metadata| metadata.revision())
             .transpose()?
             .or_else(|| {
-                (crate::review::storage::sources::candidate_identity(&row.candidate)
-                    == crate::review::storage::sources::candidate_identity(&row.base_candidate))
-                .then(|| row.policy_revision.clone())
+                (row.candidate_digest == row.base_digest).then(|| row.policy_revision.clone())
             });
     let after_revision = crate::review::inspection::source::revision(
         context,
@@ -136,8 +142,8 @@ pub(super) fn policy(context: &Context, views: &mut Views, args: &Value) -> Resu
     let mut state = crate::review::project::captured_inspection(context)?;
     let active_id = views.active_readonly(context)?;
     let captured = views.get(&active_id)?;
-    if crate::review::storage::sources::candidate_identity(&state.candidates["project"])
-        != crate::review::storage::sources::candidate_identity(&captured.candidate)
+    if crate::review::candidate_identity(&state.candidates["project"])
+        != crate::review::candidate_identity(&captured.candidate)
     {
         return Err(Error::StaleSnapshot);
     }
@@ -168,61 +174,23 @@ pub(super) fn policy(context: &Context, views: &mut Views, args: &Value) -> Resu
         .remove("pending_configuration");
     value["proposals"] = json!(rows);
     value["capture_freshness"] = json!("unchecked; apply revalidates exact reviewed files");
-    value["active_candidate_id"] = json!(active_id);
+    value["policy_candidate_id"] = json!(active_id);
     views.page("policy_show", args, value, "proposals")
 }
-pub(super) fn transition(
+/// Withdraw this interaction's live review; a closed one returns its summary.
+pub(super) fn withdraw(
     context: &Context,
-    name: &str,
     id: &str,
     checkpoint: Checkpoint<'_>,
 ) -> Result<Value, Failure> {
-    let store = if name == "policy_receipt" {
-        Store::inspect(Path::new(&context.project_root))?
-    } else {
-        Store::open(Path::new(&context.project_root))?
-    };
-    let state = if name == "policy_receipt" {
-        store.read_diagnostic_checkpoint()?.0
-    } else {
-        store.read_checkpoint()?
-    };
-    if name == "policy_receipt" {
-        state.check_inspection(context)?;
-    } else {
-        state.check(context)?;
-        state.check_operations()?;
-    }
+    let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
+    state.check(context)?;
+    state.check_operations()?;
     let row = state
         .proposals
         .iter()
         .find(|p| p.id == id)
         .ok_or(Error::Missing)?;
-    if name == "policy_receipt" {
-        if row.status != "pending" {
-            if row.status == "applied" && row.receipt.is_null() {
-                if row.reasons["historical_receipt_unavailable"] == true {
-                    return Ok(
-                        json!({"proposal_id":row.id,"status":row.status,"closed_reason":row.closed_reason,
-                        "receipt":null,"receipt_availability":"historical_receipt_unavailable",
-                        "operator":row.operator,"provenance":row.provenance}),
-                    );
-                }
-                return Err(Error::Missing.into());
-            }
-            return Ok(
-                json!({"proposal_id":row.id,"status":row.status,"closed_reason":row.closed_reason,
-                "receipt":row.receipt,"operator":row.operator,"provenance":row.provenance}),
-            );
-        }
-        if !crate::review::proposal_lifecycle::owns(row, context) {
-            return Err(Error::Invalid(
-                "review belongs to another interaction; inspect its outcome or prepare fresh",
-            )
-            .into());
-        }
-        return Err(Error::ApprovalRequired.into());
-    }
     if !crate::review::proposal_lifecycle::owns(row, context) {
         return Err(Failure::Refused(&FOREIGN_WITHDRAWAL));
     }

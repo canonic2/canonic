@@ -1,4 +1,4 @@
-//! Diagnostics observe moves; actual runtime use restores reviewed source copies.
+//! Moved, copied and files-only folders open with no enrollment step.
 use crate::{cli::Cli, configuration::Bundle, review};
 use clap::Parser;
 use serde_json::{Value, json};
@@ -36,9 +36,8 @@ fn relocation_cli_diagnostics_open_a_move_without_enrollment_review() {
     fs::rename(&original, &moved).unwrap();
     for command in ["status", "doctor"] {
         let report = diagnostic(&moved, command);
-        assert_ne!(report["bootstrap_required"], true);
         assert_eq!(report["project_root"], json!(moved));
-        assert!(report["active"].is_object());
+        assert!(report["policy_files"]["digest"].is_string(), "{report}");
     }
     assert!(review::open(&moved).is_ok());
 }
@@ -63,16 +62,11 @@ fn relocation_cli_copy_and_config_only_child_have_independent_runtime_state() {
         "schema_version: 1\npacks: []\n",
     )
     .unwrap();
-    let preview = diagnostic(&child, "doctor");
-    assert_eq!(preview["bootstrap_required"], true);
-    assert!(
-        !child.join(".shield/review/state.json").exists(),
-        "diagnosis cannot adopt a source-only policy"
-    );
-    review::open(&child).expect("actual runtime use restores privately recognized content");
+    // A folder with only policy files needs no step: its first use creates
+    // its own runtime state.
     let report = diagnostic(&child, "doctor");
-    assert_ne!(report["bootstrap_required"], true);
     assert_eq!(report["project_root"], json!(child));
+    assert!(report["policy_files"]["digest"].is_string(), "{report}");
     assert!(child.join(".shield/review/state.json").is_file());
     assert_ne!(report["project_id"], copy_report["project_id"]);
     assert_ne!(

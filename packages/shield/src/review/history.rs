@@ -75,7 +75,7 @@ pub(super) fn inspect_filtered(
             .cmp(&a["requested_at"].as_str())
             .then_with(|| b["_order"].as_u64().cmp(&a["_order"].as_u64()))
     });
-    rows.truncate(state.history_limit);
+    rows.truncate(state.settings.history_limit);
     for row in &mut rows {
         if let Some(fields) = row.as_object_mut() {
             fields.remove("_order");
@@ -100,7 +100,7 @@ pub(super) fn inspect_filtered(
         missing.push("evicted_history");
     }
     Ok(
-        json!({"policy_revision":state.policy_revision,"enabled":state.history_enabled,"limit":state.history_limit,"available":state.history_available,"missing":missing,"truncated":truncated,"entries":rows}),
+        json!({"policy_revision":(!state.policy_revision.is_empty()).then_some(&state.policy_revision),"enabled":state.settings.history_enabled,"limit":state.settings.history_limit,"available":state.history_available,"missing":missing,"truncated":truncated,"entries":rows}),
     )
 }
 

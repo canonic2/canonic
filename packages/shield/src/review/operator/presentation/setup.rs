@@ -387,10 +387,7 @@ fn tool_permissions(output: &mut String, value: &Value) {
                 ask.join(", ")
             }
         );
-        let _ = writeln!(
-            output,
-            "  Policy activation still requires your confirmation."
-        );
+        let _ = writeln!(output, "  Policy changes still require your confirmation.");
         let _ = writeln!(
             output,
             "  Agents can read/write their skill folders and system temporary folders. Session files use each agent's supported mappings."

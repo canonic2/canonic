@@ -300,38 +300,41 @@ fn claude_refreshes_older_shared_entry_without_reading_malformed_omitted_codex()
 }
 
 #[test]
-fn claude_setup_preserves_orphan_codex_fallback_until_codex_is_selected() {
+fn claude_setup_preserves_orphan_codex_fallback_until_codex_is_removed() {
     let (root, context) = fixture();
     install(&context, &["claude"]);
-    Store::open(root.path())
-        .unwrap()
-        .update(&context, &|| Ok(()), |state| {
-            state.operator["integration"]["ask_fallback"]["codex"] = json!("allow");
-            Ok(json!({}))
-        })
-        .unwrap();
+    crate::review::settings::write(
+        &context,
+        &crate::review::settings::fallbacks(std::collections::BTreeMap::from([(
+            "codex".into(),
+            AskFallback::Allow,
+        )])),
+    )
+    .unwrap();
+    let named = |context: &Context| {
+        crate::review::project::load(context)
+            .unwrap()
+            .settings
+            .ask_fallback
+            .get("codex")
+            .copied()
+    };
     let before = meta(&context);
     assert!(before["integration"]["agents"]["codex"].is_null());
     let plan = prepare(root.path(), &before, IntegrationChoice::agent("claude"))
         .unwrap()
         .unwrap();
     assert!(!plan.affects("codex"));
-    assert_eq!(
-        json!(plan.desired.as_ref().unwrap())["ask_fallback"]["codex"],
-        "allow"
-    );
     let receipt =
         crate::review::integrations::setup::finish(&context, &before, Some(&plan), None).unwrap();
     assert!(receipt["setup_error"].is_null(), "{receipt}");
-    assert_eq!(
-        meta(&context)["integration"]["ask_fallback"]["codex"],
-        "allow"
-    );
+    assert_eq!(named(&context), Some(AskFallback::Allow));
     assert!(!root.path().join(".codex/config.toml").exists());
 
     let before = meta(&context);
     let removal = IntegrationChoice::RemoveAgents(IntegrationChoice::bits(&["codex"]).unwrap());
     let plan = prepare(root.path(), &before, removal).unwrap().unwrap();
     apply(&context, &before, &plan).unwrap();
-    assert!(meta(&context)["integration"]["ask_fallback"]["codex"].is_null());
+    // Removing the agent revokes its fallback in the policy files.
+    assert_eq!(named(&context), Some(AskFallback::Block));
 }

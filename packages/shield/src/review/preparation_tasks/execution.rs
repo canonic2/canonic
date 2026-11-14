@@ -77,7 +77,7 @@ impl Runtime {
                     let _ = worker_store.settle(
                         &id,
                         "failed",
-                        "Preparation worker stopped; no policy was activated",
+                        "Preparation worker stopped; the policy files were not changed",
                         None,
                     );
                 }
@@ -87,7 +87,7 @@ impl Runtime {
                 store.settle(
                     &record.id,
                     "failed",
-                    "Preparation could not start; no policy was activated",
+                    "Preparation could not start; the policy files were not changed",
                     None,
                 )?;
             }
@@ -107,7 +107,7 @@ impl Store {
         let _lock = Directory::enter(&self.root)?;
         self.normalize_record_directories()?;
         let now = clock::now_ms()?;
-        let base = storage::Store::open(Path::new(&self.project_root))?.read_checkpoint()?;
+        let base = storage::Store::open(Path::new(&self.project_root))?.read_following_files()?;
         base.check(&Context::new(
             self.project.clone(),
             self.project_root.clone(),
@@ -230,7 +230,8 @@ impl Store {
         };
         let result = (|| {
             let record = self.get(id)?;
-            let base = storage::Store::open(Path::new(&self.project_root))?.read_checkpoint()?;
+            let base =
+                storage::Store::open(Path::new(&self.project_root))?.read_following_files()?;
             base.check(context)?;
             base.check_operations()?;
             if super::super::changes::prepared_binding(&base) != record.base_binding {
@@ -243,8 +244,7 @@ impl Store {
             }
             checkpoint()?;
             let revision = capture.revision.clone();
-            let candidate_digest =
-                super::super::storage::sources::candidate_identity(&capture.prepared.candidate);
+            let candidate_digest = crate::review::candidate_identity(&capture.prepared.candidate);
             let capture =
                 serde_json::to_value(capture).map_err(|_| Error::Invalid("capture encoding"))?;
             let directory = self.directory(id)?;
@@ -269,9 +269,9 @@ impl Store {
             let message = if matches!(error, Error::StaleSnapshot) {
                 "Policy base changed; request fresh preparation with a new idempotency_key if still needed"
             } else if matches!(error, Error::Policy(crate::policy::Error::Limit)) {
-                "Preparation exceeded its durable capture/result bound; no proposal was activated"
+                "Preparation exceeded its durable capture/result bound; no proposal was applied"
             } else {
-                "Preparation interrupted or failed; no proposal was activated. If still needed, prepare with a new idempotency_key"
+                "Preparation interrupted or failed; no proposal was applied. If still needed, prepare with a new idempotency_key"
             };
             let _ = self.settle(id, "failed", message, None);
         }
@@ -297,7 +297,7 @@ impl Store {
         }
         .into();
         record.message = if record.cancel_requested {
-            "Preparation cancelled; no proposal was activated"
+            "Preparation cancelled; no proposal was applied"
         } else {
             message
         }

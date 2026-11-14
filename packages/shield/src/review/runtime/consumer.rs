@@ -1,6 +1,6 @@
-//! Owns prepared active snapshots, exact request evidence and locked revision handoff.
-use super::{Context, Error, Store};
-use crate::review::Checkpoint;
+//! Owns prepared policy-file snapshots, exact request evidence and locked revision handoff.
+use super::{Context, Error};
+use crate::review::{Checkpoint, storage::Store};
 use crate::{
     configuration::{CandidateEvaluation, Evaluator},
     policy,
@@ -40,11 +40,11 @@ pub enum RuntimeError {
     /// Local enrollment was not found.
     #[error("runtime enrollment was not found")]
     Missing,
-    /// The evaluated activation is no longer current, including same-policy reactivation.
-    #[error("active snapshot changed; reload and evaluate the request again")]
+    /// The policy files changed since the request was evaluated.
+    #[error("policy files changed; reload and evaluate the request again")]
     StaleSnapshot,
     /// Derived policy is unavailable; operator preparation restores committed data.
-    #[error("compiled policy unavailable; run shield cache prepare in an operator terminal")]
+    #[error("compiled policy folder unusable; run shield doctor to find the cause")]
     CacheUnavailable,
     /// The project's policy files are invalid, so there is no policy to apply.
     #[error("the policy files in .shield/ are invalid: {0}")]
@@ -86,8 +86,8 @@ impl From<Error> for RuntimeError {
             Error::Capacity { .. } => Self::Policy(crate::policy::Error::Limit),
             Error::Missing => Self::Missing,
             Error::StaleSnapshot => Self::StaleSnapshot,
-            Error::CheckoutChanged => Self::Invalid("checkout runtime changed; reconnect Shield"),
-            Error::CleanupPending | Error::CacheUnavailable => Self::CacheUnavailable,
+            Error::StateRecreated => Self::Invalid("project state was recreated; reconnect Shield"),
+            Error::CacheUnavailable => Self::CacheUnavailable,
             Error::PolicyFiles(message) => Self::PolicyFiles(message),
             Error::ApprovalRequired => Self::Invalid("operator approval is required"),
             Error::AgentNotConnected => {
@@ -100,7 +100,8 @@ impl From<Error> for RuntimeError {
     }
 }
 
-/// Immutable identity of one complete local activation, not an authenticated grant.
+/// Immutable identity of the policy files a request was decided by, not an
+/// authenticated grant.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct SnapshotIdentity {
     project_id: String,
@@ -126,7 +127,7 @@ impl SnapshotIdentity {
     pub fn project_root(&self) -> &Path {
         Path::new(&self.project_root)
     }
-    /// Exact activation identity, including same-policy reactivation.
+    /// The policy files' revision; kept under this name for request records.
     #[must_use]
     pub fn activation_id(&self) -> &str {
         &self.activation_id
@@ -149,7 +150,8 @@ pub struct Project {
 }
 impl Project {
     /// Bind an explicit existing local review enrollment to its canonical root and ID.
-    /// No activation, authenticated scope enrollment or host registration occurs.
+    /// A folder with policy files and no review state gets its runtime state;
+    /// no authenticated scope enrollment or host registration occurs.
     ///
     /// # Errors
     /// Fails for missing/invalid enrollment, corrupt aggregate state or filesystem errors.
@@ -159,7 +161,7 @@ impl Project {
         })
     }
 
-    /// Load and prepare the latest complete active snapshot for repeated evaluation.
+    /// Load and prepare the policy files' plan for repeated evaluation.
     /// Old snapshots remain immutable; candidate changes do not mutate them.
     ///
     /// # Errors
@@ -185,7 +187,7 @@ impl Project {
     /// access restrictions for a trusted host that independently verifies operations.
     ///
     /// # Errors
-    /// Refuses another project or a stale activation before invoking the callback.
+    /// Refuses another project or changed policy files before invoking the callback.
     /// Invalid state, filesystem and bounded lock/release failures are reported.
     /// A lock release failure can occur after the callback has run; it cannot undo it.
     pub fn with_current<T>(
@@ -207,7 +209,7 @@ impl Project {
     }
 }
 
-/// An owned prepared evaluator over one independently captured local activation.
+/// An owned prepared evaluator over one read of the policy files.
 pub struct Snapshot {
     identity: SnapshotIdentity,
     evaluator: Arc<Evaluator>,
@@ -246,7 +248,7 @@ impl NativeSource {
         Ok(())
     }
     /// Acquire shared trust outside project authority, then confirm the exact
-    /// current activation and mode references under the short authority reader.
+    /// current policy revision and mode references under the short authority reader.
     pub(crate) fn acquire(&self, root: &Path) -> Result<NativeAuthority, Error> {
         let root = root.canonicalize()?;
         if root != Path::new(&self.identity.project_root) {
@@ -424,14 +426,14 @@ impl Snapshot {
             )
             .map_err(RuntimeError::Policy)
     }
-    /// Identity of this retained activation; it does not assert that it is still current.
+    /// Identity of the files this snapshot read; it does not assert they are unchanged.
     #[must_use]
     pub fn identity(&self) -> &SnapshotIdentity {
         &self.identity
     }
 
     /// Evaluate and retain the exact literal request through the shared policy core.
-    /// No files are reread; a newer activation requires a fresh project snapshot.
+    /// No files are reread; changed policy files require a fresh project snapshot.
     /// This evidence alone is not execution permission.
     ///
     /// # Errors
@@ -520,7 +522,7 @@ impl Snapshot {
     }
 }
 
-/// Immutable exact request and evaluation, bound to a local activation.
+/// Immutable exact request and evaluation, bound to the policy files' revision.
 /// It cannot be deserialized from caller-provided authorization claims.
 ///
 /// ```compile_fail
@@ -547,7 +549,7 @@ impl EvaluatedRequest {
     pub(crate) fn resource(&self) -> Option<&ResourceRequest> {
         self.resource.as_ref()
     }
-    /// Activation that produced this evidence.
+    /// Policy files that produced this evidence.
     #[must_use]
     pub fn identity(&self) -> &SnapshotIdentity {
         &self.identity
@@ -595,6 +597,8 @@ pub(in crate::review) fn load(
             activation_id: revision.clone(),
             previous_activation_id: None,
             policy_revision: revision.clone(),
+            // The files' key leaves out settings, so a settings change edits
+            // a policy file but leaves pending approvals valid.
             candidate_digest: policy.digest,
             registry_revision: registry_guard.revision.clone(),
             binding: revision.clone(),

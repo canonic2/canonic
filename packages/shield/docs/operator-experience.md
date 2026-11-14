@@ -13,7 +13,7 @@ Codex setup preserves a saved Ask fallback or defaults a new choice to Allow for
 every profile. The final review shows the fallback and its scope for confirmation.
 
 The baseline comes from the pinned main registry, regardless of your default
-source. Its artifacts, dependencies, and catalog checkpoint activate together;
+source. Its artifacts, dependencies, and catalog checkpoint are written together;
 a failed download or validation leaves a new project unenrolled. Use
 `shield pack remove baseline` to remove it or `shield pack add main/baseline` to add it.
 
@@ -70,8 +70,7 @@ Policy-changing operations requiring confirmation refuse JSON/unattended
 mutation, and Shield has no `--yes` to accept a review unattended.
 `mcp setup --dry-run --json` returns the setup review without writing. Agents prepare changes as MCP proposals and request host approval with
 `policy_apply`, or the operator can confirm with `shield policy review`.
-`cache prepare --json` can rebuild disposable
-derived data without activating source edits. Native hooks, MCP and SDK
+Native hooks, MCP and SDK
 interfaces never acquire this operator UI or emit human presentation.
 
 ## Command workflows
@@ -80,13 +79,13 @@ interfaces never acquire this operator UI or emit human presentation.
 | --- | --- |
 | `init` | Review default baseline and project configuration, select agents, confirm enrollment |
 | `mcp setup [--agent AGENT]... [--remove] [--pending review\|cancel] [--dry-run]` | Install, repair or remove project hooks/MCP integrations; omission opens guided selection or resumes confirmed work; pending reviews conflicts or cancellation; removal keeps unselected agents; restart/trust the agent after registration changes |
-| `status`, `doctor` | Inspect active policy, history, registrations and reported repair needs |
+| `status`, `doctor` | Inspect the policy files, history, registrations and reported problems |
 | `pack search`, `pack info` | Discover releases and inspect source, compatibility, profiles and rules before installation |
-| `pack add`, `pack update`, `pack remove` | Acquire or select verified artifacts; review the complete policy comparison before activation. `pack add` asks for a new pack's profile (Recommended preselected) unless `--profile` is given |
+| `pack add`, `pack update`, `pack remove` | Acquire or select verified artifacts; review the complete policy comparison before Shield writes it. `pack add` asks for a new pack's profile (Recommended preselected) unless `--profile` is given |
 | `pack list`, `pack show` | List retained selections or inspect their exact source and artifact |
 | `pack configure` | Set a selection's variable values and rule overrides, guided or with `--set`, `--unset`, `--override` and `--clear-override` |
 | `registry list/add/remove/default [--scope user]` | Inspect or confirm project or user discovery changes independently of installed policy |
-| `policy show`, `policy review`, `policy repair`, `policy reject ID` | Inspect policy; review a proposal/manual edit; restore projections or reject a pending proposal |
+| `policy show`, `policy review`, `policy reject ID` | Inspect policy and proposal outcomes; review a live proposal or history settings; reject a pending proposal |
 | `policy evaluate INPUT`, `policy compare --after SELECTOR` | Preview normalized requests or compare immutable policy snapshots without execution |
 | `rule list`, `rule add/edit/remove [--local]` | Inspect rules or build/edit a validated shared or local rule and confirm the resulting policy |
 | `request list`, `request show` | Inspect pending or unused grants and an exact request's scope |
@@ -94,8 +93,7 @@ interfaces never acquire this operator UI or emit human presentation.
 | `session-grant list/show/propose/approve/revoke` | Inspect, prepare, confirm or revoke [temporary conversation grants](session-grants.md); `apply` aliases `approve` |
 | `history list`, `history show`, `history configure` | Inspect observations; configure collection and retention or clear history with confirmation |
 | `docs list/search/read` | Read the binary's embedded guides without project enrollment |
-| `protection set` | Choose agent access to protected settings and policy files |
-| `cache prepare` | Prepare only the committed generation's compiled data |
+| `protection set` | Choose agent access to protected agent settings files |
 
 Use `--help` for command arguments and `--project PATH` for another project.
 Project commands require enrollment; user-scope registry commands do not. See
@@ -110,12 +108,12 @@ accepts `--start-line` and `--limit`, with the same defaults and bounds as MCP.
 
 `shield policy evaluate request.json --json` reads a JSON object containing
 normalized `input` and `context`, as described in
-[diagnostic input](project-mcp.md#diagnostic-input-and-snapshots). It uses active
-policy by default; `--proposal-id ID` evaluates a retained proposal's candidate.
+[diagnostic input](project-mcp.md#diagnostic-input-and-snapshots). It uses the current
+policy files by default; `--proposal-id ID` evaluates a retained proposal's candidate.
 JSON input files are limited to 1 MiB.
 
 `shield policy compare --before active --after proposal:ID --json` compares
-active policy with a retained candidate. `proposal:ID:before` selects that
+the current policy files (`active`) with a retained candidate. `proposal:ID:before` selects that
 proposal's captured base. `--domain sample --input request.json` compares one
 request; `literal_argv` is the default domain and `supported_semantic` reports
 its supported coverage. Results never authorize or execute a request.

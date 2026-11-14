@@ -37,11 +37,12 @@ command hooks and Shield's project MCP entry. Confirmation shows the owned files
 binary and project. Claude uses `.claude/settings.local.json` and `.mcp.json`.
 To add Codex as well, run `shield mcp setup --agent codex`; Codex uses
 `.codex/hooks.json` and `.codex/config.toml`. No user/global settings are changed.
-When active rules ask for [Codex prefix rules](policy-rules.md#codex-prefix-rules),
-Shield also writes `.codex/rules/shield.rules`. Setup and every activation rewrite
-it, removing it when no such rule remains or Codex is removed. Codex loads it
-only for a trusted project. Shield never replaces a file at that path that it
-did not write; status and the activation receipt say to move such a file aside.
+When the policy's rules ask for [Codex prefix rules](policy-rules.md#codex-prefix-rules),
+Shield also writes `.codex/rules/shield.rules`. Setup and every policy change
+Shield writes rewrite it, removing it when no such rule remains or Codex is
+removed. Codex loads it only for a trusted project. Shield never replaces a file
+at that path that it did not write; status and the change's result say to move
+such a file aside.
 Status also reports a stale file and hand edits, and `shield mcp setup`
 repairs them. Until then, Codex Asks block whatever the Ask fallback, because
 the file may let Codex skip its sandbox. Setup and policy reviews list the
@@ -453,12 +454,12 @@ packs that share a short name.
 The full registry/publisher/name reference leads to `pack_info`,
 `policy_propose` and user review through `policy_apply`. A relevant
 pack may still ask or deny the invocation. Suggestions preserve the current
-decision and activate nothing; see [catalog refresh](local-registry.md#suggestions-for-commands).
+decision and change no policy; see [catalog refresh](local-registry.md#suggestions-for-commands).
 
 With the blocking fallback, Codex explains that native approval is unavailable.
 The message can offer a rule for the exact command, web search or fetched host,
 or an outside folder. The agent submits that change through `policy_apply`
-for your approval, then retries after activation. CLI users can also use
+for your approval, then retries once it is applied. CLI users can also use
 `shield history list` and `shield rule add` directly. `shield request approve` does
 not authorize a native hook retry. Policy Deny requires a policy change and cannot
 be overridden by ordinary host approval. Web searches and fetches follow web

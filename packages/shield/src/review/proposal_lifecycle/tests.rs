@@ -48,16 +48,11 @@ fn prepare(context: &Context, connection: &Connection, id: &str) -> Value {
     assert!(result["error"].is_null(), "{result}");
     result["data"].clone()
 }
-fn receipt(context: &Context, connection: &Connection, id: &Value) -> Value {
-    let result = mcp::call(
-        context,
-        connection,
-        "policy_receipt",
-        &json!({"proposal_id":id}),
-        &|| Ok(()),
-    );
-    assert!(result["error"].is_null(), "{result}");
-    result["data"].clone()
+fn receipt(context: &Context, _connection: &Connection, id: &Value) -> Value {
+    crate::review::proposal_outcome(
+        std::path::Path::new(&context.project_root),
+        id.as_str().expect("proposal id"),
+    )
 }
 
 #[test]
@@ -87,16 +82,10 @@ fn copied_policy_workflow_proposal_continuations_require_fresh_owned_review() {
         true,
     );
     assert!(refused["error"].is_object(), "{refused}");
-    let missing = mcp::call(
-        &child,
-        &child_connection,
-        "policy_receipt",
-        &json!({"proposal_id":proposed["proposal_id"]}),
-        &|| Ok(()),
-    );
+    let missing = receipt(&child, &child_connection, &proposed["proposal_id"]);
     // The copy carries the proposal record; another connection finds it
     // withdrawn, never applicable.
-    assert_eq!(missing["data"]["status"], "withdrawn", "{missing}");
+    assert_eq!(missing["status"], "withdrawn", "{missing}");
     assert_eq!(
         crate::review::inspect(&child).unwrap()["policy_revision"],
         child_revision
@@ -662,7 +651,7 @@ fn ordinary_authority_callbacks_do_not_read_proposal_payloads_or_unlink_orphans(
             .update_checkpoint(&context, &|| Ok(()), |_| Ok(Value::Null))
             .unwrap();
         assert_eq!(trace.recorded_count("proposal.capture_file_reads"), 0);
-        assert_eq!(trace.recorded_count("source.hydrated"), 0);
+        assert_eq!(trace.recorded_count("policy.captures"), 0);
         assert_eq!(trace.recorded_count("policy.preparations"), 0);
         assert!(orphan.exists());
         let state = store.read_checkpoint().unwrap();

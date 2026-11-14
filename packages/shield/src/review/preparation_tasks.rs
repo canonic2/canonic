@@ -1,4 +1,4 @@
-//! Private durable preparation records; no task can activate policy.
+//! Private durable preparation records; no task can change the policy files.
 mod execution;
 mod files;
 use super::{
@@ -122,21 +122,6 @@ impl Runtime {
         let mut current = self.store.lock().map_err(|_| Error::Locked)?;
         current.used = true;
         Ok(current.store.clone())
-    }
-    pub(crate) fn unused(&self) -> bool {
-        self.workers.lock().is_ok_and(|workers| workers.is_empty())
-            && self.store.lock().is_ok_and(|store| !store.used)
-    }
-    pub(crate) fn rebind_unused(&self, context: &Context) -> Result<(), Error> {
-        let workers = self.workers.lock().map_err(|_| Error::Locked)?;
-        let mut store = self.store.lock().map_err(|_| Error::Locked)?;
-        if !workers.is_empty() || store.used || store.store.project_root != context.project_root {
-            return Err(Error::Invalid(
-                "preparation runtime changed; reconnect Shield",
-            ));
-        }
-        store.store = Store::new(context);
-        Ok(())
     }
     #[cfg(test)]
     pub(crate) fn join(&self) {
@@ -319,7 +304,7 @@ impl Store {
                     "failed"
                 }
                 .into();
-                record.message = "Preparation owner stopped; no policy was activated. Observed without changing the retained record; prepare with a new idempotency_key if still needed".into();
+                record.message = "Preparation owner stopped; the policy files were not changed. Observed without changing the retained record; prepare with a new idempotency_key if still needed".into();
             } else {
                 record.message = "Stored preparation status; owner liveness is unchecked because its existing mutex is unavailable".into();
             }
@@ -342,7 +327,7 @@ impl Store {
         }
         .into();
         record.updated = clock::now_ms()?.max(record.updated);
-        record.message = "Preparation owner stopped; no policy was activated. If still needed, prepare with a new idempotency_key".into();
+        record.message = "Preparation owner stopped; the policy files were not changed. If still needed, prepare with a new idempotency_key".into();
         self.save(record)
     }
     fn entries(&self) -> Result<Vec<String>, Error> {
@@ -448,7 +433,7 @@ impl Store {
             }
             .into();
             record.updated = clock::now_ms()?.max(record.updated);
-            record.message = "Preparation owner stopped before settlement; no policy was activated. If still needed, prepare with a new idempotency_key".into();
+            record.message = "Preparation owner stopped before settlement; the policy files were not changed. If still needed, prepare with a new idempotency_key".into();
             self.save(&record)?;
         }
         Ok(())

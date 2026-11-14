@@ -34,23 +34,21 @@ impl Output {
 
 #[cfg(test)]
 pub(crate) fn commit_proposal_fixture(context: &Context, id: &str) -> Result<Value, Error> {
-    let before = crate::review::project::load(context)?;
-    let row = before
+    let mut before = crate::review::project::load(context)?;
+    let index = before
         .proposals
         .iter()
-        .find(|p| p.id == id)
+        .position(|p| p.id == id)
         .ok_or(Error::Missing)?;
-    crate::review::publication::commit(
-        context,
-        &before,
-        super::storage::Store::open(Path::new(&context.project_root))?
-            .captured_candidate(&row.candidate)?,
-        row.candidate_metadata.clone(),
-        Some(id),
-    )
+    super::storage::Store::open(Path::new(&context.project_root))?
+        .hydrate_proposal(&mut before.proposals[index])?;
+    let candidate = before.proposals[index].candidate.clone();
+    let meta = before.proposals[index].candidate_metadata.clone();
+    crate::review::files::write::commit_fixture(context, &before, candidate, meta, Some(id))
 }
 
 pub(crate) fn run(input: &Cli) -> ExitCode {
+    super::retire_user_records();
     match dispatch(input) {
         Ok(Output { mut value, context }) => {
             if matches!(input.command, PublicCommand::History(_)) {
@@ -173,20 +171,9 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
     let context = if matches!(input.command, PublicCommand::Status | PublicCommand::Doctor) {
         match project_with(&start, super::open_diagnostics) {
             Ok(context) => context,
-            Err(error) => {
-                return match bootstrap_root(&start)
-                    .and_then(|root| super::bootstrap::inspect(&root))
-                {
-                    Ok(probe) if probe.bootstrap_required() => {
-                        let mut report = probe.report();
-                        report["next_action"] = json!(
-                            "Run shield init in this project to review and confirm enrollment."
-                        );
-                        Ok(Output::independent(report))
-                    }
-                    _ => Err(error),
-                };
-            }
+            // A folder with policy files and no review state, such as a new
+            // clone, worktree or copy, gets its runtime state on first use.
+            Err(error) => project(&start).map_err(|_| error)?,
         }
     } else {
         project(&start)?
@@ -200,9 +187,6 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
                 ) =>
             {
                 println!("Checking registry metadata…");
-            }
-            PublicCommand::Cache { .. } => {
-                println!("Preparing the committed policy's compiled cache…");
             }
             _ => {}
         }
@@ -248,11 +232,10 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
             if receipt.get("setup_error").is_none()
                 && let Some(directory) = input.cache_dir.as_deref()
             {
-                receipt["cache_preparation"] = super::cache::prepare(&context, Some(directory))?;
+                receipt["cache_location"] = super::files::relocate_cache(&context, directory)?;
             }
             Ok(receipt)
         }
-        PublicCommand::Cache { .. } => super::cache::prepare(&context, input.cache_dir.as_deref()),
         PublicCommand::Protection(_) => path_access::configure(&context, input.json),
         PublicCommand::SessionGrant(command) => {
             session_grants::run(&context, &command.command, input.json)
@@ -264,7 +247,6 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
         PublicCommand::Policy(policy) => match &policy.command {
             PolicyCommand::Show => project::policy(&context),
             PolicyCommand::Review => rules::policy(&context, input.json),
-            PolicyCommand::Repair => administer(&context, "policy_repair", &json!({}), input.json),
             PolicyCommand::Reject {
                 proposal_id,
                 reason,
@@ -445,14 +427,6 @@ fn project_with(start: &Path, open: fn(&Path) -> Result<Context, Error>) -> Resu
         }
     }
     Err(Error::Invalid("no enrolled project; run shield init"))
-}
-
-fn bootstrap_root(start: &Path) -> Result<std::path::PathBuf, Error> {
-    let path = start.canonicalize()?;
-    path.ancestors()
-        .find(|root| configured(root))
-        .map(Path::to_path_buf)
-        .ok_or(Error::Missing)
 }
 
 fn configured(root: &Path) -> bool {

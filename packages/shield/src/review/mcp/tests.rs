@@ -1,7 +1,6 @@
 //! Behavioral checks for the canonical project tool surface and authority separation.
 mod application;
 mod apply_cost;
-mod connection_publication;
 mod cross_source;
 mod documentation;
 mod file_editing;
@@ -34,7 +33,7 @@ fn fixture() -> (assert_fs::TempDir, Context, Connection) {
 fn first_runtime_use_keeps_diagnostic_handles() {
     let (_root, context, connection) = fixture();
     let status = call(&context, &connection, "status", &json!({}), &|| Ok(()));
-    let handle = status["data"]["active_candidate_id"]
+    let handle = status["data"]["policy_candidate_id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -144,7 +143,7 @@ fn candidate_artifact_failure_does_not_blame_tool_arguments() {
     let response = failure(&context, &crate::policy::Error::ArtifactMismatch.into());
     assert_eq!(response["error"]["code"], "candidate_error");
     let message = response["error"]["message"].as_str().unwrap();
-    assert!(message.contains("No change was activated"));
+    assert!(message.contains("The policy files were not changed"));
     assert!(message.contains("Continue without this proposal"));
     assert!(!message.contains("Invalid input"));
     assert!(response["error"]["operator_route"].is_null());
@@ -198,9 +197,6 @@ fn record_only_proposal_inspection_exposes_lazy_handles_with_exact_arguments() {
     let proposed = proposal(&context, &connection, "lazy-inspection");
     assert!(proposed["error"].is_null(), "{proposed}");
     *connection.views.lock().unwrap() = views::Views::new("acme-fresh-inspection".into());
-    let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
-    let plan = state.active.as_ref().unwrap().compiled.path();
-    std::fs::remove_file(&plan).unwrap();
     let checkpoint = root.path().join(".shield/review/state.json");
     let before = std::fs::read(&checkpoint).unwrap();
     let logs = assert_fs::TempDir::new().unwrap();
@@ -230,16 +226,11 @@ fn record_only_proposal_inspection_exposes_lazy_handles_with_exact_arguments() {
         inspected["data"]["apply_arguments"],
         proposed["data"]["apply_arguments"]
     );
-    assert!(!plan.exists());
     assert_eq!(std::fs::read(&checkpoint).unwrap(), before);
     let mut input = request(&context);
     input["candidate_id"] = inspected["data"]["after_candidate_id"].clone();
     let evaluated = invoke(&context, &connection, "policy_evaluate", input);
     assert_eq!(evaluated["data"]["decision"], "allow", "{evaluated}");
-    assert!(
-        !plan.exists(),
-        "evaluating a retained handle does not publish a current cache"
-    );
 }
 
 fn dependency_registry(
@@ -324,6 +315,33 @@ fn commit_pack_change(context: &Context, connection: &Connection, change: Value,
         proposed["data"]["proposal_id"].as_str().unwrap(),
     )
     .unwrap();
+}
+
+#[test]
+fn a_pack_proposal_applies_from_the_per_user_store_after_the_folder_cache_is_gone() {
+    let (root, context, connection) = fixture();
+    let _source = dependency_registry(&root, &context, &json!([]), false);
+    let proposed = pack_change(
+        &context,
+        &connection,
+        json!({"kind":"pack_add","reference":"acme-dependencies/acme/child"}),
+        "install-from-store",
+    );
+    assert_eq!(proposed["error"], Value::Null, "{proposed}");
+    // The proposal holds file texts; its pack artifact lives in the per-user
+    // store, so a folder without its ignored cache still applies it.
+    let _ = std::fs::remove_dir_all(root.path().join(".shield/cache"));
+    review::operator::commit_proposal_fixture(
+        &context,
+        proposed["data"]["proposal_id"].as_str().unwrap(),
+    )
+    .unwrap();
+    let state = review::storage::Store::open(root.path())
+        .unwrap()
+        .read_checkpoint()
+        .unwrap();
+    assert_eq!(state.operator["installed"][0]["id"], "acme/child");
+    assert!(crate::review::files::load(root.path()).is_ok());
 }
 
 #[test]
@@ -535,15 +553,10 @@ fn dependency_updates_capture_atomic_closures_preserve_rules_and_reject_stale_re
         json!({"kind":"pack_add","reference":"acme-dependencies/acme/parent"}),
         "install",
     );
-    Store::open(root.path())
-        .unwrap()
-        .update(&context, &|| Ok(()), |state| {
-            let sources = state.operator["sources"].as_object_mut().unwrap();
-            let source = sources.remove("acme-dependencies").unwrap();
-            sources.insert("renamed".into(), source);
-            Ok(json!({}))
-        })
-        .unwrap();
+    review::settings::registries_fixture(&context, |registries| {
+        let source = registries.sources.remove("acme-dependencies").unwrap();
+        registries.sources.insert("renamed".into(), source);
+    });
     let before = Store::open(root.path()).unwrap().read().unwrap();
     registry_release(&source, "acme/parent", "2.0.0", Some("^2"));
     registry_release(&source, "acme/child", "2.0.0", None);
@@ -554,13 +567,18 @@ fn dependency_updates_capture_atomic_closures_preserve_rules_and_reject_stale_re
         "update",
     );
     assert_eq!(proposed["error"], Value::Null, "{proposed}");
-    let pending = Store::open(root.path()).unwrap().read().unwrap();
-    assert_eq!(json!(pending.active), json!(before.active));
-    let updated = pending
+    let store = Store::open(root.path()).unwrap();
+    let mut pending = store.read().unwrap();
+    assert_eq!(pending.policy_revision, before.policy_revision);
+    let index = pending
         .proposals
         .iter()
-        .find(|p| p.id == proposed["data"]["proposal_id"])
+        .position(|p| p.id == proposed["data"]["proposal_id"])
         .unwrap();
+    store
+        .hydrate_proposal(&mut pending.proposals[index])
+        .unwrap();
+    let updated = &pending.proposals[index];
     assert_eq!(
         updated.candidate["rules"],
         before.candidates["project"]["rules"]
@@ -755,7 +773,7 @@ fn dependency_removal_preserves_shared_and_direct_packs_and_reports_required_ide
     assert!(message.contains("acme/parent") && message.contains("acme/other"));
     let after = Store::open(root.path()).unwrap().read().unwrap();
     assert_eq!(after.operator, before.operator);
-    assert_eq!(json!(after.active), json!(before.active));
+    assert_eq!(after.policy_revision, before.policy_revision);
     assert_eq!(after.proposals.len(), before.proposals.len());
     commit_pack_change(
         &context,
@@ -803,7 +821,7 @@ fn dependency_update_verification_failures_leave_active_policy_and_proposals_unc
     );
     assert_ne!(result["error"], Value::Null);
     let after = Store::open(root.path()).unwrap().read().unwrap();
-    assert_eq!(json!(after.active), json!(before.active));
+    assert_eq!(after.policy_revision, before.policy_revision);
     assert_eq!(after.operator, before.operator);
     assert_eq!(after.proposals.len(), before.proposals.len());
 }
@@ -820,8 +838,10 @@ fn dependency_proposals_capture_complete_verified_closures_and_activate_once() {
     let before = Store::open(root.path()).unwrap().read().unwrap();
     let proposed = dependency_proposal(&context, &connection, "closure");
     assert_eq!(proposed["error"], Value::Null, "{proposed}");
-    let pending = Store::open(root.path()).unwrap().read().unwrap();
-    assert_eq!(json!(pending.active), json!(before.active));
+    let store = Store::open(root.path()).unwrap();
+    let mut pending = store.read().unwrap();
+    assert_eq!(pending.policy_revision, before.policy_revision);
+    store.hydrate_proposal(&mut pending.proposals[0]).unwrap();
     let row = &pending.proposals[0];
     let installed = row.candidate_metadata["installed"].as_array().unwrap();
     assert_eq!(installed.len(), 2);
@@ -870,7 +890,7 @@ fn invalid_dependency_acquisition_and_cycles_preserve_active_policy_without_prop
         let result = dependency_proposal(&context, &connection, "invalid");
         assert_ne!(result["error"], Value::Null, "{result}");
         let after = Store::open(root.path()).unwrap().read().unwrap();
-        assert_eq!(json!(after.active), json!(before.active));
+        assert_eq!(after.policy_revision, before.policy_revision);
         assert_eq!(after.operator, before.operator);
         assert!(after.proposals.is_empty());
     }
@@ -901,8 +921,12 @@ fn stale_dependency_proposals_cannot_publish_after_another_policy_change() {
         .is_err()
     );
     assert_eq!(
-        json!(Store::open(root.path()).unwrap().read().unwrap().active),
-        json!(before.active)
+        Store::open(root.path())
+            .unwrap()
+            .read()
+            .unwrap()
+            .policy_revision,
+        before.policy_revision
     );
 }
 
@@ -952,19 +976,17 @@ fn effect_predicates_report_incomplete_coverage_and_cannot_establish_an_allowanc
 }
 
 #[test]
-fn a_cached_diagnostic_cannot_hide_changed_active_snapshot_bytes() {
+fn a_cached_diagnostic_cannot_hide_changed_policy_files() {
     let (root, context, connection) = fixture();
     let evaluated = invoke(&context, &connection, "policy_evaluate", request(&context));
     let id = evaluated["data"]["candidate_id"].clone();
-    let path = root.path().join(".shield/review/state.json");
-    let mut state: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-    state["active"]["candidates"]["project"]["config"] =
-        json!("schema_version: 1\npacks: []\nrules: forged.yml\n");
-    std::fs::write(&path, state.to_string()).unwrap();
-    assert_eq!(
-        invoke(&context, &connection, "policy_evaluate", request(&context))["error"]["code"],
-        "invalid_input"
-    );
+    std::fs::write(
+        root.path().join(".shield/config.yml"),
+        "schema_version: 1\npacks: []\nrules: missing.yml\n",
+    )
+    .unwrap();
+    let current = invoke(&context, &connection, "policy_evaluate", request(&context));
+    assert!(!current["error"].is_null(), "{current}");
     let mut retained = request(&context);
     retained["candidate_id"] = id;
     assert_eq!(
@@ -1080,13 +1102,11 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
         vec![
             "enable",
             "disable",
-            "cache_prepare",
             "protection_set",
             "registry_add",
             "registry_trust",
             "registry_remove",
             "registry_default",
-            "policy_repair",
             "history_configure",
             "policy_reject",
             "mcp_setup",
@@ -1111,7 +1131,6 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
             "review_defer",
             "policy_withdraw",
             "policy_apply",
-            "policy_receipt",
             "request_list",
             "request_approve",
             "request_show",
@@ -1185,7 +1204,7 @@ fn inventory_annotations_and_pack_selection_schema_are_canonical() {
 fn diagnostics_create_no_action_or_history_and_handles_remain_frozen_after_commit() {
     let (root, mut context, connection) = fixture();
     let initial =
-        invoke(&context, &connection, "status", json!({}))["data"]["active_candidate_id"].clone();
+        invoke(&context, &connection, "status", json!({}))["data"]["policy_candidate_id"].clone();
     assert!(initial.is_string());
     let before = Store::open(root.path()).unwrap().read().unwrap().sequence;
     assert_eq!(
@@ -1207,13 +1226,8 @@ fn diagnostics_create_no_action_or_history_and_handles_remain_frozen_after_commi
         "allow"
     );
     assert_eq!(
-        invoke(
-            &context,
-            &connection,
-            "policy_receipt",
-            json!({"proposal_id":id})
-        )["error"]["code"],
-        "operator_review_required"
+        review::proposal_outcome(root.path(), id)["status"],
+        "pending"
     );
     context.surface = "cli".into();
     review::operator::commit_proposal_fixture(&context, id).unwrap();
@@ -1237,33 +1251,18 @@ fn diagnostics_create_no_action_or_history_and_handles_remain_frozen_after_commi
         retry["data"]["after_candidate_id"],
         proposed["data"]["after_candidate_id"]
     );
-    let receipt = invoke(
-        &context,
-        &connection,
-        "policy_receipt",
-        json!({"proposal_id":id}),
-    );
+    let receipt = review::proposal_outcome(root.path(), id);
     assert!(
-        receipt["data"]["receipt"]["activation_id"].is_string(),
+        receipt["receipt"]["policy_revision"].is_string(),
         "{receipt}"
     );
-    Store::open(root.path())
-        .unwrap()
-        .inspect_locked(&context, &|| Ok(()), |state| {
-            let again = invoke(
-                &context,
-                &connection,
-                "policy_receipt",
-                json!({"proposal_id":id}),
-            );
-            assert_eq!(again, receipt);
-            assert_eq!(
-                Store::open(root.path()).unwrap().read().unwrap().sequence,
-                state.sequence
-            );
-            Ok(())
-        })
-        .unwrap();
+    // Reading the outcome again changes nothing.
+    let sequence = Store::open(root.path()).unwrap().read().unwrap().sequence;
+    assert_eq!(review::proposal_outcome(root.path(), id), receipt);
+    assert_eq!(
+        Store::open(root.path()).unwrap().read().unwrap().sequence,
+        sequence
+    );
 }
 
 #[test]
@@ -1364,39 +1363,7 @@ fn rule_lookup_uses_retained_snapshots_for_exact_and_paged_inspection() {
 }
 
 #[test]
-fn stored_policy_receipt_does_not_prepare_unavailable_retained_source() {
-    let (root, context, connection) = fixture();
-    let proposed = proposal(&context, &connection, "receipt-without-source");
-    let id = proposed["data"]["proposal_id"].as_str().unwrap();
-    review::operator::commit_proposal_fixture(&context, id).unwrap();
-    let receipt = Store::open(root.path())
-        .unwrap()
-        .read_checkpoint()
-        .unwrap()
-        .proposals
-        .iter()
-        .find(|row| row.id == id)
-        .unwrap()
-        .receipt
-        .clone();
-    let state_path = root.path().join(".shield/review/state.json");
-    let before = std::fs::read(&state_path).unwrap();
-    for entry in std::fs::read_dir(root.path().join(".shield/review/sources")).unwrap() {
-        std::fs::write(entry.unwrap().path(), "invalid retained source").unwrap();
-    }
-    let inspected = invoke(
-        &context,
-        &connection,
-        "policy_receipt",
-        json!({"proposal_id":id}),
-    );
-    assert!(inspected["error"].is_null(), "{inspected}");
-    assert_eq!(inspected["data"]["receipt"], receipt);
-    assert_eq!(std::fs::read(state_path).unwrap(), before);
-}
-
-#[test]
-fn withdrawn_proposal_receipt_is_terminal_without_an_approval_route() {
+fn a_withdrawn_proposal_is_terminal_without_an_approval_route() {
     let (_root, context, connection) = fixture();
     let proposed = proposal(&context, &connection, "withdrawn-receipt");
     let id = proposed["data"]["proposal_id"].clone();
@@ -1407,15 +1374,15 @@ fn withdrawn_proposal_receipt_is_terminal_without_an_approval_route() {
         json!({"proposal_id":id}),
     );
     assert!(withdrawn["error"].is_null(), "{withdrawn}");
-    let receipt = invoke(
+    let shown = invoke(
         &context,
         &connection,
-        "policy_receipt",
+        "policy_show",
         json!({"proposal_id":id}),
     );
-    assert!(receipt["error"].is_null(), "{receipt}");
-    assert_eq!(receipt["data"]["status"], "withdrawn");
-    assert!(receipt["data"].get("apply_arguments").is_none());
+    assert!(shown["error"].is_null(), "{shown}");
+    assert_eq!(shown["data"]["status"], "withdrawn");
+    assert!(shown["data"].get("apply_arguments").is_none());
 }
 
 #[test]
@@ -1576,7 +1543,7 @@ fn release_and_registry_refusals_name_the_user_step() {
 }
 
 #[test]
-fn receipts_route_live_proposals_to_apply_and_return_closed_failure_outcomes() {
+fn shown_live_proposals_carry_apply_arguments_and_closed_failures_do_not() {
     let (root, mut context, connection) = fixture();
     context.agent = Some("claude".into());
     let proposed = proposal(&context, &connection, "failed-receipt");
@@ -1585,13 +1552,14 @@ fn receipts_route_live_proposals_to_apply_and_return_closed_failure_outcomes() {
         invoke(
             &context,
             &connection,
-            "policy_receipt",
+            "policy_show",
             json!({"proposal_id":id}),
         )
     };
     let pending = receipt();
-    assert_eq!(pending["error"]["code"], "operator_review_required");
-    assert_eq!(pending["error"]["operator_route"], "policy_apply");
+    assert!(pending["error"].is_null(), "{pending}");
+    assert_eq!(pending["data"]["status"], "pending");
+    assert!(pending["data"]["apply_arguments"].is_object(), "{pending}");
     Store::open(root.path())
         .unwrap()
         .update(&context, &|| Ok(()), |state| {
@@ -1795,7 +1763,7 @@ fn withdrawal_checks_registered_origin_and_reconnect_requires_new_handles() {
         let error = &refused["error"];
         assert_eq!(error["code"], "operator_review_required", "{refused}");
         // A foreign withdrawal is never routed to apply.
-        assert_eq!(error["operator_route"], "policy_receipt", "{refused}");
+        assert_eq!(error["operator_route"], "policy_show", "{refused}");
         let message = error["message"].as_str().unwrap();
         assert!(message.contains("interaction"), "{message}");
         assert!(!message.contains("policy_apply"), "{message}");

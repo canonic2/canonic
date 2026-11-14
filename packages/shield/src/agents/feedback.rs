@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use std::path::Path;
 mod packs;
 mod presentation;
-// Agents change policy only by proposal; the user reviews and activates it.
+// Agents change policy only by proposal; the user reviews and applies it.
 const PROPOSE: &str = "If the user requests an allowance, propose a bounded reusable rule or outside-folder access with policy_propose; copy the returned apply_arguments object unchanged into policy_apply for approval.";
 // Stable marker for protected-access feedback across groups.
 const PROTECTED_ACCESS: &str = "Shield: protected path.";
@@ -23,13 +23,14 @@ fn raw_deny(code: &str) -> Reply {
         "operator-cli" => "Shield's operator CLI is unavailable to agents. For diagnostics use doctor or status; for command help use docs_search or docs_read. For registrations use mcp_setup with explicit agents and repair: true to review conflicts; project may name an explicit enrolled repair target without changing this connection's project. For policy changes use policy_propose and copy apply_arguments unchanged into policy_apply. Registration and policy changes each require the user's confirmation; policy rules and session grants cannot open the operator CLI.".to_owned(),
         "protected-access" => format!("{PROTECTED_ACCESS} Never read or change .shield/review or the cache. Propose policy changes with policy_propose. Do not bypass protection."),
         "sensitive-read" => "Shield: settings may contain credentials; this callback cannot request read approval. Continue without them unless essential.".to_owned(),
+        "policy-file-unknown" => "Shield: this Git command can change Shield's policy files in .shield/, or Shield cannot tell whether it would, and this host cannot ask the user. Ask the user to run it, or name paths that leave .shield out.".to_owned(),
         "search-footprint-unavailable" => "Shield: the files this search reaches could not be verified. Search a narrower path with fewer entries. In a shell rg, --no-ignore without glob filters keeps hidden files out.".to_owned(),
         "protected-search" => "Shield: this search could read protected files. Search a narrower path that excludes .shield and agent settings. In a shell rg, --files lists names only, and --no-ignore without glob filters keeps a content search to visible files.".to_owned(),
         "invalid-host-input" | "invalid-host-event" | "invalid-input" => "Shield: invalid request. Correct the tool input before retrying.".to_owned(),
         "invalid-context" => "Shield: the session's working directory is not an existing folder inside this Shield project. Work from the project folder, or ask the user to start the session there.".to_owned(),
         "runtime-busy" => "Shield: Shield state is briefly locked; retry the request.".to_owned(),
         "handoff-failed" | "project-changed" => "Shield: current authorization could not be verified. Inspect the status tool and retry only after the user resolves any protection problem.".to_owned(),
-        "compiled-cache-unavailable" => "Shield: compiled policy is unavailable. Call cache_prepare and retry the original request. If the saved cache location is unusable, call cache_prepare with an absolute cache_dir for a new private location; Shield requests the user's in-session approval. This rebuilds committed policy only.".to_owned(),
+        "compiled-cache-unavailable" => "Shield: its compiled policy folder is unusable. Call the doctor tool and ask the user to fix the folder or choose another with shield mcp setup --cache-dir, then retry the original request.".to_owned(),
         "protection-failure" => "Shield could not verify this hook's project state. Use the doctor or status MCP tool to diagnose it, then request any necessary integration repair with mcp_setup and in-session user confirmation. Do not edit protected review state.".to_owned(),
         _ => format!("Shield blocked this tool ({code}). Call the doctor or status MCP tool and follow its in-session recovery route before retrying."),
     };
@@ -353,8 +354,13 @@ fn response(
     if let Some(reply) = sensitive_prompt(adapter, event, receipt, &path) {
         return Some(reply);
     }
-    if ["sensitive-read", "protected-access", "protected-search"]
-        .contains(&receipt["code"].as_str()?)
+    if [
+        "sensitive-read",
+        "policy-file-unknown",
+        "protected-access",
+        "protected-search",
+    ]
+    .contains(&receipt["code"].as_str()?)
     {
         let mut value = raw_deny(receipt["code"].as_str()?);
         if receipt["code"] == "protected-access"
@@ -536,6 +542,17 @@ fn sensitive_prompt(
             agent_context: None,
             reason: format!(
                 "Shield: approval required. This reads .mcp.json or agent hook settings{path}, which may hold credentials. {}",
+                adapter.spec().approval_action
+            ),
+        });
+    }
+    if receipt["code"] == "policy-file-unknown" && adapter.approval(event) == NativeApproval::Prompt
+    {
+        return Some(Reply {
+            decision: Decision::Ask,
+            agent_context: None,
+            reason: format!(
+                "Shield: approval required. This Git command can change Shield's policy files in .shield/, or Shield cannot tell whether it would. {}",
                 adapter.spec().approval_action
             ),
         });

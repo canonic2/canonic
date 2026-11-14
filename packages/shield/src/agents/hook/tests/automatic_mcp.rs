@@ -560,7 +560,7 @@ fn automatic_mcp_matching_cost_fixture() {
                 let counts = &end["fields"]["counts"];
                 for key in [
                     "policy.preparations",
-                    "source.hydrated",
+                    "policy.captures",
                     "projection.files_written",
                 ] {
                     assert_eq!(counts[key], 0, "{end}");

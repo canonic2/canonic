@@ -1,50 +1,25 @@
-//! Selected raw bytes are bound to the canonical lock, never inferred from a
-//! manifest's copies of historical whole-bundle digests.
+//! Selected raw bytes of a captured candidate, bound to its canonical lock.
 use super::{Context, Error, RuleRef};
-use crate::review::storage::{
-    Store,
-    objects::Pins,
-    sources::{self, Namespace},
-};
 use serde_json::{Value, json};
-use std::{borrow::Cow, path::Path};
-#[cfg(test)]
-mod tests;
 
 struct Source<'a> {
-    reference: &'a Value,
-    inline: Option<Cow<'a, Value>>,
-    namespace: Namespace,
-    _pin: Pins,
+    candidate: &'a Value,
 }
 impl<'a> Source<'a> {
-    fn open(context: &Context, reference: &'a Value) -> Result<Self, Error> {
-        let store = Store::inspect(Path::new(&context.project_root))?;
-        let namespace = Namespace::project(&store);
-        let pin = sources::pin_inspection(&store, reference)?;
-        let inline = if reference["kind"] == "retained-source-v2" {
-            None
-        } else if reference["kind"] == "retained-source-v1" {
-            // V1 has one indivisible object. Read it once for this view.
-            Some(Cow::Owned(namespace.captured(reference)?))
-        } else {
-            Some(Cow::Borrowed(reference))
-        };
-        Ok(Self {
-            reference,
-            inline,
-            namespace,
-            _pin: pin,
-        })
+    fn open(_context: &Context, candidate: &'a Value) -> Result<Self, Error> {
+        if !candidate.is_object() {
+            return Err(Error::CandidateUnavailable);
+        }
+        Ok(Self { candidate })
     }
     fn field(&self, field: &str, index: Option<usize>) -> Result<Value, Error> {
-        match &self.inline {
-            Some(value) => Ok(match index {
-                Some(index) => value[field].get(index).ok_or(Error::Missing)?.clone(),
-                None => value[field].clone(),
-            }),
-            None => self.namespace.field(self.reference, field, index),
-        }
+        Ok(match index {
+            Some(index) => self.candidate[field]
+                .get(index)
+                .ok_or(Error::Missing)?
+                .clone(),
+            None => self.candidate[field].clone(),
+        })
     }
     fn header(&self) -> Result<Value, Error> {
         let mut value = json!({});

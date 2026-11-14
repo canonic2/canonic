@@ -2,9 +2,7 @@
 //! identity, review dispatch and host confirmation of policy changes, served by
 //! canonic-mcp-kit's stdio driver.
 
-mod bootstrap;
 mod confirmation;
-pub(crate) use bootstrap::serve as serve_bootstrap;
 mod elicitation;
 mod frame_log;
 mod messages;
@@ -35,7 +33,6 @@ pub(crate) const MAX_MESSAGES: u64 = 1024;
 /// One enrolled project connection. A pristine diagnostic connection can adopt
 /// its first runtime epoch; retained authority and later epoch changes cannot.
 pub(crate) struct Server {
-    runtime_transition: Mutex<()>,
     review: RwLock<Arc<crate::review::Context>>,
     connection: Arc<crate::review::mcp::Connection>,
     confirmations: Mutex<confirmation::Confirmations>,
@@ -78,7 +75,6 @@ impl Server {
         let connection = Arc::new(crate::review::mcp::Connection::enrolled(&context)?);
         let preparations = Arc::new(crate::review::preparation_tasks::Runtime::new(&context));
         Ok(Self {
-            runtime_transition: Mutex::new(()),
             review: RwLock::new(Arc::new(context)),
             connection,
             confirmations: Mutex::new(confirmation::Confirmations::default()),
@@ -95,46 +91,28 @@ impl Server {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
-    /// `adopt` normalizes for a read-only call that found another process's
-    /// checkout epoch; it follows the same pristine-connection rule.
-    fn normalize_runtime(
+    /// A call that needs the project's runtime checks its review state is the
+    /// one this connection opened.
+    fn check_runtime(
         &self,
         name: &str,
         args: &serde_json::Value,
-        adopt: bool,
     ) -> Result<(), crate::review::Error> {
-        if !adopt && !crate::review::mcp::needs_runtime(name, args) {
-            return Ok(());
-        }
-        let _transition = self
-            .runtime_transition
-            .lock()
-            .map_err(|_| crate::review::Error::Locked)?;
-        let before = self.review();
-        let pristine = self
-            .confirmations
-            .lock()
-            .map_err(|_| crate::review::Error::Locked)?
-            .is_empty()
-            && self
-                .questions
-                .lock()
-                .map_err(|_| crate::review::Error::Locked)?
-                .is_empty()
-            && self.preparations.unused();
-        let current = self.connection.runtime_context(&before, pristine)?;
-        if current.project_id != before.project_id {
-            self.preparations.rebind_unused(&current)?;
-            *self
-                .review
-                .write()
-                .map_err(|_| crate::review::Error::Locked)? = Arc::new(current);
+        if crate::review::mcp::needs_runtime(name, args) {
+            let before = self.review();
+            let current = crate::review::mcp::runtime_context(&before)?;
+            if current.project_id != before.project_id {
+                *self
+                    .review
+                    .write()
+                    .map_err(|_| crate::review::Error::Locked)? = Arc::new(current);
+            }
         }
         Ok(())
     }
 
-    fn call_tool(&self, call: ToolCall, context: &stdio::Context, adopt: bool) -> Outcome {
-        if let Err(error) = self.normalize_runtime(&call.name, &call.arguments, adopt) {
+    fn call_tool(&self, call: ToolCall, context: &stdio::Context) -> Outcome {
+        if let Err(error) = self.check_runtime(&call.name, &call.arguments) {
             return self.runtime_refusal(&call, context, &error);
         }
         let review = self.review_for_request(context);
@@ -576,16 +554,7 @@ impl stdio::Handler for Server {
             let Request::Tool(call) = request else {
                 return self.non_tool(&request, context);
             };
-            // Another process may rotate the checkout epoch after this
-            // connection opened. A read-only call whose own result reports it
-            // replays once after adoption; successful calls read nothing extra.
-            let replay = (!crate::review::mcp::needs_runtime(&call.name, &call.arguments))
-                .then(|| call.clone());
-            let outcome = self.call_tool(call, context, false);
-            match replay {
-                Some(call) if checkout_changed(&outcome) => self.call_tool(call, context, true),
-                _ => outcome,
-            }
+            self.call_tool(call, context)
         })();
         if let Some(trace) = &trace {
             match &outcome {
@@ -609,16 +578,6 @@ impl stdio::Handler for Server {
             crate::review::mcp::invalid_arguments(&review, &call.name, &error.path, &error.message);
         response::tool_result(&call.name, review.agent.as_deref(), value, true, &|| Ok(()))
     }
-}
-
-/// Whether this call's own result refused because another process rotated the
-/// checkout epoch, so the server may adopt it and replay the read-only call.
-fn checkout_changed(outcome: &Outcome) -> bool {
-    matches!(outcome, Outcome::Tool(result) if result.is_error
-        && result
-            .structured_content
-            .as_ref()
-            .is_some_and(|value| value["error"]["code"] == "checkout_changed"))
 }
 
 fn needs_input_form(call: &ToolCall) -> bool {

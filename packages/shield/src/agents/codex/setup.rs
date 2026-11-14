@@ -156,7 +156,7 @@ pub(super) fn prefix_rules(prefixes: &[CodexPrefix]) -> Option<String> {
     }
     let quote = |s: &str| serde_json::to_string(s).expect("string encoding");
     let mut text = format!(
-        "{PREFIX_RULES_HEADER}\n# Shield rewrites this file on activation and setup; do not edit it.\n# Shield's hooks still decide every command these prefixes cover.\n"
+        "{PREFIX_RULES_HEADER}\n# Shield rewrites this file when the policy files change and on setup; do not edit it.\n# Shield's hooks still decide every command these prefixes cover.\n"
     );
     for (pattern, owners) in patterns {
         let sources: Vec<String> = owners
@@ -187,7 +187,7 @@ pub(super) fn prefix_rules(prefixes: &[CodexPrefix]) -> Option<String> {
     Some(text)
 }
 
-/// Codex's tool prompt is the only confirmation before apply activates policy,
+/// Codex's tool prompt is the only confirmation before apply writes the policy files,
 /// so apply prompts even when the operator marks it.
 const ALWAYS_PROMPT: &str = "policy_apply";
 

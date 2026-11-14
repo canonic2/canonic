@@ -41,29 +41,7 @@ fn action_request_kinds_sdk_uses_only_the_registered_claude_form_channel() {
 }
 
 #[test]
-fn bootstrap_pinned_old_launch_selects_nearest_copy_or_move_for_review() {
-    let root = assert_fs::TempDir::new().unwrap();
-    let original = root.path().join("original");
-    configured(&original);
-    let original = original.canonicalize().unwrap();
-    let destination = root.path().join("destination");
-    configured(&destination);
-    let destination = destination.canonicalize().unwrap();
-    let nested = destination.join("src/child");
-    fs::create_dir_all(&nested).unwrap();
-    fs::write(
-        destination.join(".shield/review/state.json"),
-        json!({"schema_version":1,"project_root":original}).to_string(),
-    )
-    .unwrap();
-    assert_eq!(project_path(Some(&original), &nested).unwrap(), destination);
-    fs::rename(&original, root.path().join("original-moved")).unwrap();
-    assert_eq!(project_path(Some(&original), &nested).unwrap(), destination);
-    assert_eq!(project_path(None, &nested).unwrap(), destination);
-}
-
-#[test]
-fn serve_project_agrees_with_hooks_in_a_worktree_awaiting_enrollment() {
+fn serve_project_agrees_with_hooks_in_a_fresh_worktree() {
     let root = assert_fs::TempDir::new().unwrap();
     let parent = root.path().join("acme");
     configured(&parent);
@@ -86,13 +64,15 @@ fn serve_project_agrees_with_hooks_in_a_worktree_awaiting_enrollment() {
         worktree
     );
     assert_eq!(session_project(&worktree).as_ref(), Some(&served));
-    // So its enrollment review, the recovery for hooks that cannot open the
-    // unenrolled worktree, runs in the worktree rather than the parent.
-    assert!(
-        crate::review::bootstrap::inspect(&served)
-            .unwrap()
-            .bootstrap_required()
-    );
+    // The worktree's files are its policy: it opens with no enrollment step.
+    let opened = review_context(&ReviewContext {
+        project: served.clone(),
+        agent: None,
+        session_id: None,
+        tool_use_id: None,
+    })
+    .unwrap();
+    assert_eq!(Path::new(&opened.project_root), served);
     // Outside every project the explicit selection stands.
     assert_eq!(
         serve_project(Some(&parent), root.path(), None).unwrap(),
@@ -101,7 +81,7 @@ fn serve_project_agrees_with_hooks_in_a_worktree_awaiting_enrollment() {
 }
 
 #[test]
-fn bootstrap_other_enrollments_cannot_replace_explicit_authority() {
+fn other_projects_cannot_replace_an_explicit_selection() {
     let root = assert_fs::TempDir::new().unwrap();
     let selected = root.path().join("selected");
     let current = root.path().join("current");
@@ -132,43 +112,9 @@ fn bootstrap_other_enrollments_cannot_replace_explicit_authority() {
     );
 }
 
-#[test]
-fn bootstrap_corrupt_or_linked_claims_cannot_redirect_explicit_authority() {
-    let root = assert_fs::TempDir::new().unwrap();
-    let selected = root.path().join("selected");
-    let current = root.path().join("current");
-    configured(&selected);
-    configured(&current);
-    let selected = selected.canonicalize().unwrap();
-    let current = current.canonicalize().unwrap();
-    let state = current.join(".shield/review/state.json");
-    fs::write(&state, "broken").unwrap();
-    assert_eq!(project_path(Some(&selected), &current).unwrap(), selected);
-    // A future format can name the old root for diagnostics, but only the
-    // copied destination may then be opened; its strict codec refuses it.
-    fs::write(
-        &state,
-        json!({"schema_version":999,"project_root":selected}).to_string(),
-    )
-    .unwrap();
-    assert_eq!(project_path(Some(&selected), &current).unwrap(), current);
-    #[cfg(unix)]
-    {
-        let other = root.path().join("linked-state.json");
-        fs::write(
-            &other,
-            json!({"schema_version":1,"project_root":selected}).to_string(),
-        )
-        .unwrap();
-        fs::remove_file(&state).unwrap();
-        std::os::unix::fs::symlink(other, &state).unwrap();
-        assert_eq!(project_path(Some(&selected), &current).unwrap(), selected);
-    }
-}
-
 #[cfg(unix)]
 #[test]
-fn bootstrap_discovery_canonicalizes_cwd_without_changing_explicit_authority() {
+fn discovery_canonicalizes_cwd_without_changing_an_explicit_selection() {
     let root = assert_fs::TempDir::new().unwrap();
     let selected = root.path().join("selected");
     let current = root.path().join("current");

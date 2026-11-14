@@ -230,21 +230,14 @@ fn keys(answer: &Value, view: &[u8]) -> Vec<u8> {
         }
     } else if contains(view, b"Clearexistinghistory") && ["yes", "no"].contains(&answer) {
         if answer == "yes" { "2\r" } else { "1\r" }
-    } else if contains(view, b"Reviewpendingproposals")
-        && ["manual", "repair", "history"].contains(&answer)
-    {
-        match answer {
-            "manual" => "3\r",
-            "repair" => "4\r",
-            _ => "5\r",
-        }
+    } else if contains(view, b"Reviewpendingproposals") && answer == "history" {
+        "3\r"
     } else {
         match answer {
             "no" | "done" => "\r",
-            "yes" | "argv" | "manual" | "reject" | "deny" | "block" | "strict" | "cloud"
-            | "off" => "2\r",
-            "allow" | "repair" | "loose" => "3\r",
-            "history" => "4\r",
+            "yes" | "argv" | "reject" | "deny" | "block" | "strict" | "cloud" | "off"
+            | "history" => "2\r",
+            "allow" | "loose" => "3\r",
             "review" | "accept" | "recommended" => "1\r",
             "leave" => "\x1b",
             _ => return format!("{answer}\r").into_bytes(),

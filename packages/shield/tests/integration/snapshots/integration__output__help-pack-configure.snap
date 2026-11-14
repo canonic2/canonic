@@ -18,6 +18,6 @@ Options:
       --override <ID=VALUE>            Override a rule: `off`, `allow`, `ask`, `deny`, `on_unmet:ask` or `on_unmet:deny`. Repeatable
       --clear-override <ID>            Remove a rule override. Repeatable
       --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
-      --cache-dir <CACHE_DIR>          Compiled cache location for init, MCP setup or cache preparation
+      --cache-dir <CACHE_DIR>          Folder for this project's compiled policy plans, chosen at init or MCP setup
       --local                          Change your uncommitted local configuration instead of the shared one
   -h, --help                           Print help

@@ -87,7 +87,7 @@ fn add(context: &Context, connection: &Connection, reference: &str, key: &str) {
     );
 }
 fn unchanged_policy(before: &review::model::State, after: &review::model::State) {
-    assert_eq!(json!(after.active), json!(before.active));
+    assert_eq!(after.policy_revision, before.policy_revision);
     assert_eq!(after.operator, before.operator);
     assert_eq!(after.candidates, before.candidates);
 }
@@ -223,18 +223,10 @@ fn cross_source_add_captures_colliding_names_transitive_edges_and_offline_remova
 
 /// Moves an enrolled source to a new alias, keeping its identity.
 fn rename_source(context: &Context, from: &str, to: &str) {
-    Store::open(Path::new(&context.project_root))
-        .unwrap()
-        .update(context, &|| Ok(()), |state| {
-            let value = state.operator["sources"]
-                .as_object_mut()
-                .unwrap()
-                .remove(from)
-                .unwrap();
-            state.operator["sources"][to] = value;
-            Ok(json!({}))
-        })
-        .unwrap();
+    review::settings::registries_fixture(context, |registries| {
+        let source = registries.sources.remove(from).unwrap();
+        registries.sources.insert(to.into(), source);
+    });
 }
 
 /// After the update, each row keeps its source and profile, pinned rows stay
@@ -501,21 +493,18 @@ fn cross_source_enrollment_and_artifact_failures_preserve_policy_and_pending_pro
         let other = Local::new();
         match failure {
             "unenrolled" | "alias" | "binding" => {
-                Store::open(Path::new(&context.project_root))
-                    .unwrap()
-                    .update(&context, &|| Ok(()), |state| {
-                        let sources = state.operator["sources"].as_object_mut().unwrap();
-                        sources.remove("b");
-                        if failure != "unenrolled" {
-                            let mut source = other.source();
-                            if failure == "binding" {
-                                source["identity"] = json!(b.identity);
-                            }
-                            sources.insert("b".into(), source);
+                review::settings::registries_fixture(&context, |registries| {
+                    registries.sources.remove("b");
+                    if failure != "unenrolled" {
+                        let mut source = other.source();
+                        if failure == "binding" {
+                            source["identity"] = json!(b.identity);
                         }
-                        Ok(json!({}))
-                    })
-                    .unwrap();
+                        registries
+                            .sources
+                            .insert("b".into(), serde_json::from_value(source).unwrap());
+                    }
+                });
             }
             "artifact" => {
                 // A retained artifact is already verified and need not be

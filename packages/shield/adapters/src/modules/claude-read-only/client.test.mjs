@@ -24,7 +24,7 @@ test('missing compiled policy recovers and unrecoverable cache still blocks', as
   await mkdir(path);
   const blocked = await call(input);
   assert.equal(decision(blocked), 'deny');
-  assert.ok(blocked.hookSpecificOutput.permissionDecisionReason.includes(`shield cache prepare --project '${fixture.root}'`));
+  assert.ok(blocked.hookSpecificOutput.permissionDecisionReason.includes(`shield doctor --project '${fixture.root}'`));
   assert.deepEqual(authorizationState(await readFile(fixture.statePath)), authorizationState(fixture.state));
   await rm(path, { recursive: true });
   assert.equal(decision(await call(input)), 'allow');

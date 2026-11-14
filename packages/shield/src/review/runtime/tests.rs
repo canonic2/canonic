@@ -1,22 +1,10 @@
-//! Filesystem-backed activation, reload, boundary and recovery acceptance.
+//! Filesystem-backed request evaluation from the policy files and its boundaries.
 use super::*;
-use crate::review::tests::enrolled;
+use crate::{
+    policy,
+    review::{Checkpoint, tests::enrolled},
+};
 use std::fs;
-
-fn activate_current(context: &Context, previous: Option<&str>) -> Value {
-    try_activate_current(context, previous).unwrap()
-}
-
-fn try_activate_current(context: &Context, previous: Option<&str>) -> Result<Value, Error> {
-    let status = status(context)?;
-    publish_fixture(
-        context,
-        status["review"]["policy_revision"].as_str().unwrap(),
-        status["review"]["candidate_digest"].as_str().unwrap(),
-        previous,
-        &|| Ok(()),
-    )
-}
 
 fn evaluate(
     context: &Context,
@@ -25,7 +13,7 @@ fn evaluate(
 ) -> Result<Value, Error> {
     let snapshot = consumer::load(context, checkpoint)?;
     let evaluated = snapshot.evaluate_controlled(request.clone(), checkpoint)?;
-    Ok(json!({"active":snapshot.metadata(),"evaluation":evaluated.evaluation()}))
+    Ok(json!({"identity":snapshot.metadata(),"evaluation":evaluated.evaluation()}))
 }
 
 fn request(context: &Context) -> policy::Request {
@@ -38,25 +26,18 @@ fn request(context: &Context) -> policy::Request {
 }
 
 #[test]
-fn stale_binding_wrong_predecessor_cancellation_and_mcp_cannot_activate() {
+fn requests_use_the_policy_files_and_refuse_other_projects() {
     let (_root, context) = enrolled();
-    let status = status(&context).unwrap();
-    let revision = status["review"]["policy_revision"].as_str().unwrap();
-    let digest = status["review"]["candidate_digest"].as_str().unwrap();
-    assert!(publish_fixture(&context, "stale", digest, None, &|| Ok(())).is_err());
-    assert!(publish_fixture(&context, revision, "altered", None, &|| Ok(())).is_err());
-    assert!(publish_fixture(&context, revision, digest, Some("other"), &|| Ok(())).is_err());
-    let mut mcp = context.clone();
-    mcp.surface = "mcp".into();
-    assert!(matches!(
-        publish_fixture(&mcp, revision, digest, None, &|| Ok(())),
-        Err(Error::ApprovalRequired)
-    ));
+    let evaluated = evaluate(&context, &request(&context), &|| Ok(())).unwrap();
+    assert_eq!(
+        evaluated["identity"]["policy_revision"],
+        current_identity(&context)["policy_revision"]
+    );
     let calls = std::cell::Cell::new(0);
     assert!(
-        publish_fixture(&context, revision, digest, None, &|| {
+        evaluate(&context, &request(&context), &|| {
             calls.set(calls.get() + 1);
-            if calls.get() >= 3 {
+            if calls.get() >= 2 {
                 Err(policy::Error::Interrupted)
             } else {
                 Ok(())
@@ -64,10 +45,6 @@ fn stale_binding_wrong_predecessor_cancellation_and_mcp_cannot_activate() {
         })
         .is_err()
     );
-    assert!(super::status(&context).unwrap()["active"].is_null());
-    let active = activate_current(&context, None);
-    assert_eq!(activate_current(&context, None), active);
-    assert!(publish_fixture(&context, revision, digest, Some("wrong"), &|| Ok(())).is_err());
     let mut other = context.clone();
     other.project_id = "a".repeat(64);
     assert!(evaluate(&other, &request(&other), &|| Ok(())).is_err());
@@ -77,12 +54,32 @@ fn stale_binding_wrong_predecessor_cancellation_and_mcp_cannot_activate() {
 }
 
 #[test]
-fn corrupt_active_state_blocks_without_mutation() {
+fn checked_runs_decide_by_the_files_as_they_are_now() {
     let (root, context) = enrolled();
-    activate_current(&context, None);
+    let decision = |context: &Context| {
+        evaluate(context, &request(context), &|| Ok(())).unwrap()["evaluation"]["decision"].clone()
+    };
+    assert_ne!(decision(&context), "allow");
+    // A person adds the rule by hand; the next checked run follows it.
+    fs::write(
+        root.path().join(".shield/config.yml"),
+        "schema_version: 1\npacks: []\nrules: rules.yml\n",
+    )
+    .unwrap();
+    fs::write(
+        root.path().join(".shield/rules.yml"),
+        r#"{"schema_version":1,"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"],"rules":[{"id":"acme-read","decision":"allow","reason":"Acme read","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"exact","values":["read"]}}}]}"#,
+    )
+    .unwrap();
+    assert_eq!(decision(&context), "allow");
+}
+
+#[test]
+fn corrupt_review_state_blocks_without_mutation() {
+    let (root, context) = enrolled();
     let file = root.path().join(".shield/review/state.json");
     let mut state: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
-    state["active"]["candidate_digest"] = json!("altered");
+    state["project_id"] = json!("altered");
     fs::write(&file, state.to_string()).unwrap();
     assert!(evaluate(&context, &request(&context), &|| Ok(())).is_err());
     assert!(status(&context).is_err());

@@ -25,21 +25,17 @@ fn fixture() -> (assert_fs::TempDir, review::Context, Project) {
     )
     .unwrap();
     let context = review::open(root.path()).unwrap();
-    activate(&context, None);
     let project = Project::open(root.path()).unwrap();
     (root, context, project)
 }
 
-fn activate(context: &review::Context, previous: Option<&str>) -> Value {
-    let status = review::runtime::status(context).unwrap();
-    review::runtime::publish_fixture(
+/// One ordinary operator write to the review state.
+fn write(context: &review::Context) -> Result<Value, review::Error> {
+    review::storage::Store::open(std::path::Path::new(&context.project_root))?.update_checkpoint(
         context,
-        status["review"]["policy_revision"].as_str().unwrap(),
-        status["review"]["candidate_digest"].as_str().unwrap(),
-        previous,
         &|| Ok(()),
+        |_| Ok(Value::Null),
     )
-    .unwrap()
 }
 
 fn evidence(project: &Project, action: &str) -> EvaluatedRequest {
@@ -125,9 +121,8 @@ fn policy_allow_cannot_authorize_classified_operator_or_state_access() {
         ));
         assert_eq!(fs::read(&path).unwrap(), original);
     }
-    // Independent operator CLI/core activation remains available.
-    let active = review::runtime::status(&context).unwrap()["active"].clone();
-    activate(&context, active["activation_id"].as_str());
+    // Independent operator CLI/core writes remain available.
+    write(&context).unwrap();
 }
 
 #[test]
@@ -154,29 +149,18 @@ fn foreign_and_corrupt_state_never_reach_allow_callback() {
 }
 
 #[test]
-fn allow_handoff_excludes_activation_until_the_callback_returns() {
+fn allow_handoff_excludes_state_writes_until_the_callback_returns() {
     let (_root, context, project) = fixture();
-    let active = review::runtime::status(&context).unwrap()["active"].clone();
     handoff(
         &project,
         AgentAccess::Ordinary,
         evidence(&project, "read"),
         |_, _| {
-            let status = review::runtime::status(&context).unwrap();
-            assert!(matches!(
-                review::runtime::publish_fixture(
-                    &context,
-                    status["review"]["policy_revision"].as_str().unwrap(),
-                    status["review"]["candidate_digest"].as_str().unwrap(),
-                    active["activation_id"].as_str(),
-                    &|| Ok(()),
-                ),
-                Err(review::Error::Locked)
-            ));
+            assert!(matches!(write(&context), Err(review::Error::Locked)));
         },
     )
     .unwrap();
-    activate(&context, active["activation_id"].as_str());
+    write(&context).unwrap();
 }
 
 #[test]

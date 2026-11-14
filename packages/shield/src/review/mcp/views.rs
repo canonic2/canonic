@@ -10,6 +10,7 @@ use std::{
     path::Path,
     sync::{Arc, OnceLock},
 };
+// `Store` and `Path` serve the active handle below.
 mod paging;
 #[cfg(test)]
 mod reclamation_tests;
@@ -23,20 +24,7 @@ pub(super) struct Captured {
     pub(super) candidate: Value,
     pub(super) metadata: Value,
     evaluator: OnceLock<configuration::Evaluator>,
-    cached: Option<Cached>,
-    source: Option<SourceLease>,
     revision: String,
-}
-#[derive(Clone)]
-struct Cached {
-    artifact: crate::review::cache::Artifact,
-    root: String,
-    project_id: String,
-}
-#[derive(Clone)]
-struct SourceLease {
-    _pins: crate::review::storage::objects::Pins,
-    root: String,
 }
 impl Captured {
     pub(super) fn revision(&self) -> &str {
@@ -46,15 +34,12 @@ impl Captured {
         self.evaluator.get().ok_or(Error::CandidateUnavailable)
     }
     fn load_evaluator(&self) -> Result<configuration::Evaluator, Error> {
-        if let Some(cached) = &self.cached
-            && let Ok(evaluator) = cached.artifact.load(&cached.root, &cached.project_id)
-            && evaluator.revision() == self.revision
-        {
-            return Ok(evaluator);
-        }
         // Rebuild only this exact immutable capture, never current project files.
         configuration::Evaluator::new_for_revision(
-            snapshots(&BTreeMap::from([("project".into(), self.source()?)]))?,
+            snapshots(&BTreeMap::from([(
+                "project".into(),
+                self.candidate.clone(),
+            )]))?,
             &self.revision,
         )
         .map_err(Error::from)
@@ -63,17 +48,9 @@ impl Captured {
         Self {
             candidate: self.candidate.clone(),
             metadata: self.metadata.clone(),
-            cached: self.cached.clone(),
-            source: self.source.clone(),
             revision: self.revision.clone(),
             evaluator: OnceLock::from(evaluator),
         }
-    }
-    pub(super) fn source(&self) -> Result<Value, Error> {
-        self.source.as_ref().map_or_else(
-            || Ok(self.candidate.clone()),
-            |source| Store::inspect(Path::new(&source.root))?.captured_candidate(&self.candidate),
-        )
     }
 }
 #[derive(Clone)]
@@ -103,9 +80,6 @@ pub(super) struct Views {
     approval_bytes: usize,
 }
 impl Views {
-    pub(in crate::review::mcp) fn retained_state(&self) -> bool {
-        !self.handles.is_empty() || !self.cursors.is_empty() || !self.approvals.is_empty()
-    }
     pub(super) fn new(seed: String) -> Self {
         Self {
             seed,
@@ -161,54 +135,19 @@ impl Views {
         crate::diagnostics::trace::count("handle.admission_encodings", 1);
         let bytes = crate::json::encoded_len(&[candidate, metadata])
             .map_err(|_| Error::Invalid("candidate encoding"))?;
-        let retained = matches!(
-            candidate["kind"].as_str(),
-            Some("retained-source-v1" | "retained-source-v2")
-        );
         let revision = if let Some(prepared) = &prepared {
-            if retained {
-                crate::review::inspection::source::revision(
-                    context,
-                    candidate,
-                    Some(prepared.revision()),
-                )?;
-            }
             prepared.revision().to_owned()
-        } else if retained {
-            crate::review::inspection::source::revision(context, candidate, expected)?
         } else if let Some(expected) = expected {
             configuration::recorded_effective(candidate, expected)?;
             expected.into()
         } else {
             configuration::recorded_revision(candidate)?
         };
-        let source = if retained {
-            let store = Store::inspect(Path::new(&context.project_root))?;
-            Some(SourceLease {
-                _pins: crate::review::storage::sources::pin_inspection(&store, candidate)?,
-                root: context.project_root.clone(),
-            })
-        } else {
-            None
-        };
-        let source_bytes = if retained {
-            usize::try_from(
-                candidate["length"]
-                    .as_u64()
-                    .ok_or(Error::CandidateUnavailable)?,
-            )
-            .map_err(|_| Error::Overloaded)?
-        } else {
-            0
-        };
-        let length = bytes
-            .saturating_add(source_bytes)
-            .saturating_add(source.as_ref().map_or(0, |source| source.root.len()))
-            .saturating_add(
-                prepared
-                    .as_ref()
-                    .map_or(0, |plan| plan.compiled_bytes().len()),
-            );
+        let length = bytes.saturating_add(
+            prepared
+                .as_ref()
+                .map_or(0, |plan| plan.compiled_bytes().len()),
+        );
         self.handle_room(context, length, 1, &[keep])?;
         let id = self.id("candidate");
         self.bytes += length;
@@ -223,8 +162,6 @@ impl Views {
                     candidate: candidate.clone(),
                     metadata: metadata.clone(),
                     evaluator: prepared.map_or_else(OnceLock::new, OnceLock::from),
-                    cached: None,
-                    source,
                     revision,
                 }),
             },
@@ -245,14 +182,7 @@ impl Views {
         if captured.evaluator.get().is_none()
             && let Some(prepared) = prepared
         {
-            let reserved = captured
-                .cached
-                .as_ref()
-                .map(|cached| usize::try_from(cached.artifact.byte_len()))
-                .transpose()
-                .map_err(|_| Error::Overloaded)?
-                .unwrap_or(0);
-            let extra = prepared.compiled_bytes().len().saturating_sub(reserved);
+            let extra = prepared.compiled_bytes().len();
             self.handle_room(context, extra, 0, &[Some(id), keep])?;
             self.bytes += extra;
             let handle = self
@@ -271,62 +201,36 @@ impl Views {
     pub(super) fn active_readonly(&mut self, context: &Context) -> Result<String, Error> {
         self.active_with(context, true)
     }
+    /// The handle of the policy the files hold now, which is the policy
+    /// requests are decided by. A read-only view reuses a cached plan but never
+    /// compiles one; evaluation prepares it on demand.
     fn active_with(&mut self, context: &Context, readonly: bool) -> Result<String, Error> {
-        let (state, pins) = if readonly {
-            Store::inspect(Path::new(&context.project_root))?.read_pinned_diagnostics()?
+        let root = Path::new(&context.project_root);
+        let state = if readonly {
+            Store::inspect(root)?.read_inspection_following_files()?
         } else {
-            Store::open(Path::new(&context.project_root))?.read_pinned_checkpoint()?
+            Store::open(root)?.read_following_files()?
         };
         state.check(context)?;
-        let active = state
-            .active
-            .as_ref()
-            .ok_or(Error::Invalid("project has no confirmed active policy"))?;
-        active.validate_binding(&state)?;
-        let key = identity(active.project_candidate()?, &state.operator);
-        if let Some(id) = self.identities.get(&key).cloned() {
-            self.get(&id)?;
-            return Ok(id);
+        let candidate = state
+            .candidates
+            .get("project")
+            .ok_or(Error::Invalid("project has no policy"))?;
+        let cache = crate::review::files::cache_for(&state.operator).ok();
+        let plan = if readonly {
+            cache.and_then(|cache| crate::review::files::cached_in(root, &cache))
+        } else {
+            Some(crate::review::files::load_in(root, cache.as_deref())?.evaluator)
         }
-        let compiled = &active.compiled;
-        let candidate = active.project_candidate()?.clone();
-        let source_bytes = usize::try_from(candidate["length"].as_u64().unwrap_or_default())
-            .map_err(|_| Error::Overloaded)?;
-        let length = json!([candidate, state.operator])
-            .to_string()
-            .len()
-            .saturating_add(source_bytes)
-            .saturating_add(usize::try_from(compiled.byte_len()).map_err(|_| Error::Overloaded)?)
-            .saturating_add(compiled.inspection_byte_len()?);
-        self.handle_room(context, length, 1, &[])?;
-        let id = self.id("candidate");
-        self.bytes += length;
-        self.handles.insert(
-            id.clone(),
-            Handle {
-                key: key.clone(),
-                bytes: length,
-                used: self.sequence,
-                resolutions: BTreeMap::new(),
-                captured: Arc::new(Captured {
-                    candidate,
-                    metadata: state.operator,
-                    evaluator: OnceLock::new(),
-                    revision: active.revision().into(),
-                    source: Some(SourceLease {
-                        _pins: pins,
-                        root: state.project_root.clone(),
-                    }),
-                    cached: Some(Cached {
-                        artifact: compiled.clone(),
-                        root: state.project_root,
-                        project_id: state.project_id,
-                    }),
-                }),
-            },
-        );
-        self.identities.insert(key, id.clone());
-        Ok(id)
+        .filter(|plan| plan.revision() == state.policy_revision);
+        self.retain_prepared(
+            context,
+            candidate,
+            &state.operator,
+            plan,
+            Some(&state.policy_revision),
+            None,
+        )
     }
     pub(super) fn get(&mut self, id: &str) -> Result<Arc<Captured>, Error> {
         self.sequence += 1;
@@ -374,14 +278,7 @@ impl Views {
             return Ok(captured);
         }
         let evaluator = captured.load_evaluator()?;
-        let reserved = captured
-            .cached
-            .as_ref()
-            .map(|cached| usize::try_from(cached.artifact.byte_len()))
-            .transpose()
-            .map_err(|_| Error::Overloaded)?
-            .unwrap_or(0);
-        let extra = evaluator.compiled_bytes().len().saturating_sub(reserved);
+        let extra = evaluator.compiled_bytes().len();
         self.handle_room(context, extra, 0, &[Some(id)])?;
         let prepared = Arc::new(captured.with_evaluator(evaluator));
         self.bytes += extra;
@@ -432,11 +329,17 @@ impl Views {
     }
 }
 fn identity(candidate: &Value, metadata: &Value) -> String {
+    identity_of(&crate::review::candidate_identity(candidate), metadata)
+}
+
+/// [`identity`] of a candidate known by its identity alone, such as a
+/// proposal's, without rebuilding it.
+fn identity_of(candidate: &str, metadata: &Value) -> String {
     crate::policy::fingerprint(
         json!([
             env!("CARGO_PKG_VERSION"),
             crate::policy::compiled::FORMAT,
-            crate::review::storage::sources::candidate_identity(candidate),
+            candidate,
             metadata
         ])
         .to_string()
@@ -486,7 +389,7 @@ mod tests {
             .retain(&context, &state.candidates["project"], &state.operator)
             .unwrap();
         let captured = views.get(&id).unwrap();
-        let candidate = captured.source().unwrap();
+        let candidate = captured.candidate.clone();
         let rollback = views.clone();
         let before = views.bytes;
         let first = views.resolution(&id, &candidate, 0, &source).unwrap();
@@ -555,25 +458,39 @@ mod tests {
     }
 
     #[test]
-    fn active_handle_admission_charges_its_retained_coverage_description() {
+    fn the_active_handle_is_the_policy_the_files_hold() {
         let root = assert_fs::TempDir::new().unwrap();
-        let bundle =
-            crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None)
-                .unwrap();
+        let config = "schema_version: 1\npacks: []\n";
+        let bundle = crate::configuration::Bundle::capture(config, &[], None).unwrap();
         let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
-        let mut views = Views::new("acme-descriptor-budget".into());
-        let id = views.active(&context).unwrap();
-        let captured = views.get(&id).unwrap();
-        let artifact = &captured.cached.as_ref().unwrap().artifact;
-        let description = artifact.inspection_byte_len().unwrap();
-        assert!(description > 0);
-        let ordinary = json!([captured.candidate, captured.metadata])
-            .to_string()
-            .len()
-            + usize::try_from(captured.candidate["length"].as_u64().unwrap()).unwrap()
-            + usize::try_from(artifact.byte_len()).unwrap();
-        assert_eq!(views.handles[&id].bytes, ordinary + description);
-        assert_eq!(views.bytes, ordinary + description);
+        let path = root.path().join(".shield/config.yml");
+        std::fs::write(&path, config).unwrap();
+        let mut views = Views::new("acme-files".into());
+        let first = views.active(&context).unwrap();
+        let files = crate::review::files::load(root.path()).unwrap();
+        assert_eq!(
+            views.get(&first).unwrap().revision(),
+            files.evaluator.revision()
+        );
+        assert!(views.get(&first).unwrap().evaluator().is_ok());
+
+        // A person edits the files; the next handle is their policy.
+        std::fs::write(
+            &path,
+            format!(
+                "{config}access_paths:\n  read:\n  - {}\n",
+                crate::test_support::absolute("/srv/acme")
+            ),
+        )
+        .unwrap();
+        let second = views.active_readonly(&context).unwrap();
+        assert_ne!(first, second);
+        let edited = crate::review::files::load(root.path()).unwrap();
+        assert_ne!(edited.evaluator.revision(), files.evaluator.revision());
+        assert_eq!(
+            views.get(&second).unwrap().revision(),
+            edited.evaluator.revision()
+        );
     }
 
     #[test]

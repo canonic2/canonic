@@ -14,7 +14,6 @@ fn parity_catalog_covers_shared_cli_verbs_with_explicit_lifecycle_exceptions() {
         "history",
         "session-grant",
         "protection",
-        "cache",
         "docs",
         "policy",
         "mcp",

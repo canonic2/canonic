@@ -36,20 +36,20 @@ fn request_links_cross_threads_and_keep_nested_work_and_other_requests_separate(
         {
             let _span = span("outer");
             let _nested = span("inner");
-            count("source.hydrated", 2);
+            count("policy.captures", 2);
         }
         let link = first.clone();
         thread::spawn(move || {
             let _scope = link.enter();
             let _span = span("worker");
-            count("source.hydrated", 1);
+            count("policy.captures", 1);
         })
         .join()
         .unwrap();
         {
             let _scope = second.enter();
             let _span = span("other");
-            count("source.hydrated", 5);
+            count("policy.captures", 5);
         }
         first.finish("success");
         second.finish("refused");
@@ -65,8 +65,8 @@ fn request_links_cross_threads_and_keep_nested_work_and_other_requests_separate(
         .filter(|v| v["event"] == "request_end")
         .collect();
     assert_eq!(ended.len(), 2);
-    assert_eq!(ended[0]["fields"]["counts"]["source.hydrated"], 3);
-    assert_eq!(ended[1]["fields"]["counts"]["source.hydrated"], 5);
+    assert_eq!(ended[0]["fields"]["counts"]["policy.captures"], 3);
+    assert_eq!(ended[1]["fields"]["counts"]["policy.captures"], 5);
     assert_ne!(
         ended[0]["fields"]["trace_id"],
         ended[1]["fields"]["trace_id"]

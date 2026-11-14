@@ -41,7 +41,13 @@ fn history_control_shipping_permission_drift_accepts_or_declines_on_the_same_con
                             0o600
                         );
                         if args["enabled"] == false {
-                            assert_eq!(after["history_enabled"], false);
+                            // The setting lives in the policy files now.
+                            let status = transport.call(json!(13), "status", &json!({}));
+                            assert_eq!(
+                                status["result"]["structuredContent"]["data"]["history"]["enabled"],
+                                false,
+                                "{status}"
+                            );
                         }
                         if args["purge"] == true || args["limit"].is_number() {
                             assert_ne!(after["history_generation"], before["history_generation"]);
@@ -58,7 +64,6 @@ fn history_control_shipping_permission_drift_accepts_or_declines_on_the_same_con
                     }
                     assert_eq!(fs::metadata(&path).unwrap().ino(), inode);
                     assert_eq!(after["policy_revision"], before["policy_revision"]);
-                    assert_eq!(after["active"], before["active"]);
                     let status = transport.call(json!(12), "status", &json!({}));
                     assert_eq!(status["result"]["isError"], false, "{status}");
                 }

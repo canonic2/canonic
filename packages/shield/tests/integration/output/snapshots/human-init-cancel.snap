@@ -4,7 +4,7 @@ expression: text
 ---
 $ shield init --no-setup --no-baseline
 --- terminal
-Setting up Shield. Nothing is activated until you confirm.
+Setting up Shield. Nothing is written until you confirm.
 Initialize Shield in [PROJECT]
 
 Policy

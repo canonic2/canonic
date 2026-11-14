@@ -1,42 +1,15 @@
-//! Bounded object-directory admission and kernel-held reader pins.
-mod checkpoint;
+//! Owned private regular files and directory mutexes for review storage.
 use super::{Error, private};
-pub(in crate::review) use checkpoint::Checkpoint;
 use std::{
-    collections::BTreeSet,
     fs::{self, File, OpenOptions},
-    io::Read,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
-pub(in crate::review) const BYTE_LIMIT: u64 = 4 * 1024 * 1024 * 1024;
-pub(in crate::review) const RESERVE: u64 = 1024 * 1024 * 1024;
 pub(in crate::review) const FILE_LIMIT: usize = 4096;
-fn full(kind: crate::review::CapacityKind, needed: usize, limit: usize) -> Error {
-    Error::Capacity {
-        kind,
-        pending: 0,
-        retained: needed,
-        limit,
-    }
-}
-pub(in crate::review) type Pins = Arc<Vec<File>>;
-pub(in crate::review) fn reader_pinned(path: &Path) -> Result<bool, Error> {
-    let file = open(path, true, false)?;
-    match file.try_lock() {
-        Ok(()) => Ok(false),
-        Err(fs::TryLockError::WouldBlock) => Ok(true),
-        Err(fs::TryLockError::Error(error)) => Err(error.into()),
-    }
-}
-type SweepRow = (std::ffi::OsString, PathBuf, u64, Option<File>);
 
 pub(in crate::review) struct Directory {
     path: PathBuf,
     guard: File,
-    bytes: u64,
-    files: usize,
 }
 
 fn open(path: &Path, write: bool, create: bool) -> Result<File, Error> {
@@ -67,8 +40,8 @@ pub(in crate::review) fn read_file(path: &Path) -> Result<File, Error> {
     open(path, false, false)
 }
 
-/// Share the namespace publication mutex through a short final authority guard.
-/// The caller initializes and validates the private directory before acquiring.
+/// Share the directory's mutex through a short final authority guard. The
+/// caller initializes and validates the private directory before acquiring.
 pub(in crate::review) fn read_lease(path: &Path) -> Result<File, Error> {
     let file = read_file(&path.join(".objects.lock"))?;
     file.try_lock_shared().map_err(|_| Error::Locked)?;
@@ -98,26 +71,6 @@ pub(in crate::review) fn anomalies(path: &Path) -> Result<Vec<PathBuf>, Error> {
         }
     }
     Ok(problems)
-}
-
-/// Exact comparison with fixed working memory and no link-following open.
-pub(in crate::review) fn same_bytes(path: &Path, bytes: &[u8]) -> Result<bool, Error> {
-    let mut file = match read_file(path) {
-        Ok(file) => file,
-        Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(error),
-    };
-    if file.metadata()?.len() != bytes.len() as u64 {
-        return Ok(false);
-    }
-    let mut buffer = vec![0_u8; 64 * 1024];
-    for chunk in bytes.chunks(buffer.len()) {
-        file.read_exact(&mut buffer[..chunk.len()])?;
-        if &buffer[..chunk.len()] != chunk {
-            return Ok(false);
-        }
-    }
-    Ok(true)
 }
 
 fn checked(path: &Path, file: &File) -> Result<(), Error> {
@@ -167,7 +120,7 @@ impl Directory {
         checked(&self.path.join(".objects.lock"), &self.guard)
     }
     /// Callers verify/create the private directory before entering. The stable
-    /// mutex serializes publication and admission, never ordinary evaluation.
+    /// mutex serializes its writers, never ordinary evaluation.
     pub(in crate::review) fn enter(path: &Path) -> Result<Self, Error> {
         Self::enter_attempts(path, 20, true)
     }
@@ -176,8 +129,7 @@ impl Directory {
         Self::enter_attempts(path, 1, true)
     }
 
-    /// Inspection may pin existing objects, but never creates a missing mutex
-    /// or waits behind maintenance merely to expose an optional handle.
+    /// Inspection never creates a missing mutex or waits behind maintenance.
     pub(in crate::review) fn inspect(path: &Path) -> Result<Self, Error> {
         Self::enter_attempts(path, 1, false)
     }
@@ -210,202 +162,6 @@ impl Directory {
         Ok(Self {
             path: path.into(),
             guard,
-            bytes: 0,
-            files: 0,
         })
     }
-
-    /// Scan at most `FILE_LIMIT+1` entries. Unknown/private files count toward
-    /// admission but are never selected for deletion by an unrecognized name.
-    #[cfg(test)]
-    pub(in crate::review) fn sweep(
-        &mut self,
-        keep: &BTreeSet<String>,
-        removable: impl Fn(&str) -> bool,
-    ) -> Result<(), Error> {
-        self.sweep_refresh(keep, removable, |_| Ok(()))
-    }
-
-    pub(in crate::review) fn sweep_refresh(
-        &mut self,
-        keep: &BTreeSet<String>,
-        removable: impl Fn(&str) -> bool,
-        mut refresh: impl FnMut(&mut BTreeSet<String>) -> Result<(), Error>,
-    ) -> Result<(), Error> {
-        crate::diagnostics::trace::count("objects.sweeps", 1);
-        let mut keep = keep.clone();
-        for _ in 0..4 {
-            if self.sweep_batch(&mut keep, &removable, &mut refresh)? {
-                return Ok(());
-            }
-        }
-        // Admission never uses a partial inventory. Known garbage was reclaimed
-        // in bounded batches; retry can continue without manual deletion.
-        Err(Error::CleanupPending)
-    }
-
-    fn sweep_batch(
-        &mut self,
-        keep: &mut BTreeSet<String>,
-        removable: &impl Fn(&str) -> bool,
-        refresh: &mut impl FnMut(&mut BTreeSet<String>) -> Result<(), Error>,
-    ) -> Result<bool, Error> {
-        let mut rows = Vec::new();
-        for entry in fs::read_dir(&self.path)?.take(FILE_LIMIT + 1) {
-            let entry = entry?;
-            rows.push(entry);
-        }
-        let overflow = rows.len() > FILE_LIMIT;
-        let mut candidates = Vec::with_capacity(64);
-        let mut removed = false;
-        self.bytes = 0;
-        self.files = 0;
-        for row in rows {
-            let name = row.file_name();
-            let path = row.path();
-            let metadata = fs::symlink_metadata(&path)?;
-            let delete = name.to_str().is_some_and(|name| {
-                name != ".objects.lock" && !keep.contains(name) && removable(name)
-            });
-            let exclusive = if delete && metadata.is_file() && !metadata.file_type().is_symlink() {
-                // An unsafe neighbor counts toward admission, but never becomes
-                // a deletion candidate or prevents publication of another name.
-                let file = open(&path, true, false).ok();
-                file.filter(|file| file.try_lock().is_ok())
-            } else {
-                None
-            };
-            candidates.push((name, path, metadata.len(), exclusive));
-            if candidates.len() == 64 {
-                removed |= self.reclaim(&mut candidates, keep, refresh)?;
-            }
-        }
-        removed |= self.reclaim(&mut candidates, keep, refresh)?;
-        if overflow && !removed {
-            return Err(full(
-                crate::review::CapacityKind::StoredEntries,
-                self.files,
-                FILE_LIMIT,
-            ));
-        }
-        Ok(!overflow)
-    }
-
-    fn reclaim(
-        &mut self,
-        candidates: &mut Vec<SweepRow>,
-        keep: &mut BTreeSet<String>,
-        refresh: &mut impl FnMut(&mut BTreeSet<String>) -> Result<(), Error>,
-    ) -> Result<bool, Error> {
-        // A publisher may commit and release its reader pin while we acquire
-        // these locks. Refresh durable roots only after every deletion candidate
-        // is exclusively held: publication cannot acquire a new pin on them.
-        if candidates.iter().any(|(_, _, _, file)| file.is_some()) {
-            refresh(keep)?;
-        }
-        let mut removed = false;
-        for (name, path, bytes, exclusive) in candidates.drain(..) {
-            if let Some(file) = exclusive
-                && name.to_str().is_some_and(|name| !keep.contains(name))
-                && checked(&path, &file).is_ok()
-                && fs::remove_file(&path).is_ok()
-            {
-                removed = true;
-                continue;
-            }
-            self.bytes = self
-                .bytes
-                .checked_add(bytes)
-                .ok_or(crate::policy::Error::Limit)?;
-            self.files += 1;
-        }
-        Ok(removed)
-    }
-
-    pub(in crate::review) fn admit(
-        &self,
-        bytes: u64,
-        files: usize,
-        recovery: bool,
-    ) -> Result<(), Error> {
-        self.admit_reserved(bytes, files, recovery, 8)
-    }
-    pub(in crate::review) fn admit_reserved(
-        &self,
-        bytes: u64,
-        files: usize,
-        recovery: bool,
-        reserved_entries: usize,
-    ) -> Result<(), Error> {
-        let limit = BYTE_LIMIT - if recovery { 0 } else { RESERVE };
-        let needed = self.bytes.saturating_add(bytes);
-        if needed > limit {
-            return Err(full(
-                crate::review::CapacityKind::StoredBytes,
-                usize::try_from(needed).unwrap_or(usize::MAX),
-                usize::try_from(limit).unwrap_or(usize::MAX),
-            ));
-        }
-        let limit = FILE_LIMIT - if recovery { 0 } else { reserved_entries };
-        let needed = self.files.saturating_add(files);
-        if needed > limit {
-            return Err(full(
-                crate::review::CapacityKind::StoredEntries,
-                needed,
-                limit,
-            ));
-        }
-        Ok(())
-    }
-
-    pub(in crate::review) fn added(&mut self, bytes: u64) {
-        self.bytes += bytes;
-        self.files += 1;
-    }
-    pub(in crate::review) fn charge_external(
-        &mut self,
-        bytes: u64,
-        files: usize,
-    ) -> Result<(), Error> {
-        self.bytes = self
-            .bytes
-            .checked_add(bytes)
-            .ok_or(crate::policy::Error::Limit)?;
-        self.files = self
-            .files
-            .checked_add(files)
-            .ok_or(crate::policy::Error::Limit)?;
-        Ok(())
-    }
-
-    pub(in crate::review) fn pins(&self, names: &BTreeSet<String>) -> Result<Pins, Error> {
-        let mut files = Vec::with_capacity(names.len());
-        for name in names {
-            if Path::new(name).components().count() != 1 {
-                return Err(Error::Invalid("object pin name"));
-            }
-            let path = self.path.join(name);
-            let file = open(&path, false, false)?;
-            file.try_lock_shared().map_err(|_| Error::Locked)?;
-            checked(&path, &file)?;
-            files.push(file);
-        }
-        Ok(Arc::new(files))
-    }
-
-    pub(in crate::review) fn unpinned(&self, name: &str) -> Result<Option<File>, Error> {
-        let path = self.path.join(name);
-        match fs::symlink_metadata(&path) {
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(error.into()),
-            Ok(_) => {}
-        }
-        let file = open(&path, true, false)?;
-        file.try_lock().map_err(|_| Error::Locked)?;
-        checked(&path, &file)?;
-        Ok(Some(file))
-    }
 }
-
-#[cfg(test)]
-mod tests;

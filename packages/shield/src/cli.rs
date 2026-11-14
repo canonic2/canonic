@@ -168,7 +168,7 @@ pub struct PackTest {
     pub cases: PathBuf,
 }
 
-/// Explicit candidate documents, without activation or implicit discovery.
+/// Explicit candidate documents, without writing policy files or implicit discovery.
 #[derive(Args)]
 pub struct Selection {
     /// Local permission pack; repeat for multiple packs.

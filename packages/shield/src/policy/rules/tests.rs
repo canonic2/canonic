@@ -2180,7 +2180,7 @@ fn cache_repair_command_preserves_the_project_as_one_literal_argument() {
     if cfg!(windows) {
         assert_eq!(
             route,
-            "shield cache prepare --project 'C:/workspace/acme''s $(echo private); project'"
+            "shield doctor --project 'C:/workspace/acme''s $(echo private); project'"
         );
         return;
     }
@@ -2200,7 +2200,7 @@ fn cache_repair_command_preserves_the_project_as_one_literal_argument() {
     assert_eq!(operations.len(), 1, "{parsed}");
     assert_eq!(
         operations[0]["request"]["arguments"],
-        json!(["cache", "prepare", "--project", project])
+        json!(["doctor", "--project", project])
     );
 }
 

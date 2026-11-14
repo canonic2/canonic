@@ -122,6 +122,7 @@ fn historical_pinned_launcher_reuses_policy_after_repeated_moves() {
     let selected = original.path().canonicalize().unwrap();
     let destinations = assert_fs::TempDir::new().unwrap();
     let mut previous = selected.clone();
+    let mut policy = None;
     for name in ["first", "second"] {
         let target = destinations.path().join(name);
         std::fs::rename(&previous, &target).unwrap();
@@ -136,8 +137,10 @@ fn historical_pinned_launcher_reuses_policy_after_repeated_moves() {
         let status = server.receive();
         assert_eq!(status["result"]["isError"], false, "{status}");
         let current = &status["result"]["structuredContent"]["data"];
-        assert_ne!(current["bootstrap_required"], true, "{status}");
-        assert_eq!(current["policy_revision"], before["policy_revision"]);
+        // The moved files are the same policy.
+        let digest = current["policy_files"]["digest"].clone();
+        assert!(digest.is_string(), "{status}");
+        assert_eq!(*policy.get_or_insert_with(|| digest.clone()), digest);
         assert_eq!(current["pending_approvals"], 0);
         // A moved project is the same project.
         assert_eq!(current["project_id"], before["project_id"], "{status}");
@@ -180,6 +183,92 @@ fn cli_init_in_a_moved_project_reports_it_set_up_without_writing() {
     );
     assert_eq!(std::fs::read(&state_path).unwrap(), bytes);
     assert!(before.get("project_root").is_none());
+}
+
+#[test]
+#[cfg(unix)]
+fn a_hand_edit_is_the_next_decision_for_a_running_mcp_server_and_the_cli() {
+    let root = assert_fs::TempDir::new().unwrap();
+    root.child(".shield").create_dir_all().unwrap();
+    root.child(".shield/config.yml")
+        .write_str("schema_version: 1\npacks: []\nrules: rules.yml\n")
+        .unwrap();
+    let rules = |decision: &str| {
+        json!({"schema_version":1,"kind":"custom","capabilities":["structured-rules-v1","argument-rules-v1"],
+            "rules":[{"id":"acme","decision":decision,"conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"exact","values":["read"]}}}]})
+        .to_string()
+    };
+    root.child(".shield/rules.yml")
+        .write_str(&rules("allow"))
+        .unwrap();
+    enroll(&root);
+    let input = json!({"input":{"kind":"argv","executable":"acme","arguments":["read"],"original_input":{"command":"acme read"}},
+        "context":{"cwd":root.path(),"environment":{}}});
+    let mut server = Server::start(&root);
+    server.initialize();
+    let mut evaluate = |id: &str| {
+        server.send(&json!({"jsonrpc":"2.0","id":id,"method":"tools/call",
+            "params":{"name":"policy_evaluate","arguments":input}}));
+        let reply = server.receive();
+        reply["result"]["structuredContent"]["data"]["decision"].clone()
+    };
+    assert_eq!(evaluate("before"), "allow");
+    // A person edits the rule while the server runs; no command follows.
+    root.child(".shield/rules.yml")
+        .write_str(&rules("deny"))
+        .unwrap();
+    assert_eq!(evaluate("after"), "deny");
+    server.child.stdin.take();
+    assert!(server.child.wait().unwrap().success());
+    let request = root.child("request.json");
+    request.write_str(&input.to_string()).unwrap();
+    let cli = super::operator::query(
+        &root,
+        &["policy", "evaluate", request.path().to_str().unwrap()],
+    );
+    assert_eq!(cli["decision"], "deny", "{cli}");
+}
+
+/// A folder 0.28.0 left converts when the MCP server first opens it, the
+/// server decides by its files, and the CLI reports the conversion after.
+#[test]
+#[cfg(unix)]
+fn a_0_28_0_folder_converts_on_mcp_start_and_the_cli_follows_its_files() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = assert_fs::TempDir::new().unwrap();
+    let fixture =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/checkpoints/0.28.0");
+    root.copy_from(&fixture, &["**/*"]).unwrap();
+    std::fs::rename(root.path().join("shield"), root.path().join(".shield")).unwrap();
+    root.child(".shield/.gitignore")
+        .write_str("config.local.yml\nrules.local.yml\nshield.local.lock\nreview/\ncache/\n")
+        .unwrap();
+    let review = root.path().join(".shield/review");
+    std::fs::set_permissions(&review, std::fs::Permissions::from_mode(0o700)).unwrap();
+    std::fs::set_permissions(
+        review.join("state.json"),
+        std::fs::Permissions::from_mode(0o600),
+    )
+    .unwrap();
+    let mut server = Server::start(&root);
+    server.initialize();
+    let mut evaluate = |id: &str, argument: &str| {
+        let input = json!({"input":{"kind":"argv","executable":"acme","arguments":[argument],
+            "original_input":{"command":format!("acme {argument}")}},
+            "context":{"cwd":root.path(),"environment":{}}});
+        server.send(&json!({"jsonrpc":"2.0","id":id,"method":"tools/call",
+            "params":{"name":"policy_evaluate","arguments":input}}));
+        server.receive()["result"]["structuredContent"]["data"]["decision"].clone()
+    };
+    assert_eq!(evaluate("read", "read"), "allow");
+    assert_eq!(evaluate("remove", "remove"), "deny");
+    server.child.stdin.take();
+    assert!(server.child.wait().unwrap().success());
+    let local = std::fs::read_to_string(root.path().join(".shield/config.local.yml")).unwrap();
+    assert!(local.contains("paused"), "{local}");
+    let status = super::operator::query(&root, &["status"]);
+    assert_eq!(status["checkpoint_upgrade_pending"], false, "{status}");
+    assert_eq!(status["upgrade"]["policy"]["same"], true, "{status}");
 }
 
 #[test]
@@ -250,14 +339,11 @@ fn historical_mcp_launch_forms_continue_to_serve_project_tools() {
             &std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
         )
         .unwrap();
-        assert_eq!(
-            target["active"]["activation_id"],
-            original["active"]["activation_id"]
-        );
-        // Conversion re-binds the activation without the folder's root.
-        assert_eq!(target["active"]["binding_version"], 2);
+        // Conversion drops the recorded activation and the folder's root; the
+        // files decide.
+        assert!(target.get("active").is_none(), "{target}");
         assert!(target.get("project_root").is_none());
-        assert!(target["active"]["compiled"].is_object());
+        assert_eq!(target["policy_revision"], original["policy_revision"]);
     }
 }
 
@@ -336,15 +422,8 @@ pub(super) fn historical_checkpoint(root: &assert_fs::TempDir) -> Value {
             .expect("checkpoint object")
             .remove(field);
     }
-    raw["active"]
-        .as_object_mut()
-        .expect("active checkpoint")
-        .remove("compiled");
-    raw["active"]
-        .as_object_mut()
-        .expect("active checkpoint")
-        .remove("binding_version");
-    // The earlier format always recorded its absolute root.
+    // The earlier format always recorded its absolute root and a root-bound
+    // activation, which the reader accepts and ignores.
     raw["project_root"] = json!(
         root.path()
             .canonicalize()
@@ -356,32 +435,27 @@ pub(super) fn historical_checkpoint(root: &assert_fs::TempDir) -> Value {
         json!([
             raw["project_id"],
             raw["project_root"],
-            raw["active"]["activation_id"],
-            raw["active"]["previous_activation_id"],
-            raw["active"]["policy_revision"],
-            raw["active"]["candidate_digest"]
+            "acme-original-activation",
+            null,
+            raw["policy_revision"],
+            "acme-candidate-digest"
         ])
         .to_string()
         .as_bytes(),
     );
-    raw["active"]["binding"] = json!(binding);
+    raw["active"] = json!({"activation_id":"acme-original-activation",
+        "previous_activation_id":null,"policy_revision":raw["policy_revision"],
+        "candidate_digest":"acme-candidate-digest","candidates":raw["candidates"],
+        "binding":binding});
     raw["history_generation"] = Value::Null;
     raw["authorization_events"]
         .as_array_mut()
         .expect("authorization events")
-        .retain(|event| event["kind"] != "compiled_cache_prepared");
-    for event in raw["authorization_events"]
-        .as_array_mut()
-        .expect("authorization events")
-    {
-        if event["kind"] == "runtime_activated" {
-            event["details"]["binding"] = json!(binding);
-            event["details"]
-                .as_object_mut()
-                .expect("activation details")
-                .remove("compiled_digest");
-        }
-    }
+        .push(
+            json!({"schema_version":1,"event_id":"acme-original-activation-event",
+            "kind":"runtime_activated","links":{"activation_id":"acme-original-activation"},
+            "details":{"binding":binding}}),
+        );
     std::fs::write(path, raw.to_string()).expect("write historical checkpoint");
     raw
 }

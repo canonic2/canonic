@@ -57,7 +57,7 @@ fn history_control_permission_drift_preserves_lock_inode_records_and_authority()
             0o600
         );
         assert_eq!(before.policy_revision, after.policy_revision);
-        assert_eq!(json!(before.active), json!(after.active));
+        assert_eq!(before.policy_revision, after.policy_revision);
         assert_eq!(json!(before.read_requests), json!(after.read_requests));
         assert_eq!(json!(before.run_requests), json!(after.run_requests));
         assert!(after.history_available);
@@ -72,7 +72,7 @@ fn history_control_permission_drift_preserves_lock_inode_records_and_authority()
             }
         );
         if args["enabled"] == false {
-            assert!(!after.history_enabled);
+            assert!(!after.settings.history_enabled);
         }
         assert!(lock(&store).is_ok());
         assert_eq!(
@@ -243,6 +243,6 @@ fn history_control_never_replaces_or_normalizes_a_busy_lock() {
     )
     .unwrap();
     plan.commit(&context, &|| Ok(())).unwrap();
-    assert!(!store.read_checkpoint().unwrap().history_enabled);
+    assert!(!store.read_checkpoint().unwrap().settings.history_enabled);
     assert_eq!(fs::metadata(&path).unwrap().ino(), inode);
 }

@@ -1,12 +1,7 @@
 //! Editable project-file projections, drift fingerprints and bounded repair.
 use crate::{
     configuration, policy, policy_files,
-    review::{
-        self, Context, Error,
-        model::State,
-        project::{metadata, root},
-        storage::Store,
-    },
+    review::{self, Context, Error, project::root},
 };
 use serde_json::{Value, json};
 use std::{
@@ -190,133 +185,11 @@ pub(in crate::review) fn digest(files: &BTreeMap<String, String>) -> String {
     policy::fingerprint(json!(files).to_string().as_bytes())
 }
 
-/// The project files whose contents differ from what Shield last wrote: edits
-/// the operator has not reviewed yet. `None` when the state predates per-file
-/// hashes, so only the combined projection digest can detect drift.
-pub(in crate::review) fn edited_projections(
-    context: &Context,
-    state: &State,
-) -> Result<Option<BTreeSet<String>>, Error> {
-    let Some(expected) = state.operator["projection_file_hashes"].as_object() else {
-        return Ok(None);
-    };
-    let directory = root(context).join(".shield");
-    let mut edited = BTreeSet::new();
-    let mut artifacts = None;
-    // A local file created by hand is an edit too.
-    for name in ["config.local.yml", "rules.local.yml"] {
-        if !expected.contains_key(name) && directory.join(name).exists() {
-            edited.insert(name.to_owned());
-        }
-    }
-    for (name, hash) in expected {
-        let path = directory.join(name);
-        if missing_artifact(context, state, &path, name, &mut artifacts)? {
-            continue;
-        }
-        if !path.is_file()
-            || fs::symlink_metadata(&path)?.file_type().is_symlink()
-            || json!(policy::fingerprint(
-                crate::application::read(&path)
-                    .map_err(|_| Error::Invalid("project projection unreadable"))?
-                    .as_bytes()
-            )) != *hash
-        {
-            edited.insert(name.clone());
-        }
-    }
-    Ok(Some(edited))
-}
-
-pub(in crate::review) fn projection_changed(
-    context: &Context,
-    state: &State,
-) -> Result<bool, Error> {
-    let _trace = crate::diagnostics::trace::span("projection.check");
-    if let Some(edited) = edited_projections(context, state)? {
-        return Ok(!edited.is_empty());
-    }
-    let expected = metadata(state)["projection"].as_str().map(str::to_owned);
-    let Some(expected) = expected else {
-        return Ok(false);
-    };
-    let captured = Store::open(Path::new(&context.project_root))?
-        .captured_candidate(&state.candidates["project"])?;
-    let mut actual = projections(&captured, &metadata(state))?;
-    let artifacts = artifact_paths(&captured)?;
-    for (name, bytes) in &mut actual {
-        let path = root(context).join(".shield").join(name);
-        if artifacts.contains(name) && is_absent(&path)? {
-            continue;
-        }
-        if !path.is_file() || fs::symlink_metadata(&path)?.file_type().is_symlink() {
-            return Ok(true);
-        }
-        *bytes = crate::application::read(&path)
-            .map_err(|_| Error::Invalid("project projection unreadable"))?;
-    }
-    Ok(digest(&actual) != expected)
-}
-
-/// Pack artifacts are verified registry bytes in an ignored folder, so a fresh
-/// checkout or worktree lacks them. Their absence is missing output that
-/// publication rewrites, not an operator edit.
-fn missing_artifact(
-    context: &Context,
-    state: &State,
-    path: &Path,
-    name: &str,
-    artifacts: &mut Option<BTreeSet<String>>,
-) -> Result<bool, Error> {
-    if !is_absent(path)? {
-        return Ok(false);
-    }
-    if artifacts.is_none() {
-        let captured = Store::open(Path::new(&context.project_root))?
-            .captured_candidate(&state.candidates["project"])?;
-        *artifacts = Some(artifact_paths(&captured)?);
-    }
-    Ok(artifacts.as_ref().is_some_and(|paths| paths.contains(name)))
-}
-
-fn artifact_paths(candidate: &Value) -> Result<BTreeSet<String>, Error> {
-    let config = configuration::layers::merged(candidate)?;
-    ["packs", "disabled"]
-        .iter()
-        .flat_map(|selections| config[*selections].as_array().into_iter().flatten())
-        .map(|row| {
-            row["path"]
-                .as_str()
-                .map(str::to_owned)
-                .ok_or(Error::Invalid("pack path missing"))
-        })
-        .collect()
-}
-
-fn is_absent(path: &Path) -> Result<bool, Error> {
-    match fs::symlink_metadata(path) {
-        Ok(_) => Ok(false),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
-        Err(error) => Err(error.into()),
-    }
-}
 pub(in crate::review) fn file_hashes(files: &BTreeMap<String, String>) -> BTreeMap<String, String> {
     files
         .iter()
         .map(|(name, bytes)| (name.clone(), policy::fingerprint(bytes.as_bytes())))
         .collect()
-}
-
-pub(in crate::review) fn projection_fingerprint(
-    context: &Context,
-    state: &State,
-) -> Result<String, Error> {
-    let mut actual = projections(&state.candidates["project"], &metadata(state))?;
-    for (name, bytes) in &mut actual {
-        *bytes = crate::application::read(&root(context).join(".shield").join(name))
-            .map_err(|_| Error::Invalid("project projection unreadable"))?;
-    }
-    Ok(digest(&actual))
 }
 
 pub(in crate::review) fn materialize(
@@ -409,32 +282,4 @@ pub(in crate::review) fn projection_hashes(
         hashes.insert(name.clone(), hash);
     }
     Ok(Value::Object(hashes))
-}
-
-pub(in crate::review) fn repair_projections(
-    context: &Context,
-    files: &BTreeMap<String, String>,
-    meta: &Value,
-) -> Result<(), Error> {
-    let _trace = crate::diagnostics::trace::span("projection.repair");
-    let actual = projection_hashes(context, files)?;
-    let mut changed = BTreeMap::new();
-    for (name, bytes) in files {
-        if actual[name] == policy::fingerprint(bytes.as_bytes()) {
-            continue;
-        }
-        if meta["projection_preserved"]
-            .as_array()
-            .is_some_and(|names| names.iter().any(|preserved| preserved == name))
-            || (!actual[name].is_null()
-                && actual[name] != policy::fingerprint(bytes.as_bytes())
-                && actual[name] != meta["projection_previous"][name])
-        {
-            return Err(Error::Invalid(
-                "manual projections differ; review changes through shield policy review",
-            ));
-        }
-        changed.insert(name.clone(), bytes.clone());
-    }
-    materialize(context, &changed)
 }

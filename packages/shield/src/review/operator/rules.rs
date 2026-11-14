@@ -68,8 +68,7 @@ pub(super) fn mutate(
         RuleCommand::List => return Err(Error::Invalid("invalid operator command")),
     };
     let (next, meta, _) = crate::review::changes::custom_rule(context, &before, &change, None)?;
-    let plan = state::review_candidate(context, &before, &next, &meta, &mut tty, &base)?;
-    crate::review::publication::commit_prepared(context, &before, next, meta, None, None, &plan)
+    state::write_reviewed(context, &before, next, meta, &mut tty, &base)
 }
 fn guided_rule(id: &str, existing: Option<&Value>, tty: &mut Terminal) -> Result<Value, Error> {
     if existing.is_none() {
@@ -264,24 +263,9 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
     let mut choices = vec![
         ("inspect", "Finish inspection", "Make no changes"),
         (
-            "manual",
-            "Review edited project files",
-            "Validate and activate your configuration edits",
-        ),
-        (
-            "repair",
-            "Repair project files",
-            "Restore active policy projections",
-        ),
-        (
             "history",
             "Request history settings",
             "Configure retention and optional history clearing",
-        ),
-        (
-            "changes",
-            "Configuration change history",
-            "Inspect confirmed changes independently of request history",
         ),
     ];
     // Live interactions are optional direct reviews, never a backlog default.
@@ -298,35 +282,24 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
     // Escape in the history settings returns to this menu; Escape here cancels.
     let mut action = "inspect".to_owned();
     let mut history = History {
-        enabled: before.history_enabled,
-        limit: before.history_limit,
+        enabled: before.settings.history_enabled,
+        limit: before.settings.history_limit,
         purge: false,
     };
     loop {
         action = tty
             .choose_step(
                 "Policy",
-                "Inspect the active policy or review a specific change.",
+                "Inspect the policy or review a specific change.",
                 &choices,
                 &action,
                 false,
             )?
             .or_cancel()?;
-        if action == "changes" {
-            configuration_changes(context, &mut tty)?;
-            continue;
-        }
         return match action.as_str() {
             // The policy was already shown above the choice.
             "inspect" | "" => {
                 Ok(json!({"inspected":true,"policy_revision":value["policy_revision"]}))
-            }
-            "manual" => manual(context, &before, &mut tty, &base),
-            "repair" => {
-                tty.confirm(&json!({"operation":"restore project files from active policy","policy_revision":before.policy_revision,"manual_edits":"preserved; conflicts require manual review"}))?;
-                let mut receipt = crate::review::publication::reconcile(context, &before)?;
-                receipt["restored_project_files"] = json!(true);
-                Ok(receipt)
             }
             "review" => review_live_change(context, &mut tty),
             "history" => match history_menu(&mut history, &mut tty)? {
@@ -344,14 +317,6 @@ pub(super) fn policy(context: &Context, json_mode: bool) -> Result<Value, Error>
             _ => Err(Error::Invalid("invalid policy action")),
         };
     }
-}
-
-fn configuration_changes(context: &Context, tty: &mut Terminal) -> Result<(), Error> {
-    let (state, _) = review::storage::Store::inspect(std::path::Path::new(&context.project_root))?
-        .read_diagnostic_checkpoint()?;
-    let mut view = review::configuration_changes::inspect(&state);
-    view["operation"] = json!("configuration change history");
-    tty.display(&view)
 }
 
 /// Select one live interaction explicitly; closed history cannot be activated.
@@ -415,14 +380,23 @@ fn review_live_change(context: &Context, tty: &mut Terminal) -> Result<Value, Er
         }
     };
     let result = match choice.as_str() {
-        "accept" if !obsolete => crate::review::publication::commit_prepared(
+        "accept" if !obsolete => crate::review::files::write::write(
             context,
-            &before,
-            proposal.candidate.clone(),
-            proposal.candidate_metadata.clone(),
+            crate::review::files::write::Edit {
+                before: &before,
+                candidate: proposal.candidate.clone(),
+                meta: proposal.candidate_metadata.clone(),
+                // A review prepared before proposals recorded their files is
+                // prepared again by its agent.
+                base: proposal
+                    .reviewed_paths
+                    .clone()
+                    .ok_or(Error::StaleSnapshot)?,
+                evaluator: Some(&plan),
+                reviewed: Some(&proposal.files),
+            },
             Some(&id),
-            None,
-            &plan,
+            "operator-cli",
         )?,
         "reject" => review::transition(context, &id, "reject", None, &|| Ok(()))?,
         _ => review::transition(context, &id, "withdraw", None, &|| Ok(()))?,
@@ -506,90 +480,5 @@ fn history_menu(history: &mut History, tty: &mut Terminal) -> Result<Step<()>, E
             history.purge = purge == "yes";
             return Ok(Step::Done(()));
         }
-    }
-}
-
-fn manual(
-    context: &Context,
-    before: &crate::review::model::State,
-    tty: &mut Terminal,
-    base: &crate::configuration::Evaluator,
-) -> Result<Value, Error> {
-    let Some((fingerprint, captured)) = manual_edits(context, before)? else {
-        return Ok(json!({"no_project_edits":true,"policy_revision":before.policy_revision}));
-    };
-    let candidate = captured.candidate;
-    let meta = captured.metadata;
-    let candidates = std::collections::BTreeMap::from([("project".into(), candidate.clone())]);
-    let (comparison, plan) = review::compare_prepared(&before.candidates, &candidates, Some(base))?;
-    let mut view = json!({"operation":"adopt manual project edits",
-        "changes":crate::review::changes::diff::between(&before.operator, &before.candidates["project"], &meta, &candidate),
-        "candidate":candidate,"comparison":comparison,"packs":meta["installed"]});
-    state::terminal_mcp_details(
-        &mut view["changes"],
-        &before.candidates["project"],
-        &candidate,
-    )?;
-    tty.confirm(&view)?;
-    crate::review::publication::commit_prepared(
-        context,
-        before,
-        candidate,
-        meta,
-        None,
-        Some(&fingerprint),
-        &plan,
-    )
-}
-
-/// Avoid preparing or publishing an unchanged policy just to review its files.
-fn manual_edits(
-    context: &Context,
-    before: &crate::review::model::State,
-) -> Result<Option<(String, crate::review::changes::project_files::Capture)>, Error> {
-    if !crate::review::publication::projections::projection_changed(context, before)? {
-        return Ok(None);
-    }
-    let fingerprint =
-        crate::review::publication::projections::projection_fingerprint(context, before)?;
-    let captured = crate::review::changes::project_files::capture(context, before)?;
-    Ok(Some((fingerprint, captured)))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn manual_review_only_prepares_edited_project_files() {
-        let root = assert_fs::TempDir::new().unwrap();
-        let bundle =
-            crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None)
-                .unwrap();
-        let context = review::mcp::initialize_fixture(root.path(), &bundle);
-        let initial = review::project::load(&context).unwrap();
-        review::publication::commit(
-            &context,
-            &initial,
-            initial.candidates["project"].clone(),
-            review::project::metadata(&initial),
-            None,
-        )
-        .unwrap();
-        let before = review::project::load(&context).unwrap();
-        let state_path = root.path().join(".shield/review/state.json");
-        let original = std::fs::read(&state_path).unwrap();
-        assert!(manual_edits(&context, &before).unwrap().is_none());
-        let rules_path = root.path().join(".shield/rules.yml");
-        let rules = std::fs::read_to_string(&rules_path).unwrap();
-        std::fs::write(&rules_path, format!("{rules}\n# Acme policy comment\n")).unwrap();
-        let (_, edited) = manual_edits(&context, &before).unwrap().unwrap();
-        assert!(
-            edited.candidate["rules"]
-                .as_str()
-                .unwrap()
-                .contains("Acme policy comment")
-        );
-        assert_eq!(std::fs::read(&state_path).unwrap(), original);
     }
 }

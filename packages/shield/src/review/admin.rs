@@ -6,12 +6,11 @@
 use super::{
     Checkpoint, Context, Error,
     integrations::{self, IntegrationChoice},
-    model::State,
     project,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub(in crate::review) mod policy;
 pub(in crate::review) mod protection;
@@ -31,8 +30,6 @@ enum Input {
         agent_settings_read: Option<super::path_access::Read>,
         agent_settings_change: Option<super::path_access::Change>,
     },
-    #[serde(rename = "cache_prepare")]
-    Cache { cache_dir: Option<PathBuf> },
     #[serde(rename = "registry_add")]
     RegistryAdd {
         name: String,
@@ -52,8 +49,6 @@ enum Input {
         #[serde(default)]
         scope: Scope,
     },
-    #[serde(rename = "policy_repair")]
-    Repair {},
     #[serde(rename = "history_configure")]
     History {
         enabled: Option<bool>,
@@ -95,9 +90,7 @@ enum Operation {
     RegistryTrust(Box<super::registry_trust::Prepared>),
     Mode(super::mode::Prepared),
     Protection(protection::Prepared),
-    Cache(Option<PathBuf>),
     Registry(Box<registries::Prepared>, Scope),
-    Repair(Box<State>),
     History(policy::History),
     Reject(policy::Reject),
     Setup {
@@ -214,16 +207,9 @@ impl Prepared {
             Operation::RegistryTrust(plan) => (*plan).commit(context, checkpoint),
             Operation::Mode(plan) => plan.commit(context, checkpoint),
             Operation::Protection(plan) => plan.commit(context, checkpoint),
-            Operation::Cache(directory) => match directory {
-                Some(directory) => {
-                    super::cache::relocate_committed(context, &directory, checkpoint)
-                }
-                None => super::cache::prepare_committed(context, checkpoint),
-            },
             Operation::Registry(plan, scope) => {
                 (*plan).commit((scope == Scope::Project).then_some(context), checkpoint)
             }
-            Operation::Repair(before) => super::publication::reconcile(context, &before),
             Operation::History(plan) => plan.commit(context, checkpoint),
             Operation::Reject(plan) => plan.commit(context, checkpoint),
             Operation::Setup { metadata, plan } => integrations::setup::finish_checked(
@@ -279,12 +265,10 @@ pub(super) fn supports(name: &str) -> bool {
         "protection_set"
             | "enable"
             | "disable"
-            | "cache_prepare"
             | "registry_add"
             | "registry_trust"
             | "registry_remove"
             | "registry_default"
-            | "policy_repair"
             | "history_configure"
             | "policy_reject"
             | "mcp_setup"
@@ -347,15 +331,6 @@ fn prepare_operation(
             agent_settings_read,
             agent_settings_change,
         } => protection(context, agent_settings_read, agent_settings_change)?,
-        Input::Cache { cache_dir } => {
-            if cache_dir.as_ref().is_some_and(|path| !path.is_absolute()) {
-                return Err(Error::Invalid("cache_dir must be an absolute directory"));
-            }
-            let review = json!({"operation":"prepare committed policy cache",
-                "project":context.project_root,"cache_directory":cache_dir,
-                "policy_authority":"unchanged"});
-            (Operation::Cache(cache_dir), review)
-        }
         Input::RegistryAdd {
             name,
             location,
@@ -373,11 +348,6 @@ fn prepare_operation(
         }
         Input::RegistryDefault { name, scope } => {
             registry(context, scope, registries::Change::Default { name: &name })?
-        }
-        Input::Repair {} => {
-            let before = project::checkpoint(context)?;
-            let review = json!({"operation":"restore project files from active policy","policy_revision":before.policy_revision,"manual_edits":"preserved; conflicts require manual review"});
-            (Operation::Repair(Box::new(before)), review)
         }
         Input::History {
             enabled,
@@ -473,8 +443,7 @@ fn protection(
     if agent_settings_read.is_none() && agent_settings_change.is_none() {
         return Err(Error::Invalid("choose at least one protected file setting"));
     }
-    let mut access = super::path_access::load(&project::metadata(&project::checkpoint(context)?))
-        .unwrap_or_default();
+    let mut access = super::settings::path_access(&project::checkpoint(context)?.settings);
     if let Some(value) = agent_settings_read {
         access.agent_settings_read = value;
     }
@@ -524,7 +493,8 @@ fn setup(
             "repair requires explicit Claude or Codex installation targets",
         ));
     }
-    let metadata = project::metadata(&project::checkpoint(context)?);
+    let state = project::checkpoint(context)?;
+    let metadata = project::metadata(&state);
     if repair_hooks
         && integrations::registration(&metadata)?.is_some_and(|registration| {
             registration.box_definition.is_some()
@@ -564,7 +534,7 @@ fn setup(
         true,
         repair_hooks,
     )?;
-    integrations::setup::with_fallbacks(&metadata, choice, plan.as_mut())?;
+    integrations::setup::with_fallbacks(&state.settings, choice, plan.as_mut());
     let mut review = integrations::setup::setup_preview(root, plan.as_ref())?;
     review["dry_run"] = json!(dry_run);
     review["repair"] = json!(repair_hooks);

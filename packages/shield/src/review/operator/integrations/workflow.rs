@@ -208,9 +208,7 @@ fn plan(
     // the review states. Init has no earlier installations to hand over.
     let guided = back && !initial;
     let handover = approved.is_none() || !guided || handover(tty, meta, selected)?;
-    let mut plan = prepare_approving(root, meta, selected, initial, approved, handover)?;
-    with_fallbacks(meta, selected, plan.as_mut())?;
-    Ok(Step::Done(plan))
+    prepare_approving(root, meta, selected, initial, approved, handover).map(Step::Done)
 }
 
 /// Whether a Box install hands Shield's direct installations over to Box;
@@ -258,7 +256,8 @@ pub(super) fn review(
     json_mode: bool,
     reset: bool,
 ) -> Result<Value, Error> {
-    let meta = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
+    let state = crate::review::project::checkpoint(context)?;
+    let meta = crate::review::project::metadata(&state);
     let approved = tool_permissions(&meta, reset)?;
     let root = Path::new(&context.project_root);
     let resumable = pending(&meta)?.is_some();
@@ -279,7 +278,7 @@ pub(super) fn review(
         None => IntegrationChoice::Keep,
     };
     let mut plan = prepare_approving(root, &meta, selected, false, Some(approved), true)?;
-    with_fallbacks(&meta, selected, plan.as_mut())?;
+    with_fallbacks(&state.settings, selected, plan.as_mut());
     let mut review = setup_preview(root, plan.as_ref())?;
     review["dry_run"] = json!(true);
     Ok(review)
@@ -311,7 +310,7 @@ pub(super) fn onboard(
     baseline: super::Baseline,
 ) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
-    tty.progress("Setting up Shield. Nothing is activated until you confirm.")?;
+    tty.progress("Setting up Shield. Nothing is written until you confirm.")?;
     let has_baseline = !matches!(baseline, super::Baseline::Skip)
         && configured_packs(root)?
             .as_array()
@@ -419,7 +418,15 @@ fn onboarding_answers(
                 };
                 let earlier = fixed.is_none() || asks_profile;
                 match plan(root, meta, selected, tty, true, earlier, false)? {
-                    Step::Done(plan) => return Ok((profile, plan)),
+                    Step::Done(mut plan) => {
+                        // Before enrollment the policy files alone hold settings.
+                        let settings = crate::review::settings::current(
+                            root,
+                            &crate::review::settings::Legacy::default(),
+                        );
+                        with_fallbacks(&settings, selected, plan.as_mut());
+                        return Ok((profile, plan));
+                    }
                     Step::Back if fixed.is_none() => Stage::Agents,
                     Step::Back if asks_profile => Stage::Profile,
                     Step::Back => return Err(Error::Cancelled),
@@ -435,7 +442,8 @@ pub(super) fn setup(
     json_mode: bool,
     reset: bool,
 ) -> Result<Value, Error> {
-    let mut meta = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
+    let state = crate::review::project::checkpoint(context)?;
+    let mut meta = crate::review::project::metadata(&state);
     if let Some(receipt) = resume_pending(context, selected, json_mode, &mut meta)? {
         return Ok(receipt);
     }
@@ -462,7 +470,10 @@ pub(super) fn setup(
         };
         let asked = action.is_none() && !resumable;
         match plan(root, &meta, choice, &mut tty, false, asked, reset)? {
-            Step::Done(plan) => break plan,
+            Step::Done(mut plan) => {
+                with_fallbacks(&state.settings, choice, plan.as_mut());
+                break plan;
+            }
             Step::Back if asked => {}
             Step::Back => return Err(Error::Cancelled),
         }

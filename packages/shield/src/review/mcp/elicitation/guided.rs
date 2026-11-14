@@ -163,7 +163,7 @@ impl Guided {
         checkpoint()?;
         connection.ensure_owner(context)?;
         let store = Store::open(Path::new(&context.project_root))?;
-        let before = store.read_checkpoint()?;
+        let before = store.read_following_files()?;
         before.check(context)?;
         if changes::prepared_binding(&before) != self.binding
             || before.policy_revision != self.revision
@@ -197,7 +197,7 @@ impl Guided {
                 return Err(Error::Invalid("unknown or duplicate removal selector"));
             }
         }
-        let (before, _, _) = store.read_for_comparison(before)?;
+        let (before, _, _) = crate::review::storage::Store::read_for_comparison(before)?;
         let references = references.into_iter().collect::<Vec<_>>();
         let (candidate, metadata) = packs::prepare_remove_many(&before, &references)?;
         let mut arguments = self.arguments.clone();

@@ -49,7 +49,10 @@ fn approved(fixture: &Fixture) -> Value {
         );
     }
     let refusal = hook(fixture);
-    assert_eq!(refusal["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert_eq!(
+        refusal["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{refusal}"
+    );
     let row = raw(fixture)["hook_requests"][0].clone();
     hook_approval::approve(
         &context(fixture, "codex"),
@@ -67,9 +70,14 @@ fn revoke(fixture: &Fixture) {
 }
 fn install_registration(fixture: &Fixture, fallback: &str) {
     Store::open(fixture.project.path()).unwrap().update_checkpoint(&fixture.context,&||Ok(()),|state| {
-        state.operator["integration"]=json!({"binary":"/fixture/shield","binary_digest":"a".repeat(64),"version":"0.20.0","entry":{},"agents":{},"ask_fallback":{"codex":fallback},"box_definition":{"shared":"fixture","local":"fixture"}});
+        state.operator["integration"]=json!({"binary":"/fixture/shield","binary_digest":"a".repeat(64),"version":"0.20.0","entry":{},"agents":{},"box_definition":{"shared":"fixture","local":"fixture"}});
         Ok(Value::Null)
     }).unwrap();
+    crate::review::settings::fallback_fixture(
+        &fixture.context,
+        "codex",
+        serde_json::from_value(json!(fallback)).unwrap(),
+    );
 }
 
 fn read_evidence(fixture: &Fixture) -> (crate::runtime::EvaluatedRequest, String) {
@@ -146,7 +154,7 @@ fn final_read_authority_refuses_revoked_source_without_spending_exact_grant() {
     ));
     let after = raw(&fixture);
     assert_eq!(after["read_requests"], before["read_requests"]);
-    assert_eq!(after["active"], before["active"]);
+    assert_eq!(after["policy_revision"], before["policy_revision"]);
 }
 
 #[test]
@@ -239,7 +247,7 @@ fn final_run_authority_refuses_revoked_source_without_consumption_or_spawn() {
     ));
     let after = raw(&fixture);
     assert_eq!(after["run_requests"], before["run_requests"]);
-    assert_eq!(after["active"], before["active"]);
+    assert_eq!(after["policy_revision"], before["policy_revision"]);
 }
 
 #[test]
@@ -266,7 +274,7 @@ fn native_revocation_between_core_and_override_never_consumes_approved_grant() {
     );
     let after = raw(&fixture);
     assert_eq!(after["project_id"], before["project_id"]);
-    assert_eq!(after["active"], before["active"]);
+    assert_eq!(after["policy_revision"], before["policy_revision"]);
     assert_eq!(
         after["hook_requests"][0], row,
         "known revocation cannot consume or rewrite the exact grant"
@@ -375,7 +383,7 @@ fn native_session_override_cannot_use_revoked_source_after_initial_core_evaluati
     let after = raw(&fixture);
     assert_eq!(after["session_grants"], before["session_grants"]);
     assert_eq!(after["hook_requests"], before["hook_requests"]);
-    assert_eq!(after["active"], before["active"]);
+    assert_eq!(after["policy_revision"], before["policy_revision"]);
 }
 
 #[test]
@@ -436,7 +444,7 @@ fn native_final_callback_retains_source_guard_and_omitted_installed_rows_do_not_
             "Acme vendor disposition"
         });
         assert_eq!(trace.recorded_count("policy.preparations"), 0);
-        assert_eq!(trace.recorded_count("source.hydrated"), 0);
+        assert_eq!(trace.recorded_count("policy.captures"), 0);
     }
     trace.finish("success");
     namespace.publish(&update, Some(&previous)).unwrap();

@@ -25,7 +25,7 @@ impl History {
         }
         let state = project::checkpoint(context)?;
         Ok(Self {
-            before: json!({"enabled":state.history_enabled,"limit":state.history_limit,"generation":state.history_generation}),
+            before: json!({"enabled":state.settings.history_enabled,"limit":state.settings.history_limit,"generation":state.history_generation}),
             enabled,
             limit,
             purge,
@@ -43,9 +43,16 @@ impl History {
         checkpoint: Checkpoint<'_>,
     ) -> Result<Value, Error> {
         Store::open(Path::new(&context.project_root))?.update_checkpoint(context, checkpoint, |state| {
-            if json!({"enabled":state.history_enabled,"limit":state.history_limit,"generation":state.history_generation}) != self.before { return Err(Error::StaleSnapshot); }
-            if let Some(enabled) = self.enabled { state.history_enabled = enabled; }
-            if let Some(limit) = self.limit { state.history_limit = limit; }
+            if json!({"enabled":state.settings.history_enabled,"limit":state.settings.history_limit,"generation":state.history_generation}) != self.before { return Err(Error::StaleSnapshot); }
+            // The settings live in the policy files; this writes them there.
+            let enabled = self.enabled.unwrap_or(state.settings.history_enabled);
+            let limit = self.limit.unwrap_or(state.settings.history_limit);
+            if (enabled, limit) != (state.settings.history_enabled, state.settings.history_limit) {
+                crate::review::settings::write(context, &crate::review::settings::history(enabled, limit))?;
+            }
+            state.history_previous_limit = Some(state.settings.history_limit);
+            state.settings.history_enabled = enabled;
+            state.settings.history_limit = limit;
             if self.purge {
                 state.events.clear();
                 state.operator["history_retired_generations"] = json!(state.operator["bootstrap"]["history_recovery"]
@@ -58,8 +65,7 @@ impl History {
                 state.history_owner = None;
                 state.history_rewrite = Some(self.purge);
             }
-            crate::review::configuration_changes::changed(state, context, "request history settings");
-            Ok(json!({"schema_version":1,"enabled":state.history_enabled,"limit":state.history_limit,"purged":self.purge}))
+            Ok(json!({"schema_version":1,"enabled":state.settings.history_enabled,"limit":state.settings.history_limit,"purged":self.purge}))
         })
     }
 }

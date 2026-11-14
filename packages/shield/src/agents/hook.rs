@@ -181,16 +181,12 @@ fn translate_hook(
     // Like Git, the folder the host started the session in finds its project,
     // so a moved checkout or a worktree that inherited the hook's absolute
     // `--project` keeps working. The agent cannot change that folder.
+    // Cwd supplies context, not policy authority.
     let launch = adapter
         .session_dir(&host, env)
         .and_then(|session| crate::mcp_io::session_project(&session))
         .unwrap_or(launch);
-    // Cwd supplies context, not policy authority. Only a recorded relocation
-    // association can redirect the launch project.
-    let resolved = host["cwd"]
-        .as_str()
-        .and_then(|cwd| crate::mcp_io::project_path(Some(&launch), Path::new(cwd)).ok());
-    let root = resolved.as_deref().unwrap_or(&launch);
+    let root = launch.as_path();
     let actual = adapter.input_event_for(&host, event);
     if actual != Some(event) {
         return match actual {

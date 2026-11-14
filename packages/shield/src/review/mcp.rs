@@ -41,7 +41,7 @@ pub(crate) fn apply_confirmation(
     connection: &Connection,
     args: &Value,
 ) -> Result<Option<String>, Error> {
-    let normalized = connection.runtime_context(context, true)?;
+    let normalized = runtime_context(context)?;
     let context = &normalized;
     if crate::agents::review::for_context(context).confirmation()
         == crate::agents::review::Confirmation::ToolPermission
@@ -134,14 +134,12 @@ pub(crate) fn initialize_fixture(
 
 #[cfg(test)]
 pub(crate) fn register_fixture(context: &Context, source: &std::path::Path) {
-    super::storage::Store::open(std::path::Path::new(&context.project_root))
-        .unwrap()
-        .update(context, &|| Ok(()), |state| {
-            state.operator["sources"]["fixture"] =
-                json!(canonic_registry_kit::source::Source::local(source).unwrap());
-            Ok(json!({}))
-        })
-        .unwrap();
+    super::settings::registries_fixture(context, |registries| {
+        registries.sources.insert(
+            "fixture".into(),
+            canonic_registry_kit::source::Source::local(source).unwrap(),
+        );
+    });
 }
 
 #[cfg(test)]
@@ -176,8 +174,8 @@ struct Refusal {
 /// Only the proposing connection may withdraw; review belongs to the operator.
 const FOREIGN_WITHDRAWAL: Refusal = Refusal {
     code: "operator_review_required",
-    message: "Only the proposing interaction can withdraw this live review. Inspect its outcome with policy_receipt; if still needed, prepare a fresh change in this session. Do not send the user to a proposal queue",
-    route: Some("policy_receipt"),
+    message: "Only the proposing interaction can withdraw this live review. Inspect it with policy_show; if still needed, prepare a fresh change in this session. Do not send the user to a proposal queue",
+    route: Some("policy_show"),
 };
 
 /// `request_approve` reached without the person's answer: the host showed no form.
@@ -213,7 +211,6 @@ impl From<crate::policy::Error> for Failure {
 }
 
 pub(crate) struct Connection {
-    runtime: Mutex<Option<RuntimeBinding>>,
     owner: Mutex<Option<super::proposal_lifecycle::Lease>>,
     views: Mutex<views::Views>,
     admin: Mutex<
@@ -221,34 +218,34 @@ pub(crate) struct Connection {
     >,
     admin_sequence: std::sync::atomic::AtomicU64,
 }
-struct RuntimeBinding {
-    original: String,
-    current: String,
-    root: String,
-}
 pub(crate) fn needs_runtime(name: &str, args: &Value) -> bool {
     schemas::mutates(name)
         || name == "policy_evaluate" && args.get("candidate_id").is_none_or(Value::is_null)
 }
-impl Connection {
-    fn bound_context(&self, context: &Context) -> Result<Context, Error> {
-        let runtime = match self.runtime.try_lock() {
-            Ok(runtime) => runtime,
-            Err(std::sync::TryLockError::WouldBlock | std::sync::TryLockError::Poisoned(_)) => {
-                return Err(Error::Locked);
-            }
-        };
-        let mut current = context.clone();
-        if let Some(binding) = runtime.as_ref() {
-            if context.project_root != binding.root
-                || (context.project_id != binding.original && context.project_id != binding.current)
-            {
-                return Err(Error::Invalid("runtime checkout changed; reconnect Shield"));
-            }
-            current.project_id.clone_from(&binding.current);
-        }
-        Ok(current)
+/// A connection's context for a call that uses the project's runtime: the
+/// folder's current review state, converted from an earlier format first. A
+/// folder is its files, so the connection follows whatever state the folder
+/// holds now rather than the one it found when it started.
+pub(crate) fn runtime_context(context: &Context) -> Result<Context, Error> {
+    let root = std::path::Path::new(&context.project_root);
+    // Read-only when the state is current and is the one this connection has;
+    // only a conversion or recreated state opens it for writing.
+    let (state, pending) = super::storage::Store::inspect(root)?.read_diagnostic_checkpoint()?;
+    if !pending && state.project_id == context.project_id {
+        state.check(context)?;
+        state.check_operations()?;
+        return Ok(context.clone());
     }
+    let opened = super::open(root)?;
+    if opened.project_root != context.project_root {
+        return Err(Error::Invalid("project folder changed; reconnect Shield"));
+    }
+    let mut current = context.clone();
+    current.project_id = opened.project_id;
+    Ok(current)
+}
+
+impl Connection {
     pub(crate) fn enrolled(context: &Context) -> Result<Self, Error> {
         let views = views::Views::new(
             context
@@ -261,7 +258,6 @@ impl Connection {
                 .read_diagnostic_checkpoint()?;
         state.check(context)?;
         Ok(Self {
-            runtime: Mutex::new(None),
             owner: Mutex::new(None),
             views: Mutex::new(views),
             admin: Mutex::new(BTreeMap::default()),
@@ -271,76 +267,11 @@ impl Connection {
     #[cfg(test)]
     pub(crate) fn new(seed: String) -> Self {
         Self {
-            runtime: Mutex::new(None),
             owner: Mutex::new(None),
             views: Mutex::new(views::Views::new(seed)),
             admin: Mutex::new(BTreeMap::default()),
             admin_sequence: std::sync::atomic::AtomicU64::new(0),
         }
-    }
-    /// A fresh diagnostic connection can adopt its first actual runtime epoch.
-    /// Retained reviews/handles and every later rotation require a new connection.
-    pub(crate) fn runtime_context(
-        &self,
-        context: &Context,
-        allow_rebind: bool,
-    ) -> Result<Context, Error> {
-        let mut runtime = self.runtime.lock().map_err(|_| Error::Locked)?;
-        let reconnect = || {
-            Error::Invalid(
-                "runtime checkout changed; reconnect Shield before continuing retained reviews or handles",
-            )
-        };
-        if let Some(binding) = runtime.as_ref() {
-            if context.project_root != binding.root
-                || (context.project_id != binding.original && context.project_id != binding.current)
-            {
-                return Err(reconnect());
-            }
-            let mut current = context.clone();
-            current.project_id.clone_from(&binding.current);
-            let (state, pending) =
-                super::storage::Store::inspect(std::path::Path::new(&binding.root))?
-                    .read_diagnostic_checkpoint()?;
-            if pending || state.legacy_preview.is_some() {
-                return Err(reconnect());
-            }
-            state.check(&current).map_err(|_| reconnect())?;
-            state.check_operations().map_err(|_| reconnect())?;
-            return Ok(current);
-        }
-        let opened = super::open(std::path::Path::new(&context.project_root))?;
-        if opened.project_root != context.project_root {
-            return Err(reconnect());
-        }
-        if opened.project_id != context.project_id
-            && (!allow_rebind
-                || self.owner.lock().map_err(|_| Error::Locked)?.is_some()
-                || self
-                    .views
-                    .lock()
-                    .map_err(|_| Error::Locked)?
-                    .retained_state()
-                || !self.admin.lock().map_err(|_| Error::Locked)?.is_empty())
-        {
-            return Err(reconnect());
-        }
-        let mut current = context.clone();
-        current.project_id.clone_from(&opened.project_id);
-        let (state, pending) =
-            super::storage::Store::inspect(std::path::Path::new(&current.project_root))?
-                .read_diagnostic_checkpoint()?;
-        if pending {
-            return Err(reconnect());
-        }
-        state.check(&current)?;
-        state.check_operations()?;
-        *runtime = Some(RuntimeBinding {
-            original: context.project_id.clone(),
-            current: current.project_id.clone(),
-            root: current.project_root.clone(),
-        });
-        Ok(current)
     }
     fn ensure_owner(&self, context: &Context) -> Result<(), Error> {
         let Some(id) = &context.connection_id else {
@@ -403,10 +334,6 @@ pub(crate) fn setup_resume_status(
     value
 }
 
-fn unconfirmed_cache_rebuild(name: &str, args: &Value) -> bool {
-    name == "cache_prepare" && args.get("cache_dir").is_none_or(Value::is_null)
-}
-
 pub(crate) fn discard_admin(connection: &Connection, binding: u64) {
     if let Ok(mut pending) = connection.admin.lock() {
         pending.remove(&binding);
@@ -421,10 +348,10 @@ pub(crate) fn admin_confirmation(
     args: &Value,
     checkpoint: Checkpoint<'_>,
 ) -> Result<Option<(String, u64)>, Error> {
-    if !super::admin::supports(name) || unconfirmed_cache_rebuild(name, args) {
+    if !super::admin::supports(name) {
         return Ok(None);
     }
-    let normalized = connection.runtime_context(context, true)?;
+    let normalized = runtime_context(context)?;
     let context = &normalized;
     if (name == "mcp_setup" && args["dry_run"] == true)
         || crate::agents::review::for_context(context).confirmation()
@@ -482,9 +409,6 @@ fn admin_call(
     confirmed: bool,
     binding: Option<u64>,
 ) -> Result<Value, Error> {
-    if unconfirmed_cache_rebuild(name, args) {
-        return super::admin::prepare(context, name, args, checkpoint)?.commit(context, checkpoint);
-    }
     let retained = if let Some(binding) = binding {
         connection
             .admin
@@ -555,15 +479,12 @@ pub(crate) fn call_with_bound_confirmation(
     let normalized = if documentation::handles(name) {
         None
     } else if needs_runtime(name, args) {
-        match connection.runtime_context(context, true) {
+        match runtime_context(context) {
             Ok(context) => Some(context),
             Err(error) => return failure(context, &error),
         }
     } else {
-        match connection.bound_context(context) {
-            Ok(context) => Some(context),
-            Err(error) => return failure(context, &error),
-        }
+        None
     };
     let context = normalized.as_ref().unwrap_or(context);
     let result = (|| -> Result<ToolData, Failure> {
@@ -618,7 +539,6 @@ pub(crate) fn call_with_bound_confirmation(
             "pack_remove",
             "pack_configure",
             "policy_withdraw",
-            "policy_receipt",
         ]
         .contains(&name)
         {
@@ -661,7 +581,7 @@ pub(crate) fn settle_apply_failure(
         .ok()
         .filter(|outcome| {
             outcome["status"] == "applied"
-                && !matches!(error, Error::Invalid(_) | Error::CheckoutChanged)
+                && !matches!(error, Error::Invalid(_) | Error::StateRecreated)
         })
         .map(|outcome| result_envelope(context, "policy_apply", Ok(outcome)))
 }
@@ -715,7 +635,12 @@ fn result_envelope_data(context: &Context, name: &str, result: Result<ToolData, 
                 !documentation::handles(name) && super::model::redact(&mut data)
             };
             let redacted = redacted || data["redacted"] == true;
-            let revision = data.get("policy_revision").cloned().unwrap_or(Value::Null);
+            // A reader that did not follow the files knows no revision.
+            let revision = data
+                .get("policy_revision")
+                .filter(|revision| revision.as_str() != Some(""))
+                .cloned()
+                .unwrap_or(Value::Null);
             let missing = data.get("missing").cloned().unwrap_or_else(|| json!([]));
             let truncated = data
                 .get("truncated")
@@ -788,12 +713,10 @@ pub(crate) fn admin_route(name: &str) -> Option<&'static str> {
         "enable" => "shield enable",
         "disable" => "shield disable",
         "protection_set" => "shield protection set",
-        "cache_prepare" => "shield cache prepare",
         "registry_add" => "shield registry add",
         "registry_remove" => "shield registry remove",
         "registry_default" => "shield registry default",
         "registry_trust" => "shield registry trust",
-        "policy_repair" => "shield policy repair",
         "policy_reject" => "shield policy reject",
         "history_configure" => "shield history configure",
         "mcp_setup" => "shield mcp setup",
@@ -853,8 +776,8 @@ fn failure(context: &Context, error: &Error) -> Value {
         Error::Io(_) => Some("doctor".into()),
         Error::Capacity { kind, .. } => kind.operator_route().map(Into::into),
         Error::CacheUnavailable => {
-            message = "Compiled policy cache is unavailable. Call cache_prepare to rebuild committed policy. If its saved location is unusable, supply an absolute cache_dir for a new private location and obtain in-session user confirmation, then retry the original request.".into();
-            Some("cache_prepare".into())
+            message = "Shield cannot use its compiled policy folder. Call doctor and ask the user to fix the folder or choose another with shield mcp setup --cache-dir, then retry the original request.".into();
+            Some("doctor".into())
         }
         Error::Dependency(canonic_registry_kit::resolution::Error::Unenrolled(_)) => {
             Some("registry_add".into())
@@ -992,16 +915,6 @@ fn error_fields(error: &Error) -> (&'static str, String) {
 }
 
 fn capacity_message(kind: CapacityKind, pending: usize, retained: usize, limit: usize) -> String {
-    if matches!(
-        kind,
-        CapacityKind::StoredBytes | CapacityKind::StoredEntries
-    ) {
-        return format!(
-            "Storage admission needs {retained} {}s, limit {limit}; {}",
-            kind.noun(),
-            kind.recovery()
-        );
-    }
     let next = match kind {
         CapacityKind::Proposals => {
             "other live interactions hold the project capacity. Finish or withdraw your own interaction in this session, or wait for those interactions to finish or expire"
@@ -1012,7 +925,6 @@ fn capacity_message(kind: CapacityKind, pending: usize, retained: usize, limit: 
         CapacityKind::ReadRequests | CapacityKind::RunRequests => {
             "ask the user to review them with shield request list (or deny with shield request deny), then retry"
         }
-        CapacityKind::StoredBytes | CapacityKind::StoredEntries => kind.recovery(),
     };
     format!(
         "Capacity reached for {}s: {pending} pending, {retained} retained, limit {limit}; {next}",
@@ -1061,7 +973,7 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
     Some(match error {
         Error::Policy(crate::policy::Error::ArtifactMismatch) => (
             "candidate_error",
-            "Shield could not build a consistent pack candidate. No change was activated. Continue without this proposal and report the failure; changing tool arguments is not a recovery for this error",
+            "Shield could not build a consistent pack candidate. The policy files were not changed. Continue without this proposal and report the failure; changing tool arguments is not a recovery for this error",
         ),
         Error::CandidateUnavailable => (
             "candidate_unavailable",
@@ -1075,10 +987,6 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
             "overloaded",
             "Shield is busy or at capacity. Wait for the current operation to finish, then retry or reconnect",
         ),
-        Error::CleanupPending => (
-            "cleanup_pending",
-            "Bounded object cleanup made progress and has more work. Retry this still-needed operation to continue cleanup automatically; no policy change was approved",
-        ),
         Error::Missing => (
             "not_found",
             "The requested record is unavailable. List current records before selecting another ID",
@@ -1087,15 +995,15 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
         // Replaced by the resolved adapter's guidance in `failure`.
         Error::ApprovalRequired => (
             "operator_review_required",
-            "User approval is required to activate this proposal",
+            "User approval is required to apply this proposal",
         ),
         Error::StaleSnapshot => (
             "stale_revision",
             "Policy or review context changed. Call status for fresh handles, reassess and re-propose any still-needed change. For a preparation task, submit the original concrete changes again instead of the old preparation_task_id; if you supplied an idempotency_key, use a new key for fresh preparation",
         ),
-        Error::CheckoutChanged => (
-            "checkout_changed",
-            "This checkout's Shield runtime changed after this connection started, and the connection holds reviews or handles from before. Ask the user to restart this agent session so Shield reconnects, then retry",
+        Error::StateRecreated => (
+            "state_recreated",
+            "This project's Shield state was recreated after this connection started. Ask the user to restart this agent session so Shield reconnects, then retry",
         ),
         Error::Cancelled | Error::Policy(crate::policy::Error::Interrupted) => (
             "cancelled",
@@ -1112,7 +1020,7 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
         ),
         Error::CacheUnavailable => (
             "cache_unavailable",
-            "Compiled policy unavailable; ask the user to run shield cache prepare, then retry",
+            "Compiled policy folder unusable; inspect doctor and ask the user to fix the folder, then retry",
         ),
         _ => return None,
     })
@@ -1127,28 +1035,21 @@ fn status(context: &Context, views: &mut views::Views, doctor: bool) -> Result<V
     let mut data = project::status(context)?;
     integration_recovery(context, &mut data);
     if data["checkpoint_upgrade_pending"] == true {
-        data["active_candidate_id"] = Value::Null;
+        data["policy_candidate_id"] = Value::Null;
         return Ok(data);
-    }
-    if crate::agents::review::for_context(context).confirmation()
-        != crate::agents::review::Confirmation::Terminal
-    {
-        data["project_file_review"] = json!({"tool":"policy_propose","arguments":{"change":{"kind":"project_files_adopt"}},"inspection":"performed only on explicit capture"});
     }
     let id = match views.active_readonly(context) {
         Ok(id) => id,
         Err(error) => {
-            data["active_candidate_id"] = Value::Null;
+            data["policy_candidate_id"] = Value::Null;
             data["diagnostic_snapshot"] = json!({"status":"unavailable","detail":error.to_string(),"next_action":"Retry an explicit policy inspection or evaluation to capture the active policy."});
             return Ok(data);
         }
     };
+    // The handle is the policy the files hold, which requests follow.
     let captured = views.get(&id)?;
-    if data["active"]["policy_revision"] != captured.revision() {
-        return Err(Error::StaleSnapshot);
-    }
     data["policy_revision"] = json!(captured.revision());
-    data["active_candidate_id"] = json!(id);
+    data["policy_candidate_id"] = json!(id);
     Ok(data)
 }
 
@@ -1240,9 +1141,9 @@ fn dispatch(
                 error => error.into(),
             })
         }
-        "policy_withdraw" | "policy_receipt" => {
+        "policy_withdraw" => {
             fields(args, &["proposal_id"])?;
-            inspection::transition(context, name, required(args, "proposal_id")?, checkpoint)
+            inspection::withdraw(context, required(args, "proposal_id")?, checkpoint)
         }
         "review_defer" => {
             fields(args, &["session_id", "review_ids"])?;
@@ -1558,6 +1459,11 @@ fn propose_input(
     let old = views.clone();
     let mut handles = None;
     let presentation = std::cell::RefCell::new(None);
+    // Pinned-root reporting resolves aliases through the project's registries.
+    let settings = super::settings::current(
+        std::path::Path::new(&context.project_root),
+        &super::settings::Legacy::default(),
+    );
     let result = changes::propose(
         context,
         input,
@@ -1574,7 +1480,7 @@ fn propose_input(
                 super::publication::mcp_changed(&proposal.base_candidate, &proposal.candidate)
                     .unwrap_or(true),
             )));
-            skipped_pinned(&mut data, input, &proposal.base_metadata);
+            skipped_pinned(&mut data, input, &proposal.base_metadata, &settings);
             data
         },
     );
@@ -1598,7 +1504,12 @@ fn propose_input(
 }
 /// Report the pinned roots each `pack_update` leaves at their exact versions,
 /// as `skipped_pinned` rows of selector, id and version.
-fn skipped_pinned(data: &mut Value, input: &changes::Input, base: &Value) {
+fn skipped_pinned(
+    data: &mut Value,
+    input: &changes::Input,
+    base: &Value,
+    settings: &crate::configuration::settings::Values,
+) {
     let updates = input
         .change
         .iter()
@@ -1611,7 +1522,7 @@ fn skipped_pinned(data: &mut Value, input: &changes::Input, base: &Value) {
     for reference in updates {
         // Preparation already resolved the reference against this base; a
         // reference that names a pack an earlier batch change adds has none.
-        for row in packs::update_skipped(base, reference).unwrap_or_default() {
+        for row in packs::update_skipped(base, settings, reference).unwrap_or_default() {
             if !skipped.contains(&row) {
                 skipped.push(row);
             }
@@ -1670,9 +1581,7 @@ pub(crate) fn tools_for(agent: Option<&str>) -> Value {
 }
 
 pub(crate) fn is_tool(name: &str) -> bool {
-    name == "project_enroll"
-        || schemas::metadata().any(|(known, _)| known == name)
-        || documentation::handles(name)
+    schemas::metadata().any(|(known, _)| known == name) || documentation::handles(name)
 }
 
 /// Each tool's name and description, for the setup permissions page.

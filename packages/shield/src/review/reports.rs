@@ -14,7 +14,6 @@ pub(super) fn attach(context: &Context, tool: &str, data: &mut Value) {
             | "policy_show"
             | "policy_apply"
             | "policy_withdraw"
-            | "policy_receipt"
             | "policy_reject"
             | "rule_add"
             | "rule_edit"
@@ -73,16 +72,14 @@ pub(crate) fn read(
         .iter()
         .find(|row| row.id == id)
         .ok_or(Error::Missing)?;
-    if super::storage::sources::candidate_identity(&proposal.candidate) != digest {
+    if proposal.candidate_digest != digest {
         return Err(Error::Missing);
     }
     let mut data = if kind == "comparison" {
         proposal.comparison.clone()
     } else {
         let mut value = proposal.summary();
-        value["base_candidate_digest"] = json!(super::storage::sources::candidate_identity(
-            &proposal.base_candidate
-        ));
+        value["base_candidate_digest"] = json!(proposal.base_digest);
         value["receipt"] = proposal.receipt.clone();
         value["authorization_events"] = json!(
             state
@@ -99,6 +96,6 @@ pub(crate) fn read(
     Ok(
         json!({"schema_version":1,"project_id":context.project_id,"proposal_id":id,
         "candidate_digest":digest,"policy_revision":proposal.policy_revision,"report":kind,
-        "data":data,"redacted":redacted,"authority":"Inspection only; no activation or execution permission."}),
+        "data":data,"redacted":redacted,"authority":"Inspection only; no policy change or execution permission."}),
     )
 }

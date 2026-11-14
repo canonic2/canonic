@@ -53,10 +53,10 @@ fn session_reconsideration_preserves_exact_deny_overrides_and_history_independen
     let original = propose(&context, &json!({"session_ref":reference,"idempotency_key":"override","scope":scope(),
         "duration_seconds":600,"override_denies":[{"rule_ref":rule["rule_ref"],"branch":"met","rule_digest":rule["rule_digest"]}]})).unwrap();
     decline(&context, &original["apply_arguments"]).unwrap();
+    crate::review::settings::history_fixture(&context, false);
     store(&context)
         .unwrap()
         .update_checkpoint(&context, &|| Ok(()), |state| {
-            state.history_enabled = false;
             state.events.clear();
             Ok(json!({}))
         })
@@ -123,7 +123,7 @@ fn session_reconsideration_metadata_work_stays_independent_of_policy_and_history
             "session_reconsideration {age} elapsed_us={}",
             started.elapsed().as_micros()
         );
-        for counter in ["policy.preparations", "source.hydrated", "history.captures"] {
+        for counter in ["policy.preparations", "policy.captures", "history.captures"] {
             assert_eq!(trace.recorded_count(counter), 0, "{age} {counter}");
         }
         drop(scope);
@@ -210,10 +210,6 @@ fn session_reconsideration_preserves_decline_and_requires_fresh_confirmation() {
         old
     );
     assert_eq!(before.policy_revision, after.policy_revision);
-    assert_eq!(
-        before.active.as_ref().unwrap().activation_id(),
-        after.active.as_ref().unwrap().activation_id()
-    );
 }
 
 #[test]

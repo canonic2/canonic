@@ -36,7 +36,7 @@ or includes.
 | `invocations`, `command_sets` | Not accepted. | Optional shared bodies; see [rule reuse](policy-rules.md#share-rule-bodies-in-a-pack). |
 
 Project configuration selects the rule file. Documents cannot select a project,
-operator identity, or cache root. Activate file edits with `shield policy review`.
+operator identity, or cache root. A saved edit applies to the next request.
 
 ## Rule fields
 
@@ -219,7 +219,7 @@ Every field and argument must be declared; aliases do not replace actual field
 names. Missing required scope values and unknown traversals fail. A cursor
 declaration must be optional, nullable and `{scalar: string}`. Pack text selectors
 can use prepared variable projections. Source models contain no executable code
-or live schema queries. Invalid models refuse activation; exhausted analysis
+or live schema queries. Invalid models make the policy files invalid; exhausted analysis
 limits block rather than falling back to an allowance.
 Rules using this predicate cannot export `agents.codex.prefixes`: a command
 prefix cannot represent query or selection constraints.

@@ -92,7 +92,7 @@ fn inspect_at(context: &Context, state: &State, selector: Option<&str>, now: u64
             eligible.entry(id).or_default().push(row);
         }
     }
-    let effective = registries::effective_from_metadata(&state.operator).ok();
+    let effective = registries::effective_from(&state.settings).ok();
     let mut covered = 0;
     for (identity, rows) in &eligible {
         let source = effective.as_ref().and_then(|e| e.by_identity(identity));

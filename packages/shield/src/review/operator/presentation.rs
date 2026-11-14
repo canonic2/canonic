@@ -176,14 +176,6 @@ fn result(command: &PublicCommand, value: &Value) -> String {
 }
 
 fn primary_result(command: &PublicCommand, value: &Value) -> String {
-    if value["bootstrap_required"] == true {
-        return format!(
-            "Shield needs enrollment confirmation for {}.\nPrevious location: {}\n{}\n",
-            label(&value["project_root"]),
-            label(&value["previous_project_root"]),
-            label(&value["next_action"]),
-        );
-    }
     match command {
         PublicCommand::Init { .. } => setup::initialized(value),
         PublicCommand::Mcp(_) if value["dry_run"] == true => {
@@ -218,7 +210,6 @@ fn primary_result(command: &PublicCommand, value: &Value) -> String {
         PublicCommand::Status => activity::status(value, false),
         PublicCommand::Doctor => activity::status(value, true),
         PublicCommand::Docs(_) => documentation(value),
-        PublicCommand::Cache { .. } => activity::cache(value),
         PublicCommand::Policy(input) => match input.command {
             PolicyCommand::Evaluate { .. } => format!(
                 "Decision: {}\nPolicy: {}\nPreview only; no action authorized.",

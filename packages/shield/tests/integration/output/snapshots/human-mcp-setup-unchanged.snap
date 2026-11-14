@@ -4,12 +4,12 @@ expression: text
 ---
 $ shield mcp setup --agent claude
 --- terminal
-Tool permissions → 53 of 54 marked
+Tool permissions → 50 of 51 marked
 Agent integrations
   Claude Code unchanged · hooks PostToolUse, PostToolUseFailure, PreToolUse, SessionEnd, Stop · MCP server shield
   Hooks and MCP run [SHIELD] for this project.
-  53 of 54 Shield MCP tools run without asking; ask each time: policy_apply.
-  Policy activation still requires your confirmation.
+  50 of 51 Shield MCP tools run without asking; ask each time: policy_apply.
+  Policy changes still require your confirmation.
   Agents can read/write their skill folders and system temporary folders. Session files use each agent's supported mappings.
 
   Files

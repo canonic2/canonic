@@ -42,10 +42,10 @@ For client implementation, see [transport details](#responses-and-transport-life
 | --- | --- |
 | Status | `status`, `doctor` |
 | Packs and registries | `pack_list`, `pack_show`, `registry_list`, `registry_add`, `registry_remove`, `registry_default`, `pack_search`, `pack_info`, `pack_add`, `pack_configure`, `pack_update`, `pack_remove` |
-| Policy and rules | `policy_show`, `rule_list`, `rule_add`, `rule_edit`, `rule_remove`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_apply`, `policy_withdraw`, `policy_receipt`, `policy_defer`, `policy_draft_list`, `policy_draft_remove`, `policy_reject`, `policy_repair` |
+| Policy and rules | `policy_show`, `rule_list`, `rule_add`, `rule_edit`, `rule_remove`, `suggestion_list`, `review_defer`, `policy_propose`, `policy_apply`, `policy_withdraw`, `policy_defer`, `policy_draft_list`, `policy_draft_remove`, `policy_reject` |
 | Approvals and history | `request_list`, `request_show`, `request_approve`, `request_deny`, `history_list`, `history_show`, `history_configure` |
 | Session grants | `session_grant_list`, `session_grant_show`, `session_grant_propose`, `session_grant_reconsider`, `session_grant_approve`, `session_grant_revoke` |
-| Administration | `enable`, `disable`, `protection_set`, `cache_prepare`, `mcp_setup` |
+| Administration | `enable`, `disable`, `protection_set`, `mcp_setup` |
 | Diagnostics | `policy_evaluate`, `policy_compare` |
 | Documentation | `docs_list`, `docs_search`, `docs_read` |
 
@@ -94,8 +94,7 @@ refuse; inspect the result before requesting a fresh review.
   If a pack needs an unenrolled dependency source, use `registry_add` for that
   source and retry the pack request after acceptance. Ask for its location if
   unknown. Registry trust and permission-policy approval are separate reviews.
-- `policy_repair` restores managed projections from committed policy.
-  `policy_reject` asks the user to reject a pending `proposal_id`.
+- `policy_reject` asks the user to reject a pending `proposal_id`.
 - `history_configure` accepts `enabled`, retention `limit` (1–10000) and
   `purge`. Clearing history requires confirmation.
 - `mcp_setup` accepts registered `agents`, optional `remove` and `dry_run`.
@@ -131,11 +130,9 @@ refuse; inspect the result before requesting a fresh review.
   reports each agent separately. Changes to a shared launcher location or the
   saved tool permissions include the affected integrations in a broader review
   with an explanation before anything is published.
-- `cache_prepare {}` rebuilds disposable compiled data from committed policy.
-  It changes no authority and needs no confirmation.
-  If the saved cache location is unusable, supply an absolute `cache_dir` for
-  a new private location. This location change requires in-session confirmation;
-  it preserves the active policy and does not delete the old location.
+- Shield compiles the policy files itself; there is no cache tool. If a result
+  reports `cache_unavailable`, call `doctor` and ask the user to fix the folder
+  or choose another with `shield mcp setup --cache-dir`.
 
 `request_list` and `request_show` include native hook requests as well as read
 and execution requests. `request_deny` asks the user to deny a pending request
@@ -291,7 +288,7 @@ release cannot represent the restriction, the agent should explain that gap.
 
 For a pack declaring an optional `manager` setting, request it with
 `{"reference":"acme/settings","variables":["manager"]}`. The user supplies
-the value in the form; one final approval activates the installation and setting
+the value in the form; one final approval writes the installation and setting
 together. Use only names declared by the selected release; do not guess fields
 or search general rule-authoring docs for undeclared pack settings.
 
@@ -322,8 +319,8 @@ following shape. Replace `PACK_REFERENCE` with the exact reference you reviewed:
 Answer any required settings form. The response includes the proposal ID and
 `apply_arguments`; policy is unchanged.
 Explain the scope, then copy `apply_arguments` unchanged into `policy_apply`.
-Wait for the host approval and result. A successful application returns a receipt;
-declined or unavailable approval leaves the proposal inactive. A stale proposal
+Wait for the host approval and result. A successful application writes the policy files and
+returns the outcome; declined or unavailable approval writes nothing. A stale proposal
 needs fresh preparation. See the [review reference](#proposals-and-operator-review).
 
 ## Install a pack with guided settings
@@ -369,15 +366,15 @@ Supply either a single `reference` with its `profile` and `variables`, or `packs
 do not mix those selection fields. Select each installed pack only once, including
 when it is also another selection's dependency. Required dependency settings
 and requested variables appear in one form, with shared dependencies asked once.
-The response contains one proposal for one final approval and atomic activation.
+The response contains one proposal for one final approval and one write.
 If no required or requested input needs answering, preparation opens no settings
 form. Unknown variable names or a failed selection leave no partial proposal.
 Installed settings can also be changed later with `pack_configure`.
 
 The form retains the exact acquired releases. A registry change while it is open
 does not substitute another release. A changed project policy or review context
-requires a new `pack_add` call and fresh answers. Submission saves an inactive
-proposal; review its pack versions, profiles, values and scope, then copy its
+requires a new `pack_add` call and fresh answers. Submission saves a
+proposal and writes no file; review its pack versions, profiles, values and scope, then copy its
 `apply_arguments` unchanged to `policy_apply` for separate final approval.
 Decline, dismissal and unavailable forms create no proposal. If any `pack_add`
 reply is lost, inspect `policy_show` before retrying, including when no settings
@@ -441,7 +438,7 @@ clients can use explicit single-pack references; Shield never narrows the list
 silently. Empty, duplicate or unknown choices refuse. If policy or review
 metadata changes while the form is open, request a fresh form and new answers.
 
-These tools prepare an inactive candidate. Inspect the returned changes, then
+These tools prepare a proposal without writing files. Inspect the returned changes, then
 copy `apply_arguments` unchanged to `policy_apply` for user approval. Preparing
 an update or removal does not change active policy. Use `pack_show` with a
 `reference` to inspect one installed selection, its source and retained rules.
@@ -449,7 +446,7 @@ an update or removal does not change active policy. Use `pack_show` with a
 ## Choose installed pack settings
 
 When settings need your input, an agent can call the `pack_configure` tool to
-show a form and prepare an inactive proposal from your answers. First inspect
+show a form and prepare a proposal from your answers. First inspect
 the installed pack with `pack_show` and its `reference` selector to find its
 variable definitions. For an installed Acme pack declaring these variables,
 the tool arguments look like:
@@ -501,48 +498,40 @@ the CLI's operations as JSON fields: `set`, `unset`, `override` and
 
 To remove those choices, use `{"reference":"acme/settings","unset":["manager"],"clear_override":["build"]}`.
 Do not mix direct settings with `variables`, which selects a user-input form.
-Both modes return an inactive proposal and require `policy_apply` approval.
+Both modes return a proposal and require `policy_apply` approval.
 
 `policy_propose` accepts one tagged `change` or a `changes` array of
-1–16 changes. A batch applies in order to one candidate; approval activates all
+1–16 changes. A batch applies in order to one candidate; approval writes all
 changes together or none. Optional fields include a reason, history and
 supersession links, and an ASCII `idempotency_key` of 1–128 characters.
 
 | Change | Purpose |
 | --- | --- |
-| `project_files_adopt` | Capture and review policy edits on disk; must be proposed alone. |
 | `rule_add`, `rule_edit`, `rule_remove` | Add, replace, or remove a custom rule. |
 | `pack_add`, `pack_update`, `pack_remove` | Install, update, or remove a pack and its dependencies. |
 | `pack_configure` | Set variables or rule overrides on an installed pack. |
 | `access_path_add`, `access_path_remove` | Add or remove one absolute read/write directory. |
 
-Every change except `project_files_adopt`, `pack_update` and `pack_remove` accepts `layer: project`
+Every change except `pack_update` and `pack_remove` accepts `layer: project`
 (default) or `local` for uncommitted local configuration. Rules use the project
 condition schema.
 
-If a pack or rule change would overwrite unreviewed `.shield/` edits, first call
-`policy_propose` with `{"change":{"kind":"project_files_adopt"}}` and submit
-its returned `apply_arguments` unchanged to `policy_apply`. Approval presents
-the captured policy edits relative to active policy. The semantic comparison
-covers supported command decisions; file, web and pack-precondition decisions
-are not compared. The prompt reports incomplete comparison coverage, and its
-summary can abbreviate large changes; inspect the retained proposal with
-`policy_show` for the full structural diff. The files remain inactive until
-approval; edits made while the prompt is open make the proposal stale. After
-approval, prepare the pack or rule change again. This uses the host's ordinary
-Shield approval flow and needs no terminal review. Existing verified pack bytes
-are required; new releases still use pack acquisition. Changes to MCP connection
-settings use a host confirmation form on both Claude and Codex. The form shows
-captured before/after settings, keeping private local values out of public
-proposal arguments, comparisons and receipts. Approval also publishes the
-owned connection entries for registered agents. Interrupted publication resumes
+A proposal is built on the policy files as they are, hand edits included, and
+applying it keeps those edits. If the files change between proposal and
+approval, `policy_apply` returns `stale_revision`; prepare the change again.
+The semantic comparison covers supported command decisions; file, web and
+pack-precondition decisions are not compared. The prompt reports incomplete
+comparison coverage, and its summary can abbreviate large changes; inspect the
+retained proposal with `policy_show` for the full structural diff. Changes to
+MCP connection settings use a host confirmation form on both Claude and Codex.
+The form shows captured before/after settings, keeping private local values out
+of public proposal arguments and comparisons. Approval also writes the owned
+connection entries for registered agents. Interrupted publication resumes
 automatically on a subsequent mutating MCP request or cached launcher invocation; unchanged
 connections remain usable. Conflicting owned settings can be reviewed through
 `mcp_setup {"pending":"review"}` or cancelled in the same session. New agent
 registration uses `mcp_setup`. Host connection reload behavior determines
 when an already running connector is replaced.
-Missing or linked policy files keep the `shield policy review` repair route;
-adoption requires regular files.
 
 The `policy_propose` change with `kind: "pack_configure"` requires an installed `reference` and at least one of `set`,
 `unset`, `override`, or `clear_override`. Overrides map rule IDs to `off`,
@@ -597,8 +586,8 @@ revokes them. Cancelling a completed interim RPC ID does not revoke a later retr
 the host must discard the state or submit a decline/cancel response.
 
 Shield rechecks arguments and current policy before committing. Stale or changed
-candidates need a fresh proposal and approval. Success returns a receipt;
-repeating an applied proposal returns that receipt. Agents keep approval inside
+candidates need a fresh proposal and approval. Success writes the policy files
+and returns the outcome; repeating an applied proposal returns that outcome. Agents keep approval inside
 the conversation; sending the user to a terminal is a product bug.
 
 Inspection and proposal preparation run without prompts by default; setup
@@ -618,17 +607,17 @@ refused. Reconnect cannot take over a candidate. Closed attempts return no apply
 arguments. To try again while still authorized, prepare with a new
 `idempotency_key` or `supersedes_proposal_id` and obtain a fresh decision.
 
-If `policy_propose` reports a deadline error, its inactive proposal may
-already be saved. Retry the identical arguments on the same connection to
-recover its current outcome. Only a live review owned by that interaction
-returns approval arguments. Use `policy_show` to inspect it or `policy_receipt`
-to retrieve a known review's outcome. A timeout does not establish that the
+If `policy_propose` reports a deadline error, its proposal may already be
+saved. Retry the identical arguments on the same connection to recover its
+current outcome. Only a live review owned by that interaction returns approval
+arguments. Use `policy_show`, with `proposal_id` for a known review, to inspect
+it. A timeout does not establish that the
 proposal was absent or that policy changed. Report unresolved failures; if the
 attempt is closed, inspect its outcome before preparing fresh.
 
 Only the original registered proposer can withdraw a proposal. Repeating an
 owned withdrawal makes no further change. Unrecognized hosts can inspect and
-propose, but advertising form support does not grant activation authority or
+propose, but advertising form support does not grant authority to change policy or
 install native hooks. A prepared review expires after five minutes even before
 apply. Disconnect or process death closes its candidates; Stop hooks close
 unapplied reviews associated with that task's session; SessionEnd also closes
@@ -636,10 +625,9 @@ them, as does Codex's Interrupt event. Updated hook registration
 requires `mcp_setup` through its in-session review. When the host supplies no
 session association, the connection lease and expiry still bound its lifetime.
 
-`policy_receipt` returns rejected, withdrawn, stale and failed outcomes as well
-as committed receipts. It never reopens them. Recovery evidence is retained
-through 24 hours after the review deadline, and the current activation's receipt
-is kept. Capacity is 128 live reviews and 1,024 retained outcomes. Older eligible
+`policy_show` with `proposal_id` returns applied, rejected, withdrawn, stale and
+failed outcomes. It never reopens them. Recovery evidence is retained through
+24 hours after the review deadline. Capacity is 128 live reviews and 1,024 retained outcomes. Older eligible
 outcomes are reclaimed when admitting new work; capacity never asks a person to
 clear an approval queue.
 
@@ -654,7 +642,7 @@ fresh preparation and immediate approval.
 ## Rule suggestions
 
 After completing a task, call `suggestion_list` with the hook-reported
-`session_id`. It lists recorded policy Ask requests since the last activation,
+`session_id`. It lists recorded policy Ask requests in retained history,
 including the reason, count, any pack request for a project rule, and observed
 `request.executable`, `arguments`, and optional `cwd`. Each command in a
 compound request appears separately. Command rows supply evidence, not rule drafts.
@@ -690,7 +678,7 @@ Declined or cancelled approval must not be retried without a new user request.
 
 Recognized read-only curl/wget downloads instead include a web-fetch
 `suggested_change`, grouped by site. Local-server suggestions cover
-`localhost`, `127.0.0.1`, and `[::1]` on any port. Activation clears the list.
+`localhost`, `127.0.0.1`, and `[::1]` on any port.
 
 ### Draft reusable rules
 
@@ -732,7 +720,7 @@ from the project root, with no extra arguments:
 }
 ```
 
-This creates an inactive proposal. Copy its returned `apply_arguments` unchanged
+This creates a proposal; policy is unchanged. Copy its returned `apply_arguments` unchanged
 into `policy_apply` for user approval. The `exact` path predicate takes an
 object; `{"exact":"/workspace/acme"}` is invalid here. Using `within` instead
 includes subdirectories, so choose it only when that broader scope is intended.
@@ -775,8 +763,7 @@ is needed. Wait for each result before the next proposal. Declining or cancellin
 keeps the existing policy. Unique pack offers use the same flow, once per
 conversation.
 
-`policy_receipt` reads closed outcomes and committed receipts; live proposals return
-`operator_review_required`. It cannot apply a change. Stored action requests
+Stored action requests
 are separate: inspect `request_list`, then use `request_approve` or `request_deny`
 for in-session confirmation.
 
@@ -788,8 +775,7 @@ agent, session and tool attribution. SDK reads retry through the same factory,
 session and read window. SDK applications use the explicit
 [interactive read session](claude-read-only.md#approve-reads-in-the-sdk-session).
 Read and checked-command grants satisfy Ask; native-hook forms can also review
-supported Deny overrides. Resource changes, expiry and policy activation require
-a fresh request.
+supported Deny overrides. Resource changes and expiry require a fresh request.
 
 Pass `request_ids` to review up to eight distinct pending requests together,
 including different kinds from the same identified session. Accept issues all
@@ -798,9 +784,10 @@ session can be reviewed individually with `request_id` on its matching channel.
 
 ## Diagnostic input and snapshots
 
-`status` and `policy_show` expose `active_candidate_id`. Submission or
-inspection of a proposal exposes `before_candidate_id` and `after_candidate_id`.
-Handles identify immutable bytes; policy activation cannot retarget them.
+`status` and `policy_show` expose `policy_candidate_id`, a handle on the current
+policy files. Submission or inspection of a proposal exposes
+`before_candidate_id` and `after_candidate_id`. Handles identify immutable
+bytes; later edits to the files cannot retarget them.
 Pending reviews preserve their exact captures. Under storage pressure, old
 inspection handles may expire; `candidate_unavailable` means to request fresh
 handles through `status` or `policy_show` on the same connection. Unknown and
@@ -864,8 +851,8 @@ Clients using per-request MCP `2026-07-28` can declare
 `capabilities.extensions["io.modelcontextprotocol/tasks"] = {}` in their modern
 request metadata. A concrete `policy_propose` call may then return a task handle
 instead of waiting for preparation. Legacy calls and calls without that extension
-keep their ordinary synchronous result. Guided settings forms and manual file
-adoption keep their existing workflows.
+keep their ordinary synchronous result. Guided settings forms keep their existing
+workflow.
 
 Keep the returned `taskId`. Send `tasks/get` with `{"taskId":"RETURNED_ID"}`
 to read status and, after completion, the original tool result. Reconnect to the
@@ -922,7 +909,7 @@ compares policy. Tokens may be strings or integers. For example:
 
 Messages identify stages such as reading and verifying the registry catalog,
 release history or pack artifact, preparing policy inputs, comparing permissions
-and preparing an inactive review. Registry enrollment can report identity/key
+and preparing a review. Registry enrollment can report identity/key
 discovery before its separate trust confirmation. Stage messages contain no
 registry URLs, command text, settings or credentials.
 
@@ -933,7 +920,7 @@ new RPCs with their own tokens and counts. Calls without a token send no progres
 
 Progress is best effort: queue pressure or request completion can drop stages.
 Notifications never follow the request's final reply. Use the final tool result
-and receipt to determine the outcome. Progress cannot approve a proposal, extend
+to determine the outcome. Progress cannot approve a proposal, extend
 a deadline or revive a cancelled operation. Whether a host displays notifications
 depends on that host.
 
@@ -994,9 +981,9 @@ same addresses from text block 1. Use MCP `resources/read` with the returned URI
 
 The JSON comparison report preserves coverage, unknowns and before/after
 evidence. The evidence report includes attribution, reasons, linked requests,
-current disposition and any retained receipt or authorization events. Private
+current disposition and outcome, and any authorization events. Private
 connection settings and secrets are redacted. A report is inspection only;
-activate a change through its separate, unchanged `apply_arguments` and host
+apply a change through its separate, unchanged `apply_arguments` and host
 confirmation.
 
 Report addresses belong to one enrolled project and exact proposal candidate.
@@ -1006,7 +993,7 @@ candidate or project. A foreign, unknown or reclaimed report returns a resource
 not-found error. Discover the address shape with `resources/templates/list`;
 `resources/list` continues to list bundled static resources. Reports exceeding
 the response limit return an error rather than partial evidence. Project reports
-are unavailable before enrollment consent or on the project-free static server.
+are unavailable on the project-free static server.
 
 ### Tool result format
 

@@ -331,9 +331,11 @@ mod tests {
         .unwrap();
         let state = crate::review::storage::Store::open(root.path())
             .unwrap()
-            .read()
+            .read_checkpoint()
             .unwrap();
-        assert!(state.active.is_some());
+        // The checkpoint keeps runtime state only; enrollment writes the policy
+        // files that hold the baseline.
+        assert!(state.policy_revision.is_empty());
         assert_eq!(state.registry_checkpoints, initial.checkpoints);
         assert_eq!(state.operator["installed"][0]["profile"], "recommended");
     }

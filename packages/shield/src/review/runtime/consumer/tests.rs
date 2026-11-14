@@ -1,21 +1,15 @@
-//! Consumers retain exact evidence and cannot hand stale or foreign activations onward.
+//! Consumers retain exact evidence and cannot hand stale or foreign policy onward.
 use super::*;
 use crate::review::{
-    self, runtime,
+    self,
     tests::{enrolled, input},
 };
 use std::{cell::Cell, sync::mpsc, thread, time::Duration};
 
-fn activate(context: &Context, previous: Option<&str>) -> Value {
-    let status = runtime::status(context).unwrap();
-    runtime::publish_fixture(
-        context,
-        status["review"]["policy_revision"].as_str().unwrap(),
-        status["review"]["candidate_digest"].as_str().unwrap(),
-        previous,
-        &|| Ok(()),
-    )
-    .unwrap()
+/// One ordinary review-state write.
+fn write(context: &Context) -> Result<Value, Error> {
+    Store::open(Path::new(&context.project_root))?
+        .update_checkpoint(context, &|| Ok(()), |_| Ok(Value::Null))
 }
 fn request(context: &Context) -> policy::Request {
     policy::Request {
@@ -125,7 +119,6 @@ fn prepared_snapshots_own_requests() {
 #[test]
 fn review_changes_do_not_mutate_prepared_evaluator_and_handoff_refuses_foreign_project() {
     let (root, context) = enrolled();
-    activate(&context, None);
     let project = Project::open(root.path()).unwrap();
     let snapshot = project.snapshot().unwrap();
     let evaluated = snapshot.evaluate(request(&context)).unwrap();
@@ -159,7 +152,6 @@ fn review_changes_do_not_mutate_prepared_evaluator_and_handoff_refuses_foreign_p
         policy::Decision::Allow
     );
     let (other_root, other) = enrolled();
-    activate(&other, None);
     let other_project = Project::open(other_root.path()).unwrap();
     assert!(
         other_project
@@ -172,9 +164,8 @@ fn review_changes_do_not_mutate_prepared_evaluator_and_handoff_refuses_foreign_p
 }
 
 #[test]
-fn handoff_lock_prevents_activation_until_callback_finishes_and_unwinds_on_panic() {
+fn handoff_lock_prevents_state_writes_until_callback_finishes_and_unwinds_on_panic() {
     let (root, context) = enrolled();
-    let first = activate(&context, None);
     let project = Project::open(root.path()).unwrap();
     let evaluated = project
         .snapshot()
@@ -183,33 +174,20 @@ fn handoff_lock_prevents_activation_until_callback_finishes_and_unwinds_on_panic
         .unwrap();
     let (sender, receiver) = mpsc::channel();
     let context_for_thread = context.clone();
-    let first_for_thread = first.clone();
     let handle = project
         .with_current(&evaluated, |_, _| {
             let handle = thread::spawn(move || {
-                let status = runtime::status(&context_for_thread).unwrap();
-                let result = runtime::publish_fixture(
-                    &context_for_thread,
-                    status["review"]["policy_revision"].as_str().unwrap(),
-                    status["review"]["candidate_digest"].as_str().unwrap(),
-                    first_for_thread["activation_id"].as_str(),
-                    &|| Ok(()),
-                );
-                sender.send(result).unwrap();
+                sender.send(write(&context_for_thread)).unwrap();
             });
             assert!(matches!(
                 receiver.recv_timeout(Duration::from_secs(5)).unwrap(),
                 Err(Error::Locked)
             ));
-            assert_eq!(runtime::status(&context).unwrap()["active"], first);
             handle
         })
         .unwrap();
     handle.join().unwrap();
-    assert_ne!(
-        activate(&context, first["activation_id"].as_str())["activation_id"],
-        first["activation_id"]
-    );
+    write(&context).unwrap();
     let current = project
         .snapshot()
         .unwrap()
@@ -236,7 +214,6 @@ fn handoff_lock_prevents_activation_until_callback_finishes_and_unwinds_on_panic
 #[test]
 fn retained_evidence_cannot_cross_corruption_or_reenrollment_at_the_same_root() {
     let (root, context) = enrolled();
-    activate(&context, None);
     let project = Project::open(root.path()).unwrap();
     let snapshot = project.snapshot().unwrap();
     let evaluated = snapshot.evaluate(request(&context)).unwrap();
@@ -269,7 +246,6 @@ fn retained_evidence_cannot_cross_corruption_or_reenrollment_at_the_same_root() 
     .unwrap();
     let replacement = review::open(root.path()).unwrap();
     assert_ne!(replacement.project_id, context.project_id);
-    activate(&replacement, None);
     assert!(project.snapshot().is_err());
     assert!(
         project

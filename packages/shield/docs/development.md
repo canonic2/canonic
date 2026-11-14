@@ -30,12 +30,12 @@ separately retained executable:
 make test-focus FILTER=previous_binary_unreceipted_checkpoint TEST_TARGET=--test=integration PREVIOUS_BINARY=/path/to/previous/shield CARGO_FLAGS='--run-ignored ignored-only'
 ```
 
-This opt-in fixture enrolls through that previous binary in an isolated project
-and home. It verifies that status reads the record unchanged, and that the
-first ordinary command keeps the project ID and activation ID, rewrites the
-checkpoint without its recorded root, records the installation's authority as
-the user's consent and retains the original bytes as a recovery copy. The
-supplied binary must predate the private-consent records.
+This opt-in fixture initializes through that previous binary in an isolated
+project and home. It verifies that status reports the pending upgrade without
+changing the record, and that the first ordinary command keeps the project ID,
+converts the checkpoint once to runtime state without a copy of the policy, and
+that later reads leave it unchanged. The supplied binary must predate the
+policy-files format.
 
 ## Native Linux development
 
@@ -273,15 +273,15 @@ and operator workflows. Start with the module for the behavior you are changing:
 | Project composition, captured source, and evaluation | `src/configuration.rs` and `configuration/` |
 | Shared project, policy and request inspection | `review/project.rs`, `review/history.rs`, `review/approvals.rs` |
 | Pack discovery, acquisition and candidate preparation | `review/packs.rs`, `review/packs/`, `review/registries.rs` |
-| Confirmed publication and project-file repair | `review/publication.rs`, `review/publication/projections.rs`, `review/changes/diff.rs` |
+| Writing the policy files, writer lease and connection publication | `review/files/write.rs`, `review/publication.rs`, `review/publication/`, `review/changes/diff.rs` |
 | CLI questions, reviews and confirmation | `review/operator/` |
 | Agent configuration ownership and repair mechanics | `review/integrations.rs`, `review/integrations/`, `review/path_access.rs` |
 | Approval clocks and request-specific grants | `review/clock.rs`, `review/read_approval.rs`, `review/run_approval.rs` |
-| Durable source, disposable cache, and history | `review/storage/sources.rs`, `review/cache.rs`, `review/storage/history.rs`, `history/correlation.rs` |
-| Object admission, reclamation and live-reader pins | `review/storage/objects.rs`, `review/storage/sources/retention.rs`, `review/cache/retention.rs` |
+| Following the policy files, disposable cache, and history | `review/files.rs`, `review/cache.rs`, `review/storage/history.rs`, `history/correlation.rs` |
+| Contained object directories | `review/storage/objects.rs` |
 | Retained proposal report projections and MCP publication | `review/reports.rs`, `mcp/resources.rs` |
 | Request-owned operation stages and MCP progress | `review/progress.rs`, `mcp/progress.rs` |
-| Durable inactive preparation, task storage and management | `review/changes/preparation.rs`, `review/preparation_tasks/`, `mcp/tasks.rs` |
+| Durable preparation, task storage and management | `review/changes/preparation.rs`, `review/preparation_tasks/`, `mcp/tasks.rs` |
 | Agent payloads, setup codecs, and replies | `src/agents.rs`, `agents/claude_code.rs`, `agents/codex.rs`, `agents/setup.rs` |
 | Shared hook dispatch and feedback | `agents/hook.rs`, `agents/feedback.rs`, `src/agent_message.rs` |
 | Host-specific MCP confirmation | `agents/review.rs`, `agents/*/review.rs` |
@@ -313,7 +313,7 @@ link or a page that is not UTF-8, fails the build with its relative path.
 
 The `canonic-registry-kit` dependency handles registry identity, authentication,
 acquisition, checkpoints, resolution, and UTC timestamps. Shield owns pack
-declarations and the review that activates acquired artifacts. `canonic-mcp-kit`
+declarations and the review that writes acquired artifacts into the policy. `canonic-mcp-kit`
 handles framing, lifecycle, validation, cancellation, deadlines, and confirmation
 requests; Shield's handler supplies its tools and limits. Its documentation
 module also supplies the `docs_*` tool definitions and queries;
@@ -321,7 +321,7 @@ module also supplies the `docs_*` tool definitions and queries;
 failures into Shield's result envelope.
 
 Agent adapters translate vendor payloads and setup formats. They cannot bypass
-core policy or activation checks. To add an agent, implement its adapter and
+core policy or approval checks. To add an agent, implement its adapter and
 registry entry, then verify payload mapping, setup, and real host behavior.
 CLI detection belongs in the adapter's `is_installed` method; it inspects PATH
 without starting the tool.
@@ -559,9 +559,8 @@ unfinished drain. Native callbacks retain fixed hook-stage events without
 creating request spans or waiting for an exit drain; recent events may be lost
 at process exit. Disabled logging does not construct event fields.
 
-The apply trace covers validation, source hydration, policy preparation, cache
-construction, writer-lock wait, publication, projection checks/repair and durable
-sync operations. Legacy form continuations retain their request link and measure
+The apply trace covers validation, policy preparation, writer-lock wait, file
+writes, connection publication and durable sync operations. Legacy form continuations retain their request link and measure
 the input or approval wait. Host permission obtained before Shield receives an
 MCP call is outside this measurement. The handler boundary also excludes MCP
 scheduler queueing, schema validation and final wire encoding; round-trip tests
@@ -621,7 +620,7 @@ and native MCP readiness before submitting a prompt. Run individual cases throug
 
 `adapters/sdk-tests/google-native.test.mjs` runs installed Gemini CLI 0.67.0
 against a local scripted provider in an isolated trusted workspace. It checks
-Allow, Ask and Deny plus headless policy-activation refusal without using a cloud
+Allow, Ask and Deny plus headless policy-change refusal without using a cloud
 account. `SHIELD_TEST_BINARY` can select an already-built development executable;
 the default is the package release executable. Run this file independently with
 `node --test packages/shield/adapters/sdk-tests/google-native.test.mjs`.

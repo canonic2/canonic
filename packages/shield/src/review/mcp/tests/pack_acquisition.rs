@@ -17,6 +17,20 @@ fn unchanged_authority(path: &Path, original: &[u8]) {
         .unwrap()
         .remove("registry_checkpoints")
         .unwrap();
+    // The fixture enrolls registries in the earlier checkpoint format; the
+    // first read moves them to config.local.yml and records the conversion.
+    for key in ["sources", "default"] {
+        before["operator"].as_object_mut().unwrap().remove(key);
+    }
+    for key in ["upgrade_notice", "upgrade_recovery"] {
+        before["operator"].as_object_mut().unwrap().remove(key);
+        after["operator"].as_object_mut().unwrap().remove(key);
+    }
+    // Writing the converted checkpoint and the refreshed catalog evidence
+    // advances the write sequence.
+    for state in [&mut before, &mut after] {
+        state.as_object_mut().unwrap().remove("sequence");
+    }
     assert!(!checkpoints.as_object().unwrap().is_empty());
     for (source, retained) in previous.as_object().unwrap() {
         assert_eq!(checkpoints.get(source), Some(retained));

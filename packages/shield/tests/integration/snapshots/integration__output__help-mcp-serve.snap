@@ -24,7 +24,7 @@ Options:
       --tool-use-id <TOOL_USE_ID>
           Host tool-call ID
       --cache-dir <CACHE_DIR>
-          Compiled cache location for init, MCP setup or cache preparation
+          Folder for this project's compiled policy plans, chosen at init or MCP setup
       --request-timeout-ms <REQUEST_TIMEOUT_MS>
           Cooperative work deadline including queue and encoding [default: 5000]
   -h, --help

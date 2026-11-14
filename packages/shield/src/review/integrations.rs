@@ -1,4 +1,5 @@
 //! Noninteractive integration ownership, protected settings, file reconciliation and repair.
+use crate::configuration::settings::Values;
 use crate::{
     agents, policy,
     review::{self, Context, Error, model::State, storage::Store},
@@ -101,13 +102,9 @@ pub(in crate::review) use prefix_rules::{
     preview as preview_prefix_rules, sync as sync_prefix_rules,
 };
 
-#[derive(Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum AskFallback {
-    #[default]
-    Block,
-    Allow,
-}
+/// What a host that cannot ask does with a request policy asks about: the
+/// `ask_fallback` setting of the policy files.
+pub(crate) use crate::configuration::settings::Fallback as AskFallback;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -120,9 +117,11 @@ pub(in crate::review) struct Registration {
     /// Exact assets retained by the earliest installed Claude mod integration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(in crate::review) interceptor: Option<legacy::Installation>,
-    // Native registrations predate the fallback selection. Absence retains
-    // the original Block behavior; it never implies permission to Allow Ask.
-    #[serde(default)]
+    /// The Ask fallbacks a setup plan chooses for the agents it covers,
+    /// written to `config.local.yml` when the setup commits. A record never
+    /// holds them; earlier records that did are read, and their values move
+    /// to the policy files ([`super::settings::Legacy`]).
+    #[serde(default, skip_serializing)]
     pub(in crate::review) ask_fallback: std::collections::BTreeMap<String, AskFallback>,
     /// Tools the operator approved to run without asking; `None` until chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -337,17 +336,6 @@ pub(in crate::review) fn mcp_after(
     ))
 }
 
-/// The operator's saved fallback for an installed agent, if one was confirmed.
-pub(in crate::review) fn confirmed_fallback(
-    meta: &Value,
-    agent: &str,
-) -> Result<Option<AskFallback>, Error> {
-    fallback(meta, agent)?;
-    Ok(registration(meta)?
-        .filter(|r| r.covers(agent))
-        .and_then(|r| r.ask_fallback.get(agent).copied()))
-}
-
 impl Registration {
     /// Whether this record installs `agent`'s hooks, directly or through the
     /// Box definition, for adapters its publisher supports.
@@ -362,25 +350,42 @@ impl Registration {
     }
 }
 
-pub(crate) fn fallback(meta: &Value, agent: &str) -> Result<AskFallback, Error> {
-    let registered = registration(meta)?;
-    let repairing = pending(meta)?.is_some_and(|plan| plan.affects(agent));
-    if registered.as_ref().is_some_and(|r| {
-        r.ask_fallback
-            .keys()
-            .any(|k| agents::find(k).is_none_or(|a| !a.spec().needs_ask_fallback))
-    }) {
-        return Err(Error::Invalid("invalid Ask fallback integration"));
-    }
-    if repairing {
+/// The Ask fallback in effect for `agent`: the policy files' setting for an
+/// agent setup covers, and Block while a repair affects it or setup does not
+/// cover it.
+pub(crate) fn fallback(meta: &Value, settings: &Values, agent: &str) -> Result<AskFallback, Error> {
+    if pending(meta)?.is_some_and(|plan| plan.affects(agent))
+        || !registration(meta)?.is_some_and(|r| r.covers(agent))
+    {
         return Ok(AskFallback::Block);
     }
-    Ok(registered
-        .as_ref()
-        .filter(|r| r.covers(agent))
-        .and_then(|r| r.ask_fallback.get(agent))
-        .copied()
-        .unwrap_or_default())
+    Ok(settings.fallback(agent))
+}
+
+/// The Ask fallback changes a committed setup makes: each covered agent's
+/// confirmed fallback, and Block for agents it stops covering whose files
+/// name another. A confirmed fallback is written even when it is the default,
+/// so the next setup offers it again.
+fn fallback_changes(
+    plan: &Plan,
+    settings: &Values,
+) -> std::collections::BTreeMap<String, AskFallback> {
+    let mut changes = std::collections::BTreeMap::new();
+    for adapter in agents::ADAPTERS {
+        let id = adapter.spec().id;
+        if !adapter.spec().needs_ask_fallback || !plan.affects(id) {
+            continue;
+        }
+        let named = settings.ask_fallback.get(id);
+        let chosen = match plan.desired.as_ref().filter(|r| r.covers(id)) {
+            Some(desired) => desired.ask_fallback.get(id).copied(),
+            None => named.map(|_| AskFallback::Block),
+        };
+        if let Some(chosen) = chosen.filter(|chosen| named != Some(chosen)) {
+            changes.insert(id.to_owned(), chosen);
+        }
+    }
+    changes
 }
 
 /// Hands off under the state lock when the activation and the protected path
@@ -393,10 +398,10 @@ pub(crate) fn with_fallback<T>(
 ) -> Result<T, Error> {
     let context = review::open(root)?;
     Store::open(root)?.inspect_checkpoint(&context, &|| Ok(()), |state| {
-        if super::path_access::load(&state.operator)? != checked {
+        if super::settings::path_access(&state.settings) != checked {
             return Err(Error::StaleSnapshot);
         }
-        Ok(handoff(fallback(&state.operator, agent)?))
+        Ok(handoff(fallback(&state.operator, &state.settings, agent)?))
     })
 }
 
@@ -491,12 +496,17 @@ pub(in crate::review) fn apply_owned_guarded(
             ));
         }
         state.operator["integration_pending"] = json!(plan);
+        // Revocations take effect before publication, so an interrupted
+        // setup never leaves a fallback it revoked in effect.
+        let mut revoked = fallback_changes(plan, &state.settings);
+        revoked.retain(|_, fallback| *fallback == AskFallback::Block);
+        write_fallbacks(context, state, revoked)?;
         Ok(json!({}))
     })?;
     privacy::validate(Path::new(&context.project_root), plan)?;
     // The committed repair plan owns these bytes. All competing output
     // publishers wait on the projection lease, leaving request authority free.
-    let current = store.read_checkpoint()?;
+    let current = store.read_following_files()?;
     current.check(context)?;
     activation::check_owner(&current, expected, activation)?;
     if current.operator["integration_pending"] != json!(plan)
@@ -526,14 +536,30 @@ pub(in crate::review) fn apply_owned_guarded(
             metadata.remove("integration_verification");
             metadata.remove("integration_publication");
         }
-        let changed = state.operator["integration"] != json!(plan.desired);
         state.operator["integration"] = json!(plan.desired);
         state.operator["integration_pending"] = Value::Null;
-        if changed {
-            super::configuration_changes::changed(state, context, "agent registrations");
-        }
+        write_fallbacks(context, state, fallback_changes(plan, &state.settings))?;
         Ok(json!({}))
     })?;
+    Ok(())
+}
+
+/// Write Ask fallback changes into `config.local.yml`. A folder without
+/// policy files keeps every fallback at Block.
+fn write_fallbacks(
+    context: &Context,
+    state: &mut State,
+    changes: std::collections::BTreeMap<String, AskFallback>,
+) -> Result<(), Error> {
+    if changes.is_empty()
+        || !Path::new(&context.project_root)
+            .join(".shield/config.yml")
+            .is_file()
+    {
+        return Ok(());
+    }
+    super::settings::write(context, &super::settings::fallbacks(changes.clone()))?;
+    state.settings.ask_fallback.extend(changes);
     Ok(())
 }
 
@@ -586,7 +612,7 @@ pub(in crate::review) fn publish(root: &Path, plan: &Plan) -> Result<(), Error> 
 /// The recorded Box definition's state and the Ask fallbacks it carries.
 fn box_status(
     root: &Path,
-    meta: &Value,
+    project: &State,
     owned: &box_definition::Definition,
     diagnostics: &mut Vec<&'static str>,
 ) -> Value {
@@ -603,7 +629,10 @@ fn box_status(
         .filter(|a| a.spec().needs_ask_fallback)
         .map(|a| {
             let id = a.spec().id;
-            (id.to_owned(), json!(fallback(meta, id).unwrap_or_default()))
+            (
+                id.to_owned(),
+                json!(fallback(&project.operator, &project.settings, id).unwrap_or_default()),
+            )
         })
         .collect();
     json!({"agent":box_definition::ID,"path":box_definition::PATH,
@@ -685,7 +714,7 @@ fn checked_mcp_config(
 
 fn diagnose_registered<'a>(
     root: &Path,
-    meta: &Value,
+    state: &State,
     r: &'a Registration,
     config: &Value,
     unsettled: Option<&Plan>,
@@ -695,9 +724,6 @@ fn diagnose_registered<'a>(
     let mut agents = Vec::new();
     for (agent, installation) in &r.agents {
         let before = diagnostics.len();
-        if fallback(meta, agent).is_err() {
-            diagnostics.push("invalid Ask fallback integration");
-        }
         if native::diagnose(root, agent, &r.binary, installation, diagnostics).is_err() {
             diagnostics.push("agent native configuration is unreadable");
         }
@@ -736,10 +762,10 @@ fn diagnose_registered<'a>(
         );
     }
     let mut box_integration = r.box_definition.as_ref().map_or(Value::Null, |owned| {
-        box_status(root, meta, owned, diagnostics)
+        box_status(root, state, owned, diagnostics)
     });
     let before = diagnostics.len();
-    if diagnose_binary(r, meta, diagnostics).is_err() {
+    if diagnose_binary(r, &state.operator, diagnostics).is_err() {
         diagnostics.push("registered binary is unreadable");
     }
     if diagnostics.len() != before {
@@ -754,33 +780,6 @@ fn diagnose_registered<'a>(
     (agents, box_integration, legacy_interceptor)
 }
 
-/// Whether this folder's agent files hold exactly what the registration in
-/// `meta` owns. The installed binary's location is not part of the match.
-pub(in crate::review) fn matches_files(root: &Path, meta: &Value) -> bool {
-    let Ok(Some(registered)) = registration(meta) else {
-        return false;
-    };
-    let mut diagnostics = Vec::new();
-    let Ok(config) = checked_mcp_config(root, true, &mut diagnostics) else {
-        return false;
-    };
-    let mut degraded = std::collections::BTreeSet::new();
-    let (agents, _, _) = diagnose_registered(
-        root,
-        meta,
-        &registered,
-        &config,
-        None,
-        &mut diagnostics,
-        &mut degraded,
-    );
-    !agents.is_empty()
-        && diagnostics.iter().all(|reason| {
-            reason.starts_with("registered binary")
-                || reason.starts_with("recorded registered binary")
-        })
-}
-
 fn agent_output_drift(
     root: &Path,
     state: &State,
@@ -793,7 +792,7 @@ fn agent_output_drift(
         .and_then(|a| a.spec().prefix_rules_path.map(|path| (a, path)))
         .is_some_and(|(adapter, path)| {
             snapshot.is_some_and(|snapshot| {
-                let prefixes = if state.enforcement.enabled {
+                let prefixes = if state.settings.enabled() {
                     snapshot.codex_prefixes()
                 } else {
                     &[]
@@ -840,7 +839,7 @@ fn diagnose_prefixes(
             .iter()
             .any(|a| r.covers(a.spec().id) && a.spec().prefix_rules_path.is_some())
     });
-    // Without a readable activation there is nothing to compare against.
+    // Without loadable policy files there is nothing to compare against.
     if let Some(prefixes) = if prefixed {
         snapshot.map(super::cache::Inspection::codex_prefixes)
     } else {
@@ -871,7 +870,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
             |r| {
                 diagnose_registered(
                     root,
-                    &meta,
+                    state,
                     r,
                     &config,
                     unsettled.as_ref(),
@@ -880,18 +879,21 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                 )
             },
         );
-        // Coverage reads only activation-bound descriptions. It never loads a
-        // plan, rebuilds a cache or prepares retained source for presentation.
-        let snapshot = state
-            .active
-            .as_ref()
-            .and_then(|active| active.inspection(state));
+        // Coverage compares the agents' files with the policy files as they
+        // are now, hand edits included, using their plan only when one is
+        // already compiled. Status never compiles: without a cached plan the
+        // comparison is reported unchecked.
+        let inspection = review::files::cache_for(&state.operator)
+            .ok()
+            .and_then(|cache| review::files::cached_in(root, &cache))
+            .map(|evaluator| review::cache::Inspection::of(&evaluator));
+        let snapshot = inspection.as_ref();
         diagnose_prefixes(
             root,
             &meta,
             registered.as_ref(),
             snapshot,
-            state.enforcement.enabled,
+            state.settings.enabled(),
             &mut diagnostics,
         );
         let connections =
@@ -916,15 +918,14 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                 box_integration["status"] = json!("degraded");
             }
         }
-        let published =
-            reporting::box_hooks(root, registered.as_ref(), &state.operator, &mut diagnostics);
+        let published = reporting::box_hooks(root, registered.as_ref(), state, &mut diagnostics);
         let healthy = diagnostics.is_empty();
         let mut report = json!({
             "binary_inspection":registered.as_ref().map(|registration| json!({
                 "current_location_recorded":std::env::current_exe().ok().and_then(|path|path.canonicalize().ok()).is_some_and(|running|current_executable_receipt(registration,&meta,&running)),
                 "payload_integrity":"unchecked","compatibility":"unchecked"
             })),
-            "policy_inspection":{"availability":if snapshot.is_some() {"recorded"}else{"unavailable"},"source_validation":"not-performed","automatic_matching":"checked-on-interception"},
+            "policy_inspection":{"availability":if snapshot.is_some() {"current"}else{"unchecked"},"source_validation":"not-performed","automatic_matching":"checked-on-interception"},
             "box_integration":box_integration,
             "legacy_interceptor":legacy_interceptor,
             "mcp_connections":connections,
@@ -937,7 +938,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                     "working_files":{"categories":categories,"session_discovery":"request-time","runtime_assets":if categories.contains(&"runtime_assets") {"supported"} else {"unsupported"},"non_temporary_scratch":if categories.contains(&"non_temporary_scratch") {"supported"} else {"unsupported"}},
                     "native_approval":adapter.is_some_and(|a|a.approval(agents::Event::Before)==crate::enforcement::protocol::NativeApproval::Prompt),
                     "permission_request":adapter.is_some_and(|a|a.spec().events.iter().any(|(event,e)|*e==agents::Event::Permission && r.agents[agent].groups.contains_key(*event))),
-                    "ask_fallback":if adapter.is_some_and(|a|a.spec().needs_ask_fallback) { json!(fallback(&meta,agent).unwrap_or_default()) } else { Value::Null }})
+                    "ask_fallback":if adapter.is_some_and(|a|a.spec().needs_ask_fallback) { json!(fallback(&meta,&state.settings,agent).unwrap_or_default()) } else { Value::Null }})
             }).collect::<Vec<_>>()).unwrap_or_default(),
             "diagnostics":diagnostics,"repair_needed":!healthy,
             "tool_interception":if registered.as_ref().is_some_and(|r|!r.agents.is_empty()) {"native hooks installed; host loading is unverified"} else if !legacy_interceptor.is_null() {"legacy text-read interceptor installed; host loading is unverified"} else if box_integration.is_null() {"not installed"} else {"native hooks defined for Box to publish; host loading is unverified"},

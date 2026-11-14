@@ -8,15 +8,6 @@ pub(crate) fn fixture() -> (assert_fs::TempDir, Context, EvaluatedRequest, Strin
     root.child("acme.txt")
         .write_str("Acme private text")
         .unwrap();
-    let status = review::runtime::status(&context).unwrap();
-    review::runtime::publish_fixture(
-        &context,
-        status["review"]["policy_revision"].as_str().unwrap(),
-        status["review"]["candidate_digest"].as_str().unwrap(),
-        None,
-        &|| Ok(()),
-    )
-    .unwrap();
     let path = Path::new(&context.project_root).join("acme.txt");
     let binding = Binding::open(
         Path::new(&context.project_root),
@@ -284,31 +275,6 @@ fn terminal_read_receipts_replay_after_row_compaction_without_history_or_new_gra
         review::approvals::deny(&foreign, &second, false),
         Err(Error::Missing)
     ));
-}
-
-#[test]
-fn authorization_recovers_a_corrupt_plan_before_the_grant_transaction() {
-    let (_root, context, evidence, resource) = fixture();
-    let id = pending(&context, &evidence, &resource);
-    let status = review::runtime::status(&context).unwrap();
-    let cache = &status["compiled_cache"];
-    let path = std::path::PathBuf::from(cache["directory"].as_str().unwrap())
-        .join("compiled")
-        .join(cache["project_key"].as_str().unwrap())
-        .join(format!("{}.bin", cache["plan_key"].as_str().unwrap()));
-    std::fs::write(path, b"corrupt derived plan").unwrap();
-    assert_eq!(
-        authorize(&context, &id, 300, None, false).unwrap()["status"],
-        "approved"
-    );
-    assert_eq!(
-        review::runtime::status(&context).unwrap()["active"]["activation_id"],
-        status["active"]["activation_id"]
-    );
-    Project::open(Path::new(&context.project_root))
-        .unwrap()
-        .snapshot()
-        .unwrap();
 }
 
 #[test]
@@ -718,6 +684,43 @@ fn different_origin_request_resource_and_activation_cannot_consume() {
 }
 
 #[test]
+fn a_grant_binds_the_exact_request_across_a_policy_file_edit() {
+    let (root, context, evidence, resource) = fixture();
+    let id = pending(&context, &evidence, &resource);
+    authorize(&context, &id, 300, None, false).unwrap();
+    // A person edits the policy files after approving the read.
+    root.child(".shield/config.yml")
+        .write_str(&format!(
+            "schema_version: 1\npacks: []\naccess_paths:\n  read:\n  - {}\n",
+            crate::test_support::absolute("/srv/acme")
+        ))
+        .unwrap();
+    let edited = Project::open(Path::new(&context.project_root))
+        .unwrap()
+        .snapshot()
+        .unwrap()
+        .evaluate_resource(
+            evidence.request().clone(),
+            evidence.resource().unwrap().clone(),
+        )
+        .unwrap();
+    assert_ne!(
+        edited.identity().policy_revision(),
+        evidence.identity().policy_revision()
+    );
+    let allowed = gate(
+        &context,
+        "factory-acme",
+        &edited,
+        &resource,
+        Some(&id),
+        || true,
+    )
+    .unwrap();
+    assert_eq!(allowed["code"], "allowed-once", "{allowed}");
+}
+
+#[test]
 fn file_changes_block_operator_approval_and_non_operator_cannot_approve() {
     let (root, context, evidence, resource) = fixture();
     let id = pending(&context, &evidence, &resource);
@@ -1034,40 +1037,24 @@ fn legacy_read_checkpoint_upgrade_preserves_policy_and_closes_unbound_operation_
         for field in ["runtime_incarnation", "policy_lineage", "portable_policy"] {
             wire["operator"].as_object_mut().unwrap().remove(field);
         }
-        wire["active"].as_object_mut().unwrap().remove("compiled");
-        wire["active"]
-            .as_object_mut()
-            .unwrap()
-            .remove("binding_version");
-        // Reproduce the original root-bound activation proof, rather than
-        // dropping fields from a current versioned proof.
+        // The original format carried a root-bound activation, which the
+        // reader accepts and ignores: the policy files are the policy.
         let activation_binding = crate::policy::fingerprint(
             json!([
                 wire["project_id"],
                 wire["project_root"],
-                wire["active"]["activation_id"],
-                wire["active"]["previous_activation_id"],
-                wire["active"]["policy_revision"],
-                wire["active"]["candidate_digest"]
+                "acme-original-activation",
+                null,
+                wire["policy_revision"],
+                "acme-candidate-digest"
             ])
             .to_string()
             .as_bytes(),
         );
-        wire["active"]["binding"] = json!(activation_binding);
+        wire["active"] = json!({"activation_id":"acme-original-activation",
+            "previous_activation_id":null,"policy_revision":wire["policy_revision"],
+            "candidate_digest":"acme-candidate-digest","binding":activation_binding});
         wire["history_generation"] = Value::Null;
-        for field in ["authorization_events", "events"] {
-            let events = wire[field].as_array_mut().unwrap();
-            events.retain(|event| event["kind"] != "compiled_cache_prepared");
-            for event in events {
-                if event["kind"] == "runtime_activated" {
-                    event["details"]["binding"] = json!(activation_binding);
-                    event["details"]
-                        .as_object_mut()
-                        .unwrap()
-                        .remove("compiled_digest");
-                }
-            }
-        }
         let state_path = Path::new(&context.project_root).join(".shield/review/state.json");
         std::fs::write(&state_path, wire.to_string()).unwrap();
         let loaded = store.read_checkpoint().unwrap();
@@ -1076,12 +1063,6 @@ fn legacy_read_checkpoint_upgrade_preserves_policy_and_closes_unbound_operation_
         assert_eq!(loaded.policy_lineage(), context.project_id, "{status}");
         assert!(loaded.read_requests.is_empty(), "{status}");
         assert!(loaded.terminal_receipts.is_empty(), "{status}");
-        loaded
-            .active
-            .as_ref()
-            .unwrap()
-            .validate_binding(&loaded)
-            .unwrap();
         loaded.check_operations().unwrap();
         let next = review::open(Path::new(&context.project_root)).unwrap();
         assert!(authorize(&next, &id, 300, None, false).is_err(), "{status}");

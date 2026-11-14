@@ -147,11 +147,16 @@ fn onboarding_selects_both_agents_together_and_skip_leaves_integrations_absent()
             .len(),
         2
     );
-    assert_eq!(
-        saved["operator"]["integration"]["ask_fallback"]["codex"],
-        "allow"
-    );
-    // Reproduce a removed enrollment with surviving generated host files.
+    // Ask fallbacks are settings, kept in the uncommitted configuration layer.
+    let local = std::fs::read_to_string(root.path().join(".shield/config.local.yml"))
+        .expect("local configuration");
+    let fallback = local
+        .split("ask_fallback:")
+        .nth(1)
+        .unwrap_or_else(|| panic!("{local}"));
+    assert!(fallback.contains("codex: allow"), "{local}");
+    // A folder whose review state is gone keeps its host entries: setup names
+    // the entries it no longer owns and overwrites none of them.
     let paths = [
         ".mcp.json",
         ".claude/settings.local.json",
@@ -162,21 +167,25 @@ fn onboarding_selects_both_agents_together_and_skip_leaves_integrations_absent()
         .iter()
         .map(|p| std::fs::read(root.path().join(p)).expect("host file"))
         .collect();
-    std::fs::remove_dir_all(root.path().join(".shield/review")).expect("remove fixture enrollment");
-    assert_eq!(
-        guided(&root, &["init"], "claude,codex\n\nno\n")["code"],
-        130
+    std::fs::remove_dir_all(root.path().join(".shield/review")).expect("remove fixture state");
+    let refused = guided(
+        &root,
+        &["mcp", "setup", "--agent", "claude", "--agent", "codex"],
+        "yes\n",
     );
-    assert!(!root.path().join(".shield/review/state.json").exists());
+    assert_eq!(refused["code"], 1, "{refused}");
+    assert!(
+        refused["stderr"]
+            .as_str()
+            .is_some_and(|stderr| stderr.contains(".claude/settings.local.json")),
+        "{refused}"
+    );
     for (index, path) in paths.iter().enumerate() {
         assert_eq!(
             std::fs::read(root.path().join(path)).expect("preserved host file"),
             before[index]
         );
     }
-    let reclaimed = guided(&root, &["init"], "claude,codex\n\nyes\n");
-    assert_eq!(reclaimed["code"], 0, "{reclaimed}");
-    assert_eq!(query(&root, &["doctor"])["repair_needed"], false);
     let skipped = TempDir::new().expect("skipped project");
     assert_eq!(guided(&skipped, &["init"], "\nyes\n")["code"], 0);
     assert!(!skipped.path().join(".claude").exists());
@@ -486,27 +495,6 @@ fn global_sources_work_before_enrollment_and_project_defaults_take_precedence() 
     );
     assert_eq!(query(&root, &["registry", "list"])["default"], "main");
     assert_eq!(query(&root, &user)["default"], "acme");
-}
-
-#[test]
-#[cfg(any(unix, windows))]
-fn policy_repair_recreates_missing_files_without_using_init_or_changing_active_policy() {
-    let root = TempDir::new().expect("project");
-    assert_eq!(interactive(&root, &["init"], "yes\n")["code"], 0);
-    let before = query(&root, &["status"]);
-    let config = root.path().join(".shield/config.yml");
-    let original = std::fs::read(&config).unwrap();
-    std::fs::remove_file(&config).unwrap();
-    assert_eq!(
-        query(&root, &["status"])["project_file_inspection"],
-        "unchecked"
-    );
-    let review = ["policy", "review"];
-    assert_eq!(interactive(&root, &review, "repair\nno\n")["code"], 130);
-    assert!(!config.exists());
-    assert_eq!(interactive(&root, &review, "repair\nyes\n")["code"], 0);
-    assert_eq!(std::fs::read(config).unwrap(), original);
-    assert_eq!(query(&root, &["status"])["active"], before["active"]);
 }
 
 #[test]
@@ -839,14 +827,16 @@ fn old_public_commands_and_unattended_mutations_are_refused() {
     ] {
         cargo_bin_cmd!("shield").args(&args).assert().code(2);
     }
-    // Retained MCP launch syntax is supported, but still requires enrollment.
+    // Retained MCP launch syntax is supported, but still needs project files.
     cargo_bin_cmd!("shield")
         .current_dir(root.path())
         .args(["__internal", "mcp"])
         .assert()
         .code(1)
         .stdout("")
-        .stderr(predicates::str::contains("enrolled project required"));
+        .stderr(predicates::str::contains(
+            "no Shield project; run shield init",
+        ));
     cargo_bin_cmd!("shield")
         .args(["init", "--json", "--project"])
         .arg(root.path())
@@ -943,9 +933,9 @@ fn fresh_initialization_refuses_linked_or_file_projection_directory() {
 
 #[test]
 #[cfg(unix)]
-#[ignore = "requires PREVIOUS_BINARY pointing to a pre-continuity Shield executable"]
+#[ignore = "requires SHIELD_PREVIOUS_BINARY pointing to a pre-continuity Shield executable"]
 fn previous_binary_unreceipted_checkpoint_upgrades_in_place() {
-    let previous = std::env::var_os("SHIELD_PREVIOUS_BINARY").expect("set PREVIOUS_BINARY");
+    let previous = std::env::var_os("SHIELD_PREVIOUS_BINARY").expect("set SHIELD_PREVIOUS_BINARY");
     let previous = std::path::Path::new(&previous);
     let root = TempDir::new().unwrap();
     let initialized = guided_binary(
@@ -958,48 +948,29 @@ fn previous_binary_unreceipted_checkpoint_upgrades_in_place() {
     let path = root.path().join(".shield/review/state.json");
     let bytes = std::fs::read(&path).unwrap();
     let checkpoint: Value = serde_json::from_slice(&bytes).unwrap();
-    for field in [
-        "runtime_incarnation",
-        "policy_consent_key",
-        "administration_origin",
-    ] {
-        assert!(
-            checkpoint["operator"][field].is_null(),
-            "previous writer already records {field}"
-        );
-    }
-    // Diagnostics read the older record without converting it.
+    // Status reads the older record without converting it.
     let diagnostic = query(&root, &["status"]);
     assert_eq!(diagnostic["project_id"], checkpoint["project_id"]);
-    assert_eq!(std::fs::read(&path).unwrap(), bytes);
-    // The first command that opens the runtime upgrades in place and continues.
-    let prepared = query(&root, &["cache", "prepare"]);
-    assert!(
-        prepared.get("error").is_none_or(Value::is_null),
-        "{prepared}"
+    assert_eq!(
+        diagnostic["checkpoint_upgrade_pending"], true,
+        "{diagnostic}"
     );
+    assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    // The first command that opens the runtime converts once and continues.
+    let listed = query(&root, &["rule", "list"]);
+    assert!(listed.get("error").is_none_or(Value::is_null), "{listed}");
     let upgraded: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(upgraded["project_id"], checkpoint["project_id"]);
-    assert_eq!(
-        upgraded["active"]["activation_id"],
-        checkpoint["active"]["activation_id"]
-    );
-    assert!(upgraded["operator"]["runtime_incarnation"].is_object());
-    let digest = Sha256::digest(&bytes)
-        .iter()
-        .fold(String::new(), |mut output, byte| {
-            write!(output, "{byte:02x}").unwrap();
-            output
-        });
-    assert!(
-        root.path()
-            .join(format!(".shield/review/bootstrap-{digest}.json"))
-            .is_file()
-    );
+    // The converted checkpoint holds no copy of the policy or its activation.
+    for field in ["active", "candidates", "policy_revision"] {
+        assert!(upgraded.get(field).is_none(), "{field} kept: {upgraded}");
+    }
+    let converted = std::fs::read(&path).unwrap();
     assert_eq!(
         query(&root, &["status"])["project_id"],
         checkpoint["project_id"]
     );
+    assert_eq!(std::fs::read(&path).unwrap(), converted);
 }
 
 #[test]
@@ -1203,7 +1174,7 @@ fn confirmed_rules_publish_immediately_and_cancellation_preserves_authority() {
     let initialized = interactive(&root, &["init"], "yes\n");
     assert_eq!(initialized["code"], 0, "{initialized}");
     let before = query(&root, &["status"]);
-    assert!(before["active"].is_object());
+    assert!(before["policy_files"]["digest"].is_string(), "{before}");
     assert_eq!(before["history"]["limit"], 5000);
     let cancelled = interactive(
         &root,
@@ -1211,15 +1182,24 @@ fn confirmed_rules_publish_immediately_and_cancellation_preserves_authority() {
         "status\nargv\ngit\n[\"status\"]\nallow\nRead repository state\n\nno\n",
     );
     assert_eq!(cancelled["code"], 130);
-    assert_eq!(query(&root, &["status"])["active"], before["active"]);
+    assert_eq!(
+        query(&root, &["status"])["policy_files"],
+        before["policy_files"]
+    );
     let changed = interactive(
         &root,
         &["rule", "add"],
         "status\nargv\ngit\n[\"status\"]\nallow\nRead repository state\n\nyes\n",
     );
     assert_eq!(changed["code"], 0, "{changed}");
+    // The rule is in the files, which decide the next request.
     let after = query(&root, &["status"]);
-    assert_ne!(after["active"], before["active"]);
+    assert_ne!(after["policy_files"], before["policy_files"]);
+    assert!(
+        std::fs::read_to_string(root.path().join(".shield/rules.yml"))
+            .expect("rules")
+            .contains("status")
+    );
     assert_eq!(after["pending_change"], false);
     assert_eq!(after["repair_needed"], false);
     assert_eq!(

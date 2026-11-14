@@ -143,7 +143,7 @@ pub(super) fn captured_summary(candidate: &Value, reviewed_files: bool, args: &V
         }.into());
     } else if comparison["relation"] == "equivalent" {
         lines.push(if comparison["algorithm"] == "selected-permission-structure-identity-v1" {
-            "The supported request domains have identical permission structure; this does not establish host effects or approve activation."
+            "The supported request domains have identical permission structure; this does not establish host effects or approve the change."
         } else {
             "No command decision changes were found in the supported comparison."
         }.into());

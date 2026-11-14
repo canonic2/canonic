@@ -9,7 +9,6 @@ use std::{
 
 /// Tools whose call waits for the person's answer to Shield's form.
 pub(super) const CONFIRMED_TOOLS: &[&str] = &[
-    "project_enroll",
     "policy_apply",
     "request_approve",
     "request_deny",
@@ -20,11 +19,9 @@ pub(super) const CONFIRMED_TOOLS: &[&str] = &[
     "registry_add",
     "registry_remove",
     "registry_default",
-    "policy_repair",
     "history_configure",
     "policy_reject",
     "mcp_setup",
-    "cache_prepare",
 ];
 
 #[derive(Default)]
@@ -41,9 +38,6 @@ struct Pending {
 }
 
 impl Confirmations {
-    pub(super) fn is_empty(&self) -> bool {
-        self.pending.is_empty()
-    }
     pub(super) fn discard(&mut self, request: &RequestContext) -> Option<u64> {
         self.pending
             .remove(request.request_state.as_ref()?)?

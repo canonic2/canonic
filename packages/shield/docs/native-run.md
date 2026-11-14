@@ -189,7 +189,7 @@ with the effective canonical cwd. This example permits printing `Acme text`.
 
 The JSON below is one rule, not a complete document. Put it in your selected
 custom document's `rules` array with `structured-rules-v1` and
-`argument-rules-v1` declared, then review and activate it with `shield policy review`.
+`argument-rules-v1` declared, or add it with `shield rule add`.
 
 ```json
 {
@@ -229,7 +229,7 @@ shield __internal run --project /path/to/acme --timeout-ms 5000 --approval-reque
 
 Repeat the original argv, cwd, timeout and supplied `--agent`, `--session-id` and
 `--tool-use-id` exactly. The selector supplies no authority by itself. Grants bind
-enrollment, activation, revision and candidate digest; literal request; cwd device/
+the project and the literal request; cwd device/
 inode or Windows volume/file identity; native executable/loader identities,
 metadata, digests and verified loader contract;
 the fixed environment; timeout duration; declared origin; and the private
@@ -323,7 +323,7 @@ modes are restored after cleanup. Abrupt launcher loss closes the Job and lets
 Windows terminate its remaining members. This covers Job descendants; external
 hosts and privileged interference remain outside ownership.
 
-The launcher holds the activation lock only through verification and spawn,
+The launcher holds the project's writer lock only through verification and spawn,
 then releases it before history writes and waiting. Child ownership survives
 post-spawn failures; errors terminate/reap the owned child. Policy changes after
 launch govern future requests. Inherited file descriptors and shell redirection

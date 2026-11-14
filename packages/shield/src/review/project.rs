@@ -1,6 +1,6 @@
 //! Enrolled project loading and noninteractive policy/status inspection.
+use super::integrations;
 use super::{Context, Error, model::State, storage::Store};
-use super::{integrations, path_access};
 use crate::review;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -29,9 +29,11 @@ pub(super) fn load_prepared(
     Ok((state, evaluator))
 }
 
-/// Enrollment and authority metadata; source inspection and preparation are explicit.
+/// Enrollment and authority metadata, brought up to the policy files as the
+/// writer that later commits a review will see them; preparation is explicit.
+/// Hooks read the checkpoint alone through the store.
 pub(super) fn checkpoint(context: &Context) -> Result<State, Error> {
-    let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
+    let state = Store::open(Path::new(&context.project_root))?.read_following_files()?;
     state.check(context)?;
     Ok(state)
 }
@@ -46,13 +48,8 @@ pub(super) fn captured(context: &Context) -> Result<State, Error> {
 /// only selected fields against their canonical lock, without preparing policy.
 pub(super) fn captured_inspection(context: &Context) -> Result<State, Error> {
     let store = Store::inspect(Path::new(&context.project_root))?;
-    let (state, _) = store.read_diagnostic_checkpoint()?;
+    let state = store.read_inspection_following_files()?;
     state.check_inspection(context)?;
-    if state.legacy_preview.is_some() {
-        return Err(Error::Invalid(
-            "historical policy display is unavailable before runtime conversion; status and doctor can inspect its recorded proof without preparing policy",
-        ));
-    }
     Ok(state)
 }
 
@@ -60,14 +57,13 @@ pub(super) fn status(context: &Context) -> Result<Value, Error> {
     let (state, pending) =
         Store::inspect(Path::new(&context.project_root))?.read_diagnostic_checkpoint()?;
     state.check_inspection(context)?;
-    let mut value = status_from(context, &state);
-    if state.legacy_preview.is_none() {
-        value["pack_updates"] = super::pack_updates::inspect(context, &state, None);
-    }
     // Requests are decided by the policy files; fetch any pack release they
-    // lock that this machine lacks, then report the files' state.
+    // lock that this machine lacks before anything loads them, then report
+    // the files' state.
     let root = Path::new(&context.project_root);
-    let fetched = super::files::fetch_missing(root, &state.operator);
+    let fetched = super::files::fetch_missing(root, &state.settings);
+    let mut value = status_from(context, &state);
+    value["pack_updates"] = super::pack_updates::inspect(context, &state, None);
     let cache = super::files::cache_for(&state.operator).ok();
     value["policy_files"] = match super::files::check(root, cache.as_deref()) {
         Ok(digest) => json!({"digest":digest}),
@@ -95,30 +91,15 @@ pub(super) fn status(context: &Context) -> Result<Value, Error> {
 /// Render a checked history capture, also used by doctor's additional probes.
 pub(super) fn status_from(context: &Context, state: &State) -> Value {
     let mut value = review::runtime::status_from(state);
-    value["policy_revision"] = json!(state.policy_revision);
-    value["enabled"] = json!(state.enforcement.enabled);
-    if state.legacy_preview.is_some() {
-        value["installed_packs"] = crate::review::packs::summaries(&metadata(state));
-        value["history"] = json!({"enabled":state.history_enabled,"limit":state.history_limit,"available":null,"integrity":"unchecked","inspect":"shield history list"});
-        value["policy_validation"] =
-            json!({"source":"unchecked","model":"unchecked","compiled_integrity":"unchecked"});
-        value["project_file_inspection"] = json!("unchecked");
-        value["pending_approvals"] = json!(0);
-        value["session_grants"] =
-            json!({"available":false,"reason":"historical record inspection"});
-        value["action_authority"] = json!(
-            "unavailable until actual runtime validates and converts the historical checkpoint"
-        );
-        value["coverage"] = json!({"registered_integrations":[],"installed_integrations":[],"tool_interception":"unchecked","live_host_verification":"unchecked","verification":{"state":"unchecked","basis":"historical-record-only-inspection"},"policy_inspection":{"availability":"unavailable","source_validation":"not-performed"}});
-        value["repair_needed"] = json!(false);
-        value["repair_assessment"] =
-            json!({"known_integration_repairs":false,"project_files":"unchecked","complete":false});
-        value["repair_route"] = json!(
-            "The next actual runtime operation validates and converts this historical checkpoint; no new policy consent is required solely for its format."
-        );
-        value["project_root"] = json!(context.project_root);
-        return value;
+    // The one conversion from an earlier release's state, while recent.
+    if let Some(notice) = super::storage::recent_upgrade(&state.operator) {
+        value["upgrade"] = notice;
     }
+    // A checkpoint read holds no policy; the files' digest identifies it.
+    if !state.policy_revision.is_empty() {
+        value["policy_revision"] = json!(state.policy_revision);
+    }
+    value["enabled"] = json!(state.settings.enabled());
     value["installed_packs"] = crate::review::packs::summaries(&metadata(state));
     value["pending_configuration"] = json!(
         state
@@ -130,7 +111,6 @@ pub(super) fn status_from(context: &Context, state: &State) -> Value {
     );
     value["pending_capture_freshness"] = json!("unchecked; apply revalidates exact reviewed files");
     value["history"] = history_metadata(context, state);
-    value["reviewed_policy_consent"] = super::storage::policy_consent_presence(state);
     value["pending_approvals"] = json!(super::approvals::pending_count(
         state,
         super::clock::best_effort_ms()
@@ -140,17 +120,10 @@ pub(super) fn status_from(context: &Context, state: &State) -> Value {
     value["coverage"]["verification"] = json!({"state":"unchecked","basis":"record-only-inspection","history_available":value["history"]["available"],"agents":[],"inspect":"shield history list"});
     value["coverage"]["live_host_verification"] = json!("unchecked");
     value["enforcement"] = json!(integrations::enforcement(&value["coverage"]));
-    value["path_access"] = path_access::load(&metadata(state)).map_or_else(
-        |error| json!({"error":error.to_string()}),
-        |access| json!(access),
-    );
+    value["path_access"] = json!(super::settings::path_access(&state.settings));
     // Exact projection hashing belongs to explicit review/mutation. Even a
     // recorded digest does not make scanning all pack source a metadata probe.
     value["project_file_inspection"] = json!("unchecked");
-    value["project_input_metadata"] = state.active.as_ref().map_or_else(
-        || json!({"availability":"unavailable","probe":"not-run","integrity":"unchecked","authorizes":false}),
-        |active| super::cache::inputs::availability(&active.compiled),
-    );
     value["repair_needed"] = json!(value["coverage"]["repair_needed"] == true);
     value["repair_assessment"] = json!({"known_integration_repairs":value["repair_needed"],"project_files":"unchecked","complete":false});
     value["repair_route"] = json!(if value["coverage"]["repair_needed"] == true {
@@ -178,7 +151,7 @@ fn history_metadata(context: &Context, state: &State) -> Value {
             .and_then(|file| file.metadata().ok())
             .is_some_and(|metadata| metadata.len() <= 1024 * 1024)
     });
-    json!({"enabled":state.history_enabled,"limit":state.history_limit,
+    json!({"enabled":state.settings.history_enabled,"limit":state.settings.history_limit,
         "available":if incomplete {json!(false)}else{Value::Null},
         "integrity":if incomplete {"incomplete"}else{"unchecked"},"inspect":"shield history list"})
 }

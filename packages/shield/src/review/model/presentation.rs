@@ -1,16 +1,14 @@
-//! Bounded display-only approval presentation captured while exact source is
-//! already prepared. Actual application always regenerates from complete source.
+//! Bounded display-only approval presentation captured while the proposal is
+//! already prepared, kept inline in the proposal. Application always checks
+//! the proposal's own files; a missing or mismatched presentation is rebuilt.
 use super::{Context, Error, Proposal, State, approval};
-use crate::review::storage::{
-    Store,
-    objects::Pins,
-    sources::{self, Namespace},
-};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::path::Path;
 
-const LIMIT: usize = 256 * 1024;
+/// The largest presentation kept inline; a larger one is rebuilt on demand.
+const LIMIT: usize = 32 * 1024;
+const KIND: &str = "inline-presentation-v1";
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Presentation {
@@ -26,16 +24,17 @@ struct Presentation {
     summary: String,
 }
 
+/// The inline presentation to store with a proposal, or `None` when it is too
+/// large to keep. Its digest goes in the proposal's creation event.
 pub(in crate::review) fn capture(
-    store: &Store,
     base: &State,
+    before: &Value,
     candidate: &Value,
     metadata: &Value,
     comparison: &Value,
     reviewed_files: bool,
-) -> Result<Option<(Value, Pins)>, Error> {
+) -> Result<Option<Value>, Error> {
     let _span = crate::diagnostics::trace::span("proposal.capture_presentation");
-    let before = &base.candidates["project"];
     let changes =
         crate::review::changes::diff::between(&base.operator, before, metadata, candidate);
     let review = approval::captured(before, candidate, comparison);
@@ -44,8 +43,8 @@ pub(in crate::review) fn capture(
     let presentation = Presentation {
         schema_version: 1,
         engine: env!("CARGO_PKG_VERSION").into(),
-        before: sources::candidate_identity(before),
-        after: sources::candidate_identity(candidate),
+        before: crate::review::candidate_identity(before),
+        after: crate::review::candidate_identity(candidate),
         before_metadata: crate::json::fingerprint(&base.operator)
             .map_err(|_| Error::Invalid("presentation metadata digest"))?,
         after_metadata: crate::json::fingerprint(metadata)
@@ -58,47 +57,49 @@ pub(in crate::review) fn capture(
     if !crate::json::fits(&presentation, LIMIT) {
         return Ok(None);
     }
-    Namespace::project(store)
-        .retain_json(&json!(presentation))
-        .map(Some)
+    let value = json!(presentation);
+    let digest =
+        crate::json::fingerprint(&value).map_err(|_| Error::Invalid("presentation digest"))?;
+    Ok(Some(json!({"kind":KIND,"digest":digest,"value":value})))
 }
 
-/// Missing/corrupt/future/unbound metadata supplies no apply arguments. This
-/// never prepares source, activates policy or substitutes for actual validation.
+/// The digest a proposal's creation event binds its presentation by.
+pub(in crate::review) fn digest(presentation: &Value) -> Value {
+    presentation["digest"].clone()
+}
+
+/// Missing/corrupt/future/unbound presentations supply no apply arguments.
+/// This never prepares policy or substitutes for actual validation.
 pub(in crate::review) fn read(
-    context: &Context,
+    _context: &Context,
     state: &State,
     row: &Proposal,
 ) -> Option<(Value, String)> {
-    let reference = &row.presentation;
-    if !crate::json::fits(reference, 1024)
-        || reference["kind"] != "retained-json-v2"
-        || reference["length"]
-            .as_u64()
-            .is_none_or(|length| length > LIMIT as u64)
-    {
+    let stored = &row.presentation;
+    if stored["kind"] != KIND || !crate::json::fits(&stored["value"], LIMIT) {
         return None;
     }
-    let before = sources::candidate_identity(&row.base_candidate);
-    let after = sources::candidate_identity(&row.candidate);
+    let digest = crate::json::fingerprint(&stored["value"]).ok()?;
+    if stored["digest"] != digest.as_str() {
+        return None;
+    }
+    let before = &row.base_digest;
+    let after = &row.candidate_digest;
     if !state.authorization_events.iter().any(|event| {
         event["kind"] == "proposal_created"
             && event["links"]["proposal_id"] == row.id
-            && event["details"]["presentation"] == *reference
-            && event["details"]["before_candidate"] == before
-            && event["details"]["after_candidate"] == after
+            && event["details"]["presentation"] == digest.as_str()
+            && event["details"]["before_candidate"] == before.as_str()
+            && event["details"]["after_candidate"] == after.as_str()
             && event["details"]["policy_revision"] == row.policy_revision
     }) {
         return None;
     }
-    let store = Store::inspect(Path::new(&context.project_root)).ok()?;
-    let _pin = sources::pin_inspection(&store, reference).ok()?;
-    let value = Namespace::project(&store).read_json(reference).ok()?;
-    let presentation: Presentation = serde_json::from_value(value).ok()?;
+    let presentation: Presentation = serde_json::from_value(stored["value"].clone()).ok()?;
     if presentation.schema_version != 1
         || presentation.engine != env!("CARGO_PKG_VERSION")
-        || presentation.before != before
-        || presentation.after != after
+        || presentation.before != *before
+        || presentation.after != *after
         || presentation.revision != row.policy_revision
         || presentation.before_metadata != crate::json::fingerprint(&row.base_metadata).ok()?
         || presentation.after_metadata != crate::json::fingerprint(&row.candidate_metadata).ok()?

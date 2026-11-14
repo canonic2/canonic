@@ -46,16 +46,7 @@ pub(super) fn propose(
     )
 }
 pub(super) fn receipt(context: &Context, id: &str) -> Value {
-    let mut context = context.clone();
-    context.surface = "mcp".into();
-    context.connection_id = Some("receipt-test".into());
-    mcp::call(
-        &context,
-        &mcp::Connection::new("receipt-test".into()),
-        "policy_receipt",
-        &json!({"proposal_id":id}),
-        &|| Ok(()),
-    )
+    json!({"data": super::proposal_outcome(Path::new(&context.project_root), id)})
 }
 pub(super) fn evaluate(
     context: &Context,
@@ -91,7 +82,7 @@ pub(super) fn history(context: &Context, id: Option<&str>) -> Result<Value, Erro
             .ok_or(Error::Missing);
     }
     Ok(
-        json!({"schema_version":1,"project_id":state.project_id,"enabled":state.history_enabled,"limit":state.history_limit,"events":state.events}),
+        json!({"schema_version":1,"project_id":state.project_id,"enabled":state.settings.history_enabled,"limit":state.settings.history_limit,"events":state.events}),
     )
 }
 
@@ -105,7 +96,7 @@ fn atomic_proposal_commit_and_receipts_preserve_origin_when_history_is_purged() 
         propose(&context, &input("one"), &|| Ok(())).unwrap()["proposal_id"],
         id
     );
-    assert!(receipt(&context, id)["error"].is_object());
+    assert_eq!(receipt(&context, id)["data"]["status"], "pending");
     let mut mcp = context.clone();
     mcp.surface = "mcp".into();
     assert!(matches!(
@@ -119,16 +110,8 @@ fn atomic_proposal_commit_and_receipts_preserve_origin_when_history_is_purged() 
     assert_eq!(applied["provenance"], proposal["provenance"]);
     assert_eq!(receipt(&mcp, id)["data"].clone(), applied);
     let state = Store::open(root.path()).unwrap().read().unwrap();
-    assert_eq!(
-        state
-            .authorization_events
-            .iter()
-            .filter(
-                |event| event["kind"] == "runtime_activated" && event["links"]["proposal_id"] == id
-            )
-            .count(),
-        1
-    );
+    // The applied write is the policy the files now hold.
+    assert_eq!(applied["receipt"]["policy_revision"], state.policy_revision);
     assert_eq!(state.events.len(), 0);
     let request = policy::Request {
         executable: "acme".into(),
@@ -290,15 +273,17 @@ fn accepting_an_older_proposal_keeps_the_current_protected_file_access() {
     };
     path_access::configure_fixture(root.path(), relaxed);
     operator::commit_proposal_fixture(&context, rule["proposal_id"].as_str().unwrap()).unwrap();
-    let state = Store::open(root.path()).unwrap().read().unwrap();
-    assert_eq!(path_access::load(&state.operator).unwrap(), relaxed);
-    // A later tightening also survives a proposal captured while access was open.
+    assert_eq!(path_access::current(root.path()).unwrap(), relaxed);
+    // A later tightening edits the policy files, so a proposal captured while
+    // access was open is refused rather than written over it.
     let rule = propose(&context, &input("two"), &|| Ok(())).unwrap();
     path_access::configure_fixture(root.path(), PathAccess::default());
-    operator::commit_proposal_fixture(&context, rule["proposal_id"].as_str().unwrap()).unwrap();
-    let state = Store::open(root.path()).unwrap().read().unwrap();
+    assert!(matches!(
+        operator::commit_proposal_fixture(&context, rule["proposal_id"].as_str().unwrap()),
+        Err(Error::StaleSnapshot)
+    ));
     assert_eq!(
-        path_access::load(&state.operator).unwrap(),
+        path_access::current(root.path()).unwrap(),
         PathAccess::default()
     );
 }

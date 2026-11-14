@@ -291,65 +291,6 @@ pub(in crate::review) fn require_mode(metadata: &Value, source: &str) -> Result<
     }
 }
 
-/// A verified private receipt can remain reviewed while its policy is unusable.
-/// This marker is not an activation, compiled cache, grant or agent ownership.
-pub(in crate::review) fn record_inactive_reuse(
-    state: &mut State,
-    context: &Context,
-    error: &Error,
-) {
-    let (reason, next_action) = if matches!(error, Error::RegistryRevoked { .. }) {
-        (
-            "known-revoked",
-            "Update or remove the revoked pack before activating this reviewed policy.",
-        )
-    } else {
-        (
-            "authority-unavailable",
-            "Restore the adopted registry trust metadata; the next runtime use can reactivate this exact reviewed policy.",
-        )
-    };
-    let revoked = match error {
-        Error::RegistryRevoked {
-            source_identity,
-            pack,
-            version,
-            digest,
-        } => json!({"source_identity":source_identity,"id":pack,"version":version,"digest":digest}),
-        _ => Value::Null,
-    };
-    let proof = json!({"schema_version":1,"kind":"reviewed-private-consent","project_id":state.project_id,"policy_revision":state.policy_revision,"candidate_digest":super::storage::sources::map_digest(&state.candidates),"activated":false,"reason":reason,"revoked":revoked,"next_action":next_action});
-    state.active = None;
-    state.operator["policy_consent"] = proof.clone();
-    let mut event = state.event(
-        "policy_consent_reused",
-        context,
-        json!({}),
-        json!({}),
-        json!({"receipt":proof}),
-    );
-    event["operator"] =
-        json!({"operator_id":null,"display_name":null,"mechanism":"reviewed-private-consent"});
-    state.record(event);
-}
-
-pub(in crate::review) fn inactive_reviewed(state: &State) -> bool {
-    let proof = &state.operator["policy_consent"];
-    state.active.is_none()
-        && proof["schema_version"] == 1
-        && proof["kind"] == "reviewed-private-consent"
-        && proof["activated"] == false
-        && proof["project_id"] == state.project_id
-        && proof["policy_revision"] == state.policy_revision
-        && proof["candidate_digest"] == super::storage::sources::map_digest(&state.candidates)
-        && state.authorization_events.iter().any(|event| {
-            event["kind"] == "policy_consent_reused"
-                && event["operator"]["mechanism"] == "reviewed-private-consent"
-                && event["provenance"]["project_id"] == state.project_id
-                && event["details"]["receipt"] == *proof
-        })
-}
-
 /// A frozen first-adoption plan: exact captured origin/anchor, signed root roles,
 /// revocations, catalog checkpoint and prior global head. Nothing is rediscovered
 /// after the person confirms these bytes.
@@ -359,6 +300,8 @@ pub(in crate::review) struct Prepared {
     root: String,
     project_id: String,
     before: Value,
+    /// The project's registries, a setting of the policy files.
+    registries: canonic_registry_kit::registrations::Registrations,
     global_generation: Option<String>,
     previous: Option<Retained>,
     update: VerifiedUpdate,
@@ -380,7 +323,7 @@ impl Prepared {
             .map_err(registries::registration_error)?;
         let effective = registries::merge(
             snapshot.registrations(),
-            Some(&registries::project(&metadata)?),
+            Some(&registries::project(&state.settings)),
         )?;
         let source = effective
             .get(name)
@@ -419,6 +362,7 @@ impl Prepared {
             root: context.project_root.clone(),
             project_id: context.project_id.clone(),
             before: metadata,
+            registries: state.settings.registries.clone(),
             global_generation: snapshot.generation().map(str::to_owned),
             previous,
             update,
@@ -452,7 +396,9 @@ impl Prepared {
             return Err(Error::StaleSnapshot);
         }
         let state = super::project::checkpoint(context)?;
-        if super::project::metadata(&state) != self.before {
+        if super::project::metadata(&state) != self.before
+            || state.settings.registries != self.registries
+        {
             return Err(Error::StaleSnapshot);
         }
         self.update
@@ -476,7 +422,9 @@ impl Prepared {
         let adopted = json!({"mode":"versioned-v1","generation":publication.generation,"head_revision":publication.revision,"object":publication.object,"root_version":self.update.root().version(),"root_revision":self.update.root().revision(),"revocation_sequence":self.update.revocations().sequence(),"revocation_revision":self.update.revocations().revision()});
         let store = Store::open(Path::new(&context.project_root))?;
         let result = store.update_checkpoint(context, checkpoint, |state| {
-            if super::project::metadata(state) != self.before {
+            if super::project::metadata(state) != self.before
+                || state.settings.registries != self.registries
+            {
                 return Err(Error::StaleSnapshot);
             }
             if !state.operator["registry_trust"].is_object() {
@@ -484,16 +432,12 @@ impl Prepared {
             }
             state.operator["registry_trust"][self.source.identity()] = adopted.clone();
             state.registry_checkpoints = self.project_checkpoints.clone();
-            state.remember_policy = true;
             Ok(json!({}))
         });
         if result.is_err() {
             receipt["repair_needed"] = json!(true);
             receipt["project_reference_updated"] = json!(false);
         } else {
-            // Existing reviewed consent keeps the final acknowledged floors
-            // even when the trust review changes no policy activation.
-            store.refresh_policy_consent();
             receipt["project_reference_updated"] = json!(true);
         }
         Ok(receipt)
@@ -629,14 +573,12 @@ pub(in crate::review) fn checked_catalog(
     let published = namespace.publish(&update, Some(&previous))?;
     let store = Store::open(Path::new(&context.project_root))?;
     store.update_checkpoint(context,&||Ok(()),|current|{
-        if super::project::metadata(current)!=metadata||current.registry_checkpoints!=state.registry_checkpoints{return Err(Error::StaleSnapshot);}
+        if super::project::metadata(current)!=metadata||current.settings.registries!=state.settings.registries||current.registry_checkpoints!=state.registry_checkpoints{return Err(Error::StaleSnapshot);}
         current.registry_checkpoints=next.clone();
         if !current.operator["registry_trust"].is_object(){current.operator["registry_trust"]=json!({});}
         current.operator["registry_trust"][source.identity()]=json!({"mode":"versioned-v1","generation":published.generation,"head_revision":published.revision,"object":published.object,"root_version":update.root().version(),"root_revision":update.root().revision(),"revocation_sequence":update.revocations().sequence(),"revocation_revision":update.revocations().revision()});
-        current.remember_policy=true;
         Ok(json!({}))
     })?;
-    store.refresh_policy_consent();
     Ok(Some(catalog))
 }
 

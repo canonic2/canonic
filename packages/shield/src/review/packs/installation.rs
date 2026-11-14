@@ -79,7 +79,8 @@ impl Installation {
             let rows = metadata["installed"]
                 .as_array()
                 .ok_or(Error::Invalid("installed packs missing"))?;
-            let index = super::addition_selection(&metadata, &selection.reference)?;
+            let index =
+                super::addition_selection(&metadata, &before.settings, &selection.reference)?;
             let selector = rows[index]["selector"]
                 .as_str()
                 .ok_or(Error::Invalid("pack selector missing"))?

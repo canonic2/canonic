@@ -70,9 +70,85 @@ fn shield_mode_hook_entry_reads_checkpoint_once() {
     }
 }
 
+/// Hooks decide by the policy files' plan and read the checkpoint for runtime
+/// state only: no request captures the files into review state.
+#[test]
+fn hook_evaluation_captures_no_policy_into_review_state() {
+    use clap::Parser as _;
+    let (root, _) = fixture();
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    for agent in ["claude", "codex"] {
+        for _ in 0..2 {
+            let request = log.request("hook", "evaluate", None, None).unwrap();
+            {
+                let _scope = request.enter();
+                tool(root.path(), agent, "Bash", &json!({"command":"git status"}));
+                assert_eq!(request.recorded_count("policy.captures"), 0, "{agent}");
+                // Only compiling a plan the cache lacks reads the sources.
+                assert_eq!(
+                    request.recorded_count("policy.source_captures"),
+                    request.recorded_count("policy.plan_misses"),
+                    "{agent}"
+                );
+            }
+            request.finish("success");
+        }
+    }
+}
+
+/// Status reads a plan only when one is already compiled; it never compiles.
+#[test]
+fn status_never_compiles_a_plan_and_reports_coverage_unchecked_without_one() {
+    use clap::Parser as _;
+    let (root, context) = fixture();
+    // A hand edit gives the files a key no plan is compiled for yet.
+    let config = root.path().join(".shield/config.yml");
+    let edited = format!("# Acme edit\n{}", std::fs::read_to_string(&config).unwrap());
+    std::fs::write(&config, edited).unwrap();
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let connection = review::mcp::Connection::new("acme-status".into());
+    let status = |expected: &str| {
+        let request = log.request("command", "status", None, None).unwrap();
+        {
+            let _scope = request.enter();
+            let value = review::mcp::call(&context, &connection, "status", &json!({}), &|| Ok(()));
+            assert_eq!(request.recorded_count("policy.plan_misses"), 0, "{value}");
+            assert_eq!(
+                value["data"]["coverage"]["policy_inspection"]["availability"], expected,
+                "{value}"
+            );
+        }
+        request.finish("success");
+    };
+    status("unchecked");
+    // A request compiles the plan; status then uses it.
+    tool(
+        root.path(),
+        "claude",
+        "Bash",
+        &json!({"command":"git status"}),
+    );
+    status("current");
+}
+
 #[test]
 fn shield_mode_disabled_defers_to_host_permissions_and_enable_restores_checks() {
     let (root, mut context) = fixture();
+    commit_policy_files(root.path());
     context.agent = Some("claude".into());
     let connection = review::mcp::Connection::new("acme-mode".into());
     let toggle = |name| confirm_mode(&context, &connection, name);
@@ -355,6 +431,34 @@ fn native_host_plugin_and_hook_directories_require_administrative_access() {
     }
 }
 
+/// Makes `folder` a Git repository with its policy files committed, so a
+/// `git reset --hard` there leaves them unchanged and follows policy.
+fn commit_policy_files(folder: &Path) {
+    for arguments in [
+        &["init", "-q"][..],
+        &["add", "--", ".shield"],
+        &[
+            "-c",
+            "user.name=Acme",
+            "-c",
+            "user.email=acme@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "-m",
+            "Acme policy",
+        ],
+    ] {
+        let output = crate::test_support::git()
+            .current_dir(folder)
+            .args(arguments)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{arguments:?}: {output:?}");
+    }
+}
+
 #[test]
 fn native_tool_cwd_cannot_select_a_policy_but_a_codex_session_folder_does() {
     let (root, outer) = fixture();
@@ -371,6 +475,7 @@ fn native_tool_cwd_cannot_select_a_policy_but_a_codex_session_folder_does() {
     for cwd in [nested.as_path(), sibling.path()] {
         let inner = review::mcp::initialize_fixture(cwd, &bundle);
         assert_ne!(outer.project_id, inner.project_id);
+        commit_policy_files(cwd);
     }
     let decide = |agent: &str, cwd: &Path| {
         let host = json!({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_use_id":"authority","session_id":"test","cwd":cwd,"tool_input":{"command":"git reset --hard"}});
@@ -411,6 +516,7 @@ fn claude_hooks_follow_the_session_folder_after_a_move_or_into_a_worktree() {
     )
     .unwrap();
     review::mcp::initialize_fixture(&worktree, &bundle);
+    commit_policy_files(&worktree);
     let moved = root.path().join("moved-away");
     let decide = |launch: &Path, session: &Path, cwd: &Path| {
         let host = json!({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_use_id":"session","session_id":"test","cwd":cwd,"tool_input":{"command":"git reset --hard"}});
@@ -437,8 +543,9 @@ fn claude_hooks_follow_the_session_folder_after_a_move_or_into_a_worktree() {
     // A session started in the parent cannot reach the worktree's policy by cd.
     let (decision, reply) = decide(root.path(), root.path(), &worktree);
     assert_eq!(decision, "deny", "{reply}");
-    // A worktree awaiting enrollment fails closed rather than borrowing the
-    // parent's policy; its MCP server serves the same worktree for enrollment.
+    // A fresh worktree enforces its own files with no step rather than
+    // borrowing the parent's policy (which denies this command); its empty
+    // policy asks. Its MCP server serves the same worktree.
     let fresh = root.path().join(".gate/workspaces/fresh");
     fs::create_dir_all(fresh.join(".shield")).unwrap();
     fs::write(
@@ -447,7 +554,8 @@ fn claude_hooks_follow_the_session_folder_after_a_move_or_into_a_worktree() {
     )
     .unwrap();
     let (decision, reply) = decide(root.path(), &fresh, &fresh);
-    assert_eq!(decision, "deny", "{reply}");
+    assert_eq!(decision, "ask", "{reply}");
+    assert!(fresh.join(".shield/review/state.json").is_file());
     assert_eq!(
         crate::mcp_io::serve_project(Some(root.path()), &fresh, Some(&fresh)).unwrap(),
         fresh.canonicalize().unwrap()
@@ -1789,6 +1897,62 @@ fn invalid_policy_files_make_requests_ask_and_name_the_problem() {
 }
 
 #[test]
+fn a_hand_edit_decides_the_next_request_and_a_broken_one_never_falls_back() {
+    let (root, _) = fixture();
+    let custom = root.path().join(".shield/custom.json");
+    assert_eq!(
+        call(root.path(), "claude", "git status")["hookSpecificOutput"]["permissionDecision"],
+        "allow"
+    );
+    // A person turns the allow rule into a deny; nothing else runs.
+    let mut rules: Value = serde_json::from_slice(&fs::read(&custom).unwrap()).unwrap();
+    rules["rules"][0]["decision"] = json!("deny");
+    fs::write(&custom, rules.to_string()).unwrap();
+    assert_eq!(
+        call(root.path(), "claude", "git status")["hookSpecificOutput"]["permissionDecision"],
+        "deny"
+    );
+    // A broken edit asks; it never returns to the earlier allow or deny.
+    fs::write(&custom, "{ not json").unwrap();
+    for agent in ["claude", "codex"] {
+        let value = call(root.path(), agent, "git status");
+        let decision = &value["hookSpecificOutput"]["permissionDecision"];
+        assert_ne!(decision, "allow", "{agent}: {value}");
+        assert!(
+            value
+                .to_string()
+                .contains("policy files in .shield/ are invalid"),
+            "{agent}: {value}"
+        );
+    }
+}
+
+#[test]
+fn a_pack_missing_from_this_machine_asks_and_names_the_fix() {
+    let (root, _) = fixture();
+    let digest = crate::policy::fingerprint(b"Acme pack this machine never stored");
+    fs::write(
+        root.path().join(".shield/config.yml"),
+        format!(
+            "schema_version: 1\npacks:\n- id: acme/missing\n  version: \"1.0.0\"\n  profile: recommended\n  path: cache/{digest}.yml\nrules: custom.json\n"
+        ),
+    )
+    .unwrap();
+    for (agent, decision) in [("claude", "ask"), ("codex", "deny")] {
+        let value = call(root.path(), agent, "git status");
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], decision,
+            "{agent}: {value}"
+        );
+        assert!(
+            value.to_string().contains("missing from this machine")
+                && value.to_string().contains("status"),
+            "{agent}: {value}"
+        );
+    }
+}
+
+#[test]
 fn pinned_event_encodes_failures_without_trusting_the_input_event() {
     let (root, _) = fixture();
     let adapter = find("codex").unwrap();
@@ -2955,8 +3119,6 @@ fn canonical_mcp_recovery_defers_to_host_when_hook_project_state_cannot_open() {
             for tool in [
                 "doctor",
                 "status",
-                "project_enroll",
-                "cache_prepare",
                 "policy_propose",
                 "mcp_setup",
                 "policy_apply",
@@ -3010,7 +3172,6 @@ fn canonical_mcp_tools_defer_to_host_when_shield_is_paused() {
         for tool in [
             "doctor",
             "status",
-            "cache_prepare",
             "mcp_setup",
             "policy_propose",
             "policy_apply",
@@ -3432,10 +3593,10 @@ fn native_ask_fallback_is_scoped_truthful_and_never_permits_failures_or_protecte
         call(root.path(), "codex", "git add acme.txt")["hookSpecificOutput"]["permissionDecision"],
         "deny"
     );
-    let path = root.path().join(".shield/review/state.json");
-    let mut state: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    state["operator"]["integration"]["ask_fallback"]["codex"] = json!("invalid");
-    fs::write(path, state.to_string()).unwrap();
+    // The fallback is a policy file setting; an invalid one fails closed.
+    let local = root.path().join(".shield/config.local.yml");
+    let text = fs::read_to_string(&local).unwrap();
+    fs::write(&local, text.replace("codex: block", "codex: invalid")).unwrap();
     assert_eq!(
         call(root.path(), "codex", "acme read")["hookSpecificOutput"]["permissionDecision"],
         "deny"
@@ -4061,14 +4222,20 @@ fn operator_path_access_opens_settings_but_never_policy_files_or_review_state() 
 }
 
 #[test]
-fn invalid_path_access_blocks_every_native_request() {
+fn invalid_protection_setting_makes_every_native_request_ask() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
-    crate::review::path_access::store_fixture(root, json!({"agent_settings_change":"always"}));
-    for agent in ["claude", "codex"] {
+    // Invalid policy files decide nothing; the user answers each request.
+    std::fs::write(
+        root.join(".shield/config.local.yml"),
+        "schema_version: 1\nprotection: {agent_settings_change: always}\n",
+    )
+    .unwrap();
+    // Codex cannot prompt here, so its request is refused.
+    for (agent, decision) in [("claude", "ask"), ("codex", "deny")] {
         let value = call(root, agent, "git status");
         assert_eq!(
-            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            value["hookSpecificOutput"]["permissionDecision"], decision,
             "{agent}: {value}"
         );
     }
@@ -4124,6 +4291,124 @@ fn approved_asks_tell_claude_and_suggest_a_rule_once_routine() {
         event("codex", "PostToolUse", "acme-codex", "git add acme.txt"),
         json!({})
     );
+}
+
+#[test]
+fn git_commands_that_rewrite_policy_files_are_blocked_or_asked() {
+    let (_root, context) = fixture();
+    let root = Path::new(&context.project_root);
+    for source in [
+        "git checkout HEAD~1 -- .shield/config.yml",
+        "git checkout HEAD~1 -- .",
+        "git restore --source=HEAD~1 .shield",
+        "git show HEAD~1:.shield/config.yml > .shield/config.yml",
+    ] {
+        for agent in ["claude", "codex"] {
+            let value = call(root, agent, source);
+            assert_eq!(
+                value["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{agent} {source}: {value}"
+            );
+        }
+    }
+    // Paths a patch or stash writes are unknown: Claude asks the user, and
+    // Codex, which cannot ask here, refuses.
+    for source in ["git stash pop", "git apply acme.patch"] {
+        let value = call(root, "claude", source);
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "ask",
+            "{value}"
+        );
+        assert!(reason(&value).contains("policy files"), "{value}");
+        let value = call(root, "codex", source);
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{value}"
+        );
+        assert!(reason(&value).contains("policy files"), "{value}");
+    }
+}
+
+#[test]
+fn git_commands_that_move_the_tree_ask_only_when_the_policy_files_change() {
+    // Policy allows every Git command, so only the policy-file check decides.
+    let root = settings_fixture("git");
+    let root = root.path();
+    let git = |arguments: &[&str]| {
+        let output = crate::test_support::git()
+            .args(["-c", "user.name=Acme", "-c", "user.email=acme@example.com"])
+            .args(["-c", "commit.gpgsign=false"])
+            .current_dir(root)
+            .args(arguments)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{arguments:?}: {output:?}");
+        String::from_utf8(output.stdout).unwrap().trim().to_owned()
+    };
+    let config = fs::read_to_string(root.join(".shield/config.yml")).unwrap();
+    git(&["init", "-q"]);
+    git(&["add", "--", ".shield", "src"]);
+    git(&["commit", "-q", "-m", "Acme base"]);
+    git(&["branch", "acme-same"]);
+    git(&["switch", "-q", "-c", "acme-open"]);
+    fs::write(
+        root.join(".shield/config.yml"),
+        format!("{config}# acme open\n"),
+    )
+    .unwrap();
+    git(&["commit", "-q", "-am", "Acme open"]);
+    git(&["switch", "-q", "-"]);
+    assert_eq!(
+        fs::read_to_string(root.join(".shield/config.yml")).unwrap(),
+        config
+    );
+    for agent in ["claude", "codex"] {
+        for source in ["git switch acme-same", "git reset --hard", "git stash"] {
+            assert_permitted(&call(root, agent, source), agent);
+        }
+    }
+    let ask = |source: &str| {
+        let value = call(root, "claude", source);
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "ask",
+            "{source}: {value}"
+        );
+        assert!(reason(&value).contains("policy files"), "{value}");
+        let value = call(root, "codex", source);
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{source}: {value}"
+        );
+        assert!(reason(&value).contains("policy files"), "{value}");
+    };
+    for source in [
+        "git switch acme-open",
+        "git merge acme-open",
+        "git reset --hard acme-open",
+        "git pull",
+    ] {
+        ask(source);
+    }
+    // Staging other policy content is a policy-file write; once it is
+    // committed, a reset to it asks.
+    let open = git(&["rev-parse", "acme-open:.shield/config.yml"]);
+    let staged = format!("git update-index --cacheinfo 100644,{open},.shield/config.yml");
+    for agent in ["claude", "codex"] {
+        let value = call(root, agent, &staged);
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{agent}: {value}"
+        );
+    }
+    git(&[
+        "update-index",
+        "--cacheinfo",
+        &format!("100644,{open},.shield/config.yml"),
+    ]);
+    git(&["commit", "-q", "-m", "Acme staged"]);
+    for source in ["git reset --hard", "git stash", "git checkout -f"] {
+        ask(source);
+    }
 }
 
 #[test]

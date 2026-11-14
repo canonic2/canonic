@@ -125,7 +125,10 @@ fn status_keeps_healthy_agent_rows_when_another_configuration_is_unreadable() {
 #[test]
 fn pending_setup_blocks_only_affected_agent_fallback_and_status() {
     let (root, context, mut state) = installed();
-    state.operator["integration"]["ask_fallback"]["codex"] = json!("allow");
+    state
+        .settings
+        .ask_fallback
+        .insert("codex".into(), AskFallback::Allow);
     let metadata = review::project::metadata(&state);
     let plan = setup::prepare(root.path(), &metadata, IntegrationChoice::agent("claude"))
         .unwrap()
@@ -133,11 +136,11 @@ fn pending_setup_blocks_only_affected_agent_fallback_and_status() {
     state.operator["integration_pending"] = json!(plan);
     let metadata = review::project::metadata(&state);
     assert!(matches!(
-        fallback(&metadata, "codex").unwrap(),
+        fallback(&metadata, &state.settings, "codex").unwrap(),
         AskFallback::Allow
     ));
     assert!(matches!(
-        fallback(&metadata, "claude").unwrap(),
+        fallback(&metadata, &state.settings, "claude").unwrap(),
         AskFallback::Block
     ));
     let report = status(&context, &state);
@@ -146,7 +149,7 @@ fn pending_setup_blocks_only_affected_agent_fallback_and_status() {
     assert_agent(&report, "codex", "installed", "registered");
     state.operator["integration_pending"]["targets"] = Value::Null;
     assert!(matches!(
-        fallback(&review::project::metadata(&state), "codex").unwrap(),
+        fallback(&review::project::metadata(&state), &state.settings, "codex").unwrap(),
         AskFallback::Block
     ));
 }

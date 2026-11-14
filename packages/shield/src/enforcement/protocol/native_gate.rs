@@ -284,6 +284,19 @@ fn gate(
         value["outside_path"] =
             json!({"path":found.path,"access":found.access,"folder":found.folder});
     }
+    // A Git command that would change the policy files, or whose writes to
+    // them cannot be determined, asks; no Ask fallback or policy Allow stands in for the user. A policy
+    // Deny stands.
+    if protection == paths::Protection::Undetermined && value["decision"] != "deny" {
+        value["decision"] = json!("ask");
+        value["code"] = json!("policy-file-unknown");
+        value["disposition"] = json!(if native.approval == NativeApproval::Prompt {
+            "approval_required"
+        } else {
+            "blocked"
+        });
+        return Ok(());
+    }
     // A policy Deny stands; otherwise the user decides on reading agent settings.
     if protection == paths::Protection::Sensitive && value["decision"] != "deny" {
         value["decision"] = json!("ask");

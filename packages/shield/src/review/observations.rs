@@ -91,7 +91,7 @@ pub(crate) fn decision(context: &Context, mut details: Value) -> Result<Value, E
         }
     }
     Store::open(Path::new(&context.project_root))?.observe(context, |state| {
-        if !state.history_enabled {
+        if !state.settings.history_enabled {
             return Ok(json!({"status":"disabled","request_id":null,"event_id":null}));
         }
         let request = details["approval"]["request_id"]
@@ -267,10 +267,10 @@ pub(crate) struct AskedRequests {
     pub(crate) available: bool,
 }
 
-/// Distinct requests policy asked about since the last policy activation,
-/// newest first and at most `cap`, counted once per pre-execution decision.
-/// A session limits them to that agent session. An activation ends the scan,
-/// so applying changes starts a fresh list. Declines do not activate policy.
+/// Distinct requests policy asked about in retained history, newest first and
+/// at most `cap`, counted once per pre-execution decision. A session limits
+/// them to that agent session. The scan ends at the latest write of the policy
+/// files, or at an activation event an earlier release recorded.
 pub(crate) fn asked_requests(root: &Path, session: Option<&str>, cap: usize) -> AskedRequests {
     let mut found: Vec<(Value, AskedRequest)> = Vec::new();
     let store = Store::open(root).and_then(|store| Ok((store.read_checkpoint()?, store)));
@@ -281,7 +281,7 @@ pub(crate) fn asked_requests(root: &Path, session: Option<&str>, cap: usize) -> 
             available: false,
         };
     };
-    if !state.history_enabled {
+    if !state.settings.history_enabled {
         return AskedRequests {
             requests: vec![],
             complete: false,
@@ -292,7 +292,7 @@ pub(crate) fn asked_requests(root: &Path, session: Option<&str>, cap: usize) -> 
     // Escalation requests not yet matched to the call they escalate.
     let mut escalations: Vec<Value> = Vec::new();
     let scanned = history::recent(&store, &state, |event| {
-        if event["kind"] == "runtime_activated" {
+        if event["kind"] == "policy_files_written" || event["kind"] == "runtime_activated" {
             return ControlFlow::Break(());
         }
         let provenance = &event["provenance"];
@@ -375,7 +375,7 @@ fn uninstalled_candidates(root: &Path, executable: &str) -> Option<Vec<String>> 
     // Catalogs and installed packs are checkpoint fields; skip history and sources.
     let state = Store::open(root).ok()?.read_checkpoint().ok()?;
     let leaf = Path::new(executable).file_name()?.to_str()?;
-    let sources = crate::review::registries::advisory_sources(&state.operator).ok()?;
+    let sources = crate::review::registries::effective_from(&state.settings).ok()?;
     let installed = |identity: &str, id: &str| {
         state.operator["installed"].as_array().is_some_and(|rows| {
             rows.iter()
@@ -413,7 +413,7 @@ pub(crate) fn retain_release(context: &Context, registry: &str, release: &str) {
     Store::open(Path::new(&context.project_root))
         .unwrap()
         .update(context, &|| Ok(()), |state| {
-            let sources = crate::review::registries::advisory_sources(&state.operator)?;
+            let sources = crate::review::registries::effective_from(&state.settings)?;
             let source = sources
                 .select(Some(registry))
                 .map_err(|_| Error::Invalid("test registry"))?;

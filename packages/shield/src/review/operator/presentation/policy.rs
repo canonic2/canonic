@@ -17,11 +17,8 @@ fn automatic_mcp_notice(candidate: &Value) -> Option<&'static str> {
 pub(super) fn review(value: &Value) -> Option<String> {
     let mut output = String::new();
     match value["operation"].as_str()? {
-        "configuration change history" => {
-            configuration_history(value, &mut output);
-        }
         "inspect policy" => output = policy(value),
-        "change policy" | "adopt manual project edits" => {
+        "change policy" => {
             let _ = writeln!(
                 output,
                 "{}",
@@ -49,12 +46,6 @@ pub(super) fn review(value: &Value) -> Option<String> {
             {
                 let _ = writeln!(output, "{}", label(line));
             }
-        }
-        "restore project files from active policy" => {
-            let _ = writeln!(
-                output,
-                "Restore the .shield project files from the active policy.\nManual edits that conflict are kept for you to review."
-            );
         }
         "reject" => {
             let _ = writeln!(output, "Reject {}", proposal(&value["proposal"]));
@@ -92,39 +83,6 @@ pub(super) fn review(value: &Value) -> Option<String> {
         _ => return None,
     }
     Some(output)
-}
-
-fn configuration_history(value: &Value, output: &mut String) {
-    let _ = writeln!(output, "Configuration change history");
-    if value["available"] == false {
-        let _ = writeln!(output, "  {}", label(&value["reason"]));
-    } else {
-        let rows = value["configuration_changes"]
-            .as_array()
-            .map_or(&[][..], Vec::as_slice);
-        if rows.is_empty() {
-            let _ = writeln!(output, "  No retained configuration summaries.");
-        }
-        for row in rows {
-            let _ = writeln!(
-                output,
-                "  {} · {} · {} · {} → {} · {}",
-                label(&row["recorded_at"]),
-                label(&row["operation"]),
-                label(&row["commit_outcome"]),
-                short(&row["before_revision"]),
-                short(&row["after_revision"]),
-                label(&row["actor"]["agent"])
-            );
-        }
-    }
-    if value["available"] != false && value["complete"] == false {
-        let _ = writeln!(output, "  {}", label(&value["reason"]));
-    }
-    let _ = writeln!(
-        output,
-        "  These summaries grant no permission. Current status reports projection repair needs."
-    );
 }
 
 /// One line per proposal: identifier, what it changes, who asked and when.

@@ -1,7 +1,7 @@
 //! One-time in-session grants: capture, person-confirmed issuance, exact
 //! single consumption, the follow-up callback and tamper refusal.
 use super::*;
-use crate::review;
+use crate::review::{self, path_access};
 
 struct Fixture {
     _root: assert_fs::TempDir,
@@ -11,16 +11,7 @@ struct Fixture {
 
 fn fixture() -> Fixture {
     let (root, context) = review::tests::enrolled();
-    let status = review::runtime::status(&context).unwrap();
-    review::runtime::publish_fixture(
-        &context,
-        status["review"]["policy_revision"].as_str().unwrap(),
-        status["review"]["candidate_digest"].as_str().unwrap(),
-        None,
-        &|| Ok(()),
-    )
-    .unwrap();
-    let active = review::runtime::status(&context).unwrap()["active"].clone();
+    let active = review::runtime::current_identity(&context);
     Fixture {
         _root: root,
         context,
@@ -97,7 +88,7 @@ fn a_copied_hook_grant_and_its_followup_are_each_spent_once_across_copies() {
         let mut context = original.context.clone();
         context.project_id = opened.project_id;
         context.project_root = opened.project_root;
-        let active = review::runtime::status(&context).unwrap()["active"].clone();
+        let active = review::runtime::current_identity(&context);
         let child = Fixture {
             _root: root,
             context,

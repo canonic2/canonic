@@ -4,6 +4,16 @@ use serde_json::{Value, json};
 use std::fs;
 
 pub(super) fn initialize(project: &assert_fs::TempDir, home: &std::path::Path) {
+    // Policy files are the policy: a folder that has them needs no review.
+    if project.path().join(".shield/config.yml").exists() {
+        cargo_bin_cmd!("shield")
+            .args(["init", "--json", "--no-debug-log", "--project"])
+            .arg(project.path())
+            .env("HOME", home)
+            .assert()
+            .success();
+        return;
+    }
     let initialized = std::process::Command::new("python3")
         .arg(concat!(
             env!("CARGO_MANIFEST_DIR"),

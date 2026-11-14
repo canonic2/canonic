@@ -35,7 +35,7 @@ shield rule list --json
 ```
 
 `status` is the everyday overview. Use `doctor` when something looks wrong: it
-checks policy loading, registry checkpoints, retained pack sources, and the
+checks the policy files, registry checkpoints, pack artifacts, and the
 binary your agents run, and gives repair commands when needed. JSON output
 provides full structured details for scripts and agents.
 
@@ -45,15 +45,9 @@ still unsaved. If the review directory is read-only or the disk is full, restore
 write access or free space before retrying the operation. Hooks and changes
 require the conversion to be saved before proceeding.
 
-Doctor distinguishes agent integration repair (`shield mcp setup`) from policy
-file review (`shield policy review`). Reviewing unchanged policy files does not
-repair an integration; follow the command for the reported problem.
-
-If the complete status report cannot be read, doctor returns partial metadata
-with `missing: [complete_status]` and a `status` check. Unreadable retained policy
-source appears as a `policy_source` check. These reports require a valid authority
-checkpoint; they do not repair or replace damaged source. Restore lost retained
-source before using policy changes to recover the project.
+Doctor distinguishes agent integration repair (`shield mcp setup`) from
+problems in the policy files, which `policy_files.error` names; fix those in
+the files. Follow the command for the reported problem.
 
 ## Pause or resume Shield
 
@@ -68,10 +62,11 @@ can request the same change with `disable {}` or `enable {}`;
 Shield shows you a confirmation form and changes the setting only if you accept.
 JSON mode and redirected input cannot confirm it.
 
-The setting applies to this checkout's enrolled project and is kept in private
-review state. Other projects and developers keep their own settings. Policy,
-packs, history, grants and agent registrations remain in place, and policy edits
-or setup repairs preserve the setting. `status` and `doctor` report whether
+The command writes `enforcement: paused` or `enabled` to your uncommitted
+`.shield/config.local.yml`, so other developers keep their own setting; a value
+committed in `config.yml` applies to everyone who has not set their own. See
+[settings](policy-files.md#settings). Policy, packs, history, grants and agent
+registrations remain in place. `status` and `doctor` report whether
 Shield is enabled.
 
 While disabled, native hooks retain protected-file and operator-command guards.
@@ -80,7 +75,7 @@ operator CLI. Saved protected-file Allow choices remain in force; other
 protected accesses are blocked during the pause. Shell requests
 must have a verifiable protected footprint; unsupported or incomplete analysis
 is blocked. Other requests return no permission decision and follow your
-agent's own permissions and sandbox. Active project rules are not applied, and
+agent's own permissions and sandbox. Project rules are not applied, and
 Shield records no native request history during this pause.
 Its MCP tools remain available, with human confirmation still required for
 administrative changes. Explicit checked runs and SDK consumers continue to
@@ -88,14 +83,14 @@ enforce policy.
 
 Hooks inspect submitted requests; they do not isolate same-user processes or
 authenticate edits made outside interception. The enable review makes explicit
-that resuming trusts the saved local policy and authority state, including any
-such edits made while paused.
+that resuming applies the policy files as they are, including any edits made
+while paused.
 
 Disabling removes Shield-generated Codex permission rules; enabling restores
-them from active policy. Restart connected agents when the result requests it,
+them from the policy files. Restart connected agents when the result requests it,
 so they refresh cached rules. Native hooks read the setting on their next
 invocation; a toggle does not cancel requests already underway. Enabling
-requires readable active policy. If restoring permission rules needs repair,
+requires readable policy files. If restoring permission rules needs repair,
 checks are already enabled and the result names `shield mcp setup`.
 
 ## Initialize or revisit setup
@@ -184,9 +179,10 @@ the complete footprint rather than guessing which words are paths.
 `.shield/review/`, compiled caches, the `.shield` folder itself and
 `.shield/.gitignore` stay protected whatever you choose, and agents still cannot
 run Shield operator actions. Help-only requests follow ordinary policy. The
-choice is kept with the project's review state; agents cannot
-change it. `status` lists any group you have opened. An invalid saved choice
-blocks every native request until you run `protection set` again.
+choice is the `protection` setting, written to your `.shield/config.local.yml`
+([settings](policy-files.md#settings)); agents cannot change it. `status` lists
+any group you have opened. An invalid `protection` value makes every native
+request ask until you fix it or run `protection set` again.
 
 ### Allowing one blocked request
 
@@ -251,7 +247,8 @@ Both ask for a decision, reason, and optional UTC expiration. **Structured rule*
 accepts a complete rule in the [rule format](policy-rules.md).
 
 Editing shows the existing rule; empty answers preserve its conditions.
-Confirmation activates the validated candidate; cancellation leaves policy unchanged.
+Confirmation writes the validated change to the policy files; cancellation leaves
+them unchanged.
 
 ### Review an agent's proposal
 
@@ -274,32 +271,27 @@ including pack rules. Choose Accept, Reject, or Cancel review; cancellation
 withdraws that attempt. There is no oldest-first approval queue.
 
 Agents can also submit a proposal's exact `apply_arguments` to
-`policy_apply` for host approval. `policy_receipt` reads the
-committed receipt or closed outcome. Deferred work is saved as intent only when
-you request it, and needs fresh preparation and approval when resumed.
+`policy_apply` for host approval. `policy_show` reads a proposal's outcome.
+Deferred work is saved as intent only when you request it, and needs fresh
+preparation and approval when resumed.
 See [MCP review](project-mcp.md#proposals-and-operator-review).
-If policy files already have unreviewed edits, an agent can prepare a separate
-`project_files_adopt` proposal for the same host approval flow. Approval covers
-the complete captured policy difference; further edits make that review stale.
+A proposal builds on the policy files as they are, including your hand edits,
+and keeps them when applied.
 
-Changes to policy, setup, registry settings, or cache location can invalidate
+Changes to the policy files, setup or registry settings can invalidate
 a proposal. Ask the agent to prepare a fresh one, even if the policy revision
 has not changed. Independently confirmed protected-file settings remain current.
 For successive proposals, wait for each result before preparing the next.
 
-### Activate a manual file edit
+### Edit the policy files by hand
 
-Project policy files represent the committed snapshot. After editing configuration
-or rules, run `shield policy review`, choose `manual`, and confirm the reviewed changes.
-Inspect `shield rule list --json` for the active result. Changes during confirmation
-abort publication. Use `shield pack add` to acquire releases rather than editing
-cached pack artifacts.
+The policy files are the policy. An edit to configuration or rules applies to
+the next request; inspect `shield rule list --json` for the result, and
+`shield status` for an error if the edit made the files invalid. Use
+`shield pack add` or `shield pack update` to acquire releases rather than
+editing pack artifacts. See [policy files and settings](policy-files.md).
 
-When the project files are unchanged, manual review reports that there are no
-edits and finishes without confirmation or saving. To fetch newer installed
-pack releases, run `shield pack update`; policy review adopts local file edits.
-
-Shield preserves comments, blank lines, and layout outside changed entries.
+When Shield writes a change, it preserves comments, blank lines, and layout outside changed entries.
 Removing a rule or pack also removes its preceding comments. If a change cannot
 be made in place, such as reordering rules, Shield rewrites below the opening
 comments. The review identifies files that will be rewritten or lose comments.
@@ -319,10 +311,9 @@ access_paths:
 ```
 
 Add this mapping to `.shield/config.yml`, preserving its `schema_version`, `packs`
-and any `rules` selection, then review the `manual` action in `shield policy review` and
-confirm. An agent can also propose one directory at a time with the MCP
-`access_path_add` change, which you confirm the same way. Editing a file alone
-does not activate access. These settings are retained
+and any `rules` selection; the next request uses it. An agent can also propose
+one directory at a time with the MCP `access_path_add` change, which you
+confirm in the host. These settings are retained
 when installing, updating or removing packs and when changing custom rules.
 
 Rules with `{root: read}` use the project plus additional read and write roots;
@@ -394,12 +385,9 @@ shield history show ENTRY
 ```
 
 Entries combine request decisions, operator decisions, and reported completion.
-The policy menu's **Configuration change history** shows the latest retained
-configuration summaries independently of request recording. Clearing request
-history preserves these summaries. They identify confirmed changes and rejected
-proposals, with actor evidence and before/after policy revisions; they grant no
-permission. An incomplete-history notice means some summaries could not be
-exported or decoded. Check current status for projection repair needs.
+Policy changes are recorded by the policy files themselves; use your version
+control to see how they changed. `shield policy show` lists recent proposal
+outcomes.
 
 Configuration changes are not request entries. Shell entries show the submitted
 source: the list shows its first line, and `show` prints the full command and

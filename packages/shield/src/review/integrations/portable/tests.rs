@@ -29,13 +29,8 @@ fn portable_pending_maintenance_preserves_files_when_executable_digest_changes()
         .update_checkpoint(&context, &|| Ok(()), |state| {
             state.operator["integration"] = json!(plan.previous);
             super::super::activation::stage(&mut state.operator, &plan, None)?;
-            let activation = state.active.as_ref().unwrap().activation_id().to_owned();
-            let mut metadata = state.operator.clone();
-            super::super::activation::bind(
-                state,
-                &mut metadata,
-                &json!({"activation_id":activation}),
-            );
+            let revision = state.policy_revision.clone();
+            super::super::activation::own(&mut state.operator, &revision);
             Ok(Value::Null)
         })
         .unwrap();
@@ -290,10 +285,6 @@ fn runtime_native_migration_retries_missing_files_without_review_or_policy_chang
         unavailable.project_id
     );
     assert_eq!(unavailable.policy_revision, before.policy_revision);
-    assert_eq!(
-        unavailable.active.as_ref().unwrap().activation_id(),
-        before.active.as_ref().unwrap().activation_id()
-    );
     std::fs::rename(&saved, &path).unwrap();
     crate::review::open(root.path()).unwrap();
     let after = state(&context);
@@ -303,10 +294,6 @@ fn runtime_native_migration_retries_missing_files_without_review_or_policy_chang
     );
     assert_eq!(after.project_id, before.project_id);
     assert_eq!(after.policy_revision, before.policy_revision);
-    assert_eq!(
-        after.active.as_ref().unwrap().activation_id(),
-        before.active.as_ref().unwrap().activation_id()
-    );
     let settings =
         crate::agents::setup::parse(Some(&std::fs::read_to_string(&path).unwrap())).unwrap();
     let callbacks: Vec<_> = settings["hooks"]["PreToolUse"]

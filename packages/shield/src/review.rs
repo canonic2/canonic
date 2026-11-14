@@ -7,7 +7,6 @@ mod cache;
 mod changes;
 pub(crate) mod cli;
 mod clock;
-mod configuration_changes;
 mod files;
 mod history;
 pub(crate) mod hook_approval;
@@ -34,6 +33,7 @@ pub(crate) mod run_approval;
 pub(crate) mod runtime;
 pub(crate) mod sdk_read;
 pub(crate) mod session_grants;
+mod settings;
 mod storage;
 #[cfg(test)]
 mod tests;
@@ -117,10 +117,6 @@ pub(crate) enum Error {
     },
     #[error("review state is locked; retry after the owning writer finishes")]
     Locked,
-    #[error(
-        "object cleanup reached its bounded work limit; retry to continue cleanup automatically"
-    )]
-    CleanupPending,
     #[error("review object was not found")]
     Missing,
     /// The connection's agent made the request, but the project records no
@@ -129,18 +125,18 @@ pub(crate) enum Error {
     AgentNotConnected,
     #[error("proposal requires operator approval")]
     ApprovalRequired,
-    #[error("active snapshot changed; reload and evaluate the request again")]
+    #[error("policy or review state changed; reload and evaluate the request again")]
     StaleSnapshot,
-    /// The checkout's local runtime epoch changed after this context was opened.
-    #[error("this checkout's runtime epoch changed; reconnect Shield")]
-    CheckoutChanged,
+    /// The folder's review state was recreated after this context was opened.
+    #[error("this project's Shield state was recreated; reconnect Shield")]
+    StateRecreated,
     #[error("diagnostic candidate is unavailable in this connection")]
     CandidateUnavailable,
     #[error("cursor is unavailable or belongs to another query")]
     CursorUnavailable,
     #[error("connection capacity reached; reconnect to continue")]
     Overloaded,
-    #[error("compiled policy unavailable; run shield cache prepare in an operator terminal")]
+    #[error("compiled policy folder unusable; run shield doctor to find the cause")]
     CacheUnavailable,
     /// The project's policy files cannot be read, parsed or resolved, so there
     /// is no policy to apply. The message names the problem.
@@ -173,9 +169,6 @@ pub(crate) enum CapacityKind {
     ReadRequests,
     /// Checked-run action requests of one consumer kind.
     RunRequests,
-    /// Bounded source/cache storage admission, including live pins and temporaries.
-    StoredBytes,
-    StoredEntries,
 }
 
 impl CapacityKind {
@@ -184,8 +177,6 @@ impl CapacityKind {
             Self::Proposals | Self::RetainedProposals => "policy proposal",
             Self::ReadRequests => "read request",
             Self::RunRequests => "run request",
-            Self::StoredBytes => "stored byte",
-            Self::StoredEntries => "stored object entry",
         }
     }
     /// What the operator does to free capacity.
@@ -200,17 +191,12 @@ impl CapacityKind {
             Self::ReadRequests | Self::RunRequests => {
                 "review pending requests with shield request list or deny them with shield request deny, then retry"
             }
-            Self::StoredBytes | Self::StoredEntries => {
-                "finish pending reviews or release unused retained readers, then retry; required active and recovery data cannot be evicted"
-            }
         }
     }
     /// The operator command that frees capacity, or `None` when no command can.
     pub(crate) fn operator_route(self) -> Option<&'static str> {
         match self {
-            Self::Proposals | Self::RetainedProposals | Self::StoredBytes | Self::StoredEntries => {
-                None
-            }
+            Self::Proposals | Self::RetainedProposals => None,
             Self::ReadRequests | Self::RunRequests => Some("shield request list"),
         }
     }
@@ -237,12 +223,11 @@ impl Error {
             | Self::UnsupportedReleases(_)
             | Self::RequiredPack { .. } => "invalid-review",
             Self::Locked => "review-locked",
-            Self::CleanupPending => "cleanup-pending",
             Self::Missing => "not-found",
             Self::AgentNotConnected => "agent-not-connected",
             Self::ApprovalRequired => "approval-required",
             Self::StaleSnapshot => "stale-snapshot",
-            Self::CheckoutChanged => "checkout-changed",
+            Self::StateRecreated => "state-recreated",
             Self::CandidateUnavailable => "candidate_unavailable",
             Self::CursorUnavailable => "cursor_unavailable",
             Self::Overloaded => "overloaded",
@@ -309,6 +294,18 @@ fn snapshots(
     )])
 }
 
+/// The identity of a captured candidate: the digest of its canonical JSON.
+pub(crate) fn candidate_identity(candidate: &Value) -> String {
+    let _trace = crate::diagnostics::trace::span("source.identity");
+    crate::diagnostics::trace::count("source.identity_encodings", 1);
+    crate::json::fingerprint(candidate).expect("candidate JSON serializes")
+}
+
+/// The identity of a set of captured candidates.
+pub(crate) fn map_digest(candidates: &BTreeMap<String, Value>) -> String {
+    crate::json::fingerprint(candidates).expect("candidate JSON serializes")
+}
+
 /// Compare captured sources and retain the next plan for publication. Prefix
 /// changes use those same plans, including an already validated base when supplied.
 pub(in crate::review) fn compare_prepared(
@@ -361,6 +358,12 @@ fn project_bundle_bytes(candidates: &BTreeMap<String, Value>) -> Result<Vec<u8>,
     serde_json::to_vec(candidate).map_err(|_| Error::Invalid("candidate encoding"))
 }
 
+/// Remove a batch of this user's records earlier releases kept and this one
+/// never reads. The CLI and MCP server call it; hooks never do.
+pub(crate) fn retire_user_records() {
+    storage::retired::retire_user_records();
+}
+
 pub(crate) fn open(project: &Path) -> Result<Context, Error> {
     let store = Store::open(project)?;
     let state = store.read_checkpoint()?;
@@ -390,8 +393,20 @@ pub(crate) fn open_connection(project: &Path) -> Result<Context, Error> {
     Ok(Context::new(state.project_id, state.project_root, "cli"))
 }
 
-pub(crate) fn reuse_reviewed_policy(project: &Path) -> Result<(), Error> {
-    Store::open(project).map(|_| ())
+/// A proposal's recorded status, closing reason, receipt and origin, read from
+/// review state as diagnostics read it.
+#[cfg(test)]
+pub(crate) fn proposal_outcome(project: &Path, id: &str) -> Value {
+    let (state, _) = Store::inspect(project)
+        .and_then(|store| store.read_diagnostic_checkpoint())
+        .expect("review state");
+    let row = state
+        .proposals
+        .iter()
+        .find(|row| row.id == id)
+        .expect("proposal");
+    json!({"proposal_id":row.id,"status":row.status,"closed_reason":row.closed_reason,
+        "receipt":row.receipt,"operator":row.operator,"provenance":row.provenance})
 }
 
 #[cfg(test)]
@@ -412,7 +427,7 @@ pub(crate) fn open_native(project: &Path) -> Result<(Context, Option<mode::Pause
     let state = store.read_checkpoint()?;
     let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
     integrations::rebind_launchers(&context, &state);
-    Ok((context, mode::paused(state)))
+    Ok((context, mode::paused(&state)))
 }
 
 /// The history reader's event view: verified records with reader-derived

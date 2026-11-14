@@ -12,7 +12,6 @@ use std::{collections::BTreeMap, path::Path};
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum Change {
-    ProjectFilesAdopt,
     RuleAdd {
         rule: policy::normalized::Rule,
         #[serde(
@@ -223,7 +222,7 @@ pub(super) struct Prepared {
 
 pub(super) fn prepared_binding(state: &super::model::State) -> String {
     policy::fingerprint(
-        json!({"candidates":super::storage::sources::map_digest(&state.candidates),"metadata":state.operator})
+        json!({"candidates":super::map_digest(&state.candidates),"metadata":state.operator})
             .to_string()
             .as_bytes(),
     )
@@ -267,14 +266,6 @@ pub(super) fn propose(
     let _trace = crate::diagnostics::trace::span("proposal.prepare");
     validate_input(input)?;
     let changes = input.changes()?;
-    let adopt_files = changes
-        .iter()
-        .any(|change| matches!(change, Change::ProjectFilesAdopt));
-    if adopt_files && changes.len() != 1 {
-        return Err(Error::Invalid(
-            "project_files_adopt must be reviewed separately from other changes",
-        ));
-    }
     let request_signature = policy::fingerprint(json!(input).to_string().as_bytes());
     let mut signature = request_signature.clone();
     if let Some(prepared) = &input.prepared {
@@ -313,30 +304,6 @@ pub(super) fn propose(
             "operator workflow requires project-only policy",
         ));
     }
-    let adopted = if adopt_files {
-        // Checkpoint reads carry source references. File capture needs the
-        // exact current policy, independently of optional history or proposals.
-        for candidate in before.candidates.values_mut() {
-            *candidate = store.captured_candidate(candidate)?;
-        }
-        let project_files::Capture {
-            candidate,
-            metadata: meta,
-            fingerprint,
-            paths,
-        } = project_files::capture(context, &before)?;
-        signature = policy::fingerprint(
-            json!([input, fingerprint, before.policy_revision])
-                .to_string()
-                .as_bytes(),
-        );
-        if input.idempotency_key.is_none() {
-            retry_key = format!("proposal-{}", &signature[..32]);
-        }
-        Some((candidate, meta, fingerprint, paths))
-    } else {
-        None
-    };
     if let Some(row) = before
         .proposals
         .iter_mut()
@@ -349,11 +316,7 @@ pub(super) fn propose(
                 .split_once(':')
                 .is_some_and(|(original, _)| original == request_signature);
         if row.signature != signature && !applied_replay {
-            return Err(if adopt_files && row.operation == "project_files_adopt" {
-                Error::StaleSnapshot
-            } else {
-                Error::Invalid("idempotency key reused with changed input")
-            });
+            return Err(Error::Invalid("idempotency key reused with changed input"));
         }
         store.hydrate_proposal(row)?;
         reserve(
@@ -369,14 +332,8 @@ pub(super) fn propose(
     context
         .progress
         .stage(super::progress::Stage::PreparePolicy);
-    let (mut before, base_plan, base_snapshots) = store.read_for_comparison(before)?;
-    let mut reviewed_files = None;
-    let mut reviewed_paths = None;
-    let (candidate, meta, captured) = if let Some((candidate, meta, fingerprint, paths)) = adopted {
-        reviewed_files = Some(fingerprint);
-        reviewed_paths = Some(paths);
-        (candidate, meta, None)
-    } else if let Some(prepared) = &input.prepared {
+    let (mut before, base_plan, base_snapshots) = Store::read_for_comparison(before)?;
+    let (candidate, meta, captured) = if let Some(prepared) = &input.prepared {
         if prepared.binding != prepared_binding(&before) {
             return Err(Error::StaleSnapshot);
         }
@@ -391,8 +348,26 @@ pub(super) fn propose(
             base_snapshots.first().map(|(_, snapshot)| snapshot),
         )?
     };
+    // Applying writes the files only while they still hold what this review
+    // was prepared from.
+    let reviewed_paths = Some(super::files::write::base(
+        context, &before, &candidate, &meta,
+    )?);
+    let reviewed_files: Option<String> = None;
+    // The proposal is the file texts it writes. Both sides are rebuilt from
+    // them here, as every later load rebuilds them and refuses texts that
+    // no longer match these digests.
+    let files = super::files::write::texts(context, &before, &candidate, &meta)?;
+    let root = Path::new(&context.project_root);
+    let prepared_candidate = candidate;
+    let candidate = super::files::write::bundle(root, &files, true)?;
+    let base_candidate = super::files::write::bundle(root, &files, false)?;
+    // The prepared plan and comparison describe the stored candidate only
+    // when the texts rebuild it exactly.
+    let rebuilt_exactly = candidate == prepared_candidate;
+    let captured = captured.filter(|_| rebuilt_exactly);
     let mut after = BTreeMap::new();
-    historical::validate(&before.candidates["project"], &candidate)?;
+    historical::validate(&base_candidate, &candidate)?;
     after.insert("project".into(), candidate.clone());
     let next_snapshots = {
         let _trace = crate::diagnostics::trace::span("proposal.capture_next");
@@ -407,6 +382,7 @@ pub(super) fn propose(
             .prepared
             .as_ref()
             .and_then(|prepared| prepared.comparison.as_ref())
+            .filter(|_| rebuilt_exactly)
         {
             comparison.clone()
         } else {
@@ -425,17 +401,17 @@ pub(super) fn propose(
         .stage(super::progress::Stage::PrepareReview);
     compare_prefixes(&base_plan, &next_plan, &mut comparison);
     if let Some(summary) =
-        diff::override_permission_review(&before.candidates["project"], &candidate, &comparison)
+        diff::override_permission_review(&base_candidate, &candidate, &comparison)
     {
         comparison["override_permission_review"] = summary;
     }
-    if let Some(lines) = super::formatting_changes(&before.candidates["project"], &candidate) {
+    if let Some(lines) = super::formatting_changes(&base_candidate, &candidate) {
         comparison["formatting"] = lines;
     }
     {
         let _trace = crate::diagnostics::trace::span("proposal.reserve");
         reserve(
-            &before.candidates["project"],
+            &base_candidate,
             &before.operator,
             &candidate,
             &meta,
@@ -443,13 +419,17 @@ pub(super) fn propose(
         )?;
     }
     checkpoint()?;
-    if candidate == before.candidates["project"] && meta == before.operator {
+    if files.values().all(|texts| texts.before == texts.after) && meta == before.operator {
         let mut result =
             json!({"unchanged":true,"committed":false,"policy_revision":before.policy_revision});
         let mut skipped = Vec::new();
         for change in &changes {
             if let Change::PackUpdate { reference } = change {
-                for row in super::packs::update_skipped(&before.operator, reference.as_deref())? {
+                for row in super::packs::update_skipped(
+                    &before.operator,
+                    &before.settings,
+                    reference.as_deref(),
+                )? {
                     if !skipped.contains(&row) {
                         skipped.push(row);
                     }
@@ -462,28 +442,24 @@ pub(super) fn propose(
     // The complete base was validated above. Under the writer lock, bind to
     // those exact source bytes and metadata instead of hydrating every retained
     // proposal and preparing the same active policy again.
-    let presentation = super::model::presentation::capture(
-        &store,
+    let presentation_ref = super::model::presentation::capture(
         &before,
+        &base_candidate,
         &candidate,
         &meta,
         &comparison,
         reviewed_files.is_some(),
     )
     .ok()
-    .flatten();
-    let presentation_ref = presentation
-        .as_ref()
-        .map_or(Value::Null, |(reference, _)| reference.clone());
-    let presentation_before =
-        super::storage::sources::candidate_identity(&before.candidates["project"]);
-    let presentation_after = super::storage::sources::candidate_identity(&candidate);
+    .flatten()
+    .unwrap_or(Value::Null);
+    let presentation_before = super::candidate_identity(&base_candidate);
+    let presentation_after = super::candidate_identity(&candidate);
     store.update_checkpoint(context, checkpoint, |state| {
         state.check_operations()?;
         if state.policy_revision != before.policy_revision
             || state.operator != before.operator
-            || super::storage::sources::map_digest(&state.candidates)
-                != super::storage::sources::map_digest(&before.candidates)
+            || super::map_digest(&state.candidates) != super::map_digest(&before.candidates)
         {
             return Err(Error::StaleSnapshot);
         }
@@ -493,12 +469,9 @@ pub(super) fn propose(
             return if row.signature == signature || applied_replay {
                 // A concurrent identical request may have won after our first
                 // read. Reserve that retained row, not this request's candidate.
-                row.base_candidate = store.captured_candidate(&row.base_candidate)?;
-                row.candidate = store.captured_candidate(&row.candidate)?;
+                store.hydrate_proposal(row)?;
                 reserve(&row.base_candidate, &row.base_metadata, &row.candidate, &row.candidate_metadata, None)?;
                 Ok(present(row))
-            } else if adopt_files && row.operation == "project_files_adopt" {
-                Err(Error::StaleSnapshot)
             } else { Err(Error::Invalid("idempotency key reused with changed input")) };
         }
         if input.supersedes_proposal_id.as_ref().is_some_and(|id| !state.proposals.iter().any(|p| p.id == *id)) { return Err(Error::Missing); }
@@ -517,10 +490,11 @@ pub(super) fn propose(
         let event = state.event("proposal_created", context, json!({"proposal_id":id,"source_entry_id":input.source_entry_id,"supersedes_proposal_id":input.supersedes_proposal_id}),json!({"agent_reason":input.agent_reason}),json!({"operation":kind,"policy_revision":state.policy_revision}));
         let mut event = event;
         event["links"]["review_ids"] = json!(input.review_ids);
-        event["details"]["presentation"] = presentation_ref.clone();
+        event["details"]["presentation"] =
+            super::model::presentation::digest(&presentation_ref);
         event["details"]["before_candidate"] = json!(presentation_before);
         event["details"]["after_candidate"] = json!(presentation_after);
-        let row = Proposal { id, created_at:event["recorded_at"].as_str().ok_or(Error::Invalid("timestamp unavailable"))?.into(), status:"pending".into(), provenance:context.provenance(), links:event["links"].clone(), reasons:event["reasons"].clone(), policy_revision:state.policy_revision.clone(),target_scope:"project".into(),operation:kind,rule_id,candidate,base_candidate:before.candidates["project"].clone(),base_metadata:before.operator.clone(),candidate_metadata:meta,receipt:Value::Null,comparison,presentation:presentation_ref,operator:None,retry_key:retry_key.clone(),retry_owner:context.retry_owner(),signature,reviewed_files, reviewed_paths, interaction:Some(super::proposal_lifecycle::Interaction::new(context)?), closed_reason:None };
+        let row = Proposal { id, created_at:event["recorded_at"].as_str().ok_or(Error::Invalid("timestamp unavailable"))?.into(), status:"pending".into(), provenance:context.provenance(), links:event["links"].clone(), reasons:event["reasons"].clone(), policy_revision:state.policy_revision.clone(),target_scope:"project".into(),operation:kind,rule_id,candidate_digest:presentation_after.clone(),base_digest:presentation_before.clone(),files:files.clone(),candidate,base_candidate:base_candidate.clone(),retired_candidate:None,retired_base_candidate:None,base_metadata:before.operator.clone(),candidate_metadata:meta,receipt:Value::Null,comparison,presentation:presentation_ref,operator:None,retry_key:retry_key.clone(),retry_owner:context.retry_owner(),signature,reviewed_files, reviewed_paths, interaction:Some(super::proposal_lifecycle::Interaction::new(context)?), closed_reason:None };
         let result = {
             let _trace = crate::diagnostics::trace::span("proposal.present");
             present(&row)
@@ -832,13 +806,13 @@ mod prepared_binding_tests {
     use super::*;
 
     #[test]
-    fn prepared_binding_matches_retained_and_hydrated_sources_but_rejects_drift() {
+    fn prepared_binding_matches_every_reader_of_the_files_but_rejects_drift() {
         let root = assert_fs::TempDir::new().unwrap();
         let bundle =
             configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
         super::super::mcp::initialize_fixture(root.path(), &bundle);
         let store = Store::open(root.path()).unwrap();
-        let mut compact = store.read_checkpoint().unwrap();
+        let mut compact = store.read_following_files().unwrap();
         let mut hydrated = store.read().unwrap();
         let binding = prepared_binding(&hydrated);
         assert_eq!(binding, prepared_binding(&compact));

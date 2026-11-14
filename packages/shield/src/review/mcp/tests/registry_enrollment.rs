@@ -62,7 +62,14 @@ fn registry_enrollment_requires_its_own_connection_bound_confirmation_and_consum
             .unwrap()
             .unwrap();
     assert!(message.contains("unsigned catalog"));
-    assert!(review::project::checkpoint(&context).unwrap().operator["sources"]["acme"].is_null());
+    assert!(
+        !review::project::checkpoint(&context)
+            .unwrap()
+            .settings
+            .registries
+            .sources
+            .contains_key("acme")
+    );
     let foreign = Connection::new("foreign".into());
     assert!(confirmed(&context, &foreign, &args, binding)["error"].is_object());
     let result = confirmed(&context, &connection, &args, binding);
@@ -122,7 +129,12 @@ fn registry_enrollment_changed_expired_and_discarded_reviews_do_not_enroll() {
             "stale_revision"
         );
         assert!(
-            review::project::checkpoint(&context).unwrap().operator["sources"]["acme"].is_null()
+            !review::project::checkpoint(&context)
+                .unwrap()
+                .settings
+                .registries
+                .sources
+                .contains_key("acme")
         );
     }
 }
@@ -164,7 +176,14 @@ fn registry_enrollment_full_review_capacity_refuses_before_source_discovery_and_
         .unwrap()
         .unwrap();
     assert_eq!(connection.admin.lock().unwrap().len(), 8);
-    assert!(review::project::checkpoint(&context).unwrap().operator["sources"]["acme"].is_null());
+    assert!(
+        !review::project::checkpoint(&context)
+            .unwrap()
+            .settings
+            .registries
+            .sources
+            .contains_key("acme")
+    );
 }
 
 #[test]
@@ -190,13 +209,18 @@ fn registry_enrollment_stale_snapshot_cannot_overwrite_another_confirmed_source(
         "stale_revision"
     );
     let state = review::project::checkpoint(&context).unwrap();
-    assert!(state.operator["sources"]["acme"].is_null());
-    assert!(state.operator["sources"]["other"].is_object());
+    assert!(!state.settings.registries.sources.contains_key("acme"));
+    assert!(state.settings.registries.sources.contains_key("other"));
     let (_, fresh) = admin_confirmation(&context, &connection, "registry_add", &args, &|| Ok(()))
         .unwrap()
         .unwrap();
     assert!(confirmed(&context, &connection, &args, fresh)["error"].is_null());
     assert!(
-        review::project::checkpoint(&context).unwrap().operator["sources"]["other"].is_object()
+        review::project::checkpoint(&context)
+            .unwrap()
+            .settings
+            .registries
+            .sources
+            .contains_key("other")
     );
 }

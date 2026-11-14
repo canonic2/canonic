@@ -1,7 +1,7 @@
 # Validating permission packs
 
 Validate a pack's document, then test its decisions with example requests.
-Neither step executes commands or activates policy.
+Neither step executes commands or changes policy.
 
 You need `shield` on your path and a directory for two files. No project
 initialization or installation of the fictional `acme-check` tool is needed.
@@ -113,7 +113,7 @@ additional access paths are not configured. Add `--details` for matching rules,
 requirement checks, branch outcomes, and guidance.
 
 Normalized shell fixtures test compound commands without enrolling a project.
-They do not test native hooks, transport replies, or operator activation.
+They do not test native hooks, transport replies, or operator confirmation.
 Those checks, including extra-root behavior, need isolated enrolled projects.
 
 ### Fixture fields

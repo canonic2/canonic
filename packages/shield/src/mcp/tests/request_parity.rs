@@ -10,7 +10,7 @@ fn prepared(
     Vec<String>,
 ) {
     let (root, context, _) = crate::review::session_grants::native_fixture();
-    let active = crate::review::runtime::status(&context).unwrap()["active"].clone();
+    let active = crate::review::runtime::current_identity(&context);
     let identity = crate::review::hook_approval::Identity {
         activation_id: active["activation_id"].as_str().unwrap(),
         policy_revision: active["policy_revision"].as_str().unwrap(),

@@ -815,7 +815,7 @@ fn retained_pack_display_document(source: &str) -> Result<PackDocument, Error> {
     let envelope: serde_json::Value = parse(source)?;
     if envelope["schema_version"] != 1 || envelope["kind"] != "pack" {
         return Err(Error::Contract(
-            "historical pack display is unsupported without preparing policy; inspect or edit its retained source explicitly",
+            "historical pack display is unsupported without preparing policy; inspect or edit the pack file explicitly",
         ));
     }
     let document: PackDocument = parse(source)?;
@@ -841,7 +841,7 @@ pub(crate) fn inspect_retained_custom(source: &str) -> Result<serde_json::Value,
         serde_json::to_value(document).map_err(|_| Error::Syntax)
     } else {
         Err(Error::Contract(
-            "historical custom display is unsupported without preparing policy; inspect or edit its retained source explicitly",
+            "historical custom display is unsupported without preparing policy; inspect or edit the rules file explicitly",
         ))
     }
 }

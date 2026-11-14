@@ -258,10 +258,11 @@ pub(in crate::review) fn finish(view: Result<View, Error>, state: &mut State) {
     });
     if let Ok(((events, evicted), complete)) = read {
         crate::diagnostics::trace::count("history.correlations", 1);
-        state.events = correlation::view(events, state.history_limit);
+        state.events = correlation::view(events, state.settings.history_limit);
         state.trim();
         state.history_available = complete;
-        state.history_evicted = evicted && distinct_decisions(&state.events) < state.history_limit;
+        state.history_evicted =
+            evicted && distinct_decisions(&state.events) < state.settings.history_limit;
     } else {
         state.events.clear();
         state.history_available = false;
@@ -377,7 +378,7 @@ pub(in crate::review) fn recent(
                 && let Some(request) = event["links"]["request_id"].as_str()
             {
                 requests.insert(request.to_owned());
-                if requests.len() > state.history_limit {
+                if requests.len() > state.settings.history_limit {
                     return Ok(false);
                 }
             }
@@ -568,9 +569,10 @@ pub(in crate::review) fn encode(
     store: &Store,
     state: &State,
     locked: bool,
-) -> Result<(Vec<u8>, super::objects::Pins), Error> {
+) -> Result<Vec<u8>, Error> {
     let mut value = json!(state);
-    let pins = super::sources::checkpoint(store, &mut value, false)?;
+    // Settings an earlier checkpoint held that the files could not take yet.
+    state.legacy_settings.keep(&mut value);
     value["events"] = json!([]);
     if let Some(purge) = state.history_rewrite {
         let (mut events, mut evicted) = (Vec::new(), false);
@@ -589,8 +591,13 @@ pub(in crate::review) fn encode(
             // Persist raw records; links stay reader-derived. Segments can hold
             // records the previous limit already expired, so apply that window
             // first: raising the limit never restores them.
-            let previous = correlation::retain_raw(raw, current.history_limit);
-            events = correlation::retain_raw(previous, state.history_limit);
+            let previous = correlation::retain_raw(
+                raw,
+                state
+                    .history_previous_limit
+                    .unwrap_or(current.settings.history_limit),
+            );
+            events = correlation::retain_raw(previous, state.settings.history_limit);
         }
         // An empty generation needs no segment before publication. This keeps
         // an explicit clear available at capacity without deleting old bytes
@@ -604,15 +611,13 @@ pub(in crate::review) fn encode(
     {
         mark_failure(store, state);
     }
-    serde_json::to_vec(&value)
-        .map(|bytes| (bytes, pins))
-        .map_err(|_| Error::Invalid("review encoding"))
+    serde_json::to_vec(&value).map_err(|_| Error::Invalid("review encoding"))
 }
 /// Appends pending observations under the caller's history lock. Work is
 /// bounded by the active segment: tail recovery, and on rotation one count of
 /// the sealed segment's decisions and a listing-based prune.
 pub(in crate::review) fn publish(store: &Store, state: &State) -> Result<(), Error> {
-    if !state.history_enabled || state.pending_history.is_empty() {
+    if !state.settings.history_enabled || state.pending_history.is_empty() {
         return Ok(());
     }
     if !store.directory.join("history-readers").try_exists()? {
@@ -697,7 +702,7 @@ fn rotate(
         decisions: Some(decisions),
         path: sealed,
     });
-    prune(list, state.history_limit)?;
+    prune(list, state.settings.history_limit)?;
     let sequence = active.sequence + 1;
     let path = write_segment(store, state, sequence, None, &[])?;
     list.push(Segment {

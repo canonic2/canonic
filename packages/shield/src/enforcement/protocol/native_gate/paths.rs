@@ -18,11 +18,15 @@ pub(super) struct Guard<'a> {
 }
 
 /// How far a request may touch protected state.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum Protection {
     None,
     /// Reads agent settings that may hold credentials; the user decides.
     Sensitive,
+    /// May write Shield's policy files: from content Shield cannot inspect,
+    /// such as a patch or a stash, or from committed content that differs;
+    /// the user decides.
+    Undetermined,
     /// The modeled search's bounded metadata footprint could not be verified.
     Unverified,
     /// A content search can reach protected state; narrow its footprint.
@@ -200,7 +204,13 @@ fn output_protection(
         .and_then(|s| s.to_str())
         .unwrap_or(executable);
     match leaf {
-        "git" => git::content(&arguments, root, cwd, cwd_known, guard),
+        "git" => strictest(
+            [
+                git::content(&arguments, root, cwd, cwd_known, guard),
+                git::policy_files(&arguments, root, cwd, cwd_known, guard),
+            ]
+            .into_iter(),
+        ),
         "grep" | "egrep" | "fgrep" => match recursive_grep(&arguments, cwd) {
             Some(search) => {
                 let mut finding = search_protection(&search, root, cwd, cwd_known, guard, false);

@@ -114,7 +114,7 @@ eight hours. Matching uses are unlimited during that period. Resuming the same
 conversation can reuse an unexpired grant. A new conversation cannot. Process
 exit is not evidence that a conversation ended.
 
-Revocation, policy activation, changed protection settings, and changed native
+Revocation, changed protection settings, and changed native
 registration invalidate the permission. Clock discontinuities also make it
 unavailable; obtain fresh confirmation. A system restart or suspend may trigger
 this conservative clock check on some platforms.

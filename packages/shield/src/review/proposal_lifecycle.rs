@@ -200,7 +200,6 @@ pub(super) fn refresh_inspection(state: &mut State) {
 fn refresh_inner(state: &mut State, exact: bool) {
     let now = clock::best_effort_ms();
     drafts::reclaim(&mut state.policy_drafts, now);
-    let metadata = state.operator.clone();
     for row in &mut state.proposals {
         if row.status != "pending" {
             // Stable original timestamps let even a full legacy checkpoint age
@@ -210,11 +209,14 @@ fn refresh_inner(state: &mut State, exact: bool) {
             }
             continue;
         }
-        let mut base = row.base_metadata.clone();
-        super::publication::keep_independent_metadata(&mut base, &metadata);
+        // The files the proposal writes decide whether it still applies. One
+        // an earlier release prepared stores none and is prepared again.
         let files_changed = exact && validate_capture(&state.project_root, row).is_err();
-        let base_changed =
-            row.policy_revision != state.policy_revision || base != metadata || files_changed;
+        // A checkpoint-only read has not followed the files and knows no
+        // revision; the files' hashes are then the only comparison.
+        let revision_changed =
+            !state.policy_revision.is_empty() && row.policy_revision != state.policy_revision;
+        let base_changed = revision_changed || row.files.is_empty() || files_changed;
         let reason = if base_changed {
             Some(("stale", "base_changed"))
         } else if let Some(interaction) = &row.interaction {
@@ -245,18 +247,14 @@ fn refresh_inner(state: &mut State, exact: bool) {
 }
 
 /// Keep a full day after the review deadline for outcome reconciliation. The
-/// current activation's receipt survives independently of this recovery window.
+/// receipt of the write that produced the current policy survives
+/// independently of this recovery window.
 pub(super) fn reclaim(state: &mut State) {
     let now = clock::best_effort_ms();
-    let active = state
-        .active
-        .as_ref()
-        .map(super::runtime::Active::activation_id);
+    let revision = state.policy_revision.as_str();
     state.proposals.retain(|row| {
         row.status == "pending"
-            || row.receipt["activation_id"]
-                .as_str()
-                .is_some_and(|id| Some(id) == active)
+            || row.receipt["policy_revision"] == revision
             || row
                 .interaction
                 .as_ref()

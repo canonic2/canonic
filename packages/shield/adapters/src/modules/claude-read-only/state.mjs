@@ -24,7 +24,7 @@ export function denialReason(code, request, detail, project, interactive = false
   if (code === 'approval-revoked') return 'Shield blocked this read (approval-revoked): the user revoked or denied this approval. Do not retry automatically.';
   if (code === 'policy-deny') return 'Shield: denied by active policy. Stop this read; use Shield MCP to explain the matching rule.';
   if (code === 'compiled-cache-unavailable' && text(project) && !/\p{Cc}/u.test(project)) {
-    return `Shield: compiled policy unavailable. Ask the user to run \`shield cache prepare --project '${project.replaceAll("'", "'\\''")}'\`; retry after it succeeds.`;
+    return `Shield: compiled policy folder unusable. Ask the user to run \`shield doctor --project '${project.replaceAll("'", "'\\''")}'\` and fix what it reports; retry after that.`;
   }
   if (code === 'runtime-busy') return 'Shield state is briefly locked; retry the request.';
   if (code === 'invalid-context') return 'Shield: the session\'s working directory is not an existing folder inside this Shield project. Work from the project folder, or ask the user to start the session there.';

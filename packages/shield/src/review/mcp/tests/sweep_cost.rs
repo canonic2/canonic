@@ -52,7 +52,7 @@ fn current_mcp_startup_and_cli_status_read_no_history() {
             );
             assert_eq!(trace.recorded_count("history.captures"), 0, "{age}");
             assert_eq!(trace.recorded_count("policy.preparations"), 0, "{age}");
-            assert_eq!(trace.recorded_count("source.hydrated"), 0, "{age}");
+            assert_eq!(trace.recorded_count("policy.captures"), 0, "{age}");
             assert_eq!(trace.recorded_count("objects.sweeps"), 0, "{age}");
         }
         trace.finish("success");
@@ -115,7 +115,9 @@ fn uncached_owned_apply_reuses_active_plan_and_prepares_only_the_selected_candid
             .find(|r| r["event"] == "request_end");
         if let Some(end) = end {
             assert_eq!(end["fields"]["counts"]["policy.preparations"], 1, "{end}");
-            assert_eq!(end["fields"]["counts"]["source.hydrated"], 2, "{end}");
+            // One capture of the policy files; the proposal is rebuilt from
+            // its own file texts.
+            assert_eq!(end["fields"]["counts"]["policy.captures"], 1, "{end}");
             break;
         }
         assert!(Instant::now() < deadline);
@@ -131,6 +133,8 @@ fn uncached_owned_apply_reuses_active_plan_and_prepares_only_the_selected_candid
 fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
     let (root, mut context, connection) = fixture_with(&super::apply_cost::pack_fixture());
     context.agent = Some("codex".into());
+    // Steady state: an earlier request already compiled the files' plan.
+    crate::review::files::load(root.path()).unwrap();
     let logs = assert_fs::TempDir::new().unwrap();
     let cli = crate::cli::Cli::parse_from([
         "shield",
@@ -324,7 +328,9 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
             .count();
         // Inspection reads only selected source fields and metadata, while a
         // proposal prepares its exact current base. Neither loads history.
-        let (preparations, sources, history_reads) = if tool == "policy_propose" {
+        // A proposal follows the files into review state at most once per
+        // process and version of the files; inspection never does.
+        let (preparations, most_captures, history_reads) = if tool == "policy_propose" {
             (1, 1, 0)
         } else {
             (0, 0, 0)
@@ -333,10 +339,10 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
             end["fields"]["counts"]["policy.preparations"], preparations,
             "{age} {tool}: {end}"
         );
-        assert_eq!(
-            end["fields"]["counts"]["source.hydrated"], sources,
-            "{age} {tool}: {end}"
-        );
+        let captures = end["fields"]["counts"]["policy.captures"]
+            .as_u64()
+            .unwrap_or(0);
+        assert!(captures <= most_captures, "{age} {tool}: {end}");
         assert_eq!(history, history_reads, "{age} {tool}");
         if matches!(tool, "request_list" | "status" | "doctor") {
             let reads = records
@@ -416,18 +422,21 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
                 "an unchanged pack's patterns are compiled once and reused for the edit: {age}",
             );
         }
-        // Status validates the policy files once, since no hook has compiled
-        // them into a plan under their exact key yet.
-        let captures = match tool {
-            "policy_propose" => 2,
-            "status" => 1,
+        // Status reads the files' already compiled plan. A proposal is its file
+        // texts: preparing it rebuilds both sides from them, and showing one
+        // proposal rebuilds them again; neither depends on other proposals.
+        // Following the files into review state adds three source captures,
+        // only on the request that follows them first in this process.
+        let sources = match tool {
+            "policy_propose" => 4,
+            "selected" => 2,
             _ => 0,
-        };
+        } + 3 * captures;
         assert_eq!(
             end["fields"]["counts"]["policy.source_captures"]
                 .as_u64()
                 .unwrap_or(0),
-            captures,
+            sources,
             "{age} {tool}: {end}"
         );
         eprintln!(
@@ -450,16 +459,18 @@ fn unrelated_unavailable_source_does_not_block_selected_reads_or_new_proposals()
     let selected = proposal(&context, &connection, "acme-selected");
     let store = Store::open(root.path()).unwrap();
     let state = store.read_checkpoint().unwrap();
-    let unrelated = state
-        .proposals
-        .iter()
-        .find(|p| p.id == old["data"]["proposal_id"])
+    // The unrelated proposal's texts no longer rebuild its candidates.
+    store
+        .update_checkpoint(&context, &|| Ok(()), |state| {
+            let unrelated = state
+                .proposals
+                .iter_mut()
+                .find(|p| p.id == old["data"]["proposal_id"])
+                .unwrap();
+            unrelated.files.get_mut("config.yml").unwrap().after = Some("acme: [unreadable".into());
+            Ok(Value::Null)
+        })
         .unwrap();
-    fs::remove_file(root.path().join(".shield/review/sources").join(format!(
-        "{}.manifest.json",
-        unrelated.candidate["manifest_digest"].as_str().unwrap()
-    )))
-    .unwrap();
     for tool in ["pack_list", "registry_list", "rule_list", "policy_show"] {
         let response = invoke(&context, &connection, tool, json!({}));
         assert!(response["error"].is_null(), "{tool}: {response}");

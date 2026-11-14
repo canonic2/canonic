@@ -128,11 +128,11 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
         // Only agent connections receive this; the terminal is the operator.
         Error::Missing | Error::AgentNotConnected => missing(command),
         Error::CacheUnavailable => Report::new(
-            "Compiled policy is not ready",
-            "Shield needs a valid compiled plan for the committed policy.",
+            "Compiled policy folder is unusable",
+            "Shield compiles the policy files into a private folder and could not use it.",
             &[
-                "Run shield cache prepare in the owning project, then retry.",
-                "If preparation fails, inspect shield doctor.",
+                "Run shield doctor to find the cause, then retry.",
+                "To use another folder, run shield mcp setup --cache-dir with an absolute path.",
             ],
         ),
         Error::PolicyFiles(problem) => invalid_policy_files(problem),
@@ -141,19 +141,14 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             "The project state is locked by its current writer.",
             &["Wait for that operation to finish, then retry."],
         ),
-        Error::CleanupPending => Report::new(
-            "Object cleanup has more work",
-            "The bounded cleanup pass finished without completing its inventory.",
-            &["Retry the operation to continue cleanup automatically."],
-        ),
         Error::StaleSnapshot => Report::new(
             "The project changed during this operation",
             "The request's policy revision is no longer current.",
             &["Inspect shield status, then retry and review the current policy."],
         ),
-        Error::CheckoutChanged => Report::new(
-            "This checkout's Shield runtime changed",
-            "Another Shield process started a new local runtime for this checkout while this command ran.",
+        Error::StateRecreated => Report::new(
+            "This project's Shield state was recreated",
+            "The folder's review state was deleted and created again while this command ran.",
             &["Retry the command."],
         ),
         Error::RequiredPack { pack, dependents } => required_pack(pack, dependents),
@@ -191,7 +186,7 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
         Error::Io(error) => io_report(error),
         Error::ApprovalRequired => Report::new(
             "Operator approval is required",
-            "An inspection or proposal cannot activate this change.",
+            "An inspection or proposal cannot write this change to the policy files.",
             &["Review the pending proposal with shield policy review in an operator terminal."],
         ),
         Error::CandidateUnavailable | Error::CursorUnavailable => Report::new(
@@ -305,7 +300,7 @@ fn policy(error: &crate::policy::Error) -> Report {
             "The supplied policy does not satisfy Shield's structured v1 contract.",
             &[
                 "Inspect the policy's rule, profile and requirement fields.",
-                "Validate the corrected candidate before confirming activation.",
+                "Validate the corrected files before confirming the change.",
             ],
         ),
     }
@@ -319,11 +314,6 @@ fn capacity(
 ) -> Report {
     use crate::review::CapacityKind;
     let mut r = match kind {
-        CapacityKind::StoredBytes | CapacityKind::StoredEntries => Report::new(
-            "Policy object storage admission is full",
-            kind.recovery(),
-            &[],
-        ),
         CapacityKind::ReadRequests | CapacityKind::RunRequests => Report::new(
             &format!("Too many open {}s", kind.noun()),
             "Pending and approved requests that have not expired count toward this bound.",
@@ -344,15 +334,8 @@ fn capacity(
         r.help
             .push(format!("Run {route} to review them, then retry."));
     }
-    if matches!(
-        kind,
-        CapacityKind::StoredBytes | CapacityKind::StoredEntries
-    ) {
-        r.field("Needed", format!("{retained} {}s", kind.noun()));
-    } else {
-        r.field("Pending", pending.to_string());
-        r.field("Retained", retained.to_string());
-    }
+    r.field("Pending", pending.to_string());
+    r.field("Retained", retained.to_string());
     r.field("Limit", limit.to_string());
     r
 }
@@ -496,7 +479,7 @@ fn invalid_source(reason: &str) -> Report {
             "Shield could not use the supplied configuration or retained artifact.",
             &[
                 "Correct .shield/config.yml or its artifacts, then review with shield policy review.",
-                "Correct the candidate and review it with shield policy review; cache preparation cannot activate edits.",
+                "Correct the policy files; the next request uses them once they are valid.",
             ],
         );
     }

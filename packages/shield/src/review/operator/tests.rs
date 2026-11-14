@@ -63,15 +63,12 @@ fn history_fixture(limit: usize) -> (assert_fs::TempDir, review::Context) {
         BTreeMap::from([("project".into(), json!(candidate))]),
     )
     .expect("initialize");
+    std::fs::write(
+        root.path().join(".shield/config.yml"),
+        format!("schema_version: 1\npacks: []\nhistory:\n  limit: {limit}\n"),
+    )
+    .expect("history settings");
     let context = review::open(root.path()).expect("context");
-    Store::open(root.path())
-        .expect("store")
-        .update(&context, &|| Ok(()), |state| {
-            state.operator = crate::review::project::metadata(state);
-            state.history_limit = limit;
-            Ok(json!({}))
-        })
-        .expect("history settings");
     (root, context)
 }
 
@@ -184,7 +181,7 @@ fn joined_history_retains_rewrite_disposition_and_explanation() {
     assert_eq!(row["denied"], false);
 }
 #[test]
-fn repeated_publication_compacts_authority_and_history_retains_commands() {
+fn history_retains_the_latest_commands_within_its_limit() {
     let root = assert_fs::TempDir::new().expect("fixture");
     let candidate =
         Bundle::capture(r#"{"schema_version":1,"packs":[]}"#, &[], None).expect("empty policy");
@@ -197,20 +194,8 @@ fn repeated_publication_compacts_authority_and_history_retains_commands() {
         .read()
         .expect("state");
     state.operator = crate::review::project::metadata(&state);
-    state.history_limit = 5;
-    let compiled = review::cache::build(&state, None).expect("prepare fixture");
-    for _ in 0..1300 {
-        review::runtime::publish(&mut state, &context, None, compiled.clone());
-        state.compact_authorization();
-    }
-    assert_eq!(state.authorization_events.len(), 1);
+    state.settings.history_limit = 5;
     assert_eq!(state.events.as_slice(), &[] as &[serde_json::Value]);
-    state
-        .active
-        .as_ref()
-        .expect("active")
-        .validate(&state)
-        .expect("current checkpoint proves authority");
     for id in 0..20 {
         for kind in ["decision", "completion"] {
             let event = state.event(
@@ -225,13 +210,6 @@ fn repeated_publication_compacts_authority_and_history_retains_commands() {
     }
     assert_eq!(state.events.len(), 10);
     assert_eq!(state.events[0]["links"]["request_id"], "request-15");
-    state.events.clear();
-    state
-        .active
-        .as_ref()
-        .expect("active")
-        .validate(&state)
-        .expect("history purge preserves authority");
 }
 
 #[test]
@@ -283,19 +261,18 @@ fn doctor_keeps_source_and_projection_integrity_unchecked_without_preparing_poli
             Ok(json!({}))
         })
         .unwrap();
-    std::fs::write(root.path().join(".shield/config.yml"), [0xff]).unwrap();
+    // Pausing writes config.local.yml, so it happens while the files are readable.
     review::mode::Prepared::new(&context, false)
         .unwrap()
         .commit(&context, &|| Ok(()))
         .unwrap();
+    std::fs::write(root.path().join(".shield/config.yml"), [0xff]).unwrap();
     let state_path = root.path().join(".shield/review/state.json");
     let before = std::fs::read(&state_path).unwrap();
-    for source in std::fs::read_dir(root.path().join(".shield/review/sources")).unwrap() {
-        std::fs::write(source.unwrap().path(), "invalid retained source").unwrap();
-    }
     let report = crate::review::project::doctor(&context).unwrap();
     assert_eq!(report["project_file_inspection"], "unchecked");
-    assert_eq!(report["enabled"], false);
+    // Unreadable files cannot pause enforcement: it stays on.
+    assert_eq!(report["enabled"], true);
     assert!(
         !report["checks"]
             .as_array()
@@ -303,7 +280,6 @@ fn doctor_keeps_source_and_projection_integrity_unchecked_without_preparing_poli
             .iter()
             .any(|row| row["check"] == "status")
     );
-    assert_eq!(report["policy_validation"]["source"], "not-performed");
     assert!(
         !report["checks"]
             .as_array()

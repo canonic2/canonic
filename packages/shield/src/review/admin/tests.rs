@@ -5,6 +5,10 @@ use assert_fs::prelude::*;
 
 fn enrolled() -> (assert_fs::TempDir, Context) {
     let root = assert_fs::TempDir::new().unwrap();
+    // Settings commands write the policy files, so the project has them.
+    root.child(".shield/config.yml")
+        .write_str("schema_version: 1\npacks: []\n")
+        .unwrap();
     let bundle =
         crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
     let candidates = std::collections::BTreeMap::from([("project".into(), json!(bundle))]);
@@ -29,10 +33,10 @@ fn enrolled() -> (assert_fs::TempDir, Context) {
 #[test]
 fn parity_admin_protection_answers_remain_bound_to_the_pre_question_snapshot() {
     let (root, context) = enrolled();
-    let before = project::metadata(&project::checkpoint(&context).unwrap());
-    let unchanged = protection::Prepared::from_metadata(
+    let before = review::path_access::current(root.path()).unwrap();
+    let unchanged = protection::Prepared::from_current(
         &context,
-        &before,
+        before,
         review::path_access::PathAccess::default(),
     );
     let path = root.path().join(".shield/review/state.json");
@@ -51,9 +55,9 @@ fn parity_admin_protection_answers_remain_bound_to_the_pre_question_snapshot() {
     .unwrap()
     .commit(&context, &|| Ok(()))
     .unwrap();
-    let stale = protection::Prepared::from_metadata(
+    let stale = protection::Prepared::from_current(
         &context,
-        &before,
+        before,
         review::path_access::PathAccess::default(),
     );
     assert!(matches!(
@@ -126,27 +130,36 @@ fn parity_admin_administrative_reviews_reject_stale_and_foreign_confirmation() {
         plan.commit(&foreign, &|| Ok(())),
         Err(Error::StaleSnapshot)
     ));
-    assert_ne!(project::checkpoint(&context).unwrap().history_limit, 10);
+    assert_ne!(
+        project::checkpoint(&context)
+            .unwrap()
+            .settings
+            .history_limit,
+        10
+    );
     assert!(root.path().exists());
 }
 
 #[test]
-fn parity_admin_invalid_protection_record_can_be_repaired_without_policy_admission() {
+fn parity_admin_invalid_protection_setting_reads_as_defaults_and_is_never_overwritten() {
     let (root, context) = enrolled();
-    review::path_access::store_fixture(root.path(), json!({"unknown":"allow"}));
-    let plan = prepare(
-        &context,
-        "protection_set",
-        &json!({"agent_settings_read":"ask"}),
-        &|| Ok(()),
-    )
-    .unwrap();
-    assert!(review::path_access::current(root.path()).is_err());
-    plan.commit(&context, &|| Ok(())).unwrap();
+    let local = root.path().join(".shield/config.local.yml");
+    std::fs::write(&local, "schema_version: 1\nprotection: {unknown: allow}\n").unwrap();
+    let invalid = std::fs::read(&local).unwrap();
+    // Files Shield cannot read keep the defaults in effect.
     assert_eq!(
         review::path_access::current(root.path()).unwrap(),
         review::path_access::PathAccess::default()
     );
+    let refused = prepare(
+        &context,
+        "protection_set",
+        &json!({"agent_settings_read":"allow"}),
+        &|| Ok(()),
+    )
+    .and_then(|plan| plan.commit(&context, &|| Ok(())));
+    assert!(refused.is_err());
+    assert_eq!(std::fs::read(&local).unwrap(), invalid);
 }
 
 #[test]
@@ -166,11 +179,10 @@ fn parity_admin_history_purge_preserves_authority_and_invalidates_prior_review()
     .unwrap();
     plan.commit(&context, &|| Ok(())).unwrap();
     let after = project::checkpoint(&context).unwrap();
-    assert!(!after.history_enabled);
-    assert_eq!(after.history_limit, 10);
+    assert!(!after.settings.history_enabled);
+    assert_eq!(after.settings.history_limit, 10);
     assert_ne!(before.history_generation, after.history_generation);
     assert_eq!(before.policy_revision, after.policy_revision);
-    assert_eq!(json!(before.active), json!(after.active));
     assert!(matches!(
         stale.commit(&context, &|| Ok(())),
         Err(Error::StaleSnapshot)
@@ -220,16 +232,15 @@ fn registry_replacement_freezes_both_sources_preserves_default_and_refuses_stale
     let before = project::checkpoint(&context).unwrap();
     let arguments = json!({"name":"acme","location":replacement.path()});
     let declined = prepare(&context, "registry_add", &arguments, &|| Ok(())).unwrap();
-    let old = before.operator["sources"]["acme"].clone();
+    let old = json!(before.settings.registries.sources["acme"]);
     let review = declined.review();
     assert_eq!(review["change"], "replace");
     assert_eq!(review["previous_source"], old);
     assert_ne!(review["source"]["identity"], old["identity"]);
     drop(declined);
-    assert_eq!(
-        project::checkpoint(&context).unwrap().operator,
-        before.operator
-    );
+    let unchanged = project::checkpoint(&context).unwrap();
+    assert_eq!(unchanged.operator, before.operator);
+    assert_eq!(unchanged.settings, before.settings);
     let plan = prepare(&context, "registry_add", &arguments, &|| Ok(())).unwrap();
     let stale = prepare(&context, "registry_add", &arguments, &|| Ok(())).unwrap();
     let expected = plan.review()["source"].clone();
@@ -241,10 +252,11 @@ fn registry_replacement_freezes_both_sources_preserves_default_and_refuses_stale
     let receipt = plan.commit(&context, &|| Ok(())).unwrap();
     assert_eq!(receipt["change"], "replace");
     let after = project::checkpoint(&context).unwrap();
-    assert_eq!(after.operator["sources"]["acme"], expected);
-    assert_eq!(after.operator["default"], "acme");
+    assert_eq!(json!(after.settings.registries.sources["acme"]), expected);
+    assert_eq!(after.settings.registries.default.as_deref(), Some("acme"));
     assert_eq!(after.operator["installed"], before.operator["installed"]);
-    assert_eq!(after.candidates, before.candidates);
+    // Registries are a setting in the policy files: they change the files,
+    // never the policy.
     assert_eq!(after.policy_revision, before.policy_revision);
     assert!(stale.commit(&context, &|| Ok(())).is_err());
 }
@@ -264,7 +276,14 @@ fn parity_admin_project_registry_add_default_remove_share_exact_trust_review() {
         &|| Ok(()),
     )
     .unwrap();
-    assert!(project::checkpoint(&context).unwrap().operator["sources"]["acme"].is_null());
+    assert!(
+        !project::checkpoint(&context)
+            .unwrap()
+            .settings
+            .registries
+            .sources
+            .contains_key("acme")
+    );
     assert_eq!(plan.review()["scope"], "project");
     plan.commit(&context, &|| Ok(())).unwrap();
     prepare(
@@ -277,8 +296,13 @@ fn parity_admin_project_registry_add_default_remove_share_exact_trust_review() {
     .commit(&context, &|| Ok(()))
     .unwrap();
     assert_eq!(
-        project::checkpoint(&context).unwrap().operator["default"],
-        "acme"
+        project::checkpoint(&context)
+            .unwrap()
+            .settings
+            .registries
+            .default
+            .as_deref(),
+        Some("acme")
     );
     prepare(
         &context,
@@ -289,7 +313,14 @@ fn parity_admin_project_registry_add_default_remove_share_exact_trust_review() {
     .unwrap()
     .commit(&context, &|| Ok(()))
     .unwrap();
-    assert!(project::checkpoint(&context).unwrap().operator["sources"]["acme"].is_null());
+    assert!(
+        !project::checkpoint(&context)
+            .unwrap()
+            .settings
+            .registries
+            .sources
+            .contains_key("acme")
+    );
     assert!(
         prepare(
             &context,
@@ -604,62 +635,6 @@ fn parity_admin_box_managed_hook_repair_preserves_publication_ownership() {
     );
     assert!(!root.path().join(".codex/hooks.json").exists());
     assert!(!root.path().join(".claude/settings.local.json").exists());
-}
-
-#[test]
-fn parity_admin_repair_does_not_apply_a_review_after_operator_state_changes() {
-    let (_root, context) = enrolled();
-    assert!(
-        prepare(
-            &context,
-            "policy_repair",
-            &json!({"confirmed":true}),
-            &|| Ok(())
-        )
-        .is_err()
-    );
-    let plan = prepare(&context, "policy_repair", &json!({}), &|| Ok(())).unwrap();
-    Store::open(Path::new(&context.project_root))
-        .unwrap()
-        .update_checkpoint(&context, &|| Ok(()), |state| {
-            state.operator["path_access"] = json!({});
-            Ok(json!({}))
-        })
-        .unwrap();
-    assert!(plan.commit(&context, &|| Ok(())).is_err());
-}
-
-#[test]
-fn parity_admin_cache_preparation_uses_committed_policy_without_new_authority() {
-    let (root, context) = enrolled();
-    let before = project::checkpoint(&context).unwrap();
-    root.child(".shield/config.yml")
-        .write_str("unreviewed: invalid policy")
-        .unwrap();
-    let receipt = prepare(&context, "cache_prepare", &json!({}), &|| Ok(()))
-        .unwrap()
-        .commit(&context, &|| Ok(()))
-        .unwrap();
-    let after = project::checkpoint(&context).unwrap();
-    assert_eq!(receipt["prepared"], true);
-    assert_eq!(after.policy_revision, before.policy_revision);
-    assert_eq!(
-        after.active.as_ref().unwrap().activation_id(),
-        before.active.as_ref().unwrap().activation_id()
-    );
-    assert_eq!(
-        after.active.as_ref().unwrap().revision(),
-        before.active.as_ref().unwrap().revision()
-    );
-    assert!(
-        prepare(
-            &context,
-            "cache_prepare",
-            &json!({"cache_dir":"relative-cache"}),
-            &|| Ok(())
-        )
-        .is_err()
-    );
 }
 
 #[test]

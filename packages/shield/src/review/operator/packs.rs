@@ -255,7 +255,8 @@ pub(super) fn update(
 ) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
     let (before, base) = crate::review::project::load_prepared(context)?;
-    let skipped = crate::review::packs::update_skipped(&before.operator, reference)?;
+    let skipped =
+        crate::review::packs::update_skipped(&before.operator, &before.settings, reference)?;
     tty.progress(&super::presentation::update_progress(&skipped))?;
     let (candidate, meta) = prepare_update(context, &before, reference)?;
     let (candidate, meta) = settle_first(
@@ -284,6 +285,5 @@ fn finish(
             json!({"committed":false,"unchanged":true,"policy_revision":before.policy_revision}),
         );
     }
-    let plan = state::review_candidate(context, before, &candidate, &meta, tty, base)?;
-    crate::review::publication::commit_prepared(context, before, candidate, meta, None, None, &plan)
+    state::write_reviewed(context, before, candidate, meta, tty, base)
 }

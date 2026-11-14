@@ -10,15 +10,10 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
     let store = crate::review::storage::Store::inspect(Path::new(&context.project_root))?;
     let (current, upgrade_pending) = store.read_diagnostic_checkpoint()?;
     current.check_inspection(context)?;
-    if current.legacy_preview.is_some() {
-        let mut value = state::status_from(context, &current);
-        value["checks"] = json!([{"check":"checkpoint_upgrade","detail":"The historical record shape and recorded activation proof were inspected. Policy source, matcher model, cache and history were not validated.","repair":"The next actual runtime operation validates and converts the retained checkpoint without another policy review solely for its format."}]);
-        return Ok(value);
-    }
     let meta = state::metadata(&current);
-    let mut checks = storage_checks(context, &current);
+    let mut checks = storage_checks(context);
     let mut value = state::status_from(context, &current);
-    value["enabled"] = json!(current.enforcement.enabled);
+    value["enabled"] = json!(current.settings.enabled());
     value["checkpoint_upgrade_pending"] = json!(upgrade_pending);
     let mut problem = |check: &str, detail: String, repair: &str| {
         checks.push(json!({"check":check,"detail":detail,"repair":repair}));
@@ -33,22 +28,19 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
         );
     }
 
-    // Presence/compatibility probes are metadata-only. Payload integrity and
-    // source preparation are established by explicit use, never by diagnosis.
-    if !value["active"].is_null()
-        && (value["compiled_cache"]["presence"] != "present"
-            || value["compiled_cache"]["compatibility"] != "current")
-    {
-        let repair = crate::review::cache::repair_route(&context.project_root);
-        problem(
-            "policy",
-            "The compiled policy is missing or incompatible; payload integrity is checked on use."
-                .into(),
-            &repair,
-        );
+    // Requests are decided by the policy files; report whether they load.
+    let cache = crate::review::files::cache_for(&current.operator).ok();
+    match crate::review::files::check(Path::new(&context.project_root), cache.as_deref()) {
+        Ok(digest) => value["policy_files"] = json!({"digest":digest}),
+        Err(error) => {
+            value["policy_files"] = json!({"error":error.to_string()});
+            problem(
+                "policy",
+                format!("the policy files cannot be used, so every request asks: {error}"),
+                "Fix the named file in .shield, then run shield doctor",
+            );
+        }
     }
-    value["policy_validation"] =
-        json!({"source":"not-performed","compiled_integrity":"checked-on-use"});
 
     // Pack updates are verified against retained registry checkpoints and the
     // enrolled source each pack came from.
@@ -63,7 +55,7 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
             "shield registry list",
         );
     }
-    match registries::effective_from_metadata(&meta) {
+    match registries::effective_from(&current.settings) {
         Ok(effective) => {
             for row in meta["installed"].as_array().into_iter().flatten() {
                 let identity = row["source_identity"].as_str().unwrap_or_default();
@@ -110,14 +102,9 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
 }
 
 /// Report preserved storage anomalies without blocking unrelated operations.
-fn storage_checks(context: &Context, current: &crate::review::model::State) -> Vec<Value> {
+fn storage_checks(context: &Context) -> Vec<Value> {
     let mut checks = Vec::new();
-    let mut directories = vec![Path::new(&context.project_root).join(".shield/review/sources")];
-    if let Some(active) = &current.active
-        && let Some(partition) = active.compiled.path().parent()
-    {
-        directories.push(partition.to_path_buf());
-    }
+    let directories = [Path::new(&context.project_root).join(".shield/review/sources")];
     for directory in directories {
         match crate::review::storage::objects::anomalies(&directory) {
             Ok(paths) => {

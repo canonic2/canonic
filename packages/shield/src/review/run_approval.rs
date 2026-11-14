@@ -105,11 +105,10 @@ impl RunRequest {
             grant.operator_provenance
         ]))
     }
+    /// A grant binds the exact command, its native resource and origin; a later
+    /// edit to the policy files does not revoke it.
     fn matches(&self, evidence: &EvaluatedRequest, resource: &Value, origin: &Origin) -> bool {
         self.project_id == evidence.identity().project_id()
-            && self.activation_id == evidence.identity().activation_id()
-            && self.policy_revision == evidence.identity().policy_revision()
-            && self.candidate_digest == evidence.identity().candidate_digest()
             && json!(self.request) == json!(evidence.request())
             && self.resource_digest == hash(resource)
             && json!(self.origin) == json!(origin)

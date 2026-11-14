@@ -50,7 +50,7 @@ shield pack configure PACK_SELECTOR
 ```
 
 `show` inspects the retained selection. `configure` walks through any variable
-questions and rule overrides, then reviews the change before activation. A
+questions and rule overrides, then reviews the change before writing it. A
 variable supplies a value the pack was written to accept; an override turns a
 particular rule off or changes its decision. See
 [pack variables and rule overrides](#pack-variables-and-rule-overrides) for
@@ -143,8 +143,11 @@ Use this section when you need a local catalog or a custom HTTPS registry. You
 can use the pinned `main` source without replacing it with your own registration.
 
 Choose registries explicitly, then review permission packs before installing them.
-A project registration overrides the same user alias. A project default takes
-precedence over the user default. The reserved `main` alias pins
+Project registrations are the `registries` [setting](policy-files.md#settings):
+`shield registry add` writes them to your `.shield/config.local.yml`, and a
+`registries` key committed in `config.yml` shares them. A project registration
+overrides the same user alias. A project default takes precedence over the user
+default. The reserved `main` alias pins
 `https://canonic2.github.io/shield-registry/` and the release signing key in the
 binary; it installs no implicit policy. The signed main catalog is published
 through GitHub Pages. A network-supplied public key cannot replace the pinned root.
@@ -352,10 +355,10 @@ conflicts, missing releases, bad digests, or changed source identity leave
 active policy unchanged.
 
 The review lists selections, dependency/profile changes, and incoming constraints.
-Confirmation activates the complete candidate together. `shield pack list` and
+Confirmation writes the complete change together. `shield pack list` and
 `.shield/shield.lock` retain direct-selection flags, versions, profiles, source
-identities, digests, and dependency edges. Manual review rejects incomplete or
-incompatible sets. Promoting a dependency to a direct selection requires a
+identities, digests, and dependency edges. Hand-edited files with incomplete or
+incompatible sets are invalid and make requests ask. Promoting a dependency to a direct selection requires a
 profile satisfying all its parents.
 
 ### Source verification
@@ -448,8 +451,8 @@ renaming an alias cannot retarget an installed instance.
 
 Review shows each pack added, removed, updated or given another profile, and how
 command decisions change; `shield pack list` shows the resulting versions, profiles
-and dependency edges. Confirmation activates the whole candidate together. Failed verification,
-incompatible closures, canceled review and stale proposals preserve active policy.
+and dependency edges. Confirmation writes the whole change together. Failed verification,
+incompatible closures, canceled review and stale proposals leave the policy files unchanged.
 MCP `pack_update` proposals capture the same verified closure for operator review;
 confirmation can use those captured bytes after the source becomes unavailable.
 
@@ -485,5 +488,4 @@ root transitions. Missing metadata does not switch the source back to its old
 trust mode. Installed policy works offline unless an exact artifact is known
 revoked. A known revocation blocks affected policy until you update or remove
 the pack, including copies and restored checkouts. Diagnostics and repair remain
-available. An exact private-consent restore can retain reviewed policy inactive
-for that repair without asking you to enroll it again.
+available.

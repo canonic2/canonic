@@ -29,7 +29,7 @@ pub(in crate::review::storage) fn inspect(store: &Store, raw: &Value, state: &mu
             state.history_available = false;
         }
     } else if let Ok(events) = legacy_events(store, raw) {
-        state.events = super::correlation::view(events, state.history_limit);
+        state.events = super::correlation::view(events, state.settings.history_limit);
         state.trim();
     } else {
         state.events.clear();

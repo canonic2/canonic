@@ -93,20 +93,19 @@ fn capture(context: &Context, views: &mut Views, selector: &str) -> Result<Strin
     let (id, before) = id
         .strip_suffix(":before")
         .map_or((id, false), |id| (id, true));
-    let state = crate::review::project::load(context)?;
+    let mut state = crate::review::project::load(context)?;
     let row = state
         .proposals
-        .iter()
+        .iter_mut()
         .find(|row| row.id == id)
         .ok_or(Error::Missing)?;
+    crate::review::storage::Store::open(Path::new(&context.project_root))?.hydrate_proposal(row)?;
     let (candidate, metadata) = if before {
         (&row.base_candidate, &row.base_metadata)
     } else {
         (&row.candidate, &row.candidate_metadata)
     };
-    let source = crate::review::storage::Store::open(Path::new(&context.project_root))?
-        .captured_candidate(candidate)?;
-    views.retain(context, &source, metadata)
+    views.retain(context, candidate, metadata)
 }
 
 #[cfg(test)]

@@ -53,8 +53,6 @@ fn help_text_for_every_command() {
             "help-registry-default",
             vec!["registry", "default", "--help"],
         ),
-        ("help-cache", vec!["cache", "--help"]),
-        ("help-cache-prepare", vec!["cache", "prepare", "--help"]),
         ("help-validate", vec!["__internal", "validate", "--help"]),
         ("help-test-pack", vec!["__internal", "test-pack", "--help"]),
         (

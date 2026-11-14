@@ -87,6 +87,39 @@ struct LocalDocument {
     access_paths: AccessPaths,
     #[serde(default)]
     mcp: crate::mcp_connections::Connections,
+    #[serde(default)]
+    enforcement: Option<super::settings::Enforcement>,
+    #[serde(default)]
+    protection: Option<super::settings::Protection>,
+    #[serde(default)]
+    ask_fallback: BTreeMap<String, super::settings::Fallback>,
+    #[serde(default)]
+    history: Option<super::settings::History>,
+    #[serde(default)]
+    registries: Option<canonic_registry_kit::registrations::Registrations>,
+}
+
+impl LocalDocument {
+    /// The settings this local file holds.
+    fn settings(&self) -> super::settings::Layer {
+        super::settings::Layer {
+            enforcement: self.enforcement,
+            protection: self.protection,
+            ask_fallback: self.ask_fallback.clone(),
+            history: self.history,
+            registries: self.registries.clone(),
+        }
+    }
+
+    /// Whether the file holds nothing but settings: no selections, rules,
+    /// roots or connections.
+    fn holds_only_settings(&self) -> bool {
+        self.packs.is_empty()
+            && self.rules.is_none()
+            && self.access_paths.read.is_empty()
+            && self.access_paths.write.is_empty()
+            && self.mcp.is_empty()
+    }
 }
 
 #[derive(Deserialize)]
@@ -137,6 +170,14 @@ pub(crate) fn merge(shared: &str, local: Option<&str>) -> Result<String, Error> 
     }
     if local.packs.len() > 64 {
         return Err(Error::Limit);
+    }
+    let settings = local.settings();
+    // A local layer holding only settings changes no policy: the merged
+    // document is the shared one, so its revision stays the same. Splitting
+    // carries those settings forward from the local file itself.
+    if !settings.is_empty() && local.holds_only_settings() {
+        settings.validate()?;
+        return Ok(shared.to_owned());
     }
     let packs = document["packs"]
         .as_array_mut()
@@ -208,6 +249,9 @@ pub(crate) fn merge(shared: &str, local: Option<&str>) -> Result<String, Error> 
         document["disabled"] = json!(rows);
     }
     extra_layers(&mut document, local.rules, &local.access_paths, &local.mcp);
+    if !settings.is_empty() {
+        document["local_settings"] = json!(settings);
+    }
     Ok(document.to_string())
 }
 
@@ -296,6 +340,17 @@ pub(crate) fn split(
     let rules = fields.remove("local_rules");
     let access_paths = fields.remove("local_access_paths");
     let mcp = fields.remove("local_mcp");
+    // A local layer of settings alone merges to the shared document; its
+    // settings come forward from the local file itself.
+    let settings = match fields.remove("local_settings") {
+        Some(settings) => Some(settings),
+        None => previous
+            .1
+            .map(policy::parse::<super::settings::Layer>)
+            .transpose()?
+            .filter(|layer| !layer.is_empty())
+            .map(|layer| json!(layer)),
+    };
     // Local entries, each marked when it only names a shared selection.
     let mut entries: Vec<(Value, bool)> = Vec::new();
     let mut shared = Vec::new();
@@ -351,10 +406,18 @@ pub(crate) fn split(
     let entries = as_written(entries, &local_before, &shared);
     fields.insert("packs".into(), json!(shared));
     let shared = document.to_string();
-    if entries.is_empty() && rules.is_none() && access_paths.is_none() && mcp.is_none() {
+    if entries.is_empty()
+        && rules.is_none()
+        && access_paths.is_none()
+        && mcp.is_none()
+        && settings.is_none()
+    {
         return Ok((shared, None));
     }
     let mut local = json!({"schema_version":1,"packs":entries});
+    if let Some(Value::Object(settings)) = settings {
+        local.as_object_mut().ok_or(Error::Syntax)?.extend(settings);
+    }
     if let Some(mcp) = mcp {
         local["mcp"] = mcp;
     }

@@ -42,7 +42,7 @@ Options:
           Remove the selected agents' hooks, MCP server and permission settings
 
       --cache-dir <CACHE_DIR>
-          Compiled cache location for init, MCP setup or cache preparation
+          Folder for this project's compiled policy plans, chosen at init or MCP setup
 
       --reset-tool-permissions
           Start from current tool permission defaults instead of the saved selection

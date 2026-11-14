@@ -140,7 +140,7 @@ for await (const message of query({
 }
 ```
 
-Replace the paths, create `notes.txt`, and activate the example rule before
+Replace the paths, create `notes.txt`, and save the example rule before
 running your host. Its Read can then proceed. Without a matching allowance,
 the read enters the [operator approval flow](#one-time-operator-approval).
 
@@ -204,7 +204,7 @@ A supported read must meet these limits:
 - An existing regular `.txt` file, at most 65,536 bytes, containing valid UTF-8
   with no NUL or PDF header.
 - Inside the project's confirmed readable roots and outside `.shield` under
-  those roots. Additional `access_paths.read` or `write` roots require activation.
+  those roots. Additional roots come from `access_paths.read` or `write` in the policy files.
 - No file or parent symlinks, hard links, directories, or special files.
 - A cwd inside the project. Optional offset and limit are integers from 1 to
   1,000,000; unknown Read fields block.
@@ -237,7 +237,7 @@ Pending requests expire after ten minutes; approval lasts five minutes.
 Repeating an approval returns the same grant without renewing it. Revocation
 is final. Inspection redacts sensitive metadata and stores no file contents.
 
-The grant binds enrollment, activation, revision, snapshot digest, canonical
+The grant binds the project, canonical
 path, cwd, offset/limit, file identity/metadata/content digest, session, and a
 factory-owned random consumer ID. The original tool-call ID records provenance;
 the retry has its own ID. A private factory map supplies the pending reference,
@@ -278,7 +278,7 @@ incompatible receipt produces the history warning while preserving protection.
 The current SDK receipt also includes a registry-trust revision in its snapshot
 identity. Keep the adapter and Shield binary on compatible protocol versions.
 
-History is enabled by default. It records policy revision, activation, operation,
+History is enabled by default. It records policy revision, operation,
 available session/tool-call IDs, evaluation, and handoff result. An approved Ask
 keeps its original decision and links the consumed grant. Unsupported tools have
 no policy decision. An allowed handoff alone does not establish execution.

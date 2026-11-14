@@ -5,10 +5,10 @@ use crate::{
     review::{
         self, Context, Error,
         model::State,
-        project::{load, status},
+        project::status,
         publication::{
             self,
-            projections::{digest, file_hashes, materialize, projection_changed, projections},
+            projections::{digest, file_hashes, materialize, projections},
         },
     },
 };
@@ -25,14 +25,11 @@ pub(super) fn initialize(
 ) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
     let project = project.canonicalize()?;
+    // An enrolled folder's files are already its policy; there is nothing to
+    // initialize or restore.
     if project.join(".shield/review/state.json").exists() {
         let context = review::open(&project)?;
-        let state = load(&context)?;
-        tty.confirm(
-            &json!({"operation":"reconcile project","project":context.project_root,
-            "policy_revision":state.policy_revision,"integration_setup":setup}),
-        )?;
-        return publication::reconcile(&context, &state);
+        return status(&context);
     }
     let config = project.join(".shield/config.yml");
     let candidate = if config.exists() {
@@ -133,36 +130,54 @@ fn initial_publication(project: &Path) -> Result<publication::ProjectionLease, E
     publication::ProjectionLease::acquire(project)
 }
 
+/// Write the first policy files, then have the state follow them as written,
+/// so the next change starts from the files' own revision.
 fn initialize_projections(context: &Context, files: &BTreeMap<String, String>) -> bool {
-    let repair = materialize(context, files).is_err();
-    if !repair {
-        let _ = review::cache::inputs::refresh(context, files);
-    }
-    repair
+    materialize(context, files).is_err()
+        || crate::review::storage::Store::open(Path::new(&context.project_root))
+            .and_then(|store| store.update_checkpoint(context, &|| Ok(()), |_| Ok(Value::Null)))
+            .is_err()
 }
 
-pub(super) fn review_candidate(
+/// Show the change once and, when the person accepts, write it to the policy
+/// files. The files are checked again under the writer: an edit made while
+/// the review was open is refused, so the person reviews against it.
+pub(super) fn write_reviewed(
     context: &Context,
     before: &State,
-    candidate: &Value,
-    meta: &Value,
+    candidate: Value,
+    meta: Value,
     tty: &mut Terminal,
     base: &configuration::Evaluator,
-) -> Result<configuration::Evaluator, Error> {
-    if projection_changed(context, before)? {
-        return Err(Error::Invalid(
-            "manual configuration changes are pending; review them through shield policy review",
-        ));
-    }
+) -> Result<Value, Error> {
     let (mut view, plan) =
-        publication::prepare_review(context, before, candidate, meta, Some(base))?;
+        publication::prepare_review(context, before, &candidate, &meta, Some(base))?;
     terminal_mcp_details(
         &mut view["changes"],
         &before.candidates["project"],
-        candidate,
+        &candidate,
     )?;
+    let files = crate::review::files::write::base(context, before, &candidate, &meta)?;
     tty.confirm(&view)?;
-    Ok(plan)
+    crate::review::files::write::write(
+        context,
+        crate::review::files::write::Edit {
+            before,
+            candidate,
+            meta,
+            base: files,
+            evaluator: Some(&plan),
+            reviewed: None,
+        },
+        None,
+        "operator-cli",
+    )
+    .map_err(|error| match error {
+        Error::StaleSnapshot => {
+            Error::Invalid("the policy files changed during the review; run the command again")
+        }
+        error => error,
+    })
 }
 
 /// Enrich only the ephemeral operator review, never proposals or receipts.

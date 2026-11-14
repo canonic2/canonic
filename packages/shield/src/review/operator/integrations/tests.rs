@@ -1,6 +1,6 @@
 //! Real file/state acceptance for owned registration and interrupted reconciliation.
 use super::*;
-use crate::configuration::{Bundle, Evaluator};
+use crate::configuration::{Bundle, Evaluator, settings::Values};
 use crate::review::path_access::{Change, PathAccess};
 use crate::review::{
     integrations::{fallback, publish, status, with_fallback},
@@ -13,25 +13,56 @@ mod repository_independence;
 mod status_reporting;
 
 #[test]
-fn init_reuses_exact_source_only_consent_without_a_terminal_or_another_policy_review() {
+fn init_in_a_clone_needs_no_review_and_creates_no_activation() {
     let original = assert_fs::TempDir::new().unwrap();
     let config = "schema_version: 1\npacks: []\nrules: rules.yml\n";
-    let rules =
-        r#"{"schema_version":1,"kind":"custom","capabilities":["structured-rules-v1"],"rules":[]}"#;
+    let rules = r#"{"schema_version":1,"kind":"custom","capabilities":["structured-rules-v1","argument-rules-v1"],"rules":[{"id":"inspect","decision":"allow","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"exact","values":["inspect"]}}}]}"#;
     let bundle = Bundle::capture(config, &[], Some(rules)).unwrap();
     let before = review::mcp::initialize_fixture(original.path(), &bundle);
     let clone = assert_fs::TempDir::new().unwrap();
     fs::create_dir(clone.path().join(".shield")).unwrap();
     fs::write(clone.path().join(".shield/config.yml"), config).unwrap();
     fs::write(clone.path().join(".shield/rules.yml"), rules).unwrap();
+    // JSON mode has no terminal: init succeeds because there is nothing to review.
     let report = initialize_in_cache(clone.path(), None, true, None, Baseline::Skip).unwrap();
-    assert_eq!(report["policy_reused"], true);
     assert_ne!(report["project_id"], before.project_id);
+    assert!(report["policy_files"]["digest"].is_string(), "{report}");
+    let saved: Value =
+        serde_json::from_slice(&fs::read(clone.path().join(".shield/review/state.json")).unwrap())
+            .unwrap();
+    assert!(saved.get("active").is_none(), "{saved}");
+    // The next request is decided by the files.
+    let evaluated = crate::runtime::Project::open(clone.path())
+        .unwrap()
+        .snapshot()
+        .unwrap()
+        .evaluate(crate::policy::Request {
+            executable: "acme".into(),
+            arguments: vec!["inspect".into()],
+            cwd: clone
+                .path()
+                .canonicalize()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .into(),
+            project: clone
+                .path()
+                .canonicalize()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .into(),
+        })
+        .unwrap();
+    assert_eq!(
+        evaluated.evaluation().decision,
+        crate::policy::Decision::Allow
+    );
     let state = Store::open(clone.path())
         .unwrap()
         .read_checkpoint()
         .unwrap();
-    assert_eq!(state.policy_lineage(), before.project_id);
     assert_eq!(
         fs::read_to_string(clone.path().join(".shield/config.yml")).unwrap(),
         config
@@ -120,7 +151,7 @@ fn retained_setup_records_preserve_legacy_block_fallback_and_require_file_owners
             .is_empty()
     );
     assert!(matches!(
-        fallback(&legacy_meta, "codex").unwrap(),
+        fallback(&legacy_meta, &Values::default(), "codex").unwrap(),
         AskFallback::Block
     ));
     // The same retained codec is used inside interrupted setup plans.
@@ -156,17 +187,29 @@ fn historical_native_registration_retains_exact_ownership_without_new_permission
     assert!(decoded.approved_tools.is_none());
     assert!(decoded.connections.is_empty());
     assert!(matches!(
-        fallback(&meta, "codex").unwrap(),
+        fallback(&meta, &Values::default(), "codex").unwrap(),
         AskFallback::Block
     ));
     assert_eq!(meta.to_string(), bytes);
     let mut explicit = legacy.clone();
     explicit["agents"]["codex"] = explicit["agents"]["claude"].clone();
     explicit["ask_fallback"] = json!({"codex":"allow"});
+    // A record's fallback still loads; the policy files decide, and the
+    // record is never written with it again.
+    let explicit = json!({"integration":explicit});
+    let mut allow = Values::default();
+    allow
+        .ask_fallback
+        .insert("codex".into(), AskFallback::Allow);
     assert!(matches!(
-        fallback(&json!({"integration":explicit}), "codex").unwrap(),
+        fallback(&explicit, &allow, "codex").unwrap(),
         AskFallback::Allow
     ));
+    assert!(
+        json!(registration(&explicit).unwrap())
+            .get("ask_fallback")
+            .is_none()
+    );
     // Legacy interceptor ownership is a different protocol, not native hooks.
     let mut interceptor = legacy;
     interceptor["interceptor"] = json!({"assets":{}});
@@ -367,6 +410,13 @@ fn initial_review_reclaims_only_exact_generated_entries_without_writes() {
 
 pub(super) fn fixture() -> (assert_fs::TempDir, Context) {
     let root = assert_fs::TempDir::new().unwrap();
+    // Setup writes Ask fallbacks into the policy files.
+    fs::create_dir(root.path().join(".shield")).unwrap();
+    fs::write(
+        root.path().join(".shield/config.yml"),
+        "schema_version: 1\npacks: []\n",
+    )
+    .unwrap();
     let candidates = BTreeMap::from([(
         "project".into(),
         json!(Bundle::capture(r#"{"schema_version":1,"packs":[]}"#, &[], None).unwrap()),
@@ -386,6 +436,16 @@ fn meta(context: &Context) -> Value {
     crate::review::project::metadata(&crate::review::project::load(context).unwrap())
 }
 
+/// The Ask fallback in effect for `agent` in the project's current state.
+fn fallback_in(context: &Context, agent: &str) -> Result<AskFallback, Error> {
+    let state = crate::review::project::load(context).unwrap();
+    fallback(
+        &crate::review::project::metadata(&state),
+        &state.settings,
+        agent,
+    )
+}
+
 fn cloud_fixture(local: bool) -> (assert_fs::TempDir, Context) {
     let root = assert_fs::TempDir::new().unwrap();
     let connection = json!({"transport":{"type":"http","url":"https://cloud.example.com/mcp"},"agents":{"claude":"acme","codex":"acme"}});
@@ -396,6 +456,64 @@ fn cloud_fixture(local: bool) -> (assert_fs::TempDir, Context) {
         Bundle::capture_layers(&config, local_config.as_deref(), &[], None, None, &[]).unwrap();
     let context = review::mcp::initialize_fixture(root.path(), &bundle);
     (root, context)
+}
+
+#[test]
+fn hand_edited_mcp_connections_are_reported_and_mcp_setup_writes_them() {
+    let (root, context) = cloud_fixture(false);
+    let before = meta(&context);
+    let plan = prepare(root.path(), &before, IntegrationChoice::all())
+        .unwrap()
+        .unwrap();
+    apply(&context, &before, &plan).unwrap();
+    let diagnostics = |context: &Context| {
+        status(
+            context,
+            &crate::review::project::checkpoint(context).unwrap(),
+        )["diagnostics"]
+            .to_string()
+    };
+    let stale = "project MCP binding needs reviewed setup";
+    assert!(!diagnostics(&context).contains(stale));
+    // A person edits the connection in the policy files.
+    let config = root.path().join(".shield/config.yml");
+    let text = fs::read_to_string(&config).unwrap();
+    assert!(text.contains("cloud.example.com"));
+    fs::write(
+        &config,
+        text.replace("cloud.example.com", "next.example.com"),
+    )
+    .unwrap();
+    // Status never compiles the edited files, so it cannot compare them yet.
+    let report = status(
+        &context,
+        &crate::review::project::checkpoint(&context).unwrap(),
+    );
+    assert!(
+        report.to_string().contains(r#""availability":"unchecked""#),
+        "{report}"
+    );
+    assert!(!diagnostics(&context).contains(stale));
+    // Once a request compiles their plan, status reports the stale binding.
+    crate::review::files::load(root.path()).unwrap();
+    assert!(diagnostics(&context).contains(stale));
+    let before = meta(&context);
+    let repair = prepare(root.path(), &before, IntegrationChoice::all())
+        .unwrap()
+        .unwrap();
+    apply(&context, &before, &repair).unwrap();
+    for agent in ["claude", "codex"] {
+        crate::review::integrations::verify_mcp_connection(
+            root.path(),
+            agent,
+            "acme",
+            &crate::mcp_connections::Transport::Http {
+                url: "https://next.example.com/mcp".into(),
+            },
+        )
+        .unwrap();
+    }
+    assert!(!diagnostics(&context).contains(stale));
 }
 
 #[test]
@@ -507,7 +625,12 @@ fn mcp_connections_box_setup_repairs_bindings_and_retains_handover_ownership() {
             let doctor = crate::review::project::doctor(&context).unwrap();
             assert_eq!(doctor["repair_needed"], false, "{doctor}");
             assert_eq!(doctor["checks"], json!([]), "{doctor}");
-            assert_eq!(doctor["policy_revision"], policy_revision);
+            assert_eq!(
+                crate::review::project::load(&context)
+                    .unwrap()
+                    .policy_revision,
+                policy_revision
+            );
             for agent in ["claude", "codex"] {
                 assert!(!meta(&context)["integration"]["connections"][agent]["entries"].is_null());
             }
@@ -922,7 +1045,7 @@ fn registration_is_repeatable_and_removal_preserves_unrelated_content_and_policy
     );
     let after = crate::review::project::load(&context).unwrap();
     assert_eq!(before.candidates, after.candidates);
-    assert_eq!(json!(before.active), json!(after.active));
+    assert_eq!(before.policy_revision, after.policy_revision);
     assert!(meta(&context)["integration"].is_null());
 }
 
@@ -1446,7 +1569,7 @@ fn fallback_is_preserved_by_agent_repair_and_validated_under_current_activation(
         IntegrationChoice::agent("claude"),
         AskFallback::Block,
     );
-    assert!(fallback(&meta(&context), "codex").unwrap() == AskFallback::Allow);
+    assert!(fallback_in(&context, "codex").unwrap() == AskFallback::Allow);
     let checked = PathAccess::default();
     assert!(with_fallback(root.path(), "codex", checked, |s| s == AskFallback::Allow).unwrap());
     // A request checked against access the operator has since changed is stale.
@@ -1529,10 +1652,22 @@ fn retained_policy_proposal_cannot_restore_a_superseded_ask_fallback() {
         ),
         Err(Error::StaleSnapshot)
     ));
-    assert_eq!(fs::read(&state_path).unwrap(), before);
-    assert!(fallback(&meta(&context), "codex").unwrap() == AskFallback::Block);
+    // The refusal only closes the proposal as stale; settings and policy stay.
+    let before: Value = serde_json::from_slice(&before).unwrap();
+    let after: Value = serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
+    assert_eq!(after["operator"], before["operator"]);
+    assert_eq!(after["policy_revision"], before["policy_revision"]);
+    let row = after["proposals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["proposal_id"] == proposed["data"]["proposal_id"])
+        .unwrap();
+    assert_eq!(row["status"], "stale");
+    assert!(fallback_in(&context, "codex").unwrap() == AskFallback::Block);
 
-    // A fresh proposal may apply while independently confirmed path access stays current.
+    // A protection change edits the policy files, so a proposal prepared
+    // before it is refused and the confirmed access stays current.
     let fresh = propose("after-fallback-change");
     assert!(fresh["error"].is_null(), "{fresh}");
     let access = PathAccess {
@@ -1540,13 +1675,18 @@ fn retained_policy_proposal_cannot_restore_a_superseded_ask_fallback() {
         ..PathAccess::default()
     };
     crate::review::path_access::configure_fixture(root.path(), access);
-    super::super::commit_proposal_fixture(&context, fresh["data"]["proposal_id"].as_str().unwrap())
-        .unwrap();
+    assert!(matches!(
+        super::super::commit_proposal_fixture(
+            &context,
+            fresh["data"]["proposal_id"].as_str().unwrap()
+        ),
+        Err(Error::StaleSnapshot)
+    ));
     assert_eq!(
         crate::review::path_access::current(root.path()).unwrap(),
         access
     );
-    assert!(fallback(&meta(&context), "codex").unwrap() == AskFallback::Block);
+    assert!(fallback_in(&context, "codex").unwrap() == AskFallback::Block);
 }
 
 #[test]
@@ -1558,10 +1698,9 @@ fn interrupted_fallback_revocation_blocks_until_confirmed_repair_finishes() {
         AskFallback::Allow,
     );
     let before = meta(&context);
-    let active = crate::review::project::load(&context)
+    let revision = crate::review::project::load(&context)
         .unwrap()
-        .active
-        .unwrap();
+        .policy_revision;
     let mut plan = prepare(root.path(), &before, IntegrationChoice::agent("codex"))
         .unwrap()
         .unwrap();
@@ -1570,10 +1709,19 @@ fn interrupted_fallback_revocation_blocks_until_confirmed_repair_finishes() {
         .unwrap()
         .ask_fallback
         .insert("codex".into(), AskFallback::Block);
+    // As an interrupted setup leaves it: the plan pending and its
+    // revocation already in the policy files.
     Store::open(root.path())
         .unwrap()
         .update(&context, &|| Ok(()), |state| {
             state.operator["integration_pending"] = json!(plan);
+            crate::review::settings::write(
+                &context,
+                &crate::review::settings::fallbacks(BTreeMap::from([(
+                    "codex".into(),
+                    AskFallback::Block,
+                )])),
+            )?;
             Ok(json!({}))
         })
         .unwrap();
@@ -1590,14 +1738,12 @@ fn interrupted_fallback_revocation_blocks_until_confirmed_repair_finishes() {
         .unwrap()
         .unwrap();
     apply(&context, &current, &resumed).unwrap();
-    assert!(fallback(&meta(&context), "codex").unwrap() == AskFallback::Block);
+    assert!(fallback_in(&context, "codex").unwrap() == AskFallback::Block);
     assert_eq!(
         crate::review::project::load(&context)
             .unwrap()
-            .active
-            .unwrap()
-            .activation_id(),
-        active.activation_id()
+            .policy_revision,
+        revision
     );
 }
 
@@ -1656,7 +1802,7 @@ fn codex_prefix_rules_follow_the_active_policy_and_the_agent() {
         let candidate =
             crate::review::packs::rebuild(&state.candidates["project"], &mut [], &[], Some(&rules))
                 .unwrap();
-        crate::review::publication::commit(
+        crate::review::files::write::commit_fixture(
             &context,
             &state,
             candidate,
@@ -1780,7 +1926,7 @@ fn reviews_list_the_codex_prefixes_a_change_adds_or_removes() {
         text.contains("Codex runs these outside its sandbox without asking (.codex/rules/shield.rules):\n    acme logs (custom logs)"),
         "{text}"
     );
-    crate::review::publication::commit(
+    crate::review::files::write::commit_fixture(
         &context,
         &current,
         allow,

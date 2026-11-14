@@ -160,7 +160,7 @@ test('SDK concurrent requests preserve IDs and separate connection candidates', 
   assert.deepEqual(calls.map(report => data(report).decision), ['deny', 'allow', 'deny', 'allow', 'deny', 'allow', 'deny', 'allow']);
   assert.equal((await first.client.callTool({ name: 'policy_evaluate', arguments: { ...normalized(first.root), project: second.root, approved: true } })).isError, true);
   const inspect = await first.client.callTool({ name: 'status' });
-  assert.ok(data(inspect).active_candidate_id);
+  assert.ok(data(inspect).policy_candidate_id);
 
 });
 

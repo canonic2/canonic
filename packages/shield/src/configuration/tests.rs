@@ -552,6 +552,34 @@ fn bundles_retain_each_layer_and_bind_both_to_the_lock() {
 }
 
 #[test]
+fn empty_or_null_settings_capture_a_lock_that_verifies() {
+    for settings in [
+        "ask_fallback: {}\n",
+        "ask_fallback: null\n",
+        "history: {}\n",
+        "history: null\n",
+        "protection: {}\n",
+        "registries: {}\n",
+        "enforcement: null\n",
+    ] {
+        let config = format!("{SHARED}{settings}");
+        // A document the reader refuses is refused alike everywhere.
+        let Ok(candidate) = Candidate::from_yaml(&config) else {
+            continue;
+        };
+        assert_eq!(
+            candidate.digest,
+            settings::config_digest(&config).unwrap(),
+            "{settings}"
+        );
+        let bundle =
+            Bundle::capture_layers(&config, None, &[pack()], Some(RULES), None, &[]).unwrap();
+        Bundle::from_json(json!(bundle).to_string().as_bytes())
+            .unwrap_or_else(|error| panic!("{settings}: {error:?}"));
+    }
+}
+
+#[test]
 fn revising_a_bundle_edits_only_the_layer_that_changed() {
     let previous = layered();
     let mut merged = layers::merged(&previous).unwrap();

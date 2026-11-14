@@ -3,7 +3,7 @@ use super::terminal::{Step, Terminal};
 use crate::review::{
     Context, Error,
     admin::protection::Prepared,
-    path_access::{Change, PathAccess, Read, load},
+    path_access::{Change, PathAccess, Read},
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -15,23 +15,15 @@ fn word<T: Serialize>(value: T) -> String {
 /// Guided change, confirmed in the operator terminal and refused in JSON mode.
 pub(super) fn configure(context: &Context, json_mode: bool) -> Result<Value, Error> {
     let mut tty = Terminal::required(json_mode)?;
-    let meta = crate::review::project::metadata(&crate::review::project::checkpoint(context)?);
-    // An invalid record blocks agents; the operator replaces it from the defaults.
-    let invalid = load(&meta).is_err();
-    let before = load(&meta).unwrap_or_default();
-    if invalid {
-        tty.note(
-            "Invalid saved choice",
-            "The saved protected file access is invalid, so agents are blocked. Choices start from the defaults.",
-        )?;
-    }
+    let state = crate::review::project::checkpoint(context)?;
+    let before = crate::review::settings::path_access(&state.settings);
     tty.note(
         "Protected files",
         "Shield's policy files, .shield/review, compiled caches, the .shield folder and .shield/.gitignore stay protected whatever you choose here.",
     )?;
     let after = chosen(before, ask(&mut tty, before)?)?;
-    let prepared = Prepared::from_metadata(context, &meta, after);
-    if after != before || invalid {
+    let prepared = Prepared::from_current(context, before, after);
+    if after != before {
         tty.confirm(&prepared.review())?;
     }
     prepared.commit(context, &|| Ok(()))
@@ -65,7 +57,7 @@ fn ask(tty: &mut Terminal, before: PathAccess) -> Result<[String; 2], Error> {
             ),
             _ => (
                 "Changing agent settings",
-                "An agent that can change these files can remove Shield's hooks and turn protection off, or remove the host confirmation policy changes through Shield's MCP tools rely on, so a proposal could activate without you.",
+                "An agent that can change these files can remove Shield's hooks and turn protection off, or remove the host confirmation policy changes through Shield's MCP tools rely on, so a proposal could be written without you.",
                 &[
                     (
                         "block",

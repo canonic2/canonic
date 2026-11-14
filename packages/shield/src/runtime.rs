@@ -1,6 +1,6 @@
-//! Owned active-policy consumers and revision-checked local handoff.
+//! Owned consumers of the project's policy files and revision-checked local handoff.
 //!
-//! This API binds local retained policy and request evidence. It does not establish
+//! This API binds the policy files' compiled plan and request evidence. It does not establish
 //! a protected operator boundary, one-time grants, or launch permission. Consumers
 //! implement their applicable enforcement contracts separately. Checked execution
 //! validates resources and launches it owns.

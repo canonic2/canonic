@@ -20,7 +20,7 @@ fn instructions_with(adapter: &dyn crate::agents::review::ReviewAdapter) -> Stri
     let common = "Shield manages project permissions. For requested reviews, start with suggestion_list; inspect relevant history_list, rule_list or policy_evaluate evidence. \
 Respect incomplete evidence, pending proposals and deferred reviews. For authorized custom rules, use policy_propose and its schema examples; preserve scope and deny boundaries. \
 For packs, use pack_list and pack_show to inspect installed selections, pack_update to update one reference or all tracking packs when omitted, and pack_remove to prepare removal; omit its reference to let the person select installed packs. pack_configure accepts direct edits, named variables or bare guided settings and overrides. pack_add accepts known typed settings through set. registry_add can collect omitted name/location details through a form; then call it with the returned retry_arguments for a separate trust review. Input submission cannot approve trust or policy. \
-Previews and proposals grant no authority; activation requires user-approved policy_apply. A preparation Task grants no authority either: poll tasks/get, use its review_arguments with policy_propose to create a fresh review, then obtain separate human confirmation using unchanged apply_arguments. Repeating identical creation arguments recovers a lost task handle; never restart failed or cancelled work automatically. Read returned report_resources with resources/read when full comparison or retained review evidence is needed; a report does not approve a change. Keep approval and setup in this conversation through Shield tools and host confirmation; sending the user to a terminal is a product bug, not a recovery solution. \
+Previews and proposals grant no authority; the policy files change only through user-approved policy_apply. A preparation Task grants no authority either: poll tasks/get, use its review_arguments with policy_propose to create a fresh review, then obtain separate human confirmation using unchanged apply_arguments. Repeating identical creation arguments recovers a lost task handle; never restart failed or cancelled work automatically. Read returned report_resources with resources/read when full comparison or retained review evidence is needed; a report does not approve a change. Keep approval and setup in this conversation through Shield tools and host confirmation; sending the user to a terminal is a product bug, not a recovery solution. \
 Follow returned request_approve routes for one-time approval, then repeat the approved call once unchanged. For a planned batch of privileged native commands, inspect session_grant_list, propose a bounded exact batch or closed argv family with session_grant_propose, then copy apply_arguments to session_grant_approve for the user's form. Prefer temporary session permission for one task and persistent policy only for future sessions. Inspect existing grants first, never repeat a declined offer automatically, and never bypass refusals. Only the person's explicit request permits session_grant_reconsider followed by fresh human confirmation. ";
     let host = adapter.guidance().instructions;
     format!(
@@ -122,13 +122,12 @@ fn primary_summary(name: &str, agent: Option<&str>, value: &Value) -> String {
             let guidance = data["next_action"].as_str().unwrap_or(crate::agents::review::resolve(agent).guidance().proposed);
             data["change_summary"].as_str().map_or_else(|| guidance.into(), |change| format!("Proposed: {change} {guidance}"))
         },
-        "policy_apply" => data["next_action"].as_str().unwrap_or("Policy change active after host confirmation. Retry the original request only if still needed.").into(),
+        "policy_apply" => data["next_action"].as_str().unwrap_or("Policy change written to the policy files after host confirmation. Retry the original request only if still needed.").into(),
         "request_approve" => match data["grants"].as_array() {
             Some(grants) => format!("The user approved these {} requests once each. Follow each grant's next_action. Checked commands require --approval-request with their request_id; repeat every call unchanged through its original consumer.", grants.len()),
             None => "The user approved this request once. Repeat the identical call now; any change to it needs a new approval.".into(),
         },
         "request_deny" => "The user denied this request or revoked its unused grant. No action was authorized.".into(),
-        "cache_prepare" => "Committed policy cache prepared. Policy authority is unchanged.".into(),
         "suggestion_list" => {
             let rows = data["requests"].as_array();
             let eligible = rows.into_iter().flatten().filter(|row| row["eligible_for_offer"] == true).count();
@@ -137,8 +136,7 @@ fn primary_summary(name: &str, agent: Option<&str>, value: &Value) -> String {
         "docs_list" => "Bundled guides listed.".into(),
         "docs_search" => "Matching guide lines returned; next_offset continues the search.".into(),
         "docs_read" => "Guide text returned; next_start_line continues this page.".into(),
-        "policy_withdraw" => "Policy proposal withdrawn. Active policy is unchanged.".into(),
-        "policy_receipt" => "Policy change receipt returned. Inspect current policy and reevaluate the request before retrying.".into(),
+        "policy_withdraw" => "Policy proposal withdrawn. The policy files are unchanged.".into(),
         "policy_compare" => "Policy comparison returned. Check coverage and unknowns; this preview grants no execution permission.".into(),
         "doctor" if data["repair_needed"] == true || data["checks"].as_array().is_some_and(|checks| checks.iter().any(|row| row["blocking"] != false)) => "Shield needs repair. Ask the user to follow the returned repair route before retrying blocked requests.".into(),
         "doctor" if data["checks"].as_array().is_some_and(|checks| !checks.is_empty()) => "Shield remains usable; inspect the nonblocking storage warnings and their paths.".into(),

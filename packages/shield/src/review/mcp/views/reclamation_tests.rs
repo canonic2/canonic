@@ -1,35 +1,26 @@
 use super::*;
 
 #[test]
-fn recorded_source_handles_charge_logical_source_and_prepare_only_on_evaluation() {
+fn handles_charge_their_capture_and_prepare_only_on_evaluation() {
     let root = assert_fs::TempDir::new().unwrap();
     let bundle =
         configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
     let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
-    let state = Store::inspect(root.path())
-        .unwrap()
-        .read_diagnostic_checkpoint()
-        .unwrap()
-        .0;
-    let reference = &state.candidates["project"];
-    let mut views = Views::new("recorded-source-admission".into());
+    let state = Store::open(root.path()).unwrap().read_current().unwrap();
+    let candidate = &state.candidates["project"];
+    let mut views = Views::new("capture-admission".into());
     let id = views
         .retain_prepared(
             &context,
-            reference,
+            candidate,
             &state.operator,
             None,
             Some(&state.policy_revision),
             None,
         )
         .unwrap();
-    let logical = usize::try_from(reference["length"].as_u64().unwrap()).unwrap();
-    assert!(
-        views.bytes >= logical + crate::json::encoded_len(&[reference, &state.operator]).unwrap()
-    );
+    assert!(views.bytes >= crate::json::encoded_len(&[candidate, &state.operator]).unwrap());
     let captured = views.get(&id).unwrap();
-    assert!(captured.source.is_some());
-    assert!(captured.cached.is_none());
     assert!(captured.evaluator.get().is_none());
     assert_eq!(
         views
@@ -43,30 +34,26 @@ fn recorded_source_handles_charge_logical_source_and_prepare_only_on_evaluation(
 }
 
 #[test]
-fn storage_reclamation_lazy_mcp_capture_keeps_its_source_after_cache_eviction_and_activation() {
-    use crate::review::{self, storage::sources};
+fn a_handle_keeps_its_capture_after_the_files_change() {
     let root = assert_fs::TempDir::new().unwrap();
     let bundle =
         configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
-    let mut context = review::mcp::initialize_fixture(root.path(), &bundle);
+    let mut context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
     context.surface = "cli".into();
     let mut views = Views::new("acme-lazy-reader".into());
-    let id = views.active(&context).unwrap();
+    let id = views.active_readonly(&context).unwrap();
     let captured = views.get(&id).unwrap();
-    let candidate = captured.candidate.clone();
-    let original = captured.source().unwrap();
+    let original = captured.candidate.clone();
     let revision = captured.revision().to_owned();
-    assert!(captured.evaluator.get().is_none());
-    for index in 0..4 {
-        sources::activate_fixture(&context, &format!("acme-{index}"));
-    }
-    let descriptor = json!(captured.cached.as_ref().unwrap().artifact);
-    let path = std::path::PathBuf::from(descriptor["directory"].as_str().unwrap())
-        .join("compiled")
-        .join(descriptor["project_key"].as_str().unwrap())
-        .join(format!("{}.bin", descriptor["plan_key"].as_str().unwrap()));
-    assert!(!path.exists(), "unused old plans are reclaimed");
-    assert_eq!(captured.source().unwrap(), original);
+    std::fs::write(
+        root.path().join(".shield/config.yml"),
+        format!(
+            "schema_version: 1\npacks: []\naccess_paths:\n  read:\n  - {}\n",
+            crate::test_support::absolute("/srv/acme")
+        ),
+    )
+    .unwrap();
+    assert_eq!(captured.candidate, original);
     assert_eq!(
         views
             .prepare(&context, &id)
@@ -76,15 +63,8 @@ fn storage_reclamation_lazy_mcp_capture_keeps_its_source_after_cache_eviction_an
             .revision(),
         revision
     );
-    drop(captured);
-    drop(views);
-    sources::activate_fixture(&context, "acme-after-reader-release");
-    assert!(
-        Store::open(root.path())
-            .unwrap()
-            .captured_candidate(&candidate)
-            .is_err()
-    );
+    let next = views.active_readonly(&context).unwrap();
+    assert_ne!(next, id);
 }
 
 #[test]

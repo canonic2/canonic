@@ -6,8 +6,10 @@
 //! Object IDs a command resolves itself, such as a tag naming a blob, are
 //! outside this literal model.
 use super::{Access, Finding, Guard, Protection, absolute, classify, resolve_existing, strictest};
+mod writes;
 use crate::review::integrations::protected_files;
 use std::path::{Path, PathBuf};
+pub(super) use writes::policy_files;
 
 /// Subcommands that read the working tree and change only the repository.
 const RECORDS: &[&str] = &[
@@ -898,6 +900,170 @@ fn summary(rest: &[&str]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn git_writes_of_policy_files_from_other_content_are_blocked_or_asked() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let root = root.path().canonicalize().unwrap();
+        std::fs::create_dir_all(root.join(".shield")).unwrap();
+        std::fs::write(root.join(".shield/config.yml"), "schema_version: 1\n").unwrap();
+        std::fs::create_dir(root.join("src")).unwrap();
+        let guard = Guard {
+            cache: None,
+            allow: crate::review::path_access::PathAccess::default(),
+            working_files: None,
+        };
+        let level =
+            |arguments: &[&str], cwd: &Path| policy_files(arguments, &root, cwd, true, guard).0;
+        for arguments in [
+            &["checkout", "HEAD~3", "--", ".shield/config.yml"][..],
+            &["checkout", "acme-branch", "--", "."],
+            &["checkout", "HEAD~1", ".shield"],
+            &["checkout", "--", ":/"],
+            &["checkout", "."],
+            &["checkout", "HEAD", "--", "*.yml"],
+            &["restore", "--source", "HEAD~2", ".shield/rules.yml"],
+            &["restore", "--source=HEAD~2", "--worktree", "--staged", "."],
+            &["restore", "-s", "HEAD", "--", ".shield"],
+            &["checkout-index", "-a", "-f"],
+            &["checkout-index", "-f", "--", ".shield/config.yml"],
+            &["-C", "src", "checkout", "HEAD~1", "--", ".."],
+            // Without `--` a first word that is a path is written too.
+            &["checkout", ".shield/config.yml", "src"],
+            // Moves and removals put other content in place or drop it.
+            &["mv", "acme.yml", ".shield/rules.yml"],
+            &["mv", "-f", "acme.yml", ".shield/rules.yml"],
+            &["rm", ".shield/rules.yml"],
+            // Agents' protected settings files are covered too.
+            &["checkout", "HEAD~5", "--", ".claude/settings.json"],
+            &["restore", "--source", "HEAD~5", ".mcp.json"],
+        ] {
+            assert!(
+                level(arguments, &root) == Protection::Blocked,
+                "{arguments:?}"
+            );
+        }
+        for arguments in [
+            &["apply", "acme.patch"][..],
+            &["apply", "--index", "--cached", "acme.patch"],
+            &["am", "acme.mbox"],
+            &["stash", "pop"],
+            &["stash", "apply", "stash"],
+            &["read-tree", "-u", "-m", "HEAD~1"],
+            &["checkout", "HEAD", "--pathspec-from-file=paths.txt"],
+            &["restore", "--pathspec-from-file", "paths.txt"],
+        ] {
+            assert!(
+                level(arguments, &root) == Protection::Undetermined,
+                "{arguments:?}"
+            );
+        }
+        // Branch switches, resets, merges and stashes are decided by a Git
+        // query; writes/tests.rs covers them.
+        for arguments in [
+            &["checkout", "HEAD~3", "--", "src"][..],
+            &["restore", "--staged", ".shield/config.yml"],
+            &["restore", "src"],
+            &["apply", "--check", "acme.patch"],
+            &["apply", "--cached", "acme.patch"],
+            &["am", "--abort"],
+            &["stash", "show", "-p"],
+            &["rm", "--cached", ".shield/rules.yml"],
+            &["mv", "src", "lib"],
+        ] {
+            assert!(level(arguments, &root) == Protection::None, "{arguments:?}");
+        }
+        // Agent settings the policy files open to change are ordinary files;
+        // the policy files never are.
+        let open = Guard {
+            allow: crate::review::path_access::PathAccess {
+                agent_settings_change: crate::review::path_access::Change::Allow,
+                ..crate::review::path_access::PathAccess::default()
+            },
+            ..guard
+        };
+        let opened = |arguments: &[&str]| policy_files(arguments, &root, &root, true, open).0;
+        assert!(opened(&["checkout", "HEAD~5", "--", ".claude/settings.json"]) == Protection::None);
+        assert!(opened(&["checkout", "HEAD~5", "--", ".shield"]) == Protection::Blocked);
+        // From a subfolder, `.` holds no policy file.
+        assert!(level(&["checkout", "HEAD~1", "--", "."], &root.join("src")) == Protection::None);
+        // An unknown folder leaves every pathspec possibly covering them.
+        assert!(
+            policy_files(
+                &["checkout", "HEAD~1", "--", "src"],
+                &root,
+                &root,
+                false,
+                guard
+            )
+            .0 == Protection::Blocked
+        );
+    }
+
+    #[test]
+    fn git_write_options_are_read_as_git_reads_them() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let root = root.path().canonicalize().unwrap();
+        std::fs::create_dir_all(root.join(".shield")).unwrap();
+        std::fs::write(root.join(".shield/config.yml"), "schema_version: 1\n").unwrap();
+        let guard = Guard {
+            cache: None,
+            allow: crate::review::path_access::PathAccess::default(),
+            working_files: None,
+        };
+        let level = |arguments: &[&str]| policy_files(arguments, &root, &root, true, guard).0;
+        // Short options cluster, and long ones abbreviate.
+        for (arguments, expected) in [
+            (
+                &["read-tree", "-mu", "HEAD~1"][..],
+                Protection::Undetermined,
+            ),
+            (
+                &["read-tree", "-um", "--reset", "HEAD~1"],
+                Protection::Undetermined,
+            ),
+            (&["checkout-index", "--std"], Protection::Undetermined),
+            (
+                &["restore", "--pathspec-from=paths.txt"],
+                Protection::Undetermined,
+            ),
+            (
+                &["rm", "--pathspec-from-file=paths.txt"],
+                Protection::Undetermined,
+            ),
+            (&["checkout-index", "-fa"], Protection::Blocked),
+            (&["checkout-index", "--al"], Protection::Blocked),
+            (
+                &["restore", "-SW", ".shield/rules.yml"],
+                Protection::Blocked,
+            ),
+            // `S` here is the source revision, not `--staged`.
+            (
+                &["restore", "-sS", ".shield/rules.yml"],
+                Protection::Blocked,
+            ),
+            (
+                &["restore", "--source", "-S", ".shield/rules.yml"],
+                Protection::Blocked,
+            ),
+            // Options that make a command harmless match only exactly.
+            (
+                &["restore", "--stag", ".shield/rules.yml"],
+                Protection::Blocked,
+            ),
+            (&["read-tree", "-m", "HEAD~1"], Protection::None),
+            (&["restore", "-qS", ".shield/config.yml"], Protection::None),
+            (&["checkout", "-qb", "acme-feature"], Protection::None),
+            // `-b` takes `acme-feature`, so `HEAD~1` is the start point the
+            // tree moves to, which Git cannot compare outside a repository.
+            (
+                &["checkout", "-fb", "acme-feature", "HEAD~1"],
+                Protection::Undetermined,
+            ),
+        ] {
+            assert!(level(arguments) == expected, "{arguments:?}");
+        }
+    }
 
     #[test]
     fn revision_paths_from_subfolders_keep_relocated_settings_protected() {

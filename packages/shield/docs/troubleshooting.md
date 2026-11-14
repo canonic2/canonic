@@ -14,10 +14,10 @@ remain available when you choose to use them directly.
 | A command proceeds despite a recorded Ask | [Codex Ask handling](#a-command-runs-even-though-policy-says-ask) |
 | An unexpected Allow or Deny | [Inspect the request and matching rule](#the-request-was-allowed-or-blocked-unexpectedly) |
 | A read-only GitHub GraphQL query is blocked | [Check versions, scope and query form](#a-read-only-github-graphql-query-is-blocked) |
-| A YAML edit has no effect | [Review and activate the edit](#i-edited-a-rule-but-behavior-did-not-change) |
+| A YAML edit has no effect or every request asks | [Check the policy files](#i-edited-a-rule-but-behavior-did-not-change) |
 | An old proposal cannot be applied | [Stale proposals](#a-proposal-is-stale) |
 | A pack proposal reports `candidate_error` | [Inconsistent pack candidate](#a-pack-proposal-reports-candidate_error) |
-| Status reports repair or cache failure | [Policy files](#policy-files-need-repair) or [compiled cache](#the-compiled-policy-cache-cannot-load) |
+| Requests fail naming the compiled policy folder | [Compiled cache](#the-compiled-policy-cache-cannot-load) |
 | Initialization fails while downloading | [Baseline acquisition](#initialization-cannot-download-the-baseline) |
 | Shield's project folder was moved or copied | [Portable policy](#the-project-was-moved-or-copied) |
 | A change cannot obtain confirmation | [Terminal confirmation](#terminal-confirmation-is-unavailable) |
@@ -25,38 +25,25 @@ remain available when you choose to use them directly.
 ## A pack proposal reports `candidate_error`
 
 Shield could not align a candidate's selected packs with its artifact bytes.
-The proposal did not activate. Continue the task without that proposal and report
+The proposal changed no policy file. Continue the task without that proposal and report
 the error. Changing valid tool arguments or deleting project state is not a
 recovery for this failure.
 
 ## The project was moved or copied
 
 A Shield project is its files. After a move, rename or copy, and in a worktree or
-clone, Shield keeps working with no follow-up command. A moved or copied folder
-keeps its project ID, history, policy and pending in-session approval requests.
-Pending text-read and checked-run requests are dropped; the agent repeats the
-request. Unreviewed file edits stay inactive.
+clone, Shield keeps working with no follow-up command: the files in `.shield/`
+are the policy, so the next request is decided by them. A moved or copied folder
+keeps its project ID, history, settings and pending in-session approval
+requests. Pending text-read and checked-run requests are dropped; the agent
+repeats the request. A new clone or worktree starts with fresh history and no
+agent registration; run `shield mcp setup` there to connect an agent. A one-time
+approval is used once, whichever folder uses it first.
 
-Your approvals are recorded under your home directory, keyed by their exact
-content, so they apply in any folder with the same content: reviewed policy,
-paused protection or protected-path choices, and agent setup for the same policy.
-A worktree or clone whose Shield agent entries match your setup is registered
-automatically. Edited entries need `shield mcp setup` again. Another user, or a
-folder whose content you never reviewed, gets enabled protection, default
-settings and no agent registration. A one-time approval is used once, whichever
-folder uses it first.
-
-A fresh clone containing policy files can reuse the exact policy this developer
-already reviewed. Shield keeps private policy receipts under
-`~/.shield/reviewed-policies` on Unix or
-`%LOCALAPPDATA%/.shield/reviewed-policies` on Windows. These also supply reviewed
-pack bytes when the clone omits the ignored pack cache. The user store is private
-runtime state and must never be committed or shared.
-
-If no matching receipt exists, the policy needs its first review. The agent can
-call `project_enroll` for an in-session confirmation, or you can run `shield init`
-in a terminal. Changed configuration, unavailable private receipt storage, corrupt
-state and unsupported formats are separate problems with their own recovery.
+A clone that lacks a pack release its lock file names fetches it from the
+registry on `shield status`. Invalid files and missing packs make every request
+ask, with the problem in the message. Corrupt state and unsupported formats are
+separate problems with their own recovery.
 
 New launch entries resolve `shield` from PATH and the project from the agent's
 session folder. Restart an older agent to load the current binary. Do not delete
@@ -107,11 +94,10 @@ process that the agent starts with its session. After installing a new build:
 2. Exit the agent session and start a new one, so the agent launches the new MCP
    server. Reconnecting the MCP server from the agent (for example `/mcp` in
    Claude Code) also restarts it. An open session keeps the old server process.
-3. Run `shield doctor`. If it reports the compiled cache as missing or
-   incompatible, run `shield cache prepare`; the cache is rebuilt from the saved
-   active policy without changing it.
+3. Run `shield doctor` to confirm the integration. The new version compiles
+   the policy files into a new plan on its first request.
 
-Saved policy, proposals, history and approvals stay in `.shield/` across
+Policy files, proposals, history and approvals stay in `.shield/` across
 updates. Do not delete `.shield/review/` to recover; only the compiled cache is
 disposable.
 
@@ -180,19 +166,22 @@ The [integration guide](claude-project.md) covers exceptions and saved fallbacks
 
 ## I edited a rule, but behavior did not change
 
-Shield uses the reviewed active snapshot, not unreviewed file edits. Run:
+Shield reads the policy files on every request, so a saved edit applies to the
+next one. Run:
 
 ```sh
-shield policy review
+shield status
 ```
 
-Choose the `manual` action to review edited configuration or rules and confirm
-the change. Use `shield status` to inspect the active revision afterwards.
-Use `shield pack add` to acquire a new pack release rather than replacing its cached
+If status reports the files' error, the edit made them invalid and every
+request asks until you fix it. Otherwise inspect the request with
+`shield history list` to see which rule decided it; another rule may take precedence.
+Use `shield pack add` to acquire a new pack release rather than replacing its
 artifact by hand.
 
-For future custom-rule changes, `shield rule add`, `shield rule edit ID`, and
-`shield rule remove ID` combine validation, review, and activation. See
+`shield rule add`, `shield rule edit ID` and `shield rule remove ID` validate a
+change and show it before writing. See
+[policy files](policy-files.md) and
 [project policy](project-review.md#custom-rules-and-proposed-changes).
 
 ## A proposal is stale
@@ -202,33 +191,20 @@ inspect current state and prepare a fresh proposal. Wait for each application
 result before preparing the next; do not reuse old approval arguments. See
 [proposal review](project-mcp.md#proposals-and-operator-review).
 
-## Policy files need repair
+## Another Shield operation is writing
 
-If `shield status` reports projection repair, run `shield policy review` and choose
-`repair`. This recreates missing generated policy files from the committed
-snapshot. Other manual edits are preserved for manual review.
-
-A reported committed change with repair needed can already be active even if a
-projected file could not be written. Check status before retrying a mutation.
-Writer ownership is released automatically after a crash. A live writer can
-briefly cause a lock error; retry after its operation finishes. Shield preserves
-legacy markers whose ownership cannot be verified and never removes a live
-writer's lock because a wait timed out. See
-[active policy and repair](runtime-activation.md).
+A command that writes policy files holds a writer lock, released automatically
+if Shield exits or crashes. A lock error means another operation is still
+writing; retry after it finishes. If the files changed while a command was
+showing its change, Shield refuses and asks you to run the command again.
 
 ## The compiled policy cache cannot load
 
-Shield normally rebuilds missing, corrupt, or incompatible cache data from the
-saved active policy. To prepare it explicitly, run:
-
-```sh
-shield cache prepare
-```
-
-This does not activate manual edits or unapplied reviews. If preparation still
-fails, follow the reported cause: invalid retained source or an inaccessible
-cache directory prevents evaluation. `shield status --json` reports the chosen
-cache root. See [cache locations and overrides](compiled-cache.md).
+Shield compiles missing, corrupt or mismatched plans from the policy files by
+itself. A failure naming the compiled policy folder means Shield cannot use
+the folder. Run `shield doctor`, then fix the folder's ownership or permissions,
+or choose another with `shield mcp setup --cache-dir /absolute/path`. See
+[compiled policy cache](compiled-cache.md).
 
 ## Initialization cannot download the baseline
 
@@ -251,5 +227,5 @@ approval with `policy_apply`. If confirmation prompts are disabled, enable them
 for the session, then prepare a fresh change if it is still needed. If the host
 cannot present supported confirmation, the agent must close the attempt and
 report that missing capability. Closed reviews remain inspectable through
-`policy_receipt` and cannot be accepted later.
+`policy_show` and cannot be accepted later.
 See [terminal controls](operator-experience.md#controls-and-output).

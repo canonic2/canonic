@@ -74,8 +74,7 @@ fn explicit_project_repair_uses_the_published_schema_and_original_connection_con
 
 fn pending(project: &Project) -> String {
     use crate::review::hook_approval::{Identity, Key, Outcome, Summary, refused};
-    let state = state(project);
-    let active = &state["active"];
+    let active = &crate::review::runtime::current_identity(&project.review);
     let identity = Identity {
         activation_id: active["activation_id"].as_str().unwrap(),
         policy_revision: active["policy_revision"].as_str().unwrap(),

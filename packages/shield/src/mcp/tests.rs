@@ -66,7 +66,7 @@ fn readonly_tools_keep_the_project_and_handles_when_another_process_opens_it() {
     let status =
         crate::review::mcp::call(&old, &server.connection, "status", &json!({}), &|| Ok(()));
     assert!(
-        status["data"]["active_candidate_id"].is_string(),
+        status["data"]["policy_candidate_id"].is_string(),
         "{status}"
     );
     // A hook or CLI process opening the project changes no identity.
@@ -210,58 +210,6 @@ impl Transport {
         Self::with_runner(move |input, output| serve(server, input, output, &options))
     }
 
-    pub(crate) fn bootstrap(attribution: crate::cli::ReviewContext) -> Self {
-        Self::bootstrap_fixture(attribution, false)
-    }
-
-    pub(crate) fn bootstrap_after_publication_failure(
-        attribution: crate::cli::ReviewContext,
-    ) -> Self {
-        Self::bootstrap_fixture(attribution, true)
-    }
-
-    pub(crate) fn bootstrap_before_publication_cancellation(
-        attribution: crate::cli::ReviewContext,
-    ) -> (Self, Arc<std::sync::atomic::AtomicBool>) {
-        let project = crate::review::bootstrap::inspect(&attribution.project)
-            .expect("bootstrap cancellation fixture")
-            .project_root()
-            .to_path_buf();
-        let pending = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        let cancel = pending.clone();
-        let transport = Self::with_runner(move |input, output| {
-            super::bootstrap::serve_cancellation_fixture(
-                &project,
-                attribution,
-                cancel,
-                input,
-                output,
-                &test_options(),
-            )
-        });
-        (transport, pending)
-    }
-
-    fn bootstrap_fixture(attribution: crate::cli::ReviewContext, fail: bool) -> Self {
-        let project = crate::review::bootstrap::inspect(&attribution.project)
-            .expect("bootstrap review fixture")
-            .project_root()
-            .to_path_buf();
-        Self::with_runner(move |input, output| {
-            if fail {
-                super::bootstrap::serve_recovery_fixture(
-                    &project,
-                    attribution,
-                    input,
-                    output,
-                    &test_options(),
-                )
-            } else {
-                super::serve_bootstrap(&project, attribution, input, output, &test_options())
-            }
-        })
-    }
-
     fn with_runner(
         run: impl FnOnce(BufReader<Frames>, Responses) -> Result<(), ServeError> + Send + 'static,
     ) -> Self {
@@ -350,7 +298,6 @@ fn catalog_publishes_every_tool_and_marks_all_state_changes_as_mutations() {
     assert_eq!(
         mutations,
         [
-            "cache_prepare",
             "disable",
             "enable",
             "history_configure",
@@ -364,7 +311,6 @@ fn catalog_publishes_every_tool_and_marks_all_state_changes_as_mutations() {
             "policy_draft_remove",
             "policy_propose",
             "policy_reject",
-            "policy_repair",
             "policy_withdraw",
             "protection_set",
             "registry_add",

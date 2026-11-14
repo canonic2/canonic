@@ -1,8 +1,9 @@
 //! Transport-neutral integration planning, exact review and publication.
 use super::{
-    IntegrationChoice, MAX_CONFIG, Plan, Registration, binary_digest, box_definition,
-    confirmed_fallback, files, mcp_after, native, pending, read_file, registration,
+    IntegrationChoice, MAX_CONFIG, Plan, Registration, binary_digest, box_definition, files,
+    mcp_after, native, pending, read_file, registration,
 };
+use crate::configuration::settings::Values;
 use crate::{
     agents,
     review::{self, Context, Error},
@@ -522,32 +523,55 @@ pub(in crate::review) fn selected_agent(choice: IntegrationChoice, agent: &str) 
     choice.contains(agent)
 }
 
-/// Preserve confirmed Ask fallbacks; each adapter declares the first-setup
-/// default shown in the final review.
+/// Put the Ask fallbacks into the plan: the one the policy files name for
+/// agents already set up, kept for omitted ones; for selected agents the one the policy files
+/// name, or else the adapter's first-setup default shown in the final review.
 pub(in crate::review) fn with_fallbacks(
-    meta: &Value,
+    settings: &Values,
     selected: IntegrationChoice,
     plan: Option<&mut Plan>,
-) -> Result<(), Error> {
-    let Some(desired) = plan.and_then(|plan| plan.desired.as_mut()) else {
-        return Ok(());
+) {
+    let Some(plan) = plan else {
+        return;
     };
-    if matches!(selected, IntegrationChoice::RemoveAgents(_)) {
-        return Ok(());
-    }
-    for adapter in crate::agents::ADAPTERS {
-        let spec = adapter.spec();
-        let covered = selected.contains(spec.id)
-            || (selected.contains(super::box_definition::ID) && adapter.supports_box_hooks());
-        if covered && spec.needs_ask_fallback {
-            desired.ask_fallback.insert(
-                spec.id.into(),
-                confirmed_fallback(meta, spec.id)?
-                    .unwrap_or_else(|| adapter.default_ask_fallback()),
-            );
+    let needed = crate::agents::ADAPTERS
+        .iter()
+        .filter(|adapter| adapter.spec().needs_ask_fallback);
+    if let Some(previous) = plan.previous.as_mut() {
+        for adapter in needed.clone() {
+            let id = adapter.spec().id;
+            if let Some(named) = settings
+                .ask_fallback
+                .get(id)
+                .filter(|_| previous.covers(id))
+            {
+                previous.ask_fallback.insert(id.into(), *named);
+            }
         }
     }
-    Ok(())
+    let Some(desired) = plan.desired.as_mut() else {
+        return;
+    };
+    let removing = matches!(selected, IntegrationChoice::RemoveAgents(_));
+    for adapter in needed {
+        let id = adapter.spec().id;
+        let chosen = !removing
+            && (selected.contains(id)
+                || (selected.contains(super::box_definition::ID) && adapter.supports_box_hooks()));
+        let kept = plan.previous.as_ref().and_then(|r| r.ask_fallback.get(id));
+        if chosen {
+            desired.ask_fallback.insert(
+                id.into(),
+                settings
+                    .ask_fallback
+                    .get(id)
+                    .copied()
+                    .unwrap_or_else(|| adapter.default_ask_fallback()),
+            );
+        } else if let Some(kept) = kept.filter(|_| desired.covers(id)) {
+            desired.ask_fallback.insert(id.into(), *kept);
+        }
+    }
 }
 
 /// The review of a setup plan, including the agents' prefix rules.
@@ -752,19 +776,13 @@ fn sync_prefix_rules_for(
     else {
         return Ok(());
     };
+    // The evaluator is the policy files' own plan, which requests follow.
     state.check(context)?;
-    if state
-        .active
-        .as_ref()
-        .is_none_or(|active| active.revision() != evaluator.revision())
-    {
-        return Err(Error::StaleSnapshot);
-    }
     super::prefix_rules::sync_for(
         root,
         &crate::review::project::metadata(&state),
         evaluator.codex_prefixes(),
-        state.enforcement.enabled,
+        state.settings.enabled(),
         plan,
     )
 }

@@ -2,9 +2,30 @@
 use crate::policy::Request;
 
 #[cfg(not(any(windows, target_os = "linux")))]
-pub(super) const EXECUTABLE: &str = "/Library/Developer/CommandLineTools/usr/bin/git";
+pub(crate) const EXECUTABLE: &str = "/Library/Developer/CommandLineTools/usr/bin/git";
 #[cfg(target_os = "linux")]
-pub(super) const EXECUTABLE: &str = "/usr/bin/git";
+pub(crate) const EXECUTABLE: &str = "/usr/bin/git";
+
+/// Settings every Git launch carries before its subcommand: no pager,
+/// filesystem monitor, untracked cache, attributes, hooks, maintenance or
+/// transport. Windows launches name `NUL` for `/dev/null`.
+pub(crate) const SETTINGS: [&str; 15] = [
+    "--no-pager",
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.untrackedCache=false",
+    "-c",
+    "core.attributesFile=/dev/null",
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "maintenance.auto=false",
+    "-c",
+    "gc.auto=0",
+    "-c",
+    "protocol.allow=never",
+];
 
 pub(super) fn supported(request: &Request) -> bool {
     let args = request
@@ -19,25 +40,7 @@ pub(super) fn supported(request: &Request) -> bool {
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
 pub(super) fn launch(request: &Request) -> Request {
     let mut launch = request.clone();
-    launch.arguments = [
-        "--no-pager",
-        "-c",
-        "core.fsmonitor=false",
-        "-c",
-        "core.untrackedCache=false",
-        "-c",
-        "core.attributesFile=/dev/null",
-        "-c",
-        "core.hooksPath=/dev/null",
-        "-c",
-        "maintenance.auto=false",
-        "-c",
-        "gc.auto=0",
-        "-c",
-        "protocol.allow=never",
-    ]
-    .map(str::to_owned)
-    .to_vec();
+    launch.arguments = SETTINGS.map(str::to_owned).to_vec();
     #[cfg(windows)]
     for argument in &mut launch.arguments {
         *argument = argument.replace("=/dev/null", "=NUL");

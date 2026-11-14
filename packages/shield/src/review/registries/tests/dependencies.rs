@@ -195,7 +195,7 @@ fn signed_https_add_and_update_capture_transitive_closures_for_offline_confirmat
     let updated = propose(&context, &connection, "pack_update", "update");
     assert_eq!(updated["error"], Value::Null, "{updated}");
     let pending = Store::open(root.path()).unwrap().read().unwrap();
-    assert_eq!(json!(pending.active), json!(installed.active));
+    assert_eq!(pending.policy_revision, installed.policy_revision);
     assert_eq!(pending.operator, installed.operator);
     assert_eq!(registry.requests("catalog.json"), 1);
     drop(registry);
@@ -295,7 +295,7 @@ fn signed_https_dependency_failures_preserve_active_policy_and_create_no_proposa
         };
         assert!(rejected["error"].is_object(), "{failure}: {rejected}");
         let after = Store::open(root.path()).unwrap().read().unwrap();
-        assert_eq!(json!(after.active), json!(before.active), "{failure}");
+        assert_eq!(after.policy_revision, before.policy_revision, "{failure}");
         assert_eq!(after.operator, before.operator, "{failure}");
         assert_eq!(after.candidates, before.candidates, "{failure}");
         assert_eq!(after.proposals.len(), before.proposals.len(), "{failure}");

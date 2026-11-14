@@ -5,6 +5,7 @@
 //! and registration precedence come from `canonic_registry_kit`.
 use super::project as state;
 use crate::{
+    configuration::settings::Values,
     policy,
     review::{Context, Error, storage::Store},
 };
@@ -197,17 +198,15 @@ pub(super) fn global() -> Result<Registrations, Error> {
     global_file()?.read().map_err(registration_error)
 }
 
-/// A project's registrations, as stored in its operator metadata.
-pub(super) fn project(meta: &Value) -> Result<Registrations, Error> {
-    serde_json::from_value(json!({"sources":meta["sources"],"default":meta["default"]}))
-        .map_err(|_| Error::Invalid("invalid project sources"))
+/// A project's registrations: the `registries` key of its policy files.
+pub(super) fn project(settings: &Values) -> Registrations {
+    settings.registries.clone()
 }
 
 /// Built-in, global and, with a project, its registrations in effect.
 pub(in crate::review) fn effective(context: Option<&Context>) -> Result<Effective, Error> {
     let project = context
-        .map(|context| state::checkpoint(context).map(|s| project(&state::metadata(&s))))
-        .transpose()?
+        .map(|context| state::checkpoint(context).map(|s| project(&s.settings)))
         .transpose()?;
     merge(&global()?, project.as_ref())
 }
@@ -220,14 +219,10 @@ pub(super) fn merge(
         .map_err(|_| Error::Invalid("invalid project sources"))
 }
 
-/// Current aliases for advisory checkpoint lookup; no policy or catalog loading.
-pub(in crate::review) fn advisory_sources(meta: &Value) -> Result<Effective, Error> {
-    effective_from_metadata(meta)
-}
-
-/// Resolve registrations from a caller's captured project metadata.
-pub(in crate::review) fn effective_from_metadata(meta: &Value) -> Result<Effective, Error> {
-    merge(&global()?, Some(&project(meta)?))
+/// Resolve registrations from the settings a caller already read; no policy
+/// or catalog loading.
+pub(in crate::review) fn effective_from(settings: &Values) -> Result<Effective, Error> {
+    merge(&global()?, Some(&project(settings)))
 }
 
 pub(in crate::review) fn list(context: Option<&Context>) -> Result<Value, Error> {

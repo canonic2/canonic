@@ -186,14 +186,8 @@ fn suggestions_structured_projection_contains_action_examples_and_pending_recove
 
 #[test]
 fn suggestions_disabled_history_reports_unavailable_evidence() {
-    let (root, context, connection) = fixture();
-    Store::open(root.path())
-        .unwrap()
-        .update_checkpoint(&context, &|| Ok(()), |state| {
-            state.history_enabled = false;
-            Ok(json!({}))
-        })
-        .unwrap();
+    let (_root, context, connection) = fixture();
+    review::settings::history_fixture(&context, false);
     let result = listed(&context, &connection);
     assert_eq!(result["data"]["coverage"]["available"], false);
     assert_eq!(result["data"]["coverage"]["complete"], false);

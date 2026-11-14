@@ -5,8 +5,7 @@ fn historical_fixture() -> (assert_fs::TempDir, Value) {
     let bundle =
         crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
     let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
-    let mut raw =
-        serde_json::to_value(Store::open(root.path()).unwrap().read_current().unwrap()).unwrap();
+    let mut raw = super::tests::earlier_checkpoint(root.path());
     raw["project_root"] = json!(context.project_root);
     let object = raw.as_object_mut().unwrap();
     for key in [
@@ -64,8 +63,8 @@ fn upgrade_backup_retention_bounds_failed_attempts_and_preserves_committed_sourc
     let first = backup(&store, first_bytes);
     let second = backup(&store, second_bytes);
     raw["operator"]["upgrade_recovery"] = json!([first, second]);
-    let binding = raw["active"]["binding"].clone();
-    raw["active"]["binding"] = json!("0".repeat(64));
+    // An unreadable integration record fails each conversion attempt.
+    raw["operator"]["integration"] = json!("invalid");
     let checkpoint = store.directory.join("state.json");
     for sequence in 100..112 {
         raw["sequence"] = json!(sequence);
@@ -83,7 +82,10 @@ fn upgrade_backup_retention_bounds_failed_attempts_and_preserves_committed_sourc
             second_bytes
         );
     }
-    raw["active"]["binding"] = binding;
+    raw["operator"]
+        .as_object_mut()
+        .unwrap()
+        .remove("integration");
     let original = serde_json::to_vec(&raw).unwrap();
     fs::write(&checkpoint, &original).unwrap();
     let state = store.read_checkpoint().unwrap();

@@ -115,7 +115,7 @@ fn historical_annotations_cannot_be_added_by_rule_tools() {
             );
             let after = Store::open(root.path()).unwrap().read().unwrap();
             assert_eq!(after.policy_revision, before.policy_revision);
-            assert_eq!(json!(after.active), json!(before.active));
+            assert_eq!(after.policy_revision, before.policy_revision);
             assert!(after.proposals.is_empty());
         }
     }

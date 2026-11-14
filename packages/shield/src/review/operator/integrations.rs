@@ -39,57 +39,54 @@ pub(super) fn initialize_in_cache(
     baseline: Baseline,
 ) -> Result<Value, Error> {
     let root = start.canonicalize()?;
-    let reused = !root.join(".shield/review/state.json").exists()
-        && root.join(".shield/config.yml").exists()
-        && cache_dir.is_none()
-        && review::reuse_reviewed_policy(&root).is_ok()
-        && root.join(".shield/review/state.json").is_file();
-    if reused {
+    // The policy files are the policy: a folder that has them, such as a clone,
+    // worktree or copy, is already initialized and needs no review.
+    if root.join(".shield/config.yml").exists() {
+        let existing = root.join(".shield/review/state.json").exists();
         let context = review::open(&root)?;
-        let mut receipt = crate::review::project::status(&context)?;
-        receipt["policy_reused"] = json!(true);
-        receipt["next_action"] = json!("shield mcp setup");
-        if choice.is_some_and(|choice| {
-            !matches!(
-                choice,
-                IntegrationChoice::Keep | IntegrationChoice::Agents(0)
-            )
-        }) {
-            receipt["agent_setup"] = setup(&context, choice, json_mode, false)?;
-        }
-        return Ok(receipt);
-    }
-    if root.join(".shield/review/state.json").exists() {
-        let mut terminal = Terminal::required(json_mode)?;
-        let context = match review::open(&root) {
-            Ok(context) => context,
-            Err(error) => {
-                let cache_dir = cache_dir.map(std::path::absolute).transpose()?;
-                let plan = review::bootstrap::prepare_options(&root, None, cache_dir.as_deref())
-                    .map_err(|_| error)?;
-                let mut enrollment = plan.report();
-                enrollment["enrollment_review"] = json!(plan.message());
-                terminal.confirm(&enrollment)?;
-                let context = plan.commit_cli()?;
-                drop(terminal);
-                let mut receipt = crate::review::project::status(&context)?;
-                receipt["reenrolled"] = json!(true);
-                if choice.is_some_and(|choice| !matches!(choice, IntegrationChoice::Keep)) {
-                    receipt["agent_setup"] = setup(&context, choice, json_mode, false)?;
-                }
-                return Ok(receipt);
-            }
-        };
-        if choice.is_some_and(|c| !matches!(c, IntegrationChoice::Keep)) {
+        if existing && choice.is_some_and(|c| !matches!(c, IntegrationChoice::Keep)) {
             return Err(Error::Invalid(
                 "project already initialized; use shield mcp setup to change agents",
             ));
         }
+        write_missing_locks(&context)?;
+        // A folder initialized here, such as a fresh clone, takes the chosen
+        // plan location; an enrolled one changes it with mcp setup.
+        if let Some(directory) = cache_dir.filter(|_| !existing) {
+            crate::review::files::relocate_cache(&context, &std::path::absolute(directory)?)?;
+        }
         let mut receipt = crate::review::project::status(&context)?;
         receipt["next_action"] = json!("shield mcp setup");
+        if !existing
+            && choice.is_some_and(|choice| {
+                !matches!(
+                    choice,
+                    IntegrationChoice::Keep | IntegrationChoice::Agents(0)
+                )
+            })
+        {
+            receipt["agent_setup"] = setup(&context, choice, json_mode, false)?;
+        }
         return Ok(receipt);
     }
     workflow::onboard(&root, choice, json_mode, cache_dir, baseline)
+}
+
+/// Write the portable lock files of policy files that arrived without them,
+/// so the packs they select stay reproducible. Existing locks are kept.
+fn write_missing_locks(context: &Context) -> Result<(), Error> {
+    use crate::review::publication::projections::{locks, materialize};
+    let root = Path::new(&context.project_root);
+    let state = crate::review::project::load(context)?;
+    let meta = crate::review::project::metadata(&state);
+    let missing: std::collections::BTreeMap<_, _> = locks(&state.candidates["project"], &meta)?
+        .into_iter()
+        .filter(|(name, _)| !root.join(".shield").join(name).exists())
+        .collect();
+    if !missing.is_empty() {
+        materialize(context, &missing)?;
+    }
+    Ok(())
 }
 
 pub(super) fn setup(

@@ -10,6 +10,7 @@ mod tests;
 mod composition;
 mod connections;
 pub(crate) mod layers;
+pub(crate) mod settings;
 pub use composition::{Effective, compose};
 
 /// Render an immutable retained bundle's canonical lock without constructing
@@ -51,7 +52,7 @@ pub(crate) fn verify_recorded_fields(
             Some(value) => Some(value.as_str().ok_or(Error::Syntax)?),
         };
         let merged = layers::merge(config, local)?;
-        if policy::fingerprint(merged.as_bytes()) != lock.config_digest {
+        if settings::config_digest(&merged)? != lock.config_digest {
             return Err(Error::ArtifactMismatch);
         }
         let selection = Candidate::from_yaml(&merged)?;
@@ -196,6 +197,19 @@ struct Document {
     mcp: crate::mcp_connections::Connections,
     #[serde(default)]
     local_mcp: crate::mcp_connections::Connections,
+    #[serde(default)]
+    enforcement: Option<settings::Enforcement>,
+    #[serde(default)]
+    protection: Option<settings::Protection>,
+    #[serde(default)]
+    ask_fallback: BTreeMap<String, settings::Fallback>,
+    #[serde(default)]
+    history: Option<settings::History>,
+    #[serde(default)]
+    registries: Option<canonic_registry_kit::registrations::Registrations>,
+    /// The local layer's settings, which the layer merge carries here.
+    #[serde(default)]
+    local_settings: Option<settings::Layer>,
 }
 
 /// Marks a selection the local layer adds.
@@ -364,6 +378,21 @@ impl Candidate {
         }
         document.access_paths.validate()?;
         document.local_access_paths.validate()?;
+        let shared_settings = settings::Layer {
+            enforcement: document.enforcement,
+            protection: document.protection,
+            ask_fallback: document.ask_fallback,
+            history: document.history,
+            registries: document.registries,
+        };
+        shared_settings.validate()?;
+        if let Some(local) = &document.local_settings {
+            local.validate()?;
+        }
+        // The digest verification recomputes: a settings key with an empty or
+        // null value is still left out, so empty values cannot stand in for
+        // absent keys.
+        let digest = settings::config_digest(input)?;
         let mut access_paths = document.access_paths;
         for (paths, local) in [
             (&mut access_paths.read, document.local_access_paths.read),
@@ -390,7 +419,7 @@ impl Candidate {
             rules: document.rules,
             local_rules: document.local_rules,
             disabled: document.disabled,
-            digest: policy::fingerprint(input.as_bytes()),
+            digest,
             access_paths,
             mcp,
         };

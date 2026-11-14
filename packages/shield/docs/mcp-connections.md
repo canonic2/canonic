@@ -1,7 +1,7 @@
 # Configure project MCP servers
 
 Shield automatically applies installed pack permissions to matching MCP servers
-configured in Claude Code and Codex. Choose a pack/profile, activate it, and its
+configured in Claude Code and Codex. Choose a pack/profile and confirm it, and its
 MCP rules apply without another association or per-tool host approval setup.
 Adding a permission pack never enables or launches a server.
 
@@ -30,7 +30,7 @@ user servers remain eligible independently. Discovery never writes trust or
 approval settings. Host-only approvals or session overrides that these files
 cannot establish remain outside automatic identification.
 
-Once a pack update is reviewed and activated, new rules take effect under its
+Once a pack update is reviewed and written, new rules take effect under its
 selected profile. Existing host approval entries for old tool names do not limit
 Shield's current rules. A newly configured matching server or an alias rename
 needs no pack reinstallation or Shield configuration edit. A tool with no matching
@@ -63,7 +63,7 @@ file. The current per-file limit is 1 MiB. Inspect `shield doctor` and repair th
 file. A malformed entry for a different, identifiable alias does not block the
 requested server; an unparseable whole file cannot provide that isolation.
 
-## Declare and activate a connection
+## Declare a connection
 
 Optionally add `mcp` to `.shield/config.yml` when Shield should publish a connection
 or project rules need a stable connection ID. Each key is a project connection ID;
@@ -83,17 +83,15 @@ mcp:
       codex: cloud
 ```
 
-In an agent session, ask the agent to prepare
-`policy_propose` with `{"change":{"kind":"project_files_adopt"}}` and pass its
-returned `apply_arguments` unchanged to `policy_apply`. Shield shows the captured
-connection settings in a confirmation form. After approval, the agent calls
-`mcp_setup` with the selected `agents` (for example, `["claude","codex"]`) to
-review and publish host settings. `dry_run: true` previews without writing.
-The connection form masks sensitive values and labels them as added, changed,
-removed or unchanged, so a masked edit is still visible for review.
-Restart the affected connections after publication. The operator CLI offers the
-same reviews through `shield policy review` and `shield mcp setup` when you
-choose to work directly in a terminal.
+Shield reads the connection from the file on the next request. To write it into
+the agents' MCP settings, run `shield mcp setup`, or in an agent session have
+the agent call `mcp_setup` with the selected `agents` (for example,
+`["claude","codex"]`); `shield status` reports agents whose entries differ from
+the file. `dry_run: true` previews without writing. Connection changes an agent
+proposes through `policy_propose` show a confirmation form that masks sensitive
+values and labels them as added, changed, removed or unchanged, so a masked edit
+is still visible for review; approval also writes the registered agents'
+entries. Restart the affected connections afterwards.
 Setup does not install connectors or configure credentials.
 
 Supported host aliases start with a lowercase letter and contain lowercase
@@ -113,7 +111,7 @@ The connection is independent of packs. A matching manual project entry can be
 bound without transferring ownership. A conflicting alias requires resolution;
 Shield never replaces it silently. Setup tracks only entries it creates, detects
 edits to owned entries, and removes only those entries. Set `enabled: false`,
-review the change, then rerun setup to withdraw an owned projection.
+then rerun setup to withdraw an owned entry.
 
 ## Bind a pack integration
 
@@ -152,8 +150,8 @@ pack policy automatically. Reliably identified servers with no applicable pack
 or project policy retain host permissions. Managed calls are checked against
 their reviewed host entry; drift blocks them pending a new `mcp_setup` review
 in the session.
-Classification and enforcement share one loaded active snapshot per call.
-If that snapshot is unavailable, Shield cannot establish that a server is
+Classification and enforcement share one loaded policy per call.
+If the policy files cannot be loaded, Shield cannot establish that a server is
 external, so all third-party MCP authorization calls fail closed, including calls
 to otherwise external servers. The failure names unavailable MCP bindings and
 directs the operator to `shield doctor`. Shield does not infer an external server
@@ -224,11 +222,11 @@ as a fallback.
 Managed connection, association, binding and enablement edits use in-session
 confirmation forms, including on Codex. Ordinary tool permission alone does not
 approve private connection settings.
-Read-only automatic matching uses the activated pack's authority without an
+Read-only automatic matching uses the installed pack's authority without an
 additional connection confirmation or configuration write.
 Permission-only MCP proposals retain the existing `policy_apply` workflow.
 Changing a pack variable or release that changes resolved connection settings
-also requires the connection-settings form; a mixed proposal is not partially activated.
+also requires the connection-settings form; a mixed proposal is never partly written.
 
 ## Write MCP permission rules
 

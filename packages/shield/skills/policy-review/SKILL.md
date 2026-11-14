@@ -52,14 +52,12 @@ reconsideration automatically or change the scope to escape suppression.
 4. For authorized custom rules, inspect command grammar and effects; preserve
    scope and deny boundaries. Use `policy_propose` schema examples and link
    returned review context. Batch related changes in `changes` (up to 16).
-   For unreviewed file edits, propose `{"change":{"kind":"project_files_adopt"}}` alone, obtain approval,
-   then prepare the original change. Changed files require fresh adoption.
 5. Prepare and immediately review the proposal; use `policy_show` if more evidence is needed. Copy
    `apply_arguments` unchanged into `policy_apply` through its returned approval
    route. Do not add a preliminary chat confirmation. Preparation and previews
-   neither activate policy nor authorize execution.
+   neither change the policy files nor authorize execution.
 6. Stop on decline or cancellation. For uncertain completion, inspect current
-   policy and `policy_receipt` before retrying. Stale proposals need fresh
+   policy and the proposal with `policy_show` before retrying. Stale proposals need fresh
    preparation; unavailable approval follows the returned user route. Retry only
    while the task and authorization remain valid. Closed attempts cannot resume:
    prepare fresh with a new idempotency key. Never finish a task with an undecided

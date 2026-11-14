@@ -10,6 +10,16 @@ fn meta(context: &Context) -> Value {
     crate::review::project::metadata(&crate::review::project::load(context).unwrap())
 }
 
+/// The Ask fallback in effect for `agent` in the project's current state.
+fn fallback_in(context: &Context, agent: &str) -> Result<AskFallback, Error> {
+    let state = crate::review::project::load(context).unwrap();
+    fallback(
+        &crate::review::project::metadata(&state),
+        &state.settings,
+        agent,
+    )
+}
+
 fn choice(ids: &[&str]) -> IntegrationChoice {
     IntegrationChoice::Agents(IntegrationChoice::bits(ids).unwrap())
 }
@@ -572,7 +582,7 @@ fn box_carries_the_codex_ask_fallback_used_at_hook_time() {
     // Without a confirmed choice, a Box-only Codex blocks Ask requests.
     setup(&context, choice(&["box"])).unwrap();
     assert!(matches!(
-        fallback(&meta(&context), "codex").unwrap(),
+        fallback_in(&context, "codex").unwrap(),
         AskFallback::Block
     ));
     // Setup offers Box the same Allow default it offers a direct Codex.
@@ -587,13 +597,17 @@ fn box_carries_the_codex_ask_fallback_used_at_hook_time() {
     let mut plan = prepare(root.path(), &before, choice(&["box"]))
         .unwrap()
         .unwrap();
-    crate::review::integrations::setup::with_fallbacks(&before, choice(&["box"]), Some(&mut plan))
-        .unwrap();
+    let settings = crate::review::project::load(&context).unwrap().settings;
+    crate::review::integrations::setup::with_fallbacks(
+        &settings,
+        choice(&["box"]),
+        Some(&mut plan),
+    );
     apply(&context, &before, &plan).unwrap();
     let registered = registration(&meta(&context)).unwrap().unwrap();
     assert!(registered.agents.is_empty());
     assert!(matches!(
-        fallback(&meta(&context), "codex").unwrap(),
+        fallback_in(&context, "codex").unwrap(),
         AskFallback::Allow
     ));
     assert_eq!(
@@ -601,11 +615,17 @@ fn box_carries_the_codex_ask_fallback_used_at_hook_time() {
         "allow"
     );
     // Fallbacks remain limited to agents that need one.
-    assert!(!registered.ask_fallback.contains_key("claude"));
+    assert!(
+        !crate::review::project::load(&context)
+            .unwrap()
+            .settings
+            .ask_fallback
+            .contains_key("claude")
+    );
     // Removing Box drops the fallback it carried.
     setup(&context, removal(&["box"])).unwrap();
     assert!(matches!(
-        fallback(&meta(&context), "codex").unwrap(),
+        fallback_in(&context, "codex").unwrap(),
         AskFallback::Block
     ));
 }
@@ -803,7 +823,7 @@ fn allow_acme_logs(context: &Context) {
     let candidate =
         crate::review::packs::rebuild(&state.candidates["project"], &mut [], &[], Some(&rules))
             .unwrap();
-    crate::review::publication::commit(
+    crate::review::files::write::commit_fixture(
         context,
         &state,
         candidate,

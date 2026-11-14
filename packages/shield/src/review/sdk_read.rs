@@ -49,15 +49,12 @@ fn now() -> Result<u64, Error> {
 fn current(project: &Path) -> Result<State, Error> {
     let store = Store::inspect(project)?;
     let (state, _) = store.read_diagnostic_checkpoint()?;
-    if state.project_root != store.root() || state.legacy_preview.is_some() {
+    if state.project_root != store.root() || state.unconverted {
         return Err(Error::StaleSnapshot);
     }
+    // Each read is decided by the policy files when it arrives; admission needs
+    // no separately activated policy.
     state.check_operations()?;
-    state
-        .active
-        .as_ref()
-        .ok_or(Error::Missing)?
-        .validate_binding(&state)?;
     Ok(state)
 }
 

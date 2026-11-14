@@ -1,4 +1,4 @@
-//! Tasks wire composition; preparation and storage never activate policy.
+//! Tasks wire composition; preparation and storage never change the policy files.
 use super::{Server, response, rpc};
 use crate::review::{
     self,

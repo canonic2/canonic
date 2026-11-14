@@ -77,6 +77,10 @@ def pump(seconds):
 def activated():
     return (root / ".shield/review/state.json").exists()
 
+def policy_files():
+    # The policy is the files directly in .shield; review state is not policy.
+    return {path.name: path.read_bytes() for path in (root / ".shield").iterdir() if path.is_file()}
+
 def child_code():
     match = re.search(rb"SHIELD_CHILD_EXIT=(-?\d+)", seen)
     return int(match[1]) if match else None
@@ -129,7 +133,7 @@ try:
         while b"Ruleid" not in re.sub(rb"\s+", b"", re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", seen)):
             pump(0.05)
             assert child_code() is None and time.monotonic() < deadline
-        before = json.loads((root / ".shield/review/state.json").read_text())["policy_revision"]
+        before = policy_files()
         os.write(master, b"\x1b[200~acme\nrule\x1b[201~")
         pump(0.2)
         result["paste_did_not_submit"] = child_code() is None and b"Input" not in seen
@@ -192,7 +196,7 @@ try:
     result.update(code=child_code(), activated=activated(), restored=actual == original,
                   mode_changes=[(i, before, after) for i, (before, after) in enumerate(zip(original, actual)) if before != after])
     if mode == "editor":
-        result["policy_unchanged"] = before == json.loads((root / ".shield/review/state.json").read_text())["policy_revision"]
+        result["policy_unchanged"] = before == policy_files()
     if mode == "agents":
         result["agents"] = sorted(json.loads((root / ".shield/review/state.json").read_text())["operator"]["integration"]["agents"])
     if mode == "error":

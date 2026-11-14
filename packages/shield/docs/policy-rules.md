@@ -24,7 +24,7 @@ We use the fictional executable `acme-check`; substitute your own reviewed tool.
 In an initialized project, run `shield rule add` and choose **Exact command
 arguments** (`argv`). Enter ID `verify-project`, executable `acme-check`,
 arguments `["verify"]`, and decision Allow. The arguments array excludes the
-executable. Review and confirm to activate the rule for the project cwd.
+executable. Review and confirm to write the rule for the project cwd.
 
 The default **Complete request** form also binds vendor context and environment.
 Choose the argument form here so the rule can cover more than one exact request.
@@ -48,8 +48,8 @@ rules:
 
 Merge the rule and capabilities into the file selected by `.shield/config.yml`.
 For a new shared file, save it as `.shield/rules.yml` and set `rules: rules.yml`
-in the existing configuration. Run `shield policy review`, choose `manual`, and confirm
-the review to activate your edit.
+in the existing configuration. The next request follows the saved file; run
+`shield status` to check that the files are valid.
 
 `domain: argv` matches an executable and argument list. Here, the executable
 must be `acme-check`, the arguments exactly `[verify]`, and cwd inside the project.
@@ -96,7 +96,7 @@ arguments:
 Now both `acme-check verify` and `acme-check verify --verbose` match. The flag
 is optional. `acme-check verify --write` and `acme-check verify report.txt`
 still miss because the grammar declares neither that flag nor operands. Keep
-the executable and cwd conditions, then review and activate the edit as before.
+the executable and cwd conditions, then save the edit as before.
 
 Unless marked complete, examples below are fragments for the `rules` array.
 Add their [required capabilities](rule-reference.md#capabilities) to the document.
@@ -107,8 +107,8 @@ Suppose the fictional `acme-db` tool must use `--read-only`. Matching that flag
 in conditions would leave invocations without it to other rules. Put it in
 requirements to decide what happens when it is missing.
 
-Merge this complete example into your configured rule file and activate it
-with `shield policy review`, as in [your first rule](#your-first-rule):
+Merge this complete example into your configured rule file, as in
+[your first rule](#your-first-rule):
 
 ```yaml
 schema_version: 1
@@ -823,7 +823,7 @@ whose every part matches one of these prefixes, such as
 because Codex would otherwise run it without asking. A command behind a wrapper
 such as `env` or inside `bash -c` keeps Codex's sandbox and follows the
 fallback. Turning the rule off, changing its
-decision or failing its `when` removes the prefix at the next activation.
+decision or failing its `when` removes the prefix the next time Shield writes the policy files or runs setup.
 See [project setup](claude-project.md) for when the file is written.
 `shield rule list --json` reports, for each entry that depends on variables or is
 overridden, the values it used and the resolved rule, or why it is inactive.

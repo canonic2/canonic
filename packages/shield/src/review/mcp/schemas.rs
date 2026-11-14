@@ -57,7 +57,6 @@ fn layer() -> Value {
 fn change() -> Value {
     let mut variants = vec![];
     for (kind, mut fields, mut required) in [
-        ("project_files_adopt", json!({}), vec![]),
         (
             "rule_add",
             json!({"rule":rule(),"layer":layer()}),
@@ -237,7 +236,7 @@ fn pack_updates_schema() -> Value {
 fn policy_propose() -> Definition {
     (
         "policy_propose",
-        "Prepare an inactive proposal from 1-16 changes for atomic policy_apply approval. Modern Tasks-capable calls may return a preparation task: poll tasks/get, then pass only preparation_task_id here to create a fresh review; separate human approval is still required. Use pack_add for guided settings. Apply project_files_adopt separately. After uncertain delivery, repeat identical arguments to recover the original handle or proposal. Never retry cancellation automatically.",
+        "Prepare an inactive proposal from 1-16 changes for atomic policy_apply approval. Modern Tasks-capable calls may return a preparation task: poll tasks/get, then pass only preparation_task_id here to create a fresh review; separate human approval is still required. Use pack_add for guided settings. After uncertain delivery, repeat identical arguments to recover the original handle or proposal. Never retry cancellation automatically.",
         || {
             let mut schema = object(
                 json!({"preparation_task_id":id(),"change":change(),"changes":{"type":"array","minItems":1,"maxItems":16,"items":change()},"idempotency_key":id(),"agent_reason":string(),"source_entry_id":id(),"review_ids":{"type":"array","maxItems":16,"items":{"type":"string","minLength":64,"maxLength":64}},"supersedes_proposal_id":id()}),
@@ -323,11 +322,6 @@ fn admin_inventory() -> Vec<Definition> {
             || object(json!({}), &[]),
         ),
         (
-            "cache_prepare",
-            "Rebuild committed policy cache; optional absolute cache_dir relocates it after in-session user confirmation",
-            || object(json!({"cache_dir":string()}), &[]),
-        ),
-        (
             "protection_set",
             "Ask the user to change protected file access after an exact before/after review",
             || {
@@ -373,11 +367,6 @@ fn admin_inventory() -> Vec<Definition> {
                     &["name"],
                 )
             },
-        ),
-        (
-            "policy_repair",
-            "Ask the user to restore managed projections from committed active policy",
-            || object(json!({}), &[]),
         ),
         (
             "history_configure",
@@ -497,18 +486,13 @@ fn policy_inventory() -> Vec<Definition> {
         ),
         (
             "policy_apply",
-            "Activate a proposal with per-call user approval. Copy its returned apply_arguments unchanged.",
+            "Write a proposal to the policy files with per-call user approval. Copy its returned apply_arguments unchanged.",
             || {
                 object(
                     json!({"proposal_id":id(),"candidate_digest":string(),"changes":{"type":"array","maxItems":4096,"items":{"type":"object"}},"review":object(json!({"packs":{"type":"object"},"comparison":{"type":"object"}}), &["packs", "comparison"])}),
                     &["proposal_id", "candidate_digest", "changes", "review"],
                 )
             },
-        ),
-        (
-            "policy_receipt",
-            "Show a proposal's status and application receipt, if any",
-            || object(json!({"proposal_id":id()}), &["proposal_id"]),
         ),
     ]);
     tools

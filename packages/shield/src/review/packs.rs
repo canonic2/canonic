@@ -93,7 +93,7 @@ fn acquire(
 ) -> Result<Acquired, Error> {
     // The proposal already owns a validated capture. Resolve its registrations
     // from that capture; final publication still checks the current metadata.
-    let effective = registries::effective_from_metadata(&before.operator)?;
+    let effective = registries::effective_from(&before.settings)?;
     let (alias, source, reference) = resolve_effective(&effective, input)?;
     let mut catalog = registries::checked_catalog(context, &source)?;
     let id = catalog
@@ -260,8 +260,8 @@ fn new_selector(
 /// project metadata and the global registrations. Installed lookups need no
 /// registry access, so registrations that do not resolve leave only the
 /// retained aliases; acquisition still refuses them.
-fn current_aliases(meta: &Value) -> Vec<(String, String)> {
-    registries::effective_from_metadata(meta).map_or_else(
+fn current_aliases(settings: &crate::configuration::settings::Values) -> Vec<(String, String)> {
+    registries::effective_from(settings).map_or_else(
         |_| Vec::new(),
         |effective| {
             effective
@@ -274,11 +274,14 @@ fn current_aliases(meta: &Value) -> Vec<(String, String)> {
 /// The source identity a catalog-shaped `reference` names through the
 /// captured registrations, or `None` for a `pack:` selector or a reference
 /// those registrations cannot resolve, which match installed rows directly.
-fn named_source(meta: &Value, reference: &str) -> Option<String> {
+fn named_source(
+    settings: &crate::configuration::settings::Values,
+    reference: &str,
+) -> Option<String> {
     if reference.starts_with("pack:") {
         return None;
     }
-    let effective = registries::effective_from_metadata(meta).ok()?;
+    let effective = registries::effective_from(settings).ok()?;
     let (_, source, _) = resolve_effective(&effective, reference).ok()?;
     Some(source.identity().to_owned())
 }
@@ -335,11 +338,15 @@ fn selection(
 }
 /// Locate an added pack within the source its acquisition reference resolves to.
 /// Installed selectors retain their source-independent lookup behavior.
-fn addition_selection(meta: &Value, reference: &str) -> Result<usize, Error> {
+fn addition_selection(
+    meta: &Value,
+    settings: &crate::configuration::settings::Values,
+    reference: &str,
+) -> Result<usize, Error> {
     let rows = meta["installed"]
         .as_array()
         .ok_or(Error::Invalid("installed packs missing"))?;
-    let named = named_source(meta, reference);
+    let named = named_source(settings, reference);
     let candidates: Vec<usize> = (0..rows.len())
         .filter(|index| {
             named
@@ -351,7 +358,7 @@ fn addition_selection(meta: &Value, reference: &str) -> Result<usize, Error> {
         .iter()
         .map(|index| rows[*index].clone())
         .collect();
-    selection(&scoped, &current_aliases(meta), reference).map(|index| candidates[index])
+    selection(&scoped, &current_aliases(settings), reference).map(|index| candidates[index])
 }
 /// The distinct rows whose installed entries `reference` matches. A leading
 /// alias of any entry scopes the match to that alias.
@@ -406,7 +413,7 @@ pub(super) fn show(context: &Context, reference: &str) -> Result<Value, Error> {
     let rows = meta["installed"]
         .as_array()
         .ok_or(Error::Invalid("installed packs missing"))?;
-    let index = selection(rows, &current_aliases(&meta), reference)?;
+    let index = selection(rows, &current_aliases(&current.settings), reference)?;
     let artifact: Value = crate::policy::parse(
         current.candidates["project"]["packs"][index]
             .as_str()
@@ -610,13 +617,17 @@ fn rebuild_layers(
         );
     }
     let mut config = json!({"schema_version":1,"packs":selections});
+    // Settings keys ride along with the configuration a pack change rebuilds.
     for field in [
         "access_paths",
         "local_access_paths",
         "local_rules",
         "mcp",
         "local_mcp",
-    ] {
+    ]
+    .into_iter()
+    .chain(crate::configuration::settings::KEYS)
+    {
         if let Some(value) = previous.get(field) {
             config[field] = value.clone();
         }
@@ -760,7 +771,7 @@ pub(super) fn prepare_configure(
     change: impl FnOnce(&str, &mut Settings) -> Result<(), Error>,
 ) -> Result<(Value, Value), Error> {
     let mut meta = state::metadata(before);
-    let aliases = current_aliases(&meta);
+    let aliases = current_aliases(&before.settings);
     let candidate = &before.candidates["project"];
     let artifacts: Vec<String> = serde_json::from_value(candidate["packs"].clone())
         .map_err(|_| Error::Invalid("pack artifacts missing"))?;
@@ -1091,7 +1102,7 @@ fn prepare_shared_add(
         // A catalog reference names one source: the default for a bare name,
         // else its alias's. Only rows retained from that source answer to it,
         // so another source's same-named row is never re-rooted in its place.
-        let selected = match addition_selection(&meta, reference) {
+        let selected = match addition_selection(&meta, &before.settings, reference) {
             Ok(index) => Some(index),
             Err(Error::Missing) => None,
             Err(error) => return Err(error),
@@ -1263,10 +1274,14 @@ pub(super) fn prepare_update(
 }
 /// The pinned roots an update of `meta`'s installed packs leaves unchanged,
 /// for the operator's review and the agent's proposal result.
-pub(super) fn update_skipped(meta: &Value, reference: Option<&str>) -> Result<Vec<Value>, Error> {
+pub(super) fn update_skipped(
+    meta: &Value,
+    settings: &crate::configuration::settings::Values,
+    reference: Option<&str>,
+) -> Result<Vec<Value>, Error> {
     let rows: Vec<Value> = serde_json::from_value(meta["installed"].clone())
         .map_err(|_| Error::Invalid("installed packs missing"))?;
-    closure::mutations::skipped_pinned(&rows, &current_aliases(meta), reference)
+    closure::mutations::skipped_pinned(&rows, &current_aliases(settings), reference)
 }
 
 pub(super) fn prepare_change(

@@ -81,7 +81,7 @@ pub(in crate::review::packs) fn update(
     reference: Option<&str>,
 ) -> Result<(Value, Value), Error> {
     let mut retained = Retained::load(before)?;
-    let aliases = super::super::current_aliases(&before.operator);
+    let aliases = super::super::current_aliases(&before.settings);
     let target = reference
         .map(|r| super::super::selection(&retained.rows, &aliases, r))
         .transpose()?;
@@ -220,7 +220,7 @@ pub(in crate::review::packs) fn remove_many(
     references: &[String],
 ) -> Result<(Value, Value), Error> {
     let retained = Retained::load(before)?;
-    let aliases = super::super::current_aliases(&before.operator);
+    let aliases = super::super::current_aliases(&before.settings);
     let removed = references
         .iter()
         .map(|reference| super::super::selection(&retained.rows, &aliases, reference))

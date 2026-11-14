@@ -52,8 +52,8 @@ Shield's terminal commands show changes before asking you to confirm. Agents
 can prepare proposals through MCP, the interface they use to call Shield's
 tools and read these guides. You approve a proposal in the host or terminal.
 
-Shield saves confirmed policy as a snapshot. Manual YAML edits take effect
-only after you review and activate them with `shield policy review`.
+The policy is the project's `.shield/` files. A YAML edit you make by hand
+applies to the next request; see [policy files and settings](policy-files.md).
 
 ## Understand the boundary
 

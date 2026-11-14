@@ -6,7 +6,7 @@ pub(crate) fn cache_repair(project: &str) -> Option<String> {
         return None;
     }
     Some(format!(
-        "shield cache prepare --project '{}'",
+        "shield doctor --project '{}'",
         if cfg!(windows) {
             project.replace('\'', "''")
         } else {

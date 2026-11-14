@@ -35,7 +35,10 @@ fn pack_updates_search_seeds_offline_cli_and_mcp_inspection_without_policy_chang
         "1.1.0"
     );
     let status = invoke(&context, &connection, "status", json!({}));
-    assert_eq!(status["data"]["pack_updates"], cli["pack_updates"]);
+    assert_eq!(
+        status["data"]["pack_updates"], cli["pack_updates"],
+        "{status}"
+    );
     let selected = invoke(
         &context,
         &connection,

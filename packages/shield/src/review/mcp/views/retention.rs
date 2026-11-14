@@ -1,5 +1,5 @@
 //! Pressure-driven eviction of disposable captures; live reviews keep exact pins.
-use super::{Context, Error, HANDLE_BYTES, Path, Store, Value, Views, configuration, identity};
+use super::{Context, Error, HANDLE_BYTES, Path, Store, Value, Views, configuration, identity_of};
 use std::collections::BTreeSet;
 
 impl Views {
@@ -61,8 +61,8 @@ impl Views {
             .filter(|row| row.status == "pending")
             .flat_map(|row| {
                 [
-                    identity(&row.base_candidate, &row.base_metadata),
-                    identity(&row.candidate, &row.candidate_metadata),
+                    identity_of(&row.base_digest, &row.base_metadata),
+                    identity_of(&row.candidate_digest, &row.candidate_metadata),
                 ]
             })
             .collect();

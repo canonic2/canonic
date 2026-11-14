@@ -5,8 +5,7 @@ use crate::{
     mcp,
 };
 use std::{
-    fs,
-    io::{self, Read},
+    fs, io,
     path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
@@ -38,6 +37,7 @@ pub(crate) fn run(
             }
         };
     }
+    crate::review::retire_user_records();
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let session = session_dir(input.agent.as_deref());
     let target = match serve_project(project, &cwd, session.as_deref()) {
@@ -47,8 +47,6 @@ pub(crate) fn run(
             return ExitCode::FAILURE;
         }
     };
-    let requested =
-        project.map_or_else(|| target.clone(), |project| absolute_project(project, &cwd));
     let context = ReviewContext {
         project: target.clone(),
         agent: input.agent.clone(),
@@ -56,38 +54,6 @@ pub(crate) fn run(
         tool_use_id: input.tool_use_id.clone(),
     };
     log.event("mcp_start", || serde_json::json!({"session_id":context.session_id,"agent":context.agent,"request_timeout_ms":input.request_timeout_ms}));
-    // Starting a runtime connection, unlike CLI inspection, may reuse this
-    // developer's exact reviewed source receipt before first-use diagnostics.
-    if valid_attribution(&context)
-        && let Err(error) = crate::review::reuse_reviewed_policy(&target)
-    {
-        log.event(
-            "reviewed_policy_reuse_failed",
-            || serde_json::json!({"error_kind":error.code()}),
-        );
-    }
-    if valid_attribution(&context)
-        && let Ok(probe) = crate::review::bootstrap::inspect(&target)
-        && probe.bootstrap_required()
-    {
-        let attribution = ReviewContext {
-            project: requested,
-            ..context
-        };
-        return match mcp::serve_bootstrap(
-            probe.project_root(),
-            attribution,
-            io::BufReader::new(io::stdin()),
-            io::stdout().lock(),
-            &options,
-        ) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::FAILURE
-            }
-        };
-    }
     let context = match review_context(&context) {
         Ok(context) => context,
         Err(error) => {
@@ -98,7 +64,7 @@ pub(crate) fn run(
             ) {
                 eprintln!("{error}");
             } else {
-                eprintln!("Cannot start Shield MCP server: enrolled project required");
+                eprintln!("Cannot start Shield MCP server: no Shield project; run shield init");
             }
             return ExitCode::FAILURE;
         }
@@ -122,8 +88,8 @@ pub(crate) fn run(
     }
 }
 
-/// A validated enrollment or integration-review receipt retains human forms
-/// across connections, without importing native registration or caller claims.
+/// A validated integration-review receipt retains human forms across
+/// connections, without importing native registration or caller claims.
 pub(crate) fn review_context(
     input: &ReviewContext,
 ) -> Result<crate::review::Context, crate::review::Error> {
@@ -135,42 +101,16 @@ pub(crate) fn review_context(
     Ok(context)
 }
 
-fn valid_attribution(context: &ReviewContext) -> bool {
-    [&context.agent, &context.session_id, &context.tool_use_id]
-        .into_iter()
-        .all(|value| {
-            value.as_ref().is_none_or(|value| {
-                !value.is_empty() && value.len() <= 4096 && !value.contains('\0')
-            })
-        })
-}
-
-/// Resolve portable launchers from cwd and keep historical absolute launchers
-/// on the current checkout instead of opening their old runtime.
+/// An explicit project selection, else the nearest project holding `cwd`.
 pub(crate) fn project_path(
     project: Option<&Path>,
     cwd: &Path,
 ) -> Result<PathBuf, crate::review::Error> {
     let cwd = cwd.canonicalize()?;
-    let nearest = nearest_project(&cwd);
-    let Some(project) = project.filter(|path| *path != Path::new(".")) else {
-        return Ok(nearest.unwrap_or(&cwd).into());
-    };
-    let selected = absolute_project(project, &cwd);
-    if let Some(nearest) = nearest
-        && nearest != selected
-    {
-        if recorded_launch(
-            &nearest.join(".shield/review/state.json"),
-            &selected,
-            nearest,
-        ) || crate::review::bootstrap::accepts_launch(nearest, &selected)
-        {
-            return Ok(nearest.into());
-        }
-        return Ok(selected);
-    }
-    Ok(selected)
+    Ok(match project.filter(|path| *path != Path::new(".")) {
+        Some(project) => absolute_project(project, &cwd),
+        None => nearest_project(&cwd).unwrap_or(&cwd).into(),
+    })
 }
 
 /// The agent's session folder from this process's host-set environment.
@@ -222,45 +162,4 @@ fn absolute_project(project: &Path, cwd: &Path) -> PathBuf {
         cwd.join(project)
     };
     selected.canonicalize().unwrap_or(selected)
-}
-
-fn recorded_launch(path: &Path, requested: &Path, current: &Path) -> bool {
-    recorded_claim(path).is_some_and(|value| {
-        if value["operator"]["portable_launch_roots"]
-            .as_array()
-            .is_some_and(|roots| {
-                roots.iter().take(2).any(|root| {
-                    root.as_str()
-                        .is_some_and(|root| Path::new(root) == requested)
-                })
-            })
-        {
-            return true;
-        }
-        // These claims select a runtime only. Its checkpoint or private policy
-        // receipt still has to pass the ordinary authority validation.
-        value["project_root"]
-            .as_str()
-            .is_some_and(|root| Path::new(root) != current)
-            && (value["project_root"]
-                .as_str()
-                .is_some_and(|root| Path::new(root) == requested)
-                || crate::review::bootstrap::launch_matches_metadata(current, requested))
-    })
-}
-
-fn recorded_claim(path: &Path) -> Option<serde_json::Value> {
-    let metadata = fs::symlink_metadata(path).ok()?;
-    if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 16 * 1024 * 1024
-    {
-        return None;
-    }
-    let mut bytes = Vec::new();
-    fs::File::open(path)
-        .ok()?
-        .take(16 * 1024 * 1024 + 1)
-        .read_to_end(&mut bytes)
-        .ok()?;
-    let value = crate::json::parse(&bytes).ok()?;
-    Some(value)
 }

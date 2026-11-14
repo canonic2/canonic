@@ -34,7 +34,7 @@ fn metadata(context: &Context) -> Value {
 
 fn authority(context: &Context) -> Value {
     let state = project::checkpoint(context).unwrap();
-    json!({"active":state.active,"read":state.read_requests,"run":state.run_requests,
+    json!({"read":state.read_requests,"run":state.run_requests,
         "hooks":state.hook_requests,"sessions":state.session_grants,"policy":state.policy_revision})
 }
 

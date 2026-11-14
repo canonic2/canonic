@@ -23,15 +23,14 @@ pub(super) fn apply(
         .ok_or(Error::Missing)?;
     if proposal.status == "applied" {
         let mut value = json!({"proposal_id":id,"status":"applied","policy_revision":proposal.receipt["policy_revision"],"receipt":proposal.receipt,"operator":proposal.operator});
+        // Policy file writes own their publication by revision; receipts from
+        // earlier releases name the activation.
         if before.operator["integration_publication"]["proposal_id"] == id
-            && let Some(activation) = proposal.receipt["activation_id"].as_str()
+            && let Some(owner) = proposal.receipt["activation_id"]
+                .as_str()
+                .or_else(|| proposal.receipt["policy_revision"].as_str())
         {
-            crate::review::publication::resume_connections(
-                context,
-                Some(&id),
-                activation,
-                &mut value,
-            );
+            crate::review::publication::resume_connections(context, Some(&id), owner, &mut value);
         }
         return Ok(value);
     }
@@ -48,21 +47,27 @@ pub(super) fn apply(
         Confirmation::Form | Confirmation::Terminal => return Err(Error::ApprovalRequired),
     };
     checkpoint()?;
+    // A review prepared before proposals recorded their files is prepared again.
+    let base = proposal
+        .reviewed_paths
+        .clone()
+        .ok_or(Error::StaleSnapshot)?;
     let prepared = views.prepared(&source, &proposal.candidate_metadata);
-    let receipt = crate::review::publication::commit_mcp(
+    let receipt = crate::review::files::write::write(
         context,
-        &before,
-        proposal.candidate.clone(),
-        proposal.candidate_metadata.clone(),
-        &id,
-        mechanism,
-        crate::review::publication::Prepared {
-            source: Some(&source),
+        crate::review::files::write::Edit {
+            before: &before,
+            candidate: proposal.candidate.clone(),
+            meta: proposal.candidate_metadata.clone(),
+            base,
             evaluator: prepared
                 .as_ref()
                 .map(|capture| capture.evaluator())
                 .transpose()?,
+            reviewed: Some(&proposal.files),
         },
+        Some(&id),
+        mechanism.mechanism(),
     )?;
     let mut result = json!({"proposal_id":id,"status":"applied","policy_revision":receipt["policy_revision"],"receipt":receipt,
         "operator":{"operator_id":null,"display_name":null,"mechanism":mechanism.mechanism()}});
@@ -98,7 +103,7 @@ fn validate_with_views(
         return Err(Error::ApprovalRequired);
     }
     let store = crate::review::storage::Store::open(std::path::Path::new(&context.project_root))?;
-    let mut before = store.read_checkpoint()?;
+    let mut before = store.read_following_files()?;
     before.check(context)?;
     before.check_operations()?;
     if before.candidates.len() != 1 || !before.candidates.contains_key("project") {
@@ -106,24 +111,10 @@ fn validate_with_views(
             "operator workflow requires project-only policy",
         ));
     }
-    // Activation needs current authority and the selected review, never optional
-    // history or every other proposal's source. Verify bytes before reusing a plan.
-    let current_identity =
-        crate::review::storage::sources::candidate_identity(&before.candidates["project"]);
-    let same_active = before
-        .active
-        .as_ref()
-        .is_some_and(|active| active.candidates == before.candidates);
+    // Applying needs the current policy and the selected review, never optional
+    // history or other proposals. Verify bytes before reusing a plan.
     let prepared =
         views.and_then(|views| views.prepared(&before.candidates["project"], &before.operator));
-    for candidate in before.candidates.values_mut() {
-        *candidate = store.captured_candidate(candidate)?;
-    }
-    if !same_active && let Some(active) = &mut before.active {
-        for candidate in active.candidates.values_mut() {
-            *candidate = store.captured_candidate(candidate)?;
-        }
-    }
     let owned;
     let evaluator = if let Some(capture) = &prepared {
         capture.evaluator()?
@@ -142,10 +133,6 @@ fn validate_with_views(
             "review revision differs from retained policy",
         ));
     }
-    // read_checkpoint validated activation authority before source expansion.
-    // Identical retained references share the source verification above. A distinct
-    // active snapshot must still validate its own source and evaluator revision.
-    validate_active(&before, same_active, evaluator.revision())?;
     // Selection reads only proposal IDs; the exact comparison below regenerates
     // the selected proposal alone and binds its candidate, changes and review.
     let mut matches = before
@@ -157,16 +144,12 @@ fn validate_with_views(
         return Err(Error::Invalid("approval identifies multiple proposals"));
     }
     let binding = argument_binding(context, proposal);
+    // A review an earlier release prepared stores no files; it is prepared again.
+    if proposal.files.is_empty() {
+        return Err(Error::StaleSnapshot);
+    }
+    store.hydrate_proposal(proposal)?;
     let source = proposal.candidate.clone();
-    proposal.candidate = store.captured_candidate(&proposal.candidate)?;
-    proposal.base_candidate =
-        if crate::review::storage::sources::candidate_identity(&proposal.base_candidate)
-            == current_identity
-        {
-            before.candidates["project"].clone()
-        } else {
-            store.captured_candidate(&proposal.base_candidate)?
-        };
     let cached = views.and_then(|views| views.approval(&binding));
     let regenerated;
     let expected = if let Some(arguments) = cached {
@@ -189,7 +172,6 @@ fn validate_with_views(
     crate::review::proposal_lifecycle::validate_capture(&context.project_root, proposal)?;
     crate::review::changes::historical::validate(&proposal.base_candidate, &proposal.candidate)?;
     let id = proposal.id.clone();
-    crate::review::publication::validate_proposal_base(&before, &id)?;
     Ok((before, id, source))
 }
 
@@ -199,7 +181,7 @@ fn validate_live(proposal: &Proposal, context: &Context, revision: &str) -> Resu
     }
     if proposal.status != "pending" {
         return Err(Error::Invalid(
-            "this review is closed; inspect policy_receipt for its outcome and prepare a fresh change with a new idempotency_key if still authorized",
+            "this review is closed; inspect it with policy_show and prepare a fresh change with a new idempotency_key if still authorized",
         ));
     }
     if proposal.policy_revision != revision {
@@ -213,21 +195,6 @@ fn validate_live(proposal: &Proposal, context: &Context, revision: &str) -> Resu
     Ok(())
 }
 
-fn validate_active(before: &State, same_active: bool, revision: &str) -> Result<(), Error> {
-    if let Some(active) = &before.active {
-        if same_active {
-            if active.revision() != revision {
-                return Err(Error::Invalid(
-                    "active revision differs from retained snapshot",
-                ));
-            }
-        } else {
-            active.validate(before)?;
-        }
-    }
-    Ok(())
-}
-
 /// Every input to adapter presentation, except mutable status/receipt fields.
 /// A cached rendering grants no authority: source integrity, current revision,
 /// proposal status, exact arguments and locked publication checks remain required.
@@ -236,8 +203,8 @@ pub(super) fn argument_binding(context: &Context, proposal: &Proposal) -> String
         json!([
             context.agent,
             proposal.id,
-            crate::review::storage::sources::candidate_identity(&proposal.base_candidate),
-            crate::review::storage::sources::candidate_identity(&proposal.candidate),
+            proposal.base_digest,
+            proposal.candidate_digest,
             proposal.base_metadata,
             proposal.candidate_metadata,
             proposal.comparison,
@@ -334,8 +301,7 @@ pub(super) fn present(context: &Context, data: &mut Value) -> Result<(), Error> 
         .iter_mut()
         .find(|p| data["proposal_id"] == p.id)
         .ok_or(Error::Missing)?;
-    proposal.candidate = store.captured_candidate(&proposal.candidate)?;
-    proposal.base_candidate = store.captured_candidate(&proposal.base_candidate)?;
+    store.hydrate_proposal(proposal)?;
     data["apply_arguments"] = arguments(adapter, proposal);
     Ok(())
 }

@@ -72,7 +72,7 @@ These integrations support Shield's MCP confirmation forms when the client can
 present them. When confirmation is unavailable, the agent must close the
 unapplied attempt and report the missing capability; it must not direct the user
 to a terminal to accept a saved proposal. Closed reviews are retained for outcome
-inspection, not later activation.
+inspection, not later approval.
 Gemini 0.67.0 does not advertise MCP forms. Antigravity CLI 1.5.1 advertises them
 but cancels them without an approval UI in both interactive and headless operation,
 including skip-permissions.

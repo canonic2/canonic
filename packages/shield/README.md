@@ -107,7 +107,8 @@ rules:
 In an initialized project, merge the rule and capabilities into the file selected
 by `.shield/config.yml`. For a new shared file, save the document above as
 `.shield/rules.yml` and set `rules: rules.yml` in the existing configuration.
-Run `shield policy review`, choose **manual**, and confirm to activate the edit.
+The next request follows the saved file; `shield status` reports an error if the
+edit made the files invalid. See [policy files and settings](docs/policy-files.md).
 `acme-check` is a fictional executable; substitute your own reviewed command.
 
 When nothing decides a request, the result is Ask. See [writing rules](docs/policy-rules.md)
@@ -169,6 +170,7 @@ the review shows this setting, and Deny still blocks. In a Box project,
 - [What is Shield?](docs/introduction.md)
 - [Your first project](docs/getting-started.md)
 - [Policy decisions](docs/policy-decisions.md)
+- [Policy files and settings](docs/policy-files.md)
 - [Policy, approvals and history](docs/project-review.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [All guides](docs/README.md)

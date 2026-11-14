@@ -21,6 +21,8 @@ For an existing project, choose a task below or go to
 
 ## Work with your project
 
+- [Policy files and settings](policy-files.md): what the `.shield/` files hold,
+  how changes take effect, and every setting key.
 - [Manage policy, approvals, and history](project-review.md): review changes,
   manage protected files, add access paths, and inspect requests.
 - [Approve a batch for one conversation](session-grants.md): reuse a bounded,
@@ -41,7 +43,7 @@ For an existing project, choose a task below or go to
 - [Configure project MCP servers](mcp-connections.md): bind connections and pack
   permissions, review host projections, and keep local stdio settings private.
 - [Troubleshoot Shield](troubleshooting.md): investigate unexpected decisions,
-  missing integrations, unapplied edits, and recovery errors.
+  missing integrations, invalid policy files, and recovery errors.
 
 ## Write and look up rules
 
@@ -70,9 +72,7 @@ For developers embedding Shield in a host application:
 
 ## Recovery and development details
 
-- [Active policy and repair](runtime-activation.md): understand when changes take
-  effect and recover interrupted policy-file updates.
-- [Compiled policy cache](compiled-cache.md): locate or prepare the disposable
-  cache used to load active policy.
+- [Compiled policy cache](compiled-cache.md): locate the disposable cache of
+  compiled policy files or choose another folder for it.
 - [Developing Shield](development.md): build the CLI, find source ownership,
   choose engineering checks, and collect diagnostics.

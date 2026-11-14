@@ -59,16 +59,11 @@ fn review_resources_redact_private_evidence_and_require_retained_identity() {
             "transport":{"type":"stdio","args":["acme-private-profile"]}}}}}]},"coverage":{"complete":false,"unknowns":["acme-unknown"]}});
         row.reasons["token"] = json!("acme-secret-token");
         row.receipt = json!({"token":"acme-secret-receipt"});
+        // Reports never rebuild the proposal's candidates: texts that could
+        // not be rebuilt leave them readable.
+        row.files.get_mut("config.yml").unwrap().after = Some("acme: [unreadable".into());
         Ok(Value::Null)
     }).unwrap();
-    let state = store.read_checkpoint().unwrap();
-    let selected = &state.proposals[0];
-    let source = selected.candidate["manifest_digest"].as_str().unwrap();
-    std::fs::remove_file(
-        root.path()
-            .join(format!(".shield/review/sources/{source}.manifest.json")),
-    )
-    .unwrap();
     let logs = assert_fs::TempDir::new().unwrap();
     let cli = crate::cli::Cli::parse_from([
         "shield",
@@ -95,7 +90,7 @@ fn review_resources_redact_private_evidence_and_require_retained_identity() {
         assert!(!evidence.to_string().contains("acme-secret"));
         assert_eq!(std::fs::read(&path).unwrap(), before);
         for counter in [
-            "source.hydrated",
+            "policy.captures",
             "policy.preparations",
             "history.captures",
             "objects.sweeps",

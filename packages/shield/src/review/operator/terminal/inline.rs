@@ -153,7 +153,12 @@ fn request(card: &Card) -> permission_review::Request {
         choice.detail = detail.into();
         choice
     };
-    let mut accept = choice("accept", "Accept", "activate this change now", Kind::Allow);
+    let mut accept = choice(
+        "accept",
+        "Accept",
+        "write this change to the policy files now",
+        Kind::Allow,
+    );
     accept.wider = true;
     accept.scope.clone_from(&card.summary);
     accept.prompt = "This changes the project's active policy right away:".into();

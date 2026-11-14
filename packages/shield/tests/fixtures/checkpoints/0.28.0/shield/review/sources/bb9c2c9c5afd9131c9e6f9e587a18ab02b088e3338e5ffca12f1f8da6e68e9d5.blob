@@ -1,0 +1,12 @@
+schema_version: 1
+kind: custom
+capabilities: [structured-rules-v1, argument-rules-v1]
+rules:
+- id: acme-read
+  decision: allow
+  reason: Acme read
+  conditions: {domain: argv, executable: acme, arguments: {kind: exact, values: [read]}}
+- id: acme-remove
+  decision: deny
+  reason: Acme destructive operation
+  conditions: {domain: argv, executable: acme, arguments: {kind: exact, values: [remove]}}

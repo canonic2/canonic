@@ -119,10 +119,7 @@ fn every_public_command_has_concise_human_output() {
     let root = TempDir::new().expect("project");
     let registry = super::super::operator::local_dependency_source();
     let source = registry.path().to_str().expect("registry path");
-    let mut steps = public_command_steps(source);
-    if cfg!(not(target_os = "macos")) {
-        steps.retain(|(name, _, _)| *name != "cache-prepare");
-    }
+    let steps = public_command_steps(source);
     let filters = filters(&[(root.path(), "[PROJECT]"), (registry.path(), "[REGISTRY]")]);
     for (name, args, answers) in steps {
         let text = screen(root.path(), &args, answers);
@@ -202,7 +199,6 @@ fn public_command_steps(source: &str) -> Vec<(&'static str, Vec<&str>, &'static 
         ),
         ("policy-review", vec!["policy", "review"], "\n"),
         ("policy-show", vec!["policy", "show"], ""),
-        ("policy-repair", vec!["policy", "review"], "repair\nyes\n"),
         (
             "policy-history",
             vec!["policy", "review"],
@@ -235,7 +231,6 @@ fn public_command_steps(source: &str) -> Vec<(&'static str, Vec<&str>, &'static 
             vec!["history", "show", "missing"],
             "",
         ),
-        ("cache-prepare", vec!["cache", "prepare"], ""),
         (
             "mcp-setup-claude",
             vec!["mcp", "setup", "--agent", "claude"],
@@ -277,11 +272,8 @@ fn approvals_and_history_have_concise_human_output() {
     root.child(".shield/rules.yml")
         .write_str(&json!({"schema_version":1,"rules":[rule],"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"]}).to_string())
         .expect("rules");
-    let init = screen(
-        root.path(),
-        &["init", "--no-setup", "--no-baseline"],
-        "yes\n",
-    );
+    // Existing policy files need no review: init asks nothing.
+    let init = screen(root.path(), &["init", "--no-setup", "--no-baseline"], "");
     assert!(init.contains("--- exit 0"), "{init}");
     let run = |args: &[&str]| {
         assert_cmd::cargo::cargo_bin_cmd!("shield")

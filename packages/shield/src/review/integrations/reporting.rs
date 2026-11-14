@@ -6,13 +6,13 @@ use std::{collections::BTreeMap, path::Path};
 pub(super) fn box_hooks(
     root: &Path,
     registered: Option<&Registration>,
-    metadata: &Value,
+    state: &State,
     diagnostics: &mut Vec<&'static str>,
 ) -> Vec<Value> {
     let Some(registration) = registered.filter(|r| r.box_definition.is_some()) else {
         return Vec::new();
     };
-    let previous_roots: Vec<_> = metadata["portable_launch_roots"]
+    let previous_roots: Vec<_> = state.operator["portable_launch_roots"]
         .as_array()
         .into_iter()
         .flatten()
@@ -46,7 +46,7 @@ pub(super) fn box_hooks(
                 };
             Some(
                 json!({"agent":agent,"surface":"native-hooks","managed_by":"box","status":status,
-                "ask_fallback":registration.ask_fallback.get(agent)}),
+                "ask_fallback":state.settings.ask_fallback.get(agent)}),
             )
         })
         .collect()

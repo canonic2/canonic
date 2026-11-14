@@ -30,9 +30,9 @@ pub(crate) mod read_text;
 pub enum AgentAccess {
     /// A supported ordinary request evaluated from the available host input.
     Ordinary,
-    /// Approval, grant issuance, activation, enrollment or disabling protection.
+    /// Approval, grant issuance, policy changes or disabling protection.
     Operator,
-    /// Direct mutation of retained policy, approvals, activation or their storage parents.
+    /// Direct mutation of the policy files, approvals, review state or their storage parents.
     AuthorizationStateWrite,
     /// An unsupported or ambiguous submitted operation.
     Unclassified,
@@ -45,7 +45,7 @@ pub enum Error {
     #[error(transparent)]
     Runtime(#[from] runtime::Error),
     /// Policy denied the actual request; one-time approval cannot override it.
-    #[error("active policy denied the request")]
+    #[error("policy denied the request")]
     Denied,
     /// This generic gate has no execution grant route; no callback was invoked.
     #[error("operator execution approval is required")]
@@ -61,7 +61,7 @@ pub enum Error {
 /// Handoff one owned request only when current policy allows ordinary access.
 ///
 /// Mandatory access restrictions run independently of policy, including an allow
-/// rule. For ordinary access the current enrollment and activation are revalidated
+/// rule. For ordinary access the project and its policy files are revalidated
 /// under the shared writer lock, then allow/ask/deny is handled before the callback.
 /// The callback receives the immutable original request/evaluation and runs while
 /// that lock is held. It must be short, must not acquire a review writer lock, and

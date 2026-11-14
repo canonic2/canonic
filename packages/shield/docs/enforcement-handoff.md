@@ -10,14 +10,14 @@ The embedded API installs neither integration.
 
 ## Integration contract
 
-Load the project's [active snapshot](runtime-activation.md), evaluate the request,
-and classify it with `enforcement::AgentAccess`:
+Load a snapshot of the project's [policy files](policy-files.md), evaluate the
+request, and classify it with `enforcement::AgentAccess`:
 
 | Access | Gate behavior |
 | --- | --- |
-| `Ordinary` | Revalidate current state; invoke the callback only for allow |
-| `Operator` | Block approval, grants, activation, enrollment and protection disabling |
-| `AuthorizationStateWrite` | Block direct mutation of retained policy/approval/active state or its storage parents |
+| `Ordinary` | Recheck that the policy files are unchanged; invoke the callback only for allow |
+| `Operator` | Block approval, grants, policy changes and protection disabling |
+| `AuthorizationStateWrite` | Block direct writes to the policy files, approval state or their storage parents |
 | `Unclassified` | Block unsupported or ambiguous requests |
 
 Allow rules cannot override protected or unclassified access. Ask returns
@@ -34,8 +34,9 @@ shell effects. Incorrect classification defeats its protection.
 
 The callback receives the original request/evaluation while the writer lock is
 held. Keep it short; do not wait for process completion or acquire another review
-writer lock. Same-policy reactivation, foreign enrollment or corrupt state prevents
-ordinary handoff. Snapshot checks do not prove executable or filesystem stability.
+writer lock. Changed policy files, another project's evidence or corrupt state
+prevents ordinary handoff; evaluate the request again. Snapshot checks do not
+prove executable or filesystem stability.
 
 The outer `Result` reports protection failures; the inner value is the callback's
 result. Panic unwinding releases the lock. A lock-release error can occur after

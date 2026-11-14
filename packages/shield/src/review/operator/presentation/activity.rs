@@ -58,7 +58,7 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
         output,
         "Policy: {} · revision {}",
         plural(packs, "pack", "packs"),
-        short(&value["active"]["policy_revision"])
+        short(&value["policy_files"]["digest"])
     );
     let history = &value["history"];
     let _ = writeln!(
@@ -195,17 +195,6 @@ fn diagnostics(value: &Value, connected: bool) -> String {
         );
     }
     output
-}
-
-/// `shield cache prepare`.
-pub(super) fn cache(value: &Value) -> String {
-    if value["prepared"] != true {
-        return super::fallback(value);
-    }
-    format!(
-        "Compiled policy is ready in {}.\n",
-        label(&value["cache_directory"])
-    )
 }
 
 /// What a request asks to do: a command it would run or a file it would read.
@@ -553,7 +542,7 @@ mod tests {
     #[test]
     fn status_leads_with_protection_and_names_missing_agents() {
         let text = status(
-            &json!({"project_root":"/srv/acme","active":{"policy_revision":"0123456789abcdef"},
+            &json!({"project_root":"/srv/acme","policy_files":{"digest":"0123456789abcdef"},
                 "installed_packs":{"packs":[{}]},"history":{"enabled":true,"limit":5000},"coverage":{"installed_integrations":[]}}),
             false,
         );

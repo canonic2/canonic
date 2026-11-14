@@ -115,13 +115,13 @@ fn registration(state: &State, agent: &str) -> Result<String, Error> {
     ))
 }
 
-fn protection(state: &State) -> Result<Value, Error> {
-    Ok(json!(super::path_access::load(&state.operator)?))
+fn protection(state: &State) -> Value {
+    json!(super::settings::path_access(&state.settings))
 }
 
 /// Shared authority is stable throughout one inspection/compaction pass.
 struct Authority {
-    protection: Option<Value>,
+    protection: Value,
     registrations: BTreeMap<String, String>,
     legacy_registration: Option<String>,
     compatibility: registration::Compatibility,
@@ -133,7 +133,7 @@ impl Authority {
             .flatten();
         let fingerprint = registration.as_ref().map(|r| hash(&json!(r)));
         Self {
-            protection: protection(state).ok(),
+            protection: protection(state),
             legacy_registration: fingerprint,
             compatibility: state.session_grants.compatibility.clone(),
             registrations: crate::agents::ADAPTERS
@@ -202,7 +202,7 @@ impl Record {
     /// A grant binds its approved scope and the protection choice, not a
     /// policy version: a change to the policy files does not revoke it.
     fn current_with(&self, authority: &Authority) -> bool {
-        authority.protection.as_ref() == Some(&self.protection) && authority.matches(self)
+        authority.protection == self.protection && authority.matches(self)
     }
     fn effective(&self, state: &State, now: u64) -> &'static str {
         self.effective_with(&Authority::capture(state), now)
@@ -506,7 +506,7 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
             // Earlier grants recorded the activation they were approved
             // under; it stays in their digest but no longer binds them.
             activation: Value::Null,
-            protection: protection(state)?,
+            protection: protection(state),
             provenance: context.provenance(),
             digest: String::new(),
             status: "pending".into(),

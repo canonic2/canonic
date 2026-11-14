@@ -1,21 +1,9 @@
 //! One bounded atomic project-state owner; locks are never stolen from writers.
-mod administration;
 pub(in crate::review) mod authority;
-pub(in crate::review) mod bootstrap;
-mod incarnation;
 mod locking;
-mod portability;
-pub(in crate::review) use portability::consent::{
-    PreparedConsent, presence as policy_consent_presence,
-};
-pub(in crate::review) fn stamp_policy_consent(
-    metadata: &mut Value,
-    prepared: Option<&PreparedConsent>,
-) {
-    portability::consent::stamp(metadata, prepared);
-}
 pub(in crate::review) mod private_files;
 pub(in crate::review) mod registry_trust;
+pub(crate) mod retired;
 mod upgrades;
 use super::{Checkpoint, Context, Error, model::State};
 use locking::Lock;
@@ -30,6 +18,7 @@ use std::{
 };
 #[cfg(test)]
 use std::{thread, time::Duration};
+pub(in crate::review) use upgrades::report::recent as recent_upgrade;
 const MAX_STATE: usize = 16 * 1024 * 1024;
 type ComparisonCapture = (
     State,
@@ -72,12 +61,43 @@ impl Writer<'_> {
         self.lock.take().expect("owned writer").release()
     }
 }
+/// Operator fields only earlier identity-bound formats wrote; dropped on load.
+const LEGACY_FIELDS: &[&str] = &[
+    "runtime_incarnation",
+    "administration_origin",
+    "portable_admin_unverified",
+    "portable_lineage_unverified",
+    "policy_consent",
+    "policy_consent_key",
+    "policy_consent_version",
+    "portable_policy",
+    "policy_lineage",
+    "policy_reuse",
+];
+
+/// A loaded checkpoint as this release keeps it: without the folder identity
+/// and consent records earlier formats wrote, and with only this folder's
+/// grants. Nothing here grants anything; the policy files are the policy.
+fn admit(mut state: State) -> State {
+    state.recorded_root = None;
+    let expired = state.operator.get("upgrade_notice").is_some()
+        && upgrades::report::recent(&state.operator).is_none();
+    if let Some(fields) = state.operator.as_object_mut() {
+        for field in LEGACY_FIELDS {
+            fields.remove(*field);
+        }
+        // The conversion notice is shown for a while, then dropped.
+        if expired {
+            fields.remove("upgrade_notice");
+        }
+    }
+    super::read_approval::retain_local(&mut state);
+    super::run_approval::retain_local(&mut state);
+    state
+}
+
 struct Temporary {
     path: PathBuf,
-}
-enum InitialActivation<'a> {
-    Operator,
-    Reused(&'a crate::configuration::Evaluator),
 }
 impl Drop for Temporary {
     fn drop(&mut self) {
@@ -124,10 +144,18 @@ impl Store {
             writer_owned: Mutex::new(None),
         })
     }
+    /// Open this folder's runtime state. A folder whose policy files arrived
+    /// by clone, worktree or copy gets empty runtime state on first use: the
+    /// files are its policy, so no enrollment step stands in between.
     pub(crate) fn open(project: &Path) -> Result<Self, Error> {
         let store = Self::location(project)?;
         if !store.checkpoint_present()? {
-            portability::restore(&store)?;
+            if Path::new(&store.root).join(".shield/config.yml").is_file() {
+                match Self::initialize_runtime(project) {
+                    Ok(_) | Err(Error::Invalid("review project already enrolled")) => {}
+                    Err(error) => return Err(error),
+                }
+            }
             if !store.directory.is_dir() {
                 return Err(Error::Missing);
             }
@@ -161,7 +189,7 @@ impl Store {
             candidates,
             revision,
             operator,
-            None,
+            false,
             BTreeMap::default(),
         )?;
         Self::follow_fixture_files(project, written)?;
@@ -228,7 +256,7 @@ impl Store {
             candidates,
             revision,
             operator,
-            Some(InitialActivation::Operator),
+            true,
             BTreeMap::default(),
         )?;
         Self::follow_fixture_files(project, written)?;
@@ -255,25 +283,87 @@ impl Store {
         operator: Value,
         checkpoints: BTreeMap<String, Value>,
     ) -> Result<Value, Error> {
-        Self::initialize_with(
+        Self::initialize_with(project, candidates, revision, operator, true, checkpoints)
+    }
+
+    /// Empty runtime state for a folder whose policy files arrived without
+    /// it. Files that cannot be read are still the folder's policy: requests
+    /// ask with the problem, so the state starts from an empty candidate.
+    fn initialize_runtime(project: &Path) -> Result<Value, Error> {
+        let config = project.join(".shield/config.yml");
+        let candidate = match super::integrations::project_sources::capture(&config) {
+            Ok(bundle) => json!(bundle),
+            Err(_) => json!(crate::configuration::Bundle::capture(
+                r#"{"schema_version":1,"packs":[]}"#,
+                &[],
+                None
+            )?),
+        };
+        let merged = crate::configuration::layers::merged(&candidate)?;
+        let mut operator = json!({"sources":{},"default":null,"projection":null,
+            "installed":super::integrations::project_sources::installed(&merged, &candidate)?});
+        let disabled = super::integrations::project_sources::disabled(&merged, &candidate)?;
+        if !disabled.is_empty() {
+            operator["disabled"] = json!(disabled);
+        }
+        let candidates = BTreeMap::from([("project".into(), candidate)]);
+        let revision =
+            crate::configuration::Evaluator::revision_of(&super::snapshots(&candidates)?)?;
+        let result = Self::initialize_with(
             project,
             candidates,
-            revision,
+            &revision,
             operator,
-            Some(InitialActivation::Operator),
-            checkpoints,
-        )
+            false,
+            BTreeMap::default(),
+        )?;
+        // Follow the files as they are, as every later write does, so the
+        // first change starts from the files' own revision.
+        let store = Self::location(project)?;
+        let lock = store.lock(&|| Ok(()))?;
+        let mut state = store.read_checkpoint()?;
+        let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
+        if super::files::sync(&context, &mut state).unwrap_or(false) {
+            store.write(&mut state)?;
+        }
+        lock.release()?;
+        Ok(result)
     }
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one initializer retains registry and source pins across the exact authority commit and postcommit consent handoff"
-    )]
+
+    /// Keep the review folder out of version control with its own
+    /// `.gitignore`. An existing one must already exclude everything and be a
+    /// regular file.
+    fn ignore_review_folder(&self) -> Result<(), Error> {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        private(&mut options);
+        let ignore_path = self.directory.join(".gitignore");
+        match options.open(&ignore_path) {
+            Ok(mut ignore) => ignore.write_all(b"*\n")?,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let metadata = fs::symlink_metadata(&ignore_path)?;
+                if !metadata.is_file() || metadata.file_type().is_symlink() {
+                    return Err(Error::Invalid("review ignore file cannot be a link"));
+                }
+                if fs::read_to_string(&ignore_path)?.trim() != "*" {
+                    return Err(Error::Invalid(
+                        "review ignore file must exclude local state",
+                    ));
+                }
+            }
+            Err(error) => return Err(error.into()),
+        }
+        Ok(())
+    }
+
+    /// Write a folder's first runtime state. `verify_registries` refuses
+    /// policy naming a revoked pack, as a person's enrollment does.
     fn initialize_with(
         project: &Path,
         candidates: BTreeMap<String, Value>,
         revision: &str,
         mut operator: Value,
-        activation: Option<InitialActivation<'_>>,
+        verify_registries: bool,
         registry_checkpoints: BTreeMap<String, Value>,
     ) -> Result<Value, Error> {
         let store = Self::location(project)?;
@@ -300,12 +390,12 @@ impl Store {
             )?
             .as_bytes(),
         );
-        if operator.get("policy_lineage").is_none() {
-            operator["policy_lineage"] = json!(project_id);
+        if let Some(fields) = operator.as_object_mut() {
+            fields.remove("policy_lineage");
         }
         let mut state = State {
-            legacy_preview: None,
-            remember_policy: false,
+            unconverted: false,
+            earlier_format: false,
             followed_files: None,
             history_generation: history::generation()?,
             history_owner: None,
@@ -322,8 +412,11 @@ impl Store {
             sequence: 0,
             policy_revision: revision.into(),
             candidates,
+            retired_policy_revision: None,
+            retired_candidates: None,
+            retired_followed_files: None,
             registry_checkpoints,
-            active: None,
+            retired_active: None,
             read_requests: vec![],
             run_requests: vec![],
             session_grants: super::session_grants::Registry::default(),
@@ -333,119 +426,37 @@ impl Store {
             policy_drafts: vec![],
             dismissed_reviews: vec![],
             events: vec![],
-            configuration_changes: super::configuration_changes::Log::default(),
-            configuration_changes_dirty: false,
+            retired_configuration_changes: None,
             authorization_events: vec![],
-            history_enabled: true,
-            enforcement: super::mode::Mode::default(),
-            history_limit: if activation.is_some() { 5000 } else { 500 },
+            settings: super::settings::current(
+                Path::new(&store.root),
+                &super::settings::Legacy::default(),
+            ),
+            history_previous_limit: None,
+            legacy_history_enabled: None,
+            legacy_history_limit: None,
+            legacy_enforcement: None,
+            legacy_settings: super::settings::Legacy::default(),
         };
         let mut _registry_guard = None;
-        if let Some(activation) = activation {
-            let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
-            let owned_effective;
-            let effective = match &activation {
-                InitialActivation::Reused(evaluator) => evaluator.effective(),
-                InitialActivation::Operator => {
-                    owned_effective = crate::configuration::recorded_effective(
-                        &state.candidates["project"],
-                        &state.policy_revision,
-                    )?;
-                    &owned_effective
-                }
-            };
-            match super::registry_trust::guard_effective(&state.operator, effective) {
-                Err(error) => {
-                    if matches!(activation, InitialActivation::Reused(_)) {
-                        super::registry_trust::record_inactive_reuse(&mut state, &context, &error);
-                    } else {
-                        return Err(error);
-                    }
-                }
-                Ok(guard) => {
-                    guard.bind_modes(&mut state.operator)?;
-                    _registry_guard = Some(guard);
-                    let (compiled, mechanism) = match activation {
-                        InitialActivation::Operator => {
-                            (super::cache::build(&state, None)?, "operator-cli")
-                        }
-                        InitialActivation::Reused(evaluator) => {
-                            let compiled = match super::cache::build_candidate(
-                                &context,
-                                &state.candidates,
-                                &state.policy_revision,
-                                &state.operator,
-                                evaluator,
-                            ) {
-                                Ok(compiled) => compiled,
-                                Err(Error::Io(_) | Error::CacheUnavailable) => {
-                                    super::cache::describe_candidate(
-                                        &context,
-                                        &state.candidates,
-                                        &state.policy_revision,
-                                        &state.operator,
-                                        evaluator,
-                                    )?
-                                }
-                                Err(error) => return Err(error),
-                            };
-                            (compiled, "reviewed-policy-reuse")
-                        }
-                    };
-                    super::runtime::publish_confirmed(
-                        &mut state, &context, None, compiled, mechanism,
-                    );
-                }
-            }
+        if verify_registries {
+            let effective = crate::configuration::recorded_effective(
+                &state.candidates["project"],
+                &state.policy_revision,
+            )?;
+            let guard = super::registry_trust::guard_effective(&state.operator, &effective)?;
+            guard.bind_modes(&mut state.operator)?;
+            _registry_guard = Some(guard);
         }
-        // Durable source and optional reusable-consent bodies are prepared
-        // before authority; the writer publishes only compact references.
-        let (retained, _source_pins) = store.retain_candidates(&state.candidates)?;
-        state.candidates = retained;
-        if let Some(active) = &mut state.active {
-            active.candidates = state.candidates.clone();
-        }
-        let prepared_consent = state
-            .active
-            .as_ref()
-            .and_then(|active| active.project_candidate().ok())
-            .and_then(|reference| store.prepare_policy_consent(reference));
-        stamp_policy_consent(&mut state.operator, prepared_consent.as_ref());
         let lock = store.lock(&|| Ok(()))?;
         if store.checkpoint_present()? {
             return Err(Error::Invalid("review project already enrolled"));
         }
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        private(&mut options);
-        let ignore_path = store.directory.join(".gitignore");
-        match options.open(&ignore_path) {
-            Ok(mut ignore) => ignore.write_all(b"*\n")?,
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let metadata = fs::symlink_metadata(&ignore_path)?;
-                if !metadata.is_file() || metadata.file_type().is_symlink() {
-                    return Err(Error::Invalid("review ignore file cannot be a link"));
-                }
-                if fs::read_to_string(&ignore_path)?.trim() != "*" {
-                    return Err(Error::Invalid(
-                        "review ignore file must exclude local state",
-                    ));
-                }
-            }
-            Err(error) => return Err(error.into()),
-        }
+        store.ignore_review_folder()?;
         store.write(&mut state)?;
         lock.release()?;
-        super::configuration_changes::export(&mut state);
-        let consent_recorded = store.finish_policy_consent(
-            prepared_consent,
-            state
-                .active
-                .as_ref()
-                .map(super::runtime::Active::activation_id),
-        );
         Ok(
-            json!({"schema_version":1,"project_id":project_id,"policy_revision":revision,"mode":"local-review","enforcement":"not-installed","policy_reuse_recorded":consent_recorded}),
+            json!({"schema_version":1,"project_id":project_id,"policy_revision":revision,"mode":"local-review","enforcement":"not-installed"}),
         )
     }
     #[cfg(test)]
@@ -468,12 +479,8 @@ impl Store {
 
     /// A proposal compares the same validated source it used to prepare the
     /// base plan. Retain that capture instead of parsing every pack twice.
-    pub(in crate::review) fn read_for_comparison(
-        &self,
-        state: State,
-    ) -> Result<ComparisonCapture, Error> {
+    pub(in crate::review) fn read_for_comparison(state: State) -> Result<ComparisonCapture, Error> {
         let _trace = crate::diagnostics::trace::span("proposal.capture_base");
-        let state = self.hydrate_current(state)?;
         let snapshots = super::snapshots(&state.candidates)?;
         let evaluator = match Self::cached_evaluator(&state) {
             Some(evaluator) => evaluator,
@@ -486,10 +493,10 @@ impl Store {
         Ok((state, evaluator, snapshots))
     }
 
-    /// The current policy, following the policy files. Proposals remain
-    /// references and optional history stays with history readers.
+    /// The current policy, following the policy files. Optional history stays
+    /// with history readers.
     pub(in crate::review) fn read_current(&self) -> Result<State, Error> {
-        self.hydrate_current(self.read_following_files()?)
+        self.read_following_files()
     }
 
     /// Read the checkpoint with its copy of the policy brought up to the policy
@@ -502,23 +509,12 @@ impl Store {
         Ok(state)
     }
 
-    fn hydrate_current(&self, mut state: State) -> Result<State, Error> {
-        let same = state
-            .active
-            .as_ref()
-            .is_some_and(|active| active.candidates == state.candidates);
-        for candidate in state.candidates.values_mut() {
-            *candidate = self.captured_candidate(candidate)?;
-        }
-        if let Some(active) = &mut state.active {
-            if same {
-                active.candidates = state.candidates.clone();
-            } else {
-                for candidate in active.candidates.values_mut() {
-                    *candidate = self.captured_candidate(candidate)?;
-                }
-            }
-        }
+    /// [`Self::read_following_files`] for inspection: the diagnostic checkpoint,
+    /// never converted or written, brought up to the policy files in memory.
+    pub(in crate::review) fn read_inspection_following_files(&self) -> Result<State, Error> {
+        let (mut state, _) = self.read_diagnostic_checkpoint()?;
+        let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
+        super::files::sync(&context, &mut state)?;
         Ok(state)
     }
 
@@ -541,42 +537,37 @@ impl Store {
     pub(in crate::review) fn cached_evaluator(
         state: &State,
     ) -> Option<crate::configuration::Evaluator> {
-        let evaluator = state
-            .active
-            .as_ref()
-            .filter(|active| {
-                active.candidates == state.candidates
-                    || sources::map_digest(&active.candidates)
-                        == sources::map_digest(&state.candidates)
-            })
-            .and_then(|active| {
-                active
-                    .compiled
-                    .load(&state.project_root, &state.project_id)
-                    .ok()
-            })
-            // The plan compiled for the policy files, when it holds this revision.
-            .or_else(|| {
-                super::files::cached(Path::new(&state.project_root))
-                    .filter(|evaluator| evaluator.revision() == state.policy_revision)
-            });
-        crate::diagnostics::trace::count(
-            if evaluator.is_some() {
-                "policy.plan_hits"
-            } else {
-                "policy.plan_misses"
-            },
-            1,
-        );
-        evaluator
+        // The policy files' plan, when it holds this revision. Loading
+        // compiles and saves it on a miss, so later requests reuse it.
+        super::files::load(Path::new(&state.project_root))
+            .ok()
+            .map(|policy| policy.evaluator)
+            .filter(|evaluator| evaluator.revision() == state.policy_revision)
     }
 
+    /// Rebuild a proposal's candidates from the file texts it stores, bound to
+    /// the digests it recorded. One an earlier release prepared stores no
+    /// texts and cannot be applied.
     pub(in crate::review) fn hydrate_proposal(
         &self,
         proposal: &mut super::model::Proposal,
     ) -> Result<(), Error> {
-        proposal.candidate = self.captured_candidate(&proposal.candidate)?;
-        proposal.base_candidate = self.captured_candidate(&proposal.base_candidate)?;
+        if !proposal.candidate.is_null() {
+            return Ok(());
+        }
+        if proposal.files.is_empty() {
+            return Err(Error::CandidateUnavailable);
+        }
+        let root = Path::new(&self.root);
+        let candidate = super::files::write::bundle(root, &proposal.files, true)?;
+        let base = super::files::write::bundle(root, &proposal.files, false)?;
+        if super::candidate_identity(&candidate) != proposal.candidate_digest
+            || super::candidate_identity(&base) != proposal.base_digest
+        {
+            return Err(Error::Invalid("proposal files differ from their review"));
+        }
+        proposal.candidate = candidate;
+        proposal.base_candidate = base;
         Ok(())
     }
 
@@ -599,84 +590,11 @@ impl Store {
     #[cfg(test)]
     pub(in crate::review) fn read_unprepared(&self) -> Result<State, Error> {
         let _trace = crate::diagnostics::trace::span("state.hydrate_all");
-        let state = self.read_history()?;
-        let mut value =
-            serde_json::to_value(state).map_err(|_| Error::Invalid("state encoding"))?;
-        sources::checkpoint(self, &mut value, true)?;
-        let mut state: State = serde_json::from_value(value)
-            .map_err(|_| Error::Invalid("source checkpoint decoding"))?;
-        state.project_root.clone_from(&self.root);
+        let mut state = self.read_history()?;
+        let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
+        super::files::sync(&context, &mut state)?;
         Ok(state)
     }
-    pub(in crate::review) fn captured_candidate(&self, reference: &Value) -> Result<Value, Error> {
-        let mut value = reference.clone();
-        sources::hydrate(self, &mut value)?;
-        Ok(value)
-    }
-    /// Capture pins before exposing a lazy source handle. If an activation won
-    /// the read/pin race, retry current authority before assigning any handle ID.
-    pub(in crate::review) fn read_pinned_checkpoint(
-        &self,
-    ) -> Result<(State, objects::Pins), Error> {
-        self.pinned_checkpoint(false)
-    }
-    pub(in crate::review) fn read_pinned_diagnostics(
-        &self,
-    ) -> Result<(State, objects::Pins), Error> {
-        self.pinned_checkpoint(true)
-    }
-    fn pinned_checkpoint(&self, readonly: bool) -> Result<(State, objects::Pins), Error> {
-        for attempt in 0..2 {
-            let state = if readonly {
-                let (state, pending) = self.read_diagnostic_checkpoint()?;
-                if pending {
-                    return Err(Error::CandidateUnavailable);
-                }
-                state
-            } else {
-                self.read_checkpoint()?
-            };
-            let candidate = state
-                .active
-                .as_ref()
-                .ok_or(Error::CandidateUnavailable)?
-                .project_candidate()?;
-            let pins = if readonly {
-                sources::pin_inspection(self, candidate)
-            } else {
-                sources::pin(self, candidate)
-            };
-            match pins {
-                Ok(pins) => return Ok((state, pins)),
-                Err(_) if attempt == 0 => {}
-                Err(error) => return Err(error),
-            }
-        }
-        Err(Error::CandidateUnavailable)
-    }
-    pub(in crate::review) fn retain_candidates(
-        &self,
-        candidates: &BTreeMap<String, Value>,
-    ) -> Result<(BTreeMap<String, Value>, objects::Pins), Error> {
-        sources::Namespace::project(self).retain_map(candidates)
-    }
-    pub(in crate::review) fn prepare_policy_consent(
-        &self,
-        reference: &Value,
-    ) -> Option<PreparedConsent> {
-        portability::consent::prepare(self, reference)
-    }
-    pub(in crate::review) fn refresh_policy_consent(&self) -> bool {
-        portability::consent::refresh(self)
-    }
-    pub(in crate::review) fn finish_policy_consent(
-        &self,
-        prepared: Option<PreparedConsent>,
-        activation: Option<&str>,
-    ) -> bool {
-        portability::consent::finish(self, prepared, activation)
-    }
-
     /// Read-only diagnostic snapshot including optional history health.
     #[cfg(test)]
     pub(in crate::review) fn read_diagnostics(&self) -> Result<(State, bool), Error> {
@@ -705,13 +623,16 @@ impl Store {
         let _trace = crate::diagnostics::trace::span("state.checkpoint");
         crate::diagnostics::trace::count("state.checkpoint_reads", 1);
         let bytes = self.checkpoint_bytes()?;
+        // An earlier format converts in memory only; nothing is written.
         let (state, pending) = match self.decode(&bytes) {
-            Ok(state) => (state, false),
+            Ok(state) => {
+                let pending = self.convertible(&state);
+                (state, pending)
+            }
             Err(_) => (upgrades::inspect(self, &bytes)?, true),
         };
-        // Admitted in memory only; a legacy checkpoint converts on its next
-        // runtime read, never through diagnostics.
-        let mut state = portability::admit(self, state, false)?;
+        let mut state = admit(state);
+        super::settings::load(Path::new(&self.root), &mut state);
         Self::validate_checkpoint(&state)?;
         super::proposal_lifecycle::refresh_inspection(&mut state);
         Ok((state, pending))
@@ -722,23 +643,45 @@ impl Store {
     fn decode(&self, bytes: &[u8]) -> Result<State, Error> {
         let mut state = upgrades::checkpoint(bytes)?;
         state.project_root.clone_from(&self.root);
+        state.earlier_format = state.recorded_root.is_some()
+            || state.retired_active.is_some()
+            || state.retired_candidates.is_some()
+            || state.retired_policy_revision.is_some()
+            || state.retired_followed_files.is_some()
+            || state.retired_configuration_changes.is_some()
+            || state
+                .operator
+                .as_object()
+                .is_some_and(|fields| LEGACY_FIELDS.iter().any(|key| fields.contains_key(*key)));
         Ok(state)
+    }
+
+    /// Whether a decoded checkpoint is in a format an earlier release wrote and
+    /// the one conversion can rewrite now. Settings it holds move only into
+    /// policy files; without them they stay and keep applying.
+    fn convertible(&self, state: &State) -> bool {
+        state.earlier_format
+            || (super::settings::held(state)
+                && Path::new(&self.root).join(".shield/config.yml").is_file())
     }
 
     // Current enrollment, authorization and source identities, without preparing policy.
     pub(in crate::review) fn read_checkpoint(&self) -> Result<State, Error> {
+        self.read_settled_checkpoint()
+    }
+
+    fn read_settled_checkpoint(&self) -> Result<State, Error> {
         let _trace = crate::diagnostics::trace::span("state.checkpoint");
         crate::diagnostics::trace::count("state.checkpoint_reads", 1);
         let bytes = self.checkpoint_bytes()?;
+        // Every earlier format, current-family or historical, takes the one
+        // conversion; a checkpoint written by this release decodes as it is.
         let state = match self.decode(&bytes) {
-            Ok(state) => state,
-            Err(_) => upgrades::convert(self, &bytes)?,
+            Ok(state) if !self.convertible(&state) => state,
+            _ => upgrades::convert(self, &bytes)?,
         };
-        let mut state = if portability::legacy(&state) {
-            portability::convert(self)?
-        } else {
-            portability::admit(self, state, false)?
-        };
+        let mut state = admit(state);
+        super::settings::load(Path::new(&self.root), &mut state);
         Self::validate_checkpoint(&state)?;
         super::proposal_lifecycle::refresh_inspection(&mut state);
         Ok(state)
@@ -778,9 +721,6 @@ impl Store {
             state.project_root.clone(),
             "cli",
         ))?;
-        if let Some(active) = &state.active {
-            active.validate_binding(state)?;
-        }
         super::read_approval::validate(state)?;
         super::run_approval::validate(state)?;
         super::hook_approval::validate(state)?;
@@ -808,7 +748,7 @@ impl Store {
     ) -> Result<Value, Error> {
         let (mut state, _guard) = self.observation_checkpoint(true)?;
         state.check(context)?;
-        if !state.history_enabled {
+        if !state.settings.history_enabled {
             return Ok(json!({"status":"disabled","request_id":null,"event_id":null}));
         }
         let result = operation(&mut state)?;
@@ -821,6 +761,9 @@ impl Store {
     /// Capture optional observations under their own lock. Legacy conversion
     /// needs authority -> history ordering, so release history before converting.
     fn observation_checkpoint(&self, optional: bool) -> Result<(State, fs::File), Error> {
+        // One conversion attempt: a conversion that cannot write leaves the
+        // earlier checkpoint readable in memory.
+        let mut converted = false;
         loop {
             let guard = if optional {
                 history::lock_optional(self)?
@@ -831,12 +774,14 @@ impl Store {
             crate::diagnostics::trace::count("state.checkpoint_reads", 1);
             let bytes = self.checkpoint_bytes()?;
             if let Ok(state) = self.decode(&bytes) {
-                if portability::legacy(&state) {
+                if !converted && self.convertible(&state) {
+                    converted = true;
                     drop(guard);
                     self.read_checkpoint()?;
                     continue;
                 }
-                let mut state = portability::admit(self, state, false)?;
+                let mut state = admit(state);
+                super::settings::load(Path::new(&self.root), &mut state);
                 Self::validate_checkpoint(&state)?;
                 super::proposal_lifecycle::refresh_inspection(&mut state);
                 return Ok((state, guard));
@@ -920,7 +865,6 @@ impl Store {
             self.write(&mut state)?;
         }
         lock.release()?;
-        super::configuration_changes::export(&mut state);
         Ok(())
     }
     fn update_inner(
@@ -950,7 +894,6 @@ impl Store {
         super::proposal_lifecycle::refresh_inspection(&mut state);
         self.write(&mut state)?;
         lock.release()?;
-        super::configuration_changes::export(&mut state);
         self.ignore_local_state();
         Ok(result)
     }
@@ -1002,38 +945,13 @@ impl Store {
             Ok(_) => {}
         }
     }
-    #[cfg(test)]
-    pub(crate) fn inspect_locked<T>(
-        &self,
-        context: &Context,
-        checkpoint: Checkpoint<'_>,
-        operation: impl FnOnce(&State) -> Result<T, Error>,
-    ) -> Result<T, Error> {
-        self.inspect_inner(context, checkpoint, operation, true)
-    }
     pub(in crate::review) fn inspect_checkpoint<T>(
         &self,
         context: &Context,
         checkpoint: Checkpoint<'_>,
         operation: impl FnOnce(&State) -> Result<T, Error>,
     ) -> Result<T, Error> {
-        self.inspect_inner(context, checkpoint, operation, false)
-    }
-    fn inspect_inner<T>(
-        &self,
-        context: &Context,
-        checkpoint: Checkpoint<'_>,
-        operation: impl FnOnce(&State) -> Result<T, Error>,
-        full: bool,
-    ) -> Result<T, Error> {
-        let (lock, state) = self.locked_state(
-            checkpoint,
-            if full {
-                |store| store.read_current_evaluated().map(|(state, _)| state)
-            } else {
-                Self::read_checkpoint
-            },
-        )?;
+        let (lock, state) = self.locked_state(checkpoint, Self::read_checkpoint)?;
         state.check(context)?;
         checkpoint()?;
         let result = operation(&state)?;
@@ -1061,16 +979,10 @@ impl Store {
     }
     fn write(&self, state: &mut State) -> Result<(), Error> {
         let _trace = crate::diagnostics::trace::span("state.write");
-        // This user's consent precedes the checkpoint that asserts it.
-        authority::record(state)?;
-        if state.remember_policy {
-            state.operator["portable_policy"] = json!(
-                state
-                    .active
-                    .as_ref()
-                    .map(super::runtime::Active::activation_id)
-            );
-            state.operator["policy_consent_version"] = json!(2);
+        // Settings an earlier checkpoint held move into the policy files with
+        // the first write that can; until then the checkpoint keeps them.
+        if super::settings::pending(state) {
+            let _ = super::settings::convert(state);
         }
         let history_lock = if state.history_control {
             history::lock_control(self)
@@ -1096,7 +1008,7 @@ impl Store {
         if upgrade_receipts > 1 || state.authorization_events.len() > 1024 + upgrade_receipts {
             return Err(crate::policy::Error::Limit.into());
         }
-        let (bytes, _source_pins) = history::encode(self, state, history_guard.is_some())?;
+        let bytes = history::encode(self, state, history_guard.is_some())?;
         if bytes.len() > MAX_STATE {
             return Err(crate::policy::Error::Limit.into());
         }
@@ -1135,7 +1047,7 @@ impl Store {
         // Optional evidence cannot roll back an already durable authority
         // transition. Without pending observations nothing was lost, so a busy
         // history lock is not a failure.
-        let pending = state.history_enabled && !state.pending_history.is_empty();
+        let pending = state.settings.history_enabled && !state.pending_history.is_empty();
         if pending && (history_guard.is_none() || history::publish(self, state).is_err()) {
             history::mark_failure(self, state);
         }
@@ -1150,7 +1062,6 @@ impl Store {
 
 pub(in crate::review) mod history;
 pub(in crate::review) mod objects;
-pub(in crate::review) mod sources;
 const LOCAL_STATE_IGNORE: &[u8] =
     b"review/\ncache/\nconfig.local.yml\nrules.local.yml\nshield.local.lock\n";
 

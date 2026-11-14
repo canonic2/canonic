@@ -53,13 +53,21 @@ fn pack_candidates_preserve_current_alias_source_and_installed_identity() {
         canonic_registry_kit::source::Source::local(&registry.path().canonicalize().unwrap())
             .unwrap();
     let root = Path::new(&context.project_root);
+    // The registry is a policy file setting; writing it lets the state follow
+    // the files, so the installed row below is set afterwards.
     Store::open(root).unwrap().update(&context, &|| Ok(()), |state| {
         state.operator["sources"]["acme"] = json!(source);
         state.registry_checkpoints.insert(source.identity().into(), json!({"sequence":1,"digest":"0".repeat(64),"releases":{},"commands":{"npm":["acme/runtime"],"node":["acme/runtime"],"acme-db":["acme/database"]}}));
-        // Same pack ID from another registry must not hide this candidate.
-        state.operator["installed"] = json!([{"id":"acme/runtime","source_identity":"main"}]);
         Ok(Value::Null)
     }).unwrap();
+    Store::open(root)
+        .unwrap()
+        .update(&context, &|| Ok(()), |state| {
+            // Same pack ID from another registry must not hide this candidate.
+            state.operator["installed"] = json!([{"id":"acme/runtime","source_identity":"main"}]);
+            Ok(Value::Null)
+        })
+        .unwrap();
     assert_eq!(
         uninstalled_packs(root, "/usr/local/bin/npm"),
         ["acme/acme/runtime"]
@@ -70,21 +78,16 @@ fn pack_candidates_preserve_current_alias_source_and_installed_identity() {
     Store::open(root)
         .unwrap()
         .update(&context, &|| Ok(()), |state| {
-            state.operator["installed"][0]["source_identity"] = json!(source.identity());
+            // Every write follows the files first, so the row is set whole.
+            state.operator["installed"] =
+                json!([{"id":"acme/runtime","source_identity":source.identity()}]);
             Ok(Value::Null)
         })
         .unwrap();
     assert_eq!(uninstalled_packs(root, "npm"), Vec::<String>::new());
-    Store::open(root)
-        .unwrap()
-        .update(&context, &|| Ok(()), |state| {
-            state.operator["sources"]
-                .as_object_mut()
-                .unwrap()
-                .remove("acme");
-            Ok(Value::Null)
-        })
-        .unwrap();
+    crate::review::settings::registries_fixture(&context, |registries| {
+        registries.sources.remove("acme");
+    });
     assert_eq!(uninstalled_packs(root, "acme-db"), Vec::<String>::new());
 }
 

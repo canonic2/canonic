@@ -6,7 +6,10 @@ use std::{
     io::{Read, Write},
 };
 
+#[cfg(test)]
+mod fixtures;
 mod proposals;
+pub(super) mod report;
 #[cfg(test)]
 mod retention_tests;
 #[cfg(test)]
@@ -139,6 +142,23 @@ fn historical(bytes: &[u8]) -> Result<(Value, State), Error> {
     Ok((raw, state))
 }
 
+/// The one conversion of a checkpoint an earlier release wrote, of any shipped
+/// format, into this release's runtime-only state. It runs once, under the
+/// writer, on the first runtime access through the CLI, MCP or a hook:
+///
+/// 1. Recognize the format and check the checkpoint's identity and records.
+/// 2. Keep a private recovery copy of the original bytes.
+/// 3. Move settings the checkpoint held into `config.local.yml`.
+/// 4. Drop the policy copy, activation, consent, folder identity and change
+///    log records, keeping history, requests, grants, registrations and
+///    registry checkpoints.
+/// 5. Record the conversion once, naming packs and rules that differ between
+///    the copy the checkpoint approved and the policy files.
+/// 6. Write and validate the complete state, then replace the checkpoint.
+///
+/// An interrupted conversion leaves the original checkpoint authoritative; the
+/// next access converts again from it. Inside this store's writer it refuses
+/// with [`Error::StaleSnapshot`], so the writer releases and retries after it.
 pub(super) fn convert(store: &Store, original: &[u8]) -> Result<State, Error> {
     let held = *store
         .writer_owned
@@ -148,38 +168,46 @@ pub(super) fn convert(store: &Store, original: &[u8]) -> Result<State, Error> {
     if held {
         return Err(Error::StaleSnapshot);
     }
-    let _publication =
-        crate::review::publication::ProjectionLease::acquire(std::path::Path::new(&store.root))?;
+    let root = std::path::Path::new(&store.root);
+    let _publication = crate::review::publication::ProjectionLease::acquire(root)?;
     let mut bytes = original.to_vec();
     loop {
-        let (raw, mut state) = recognize(store, &bytes)?;
+        let (raw, state, historical) = recognize(store, &bytes)?;
         Store::validate_checkpoint(&state)?;
         crate::review::integrations::registration(&state.operator)?;
         crate::review::integrations::pending(&state.operator)?;
-        // The v1 hash verifies format/content integrity, never reviewed origin.
-        // Authenticate before the historical converter constructs an evaluator
-        // or publishes either a cache artifact or converted checkpoint.
-        crate::review::runtime::inspect_historical(store, &mut state, &raw["active"])?;
-        state.legacy_preview = None;
+        // An earlier activation record is recognized and dropped: the policy
+        // files decide requests. Only publish after checking the same source again.
         let previous = recovery_sources(store, &state.operator)?;
-        // Compilation and immutable derived-cache preparation do not require
-        // authority ownership. Only publish after checking the same source again.
-        crate::review::runtime::restore_historical(store, &mut state, &raw["active"])?;
-        // Admit authority by this user's content-keyed consent, recording it
-        // for an installation the old evidence proves was upgraded in place.
-        let mut state = super::portability::admit(store, state, true)?;
-        crate::review::read_approval::drop_unbound(&mut state);
+        let mut state = super::admit(state);
+        // Current-family read requests without a bound resource stay readable
+        // through their legacy binding; only the historical family drops them.
+        if historical {
+            crate::review::read_approval::drop_unbound(&mut state);
+        }
         #[cfg(test)]
         super::tests::observe(super::tests::Stage::UpgradePrepared);
-        let owned = (!held).then(|| store.lock(&|| Ok(()))).transpose()?;
+        let owned = store.lock(&|| Ok(()))?;
         let latest = store.checkpoint_bytes()?;
-        if let Ok(state) = store.decode(&latest) {
-            return Ok(state);
+        if let Ok(current) = store.decode(&latest)
+            && !store.convertible(&current)
+        {
+            return Ok(current);
         }
         if latest != bytes {
             drop(owned);
             bytes = latest;
             continue;
+        }
+        crate::review::settings::load(root, &mut state);
+        if crate::review::settings::pending(&state)
+            && crate::review::settings::convert(&mut state).is_err()
+        {
+            // Settings the files cannot take yet: the earlier checkpoint stays
+            // as it is and keeps applying in memory; the next access retries.
+            crate::diagnostics::trace::count("upgrade.settings_deferred", 1);
+            owned.release()?;
+            return Ok(state);
         }
         let current = crate::policy::fingerprint(&bytes);
         let mut keep = previous.clone();
@@ -199,32 +227,54 @@ pub(super) fn convert(store: &Store, original: &[u8]) -> Result<State, Error> {
             }
         }
         state.operator["upgrade_recovery"] = json!(committed);
-        super::history::upgrade(store, &raw, &mut state)?;
+        if historical {
+            super::history::upgrade(store, &raw, &mut state)?;
+        }
+        let notice = report::differences(root, &raw);
+        let context = crate::review::Context::new(
+            state.project_id.clone(),
+            state.project_root.clone(),
+            "cli",
+        );
+        let event = state.event(
+            "checkpoint_converted",
+            &context,
+            json!({}),
+            json!({}),
+            json!({"previous_checkpoint":crate::policy::fingerprint(&bytes),"policy":notice}),
+        );
+        state.record(event);
+        state.operator["upgrade_notice"] = report::notice(&notice);
         Store::validate_checkpoint(&state)?;
         store.write(&mut state)?;
         let _ = cleanup(store, &committed);
-        if let Some(owned) = owned {
-            owned.release()?;
-        }
+        report::retire_folder_records(root);
+        owned.release()?;
         return Ok(state);
     }
 }
 
 /// Diagnostics verify the historical record proof, without preparing its policy.
 pub(super) fn inspect(store: &Store, bytes: &[u8]) -> Result<State, Error> {
-    let (raw, mut state) = recognize(store, bytes)?;
+    let (_, mut state, _) = recognize(store, bytes)?;
     Store::validate_checkpoint(&state)?;
     crate::review::integrations::registration(&state.operator)?;
     crate::review::integrations::pending(&state.operator)?;
-    crate::review::runtime::inspect_historical(store, &mut state, &raw["active"])?;
-    Store::validate_checkpoint(&state)?;
+    state.unconverted = true;
     Ok(state)
 }
 
-fn recognize(store: &Store, bytes: &[u8]) -> Result<(Value, State), Error> {
+/// The checkpoint's raw document, its decoded state and whether it is from the
+/// historical family whose history needs converting into a journal.
+fn recognize(store: &Store, bytes: &[u8]) -> Result<(Value, State, bool), Error> {
+    if let Ok(state) = store.decode(bytes) {
+        let raw = crate::json::parse(bytes)
+            .map_err(|_| Error::Invalid("corrupt review state; preserve it for recovery"))?;
+        return Ok((raw, state, false));
+    }
     let recognized = historical(bytes).map(|(raw, mut state)| {
         state.project_root.clone_from(&store.root);
-        (raw, state)
+        (raw, state, true)
     });
     recognized.map_err(|error| {
         if matches!(

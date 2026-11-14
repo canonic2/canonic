@@ -1,4 +1,4 @@
-//! Capture editable policy files without activating them or importing terminal UI.
+//! Capture the editable policy files without writing them or importing terminal UI.
 use crate::review::{Context, Error, model::State};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path};
@@ -6,45 +6,10 @@ use std::{collections::BTreeMap, path::Path};
 pub(in crate::review) struct Capture {
     pub(in crate::review) candidate: Value,
     pub(in crate::review) metadata: Value,
-    pub(in crate::review) fingerprint: String,
     pub(in crate::review) paths: BTreeMap<String, Option<String>>,
 }
 
 type Reader<'a> = dyn FnMut(&str) -> Result<Option<String>, Error> + 'a;
-
-/// Bind the union of current and proposed output paths, including local files
-/// that did not exist in the active generation. Missing files remain evidence.
-pub(in crate::review) fn fingerprint(
-    context: &Context,
-    before: &State,
-    candidate: &Value,
-    meta: &Value,
-) -> Result<String, Error> {
-    let directory = crate::review::project::root(context).join(".shield");
-    fingerprint_with(before, candidate, meta, &mut |name| {
-        read_file(&directory, name)
-    })
-}
-
-fn fingerprint_with(
-    before: &State,
-    candidate: &Value,
-    meta: &Value,
-    read: &mut Reader<'_>,
-) -> Result<String, Error> {
-    use crate::review::publication::projections::paths;
-    let mut files = paths(&before.candidates["project"], &before.operator)?;
-    files.extend(paths(candidate, meta)?);
-    files.extend(["config.local.yml".into(), "rules.local.yml".into()]);
-    let mut hashes = BTreeMap::new();
-    for name in &files {
-        let hash = read(name)?.map(|bytes| crate::policy::fingerprint(bytes.as_bytes()));
-        hashes.insert(name, hash);
-    }
-    Ok(crate::policy::fingerprint(
-        json!(hashes).to_string().as_bytes(),
-    ))
-}
 
 pub(in crate::review) fn capture(context: &Context, before: &State) -> Result<Capture, Error> {
     let directory = crate::review::project::root(context).join(".shield");
@@ -139,7 +104,6 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
         &disabled_bytes,
     )?);
     update_shared_metadata(before, &source, &candidate, &mut meta)?;
-    let fingerprint = fingerprint_with(before, &candidate, &meta, &mut read)?;
     let paths = files
         .into_iter()
         .map(|(name, source)| {
@@ -152,7 +116,6 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
     Ok(Capture {
         candidate,
         metadata: meta,
-        fingerprint,
         paths,
     })
 }
@@ -296,7 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn project_files_adopt_fingerprint_uses_candidate_reads_even_if_disk_changes_back() {
+    fn capture_reads_each_file_once_and_records_what_it_read() {
         let root = assert_fs::TempDir::new().unwrap();
         let bundle =
             crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None)
@@ -325,17 +288,10 @@ mod tests {
         .unwrap();
         assert_eq!(reads, 1);
         assert_eq!(captured.candidate["rules"], a);
-        let live = fingerprint(&context, &state, &captured.candidate, &captured.metadata).unwrap();
-        assert_ne!(captured.fingerprint, live);
-        std::fs::write(directory.join("rules.yml"), a).unwrap();
+        // The recorded hash is of the bytes read, not of the later edit.
         assert_eq!(
-            captured.fingerprint,
-            fingerprint(&context, &state, &captured.candidate, &captured.metadata).unwrap()
-        );
-        std::fs::write(directory.join("rules.yml"), &b).unwrap();
-        assert_ne!(
-            captured.fingerprint,
-            fingerprint(&context, &state, &captured.candidate, &captured.metadata).unwrap()
+            captured.paths["rules.yml"],
+            Some(crate::policy::fingerprint(a.as_bytes()))
         );
     }
 }

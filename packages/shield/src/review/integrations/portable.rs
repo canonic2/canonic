@@ -24,8 +24,7 @@ pub(super) fn manual(error: &Error) -> bool {
 }
 
 pub(super) fn needed(state: &State) -> bool {
-    state.active.is_some()
-        && state.operator["portable_registration_epoch"] != state.project_id
+    state.operator["portable_registration_epoch"] != state.project_id
         && registration(&state.operator)
             .ok()
             .flatten()

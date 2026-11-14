@@ -76,7 +76,7 @@ pub(super) fn list(context: &Context, session: Option<&str>) -> Value {
     annotate(&mut rows, &state, session);
     json!({"session_id":session,"requests":rows,
         "coverage":{"complete":collected.complete && !capped && state.is_ok(),"available":collected.available && state.is_ok(),
-            "scope":"retained history since the latest policy activation","collection_limit":MAX_REQUESTS,
+            "scope":"retained history","collection_limit":MAX_REQUESTS,
             "reason":if !collected.available || state.is_err(){"history or review state unavailable"} else if capped {"review item limit reached"} else if !collected.complete {"history scan or retained request limit reached"} else {"complete retained window"}},
         "next_action":"Review eligible groups after the task. Listing or deferral grants no permission. Incomplete evidence is not an empty successful review.",
         "authoring_examples":super::schemas::proposal_examples(),

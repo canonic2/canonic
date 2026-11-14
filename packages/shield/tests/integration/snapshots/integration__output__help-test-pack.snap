@@ -15,5 +15,5 @@ Options:
       --with-pack <WITH_PACK>          Companion packs composed under the same fixture profile; repeat as needed
       --cases <CASES>                  Versioned YAML or JSON decision fixtures
       --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
-      --cache-dir <CACHE_DIR>          Compiled cache location for init, MCP setup or cache preparation
+      --cache-dir <CACHE_DIR>          Folder for this project's compiled policy plans, chosen at init or MCP setup
   -h, --help                           Print help

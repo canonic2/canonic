@@ -38,8 +38,8 @@ awaiting = False
 confirm_accept = False
 sent = []
 frame_answers = {"yes": b"2\r", "no": b"\r", "argv": b"2\r",
-                 "allow": b"3\r", "repair": b"3\r", "history": b"4\r",
-                 "manual": b"2\r", "review": b"1\r", "leave": b"\x1b",
+                 "allow": b"3\r", "history": b"2\r",
+                 "review": b"1\r", "leave": b"\x1b",
                  "reject": b"2\r", "accept": b"1\r", "block": b"2\r",
                  "strict": b"2\r", "loose": b"3\r", "recommended": b"1\r",
                  "done": b"\r", "cloud": b"2\r", "off": b"2\r", "back": b"\x1b"}
@@ -62,8 +62,8 @@ def key_bytes(answer, view):
         return {"yes": b"1\r", "no": b"2\r"}.get(answer, b"\r")
     if b"Clear existing history".replace(b" ", b"") in compact:
         return {"yes": b"2\r", "no": b"1\r"}.get(answer, b"\r")
-    if b"Reviewpendingproposals" in compact and answer in ("manual", "history", "repair"):
-        return {"manual": b"3\r", "repair": b"4\r", "history": b"5\r"}[answer]
+    if b"Reviewpendingproposals" in compact and answer == "history":
+        return b"3\r"
     return frame_answers.get(answer, answer.encode() + b"\r")
 
 def parse(chunk):

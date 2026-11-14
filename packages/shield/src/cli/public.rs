@@ -27,7 +27,7 @@ pub struct Cli {
     /// Disable diagnostic logging, including automatic debug-build logs.
     #[arg(long, global = true)]
     pub no_debug_log: bool,
-    /// Compiled cache location for init, MCP setup or cache preparation.
+    /// Folder for this project's compiled policy plans, chosen at init or MCP setup.
     #[arg(long, global = true)]
     pub cache_dir: Option<PathBuf>,
     /// Operation to perform.
@@ -83,11 +83,6 @@ pub enum PublicCommand {
     SessionGrant(SessionGrant),
     /// List or inspect agent request decisions and outcomes.
     History(History),
-    /// Prepare disposable compiled data from the currently committed policy.
-    Cache {
-        #[command(subcommand)]
-        command: CacheCommand,
-    },
     /// Registered integration transports; not an operator workflow.
     #[command(name = "__internal", hide = true, subcommand)]
     Internal(Box<super::Command>),
@@ -150,13 +145,6 @@ pub enum SessionGrantCommand {
         /// Retained proposal or grant ID.
         id: String,
     },
-}
-
-/// Maintenance of derived policy data; never activates pending source edits.
-#[derive(Subcommand)]
-pub enum CacheCommand {
-    /// Prepare or repair the active generation without a policy approval prompt.
-    Prepare,
 }
 
 /// Where an integration or configuration applies.
@@ -269,12 +257,10 @@ pub struct Policy {
 /// Project policy operations.
 #[derive(Subcommand)]
 pub enum PolicyCommand {
-    /// Show active policy, live reviews and history settings.
+    /// Show the policy, live reviews and history settings.
     Show,
-    /// Review a live change, edited files, projection repair or history settings in a terminal.
+    /// Review a live change or history settings in a terminal.
     Review,
-    /// Restore managed project files from committed policy after confirmation.
-    Repair,
     /// Reject a live proposal after confirmation.
     Reject {
         proposal_id: String,
@@ -284,11 +270,11 @@ pub enum PolicyCommand {
     /// Preview a normalized request from a JSON input/context object; never executes it.
     Evaluate {
         input: PathBuf,
-        /// Active policy by default; select a retained proposal's candidate instead.
+        /// The current policy by default; select a proposal's instead.
         #[arg(long)]
         proposal_id: Option<String>,
     },
-    /// Compare active policy or retained proposal snapshots without activating them.
+    /// Compare the current policy with a proposal's, or a proposal's two sides, without changing anything.
     Compare {
         /// active, proposal:ID, or proposal:ID:before.
         #[arg(long, default_value = "active")]

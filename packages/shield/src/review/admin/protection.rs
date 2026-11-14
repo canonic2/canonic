@@ -1,37 +1,39 @@
 //! Exact protected-file access review shared by terminal and MCP adapters.
+//! The choice is the `protection` key of the policy files.
 use crate::review::{
-    Checkpoint, Context, Error,
-    path_access::{PathAccess, load},
-    project,
-    storage::Store,
+    Checkpoint, Context, Error, path_access::PathAccess, project, settings, storage::Store,
 };
 use serde_json::{Value, json};
 use std::path::Path;
 
 pub(in crate::review) struct Prepared {
     root: String,
-    before: Value,
+    before: PathAccess,
     after: PathAccess,
     changed: bool,
 }
 
 impl Prepared {
     pub(in crate::review) fn new(context: &Context, after: PathAccess) -> Result<Self, Error> {
-        let metadata = project::metadata(&project::checkpoint(context)?);
-        Ok(Self::from_metadata(context, &metadata, after))
+        let state = project::checkpoint(context)?;
+        Ok(Self::from_current(
+            context,
+            settings::path_access(&state.settings),
+            after,
+        ))
     }
 
-    pub(in crate::review) fn from_metadata(
+    /// A review from the access in effect when it was read.
+    pub(in crate::review) fn from_current(
         context: &Context,
-        metadata: &Value,
+        before: PathAccess,
         after: PathAccess,
     ) -> Self {
-        let changed = load(metadata).map_or(true, |before| before != after);
         Self {
             root: context.project_root.clone(),
-            before: metadata["path_access"].clone(),
+            before,
             after,
-            changed,
+            changed: before != after,
         }
     }
 
@@ -54,18 +56,13 @@ impl Prepared {
             context,
             checkpoint,
             |state| {
-                if state.operator["path_access"] != self.before {
+                if settings::path_access(&state.settings) != self.before {
                     return Err(Error::StaleSnapshot);
                 }
                 if self.changed {
-                    state.operator["path_access"] = json!(self.after);
-                    crate::review::configuration_changes::changed(
-                        state,
-                        context,
-                        "protected file access",
-                    );
+                    settings::write(context, &settings::protection(self.after))?;
                 }
-                Ok(self.changed)
+                Ok(false)
             },
         )?;
         Ok(result)

@@ -86,7 +86,7 @@ fn proposal(context: &Context, reference: &str) -> Value {
 fn receipt(context: &Context, arguments: Vec<String>) -> Value {
     let arguments = Value::Array(arguments.into_iter().map(Value::String).collect());
     let state = store(context).unwrap().read_checkpoint().unwrap();
-    json!({"identity":{"activation_id":state.active.as_ref().unwrap().activation_id(),"policy_revision":state.policy_revision},
+    json!({"identity":{"activation_id":state.policy_revision,"policy_revision":state.policy_revision},
         "code":"approval-required","decision":"ask","disposition":"approval_required",
         "_observation":{"evaluation":{"evaluation":{"matches":[]}}},
         "_shell_analysis":{"coverage":"single-literal-invocation","operations":[{"source_unit":0,"span":{"start":0,"end":10},"coverage":"literal-argv","decision":"ask","request":{"executable":"acme","arguments":arguments,"cwd":context.project_root,"project":context.project_root},"evaluation":{"decision":"ask","evaluation":{"matches":[]}}}]}})
@@ -661,10 +661,10 @@ fn grants_do_not_depend_on_optional_history() {
     let (_root, context, reference) = fixture();
     let proposed = proposal(&context, &reference);
     apply(&context, &proposed["apply_arguments"], true).unwrap();
+    crate::review::settings::history_fixture(&context, false);
     store(&context)
         .unwrap()
         .update_checkpoint(&context, &|| Ok(()), |state| {
-            state.history_enabled = false;
             state.events.clear();
             Ok(json!({}))
         })

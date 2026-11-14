@@ -7,7 +7,11 @@ fn fixture() -> (assert_fs::TempDir, Context, State, Source) {
     let (root, context) = review::tests::enrolled();
     let source = Source::local(root.path()).unwrap();
     let mut state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
-    state.operator["sources"]["acme"] = json!(source);
+    state
+        .settings
+        .registries
+        .sources
+        .insert("acme".into(), source.clone());
     state.operator["installed"] = json!([{
         "selector":"pack:acme-node","id":"acme/node","version":"1.0.0",
         "source":source,"source_identity":source.identity(),"source_alias":"acme",
@@ -58,7 +62,11 @@ fn pack_updates_truncation_preserves_fresh_notices_after_eight_stale_candidates(
         now,
     )
     .unwrap();
-    state.operator["sources"] = json!({"stale":expired_source,"fresh":fresh});
+    state.settings.registries.sources = [
+        ("stale".to_owned(), expired_source.clone()),
+        ("fresh".to_owned(), fresh.clone()),
+    ]
+    .into();
     let mut installed: Vec<_> = ids
         .iter()
         .map(|id| {
@@ -172,7 +180,7 @@ fn pack_updates_preserve_source_binding_checkpoint_and_expiry() {
         "unknown"
     );
     state.registry_checkpoints.clear();
-    state.operator["sources"] = json!({});
+    state.settings.registries.sources.clear();
     assert_eq!(
         inspect_at(&context, &state, None, now)["sources"][0]["reason"],
         "source_ineligible"

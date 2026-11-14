@@ -25,20 +25,24 @@ pub(in crate::review) fn resume(context: &Context, initial: &State) {
 
 fn resume_inner(context: &Context, initial: &State) -> Result<(), Error> {
     if let Some(plan) = pending(&initial.operator)? {
+        // The owner is a policy revision, which only the files give.
         if matches!(
             plan.scope_reason.as_deref(),
             Some(REASON | portable::REASON)
-        ) && let Some(active) = &initial.active
-        {
+        ) && let Some(owner) = activation::current_owner(
+            &Store::open(Path::new(&context.project_root))?.read_following_files()?,
+        ) {
             let guard = crate::review::publication::ProjectionLease::acquire(Path::new(
                 &context.project_root,
             ))?;
-            activation::resume_guarded(context, None, active.activation_id(), &guard)?;
+            activation::resume_guarded(context, None, &owner, &guard)?;
         }
         return Ok(());
     }
     let migrate_native = portable::needed(initial);
-    if initial.active.is_none()
+    // Nothing to rebind before an agent is registered, as while a folder is
+    // still being initialized.
+    if registration(&initial.operator)?.is_none()
         || (initial.operator["mcp_rebind_pending"] != true && !migrate_native)
     {
         return Ok(());
@@ -59,14 +63,14 @@ fn resume_inner(context: &Context, initial: &State) -> Result<(), Error> {
     let store = Store::open(root)?;
     let mut native_retry = false;
     if migrate_native {
-        let state = store.read_checkpoint()?;
+        let state = store.read_following_files()?;
         match portable::prepare_box(root, &state, &executable) {
             Ok(Some(plan)) => publish(context, &store, &state, &plan, &guard)?,
             Ok(None) => {}
             Err(error) => native_retry |= !portable::manual(&error),
         }
         for agent in previous.agents.keys() {
-            let state = store.read_checkpoint()?;
+            let state = store.read_following_files()?;
             state.check(context)?;
             state.check_operations()?;
             if pending(&state.operator)?.is_some() {
@@ -93,13 +97,11 @@ fn resume_inner(context: &Context, initial: &State) -> Result<(), Error> {
             let Some(alias) = connection.agents.get(adapter.spec().id) else {
                 continue;
             };
-            let state = store.read_checkpoint()?;
+            let state = store.read_following_files()?;
             state.check(context)?;
             state.check_operations()?;
-            if state.active.as_ref().is_none_or(|active| {
-                active.activation_id() != snapshot.identity().activation_id()
-                    || active.revision() != snapshot.identity().policy_revision()
-            }) {
+            // The snapshot is the policy files' plan; the state must follow them.
+            if state.policy_revision != snapshot.identity().policy_revision() {
                 return Err(Error::StaleSnapshot);
             }
             if pending(&state.operator)?.is_some() {
@@ -168,29 +170,18 @@ fn publish(
     plan: &Plan,
     guard: &crate::review::publication::ProjectionLease,
 ) -> Result<(), Error> {
-    let activation = state
-        .active
-        .as_ref()
-        .ok_or(Error::CandidateUnavailable)?
-        .activation_id()
-        .to_owned();
+    let revision = state.policy_revision.clone();
     let expected = state.operator.clone();
     store.update_checkpoint(context, &|| Ok(()), |current| {
         current.check_operations()?;
-        if current.operator != expected
-            || current
-                .active
-                .as_ref()
-                .is_none_or(|active| active.activation_id() != activation)
-        {
+        if current.operator != expected || current.policy_revision != revision {
             return Err(Error::StaleSnapshot);
         }
         activation::stage(&mut current.operator, plan, None)?;
-        let mut metadata = current.operator.clone();
-        activation::bind(current, &mut metadata, &json!({"activation_id":activation}));
+        activation::own(&mut current.operator, &revision);
         Ok(json!({}))
     })?;
-    activation::resume_guarded(context, None, &activation, guard)?;
+    activation::resume_guarded(context, None, &revision, guard)?;
     Ok(())
 }
 

@@ -92,6 +92,12 @@ impl Sources {
         .chain(self.disabled.iter().map(|pack| Some(pack.as_str())))
     }
 
+    /// The configuration layers' text, shared then local, for keys that
+    /// treat their settings separately; [`Self::parts`] begins with these two.
+    pub(in crate::review) fn config_layers(&self) -> (&str, Option<&str>) {
+        (&self.shared, self.local.as_deref())
+    }
+
     /// Validate the files into a bundle, including that every pack a lock
     /// file records has exactly the bytes the lock pins.
     pub(in crate::review) fn bundle(&self) -> Result<configuration::Bundle, Error> {
@@ -196,6 +202,110 @@ pub(in crate::review) fn read(config: &Path) -> Result<Sources, Error> {
     })
 }
 
+/// [`read`] over file texts held in memory, such as a proposal's: `text`
+/// returns a policy file's text by its path inside `.shield/`. Digest-named
+/// pack artifacts it does not hold come from the per-user store, checked
+/// against their digest.
+pub(in crate::review) fn from_texts(
+    shield: &Path,
+    text: &dyn Fn(&str) -> Option<String>,
+) -> Result<Sources, Error> {
+    let missing = || -> Error {
+        crate::policy::Error::Contract(
+            "a pack named in the policy files is missing from this machine; the status tool or shield status fetches it",
+        )
+        .into()
+    };
+    let shared = text("config.yml").ok_or(crate::policy::Error::Contract(
+        "project configuration missing",
+    ))?;
+    let local = text("config.local.yml");
+    let candidate =
+        Candidate::from_yaml(&configuration::layers::merge(&shared, local.as_deref())?)?;
+    let read = |paths: &mut dyn Iterator<Item = &str>| {
+        paths
+            .map(|path| {
+                text(path)
+                    .or_else(|| stored_artifact(shield, path))
+                    .ok_or_else(missing)
+            })
+            .collect::<Result<Vec<_>, _>>()
+    };
+    Ok(Sources {
+        packs: read(&mut candidate.pack_paths())?,
+        disabled: read(&mut candidate.disabled_paths())?,
+        rules: read(&mut candidate.rules_path().into_iter())?.pop(),
+        local_rules: read(&mut candidate.local_rules_path().into_iter())?.pop(),
+        locks: [text("shield.lock"), text("shield.local.lock")],
+        shared,
+        local,
+    })
+}
+
+/// Whether `path` names a pack artifact by its digest, which the per-user
+/// store holds for every checkout.
+pub(in crate::review) fn digest_named(path: &str) -> Option<&str> {
+    let path = Path::new(path);
+    // Shield names these files itself, always with a lowercase `.yml`.
+    path.extension()
+        .filter(|extension| *extension == "yml")
+        .and(path.file_stem())
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| stem.len() == 64 && stem.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// Keep a digest-named pack artifact in the per-user store.
+pub(in crate::review) fn keep_artifact(path: &str, text: &str) {
+    if let Some(digest) = digest_named(path)
+        && crate::policy::fingerprint(text.as_bytes()) == digest
+    {
+        store_artifact(digest, text);
+    }
+}
+
+/// Every pack, disabled and rules file a captured bundle's configuration names.
+pub(in crate::review) fn referenced(bundle: &Value) -> Result<Vec<String>, Error> {
+    let Some(shared) = bundle["config"].as_str() else {
+        return Ok(Vec::new());
+    };
+    let candidate = Candidate::from_yaml(&configuration::layers::merge(
+        shared,
+        bundle["local_config"].as_str(),
+    )?)?;
+    Ok(candidate
+        .pack_paths()
+        .chain(candidate.disabled_paths())
+        .chain(candidate.rules_path())
+        .chain(candidate.local_rules_path())
+        .map(str::to_owned)
+        .collect())
+}
+
+/// Keep every digest-named pack and disabled artifact a captured bundle holds
+/// in the per-user store, so the bundle can be rebuilt from its policy file
+/// texts on any checkout.
+pub(in crate::review) fn keep_bundle_artifacts(bundle: &Value) -> Result<(), Error> {
+    let Some(shared) = bundle["config"].as_str() else {
+        return Ok(());
+    };
+    let candidate = Candidate::from_yaml(&configuration::layers::merge(
+        shared,
+        bundle["local_config"].as_str(),
+    )?)?;
+    for (paths, texts) in [
+        (candidate.pack_paths().collect::<Vec<_>>(), &bundle["packs"]),
+        (candidate.disabled_paths().collect(), &bundle["disabled"]),
+    ] {
+        let texts = texts.as_array().map(Vec::as_slice).unwrap_or_default();
+        for (path, text) in paths.into_iter().zip(texts) {
+            if let Some(text) = text.as_str() {
+                keep_artifact(path, text);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Shield writes an empty `rules.yml` beside every configuration. When the
 /// configuration does not name it, rules written there would never apply, so
 /// a `rules.yml` that holds rules makes the policy files invalid.
@@ -298,68 +408,6 @@ fn read_project_artifact(root: &Path, path: &str) -> Result<String, Error> {
         .into());
     }
     application::read(&resolved)
-}
-
-/// Authoring inputs identify an already reviewed policy even when a fresh
-/// checkout does not contain its ignored pack cache.
-pub(in crate::review) fn authored(config: &Path) -> Result<Value, Error> {
-    let source_root = config.parent().ok_or(Error::Context)?.canonicalize()?;
-    let config = regular_file(config)?;
-    let root = config.parent().ok_or(Error::Context)?;
-    if root != source_root {
-        return Err(Error::Context);
-    }
-    let shared = application::read(&config)?;
-    let local = root.join("config.local.yml");
-    let local = if local.exists() {
-        let local = regular_file(&local)?;
-        if !local.starts_with(root) {
-            return Err(Error::Context);
-        }
-        Some(application::read(&local)?)
-    } else {
-        None
-    };
-    let candidate =
-        Candidate::from_yaml(&configuration::layers::merge(&shared, local.as_deref())?)?;
-    let rules = candidate
-        .rules_path()
-        .map(|path| read_artifact(root, path))
-        .transpose()?;
-    let local_rules = candidate
-        .local_rules_path()
-        .map(|path| read_artifact(root, path))
-        .transpose()?;
-    Ok(json!({"config":shared,"local_config":local,"rules":rules,"local_rules":local_rules}))
-}
-
-/// Present artifacts must agree exactly with the private receipt. Missing pack
-/// artifacts use that receipt's retained bytes; source edits cannot do so.
-pub(in crate::review) fn matches_artifacts(config: &Path, saved: &Value) -> Result<bool, Error> {
-    let root = regular_file(config)?
-        .parent()
-        .ok_or(Error::Context)?
-        .to_owned();
-    let candidate = Candidate::from_yaml(&configuration::layers::merge(
-        saved["config"].as_str().ok_or(Error::Context)?,
-        saved["local_config"].as_str(),
-    )?)?;
-    for (paths, field) in [
-        (candidate.pack_paths().collect::<Vec<_>>(), "packs"),
-        (candidate.disabled_paths().collect::<Vec<_>>(), "disabled"),
-    ] {
-        for (index, path) in paths.iter().enumerate() {
-            match std::fs::symlink_metadata(root.join(path)) {
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(error) => return Err(error.into()),
-                Ok(_) => {}
-            }
-            if saved[field][index].as_str() != Some(read_artifact(&root, path)?.as_str()) {
-                return Ok(false);
-            }
-        }
-    }
-    Ok(true)
 }
 
 fn regular_file(path: &Path) -> Result<PathBuf, Error> {

@@ -25,28 +25,7 @@ fn mcp_connection_default_changes_are_detected_without_declaration_edits() {
 }
 
 #[test]
-fn project_files_adopt_refuses_combined_permission_changes() {
-    let (_root, context, connection) = fixture();
-    let result = invoke(
-        &context,
-        &connection,
-        "policy_propose",
-        json!({"changes":[
-            {"kind":"project_files_adopt"},
-            {"kind":"rule_add","rule":rule("extra", "allow")}
-        ]}),
-    );
-    assert_eq!(result["error"]["code"], "invalid_input");
-    assert!(
-        result["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("separately")
-    );
-}
-
-#[test]
-fn project_files_adopt_status_leaves_deleted_source_unchecked_until_explicit_review() {
+fn status_leaves_a_deleted_source_unchecked() {
     let (root, mut context, connection) = fixture();
     context.agent = Some("codex".into());
     let first = prepare(
@@ -72,31 +51,6 @@ fn project_files_adopt_status_leaves_deleted_source_unchecked_until_explicit_rev
     assert!(status["data"].get("repair_arguments").is_none());
 }
 
-#[cfg(unix)]
-#[test]
-fn project_files_adopt_status_keeps_repair_for_a_linked_rules_file() {
-    let (root, mut context, connection) = fixture();
-    context.agent = Some("codex".into());
-    let first = prepare(
-        &context,
-        &connection,
-        &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
-    );
-    apply(&context, &connection, &first);
-    let path = root.path().join(".shield/rules.yml");
-    let target = root.path().join(".shield/linked-rules.yml");
-    std::fs::rename(&path, &target).unwrap();
-    std::os::unix::fs::symlink(&target, &path).unwrap();
-    let status = invoke(&context, &connection, "status", json!({}));
-    assert!(status["error"].is_null(), "{status}");
-    assert_eq!(
-        status["data"]["coverage"]["repair_needed"], false,
-        "{status}"
-    );
-    assert_eq!(status["data"]["repair_route"], "shield policy review");
-    assert!(status["data"].get("repair_arguments").is_none());
-}
-
 #[test]
 fn prepared_apply_verifies_source_bytes_and_reconnect_can_prepare_its_own_plan() {
     let (root, mut context, connection) = fixture();
@@ -108,22 +62,35 @@ fn prepared_apply_verifies_source_bytes_and_reconnect_can_prepare_its_own_plan()
     );
     let store = Store::open(root.path()).unwrap();
     let state = store.read_checkpoint().unwrap();
-    let source = &state.proposals[0].candidate;
-    let path = root.path().join(".shield/review/sources").join(format!(
-        "{}.manifest.json",
-        source["manifest_digest"].as_str().unwrap()
-    ));
-    let original = std::fs::read(&path).unwrap();
-    let mut changed = original.clone();
-    changed[0] ^= 1;
-    std::fs::write(&path, changed).unwrap();
+    let original = state.proposals[0].files.clone();
+    // Texts that differ from what the person reviewed are never written.
+    store
+        .update_checkpoint(&context, &|| Ok(()), |current| {
+            let rules = current.proposals[0].files.get_mut("rules.yml").unwrap();
+            rules.after = rules
+                .after
+                .as_ref()
+                .map(|text| text.replace("acme-source", "acme-swapped"));
+            Ok(Value::Null)
+        })
+        .unwrap();
     let refused = invoke(&context, &connection, "policy_apply", args.clone());
     assert!(!refused["error"].is_null(), "{refused}");
     assert_eq!(
         store.read_checkpoint().unwrap().policy_revision,
         state.policy_revision
     );
-    std::fs::write(&path, original).unwrap();
+    assert!(
+        !std::fs::read_to_string(root.path().join(".shield/rules.yml"))
+            .unwrap_or_default()
+            .contains("acme-swapped")
+    );
+    store
+        .update_checkpoint(&context, &|| Ok(()), |current| {
+            current.proposals[0].files = original.clone();
+            Ok(Value::Null)
+        })
+        .unwrap();
     store
         .update_checkpoint(&context, &|| Ok(()), |current| {
             current.proposals[0].comparison["formatting"] =
@@ -153,8 +120,7 @@ fn prepared_apply_verifies_source_bytes_and_reconnect_can_prepare_its_own_plan()
     );
     apply(&context, &reconnected, &args);
     apply(&context, &reconnected, &args);
-    let after = store.read().unwrap();
-    after.active.as_ref().unwrap().validate(&after).unwrap();
+    crate::review::runtime::consumer::load(&context, &|| Ok(())).unwrap();
 }
 
 /// The Codex confirmation as one text: its change line, then any details.
@@ -296,12 +262,17 @@ fn redacted_apply_arguments_bind_and_commit_the_original_candidate() {
         &json!({"kind":"access_path_add","access":"read","path":path}),
     );
     assert!(args["changes"].to_string().contains("--token [REDACTED]"));
-    let before = Store::open(root.path()).unwrap().read().unwrap();
-    let proposal = before
+    let store = Store::open(root.path()).unwrap();
+    let mut before = store.read().unwrap();
+    let index = before
         .proposals
         .iter()
-        .find(|p| p.id == args["proposal_id"])
+        .position(|p| p.id == args["proposal_id"])
         .unwrap();
+    store
+        .hydrate_proposal(&mut before.proposals[index])
+        .unwrap();
+    let proposal = &before.proposals[index];
     assert_eq!(args, proposal.apply_arguments());
     assert_eq!(
         args["candidate_digest"],
@@ -332,7 +303,7 @@ fn redacted_apply_arguments_bind_and_commit_the_original_candidate() {
 
 #[test]
 fn inspected_apply_arguments_recover_the_reply_and_keep_approved_changes_after_apply() {
-    let (_root, mut context, connection) = fixture();
+    let (root, mut context, connection) = fixture();
     context.agent = Some("claude".into());
     let result = proposal(&context, &connection, "acme-inspected");
     let id = result["data"]["proposal_id"].clone();
@@ -355,15 +326,11 @@ fn inspected_apply_arguments_recover_the_reply_and_keep_approved_changes_after_a
     // Closed inspection has no reusable approval arguments; the receipt is kept.
     let applied = inspect();
     assert!(applied.is_null());
-    let receipt = invoke(
-        &context,
-        &connection,
-        "policy_receipt",
-        json!({"proposal_id":id}),
-    );
+    let receipt = crate::review::proposal_outcome(root.path(), id.as_str().unwrap());
+    assert_eq!(receipt["status"], "applied");
     assert_eq!(
-        receipt["data"]["receipt"]["candidate_digest"],
-        committed["data"]["receipt"]["candidate_digest"]
+        receipt["receipt"]["policy_revision"],
+        committed["data"]["receipt"]["policy_revision"]
     );
 }
 
@@ -387,8 +354,11 @@ fn codex_readable_review_is_exact_retrievable_and_bound_to_the_retained_candidat
     // Codex's own prompt asks the question and labels Allow/Cancel.
     assert!(!message.contains("Approve this Shield policy change?"));
     assert!(!message.contains("applies this change"));
-    let state = Store::open(root.path()).unwrap().read().unwrap();
-    let retained = state.proposals.iter().find(|p| p.id == id).unwrap();
+    let store = Store::open(root.path()).unwrap();
+    let mut state = store.read().unwrap();
+    let index = state.proposals.iter().position(|p| p.id == id).unwrap();
+    store.hydrate_proposal(&mut state.proposals[index]).unwrap();
+    let retained = &state.proposals[index];
     let canonical = retained.apply_arguments();
     let candidate = retained.candidate.clone();
     assert!(!message.contains(canonical["candidate_digest"].as_str().unwrap()));
@@ -404,7 +374,7 @@ fn codex_readable_review_is_exact_retrievable_and_bound_to_the_retained_candidat
             assert_eq!(&data["apply_arguments"], args);
         }
     }
-    let initial = json!(state.active);
+    let initial = json!(state.policy_revision);
     for changed in [
         {
             let mut a = args.clone();
@@ -431,7 +401,13 @@ fn codex_readable_review_is_exact_retrievable_and_bound_to_the_retained_candidat
         let result = invoke(&context, &connection, "policy_apply", changed);
         assert!(!result["error"].is_null(), "{result}");
         assert_eq!(
-            json!(Store::open(root.path()).unwrap().read().unwrap().active),
+            json!(
+                Store::open(root.path())
+                    .unwrap()
+                    .read()
+                    .unwrap()
+                    .policy_revision
+            ),
             initial
         );
     }
@@ -461,7 +437,13 @@ fn codex_readable_reviews_cannot_apply_withdrawn_or_stale_proposals() {
     let (root, mut context, connection) = fixture();
     context.agent = Some("codex".into());
     let withdrawn = proposal(&context, &connection, "acme-withdrawn");
-    let initial = json!(Store::open(root.path()).unwrap().read().unwrap().active);
+    let initial = json!(
+        Store::open(root.path())
+            .unwrap()
+            .read()
+            .unwrap()
+            .policy_revision
+    );
     let result = invoke(
         &context,
         &connection,
@@ -477,7 +459,13 @@ fn codex_readable_reviews_cannot_apply_withdrawn_or_stale_proposals() {
     );
     assert!(!refused["error"].is_null());
     assert_eq!(
-        json!(Store::open(root.path()).unwrap().read().unwrap().active),
+        json!(
+            Store::open(root.path())
+                .unwrap()
+                .read()
+                .unwrap()
+                .policy_revision
+        ),
         initial
     );
     let stale = proposal(&context, &connection, "acme-stale");
@@ -490,7 +478,13 @@ fn codex_readable_reviews_cannot_apply_withdrawn_or_stale_proposals() {
         &independent_connection,
         &fresh["data"]["apply_arguments"],
     );
-    let active = json!(Store::open(root.path()).unwrap().read().unwrap().active);
+    let active = json!(
+        Store::open(root.path())
+            .unwrap()
+            .read()
+            .unwrap()
+            .policy_revision
+    );
     let refused = invoke(
         &context,
         &connection,
@@ -499,7 +493,13 @@ fn codex_readable_reviews_cannot_apply_withdrawn_or_stale_proposals() {
     );
     assert_eq!(refused["error"]["code"], "stale_revision");
     assert_eq!(
-        json!(Store::open(root.path()).unwrap().read().unwrap().active),
+        json!(
+            Store::open(root.path())
+                .unwrap()
+                .read()
+                .unwrap()
+                .policy_revision
+        ),
         active
     );
 }
@@ -528,37 +528,27 @@ fn withdrawing_a_proposal_after_its_base_changed_reports_the_stale_revision() {
     let state = Store::open(root.path()).unwrap().read().unwrap();
     let row = state.proposals.iter().find(|p| p.id == id).unwrap();
     assert_eq!(row.status, "stale");
-    let receipt = invoke(
-        &context,
-        &connection,
-        "policy_receipt",
-        json!({"proposal_id":id}),
-    );
-    assert!(receipt["error"].is_null(), "{receipt}");
-    assert_eq!(receipt["data"]["status"], "stale");
 }
 
 #[test]
-fn a_cache_location_change_during_review_still_refuses_the_proposal() {
+fn a_cache_location_change_during_review_survives_applying_the_proposal() {
     let (root, mut context, connection) = fixture();
     context.agent = Some("claude".into());
     let pending = proposal(&context, &connection, "acme-before-relocation");
     let relocated = assert_fs::TempDir::new().unwrap();
     let cache = relocated.path().join("cache");
-    crate::review::cache::relocate_committed(&context, &cache, &|| Ok(())).unwrap();
-    let refused = invoke(
-        &context,
-        &connection,
-        "policy_apply",
-        pending["data"]["apply_arguments"].clone(),
-    );
-    assert_eq!(refused["error"]["code"], "stale_revision", "{refused}");
+    crate::review::files::relocate_cache(&context, &cache).unwrap();
+    let location =
+        Store::open(root.path()).unwrap().read().unwrap().operator["compiled_cache_root"].clone();
+    assert!(location.is_string());
+    // A proposal writes policy files; the cache location stays the current one.
+    apply(&context, &connection, &pending["data"]["apply_arguments"]);
     let state = Store::open(root.path()).unwrap().read().unwrap();
-    assert!(state.operator["compiled_cache_root"].is_string());
+    assert_eq!(state.operator["compiled_cache_root"], location);
 }
 
 #[test]
-fn a_pending_proposal_whose_base_changed_has_a_stale_receipt() {
+fn a_pending_proposal_whose_base_changed_becomes_stale() {
     let (root, mut context, connection) = fixture();
     context.agent = Some("claude".into());
     let mut other = context.clone();
@@ -567,26 +557,24 @@ fn a_pending_proposal_whose_base_changed_has_a_stale_receipt() {
     let first = proposal(&other, &other_connection, "acme-first");
     let second = proposal(&context, &connection, "acme-second");
     let id = second["data"]["proposal_id"].clone();
-    // Before the base changes, the receipt routes to apply.
+    // Before the base changes, the proposal can still be applied.
     let pending = invoke(
         &context,
         &connection,
-        "policy_receipt",
+        "policy_show",
         json!({"proposal_id":id}),
     );
-    assert_eq!(
-        pending["error"]["code"], "operator_review_required",
-        "{pending}"
-    );
+    assert_eq!(pending["data"]["status"], "pending", "{pending}");
+    assert!(pending["data"]["apply_arguments"].is_object(), "{pending}");
     apply(&other, &other_connection, &first["data"]["apply_arguments"]);
-    let receipt = invoke(
+    let shown = invoke(
         &context,
         &connection,
-        "policy_receipt",
+        "policy_show",
         json!({"proposal_id":id}),
     );
-    assert!(receipt["error"].is_null(), "{receipt}");
-    assert_eq!(receipt["data"]["status"], "stale");
+    assert!(shown["error"].is_null(), "{shown}");
+    assert_eq!(shown["data"]["status"], "stale");
     // Closure follows the changed base, without an attempted application.
     let state = Store::open(root.path()).unwrap().read().unwrap();
     let row = state.proposals.iter().find(|p| p.id == id).unwrap();
@@ -639,11 +627,17 @@ fn host_approved_rules_domains_and_folder_changes_activate_and_retries_are_idemp
             "host-tool-permission"
         );
         let state = Store::open(root.path()).unwrap().read().unwrap();
-        state.active.as_ref().unwrap().validate(&state).unwrap();
-        let active = json!(state.active);
+        crate::review::runtime::consumer::load(&context, &|| Ok(())).unwrap();
+        let active = json!(state.policy_revision);
         apply(&context, &connection, &args);
         assert_eq!(
-            json!(Store::open(root.path()).unwrap().read().unwrap().active),
+            json!(
+                Store::open(root.path())
+                    .unwrap()
+                    .read()
+                    .unwrap()
+                    .policy_revision
+            ),
             active
         );
     }
@@ -658,7 +652,13 @@ fn host_application_refuses_changed_stale_withdrawn_or_unregistered_requests() {
         &connection,
         &json!({"kind":"rule_add","rule":rule("read", "allow")}),
     );
-    let initial = json!(Store::open(root.path()).unwrap().read().unwrap().active);
+    let initial = json!(
+        Store::open(root.path())
+            .unwrap()
+            .read()
+            .unwrap()
+            .policy_revision
+    );
     for field in ["candidate_digest", "changes", "review", "confirmed"] {
         let mut changed = args.clone();
         changed[field] = json!(true);
@@ -675,7 +675,13 @@ fn host_application_refuses_changed_stale_withdrawn_or_unregistered_requests() {
     });
     assert!(!cancelled["error"].is_null());
     assert_eq!(
-        json!(Store::open(root.path()).unwrap().read().unwrap().active),
+        json!(
+            Store::open(root.path())
+                .unwrap()
+                .read()
+                .unwrap()
+                .policy_revision
+        ),
         initial
     );
     invoke(
@@ -735,49 +741,9 @@ fn host_application_refuses_after_a_hand_edit_and_keeps_the_edit() {
         &|| Ok(()),
         true,
     );
-    assert!(
-        result["error"]["message"]
-            .as_str()
-            .is_some_and(|m| m.contains("would overwrite unreviewed edits to .shield files")),
-        "{result}"
-    );
+    // The review no longer matches the files: prepare it again and ask again.
+    assert_eq!(result["error"]["code"], "stale_revision", "{result}");
     assert_eq!(std::fs::read_to_string(&rules).unwrap(), edited);
-}
-
-#[test]
-fn host_application_preserves_a_deleted_projection_through_later_repair() {
-    let (root, mut context, connection) = fixture();
-    context.agent = Some("codex".into());
-    let first = prepare(
-        &context,
-        &connection,
-        &json!({"kind":"rule_add","rule":rule("read", "allow")}),
-    );
-    apply(&context, &connection, &first);
-    let rules = root.path().join(".shield/rules.yml");
-    let original = std::fs::read(&rules).unwrap();
-    std::fs::remove_file(&rules).unwrap();
-    let reference = assert_fs::TempDir::new().unwrap();
-    let path = reference.path().canonicalize().unwrap();
-    let args = prepare(
-        &context,
-        &connection,
-        &json!({"kind":"access_path_add","access":"read","path":path}),
-    );
-    let result = apply(&context, &connection, &args);
-    assert_eq!(result["data"]["receipt"]["repair_needed"], true, "{result}");
-    assert!(!rules.exists());
-    let config = std::fs::read_to_string(root.path().join(".shield/config.yml")).unwrap();
-    assert!(config.contains(path.to_str().unwrap()), "{config}");
-    // Reload durable state: repair must remember that this absence was kept,
-    // rather than treating it as output lost during an interrupted write.
-    let state = Store::open(root.path()).unwrap().read().unwrap();
-    crate::review::publication::reconcile(&context, &state).unwrap_err();
-    assert!(!rules.exists());
-    // Restoring the committed bytes resolves the pending edit.
-    std::fs::write(&rules, original).unwrap();
-    let repaired = crate::review::publication::reconcile(&context, &state).unwrap();
-    assert_eq!(repaired["repair_needed"], false, "{repaired}");
 }
 
 #[test]

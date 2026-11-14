@@ -28,10 +28,8 @@ pub(in crate::review) fn eligible(arguments: &Value) -> Result<bool, Error> {
     let input: Input = serde_json::from_value(arguments.clone())
         .map_err(|_| Error::Invalid("invalid preparation arguments"))?;
     validate_input(&input)?;
-    Ok(!input
-        .changes()?
-        .iter()
-        .any(|change| matches!(change, Change::ProjectFilesAdopt)))
+    input.changes()?;
+    Ok(true)
 }
 
 pub(in crate::review) fn capture(
@@ -49,7 +47,8 @@ pub(in crate::review) fn capture(
     let before = store.read_following_files()?;
     before.check(context)?;
     before.check_operations()?;
-    let (mut before, base, snapshots_before) = store.read_for_comparison(before)?;
+    let (mut before, base, snapshots_before) =
+        crate::review::storage::Store::read_for_comparison(before)?;
     let global_sources = if input.changes()?.iter().any(|change| {
         matches!(
             change,

@@ -97,54 +97,51 @@ pub(in crate::review) fn stage(
     Ok(())
 }
 
-pub(in crate::review) fn bind(state: &mut super::State, metadata: &mut Value, receipt: &Value) {
-    if metadata["integration_publication"].is_object()
-        && metadata["integration_publication"]
-            .get("activation_id")
-            .is_none()
-    {
-        metadata["integration_publication"]["activation_id"] = receipt["activation_id"].clone();
-        state.operator["integration_publication"] = metadata["integration_publication"].clone();
+/// The pending publication's owner while it may still finish: the policy
+/// revision written with it. A marker an earlier release staged for an
+/// activation has no owner; `mcp_setup` reviews or cancels it.
+pub(super) fn current_owner(state: &super::State) -> Option<String> {
+    let revision = state.operator["integration_publication"]["policy_revision"].as_str()?;
+    (revision == state.policy_revision).then(|| revision.to_owned())
+}
+
+/// Record the policy revision a staged publication belongs to.
+pub(in crate::review) fn own(metadata: &mut Value, revision: &str) {
+    if metadata["integration_publication"].is_object() {
+        metadata["integration_publication"]["policy_revision"] = json!(revision);
     }
 }
 
-/// Retry only this activation's exact confirmed plan, never a later setup.
+/// Retry only this owner's exact confirmed plan, never a later setup.
 pub(in crate::review) fn resume(
     context: &Context,
     proposal: Option<&str>,
-    activation: &str,
+    owner: &str,
 ) -> Result<bool, Error> {
     let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
     state.check(context)?;
     state.check_operations()?;
     let guard =
         crate::review::publication::ProjectionLease::acquire(Path::new(&context.project_root))?;
-    resume_guarded(context, proposal, activation, &guard)
+    resume_guarded(context, proposal, owner, &guard)
 }
 
 pub(in crate::review) fn resume_guarded(
     context: &Context,
     proposal: Option<&str>,
-    activation: &str,
+    owner: &str,
     guard: &crate::review::publication::ProjectionLease,
 ) -> Result<bool, Error> {
     guard.check(context)?;
-    let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
+    // The owner is a policy revision, which only the files give.
+    let state = Store::open(Path::new(&context.project_root))?.read_following_files()?;
     state.check(context)?;
     state.check_operations()?;
-    if state
-        .active
-        .as_ref()
-        .is_none_or(|active| active.activation_id() != activation)
-    {
-        return Ok(false);
-    }
     let Some(plan) = pending(&state.operator)? else {
         return Ok(true);
     };
     let marker = &state.operator["integration_publication"];
-    if !marker.is_object()
-        || marker["activation_id"] != activation
+    if current_owner(&state).as_deref() != Some(owner)
         || marker["proposal_id"] != json!(proposal)
         || marker["plan_digest"]
             != crate::json::fingerprint(&plan)
@@ -152,7 +149,7 @@ pub(in crate::review) fn resume_guarded(
     {
         return Ok(false);
     }
-    setup::resume_plan_guarded(context, &state.operator, &plan, Some(activation), guard)?;
+    setup::resume_plan_guarded(context, &state.operator, &plan, Some(owner), guard)?;
     Ok(true)
 }
 
@@ -160,13 +157,11 @@ pub(in crate::review) fn resume_guarded(
 pub(super) fn check_owner(
     state: &super::State,
     expected: &Value,
-    activation: Option<&str>,
+    owner: Option<&str>,
 ) -> Result<(), Error> {
-    if activation.is_some_and(|id| {
-        state
-            .active
-            .as_ref()
-            .is_none_or(|active| active.activation_id() != id)
+    // The owner is the policy revision the publication was staged for.
+    if owner.is_some_and(|id| {
+        state.policy_revision != id
             || state.operator["integration_publication"] != expected["integration_publication"]
     }) {
         return Err(Error::StaleSnapshot);
@@ -215,11 +210,16 @@ pub(crate) fn resume_launch(context: &Context, token: &str) -> Result<(), Error>
                     binding["token"] == token && old != new
                 })
         });
-    if owns && let Some(active) = state.active.as_ref() {
+    if !owns {
+        return Ok(());
+    }
+    // Only a publication this launch owns reads the files for its revision.
+    let state = Store::open(Path::new(&context.project_root))?.read_following_files()?;
+    if let Some(owner) = current_owner(&state) {
         resume(
             context,
-            marker["proposal_id"].as_str(),
-            active.activation_id(),
+            state.operator["integration_publication"]["proposal_id"].as_str(),
+            &owner,
         )?;
     }
     Ok(())

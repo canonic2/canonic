@@ -23,7 +23,7 @@ pub(crate) struct Guidance {
 }
 
 /// Encodes host presentation only. The shared review core validates retained
-/// proposals, freshness, exact arguments and confirmation before activation.
+/// proposals, freshness, exact arguments and confirmation before the policy files are written.
 pub(crate) trait ReviewAdapter: Sync {
     fn confirmation(&self) -> Confirmation;
     fn guidance(&self) -> &'static Guidance;

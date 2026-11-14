@@ -141,6 +141,15 @@ impl EventInput {
     }
 }
 
+/// A policy file's text when a proposal was prepared, and the text applying
+/// it writes; `None` is an absent or removed file.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Texts {
+    pub(crate) before: Option<String>,
+    pub(crate) after: Option<String>,
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Proposal {
@@ -155,8 +164,30 @@ pub(crate) struct Proposal {
     pub(crate) target_scope: String,
     pub(crate) operation: String,
     pub(crate) rule_id: String,
+    /// The policy applying this proposal writes and the policy it was prepared
+    /// against, rebuilt from `files` by `Store::hydrate_proposal`; never stored.
+    #[serde(skip)]
     pub(crate) candidate: Value,
+    #[serde(skip)]
     pub(crate) base_candidate: Value,
+    /// Those candidates' identities, for inspection without rebuilding them.
+    #[serde(default)]
+    pub(crate) candidate_digest: String,
+    #[serde(default)]
+    pub(crate) base_digest: String,
+    /// Each policy file the proposal touches: its text when prepared and the
+    /// text applying it writes. Digest-named pack artifacts live in the
+    /// per-user store instead.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) files: BTreeMap<String, Texts>,
+    /// Retained-source references an earlier release stored. A proposal that
+    /// has only these is never applied; it is prepared again.
+    #[expect(dead_code, reason = "accepts the keys earlier checkpoints wrote")]
+    #[serde(default, rename = "candidate", skip_serializing)]
+    pub(in crate::review) retired_candidate: Option<serde::de::IgnoredAny>,
+    #[expect(dead_code, reason = "accepts the keys earlier checkpoints wrote")]
+    #[serde(default, rename = "base_candidate", skip_serializing)]
+    pub(in crate::review) retired_base_candidate: Option<serde::de::IgnoredAny>,
     pub(crate) base_metadata: Value,
     pub(crate) candidate_metadata: Value,
     pub(crate) receipt: Value,
@@ -178,14 +209,11 @@ pub(crate) struct Proposal {
     pub(super) reviewed_paths: Option<BTreeMap<String, Option<String>>>,
 }
 impl Proposal {
+    /// The exact arguments applying this proposal takes. The proposal must be
+    /// hydrated; the digest binds the files it writes.
     pub(crate) fn apply_arguments(&self) -> Value {
-        self.arguments_with_digest(
-            &crate::json::fingerprint(&self.candidate).expect("candidate JSON serializes"),
-        )
-    }
-    fn arguments_with_digest(&self, digest: &str) -> Value {
         let mut arguments = json!({"proposal_id":self.id,
-            "candidate_digest":digest,
+            "candidate_digest":self.candidate_digest,
             "changes":crate::review::changes::diff::between(&self.base_metadata, &self.base_candidate, &self.candidate_metadata, &self.candidate),
             "review":approval::summary(self)});
         // Returned and validated arguments share the public projection; the
@@ -204,21 +232,15 @@ impl Proposal {
             "status":self.status,"provenance":self.provenance,"links":self.links,"reasons":self.reasons,
             "policy_revision":self.policy_revision,"target_scope":self.target_scope,"operation":self.operation,
             "rule_id":self.rule_id,"operator":self.operator,
-            "candidate_digest":super::storage::sources::candidate_identity(&self.candidate)})
+            "candidate_digest":self.candidate_digest})
     }
+    /// The proposal as inspection shows it. Apply arguments need a hydrated
+    /// proposal and appear only while it is pending.
     pub(crate) fn public(&self, reveal: bool) -> Value {
         let mut value = self.metadata_view();
         value["comparison"] = self.comparison.clone();
-        if self.status == "pending" {
-            value["apply_arguments"] = if self.candidate["kind"] == "candidate-bundle" {
-                self.arguments_with_digest(
-                    value["candidate_digest"]
-                        .as_str()
-                        .expect("candidate digest"),
-                )
-            } else {
-                self.apply_arguments()
-            };
+        if self.status == "pending" && !self.candidate.is_null() {
+            value["apply_arguments"] = self.apply_arguments();
         }
         if reveal {
             value["candidate"] = self.candidate.clone();
@@ -273,15 +295,18 @@ pub(crate) fn redact_comparison(value: &mut Value) -> bool {
     reason = "persisted settings and per-read history flags, each independent"
 )]
 pub(crate) struct State {
-    /// Non-authorizing legacy record display; never accepted from saved state.
+    /// An earlier format converted in memory for inspection and not saved;
+    /// it authorizes nothing. Never accepted from saved state.
     #[serde(skip)]
-    pub(in crate::review) legacy_preview: Option<super::runtime::LegacyPreview>,
-    /// Request-local publication work; never accepted from saved state.
+    pub(in crate::review) unconverted: bool,
+    /// Decoded from a checkpoint an earlier release wrote: it still holds a
+    /// policy copy, activation, consent or folder identity records. Runtime
+    /// only; the one conversion ([`super::storage`]) rewrites it.
     #[serde(skip)]
-    pub(in crate::review) remember_policy: bool,
-    /// Digest of the policy files this state last followed. Bookkeeping only:
-    /// it is not policy or operator metadata. Absent until the first follow.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(in crate::review) earlier_format: bool,
+    /// Digest of the policy files this state was brought up to in memory, by
+    /// [`super::files::sync`]. Runtime only: a checkpoint never holds the policy.
+    #[serde(skip)]
     pub(in crate::review) followed_files: Option<String>,
     pub(crate) history_generation: String,
     /// Journal ownership survives a checkout epoch change without rewriting
@@ -312,11 +337,28 @@ pub(crate) struct State {
     #[serde(rename = "project_root", default, skip_serializing)]
     pub(in crate::review) recorded_root: Option<String>,
     pub(crate) sequence: u64,
+    /// The policy files' revision and captured candidate, filled in memory by
+    /// [`super::files::sync`] for workflows that compare against the policy.
+    /// Runtime only: the files are the policy, so a checkpoint never holds a
+    /// copy. Checkpoint-only reads, such as hooks, leave them empty.
+    #[serde(skip)]
     pub(crate) policy_revision: String,
+    #[serde(skip)]
     pub(crate) candidates: BTreeMap<String, Value>,
+    /// The policy copy earlier releases kept: its revision, candidate
+    /// references and the digest of the files it followed. Their presence
+    /// marks an earlier format for the one conversion; never written.
+    #[serde(default, rename = "policy_revision", skip_serializing)]
+    pub(in crate::review) retired_policy_revision: Option<serde::de::IgnoredAny>,
+    #[serde(default, rename = "candidates", skip_serializing)]
+    pub(in crate::review) retired_candidates: Option<serde::de::IgnoredAny>,
+    #[serde(default, rename = "followed_files", skip_serializing)]
+    pub(in crate::review) retired_followed_files: Option<serde::de::IgnoredAny>,
     pub(crate) registry_checkpoints: BTreeMap<String, Value>,
-    #[serde(deserialize_with = "nullable")]
-    pub(in crate::review) active: Option<super::runtime::Active>,
+    /// The activation record earlier releases kept; dropped by the one
+    /// conversion. The policy files are what requests are decided by.
+    #[serde(default, rename = "active", skip_serializing)]
+    pub(in crate::review) retired_active: Option<serde::de::IgnoredAny>,
     pub(crate) read_requests: Vec<super::read_approval::ReadRequest>,
     pub(crate) run_requests: Vec<super::run_approval::RunRequest>,
     /// Non-authorizing terminal outcomes, independent of live grant capacity/history.
@@ -339,19 +381,32 @@ pub(crate) struct State {
     #[serde(default)]
     pub(crate) dismissed_reviews: Vec<String>,
     pub(crate) events: Vec<Value>,
-    #[serde(
-        default,
-        skip_serializing_if = "super::configuration_changes::Log::is_empty"
-    )]
-    pub(super) configuration_changes: super::configuration_changes::Log,
-    #[serde(skip)]
-    pub(super) configuration_changes_dirty: bool,
+    /// The configuration change log earlier releases kept; dropped by the
+    /// one conversion.
+    #[serde(default, rename = "configuration_changes", skip_serializing)]
+    pub(super) retired_configuration_changes: Option<serde::de::IgnoredAny>,
     pub(crate) authorization_events: Vec<Value>,
-    pub(crate) history_enabled: bool,
-    /// Local human-controlled native interception; independent of policy activation.
-    #[serde(default)]
-    pub(crate) enforcement: super::mode::Mode,
-    pub(crate) history_limit: usize,
+    /// The settings in effect, read from the policy files when this state is
+    /// loaded ([`super::settings::load`]). Runtime only: a checkpoint never
+    /// holds settings, and commands change them by writing the files.
+    #[serde(skip)]
+    pub(crate) settings: crate::configuration::settings::Values,
+    /// The retention limit before a history setting change in this command,
+    /// so rewriting history never restores records the old limit expired.
+    #[serde(skip)]
+    pub(crate) history_previous_limit: Option<usize>,
+    /// Settings an earlier checkpoint held, read once to move them into
+    /// `config.local.yml`; never written.
+    #[serde(default, rename = "history_enabled", skip_serializing)]
+    pub(in crate::review) legacy_history_enabled: Option<bool>,
+    #[serde(default, rename = "history_limit", skip_serializing)]
+    pub(in crate::review) legacy_history_limit: Option<usize>,
+    #[serde(default, rename = "enforcement", skip_serializing)]
+    pub(in crate::review) legacy_enforcement: Option<super::mode::Mode>,
+    /// The operator settings records of an earlier checkpoint, taken out of
+    /// `operator` on load ([`super::settings::Legacy`]).
+    #[serde(skip)]
+    pub(in crate::review) legacy_settings: super::settings::Legacy,
 }
 impl State {
     /// Check retained diagnostic evidence at the selected checkout without
@@ -373,11 +428,11 @@ impl State {
             .as_str()
             .unwrap_or(&self.project_id)
     }
-    /// A historical record preview is display only and cannot authorize work.
+    /// An unsaved in-memory conversion is for inspection and cannot authorize work.
     pub(crate) fn check_operations(&self) -> Result<(), Error> {
-        if self.legacy_preview.is_some() {
+        if self.unconverted {
             return Err(Error::Invalid(
-                "historical record inspection cannot authorize operations",
+                "an unconverted earlier checkpoint cannot authorize operations",
             ));
         }
         Ok(())
@@ -385,23 +440,19 @@ impl State {
 
     pub(crate) fn check(&self, context: &Context) -> Result<(), Error> {
         if !self.operator.is_object()
-            || !self.operator["sources"].is_object()
             || self.operator["installed"]
                 .as_array()
                 .is_none_or(|rows| rows.len() > 64)
-            || (!self.operator["default"].is_null() && !self.operator["default"].is_string())
         {
             return Err(Error::Invalid("invalid operator configuration"));
         }
+        // Candidates are rebuilt from a proposal's files on demand; what a
+        // checkpoint holds is the metadata and those files.
         if self.proposals.iter().any(|proposal| {
-            [
-                &proposal.base_candidate,
-                &proposal.candidate,
-                &proposal.base_metadata,
-                &proposal.candidate_metadata,
-            ]
-            .iter()
-            .any(|value| !value.is_object())
+            [&proposal.base_metadata, &proposal.candidate_metadata]
+                .iter()
+                .any(|value| !value.is_object())
+                || (!proposal.files.is_empty() && !proposal.files.contains_key("config.yml"))
         }) {
             return Err(Error::Invalid("incomplete proposal capture"));
         }
@@ -423,14 +474,13 @@ impl State {
             || self.run_requests.len() > 128
             || self.hook_requests.len() > 128
             || self.events.len() > 40000
-            || !(1..=10000).contains(&self.history_limit)
         {
             return Err(Error::Invalid("invalid project state"));
         }
-        // The same root with another ID is a rotated checkout epoch, which a
-        // pristine MCP connection may adopt; it is never a different project.
+        // The same root with another ID is review state recreated since the
+        // context opened.
         if self.project_id != context.project_id {
-            return Err(Error::CheckoutChanged);
+            return Err(Error::StateRecreated);
         }
         Ok(())
     }
@@ -472,22 +522,11 @@ impl State {
         value
     }
     pub(crate) fn record(&mut self, event: Value) {
-        if self.configuration_changes.record(
-            &event,
-            self.active.as_ref().map(super::runtime::Active::revision),
-        ) {
-            self.configuration_changes.trim_queue();
-            self.configuration_changes_dirty = true;
-        }
         if event["kind"].as_str().is_some_and(|kind| {
             [
                 "proposal_rejected",
                 "project_enrolled",
-                "policy_reused",
-                "policy_consent_reused",
                 "integration_review_confirmed",
-                "runtime_activated",
-                "compiled_cache_prepared",
                 "read_grant_issued",
                 "read_grant_consumed",
                 "read_grant_revoked",
@@ -498,11 +537,11 @@ impl State {
                 "hook_grant_consumed",
             ]
             .contains(&kind)
-                || (kind == "proposal_created" && event["details"]["presentation"].is_object())
+                || (kind == "proposal_created" && event["details"]["presentation"].is_string())
         }) {
             self.authorization_events.push(event.clone());
         }
-        if self.history_enabled {
+        if self.settings.history_enabled {
             let event = super::storage::history::bound_event(event);
             self.pending_history.push(event.clone());
             self.events.push(event);
@@ -520,7 +559,7 @@ impl State {
                 )
             })
             .collect();
-        let retained = retained_events(&fields, self.history_limit);
+        let retained = retained_events(&fields, self.settings.history_limit);
         let mut index = 0;
         self.events.retain(|_| {
             let keep = retained[index];
@@ -556,14 +595,8 @@ impl State {
                 && self.proposals.iter().any(|proposal| {
                     event["links"]["proposal_id"] == proposal.id
                         && proposal.presentation.is_object()
-                        && event["details"]["presentation"] == proposal.presentation
+                        && event["details"]["presentation"] == proposal.presentation["digest"]
                 }))
-                || (event["kind"] == "policy_consent_reused"
-                    && event["provenance"]["project_id"] == self.project_id
-                    && event["details"]["receipt"] == self.operator["policy_consent"])
-                || (event["kind"] == "policy_reused"
-                    && event["provenance"]["project_id"] == self.project_id
-                    && event["details"]["receipt"] == self.operator["policy_reuse"])
                 || (event["kind"] == "project_enrolled"
                     && event["provenance"]["project_id"] == self.project_id
                     && event["details"]["bootstrap"] == self.operator["bootstrap"])
@@ -574,10 +607,6 @@ impl State {
                 || event["links"]["request_id"]
                     .as_str()
                     .is_some_and(|id| ids.contains(id))
-                || self
-                    .active
-                    .as_ref()
-                    .is_some_and(|a| event["links"]["activation_id"] == a.activation_id())
         });
     }
 }
@@ -632,3 +661,31 @@ fn history_available() -> bool {
 pub(crate) use crate::evidence::redact;
 
 pub(crate) use crate::evidence::now;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn model_visible_comparisons_keep_local_connection_settings_private() {
+        let local = json!({"local":true,"enabled":true,"agents":{"claude":"acme"},
+            "transport":{"type":"stdio","command":"/acme/private/connector","args":["--profile","acme-private"],
+                "env":{"ACME_REGION":"acme-private-region"}}});
+        let shared = json!({"local":false,"enabled":true,"agents":{"claude":"docs"},
+            "transport":{"type":"http","url":"https://docs.example.com/mcp"}});
+        let side = |connection: &Value| json!({"scopes":[{"lock":{"mcp":{"acme":connection.clone(),"docs":shared.clone()}}}]});
+        let mut comparison = json!({"before":side(&local),"after":side(&local)});
+        assert!(redact_comparison(&mut comparison));
+        for side in ["before", "after"] {
+            let mcp = &comparison[side]["scopes"][0]["lock"]["mcp"];
+            assert_eq!(mcp["acme"], json!({"local":true,"settings":"private"}));
+            // Committed connections are policy everyone reviews in the files.
+            assert_eq!(mcp["docs"], shared);
+        }
+        assert!(!comparison.to_string().contains("private/connector"));
+        assert!(!comparison.to_string().contains("acme-private"));
+        // A comparison without local settings is left as it is.
+        let mut plain = json!({"before":side(&shared),"after":side(&shared)});
+        assert!(!redact_comparison(&mut plain));
+    }
+}

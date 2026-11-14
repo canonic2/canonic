@@ -5,19 +5,6 @@ use assert_fs::prelude::*;
 
 fn fixture() -> (assert_fs::TempDir, Context, EvaluatedRequest, Value) {
     let (root, mut context) = review::tests::enrolled();
-    let status = review::runtime::status(&context).expect("native approval fixture");
-    review::runtime::publish_fixture(
-        &context,
-        status["review"]["policy_revision"]
-            .as_str()
-            .expect("native approval fixture"),
-        status["review"]["candidate_digest"]
-            .as_str()
-            .expect("native approval fixture"),
-        None,
-        &|| Ok(()),
-    )
-    .expect("native approval fixture");
     context.surface = "run".into();
     context.cwd = Some(context.project_root.clone());
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -373,31 +360,6 @@ fn shown_requests_carry_their_creation_time_and_policy_basis_without_operands() 
 }
 
 #[test]
-fn authorization_recovers_a_corrupt_plan_before_the_grant_transaction() {
-    let (_root, context, evidence, resource) = fixture();
-    let id = pending(&context, &evidence, &resource);
-    let status = review::runtime::status(&context).unwrap();
-    let cache = &status["compiled_cache"];
-    let path = std::path::PathBuf::from(cache["directory"].as_str().unwrap())
-        .join("compiled")
-        .join(cache["project_key"].as_str().unwrap())
-        .join(format!("{}.bin", cache["plan_key"].as_str().unwrap()));
-    std::fs::write(path, b"corrupt derived plan").unwrap();
-    assert_eq!(
-        authorize(&operator(&context), &id, 300, None, false).unwrap()["status"],
-        "approved"
-    );
-    assert_eq!(
-        review::runtime::status(&context).unwrap()["active"]["activation_id"],
-        status["active"]["activation_id"]
-    );
-    Project::open(Path::new(&context.project_root))
-        .unwrap()
-        .snapshot()
-        .unwrap();
-}
-
-#[test]
 fn approval_replay_uses_grant_expiry_after_pending_window_closes() {
     let (_root, context, evidence, resource) = fixture();
     let id = pending(&context, &evidence, &resource);
@@ -692,13 +654,8 @@ fn publication_failure_withholds_the_callback_and_leaves_the_grant_spent() {
     let store = Store::open(Path::new(&context.project_root)).expect("native approval fixture");
     store
         .update(&context, &|| Ok(()), |state| {
-            let activation = state
-                .active
-                .as_ref()
-                .expect("active fixture")
-                .activation_id();
-            let filler =
-                json!({"kind":"acme-capacity-fixture","links":{"activation_id":activation}});
+            // Events linked to a retained request survive retention.
+            let filler = json!({"kind":"acme-capacity-fixture","links":{"request_id":id}});
             state.authorization_events.resize(1024, filler);
             Ok(json!({}))
         })

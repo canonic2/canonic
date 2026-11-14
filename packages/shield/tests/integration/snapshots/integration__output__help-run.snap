@@ -25,7 +25,7 @@ Options:
       --tool-use-id <TOOL_USE_ID>
           Optional host tool-call ID
       --cache-dir <CACHE_DIR>
-          Compiled cache location for init, MCP setup or cache preparation
+          Folder for this project's compiled policy plans, chosen at init or MCP setup
       --cwd <CWD>
           Canonical cwd inside the enrolled project; defaults to its root
       --timeout-ms <TIMEOUT_MS>

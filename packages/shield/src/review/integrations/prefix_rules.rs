@@ -297,7 +297,7 @@ mod tests {
                 crate::review::storage::Store::open(root.path())
                     .unwrap()
                     .inspect_checkpoint(&context, &|| Ok(()), |state| {
-                        sync(root.path(), &state.operator, &[], state.enforcement.enabled)
+                        sync(root.path(), &state.operator, &[], state.settings.enabled())
                     })
                     .unwrap();
                 assert_eq!(

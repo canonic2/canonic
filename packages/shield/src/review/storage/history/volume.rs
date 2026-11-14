@@ -115,7 +115,7 @@ fn history_volume_campaign() {
     let elapsed = began.elapsed().as_secs_f64();
     let counters: serde_json::Map<String, Value> = [
         "policy.preparations",
-        "source.hydrated",
+        "policy.captures",
         "source.read_bytes",
         "state.read_bytes",
         "state.checkpoint_reads",
@@ -138,7 +138,7 @@ fn history_volume_campaign() {
     trace.finish("measured");
     for name in [
         "policy.preparations",
-        "source.hydrated",
+        "policy.captures",
         "source.read_bytes",
         "history.captures",
         "history.read_bytes",

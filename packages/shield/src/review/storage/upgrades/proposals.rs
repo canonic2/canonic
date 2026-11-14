@@ -11,14 +11,26 @@ pub(super) fn prepare(target: &mut Value) -> Result<(), Error> {
         let fields = row
             .as_object_mut()
             .ok_or(Error::Invalid("invalid historical proposal"))?;
-        if !fields.get("candidate").is_some_and(Value::is_object) {
+        // A proposal stores either whole retained candidates or the policy
+        // file texts it writes; the latter has no base candidate to capture.
+        let retained = fields.get("candidate").is_some_and(Value::is_object);
+        let texts = fields
+            .get("files")
+            .and_then(Value::as_object)
+            .is_some_and(|files| !files.is_empty());
+        if !(retained || texts) {
             return Err(Error::Invalid(
                 "historical proposal candidate is unavailable",
             ));
         }
+        let names: &[&str] = if retained {
+            &["base_candidate", "base_metadata", "candidate_metadata"]
+        } else {
+            &["base_metadata", "candidate_metadata"]
+        };
         let mut captured = serde_json::Map::new();
         let mut missing = Vec::new();
-        for name in ["base_candidate", "base_metadata", "candidate_metadata"] {
+        for &name in names {
             match fields.get(name) {
                 Some(value) if value.is_object() => {}
                 Some(Value::Null) => {
@@ -31,27 +43,7 @@ pub(super) fn prepare(target: &mut Value) -> Result<(), Error> {
                 Some(_) => return Err(Error::Invalid("invalid historical proposal capture")),
             }
         }
-        // These defaults were explicitly supported by the historical codec.
-        // Neither absent operator identity nor absent receipt implies approval.
-        fields.entry("receipt").or_insert(Value::Null);
-        fields.entry("operator").or_insert(Value::Null);
-        if fields.get("status").and_then(Value::as_str) == Some("applied")
-            && fields.get("receipt").is_some_and(Value::is_null)
-        {
-            let reasons = fields
-                .get_mut("reasons")
-                .and_then(Value::as_object_mut)
-                .ok_or(Error::Invalid("invalid historical proposal reasons"))?;
-            if reasons
-                .get("historical_receipt_unavailable")
-                .is_some_and(|value| value != &Value::Bool(true))
-            {
-                return Err(Error::Invalid(
-                    "historical proposal receipt evidence conflicts",
-                ));
-            }
-            reasons.insert("historical_receipt_unavailable".into(), Value::Bool(true));
-        }
+        mark_missing_receipt(fields)?;
         if captured.is_empty() {
             continue;
         }
@@ -83,7 +75,7 @@ pub(super) fn prepare(target: &mut Value) -> Result<(), Error> {
             ));
         }
         reasons.insert("historical_capture".into(), evidence);
-        for name in ["base_candidate", "base_metadata", "candidate_metadata"] {
+        for &name in names {
             if !fields.get(name).is_some_and(Value::is_object) {
                 fields.insert(name.into(), json!({}));
             }
@@ -96,6 +88,33 @@ pub(super) fn prepare(target: &mut Value) -> Result<(), Error> {
             );
         }
     }
+    Ok(())
+}
+
+/// Fill the defaults the historical codec explicitly supported, and mark an
+/// applied proposal without a receipt. Neither absent operator identity nor an
+/// absent receipt implies approval.
+fn mark_missing_receipt(fields: &mut serde_json::Map<String, Value>) -> Result<(), Error> {
+    fields.entry("receipt").or_insert(Value::Null);
+    fields.entry("operator").or_insert(Value::Null);
+    if fields.get("status").and_then(Value::as_str) != Some("applied")
+        || !fields.get("receipt").is_some_and(Value::is_null)
+    {
+        return Ok(());
+    }
+    let reasons = fields
+        .get_mut("reasons")
+        .and_then(Value::as_object_mut)
+        .ok_or(Error::Invalid("invalid historical proposal reasons"))?;
+    if reasons
+        .get("historical_receipt_unavailable")
+        .is_some_and(|value| value != &Value::Bool(true))
+    {
+        return Err(Error::Invalid(
+            "historical proposal receipt evidence conflicts",
+        ));
+    }
+    reasons.insert("historical_receipt_unavailable".into(), Value::Bool(true));
     Ok(())
 }
 

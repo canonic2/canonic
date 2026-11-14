@@ -146,7 +146,7 @@ fn proposal_text_preserves_present_null_selectors_and_full_structured_evidence()
         ),
         (
             "policy_withdraw",
-            "Policy proposal withdrawn. Active policy is unchanged.",
+            "Policy proposal withdrawn. The policy files are unchanged.",
         ),
     ] {
         let evidence = json!({"data":{"proposal_id":"acme-proposal","status":"pending",
