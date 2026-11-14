@@ -1,6 +1,6 @@
 [package]
 name = "canonic-registry-kit"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.97"
 publish = false
@@ -29,6 +29,8 @@ libc = "0.2"
 [target.'cfg(windows)'.dependencies]
 atomicwrites = "0.4.4"
 windows-permissions = "0.2.4"
+# Safe native file identities: volume serial number, file index and link count.
+winapi-util = "0.1.11"
 winsafe = { version = "0.0.29", features = ["advapi"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

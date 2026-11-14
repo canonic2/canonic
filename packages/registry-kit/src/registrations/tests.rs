@@ -225,7 +225,7 @@ fn global_file_round_trips_atomically_and_refuses_stale_reviews() {
     after.default = Some("team".into());
     file.replace(&empty, &after).unwrap();
     assert_eq!(file.read().unwrap(), after);
-    assert!(!home.child(".acme/registries.lock").exists());
+    assert!(home.child(".acme/registries.lock").exists());
     assert!(!home.child(".acme/registries.new").exists());
     #[cfg(unix)]
     {
@@ -280,9 +280,9 @@ fn valid_registrations_that_would_serialize_beyond_the_bound_are_not_written() {
         file.replace(&small, &after),
         Err(RegistrationError::TooLarge)
     ));
-    // The previous file is untouched, still readable, and the lock is released.
+    // The previous value is untouched and the persistent kernel lease is released.
     assert_eq!(file.read().unwrap(), small);
-    assert!(!home.child("registries.lock").exists());
+    assert!(home.child("registries.lock").exists());
     assert!(!home.child("registries.new").exists());
 }
 
@@ -294,6 +294,10 @@ fn a_committed_write_that_cannot_be_synced_reports_it_without_rolling_back() {
     let dir = home.path().join("config");
     fs::create_dir(&dir).unwrap();
     let file = GlobalFile::new(dir.join("registries.json"), "main");
+    // Establish the durable lease and generation directory before restricting
+    // the projection parent; the failure under test follows commitment.
+    file.replace(&Registrations::default(), &Registrations::default())
+        .unwrap();
     let mut after = Registrations::default();
     after.add("acme", local("/srv/acme"), "main").unwrap();
     // Writable and searchable, but not readable: the directory cannot be opened to sync.
@@ -311,7 +315,7 @@ fn a_committed_write_that_cannot_be_synced_reports_it_without_rolling_back() {
     );
     // The new value is in place and the lock was released.
     assert_eq!(file.read().unwrap(), after);
-    assert!(!dir.join("registries.lock").exists());
+    assert!(dir.join("registries.lock").exists());
 }
 
 #[test]

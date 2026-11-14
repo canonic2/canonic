@@ -5,6 +5,7 @@ use std::{
     os::windows::fs::{MetadataExt, OpenOptionsExt},
     path::Path,
 };
+use winapi_util::file::information;
 use windows_permissions::{
     LocalBox, SecurityDescriptor,
     constants::{SeObjectType, SecurityInformation},
@@ -22,6 +23,24 @@ fn refused() -> io::Error {
 pub(super) fn regular(file: &File) -> io::Result<bool> {
     let metadata = file.metadata()?;
     Ok(metadata.is_file() && metadata.file_attributes() & 0x0400 == 0)
+}
+
+/// Whether `path` names the same regular file as `file`, with at most two
+/// links. The path is opened for attributes only, without following a final
+/// reparse point: no data access, so a byte-range lock held on `file` cannot
+/// refuse it.
+pub(super) fn same_file(path: &Path, file: &File) -> io::Result<bool> {
+    let other = OpenOptions::new()
+        .access_mode(0x0000_0080)
+        .custom_flags(0x0200_0000 | 0x0020_0000)
+        .open(path)?;
+    if !regular(&other)? || !regular(file)? {
+        return Ok(false);
+    }
+    let (a, b) = (information(&other)?, information(file)?);
+    Ok(a.volume_serial_number() == b.volume_serial_number()
+        && a.file_index() == b.file_index()
+        && b.number_of_links() <= 2)
 }
 
 pub(super) fn private(file: &mut File) -> io::Result<()> {

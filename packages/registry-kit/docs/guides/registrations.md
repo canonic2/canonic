@@ -46,8 +46,9 @@ state; do not retain aliases as dependency identities.
 
 ## Persist global registrations
 
-`GlobalFile` reads and conditionally replaces a JSON document at your chosen path.
-A missing file reads as empty registrations.
+`GlobalFile` reads committed registrations and publishes reviewed generations at
+your chosen path. Its JSON file is a readable projection; before the first
+generation, a missing file reads as empty registrations.
 
 ```rust
 use canonic_registry_kit::{registrations::GlobalFile, source::Source};
@@ -64,19 +65,27 @@ fn store_approved(path: &Path, source: Source) -> Result<(), Box<dyn Error>> {
 }
 ```
 
-Replacement validates `after`, takes an exclusive sibling lock, rereads the file
-and writes only if it still equals `before`. On `Changed`, reread and rebuild
-the proposed change; obtain review again if what was approved has changed.
+Replacement validates `after`, takes a kernel lease and publishes only if the
+captured base remains current. On `Changed`, reread and rebuild the proposed
+change; obtain review again if what was approved has changed.
+
+For a frozen review and recoverable application receipt, use `snapshot`, then
+`publish(&snapshot, &after, operation_digest, &receipt)`. The snapshot also binds
+the generation: an intervening change and reversal still make it stale. Supply a
+64-character lowercase SHA-256 operation key and a JSON receipt no larger than
+64 KiB. Your application owns review and the receipt's meaning. Call `recover`
+before a later mutation to reconcile interrupted approved intent using its
+retained source and receipt, without another acquisition or approval.
 
 The file is bounded to 1 MiB and must be regular. Symlink files and symlink
-parents are refused. The `.lock` and `.new` sibling paths replace the document's
-extension: `registries.json` uses `registries.lock` and `registries.new`.
-Choose a path with a parent and an extension other than `.lock` or `.new`, in
+parents are refused. Sibling `.lease`, `.lock`, `.new` and `.state` paths replace
+the document's extension. The state directory contains immutable generations and
+active/pending references. Choose a parent and a non-reserved extension, in
 any case. On Unix, created directories are 0700 and files are 0600. On Windows,
 created directories and replacement files receive a protected DACL allowing only
 the current user and SYSTEM. Existing parent-directory permissions are preserved.
 
-The serialized shape has a `sources` map from alias to `Source` and an optional
+The projection has a `sources` map from alias to `Source` and an optional
 `default` alias. Serialize library types instead of calculating identities or
 assembling trust fields yourself. Reads revalidate sources and global scope
 rules. The library exposes no project-file adapter: persist that scope in your
@@ -84,14 +93,39 @@ application, validate it with `Scope::Project`, then merge it.
 
 ## Handle write outcomes
 
-Most refusals leave the file unchanged. Two errors mean replacement committed:
-`NotDurable` means the subsequent directory sync failed, and `LockRemains`
-means the lock could not be removed. Read the current state before deciding
-whether to retry. `RefusedLockRemains` means nothing committed and carries both
-the original refusal and the lock path.
+`publish` returns `Publication` after the active reference commits. Its flags
+separately report confirmed durability, projection repair, replay and resumption
+of unfinished approved intent. Do not interpret post-commit problems as a failed
+mutation and run it again. The conditional `replace` adapter reports these as
+`NotDurable` or `CommittedRepair`, both of which mean commitment.
 
-`Locked(path)` can indicate an active writer or a lock left after a crash.
-Verify that no writer still owns it before removing a stale lock. See
+Reads use the selected generation even when the projection has missing or
+conflicting manual bytes. `Snapshot::projection_ready` exposes disagreement.
+Recovery materializes an exact reviewed base or already committed result and
+rewrites a deleted projection from the active generation; it preserves
+conflicting bytes for the application to reconcile.
+
+To reconcile a manual edit, take a `snapshot` (its `projection_ready()` is
+false) and show the person both values: `snapshot.registrations()` is committed,
+`read_projection()` is the edited file. Publish the one they choose from that
+snapshot. The snapshot binds the exact edited bytes, so a further edit makes the
+publication `Changed` instead of overwriting work nobody reviewed. `replace`
+cannot show the edit and refuses with `ProjectionConflict(path)`. An interrupted publication
+whose reviewed base has since changed never committed, so recovery discards it
+and `receipt` returns nothing for its operation; review the change again. `receipt` reads
+only the active generation's matching operation, without flushing files or
+replaying arbitrary historical mutations.
+
+New kernel leases release ownership on process death and are reused without
+deleting marker files. A different legacy marker has an unknowable owner and is
+refused with `Locked(path)`. Close other writers and inspect ownership before any
+manual repair; the library never guesses that such a marker is abandoned. On a
+single-user machine where no process still runs an older writer, deleting that
+`.lock` file is the repair; the next write recreates it as a link to its lease.
+
+Writes need a filesystem with hard links; exFAT and some network mounts refuse
+them with `Io`. On Unix the lease must belong to the owner of its directory, so
+run every writer under the account that owns the configuration directory. See
 [Errors and troubleshooting](../reference/errors.md).
 
 [Documentation index](../README.md)

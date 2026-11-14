@@ -97,6 +97,67 @@ checkpoints when removing an alias; otherwise re-enrollment loses that history.
 `get` and `release_digest` expose retained information for diagnostics. The
 application owns validation and protection of its persisted state.
 
+## Opt in to versioned trust
+
+Versioned trust lets a publisher rotate its signing keys and revoke exact
+releases without changing the source your users enrolled. It is opt-in: once your
+application adopts it for a source, use only the versioned methods for that
+source and never fall back to `catalog` or `artifact`.
+
+```rust
+use canonic_registry_kit::{
+    acquisition::{Fetcher, VerifiedUpdate, VersionedRequest},
+    checkpoint::Checkpoints,
+    source::Source,
+};
+use std::{collections::BTreeMap, time::SystemTime};
+
+fn update(
+    fetcher: &Fetcher,
+    source: &Source,
+    previous: Option<&VerifiedUpdate>,
+    checkpoints: &Checkpoints,
+) -> Result<VerifiedUpdate, Box<dyn std::error::Error>> {
+    let protected = BTreeMap::new(); // installed or pinned release digests
+    Ok(fetcher.versioned_catalog(
+        VersionedRequest {
+            source,
+            previous: previous.map(|u| (u.root(), u.revocations())),
+            checkpoints: previous.map_or(checkpoints, VerifiedUpdate::checkpoints),
+            protected: &protected,
+            now: SystemTime::now(),
+        },
+        &|| Ok(()), // return Err(AcquisitionError::Cancelled) to stop
+    )?)
+}
+```
+
+`versioned_catalog` follows `trust/roots/N.json` successors from the last root
+you admitted (or version 1 on adoption), then reads `trust/revocations.json` and
+`catalog.json`, each beside a `.sig` file: JSON
+`{"schema_version":1,"kind":"registry-signatures","signatures":[{"key_id","signature"}]}`
+over the exact payload bytes. Version 1 must be signed by the enrolled key and
+its own root keys; each later root by the threshold of both the previous and new
+root keys. All reads share one deadline and a 4 MiB budget, and a missing or
+invalid file refuses the whole update.
+
+The returned `VerifiedUpdate` changes nothing on disk. Persist its root
+(`TrustedRoot::checkpoint`), revocations (`Revocations::signed_bytes`) and
+`checkpoints()` yourself, and only if your stored head still equals
+`expected_head_revision()`; store `head_revision()` with them. Reload them with
+`TrustedRoot::restore_checkpoint(&source, &bytes)` and
+`Revocations::restore_checkpoint(&root, &payload, &signatures)`, which keep known
+revocations even after they expire.
+
+Before using a selected entry, call `update.check_release(&entry)`: it refuses
+entries the catalog does not list and exactly revoked releases, with no clock or
+network, so apply it to cached bytes too. Fetch bytes with
+`fetcher.versioned_artifact(&update, &entry, max_bytes, now)` and load pack
+history with `versioned_history`. Both refuse before any request once the root,
+revocations or catalog has expired at `now`; run `versioned_catalog` again to
+refresh. `RootSummary` (from `TrustedRoot::summary`) describes the current keys
+and roles for display; it grants nothing.
+
 ## Transport behavior
 
 HTTPS acquisition uses public TLS roots, no proxies, no redirects and no content

@@ -18,10 +18,12 @@ unpublished, so its API reference is built locally rather than hosted on docs.rs
 | Discover a new source | `acquisition::Fetcher::discover`, `Discovery` | [Sources and trust](../guides/sources-and-trust.md) |
 | Construct an already trusted source | `source::Source::{local,signed,pinned}` | [Sources and trust](../guides/sources-and-trust.md) |
 | Fetch catalogs and releases | `Fetcher::{catalog,history,artifact,read}` | [Sources and trust](../guides/sources-and-trust.md) |
+| Fetch under versioned trust | `Fetcher::{versioned_catalog,versioned_history,versioned_artifact}`, `acquisition::{VersionedRequest,VerifiedUpdate}` | [Opt in to versioned trust](../guides/sources-and-trust.md#opt-in-to-versioned-trust) |
+| Persist and inspect versioned trust | `trust::{TrustedRoot,Revocations,RootSummary,RoleSummary,TrustError}` | [Opt in to versioned trust](../guides/sources-and-trust.md#opt-in-to-versioned-trust) |
 | Verify supplied catalog bytes | `catalog::Catalog::verify` | [Sources and trust](../guides/sources-and-trust.md) |
 | Retain rollback history | `checkpoint::Checkpoints::{admit,admit_retaining,get,release_digest}` | [Sources and trust](../guides/sources-and-trust.md) |
 | Manage aliases and defaults | `registrations::{Registrations,Effective,Scope}` | [Registrations](../guides/registrations.md) |
-| Read and replace global state | `registrations::GlobalFile` | [Registrations](../guides/registrations.md) |
+| Read, review and recover global generations | `registrations::{GlobalFile, Snapshot, Publication}` | [Registrations](../guides/registrations.md) |
 | Parse user input | `selector::{parse,Selector,Reference}` | [Selecting packs](../guides/selecting-packs.md) |
 | Browse releases | `Catalog::{lookup,select,release,releases,search,entries,heads,history}` | [Selecting packs](../guides/selecting-packs.md) |
 | Verify indexed history pages | `catalog::history::{Page,Reference}` | [Catalog format](../publishing/catalog-format.md) |

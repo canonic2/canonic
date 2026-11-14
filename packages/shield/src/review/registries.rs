@@ -278,6 +278,9 @@ pub(super) fn registration_error(error: RegistrationError) -> Error {
         RegistrationError::CommittedRepair => Error::Invalid(
             "global registry change committed; configuration projection needs repair",
         ),
+        RegistrationError::ProjectionConflict(_) => Error::Invalid(
+            "global registry projection has conflicting manual edits; preserve them and reconcile ~/.shield/registries.json with the committed registrations before retrying",
+        ),
         RegistrationError::Locked(lock) => Error::Io(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
             format!(
@@ -285,10 +288,7 @@ pub(super) fn registration_error(error: RegistrationError) -> Error {
                 lock.display()
             ),
         )),
-        RegistrationError::NotDurable(error)
-        | RegistrationError::LockRemains(_, error)
-        | RegistrationError::RefusedLockRemains { source: error, .. }
-        | RegistrationError::Io(error) => Error::Io(error),
+        RegistrationError::NotDurable(error) | RegistrationError::Io(error) => Error::Io(error),
     }
 }
 

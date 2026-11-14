@@ -7,6 +7,8 @@
 
 mod history;
 mod hosted;
+mod versioned;
+pub use versioned::{MAX_ROOT_STEPS, MAX_UPDATE_BYTES, VerifiedUpdate, VersionedRequest};
 
 use crate::{
     catalog::{self, Catalog, CatalogError, Entry},
@@ -31,6 +33,15 @@ pub const MAX_TRUST_BYTES: u64 = 4096;
 /// Acquisition failures.
 #[derive(Debug, thiserror::Error)]
 pub enum AcquisitionError {
+    /// The caller cancelled an explicit metadata update.
+    #[error("registry acquisition cancelled")]
+    Cancelled,
+    /// Authenticated versioned root or revocation metadata was refused.
+    #[error(transparent)]
+    Trust(#[from] crate::trust::TrustError),
+    /// Catalog continuity refused an otherwise authenticated update.
+    #[error(transparent)]
+    Checkpoint(#[from] crate::checkpoint::CheckpointError),
     /// The registration location is neither a directory nor a supported URL.
     #[error("registry location must be a directory or a safe https:// URL")]
     Location,

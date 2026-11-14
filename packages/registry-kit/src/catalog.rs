@@ -77,6 +77,9 @@ pub struct Catalog {
 /// Why catalog bytes were refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CatalogError {
+    /// Explicit versioned role authentication failed.
+    #[error(transparent)]
+    Trust(#[from] crate::trust::TrustError),
     /// A signed source served no signature.
     #[error("registry signature missing")]
     SignatureMissing,
@@ -142,6 +145,29 @@ impl Catalog {
         if let Some(key) = source.key() {
             verify_signature(key, bytes, signature.ok_or(CatalogError::SignatureMissing)?)?;
         }
+        Self::parse_authenticated(source, bytes, now)
+    }
+
+    /// Authenticates exact catalog bytes using an explicitly adopted root's
+    /// current catalog role, retaining the original enrolled source identity.
+    ///
+    /// # Errors
+    /// Returns [`CatalogError`] for trust, schema, identity, size or expiry failure.
+    pub fn verify_versioned(
+        root: &crate::trust::TrustedRoot,
+        bytes: &[u8],
+        signatures: &[u8],
+        now: SystemTime,
+    ) -> Result<Self, CatalogError> {
+        root.verify_catalog(bytes, signatures, now)?;
+        Self::parse_authenticated(root.source(), bytes, now)
+    }
+
+    fn parse_authenticated(
+        source: &Source,
+        bytes: &[u8],
+        now: SystemTime,
+    ) -> Result<Self, CatalogError> {
         let document: Document =
             serde_json::from_slice(bytes).map_err(|_| CatalogError::Malformed)?;
         if !matches!(document.schema_version, 1..=3)
@@ -334,6 +360,22 @@ impl Catalog {
     #[must_use]
     pub fn expires_at(&self) -> Option<&str> {
         self.expires_at.as_deref()
+    }
+
+    /// Rechecks this catalog's expiry at `now`, for a catalog retained after
+    /// verification. A local catalog without an expiry is always fresh.
+    ///
+    /// # Errors
+    /// Returns [`CatalogError::Expired`] once the expiry has passed.
+    pub fn check_fresh(&self, now: SystemTime) -> Result<(), CatalogError> {
+        match self.expires_at.as_deref() {
+            None => Ok(()),
+            Some(expiry) => match timestamp::is_expired(expiry, now) {
+                Some(false) => Ok(()),
+                Some(true) => Err(CatalogError::Expired),
+                None => Err(CatalogError::ExpiryInvalid),
+            },
+        }
     }
 
     /// Releases of one pack, highest version first.

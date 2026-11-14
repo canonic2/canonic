@@ -68,6 +68,18 @@ impl Client {
         read(&self.agent(deadline)?, base, path, max_bytes)
     }
 
+    /// Only a versioned next-root probe may interpret an unencoded 404 as the
+    /// end of succession. Every other response/transport failure still refuses.
+    pub(super) fn next_root_until(
+        &self,
+        base: &str,
+        path: &str,
+        max_bytes: u64,
+        deadline: Instant,
+    ) -> Result<Option<Vec<u8>>, AcquisitionError> {
+        read_response(&self.agent(deadline)?, base, path, max_bytes, true)
+    }
+
     /// Builds an HTTPS-only agent bound to `deadline`.
     ///
     /// The HTTP client checks its overall deadline only before sending; while
@@ -297,6 +309,16 @@ fn read(
     path: &str,
     max_bytes: u64,
 ) -> Result<Vec<u8>, AcquisitionError> {
+    read_response(agent, base, path, max_bytes, false)?.ok_or(AcquisitionError::Response)
+}
+
+fn read_response(
+    agent: &ureq::Agent,
+    base: &str,
+    path: &str,
+    max_bytes: u64,
+    next_root: bool,
+) -> Result<Option<Vec<u8>>, AcquisitionError> {
     if !source::is_https_location(base) || !names::is_artifact_path(path) {
         return Err(AcquisitionError::Location);
     }
@@ -304,6 +326,10 @@ fn read(
         .get(&format!("{base}{path}"))
         .call()
         .map_err(|error| transport_error(&error))?;
+    if next_root && response.status() == 404 && !response.headers().contains_key("content-encoding")
+    {
+        return Ok(None);
+    }
     if response.status() != 200 || response.headers().contains_key("content-encoding") {
         return Err(AcquisitionError::Response);
     }
@@ -321,7 +347,7 @@ fn read(
     if bytes.len() as u64 > max_bytes {
         return Err(AcquisitionError::TooLarge);
     }
-    Ok(bytes)
+    Ok(Some(bytes))
 }
 
 fn transport_error(error: &ureq::Error) -> AcquisitionError {

@@ -7,7 +7,7 @@
 
 mod global_file;
 
-pub use global_file::{GlobalFile, MAX_FILE_BYTES};
+pub use global_file::{GlobalFile, MAX_FILE_BYTES, MAX_RECEIPT_BYTES, Publication, Snapshot};
 
 use crate::{names, source::Source};
 use serde::{Deserialize, Serialize};
@@ -63,7 +63,8 @@ pub enum RegistrationError {
     /// The alias is not registered.
     #[error("registry is not registered: {0}")]
     Missing(String),
-    /// The scope already holds [`MAX_REGISTRATIONS`] registrations.
+    /// The scope already holds [`MAX_REGISTRATIONS`] registrations, or the
+    /// global file's state directory holds more than 64 entries.
     #[error("registry registration limit exceeded")]
     Limit,
     /// A global default must name a global registration or the built-in alias.
@@ -76,8 +77,8 @@ pub enum RegistrationError {
     /// the written file could not be read back.
     #[error("registry registrations would exceed the file size limit")]
     TooLarge,
-    /// The file path has no parent, or ends in `.lock` or `.new` in any letter
-    /// case, which its own lock or temporary file would use.
+    /// The file path has no parent, or ends in `.lock`, `.lease`, `.new` or
+    /// `.state` in any letter case, which its own infrastructure would use.
     #[error("registry registrations file path is unusable")]
     Path,
     /// The registrations file or its directory is a symbolic link.
@@ -86,30 +87,23 @@ pub enum RegistrationError {
     /// The file changed after the caller read it.
     #[error("registry registrations changed; review again")]
     Changed,
-    /// Another writer holds the lock, or a crashed writer left it behind.
+    /// A live writer holds the kernel lease, or a legacy marker at this path
+    /// has an owner that cannot be verified. Markers are never removed automatically.
     #[error("registry registrations are locked by another writer: {0}")]
     Locked(PathBuf),
-    /// The new registrations were written, but syncing their directory
-    /// failed, so they may revert to the previous ones after a crash.
-    #[error("registry registrations were written but may not survive a crash")]
+    /// The generation committed, but required publication durability could not
+    /// be confirmed. Reconciliation must not repeat the approved mutation.
+    #[error("registry registrations committed; publication durability needs reconciliation")]
     NotDurable(#[source] io::Error),
-    /// The new registrations were written, but the lock could not be removed;
-    /// later writes are refused until it is. Reported in preference to
-    /// [`RegistrationError::NotDurable`] when both occur.
-    #[error("registry registrations were written but the lock remains: {0}")]
-    LockRemains(PathBuf, #[source] io::Error),
-    /// Nothing was written, because of `refusal`, and the lock could not be
-    /// removed either; later writes are refused until it is.
-    #[error("registry registrations were not written ({refusal}) and the lock remains: {}", lock.display())]
-    RefusedLockRemains {
-        /// Why nothing was written.
-        refusal: Box<RegistrationError>,
-        /// The lock file to remove.
-        lock: PathBuf,
-        /// Why the lock could not be removed.
-        #[source]
-        source: io::Error,
-    },
+    /// The new generation is authoritative but its projection needs repair.
+    #[error("global registrations committed; configuration projection needs repair")]
+    CommittedRepair,
+    /// The projection file at this path differs from the committed
+    /// registrations, and a value-only replacement never reviewed that edit.
+    /// Show it with `GlobalFile::read_projection`, then publish either it or
+    /// the committed values from a fresh snapshot.
+    #[error("registry registrations file has manual edits to review: {0}")]
+    ProjectionConflict(PathBuf),
     /// Filesystem failure.
     #[error("registry registrations I/O failed")]
     Io(#[from] io::Error),

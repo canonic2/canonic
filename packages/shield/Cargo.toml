@@ -36,7 +36,7 @@ strip = "none"
 
 [dependencies]
 canonic-tui-kit = { version = "0.5.0", path = "../tui-kit" }
-canonic-registry-kit = { version = "0.4.0", path = "../registry-kit" }
+canonic-registry-kit = { version = "0.5.0", path = "../registry-kit" }
 canonic-mcp-kit = { version = "0.23.0", path = "../mcp-kit" }
 blake3 = "1.8.2"
 clap = { version = "4.5", features = ["derive"] }
@@ -88,7 +88,7 @@ libproc = "0.14.11"
 # Exercise the Windows PE contract on every development host.
 object = { version = "0.39.1", default-features = false, features = ["read_core", "pe", "elf", "std"] }
 base64 = "0.22.1"
-canonic-registry-kit = { version = "0.4.0", path = "../registry-kit", features = ["test-support"] }
+canonic-registry-kit = { version = "0.5.0", path = "../registry-kit", features = ["test-support"] }
 # Builds fixture documentation bundles for the bundled-docs integration tests.
 canonic-mcp-kit = { version = "0.23.0", path = "../mcp-kit", features = ["docs-build"] }
 assert_cmd = "2.2"

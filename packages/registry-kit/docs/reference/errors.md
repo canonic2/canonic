@@ -89,17 +89,19 @@ For `RegistrationError::{InvalidAlias,Reserved,Duplicate,Identity}`, correct
 the proposed alias/source rather than retrying unchanged. `Missing` or
 `InvalidDefault` requires a registered alias in the appropriate scope.
 `Malformed`, `Link`, `Path`, `TooLarge` and `Limit` identify invalid storage
-or exceeded limits. `Io` carries a filesystem error.
+or exceeded limits. `Limit` also refuses a write when the global file's `.state`
+directory holds more than 64 entries; remove entries the library does not own.
+`Io` carries a filesystem error.
 
 The write outcomes require different responses:
 
 | Error | New value written? | Response |
 | --- | --- | --- |
 | `Changed` | No | Reread, rebuild the change and review if needed |
-| `Locked(path)` | No | Wait for the active writer; remove a stale lock only after confirming ownership |
-| `NotDurable` | Yes | Read current state; report that crash durability was not established |
-| `LockRemains(path)` | Yes | Read current state and resolve the leftover lock before another write |
-| `RefusedLockRemains { .. }` | No | Handle the contained refusal and resolve the leftover lock |
+| `Locked(path)` | No | Close other writers; inspect an unknown legacy marker's ownership before repair, without deleting it by guess |
+| `NotDurable` | Yes | Reconcile the committed generation; required publication durability was not confirmed |
+| `CommittedRepair` | Yes | Preserve conflicting projection bytes and reconcile them with committed registrations |
+| `ProjectionConflict(path)` | No | Show the edit from `read_projection`, then publish it or the committed values from a fresh `snapshot` |
 
 Do not treat every error as a rolled-back write or retry blindly. See
 [Registrations](../guides/registrations.md).

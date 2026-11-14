@@ -1,21 +1,16 @@
-//! The user's global registrations file: validated reads and locked atomic
-//! replacement.
+//! Reviewed global registrations: immutable generations, recoverable publication
+//! and a compatible human-readable projection at the caller's selected path.
+use super::{RegistrationError, Registrations};
+use serde_json::Value;
+use std::path::{Path, PathBuf};
 
-use super::{RegistrationError, Registrations, Scope};
-use crate::files::{self, Bounded, Commit};
-use std::{
-    fs, io,
-    path::{Path, PathBuf},
-};
+mod transaction;
+pub use transaction::{MAX_RECEIPT_BYTES, Publication, Snapshot};
 
-/// Maximum size of the global registrations file.
+/// Maximum size of the global registrations projection.
 pub const MAX_FILE_BYTES: u64 = 1_048_576;
 
-/// One product's global registrations, stored as JSON at a path it chooses.
-///
-/// The lock and temporary files sit beside it with `.lock` and `.new`
-/// extensions. On Unix the file is mode 0600, and a parent directory created
-/// here is mode 0700.
+/// A product's global discovery configuration and scoped publication journal.
 #[derive(Clone, Debug)]
 pub struct GlobalFile {
     path: PathBuf,
@@ -23,7 +18,7 @@ pub struct GlobalFile {
 }
 
 impl GlobalFile {
-    /// A registrations file at `path` for a product whose built-in alias is `builtin`.
+    /// Selects a configuration path and reserved built-in alias.
     #[must_use]
     pub fn new(path: impl Into<PathBuf>, builtin: &str) -> Self {
         Self {
@@ -32,185 +27,100 @@ impl GlobalFile {
         }
     }
 
-    /// The file path.
+    /// The human-readable projection path.
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// Reads and validates the file; a missing file is empty.
+    /// Reads committed registrations, or a legacy projection before the first
+    /// generation. This read never publishes or repairs files.
     ///
     /// # Errors
-    /// Returns [`RegistrationError`] for links, oversized or invalid content and I/O failure.
+    /// Refuses malformed, linked, oversized or unavailable required state.
     pub fn read(&self) -> Result<Registrations, RegistrationError> {
-        match files::kind(&self.path)? {
-            None => return Ok(Registrations::default()),
-            Some(kind) if kind.is_symlink() => return Err(RegistrationError::Link),
-            Some(_) => {}
-        }
-        let Bounded::Bytes(bytes) = files::read_bounded(&self.path, MAX_FILE_BYTES)? else {
-            return Err(RegistrationError::Malformed);
-        };
-        let registrations: Registrations =
-            serde_json::from_slice(&bytes).map_err(|_| RegistrationError::Malformed)?;
-        registrations.validate(&self.builtin, Scope::Global)?;
-        Ok(registrations)
+        Ok(self.snapshot()?.registrations().clone())
     }
 
-    /// Replaces `before` with `after`, refusing if the file changed meanwhile.
-    ///
-    /// The parent directory is created when missing. The write holds an
-    /// exclusive lock file, writes a temporary file, syncs it and renames it
-    /// over the original, then syncs the directory and removes the lock.
+    /// Captures the exact committed generation and projection reviewed by a caller.
+    /// When [`Snapshot::projection_ready`] is false, publishing from this
+    /// snapshot replaces the exact projection bytes it captured.
     ///
     /// # Errors
-    /// Every error except two means the file is unchanged:
-    /// [`RegistrationError::Changed`] when the file no longer equals `before`,
-    /// [`RegistrationError::Locked`] while another writer holds the lock, and
-    /// other [`RegistrationError`] values for invalid content or I/O.
+    /// Refuses invalid required state or a filesystem failure.
+    pub fn snapshot(&self) -> Result<Snapshot, RegistrationError> {
+        transaction::snapshot(self)
+    }
+
+    /// Parses the projection file on its own, without the active generation,
+    /// so a caller can show a manual edit and adopt it by publishing it as
+    /// `after`. Returns `None` when the file is missing.
     ///
-    /// [`RegistrationError::NotDurable`] and [`RegistrationError::LockRemains`]
-    /// mean `after` was written: respectively, the directory sync failed, or
-    /// the lock could not be removed and must be removed before the next write.
-    /// [`RegistrationError::RefusedLockRemains`] means nothing was written and
-    /// the lock could not be removed; it carries the original refusal.
+    /// # Errors
+    /// Refuses a linked, oversized or invalid projection or I/O failure.
+    pub fn read_projection(&self) -> Result<Option<Registrations>, RegistrationError> {
+        transaction::read_projection(self)
+    }
+
+    /// Reconciles an already approved interrupted publication. It never invents
+    /// an approval or discards conflicting manual bytes. An uncommitted intent
+    /// whose reviewed base changed can never commit and is discarded; a missing
+    /// projection is rewritten from the active generation.
+    ///
+    /// # Errors
+    /// Refuses live/unverifiable ownership, invalid state, or I/O failure
+    /// before the commit point.
+    pub fn recover(&self) -> Result<Option<Publication>, RegistrationError> {
+        transaction::recover(self)
+    }
+
+    /// Reads the last committed receipt only when its logical operation matches.
+    /// Older mutations are never revived by this lookup.
+    ///
+    /// # Errors
+    /// Refuses invalid required state or I/O failure.
+    pub fn receipt(&self, operation: &str) -> Result<Option<Publication>, RegistrationError> {
+        transaction::receipt(self, operation)
+    }
+
+    /// Publishes a caller-reviewed generation with a bounded product-owned receipt.
+    /// The snapshot binds its base generation, including equal-value ABA changes.
+    ///
+    /// # Errors
+    /// Refuses stale review, invalid/bounded input, live/unverifiable ownership,
+    /// or I/O before commitment. Post-commit problems are returned in Publication.
+    pub fn publish(
+        &self,
+        before: &Snapshot,
+        after: &Registrations,
+        operation: &str,
+        receipt: &Value,
+    ) -> Result<Publication, RegistrationError> {
+        transaction::publish(self, before, after, operation, receipt)
+    }
+
+    /// Conditionally replaces registrations through the generation transaction.
+    /// Use snapshot and publish to retain a product receipt.
+    ///
+    /// # Errors
+    /// Most errors leave the active generation unchanged. `NotDurable` and
+    /// `CommittedRepair` explicitly mean the new generation was committed.
+    /// `ProjectionConflict` refuses while the projection holds manual edits;
+    /// resolve them through `snapshot` and `publish`.
     pub fn replace(
         &self,
         before: &Registrations,
         after: &Registrations,
     ) -> Result<(), RegistrationError> {
-        after.validate(&self.builtin, Scope::Global)?;
-        // The lock and temporary files replace the extension; a file already
-        // named like one of them would collide with its own lock or temporary.
-        // Compare case-insensitively (with Unicode folding, as case-insensitive
-        // filesystems do): on such a filesystem `registries.NEW` *is* its own
-        // temporary file, which the write would otherwise delete.
-        if self
-            .path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .map(str::to_lowercase)
-            .is_some_and(|extension| extension == "lock" || extension == "new")
-        {
-            return Err(RegistrationError::Path);
+        let result = transaction::replace(self, before, after)?;
+        if result.repair_needed {
+            return Err(RegistrationError::CommittedRepair);
         }
-        let parent = self.path.parent().ok_or(RegistrationError::Path)?;
-        // A bare file name lives in the current directory.
-        let parent = if parent.as_os_str().is_empty() {
-            Path::new(".")
-        } else {
-            parent
-        };
-        match files::kind(parent)? {
-            None => files::create_private_dir(parent)?,
-            Some(kind) if kind.is_symlink() => return Err(RegistrationError::Link),
-            Some(_) => {}
+        if !result.durable {
+            return Err(RegistrationError::NotDurable(std::io::Error::other(
+                "committed generation requires durability reconciliation",
+            )));
         }
-        let lock = self.path.with_extension("lock");
-        let guard = match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&lock)
-        {
-            Ok(guard) => guard,
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                return Err(RegistrationError::Locked(lock));
-            }
-            Err(error) => return Err(error.into()),
-        };
-        let result = self.write_locked(before, after);
-        drop(guard);
-        let released = fs::remove_file(&lock);
-        conclude(result, released, lock)
-    }
-
-    fn write_locked(
-        &self,
-        before: &Registrations,
-        after: &Registrations,
-    ) -> Result<Commit, RegistrationError> {
-        if &self.read()? != before {
-            return Err(RegistrationError::Changed);
-        }
-        let mut bytes =
-            serde_json::to_vec_pretty(after).map_err(|_| RegistrationError::Malformed)?;
-        bytes.push(b'\n');
-        // Escaping can make valid registrations larger than the reader accepts;
-        // refuse before anything on disk changes, so the file stays readable.
-        if bytes.len() as u64 > MAX_FILE_BYTES {
-            return Err(RegistrationError::TooLarge);
-        }
-        let temporary = self.path.with_extension("new");
-        // A previous writer crashed after creating it; the lock is ours now.
-        if let Err(error) = fs::remove_file(&temporary)
-            && error.kind() != io::ErrorKind::NotFound
-        {
-            return Err(error.into());
-        }
-        Ok(files::replace_private(&temporary, &self.path, &bytes)?)
-    }
-}
-
-/// Combines the write's outcome with the lock's release, so neither hides
-/// the other and every error says whether the new value was written.
-fn conclude(
-    result: Result<Commit, RegistrationError>,
-    released: io::Result<()>,
-    lock: PathBuf,
-) -> Result<(), RegistrationError> {
-    match (result, released) {
-        // Nothing was written, and the lock could not be removed either:
-        // report both, so the stuck lock is not hidden behind the refusal.
-        (Err(refusal), Err(error)) => Err(RegistrationError::RefusedLockRemains {
-            refusal: Box::new(refusal),
-            lock,
-            source: error,
-        }),
-        (Err(refusal), Ok(())) => Err(refusal),
-        // From here the new registrations are in place: report what remains
-        // undone rather than a plain failure, and never roll back.
-        (Ok(_), Err(error)) => Err(RegistrationError::LockRemains(lock, error)),
-        (Ok(Commit::Durable), Ok(())) => Ok(()),
-        (Ok(Commit::NotDurable(error)), Ok(())) => Err(RegistrationError::NotDurable(error)),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn failure() -> io::Error {
-        io::Error::other("fixture failure")
-    }
-
-    #[test]
-    fn every_outcome_reports_whether_the_value_was_written_and_any_stuck_lock() {
-        let lock = || PathBuf::from("/srv/acme/registries.lock");
-        assert!(conclude(Ok(Commit::Durable), Ok(()), lock()).is_ok());
-        assert!(matches!(
-            conclude(Ok(Commit::NotDurable(failure())), Ok(()), lock()),
-            Err(RegistrationError::NotDurable(_))
-        ));
-        // Committed, with a stuck lock: the lock wins over durability.
-        assert!(matches!(
-            conclude(Ok(Commit::NotDurable(failure())), Err(failure()), lock()),
-            Err(RegistrationError::LockRemains(path, _)) if path == lock()
-        ));
-        assert!(matches!(
-            conclude(Err(RegistrationError::Changed), Ok(()), lock()),
-            Err(RegistrationError::Changed)
-        ));
-        // Refused, with a stuck lock: both are reported.
-        match conclude(Err(RegistrationError::TooLarge), Err(failure()), lock()) {
-            Err(RegistrationError::RefusedLockRemains {
-                refusal,
-                lock: path,
-                ..
-            }) => {
-                assert!(matches!(*refusal, RegistrationError::TooLarge));
-                assert_eq!(path, lock());
-            }
-            other => panic!("expected a refusal with a stuck lock, got {other:?}"),
-        }
+        Ok(())
     }
 }

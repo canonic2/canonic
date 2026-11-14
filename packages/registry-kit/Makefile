@@ -2,6 +2,14 @@
 CARGO ?= $(if $(wildcard $(HOME)/.cargo/bin/cargo),$(HOME)/.cargo/bin/cargo,$(shell command -v cargo 2>/dev/null))
 CARGO_FLAGS ?=
 
+# Cargo never deletes old build output. Run prune on its own, while no build or
+# test run uses target/: a running test may still launch an old test binary.
+PRUNE_DAYS ?= 3
+.PHONY: prune
+prune: ## Delete incremental caches and test binaries unused for more than PRUNE_DAYS days
+	@test ! -d target || find target -mindepth 3 -maxdepth 4 -type d -path '*/incremental/*' -prune -mtime +$(PRUNE_DAYS) -exec rm -rf {} +
+	@test ! -d target || find target -mindepth 3 -maxdepth 4 -type f -path '*/deps/*' -perm -u+x ! -name '*.*' -mtime +$(PRUNE_DAYS) -delete
+
 # Development keeps Cargo's incremental artifacts in the existing target directory.
 TEST_TARGET ?= --lib
 .PHONY: dev test-focus

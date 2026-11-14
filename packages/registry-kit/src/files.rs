@@ -13,6 +13,8 @@ use std::{
 };
 
 static TEMPORARY: AtomicU64 = AtomicU64::new(0);
+mod lease;
+pub(crate) use lease::acquire as lease;
 
 #[cfg(windows)]
 mod windows;
@@ -194,7 +196,7 @@ fn replace(temporary: &Path, target: &Path) -> io::Result<()> {
 /// `fsync`, not the `F_FULLFSYNC` that `File::sync_all` issues there: that
 /// also empties the drive's write cache and waits behind every other
 /// process's flush. Elsewhere it is `File::sync_all`.
-fn sync(file: &File) -> io::Result<()> {
+pub(crate) fn sync(file: &File) -> io::Result<()> {
     #[cfg(target_os = "macos")]
     {
         rustix::fs::fsync(file).map_err(io::Error::from)
@@ -205,6 +207,32 @@ fn sync(file: &File) -> io::Result<()> {
     }
 }
 
+/// Reconfirms a regular owned publication file without following a final link.
+/// Windows `FlushFileBuffers` requires a writable handle even when bytes do not change.
+pub(crate) fn sync_existing(path: &Path) -> io::Result<()> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(0x0020_0000);
+    }
+    let file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(io::ErrorKind::InvalidInput.into());
+    }
+    #[cfg(windows)]
+    if !windows::regular(&file)? {
+        return Err(io::ErrorKind::InvalidInput.into());
+    }
+    sync(&file)
+}
+
 /// Syncs the directory holding `path`, making a rename into it durable.
 #[cfg_attr(
     not(unix),
@@ -213,7 +241,7 @@ fn sync(file: &File) -> io::Result<()> {
         reason = "Unix directory flushing can fail; Windows uses write-through replacement and shares the fallible call interface"
     )
 )]
-fn sync_directory(path: &Path) -> io::Result<()> {
+pub(crate) fn sync_directory(path: &Path) -> io::Result<()> {
     #[cfg(unix)]
     {
         let directory = path
