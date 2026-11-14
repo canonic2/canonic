@@ -107,14 +107,14 @@ fn a_copied_hook_grant_and_its_followup_are_each_spent_once_across_copies() {
         assert_eq!(child.context.project_id, original.context.project_id);
         if consumed {
             // The consumed grant's one follow-up is spent once, in either folder.
-            assert!(followup(child.root(), &key("acme-copy"), &child.identity()).unwrap());
-            assert!(!followup(original.root(), &key("acme-copy"), &original.identity()).unwrap());
+            assert!(followup(child.root(), &key("acme-copy")).unwrap());
+            assert!(!followup(original.root(), &key("acme-copy")).unwrap());
             assert!(matches!(child.refuse("acme-copy"), Outcome::Pending(..)));
         } else {
             // The unused grant allows one retry, in whichever folder retries first.
             assert!(matches!(child.refuse("acme-copy"), Outcome::Allowed));
             assert!(matches!(original.refuse("acme-copy"), Outcome::Pending(..)));
-            assert!(!followup(original.root(), &key("acme-copy"), &original.identity()).unwrap());
+            assert!(!followup(original.root(), &key("acme-copy")).unwrap());
         }
         // Either folder can still ask for and use a fresh approval.
         let fresh = pending(original.refuse("acme-copy"));
@@ -322,6 +322,29 @@ fn a_group_with_one_unapprovable_request_refuses_whole() {
 }
 
 #[test]
+fn a_policy_change_or_upgrade_does_not_revoke_a_one_time_approval() {
+    let fixture = fixture();
+    let id = pending(fixture.refuse("acme-kept"));
+    approve(
+        &fixture.connection("codex"),
+        &json!({"request_id":id}),
+        true,
+    )
+    .unwrap();
+    // The retry is decided under a different policy revision, as after an
+    // edit to the policy files or an upgrade that renames the generation.
+    let changed = Identity {
+        activation_id: "acme-changed",
+        policy_revision: "acme-changed",
+        candidate_digest: "acme-changed",
+    };
+    assert!(matches!(
+        refused(fixture.root(), &key("acme-kept"), &changed, &summary()).unwrap(),
+        Outcome::Allowed
+    ));
+}
+
+#[test]
 fn a_request_answered_while_the_form_is_open_makes_accept_issue_nothing() {
     let fixture = fixture();
     let first = pending(fixture.refuse("acme-discard"));
@@ -344,47 +367,6 @@ fn a_request_answered_while_the_form_is_open_makes_accept_issue_nothing() {
         pending(fixture.refuse_with("acme-session", "acme-branch", &deny_summary("acme/task"))),
         second
     );
-
-    // A policy activation while the form is open invalidates the whole group.
-    let third = pending(fixture.refuse("acme-third"));
-    let group = json!({"request_ids":[second, third]});
-    confirmation(&mcp, &group).unwrap();
-    review::runtime::publish_fixture(
-        &fixture.context,
-        fixture.active["policy_revision"].as_str().unwrap(),
-        fixture.active["candidate_digest"].as_str().unwrap(),
-        fixture.active["activation_id"].as_str(),
-        &|| Ok(()),
-    )
-    .unwrap();
-    assert!(matches!(
-        approve(&mcp, &group, true),
-        Err(Error::Grouped { .. })
-    ));
-}
-
-#[test]
-fn the_grouping_hint_ignores_requests_a_policy_change_invalidated() {
-    let fixture = fixture();
-    pending(fixture.refuse("acme-old"));
-    review::runtime::publish_fixture(
-        &fixture.context,
-        fixture.active["policy_revision"].as_str().unwrap(),
-        fixture.active["candidate_digest"].as_str().unwrap(),
-        fixture.active["activation_id"].as_str(),
-        &|| Ok(()),
-    )
-    .unwrap();
-    let active = review::runtime::status(&fixture.context).unwrap()["active"].clone();
-    let identity = Identity {
-        activation_id: active["activation_id"].as_str().unwrap(),
-        policy_revision: active["policy_revision"].as_str().unwrap(),
-        candidate_digest: active["candidate_digest"].as_str().unwrap(),
-    };
-    let refuse = |input| refused(fixture.root(), &key(input), &identity, &summary()).unwrap();
-    // The request from before the activation could no longer join a group.
-    assert!(matches!(refuse("acme-new"), Outcome::Pending(_, false)));
-    assert!(matches!(refuse("acme-newer"), Outcome::Pending(_, true)));
 }
 
 #[test]
@@ -446,7 +428,7 @@ fn unchanged_refusals_and_uncovered_callbacks_write_nothing() {
     let id = pending(fixture.refuse("acme-discard"));
     let before = state_bytes(&fixture);
     assert_eq!(pending(fixture.refuse("acme-discard")), id);
-    assert!(!followup(fixture.root(), &key("acme-discard"), &fixture.identity()).unwrap());
+    assert!(!followup(fixture.root(), &key("acme-discard")).unwrap());
     assert_eq!(state_bytes(&fixture), before);
 }
 
@@ -540,8 +522,7 @@ fn consumed_grant_covers_one_followup_callback_of_the_same_request() {
     let id = pending(fixture.refuse("acme-escalated"));
     let mcp = fixture.connection("codex");
     approve(&mcp, &json!({"request_id":id}), true).unwrap();
-    let identity = fixture.identity();
-    assert!(!followup(fixture.root(), &key("acme-escalated"), &identity).unwrap());
+    assert!(!followup(fixture.root(), &key("acme-escalated")).unwrap());
     assert!(matches!(fixture.refuse("acme-escalated"), Outcome::Allowed));
     let mut owner = mcp.clone();
     owner.session_id = Some("acme-session".into());
@@ -564,9 +545,9 @@ fn consumed_grant_covers_one_followup_callback_of_the_same_request() {
             .iter()
             .any(|row| row.request_id == id && row.live_id(now().unwrap()).is_some())
     );
-    assert!(!followup(fixture.root(), &key("acme-other"), &identity).unwrap());
-    assert!(followup(fixture.root(), &key("acme-escalated"), &identity).unwrap());
-    assert!(!followup(fixture.root(), &key("acme-escalated"), &identity).unwrap());
+    assert!(!followup(fixture.root(), &key("acme-other")).unwrap());
+    assert!(followup(fixture.root(), &key("acme-escalated")).unwrap());
+    assert!(!followup(fixture.root(), &key("acme-escalated")).unwrap());
     let state = review::project::checkpoint(&owner).unwrap();
     assert!(state.hook_requests.iter().all(|row| row.request_id != id));
     assert_eq!(
@@ -689,30 +670,6 @@ fn legacy_native_revoked_rows_keep_their_existing_retention_deadline() {
     );
     state.compact_authorization_at(until);
     assert!(state.hook_requests.is_empty());
-}
-
-#[test]
-fn a_policy_activation_after_consumption_ends_the_followup_cover() {
-    let fixture = fixture();
-    let id = pending(fixture.refuse("acme-escalated"));
-    approve(
-        &fixture.connection("codex"),
-        &json!({"request_id":id}),
-        true,
-    )
-    .unwrap();
-    assert!(matches!(fixture.refuse("acme-escalated"), Outcome::Allowed));
-    // The same policy activated again is a new generation.
-    review::runtime::publish_fixture(
-        &fixture.context,
-        fixture.active["policy_revision"].as_str().unwrap(),
-        fixture.active["candidate_digest"].as_str().unwrap(),
-        fixture.active["activation_id"].as_str(),
-        &|| Ok(()),
-    )
-    .unwrap();
-    // The callback still carries the generation the hook decided under.
-    assert!(!followup(fixture.root(), &key("acme-escalated"), &fixture.identity()).unwrap());
 }
 
 #[test]

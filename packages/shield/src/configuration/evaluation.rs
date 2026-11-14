@@ -406,6 +406,14 @@ impl Evaluator {
         })
     }
 
+    /// The revision these captured candidates would have, without compiling them.
+    pub(crate) fn revision_of(inputs: &[(Scope, Snapshot)]) -> Result<String, Error> {
+        let [(scope, snapshot)] = inputs else {
+            return Err(Error::Contract("exactly one project candidate required"));
+        };
+        compose(&[(*scope, snapshot.lock.clone())])?.revision()
+    }
+
     pub(crate) fn from_authenticated_compiled(bytes: Vec<u8>) -> Result<Self, Error> {
         Self::from_plan(policy::compiled::Plan::load_authenticated(bytes)?)
     }

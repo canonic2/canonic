@@ -48,82 +48,8 @@ fn refused(result: &Value) {
     );
 }
 
-fn refuse_manual_adoption(
-    root: &Path,
-    context: &Context,
-    connection: &Connection,
-    before: &review::model::State,
-    next: &Value,
-    local: bool,
-) {
-    let meta = review::project::metadata(before);
-    let files = review::publication::projections::projections(&before.candidates["project"], &meta)
-        .unwrap();
-    review::publication::projections::materialize(context, &files).unwrap();
-    std::fs::write(
-        root.join(if local {
-            ".shield/rules.local.yml"
-        } else {
-            ".shield/rules.yml"
-        }),
-        next[if local { "local_rules" } else { "rules" }]
-            .as_str()
-            .unwrap(),
-    )
-    .unwrap();
-    refused(&invoke(
-        context,
-        connection,
-        "policy_propose",
-        json!({"change":{"kind":"project_files_adopt"}}),
-    ));
-    let captured = review::changes::project_files::capture(context, before).unwrap();
-    let error = review::publication::prepare_review(
-        context,
-        before,
-        &captured.candidate,
-        &captured.metadata,
-        None,
-    )
-    .err()
-    .unwrap();
-    assert!(
-        error.to_string().contains("historical annotations"),
-        "{error}"
-    );
-    let after = BTreeMap::from([("project".into(), captured.candidate.clone())]);
-    let error = review::compare_prepared(&before.candidates, &after, None)
-        .err()
-        .unwrap();
-    assert!(
-        error.to_string().contains("historical annotations"),
-        "{error}"
-    );
-    let error =
-        review::publication::commit(context, before, captured.candidate, captured.metadata, None)
-            .unwrap_err();
-    assert!(
-        error.to_string().contains("historical annotations"),
-        "{error}"
-    );
-    let fresh = assert_fs::TempDir::new().unwrap();
-    let error = review::publication::initialize(
-        fresh.path(),
-        &BTreeMap::from([("project".into(), next.clone())]),
-        &before.policy_revision,
-        &meta,
-        BTreeMap::new(),
-    )
-    .unwrap_err();
-    assert!(
-        error.to_string().contains("historical annotations"),
-        "{error}"
-    );
-    assert!(!fresh.path().join(".shield/review/state.json").exists());
-}
-
 #[test]
-fn historical_annotations_cannot_be_added_by_rule_tools_or_manual_adoption() {
+fn historical_annotations_cannot_be_added_by_rule_tools() {
     for kind in ["historical_matcher", "historical_normalized"] {
         for local in [false, true] {
             let (root, context, connection) = fixture_with(&bundle(&[modern()], local));
@@ -187,7 +113,6 @@ fn historical_annotations_cannot_be_added_by_rule_tools_or_manual_adoption() {
                     .proposals
                     .is_empty()
             );
-            refuse_manual_adoption(root.path(), &context, &connection, &before, &next, local);
             let after = Store::open(root.path()).unwrap().read().unwrap();
             assert_eq!(after.policy_revision, before.policy_revision);
             assert_eq!(json!(after.active), json!(before.active));

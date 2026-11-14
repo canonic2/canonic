@@ -76,11 +76,6 @@ pub(crate) fn prepare(project: &Path) -> Result<Plan, Error> {
     prepare_options(project, None, None)
 }
 
-#[cfg(test)]
-pub(crate) fn prepare_launch(project: &Path, requested: &Path) -> Result<Plan, Error> {
-    prepare_options(project, Some(requested), None)
-}
-
 pub(crate) fn prepare_options(
     project: &Path,
     requested: Option<&Path>,

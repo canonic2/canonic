@@ -40,6 +40,21 @@ fn raw_deny(code: &str) -> Reply {
     }
 }
 
+/// With invalid policy files there is no policy to apply, so every request asks
+/// the person instead of being allowed or blocked.
+pub(super) fn invalid_policy_files(adapter: &dyn AgentAdapter, message: &str) -> Reply {
+    Reply {
+        decision: Decision::Ask,
+        reason: format!(
+            "Shield: approval required. The policy files in .shield/ are invalid ({message}), so every request asks until they are fixed. {}",
+            adapter.spec().approval_action
+        ),
+        agent_context: Some(format!(
+            "Shield cannot apply policy: the files in .shield/ are invalid ({message}). Tell the user; agents cannot edit .shield/ files."
+        )),
+    }
+}
+
 fn approval(adapter: &dyn AgentAdapter) -> Reply {
     Reply {
         decision: Decision::Ask,

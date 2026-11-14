@@ -56,13 +56,6 @@ impl Active {
     pub(super) fn activation_id(&self) -> &str {
         &self.activation_id
     }
-    pub(super) fn matches(&self, identity: &consumer::SnapshotIdentity) -> bool {
-        self.matches_parts(
-            identity.activation_id(),
-            identity.policy_revision(),
-            identity.candidate_digest(),
-        )
-    }
     /// The same identity check for a receipt's recorded identity fields.
     pub(super) fn matches_parts(&self, activation: &str, revision: &str, digest: &str) -> bool {
         self.activation_id == activation
@@ -110,21 +103,6 @@ impl Active {
             &self.policy_revision,
         )?;
         if evaluator.revision() != self.policy_revision {
-            return Err(Error::Invalid(
-                "active revision differs from retained snapshot",
-            ));
-        }
-        Ok(())
-    }
-
-    /// Reuse validation of identical current bytes, while checking activation's
-    /// own binding and revision. Different retained snapshots validate separately.
-    pub(super) fn validate_evaluated(&self, state: &State, revision: &str) -> Result<(), Error> {
-        if self.candidates != state.candidates {
-            return self.validate(state);
-        }
-        self.validate_binding(state)?;
-        if self.policy_revision != revision {
             return Err(Error::Invalid(
                 "active revision differs from retained snapshot",
             ));
@@ -256,7 +234,8 @@ pub(super) fn status_from(state: &State) -> Value {
         "active":state.active.as_ref().map(Active::metadata),
         "compiled_cache":state.active.as_ref().map(|a| a.compiled.diagnostics(&state.project_root, &a.candidate_digest, &a.policy_revision)),
         "authorization":state.active.as_ref().and_then(|active| state.authorization_events.iter().find(|event| event["links"]["activation_id"] == active.activation_id)),
-        "pending_change":state.active.as_ref().is_none_or(|a| a.candidate_digest != digest(&state.candidates))});
+        // The policy files are the policy; only a live proposal is pending.
+        "pending_change":state.proposals.iter().any(|proposal| proposal.status == "pending")});
     if super::registry_trust::inactive_reviewed(state) {
         value["reviewed_consent"] = state.operator["policy_consent"].clone();
         value["next_action"] = state.operator["policy_consent"]["next_action"].clone();

@@ -10,8 +10,6 @@ mod proposals;
 #[cfg(test)]
 mod retention_tests;
 #[cfg(test)]
-mod source_tests;
-#[cfg(test)]
 mod tests;
 
 pub(super) fn checkpoint(bytes: &[u8]) -> Result<State, Error> {

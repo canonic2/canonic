@@ -34,9 +34,12 @@ pub(crate) struct PathAccess {
     pub(crate) agent_settings_read: Read,
     #[serde(default)]
     pub(crate) agent_settings_change: Change,
-    /// `.shield` policy files other than review state, caches and `.gitignore`.
-    #[serde(default)]
-    pub(crate) shield_config_change: Change,
+    /// Earlier releases let the operator open `.shield` policy files to agent
+    /// edits. Those files are the enforced policy, so agent writes to them are
+    /// always blocked; a saved record that still names the choice loads, and
+    /// its value is ignored and never written again.
+    #[serde(default, rename = "shield_config_change", skip_serializing)]
+    pub(crate) retired_policy_file_change: Option<Change>,
 }
 
 /// The stored choice; absent means the defaults, and an invalid record is an error.
@@ -97,5 +100,15 @@ mod tests {
         ] {
             assert!(load(&invalid).is_err(), "{invalid}");
         }
+    }
+
+    #[test]
+    fn an_earlier_policy_file_choice_loads_but_is_never_written_again() {
+        let saved = load(&json!({"path_access":{
+            "agent_settings_change":"allow","shield_config_change":"allow"
+        }}))
+        .unwrap();
+        assert_eq!(saved.agent_settings_change, Change::Allow);
+        assert!(json!(saved).get("shield_config_change").is_none());
     }
 }

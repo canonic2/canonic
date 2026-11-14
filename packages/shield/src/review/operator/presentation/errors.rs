@@ -100,6 +100,16 @@ fn not_portable() -> Report {
     )
 }
 
+fn invalid_policy_files(problem: &str) -> Report {
+    let mut report = Report::new(
+        "The policy files are invalid",
+        "Shield cannot apply the policy in .shield/; agent requests ask until it is fixed.",
+        &["Fix the named file, then retry."],
+    );
+    report.field("Problem", problem);
+    report
+}
+
 fn classify(command: &PublicCommand, error: &Error) -> Report {
     match error {
         Error::Cancelled => Report::new("Cancelled", "The pending change was not confirmed.", &[]),
@@ -125,6 +135,7 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
                 "If preparation fails, inspect shield doctor.",
             ],
         ),
+        Error::PolicyFiles(problem) => invalid_policy_files(problem),
         Error::Locked => Report::new(
             "Another Shield operation is writing",
             "The project state is locked by its current writer.",

@@ -1761,16 +1761,12 @@ fn escape_in_protection_goes_back_with_answers_kept() {
     assert_eq!(interactive(&root, &set, "back\n")["code"], 130);
     assert_eq!(query(&root, &["status"])["path_access"], before);
     // Allow reading, go back from the next question, and keep that answer.
-    let changed = interactive(&root, &set, "2\nback\n\n\n\nyes\n");
+    let changed = interactive(&root, &set, "2\nback\n\n\nyes\n");
     assert_eq!(changed["code"], 0, "{changed}");
     let after = query(&root, &["status"])["path_access"].clone();
     assert_eq!(after["agent_settings_read"], "allow", "{after}");
     assert_eq!(
         after["agent_settings_change"], before["agent_settings_change"],
-        "{after}"
-    );
-    assert_eq!(
-        after["shield_config_change"], before["shield_config_change"],
         "{after}"
     );
 }

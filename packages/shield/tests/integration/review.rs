@@ -11,13 +11,15 @@ fn fixture() -> assert_fs::TempDir {
 }
 
 #[test]
-fn retained_runtime_ignores_manual_edits_and_public_status_discovers_the_owner() {
+fn a_held_snapshot_is_immutable_and_public_status_discovers_the_owner() {
     if super::isolated_home() {
         return;
     }
     let root = fixture();
     let project = shield::runtime::Project::open(root.path()).unwrap();
     let active = project.snapshot().unwrap();
+    let config = root.path().join(".shield/config.yml");
+    let original = std::fs::read(&config).unwrap();
     root.child(".shield/config.yml")
         .write_str("invalid candidate")
         .unwrap();
@@ -33,6 +35,7 @@ fn retained_runtime_ignores_manual_edits_and_public_status_discovers_the_owner()
         evidence.evaluation().decision,
         shield::policy::Decision::Ask
     );
+    std::fs::write(&config, original).unwrap();
     root.child("nested").create_dir_all().unwrap();
     let discovered = cargo_bin_cmd!("shield")
         .current_dir(root.child("nested").path())
@@ -41,8 +44,8 @@ fn retained_runtime_ignores_manual_edits_and_public_status_discovers_the_owner()
         .success();
     let value: Value = serde_json::from_slice(&discovered.get_output().stdout).unwrap();
     assert_eq!(
-        value["active"]["policy_revision"],
-        active.identity().policy_revision()
+        value["policy_files"]["digest"],
+        active.identity().candidate_digest()
     );
 }
 

@@ -150,8 +150,9 @@ shield protection set
 When policy checks are enabled, native hooks ask by default before agents read
 `.mcp.json` and agent hook settings (`.claude/settings.local.json`,
 `.claude/settings.json`, `.codex/hooks.json`, `.codex/config.toml`),
-which may hold credentials, and block agents from changing them or the `.shield`
-policy files.
+which may hold credentials, and block agents from changing them. Agents can never
+change the `.shield` policy files, whatever you choose: those files are the
+policy, so agents change it by proposal.
 
 The same settings protection covers the adapter's configured agent home,
 including a relocated home. Verified session-output reads retain their separate
@@ -163,7 +164,6 @@ scope; they do not permit configuration writes.
 | --- | --- | --- |
 | Reading agent settings | Ask, or block where the agent cannot prompt | Allow without asking |
 | Changing agent settings | Block | Allow; the agent can then remove Shield's hooks or the host confirmation that MCP policy changes rely on |
-| Changing `.shield` policy files | Block | Allow; edits still apply only after `shield policy review` |
 
 Reading agent settings includes commands whose output can print them without
 naming them, such as `git show HEAD:.mcp.json`, an unscoped `git diff` or

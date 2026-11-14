@@ -119,11 +119,10 @@ fn mcp_connections_classification_and_enforcement_share_one_snapshot_load() {
 fn mcp_connections_unknown_bindings_fail_closed_when_snapshot_is_unavailable() {
     let (root, context) = snapshot_fixture();
     let project = Path::new(&context.project_root);
-    let path = root.path().join(".shield/review/state.json");
+    // Invalid policy files leave no policy to check the bindings against.
+    let path = root.path().join(".shield/config.yml");
     let original = fs::read(&path).unwrap();
-    let mut state: Value = serde_json::from_slice(&original).unwrap();
-    state["active"] = Value::Null;
-    fs::write(&path, state.to_string()).unwrap();
+    fs::write(&path, "schema_version: 1\npacks: [\n").unwrap();
     assert!(review::open(project).is_ok());
     assert!(Project::open(project).unwrap().snapshot().is_err());
     for agent in ["claude", "codex"] {
@@ -171,35 +170,6 @@ fn mcp_connections_unknown_bindings_fail_closed_when_snapshot_is_unavailable() {
             json!({})
         );
     }
-}
-
-#[test]
-fn mcp_connections_retained_snapshot_still_requires_current_activation_at_handoff() {
-    let (root, context) = snapshot_fixture();
-    let project = Path::new(&context.project_root);
-    let prepared = protocol::Prepared::load(project, &|_| {}).unwrap();
-    let path = root.path().join(".shield/review/state.json");
-    let mut state: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    state["active"] = Value::Null;
-    fs::write(&path, state.to_string()).unwrap();
-    let input = json!({"protocol_version":1,"request_id":"snapshot-reuse","expected_project_id":context.project_id,"cwd":project,
-        "operation":{"kind":"mcp","alias":"acme_snapshot","tool":"inspect","arguments":{}},"host":null,"approval_request_id":null});
-    let (receipt, exit) = protocol::evaluate_native(
-        project,
-        &serde_json::to_vec(&input).unwrap(),
-        &json!({}),
-        protocol::NativeContext {
-            integration: "claude",
-            approval: protocol::NativeApproval::Prompt,
-            context_complete: true,
-            working_files: None,
-        },
-        Some(prepared),
-        &|_| {},
-    );
-    assert_eq!(exit, 2, "{receipt}");
-    assert_eq!(receipt["code"], "handoff-failed", "{receipt}");
-    assert_eq!(receipt["decision"], "deny");
 }
 
 #[test]

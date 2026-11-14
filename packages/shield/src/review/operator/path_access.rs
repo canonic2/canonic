@@ -27,7 +27,7 @@ pub(super) fn configure(context: &Context, json_mode: bool) -> Result<Value, Err
     }
     tty.note(
         "Protected files",
-        ".shield/review, compiled caches, the .shield folder and .shield/.gitignore stay protected whatever you choose here.",
+        "Shield's policy files, .shield/review, compiled caches, the .shield folder and .shield/.gitignore stay protected whatever you choose here.",
     )?;
     let after = chosen(before, ask(&mut tty, before)?)?;
     let prepared = Prepared::from_metadata(context, &meta, after);
@@ -37,9 +37,9 @@ pub(super) fn configure(context: &Context, json_mode: bool) -> Result<Value, Err
     prepared.commit(context, &|| Ok(()))
 }
 
-/// The three access questions, starting from the current answers. Escape goes
+/// The two access questions, starting from the current answers. Escape goes
 /// back one question with answers kept; on the first it cancels.
-fn ask(tty: &mut Terminal, before: PathAccess) -> Result<[String; 3], Error> {
+fn ask(tty: &mut Terminal, before: PathAccess) -> Result<[String; 2], Error> {
     let reading = format!(
         ".mcp.json and agent settings ({}) may hold credentials.",
         agent_settings().join(", ")
@@ -47,7 +47,6 @@ fn ask(tty: &mut Terminal, before: PathAccess) -> Result<[String; 3], Error> {
     let mut answers = [
         word(before.agent_settings_read),
         word(before.agent_settings_change),
-        word(before.shield_config_change),
     ];
     let mut step = 0;
     while step < answers.len() {
@@ -64,7 +63,7 @@ fn ask(tty: &mut Terminal, before: PathAccess) -> Result<[String; 3], Error> {
                     ("allow", "Allow", "Agents read them without asking"),
                 ],
             ),
-            1 => (
+            _ => (
                 "Changing agent settings",
                 "An agent that can change these files can remove Shield's hooks and turn protection off, or remove the host confirmation policy changes through Shield's MCP tools rely on, so a proposal could activate without you.",
                 &[
@@ -74,22 +73,6 @@ fn ask(tty: &mut Terminal, before: PathAccess) -> Result<[String; 3], Error> {
                         "Only you change them, with shield mcp setup",
                     ),
                     ("allow", "Allow", "Agents may edit or remove them"),
-                ],
-            ),
-            _ => (
-                "Changing Shield policy files",
-                "Edits to .shield/config.yml, rules.yml and the other policy files apply only after you review them with shield policy review.",
-                &[
-                    (
-                        "block",
-                        "Block",
-                        "Agents propose changes through Shield's MCP tools",
-                    ),
-                    (
-                        "allow",
-                        "Allow",
-                        "Agents may edit them; you still review before activation",
-                    ),
                 ],
             ),
         };
@@ -106,7 +89,7 @@ fn ask(tty: &mut Terminal, before: PathAccess) -> Result<[String; 3], Error> {
 }
 
 /// The access the answers select; an empty answer keeps the current choice.
-fn chosen(before: PathAccess, [read, settings, config]: [String; 3]) -> Result<PathAccess, Error> {
+fn chosen(before: PathAccess, [read, settings]: [String; 2]) -> Result<PathAccess, Error> {
     let change = |answer: &str, current: Change| match answer {
         "" => Ok(current),
         "block" => Ok(Change::Block),
@@ -121,7 +104,7 @@ fn chosen(before: PathAccess, [read, settings, config]: [String; 3]) -> Result<P
             _ => return Err(Error::Invalid("choose ask or allow")),
         },
         agent_settings_change: change(&settings, before.agent_settings_change)?,
-        shield_config_change: change(&config, before.shield_config_change)?,
+        ..PathAccess::default()
     })
 }
 

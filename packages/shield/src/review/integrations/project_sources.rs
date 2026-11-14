@@ -30,25 +30,134 @@ fn selection_rows(
     candidate: &Value,
     field: &str,
 ) -> Result<Vec<Value>, crate::review::Error> {
-    let project_identity = crate::policy::fingerprint(b"shield-project-files");
     let rows = config[field]
         .as_array()
         .ok_or(crate::review::Error::Invalid("packs missing"))?;
-    Ok(rows.iter().enumerate().map(|(index, row)| {
-        let source_identity = row["registry_identity"].as_str().unwrap_or(&project_identity);
-        let digest = crate::policy::fingerprint(candidate[field][index].as_str().unwrap_or_default().as_bytes());
-        let seed = crate::policy::fingerprint(format!("{source_identity}:{digest}:{index}").as_bytes());
-        let mut installed = json!({"selector":format!("pack:{}-{}-{}-{}-{}",&seed[..8],&seed[8..12],&seed[12..16],&seed[16..20],&seed[20..32]),"id":row["id"],"version":row["version"],"profile":row["profile"],"digest":digest,"source_identity":source_identity,"source_alias":"project-files","source":{"identity":source_identity,"location":".shield","key":null},"pinned":true,"direct":true});
-        if row["layer"] == "local" {
-            installed["layer"] = json!("local");
-        }
-        installed
-    }).collect())
+    Ok(rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| {
+            project_release(
+                row,
+                candidate[field][index].as_str().unwrap_or_default(),
+                index,
+            )
+        })
+        .collect())
 }
 
-/// Capture config.yml with the optional uncommitted config.local.yml beside it,
-/// each file's bytes as read, with every artifact either layer names.
-pub(in crate::review) fn capture(config: &Path) -> Result<configuration::Bundle, Error> {
+/// Release metadata for a pack the policy files name with exact bytes but no
+/// known registry release: its provenance is the project files, with no
+/// registry signing trust. Hooks enforce such a pack from its bytes alone.
+pub(in crate::review) fn project_release(row: &Value, artifact: &str, index: usize) -> Value {
+    let project_identity = crate::policy::fingerprint(b"shield-project-files");
+    let source_identity = row["registry_identity"]
+        .as_str()
+        .unwrap_or(&project_identity);
+    let digest = crate::policy::fingerprint(artifact.as_bytes());
+    let seed = crate::policy::fingerprint(format!("{source_identity}:{digest}:{index}").as_bytes());
+    let mut installed = json!({"selector":format!("pack:{}-{}-{}-{}-{}",&seed[..8],&seed[8..12],&seed[12..16],&seed[16..20],&seed[20..32]),"id":row["id"],"version":row["version"],"profile":row["profile"],"digest":digest,"source_identity":source_identity,"source_alias":"project-files","source":{"identity":source_identity,"location":".shield","key":null},"pinned":true,"direct":true});
+    if row["layer"] == "local" {
+        installed["layer"] = json!("local");
+    }
+    installed
+}
+
+/// The bytes of a project's policy files, as read, before any validation.
+pub(in crate::review) struct Sources {
+    shared: String,
+    local: Option<String>,
+    packs: Vec<String>,
+    rules: Option<String>,
+    local_rules: Option<String>,
+    disabled: Vec<String>,
+    /// `shield.lock` and `shield.local.lock`, when present.
+    locks: [Option<String>; 2],
+}
+
+impl Sources {
+    /// Every file's bytes in a fixed order, for a content key.
+    pub(in crate::review) fn parts(&self) -> impl Iterator<Item = Option<&str>> {
+        [
+            Some(self.shared.as_str()),
+            self.local.as_deref(),
+            self.rules.as_deref(),
+            self.local_rules.as_deref(),
+            self.locks[0].as_deref(),
+            self.locks[1].as_deref(),
+        ]
+        .into_iter()
+        .chain(self.packs.iter().map(|pack| Some(pack.as_str())))
+        .chain([None])
+        .chain(self.disabled.iter().map(|pack| Some(pack.as_str())))
+    }
+
+    /// Validate the files into a bundle, including that every pack a lock
+    /// file records has exactly the bytes the lock pins.
+    pub(in crate::review) fn bundle(&self) -> Result<configuration::Bundle, Error> {
+        self.validated().map(|(bundle, _)| bundle)
+    }
+
+    /// [`Self::bundle`] with the snapshot its single validation produced.
+    pub(in crate::review) fn validated(
+        &self,
+    ) -> Result<(configuration::Bundle, configuration::Snapshot), Error> {
+        self.check_locks()?;
+        configuration::Bundle::capture_with_snapshot(
+            &self.shared,
+            self.local.as_deref(),
+            &self.packs,
+            self.rules.as_deref(),
+            self.local_rules.as_deref(),
+            &self.disabled,
+        )
+        .map_err(Into::into)
+    }
+
+    fn check_locks(&self) -> Result<(), Error> {
+        let mut locked = Vec::new();
+        for text in self.locks.iter().flatten() {
+            let lock: Value = serde_json::from_str(text).map_err(|_| {
+                crate::policy::Error::Contract("a Shield lock file is not valid JSON")
+            })?;
+            locked.extend(lock["packs"].as_array().into_iter().flatten().cloned());
+        }
+        if locked.is_empty() {
+            return Ok(());
+        }
+        let config: Value = crate::policy::parse(&configuration::layers::merge(
+            &self.shared,
+            self.local.as_deref(),
+        )?)?;
+        for (list, artifacts) in [("packs", &self.packs), ("disabled", &self.disabled)] {
+            let rows = config[list].as_array().into_iter().flatten();
+            for (row, artifact) in rows.zip(artifacts) {
+                let rows: Vec<_> = locked
+                    .iter()
+                    .filter(|lock| {
+                        lock["id"] == row["id"]
+                            && lock["version"] == row["version"]
+                            && (row["registry_identity"].is_null()
+                                || lock["source_identity"] == row["registry_identity"])
+                    })
+                    .collect();
+                let digest = crate::policy::fingerprint(artifact.as_bytes());
+                if !rows.is_empty() && !rows.iter().any(|lock| lock["digest"] == digest.as_str()) {
+                    return Err(crate::policy::Error::Contract(
+                        "a pack's bytes differ from the digest its lock file records",
+                    )
+                    .into());
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Read config.yml with the optional uncommitted config.local.yml beside it,
+/// each file's bytes as read, with every artifact either layer names. Only the
+/// configuration is parsed, to find those artifacts.
+pub(in crate::review) fn read(config: &Path) -> Result<Sources, Error> {
     let path = regular_file(config)?;
     let root = path.parent().ok_or(Error::Context)?;
     let shared = application::read(&path)?;
@@ -60,27 +169,127 @@ pub(in crate::review) fn capture(config: &Path) -> Result<configuration::Bundle,
     };
     let candidate =
         Candidate::from_yaml(&configuration::layers::merge(&shared, local.as_deref())?)?;
+    if candidate.rules_path().is_none() {
+        refuse_unreferenced_rules(root)?;
+    }
     let read = |paths: &mut dyn Iterator<Item = &str>| {
         paths
             .map(|path| read_artifact(root, path))
             .collect::<Result<Vec<_>, _>>()
     };
-    let packs = read(&mut candidate.pack_paths())?;
-    let disabled = read(&mut candidate.disabled_paths())?;
-    let rules = read(&mut candidate.rules_path().into_iter())?.pop();
-    let local_rules = read(&mut candidate.local_rules_path().into_iter())?.pop();
-    configuration::Bundle::capture_layers(
-        &shared,
-        local.as_deref(),
-        &packs,
-        rules.as_deref(),
-        local_rules.as_deref(),
-        &disabled,
-    )
-    .map_err(Into::into)
+    let lock = |name: &str| -> Result<Option<String>, Error> {
+        let path = root.join(name);
+        if path.exists() {
+            Ok(Some(application::read(&regular_file(&path)?)?))
+        } else {
+            Ok(None)
+        }
+    };
+    Ok(Sources {
+        packs: read(&mut candidate.pack_paths())?,
+        disabled: read(&mut candidate.disabled_paths())?,
+        rules: read(&mut candidate.rules_path().into_iter())?.pop(),
+        local_rules: read(&mut candidate.local_rules_path().into_iter())?.pop(),
+        locks: [lock("shield.lock")?, lock("shield.local.lock")?],
+        shared,
+        local,
+    })
 }
 
+/// Shield writes an empty `rules.yml` beside every configuration. When the
+/// configuration does not name it, rules written there would never apply, so
+/// a `rules.yml` that holds rules makes the policy files invalid.
+fn refuse_unreferenced_rules(root: &Path) -> Result<(), Error> {
+    let path = root.join("rules.yml");
+    if !path.is_file() {
+        return Ok(());
+    }
+    let rules: Value = crate::policy::parse(&application::read(&regular_file(&path)?)?)?;
+    if rules["rules"]
+        .as_array()
+        .is_some_and(|rules| !rules.is_empty())
+    {
+        return Err(crate::policy::Error::Contract(
+            "rules.yml holds rules that config.yml does not name; add `rules: rules.yml` to config.yml",
+        )
+        .into());
+    }
+    Ok(())
+}
+
+/// Capture and validate the policy files under a configuration path.
+pub(in crate::review) fn capture(config: &Path) -> Result<configuration::Bundle, Error> {
+    read(config)?.bundle()
+}
+
+/// Read a pack artifact from the configuration directory. An artifact named by
+/// its SHA-256 digest that is missing there, as in a fresh clone or worktree,
+/// comes from the per-user artifact store or this folder's earlier retained
+/// sources, checked against that digest; one read from the project is added to
+/// the store for other checkouts.
 fn read_artifact(root: &Path, path: &str) -> Result<String, Error> {
+    let digest = Path::new(path)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| stem.len() == 64 && stem.bytes().all(|b| b.is_ascii_hexdigit()));
+    let Some(digest) = digest else {
+        return read_project_artifact(root, path);
+    };
+    if root.join(path).exists() {
+        let text = read_project_artifact(root, path)?;
+        // A pack named by its digest must have exactly those bytes.
+        if crate::policy::fingerprint(text.as_bytes()) != digest {
+            return Err(crate::policy::Error::Contract(
+                "a pack's bytes differ from the digest in its file name",
+            )
+            .into());
+        }
+        store_artifact(digest, &text);
+        return Ok(text);
+    }
+    stored_artifact(root, path).ok_or_else(|| {
+        crate::policy::Error::Contract(
+            "a pack named in the policy files is missing from this machine; the status tool or shield status fetches it",
+        )
+        .into()
+    })
+}
+
+/// A digest-named pack artifact that is not in the configuration directory
+/// `shield`, from the per-user store or this folder's retained sources, checked
+/// against its digest. Every reader of the policy files resolves missing
+/// artifacts through this one function.
+pub(in crate::review) fn stored_artifact(shield: &Path, path: &str) -> Option<String> {
+    let digest = Path::new(path)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| stem.len() == 64 && stem.bytes().all(|b| b.is_ascii_hexdigit()))?;
+    let store = crate::review::files::artifact_store().ok();
+    let candidates = [
+        store.map(|store| store.join(format!("{digest}.yml"))),
+        Some(shield.join("review/sources").join(format!("{digest}.blob"))),
+    ];
+    let text = candidates.into_iter().flatten().find_map(|candidate| {
+        std::fs::read_to_string(candidate)
+            .ok()
+            .filter(|text| crate::policy::fingerprint(text.as_bytes()) == digest)
+    })?;
+    store_artifact(digest, &text);
+    Some(text)
+}
+
+fn store_artifact(digest: &str, text: &str) {
+    let Ok(store) = crate::review::files::artifact_store() else {
+        return;
+    };
+    let path = store.join(format!("{digest}.yml"));
+    if !path.exists() {
+        // The store is a cache: a failed write only means a later fetch.
+        let _ = crate::review::files::write_private(&path, text.as_bytes());
+    }
+}
+
+fn read_project_artifact(root: &Path, path: &str) -> Result<String, Error> {
     let resolved = regular_file(&root.join(path))?;
     if !resolved.starts_with(root) {
         return Err(crate::policy::Error::Contract(
@@ -183,6 +392,89 @@ mod tests {
         assert_eq!(
             shared[0]["digest"],
             crate::policy::fingerprint(b"shared artifact")
+        );
+    }
+
+    #[test]
+    fn a_missing_artifact_comes_from_retained_sources_or_the_store_by_digest() {
+        let root = assert_fs::TempDir::new().expect("fixture");
+        let shield = root.child(".shield");
+        shield.create_dir_all().expect("folder");
+        let text = format!("acme artifact {}\n", std::process::id());
+        let digest = crate::policy::fingerprint(text.as_bytes());
+        let path = format!("cache/{digest}.yml");
+        let shield = shield.path().canonicalize().expect("canonical");
+
+        assert!(
+            read_artifact(&shield, &path).is_err(),
+            "nothing holds it yet"
+        );
+        let sources = shield.join("review/sources");
+        std::fs::create_dir_all(&sources).expect("sources");
+        std::fs::write(sources.join(format!("{digest}.blob")), "tampered").expect("tampered");
+        assert!(
+            read_artifact(&shield, &path).is_err(),
+            "bytes must match the digest"
+        );
+
+        std::fs::write(sources.join(format!("{digest}.blob")), &text).expect("blob");
+        assert_eq!(read_artifact(&shield, &path).expect("from sources"), text);
+        std::fs::remove_dir_all(&sources).expect("forget sources");
+        assert_eq!(read_artifact(&shield, &path).expect("from store"), text);
+    }
+
+    #[test]
+    fn a_pack_named_by_a_digest_must_have_those_bytes() {
+        let root = assert_fs::TempDir::new().expect("fixture");
+        let digest = crate::policy::fingerprint(b"acme original");
+        root.child(format!(".shield/cache/{digest}.yml"))
+            .write_str("acme substituted")
+            .expect("artifact");
+        let shield = root
+            .path()
+            .join(".shield")
+            .canonicalize()
+            .expect("canonical");
+        let error = read_artifact(&shield, &format!("cache/{digest}.yml")).unwrap_err();
+        assert!(
+            error.to_string().contains("digest in its file name"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn lock_rows_pin_the_bytes_of_the_packs_they_record() {
+        let root = assert_fs::TempDir::new().expect("fixture");
+        root.child(".shield/config.yml")
+            .write_str("schema_version: 1\npacks:\n- id: acme/tools\n  version: 1.0.0\n  profile: recommended\n  path: cache/acme.yml\n")
+            .expect("config");
+        root.child(".shield/cache/acme.yml")
+            .write_str("acme substituted")
+            .expect("artifact");
+        let lock = |digest: &str| {
+            json!({"schema_version":1,"packs":[{"id":"acme/tools","version":"1.0.0","digest":digest}]})
+                .to_string()
+        };
+        root.child(".shield/shield.lock")
+            .write_str(&lock(&crate::policy::fingerprint(b"acme original")))
+            .expect("lock");
+        let config = root.path().join(".shield/config.yml");
+        let Err(error) = read(&config).expect("sources").bundle() else {
+            panic!("bytes the lock does not pin must be refused");
+        };
+        assert!(error.to_string().contains("lock file records"), "{error}");
+        root.child(".shield/shield.lock")
+            .write_str(&lock(&crate::policy::fingerprint(b"acme substituted")))
+            .expect("lock");
+        // Matching bytes pass the lock check; validation then reaches the pack.
+        let result = read(&config).expect("sources").bundle();
+        assert!(
+            result
+                .as_ref()
+                .err()
+                .is_none_or(|error| !error.to_string().contains("lock file")),
+            "{:?}",
+            result.err()
         );
     }
 

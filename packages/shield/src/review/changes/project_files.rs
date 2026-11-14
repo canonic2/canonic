@@ -48,7 +48,12 @@ fn fingerprint_with(
 
 pub(in crate::review) fn capture(context: &Context, before: &State) -> Result<Capture, Error> {
     let directory = crate::review::project::root(context).join(".shield");
-    capture_with(before, &mut |name| read_file(&directory, name))
+    // Missing pack artifacts resolve exactly as they do for enforcement.
+    capture_with(before, &mut |name| {
+        Ok(read_file(&directory, name)?.or_else(|| {
+            crate::review::integrations::project_sources::stored_artifact(&directory, name)
+        }))
+    })
 }
 
 fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Error> {
@@ -64,15 +69,7 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
     let (source, local, config) = adopted_config(&mut read)?;
     let mut meta = crate::review::project::metadata(before);
     crate::review::packs::repair_disabled_metadata(&before.candidates["project"], &mut meta)?;
-    // Installed and locally disabled selections are both known releases.
-    let known: Vec<Value> = meta["installed"]
-        .as_array()
-        .into_iter()
-        .chain(meta["disabled"].as_array())
-        .chain(meta["shared_installed"].as_array())
-        .flatten()
-        .cloned()
-        .collect();
+    let known = known_releases(&meta, &mut read)?;
     let mut selected = Vec::new();
     let mut bytes = Vec::new();
     let mut disabled_rows = Vec::new();
@@ -81,7 +78,15 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
         ("packs", &mut selected, &mut bytes),
         ("disabled", &mut disabled_rows, &mut disabled_bytes),
     ] {
-        for row in config[list].as_array().into_iter().flatten() {
+        for (index, row) in config[list].as_array().into_iter().flatten().enumerate() {
+            let path = row["path"]
+                .as_str()
+                .ok_or(Error::Invalid("pack path missing"))?;
+            let artifact = read(path)?.ok_or(Error::Invalid("project artifact unreadable"))?;
+            let digest = crate::policy::fingerprint(artifact.as_bytes());
+            // A known release with these exact bytes keeps its registry
+            // provenance; any other pack the files name is, as for
+            // enforcement, the project files' own release.
             let original = known
                 .iter()
                 .find(|p| {
@@ -89,18 +94,15 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
                         && (row["registry_identity"].is_null()
                             || p["source_identity"] == row["registry_identity"])
                         && p["version"] == row["version"]
+                        && p["digest"] == digest.as_str()
                 })
-                .ok_or(Error::Invalid("use shield pack add for a new pack release"))?;
-            let path = row["path"]
-                .as_str()
-                .ok_or(Error::Invalid("pack path missing"))?;
-            let artifact = read(path)?.ok_or(Error::Invalid("project artifact unreadable"))?;
-            if crate::policy::fingerprint(artifact.as_bytes()) != original["digest"] {
-                return Err(Error::Invalid(
-                    "installed artifact bytes changed; reacquire the pack",
-                ));
-            }
-            let mut selection = original.clone();
+                .cloned()
+                .unwrap_or_else(|| {
+                    crate::review::integrations::project_sources::project_release(
+                        row, &artifact, index,
+                    )
+                });
+            let mut selection = original;
             selection["profile"] = row["profile"].clone();
             if let Some(fields) = selection.as_object_mut() {
                 fields.remove("layer");
@@ -120,7 +122,10 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
     } else {
         meta["disabled"] = json!(disabled_rows);
     }
-    let rules = read("rules.yml")?.ok_or(Error::Invalid("manual rules unreadable"))?;
+    let rules = config["rules"]
+        .as_str()
+        .map(|path| read(path)?.ok_or(Error::Invalid("manual rules unreadable")))
+        .transpose()?;
     let local_rules = config["local_rules"]
         .as_str()
         .map(|path| read(path)?.ok_or(Error::Invalid("project artifact unreadable")))
@@ -129,7 +134,7 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
         &source,
         local.as_deref(),
         &bytes,
-        Some(&rules),
+        rules.as_deref(),
         local_rules.as_deref(),
         &disabled_bytes,
     )?);
@@ -150,6 +155,28 @@ fn capture_with(before: &State, source: &mut Reader<'_>) -> Result<Capture, Erro
         fingerprint,
         paths,
     })
+}
+
+/// Installed and locally disabled selections are both known releases, and so
+/// is every release the lock files name: a pull or merge that brings a new
+/// release brings its lock row with it.
+fn known_releases(meta: &Value, read: &mut Reader<'_>) -> Result<Vec<Value>, Error> {
+    let mut known: Vec<Value> = meta["installed"]
+        .as_array()
+        .into_iter()
+        .chain(meta["disabled"].as_array())
+        .chain(meta["shared_installed"].as_array())
+        .flatten()
+        .cloned()
+        .collect();
+    for lock in ["shield.lock", "shield.local.lock"] {
+        if let Some(text) = read(lock)? {
+            let locked: Value = serde_json::from_str(&text)
+                .map_err(|_| Error::Invalid("project lock file is not valid JSON"))?;
+            known.extend(locked["packs"].as_array().into_iter().flatten().cloned());
+        }
+    }
+    Ok(known)
 }
 
 fn update_shared_metadata(
@@ -174,17 +201,12 @@ fn update_shared_metadata(
     Ok(())
 }
 
-/// Capture both configuration layers, preserving comments when selecting rules.yml.
+/// Capture both configuration layers exactly as written: the files mean what
+/// they say, as they do for every request.
 fn adopted_config(read: &mut Reader<'_>) -> Result<(String, Option<String>, Value), Error> {
     let source = read("config.yml")?.ok_or(Error::Invalid("project config unreadable"))?;
-    let mut shared: Value =
+    let _: Value =
         crate::policy::parse(&source).map_err(|_| Error::Invalid("invalid project config"))?;
-    let source = if shared["rules"] == "rules.yml" {
-        source
-    } else {
-        shared["rules"] = json!("rules.yml");
-        crate::policy_files::write(Some(&source), &shared)?.text
-    };
     let local = read("config.local.yml")?;
     let config: Value = crate::policy::parse(&crate::configuration::layers::merge(
         &source,
@@ -286,7 +308,7 @@ mod tests {
         let directory = root.path().join(".shield");
         std::fs::write(
             directory.join("config.yml"),
-            "schema_version: 1\npacks: []\n",
+            "schema_version: 1\npacks: []\nrules: rules.yml\n",
         )
         .unwrap();
         std::fs::write(directory.join("rules.yml"), a).unwrap();

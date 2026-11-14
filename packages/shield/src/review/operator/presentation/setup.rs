@@ -81,7 +81,6 @@ fn access_lines(output: &mut String, before: &Value, after: &Value) {
     for (key, name) in [
         ("agent_settings_read", "Reading agent settings"),
         ("agent_settings_change", "Changing agent settings"),
-        ("shield_config_change", "Changing Shield policy files"),
     ] {
         let now = access_word(&after[key]);
         let was = access_word(&before[key]);

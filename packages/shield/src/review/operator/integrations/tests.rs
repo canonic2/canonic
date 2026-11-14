@@ -1447,22 +1447,8 @@ fn fallback_is_preserved_by_agent_repair_and_validated_under_current_activation(
         AskFallback::Block,
     );
     assert!(fallback(&meta(&context), "codex").unwrap() == AskFallback::Allow);
-    let active = crate::review::project::load(&context)
-        .unwrap()
-        .active
-        .unwrap();
     let checked = PathAccess::default();
-    assert!(
-        with_fallback(root.path(), active.activation_id(), "codex", checked, |s| s
-            == AskFallback::Allow)
-        .unwrap()
-    );
-    assert!(
-        with_fallback(root.path(), "stale", "codex", checked, |_| panic!(
-            "stale handoff"
-        ))
-        .is_err()
-    );
+    assert!(with_fallback(root.path(), "codex", checked, |s| s == AskFallback::Allow).unwrap());
     // A request checked against access the operator has since changed is stale.
     let relaxed = PathAccess {
         agent_settings_change: Change::Allow,
@@ -1470,25 +1456,12 @@ fn fallback_is_preserved_by_agent_repair_and_validated_under_current_activation(
     };
     crate::review::path_access::configure_fixture(root.path(), relaxed);
     assert!(
-        with_fallback(
-            root.path(),
-            active.activation_id(),
-            "codex",
-            checked,
-            |_| panic!("handoff checked against replaced access")
-        )
+        with_fallback(root.path(), "codex", checked, |_| panic!(
+            "handoff checked against replaced access"
+        ))
         .is_err()
     );
-    assert!(
-        with_fallback(
-            root.path(),
-            active.activation_id(),
-            "codex",
-            relaxed,
-            |_| ()
-        )
-        .is_ok()
-    );
+    assert!(with_fallback(root.path(), "codex", relaxed, |_| ()).is_ok());
     let report = status(&context, &crate::review::project::load(&context).unwrap());
     assert!(
         report["installed_integrations"]
@@ -1605,13 +1578,8 @@ fn interrupted_fallback_revocation_blocks_until_confirmed_repair_finishes() {
         })
         .unwrap();
     assert!(
-        with_fallback(
-            root.path(),
-            active.activation_id(),
-            "codex",
-            PathAccess::default(),
-            |s| s == AskFallback::Block
-        )
+        with_fallback(root.path(), "codex", PathAccess::default(), |s| s
+            == AskFallback::Block)
         .unwrap()
     );
     let report = status(&context, &crate::review::project::load(&context).unwrap());

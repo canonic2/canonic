@@ -76,7 +76,7 @@ fn portable_policy_copy_keeps_its_state_and_leaves_the_original_alone() {
     let original_bytes = fs::read(original.path().join(".shield/review/state.json")).unwrap();
     let destination = assert_fs::TempDir::new().unwrap();
     copy(original.path(), destination.path());
-    // An edit in the copy's files does not change its reviewed policy.
+    // An edit in the copy's files is the copy's policy, and only the copy's.
     fs::write(
         destination.path().join(".shield/rules.yml"),
         RULES.replace("allow", "deny"),
@@ -103,7 +103,7 @@ fn portable_policy_copy_keeps_its_state_and_leaves_the_original_alone() {
             .read_current()
             .unwrap()
             .candidates["project"]["rules"],
-        RULES
+        RULES.replace("allow", "deny")
     );
     assert_eq!(
         fs::read(original.path().join(".shield/review/state.json")).unwrap(),
@@ -147,44 +147,6 @@ fn portable_policy_repeated_moves_keep_working() {
     }
 }
 
-#[test]
-fn portable_policy_source_clone_reuses_missing_pack_bytes_but_refuses_changed_artifacts() {
-    let original = assert_fs::TempDir::new().unwrap();
-    let pack = json!({"schema_version":1,"id":"acme/portable","version":"0.1.0","description":"Acme","license":"UNLICENSED","maintainers":["Acme"],"engines":{"shield":env!("CARGO_PKG_VERSION")},"capabilities":["structured-rules-v1"],"rules":[],"kind":"pack"}).to_string();
-    let config = "schema_version: 1\npacks:\n- id: acme/portable\n  version: 0.1.0\n  profile: recommended\n  path: cache/portable.yml\n";
-    let bundle = Bundle::capture(config, std::slice::from_ref(&pack), None).unwrap();
-    review::mcp::initialize_fixture(original.path(), &bundle);
-    let destination = assert_fs::TempDir::new().unwrap();
-    fs::create_dir(destination.path().join(".shield")).unwrap();
-    fs::write(destination.path().join(".shield/config.yml"), config).unwrap();
-    let context = review::open(destination.path()).unwrap();
-    let state = Store::open(destination.path())
-        .unwrap()
-        .read_current()
-        .unwrap();
-    assert_eq!(state.candidates["project"]["packs"][0], pack);
-    assert!(
-        crate::runtime::Project::open(destination.path())
-            .unwrap()
-            .snapshot()
-            .is_ok()
-    );
-    assert!(state.read_requests.is_empty());
-    let changed = assert_fs::TempDir::new().unwrap();
-    fs::create_dir_all(changed.path().join(".shield/cache")).unwrap();
-    fs::write(changed.path().join(".shield/config.yml"), config).unwrap();
-    fs::write(
-        changed.path().join(".shield/cache/portable.yml"),
-        pack.replace("Acme", "Changed"),
-    )
-    .unwrap();
-    assert!(review::open(changed.path()).is_err());
-    assert!(!changed.path().join(".shield/review/state.json").exists());
-    assert_ne!(
-        review::open(original.path()).unwrap().project_id,
-        context.project_id
-    );
-}
 #[cfg(unix)]
 #[test]
 fn portable_policy_linked_external_configuration_does_not_borrow_its_receipt() {
@@ -204,46 +166,6 @@ fn portable_policy_linked_external_configuration_does_not_borrow_its_receipt() {
             .exists()
     );
 }
-#[test]
-fn portable_policy_reuse_keeps_reviewed_source_when_disposable_cache_is_unavailable() {
-    let (_original, before) = fixture();
-    let destination = assert_fs::TempDir::new().unwrap();
-    let cache = assert_fs::TempDir::new().unwrap();
-    let blocked = cache.path().join("blocked");
-    fs::write(&blocked, b"preserve cache obstruction").unwrap();
-    let bundle = Bundle::capture(CONFIG, &[], Some(RULES)).unwrap();
-    let candidates = BTreeMap::from([("project".into(), json!(bundle))]);
-    let evaluator =
-        crate::configuration::Evaluator::new(review::snapshots(&candidates).unwrap()).unwrap();
-    Store::initialize_with(
-        destination.path(),
-        candidates,
-        evaluator.revision(),
-        json!({"sources":{},"installed":[],"compiled_cache_root":blocked}),
-        Some(super::super::InitialActivation::Reused(&evaluator)),
-        BTreeMap::new(),
-    )
-    .unwrap();
-    let context = review::open(destination.path()).unwrap();
-    assert_ne!(context.project_id, before.project_id);
-    let store = Store::open(destination.path()).unwrap();
-    let state = store.read_current().unwrap();
-    assert_eq!(state.candidates["project"]["rules"], RULES);
-    assert!(state.active.is_some());
-    assert!(state.read_requests.is_empty() && state.run_requests.is_empty());
-    assert_eq!(fs::read(&blocked).unwrap(), b"preserve cache obstruction");
-    assert!(matches!(
-        crate::runtime::Project::open(destination.path())
-            .unwrap()
-            .snapshot(),
-        Err(crate::runtime::Error::CacheUnavailable)
-    ));
-    assert_eq!(
-        store.read_checkpoint().unwrap().project_id,
-        context.project_id
-    );
-}
-
 #[test]
 fn portable_policy_source_only_clone_reuses_exact_private_receipt() {
     let (_original, before) = fixture();

@@ -87,20 +87,14 @@ fn expiring_allow_is_revalidated_before_retained_evidence_reaches_a_consumer() {
 }
 
 #[test]
-fn prepared_snapshots_own_requests_and_reactivation_invalidates_even_equal_policy() {
+fn prepared_snapshots_own_requests() {
     let (root, context) = enrolled();
     let project = Project::open(root.path()).unwrap();
-    assert!(project.snapshot().is_err());
-    let first = activate(&context, None);
     let snapshot = project.snapshot().unwrap();
     assert_eq!(snapshot.identity().project_id(), context.project_id);
     assert_eq!(
         snapshot.identity().project_root(),
         root.path().canonicalize().unwrap()
-    );
-    assert_eq!(
-        snapshot.identity().candidate_digest(),
-        first["candidate_digest"].as_str().unwrap()
     );
     let mut literal = request(&context);
     literal.arguments = vec![
@@ -120,15 +114,6 @@ fn prepared_snapshots_own_requests_and_reactivation_invalidates_even_equal_polic
             assert_eq!(evaluation.decision, policy::Decision::Ask);
         })
         .unwrap();
-    let second = activate(&context, first["activation_id"].as_str());
-    assert_eq!(first["policy_revision"], second["policy_revision"]);
-    assert_ne!(first["activation_id"], second["activation_id"]);
-    let invoked = Cell::new(false);
-    assert!(matches!(
-        project.with_current(&evaluated, |_, _| invoked.set(true)),
-        Err(RuntimeError::StaleSnapshot)
-    ));
-    assert!(!invoked.get());
     let current = project
         .snapshot()
         .unwrap()
@@ -155,10 +140,6 @@ fn review_changes_do_not_mutate_prepared_evaluator_and_handoff_refuses_foreign_p
             .decision,
         policy::Decision::Ask
     );
-    assert!(matches!(
-        project.with_current(&evaluated, |_, _| ()),
-        Err(RuntimeError::StaleSnapshot)
-    ));
     assert_eq!(
         snapshot
             .evaluate(request(&context))

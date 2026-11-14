@@ -1,7 +1,5 @@
 //! Native session-context capture and revision-locked reusable grant handoff.
-use super::{
-    Context, Conversation, Error, Record, Value, activation, hash, json, registration, scope, store,
-};
+use super::{Context, Conversation, Error, Record, Value, hash, json, registration, scope, store};
 use crate::policy::Request;
 
 /// Observational capture: existing contexts need neither a lock nor a write.
@@ -170,10 +168,8 @@ fn handoff_session(
     {
         return Ok(());
     }
-    let identity = receipt["identity"].clone();
     let covered=store.inspect_checkpoint(context,&||Ok(()),|state| {
         state.check_operations()?;
-        if activation(state)?!=json!([identity["activation_id"],identity["policy_revision"]]) {return Err(Error::StaleSnapshot);}
         let authority=super::Authority::capture(state);
         let ids=state.session_grants.sessions.get(&key).map_or(&[][..],Vec::as_slice);
         let mut candidates:Vec<&Record>=ids.iter().filter_map(|id|state.session_grants.records.get(id))

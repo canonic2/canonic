@@ -594,8 +594,8 @@ fn native_hooks_reuse_session_grants_for_both_hosts_and_permission_request() {
 }
 
 #[test]
-fn policy_changes_and_registration_changes_permanently_invalidate_grants() {
-    for change in ["policy", "registration", "protection"] {
+fn registration_and_protection_changes_permanently_invalidate_grants() {
+    for change in ["registration", "protection"] {
         let (_root, context, reference) = fixture();
         let proposed = proposal(&context, &reference);
         apply(&context, &proposed["apply_arguments"], true).unwrap();
@@ -603,9 +603,7 @@ fn policy_changes_and_registration_changes_permanently_invalidate_grants() {
         store(&context)
             .unwrap()
             .update_checkpoint(&context, &|| Ok(()), |state| {
-                if change == "policy" {
-                    state.policy_revision = "changed".into();
-                } else if change == "registration" {
+                if change == "registration" {
                     state.operator["integration"]["binary"] = json!("/fixture/replaced-shield");
                 } else {
                     state.operator["path_access"] = json!({"agent_settings_read":"allow"});

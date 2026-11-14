@@ -153,14 +153,67 @@ impl Store {
         candidates: BTreeMap<String, Value>,
         revision: &str,
     ) -> Result<Value, Error> {
-        Self::initialize_with(
+        let operator =
+            serde_json::json!({"sources":{},"default":null,"installed":[],"projection":null});
+        let written = Self::write_fixture_files(project, &candidates)?;
+        let result = Self::initialize_with(
             project,
             candidates,
             revision,
-            serde_json::json!({"sources":{},"default":null,"installed":[],"projection":null}),
+            operator,
             None,
             BTreeMap::default(),
-        )
+        )?;
+        Self::follow_fixture_files(project, written)?;
+        Ok(result)
+    }
+    /// A test project's policy is its files, as in a real project: write the
+    /// candidate's files when the fixture has not written its own. Returns
+    /// whether it wrote them.
+    #[cfg(test)]
+    fn write_fixture_files(
+        project: &Path,
+        candidates: &BTreeMap<String, Value>,
+    ) -> Result<bool, Error> {
+        let Some(candidate) = candidates.get("project") else {
+            return Ok(false);
+        };
+        if project.join(".shield/config.yml").exists() || candidate.get("config").is_none() {
+            return Ok(false);
+        }
+        let merged = crate::configuration::layers::merged(candidate)?;
+        let text = |field: &str| candidate[field].as_str().map(str::to_owned);
+        let mut files = BTreeMap::new();
+        for (path, field) in [
+            (Some("config.yml"), "config"),
+            (Some("config.local.yml"), "local_config"),
+            (merged["rules"].as_str(), "rules"),
+            (merged["local_rules"].as_str(), "local_rules"),
+        ] {
+            if let (Some(path), Some(source)) = (path, text(field)) {
+                files.insert(path.to_owned(), source);
+            }
+        }
+        for (selections, artifacts) in [("packs", "packs"), ("disabled", "disabled")] {
+            for (index, row) in merged[selections]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .enumerate()
+            {
+                if let (Some(path), Some(source)) =
+                    (row["path"].as_str(), candidate[artifacts][index].as_str())
+                {
+                    files.insert(path.to_owned(), source.to_owned());
+                }
+            }
+        }
+        let root = project.canonicalize()?.to_string_lossy().into_owned();
+        super::publication::projections::materialize(
+            &Context::new(String::new(), root, "cli"),
+            &files,
+        )?;
+        Ok(true)
     }
     #[cfg(test)]
     pub(crate) fn initialize_active(
@@ -169,14 +222,31 @@ impl Store {
         revision: &str,
         operator: Value,
     ) -> Result<Value, Error> {
-        Self::initialize_with(
+        let written = Self::write_fixture_files(project, &candidates)?;
+        let result = Self::initialize_with(
             project,
             candidates,
             revision,
             operator,
             Some(InitialActivation::Operator),
             BTreeMap::default(),
-        )
+        )?;
+        Self::follow_fixture_files(project, written)?;
+        Ok(result)
+    }
+    /// Files a fixture wrote from its own candidate are what the state holds,
+    /// as after a real enrollment: record them as followed.
+    #[cfg(test)]
+    fn follow_fixture_files(project: &Path, written: bool) -> Result<(), Error> {
+        if !written {
+            return Ok(());
+        }
+        let store = Self::open(project)?;
+        let lock = store.lock(&|| Ok(()))?;
+        let mut state = store.read_checkpoint()?;
+        state.followed_files = Some(super::files::digest(project)?);
+        store.write(&mut state)?;
+        Ok(lock.release()?)
     }
     pub(crate) fn initialize_verified(
         project: &Path,
@@ -236,6 +306,7 @@ impl Store {
         let mut state = State {
             legacy_preview: None,
             remember_policy: false,
+            followed_files: None,
             history_generation: history::generation()?,
             history_owner: None,
             history_available: true,
@@ -381,17 +452,6 @@ impl Store {
     pub(crate) fn read(&self) -> Result<State, Error> {
         self.read_evaluated().map(|(state, _)| state)
     }
-    /// Actual runtime use may restore an exact reviewed inactive capture after
-    /// its authority becomes available. Diagnostic readers never call this.
-    pub(in crate::review) fn reactivate_reviewed(
-        &self,
-        context: &Context,
-        state: State,
-        checkpoint: Checkpoint<'_>,
-    ) -> Result<(), Error> {
-        portability::reactivate(self, context, state, checkpoint)
-    }
-
     /// Keep the validated active plan for workflows that also need its prefixes.
     #[cfg(test)]
     pub(in crate::review) fn read_evaluated(
@@ -426,10 +486,20 @@ impl Store {
         Ok((state, evaluator, snapshots))
     }
 
-    /// Verify the current/active source only. Proposals remain references and
-    /// optional history stays with history readers. This does not prepare policy.
+    /// The current policy, following the policy files. Proposals remain
+    /// references and optional history stays with history readers.
     pub(in crate::review) fn read_current(&self) -> Result<State, Error> {
-        self.hydrate_current(self.read_checkpoint()?)
+        self.hydrate_current(self.read_following_files()?)
+    }
+
+    /// Read the checkpoint with its copy of the policy brought up to the policy
+    /// files in memory. Readers never take the writer lock; the next writer
+    /// persists the same result. Unchanged files cost one read and hash.
+    pub(in crate::review) fn read_following_files(&self) -> Result<State, Error> {
+        let mut state = self.read_checkpoint()?;
+        let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
+        super::files::sync(&context, &mut state)?;
+        Ok(state)
     }
 
     fn hydrate_current(&self, mut state: State) -> Result<State, Error> {
@@ -484,6 +554,11 @@ impl Store {
                     .compiled
                     .load(&state.project_root, &state.project_id)
                     .ok()
+            })
+            // The plan compiled for the policy files, when it holds this revision.
+            .or_else(|| {
+                super::files::cached(Path::new(&state.project_root))
+                    .filter(|evaluator| evaluator.revision() == state.policy_revision)
             });
         crate::diagnostics::trace::count(
             if evaluator.is_some() {
@@ -509,13 +584,12 @@ impl Store {
         state: &State,
         evaluator: &crate::configuration::Evaluator,
     ) -> Result<(), Error> {
+        // The policy files decide requests; an earlier activation record is
+        // not enforced, so it needs no validation here.
         if evaluator.revision() != state.policy_revision {
             return Err(Error::Invalid(
                 "review revision differs from retained policy",
             ));
-        }
-        if let Some(active) = &state.active {
-            active.validate_evaluated(state, evaluator.revision())?;
         }
         Ok(())
     }
@@ -839,7 +913,8 @@ impl Store {
         let (lock, mut state) = self.locked_state(checkpoint, Self::read_checkpoint)?;
         state.check(context)?;
         checkpoint()?;
-        if operation(&mut state)? {
+        let synced = super::files::sync(context, &mut state)?;
+        if operation(&mut state)? || synced {
             checkpoint()?;
             state.compact_authorization();
             self.write(&mut state)?;
@@ -857,6 +932,9 @@ impl Store {
     ) -> Result<Value, Error> {
         let (lock, mut state) = self.locked_state(checkpoint, read)?;
         state.check(context)?;
+        // Every write starts from the policy files as they are now, so its
+        // comparisons and publication see the files, not an older copy.
+        super::files::sync(context, &mut state)?;
         state.compact_authorization();
         checkpoint()?;
         let result = operation(&mut state)?;

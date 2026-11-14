@@ -652,11 +652,6 @@ pub(super) fn relocate_committed(
     rebuild(context, Some(directory), checkpoint, "derived-cache")
 }
 
-/// Reconstruct disposable data from the committed source, never editable projections.
-pub(super) fn recover(context: &Context, checkpoint: super::Checkpoint<'_>) -> Result<(), Error> {
-    rebuild(context, None, checkpoint, "derived-cache").map(|_| ())
-}
-
 fn reusable_current_plan(active: &super::runtime::Active, context: &Context) -> Option<Evaluator> {
     if active.compiled.plan_key
         != plan_key(

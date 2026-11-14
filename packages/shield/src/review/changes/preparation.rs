@@ -46,7 +46,7 @@ pub(in crate::review) fn capture(
         .map_err(|_| Error::Invalid("invalid preparation arguments"))?;
     checkpoint()?;
     let store = Store::open(Path::new(&context.project_root))?;
-    let before = store.read_checkpoint()?;
+    let before = store.read_following_files()?;
     before.check(context)?;
     before.check_operations()?;
     let (mut before, base, snapshots_before) = store.read_for_comparison(before)?;

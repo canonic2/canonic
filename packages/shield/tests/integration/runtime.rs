@@ -1,12 +1,12 @@
-//! The public consumer API shares CLI activation and never fabricates a launch grant.
+//! The public consumer API reads the CLI's policy files and never fabricates a launch grant.
 use shield::{
     enforcement::{self, AgentAccess},
     policy,
-    runtime::{Error, Project},
+    runtime::Project,
 };
 
 #[test]
-fn public_consumer_prepares_current_cli_activation_and_rejects_stale_handoff() {
+fn public_consumer_reads_the_cli_policy_and_never_hands_off_ask_or_operator_access() {
     if super::isolated_home() {
         return;
     }
@@ -14,7 +14,7 @@ fn public_consumer_prepares_current_cli_activation_and_rejects_stale_handoff() {
     let initialized = super::operator::interactive(&root, &["init"], "yes\n");
     assert_eq!(initialized["code"], 0, "{initialized}");
     let status = super::operator::query(&root, &["status"]);
-    let revision = status["active"]["policy_revision"].as_str().unwrap();
+    let digest = status["policy_files"]["digest"].as_str().unwrap();
     let project = Project::open(root.path()).unwrap();
     let snapshot = project.snapshot().unwrap();
     let evidence = snapshot
@@ -25,14 +25,13 @@ fn public_consumer_prepares_current_cli_activation_and_rejects_stale_handoff() {
             project: snapshot.identity().project_root().to_str().unwrap().into(),
         })
         .unwrap();
-    assert_eq!(evidence.identity().policy_revision(), revision);
+    assert_eq!(evidence.identity().candidate_digest(), digest);
     project
         .with_current(&evidence, |request, evaluation| {
             assert_eq!(request.arguments, ["read"]);
             assert_eq!(evaluation.decision, policy::Decision::Ask);
         })
         .unwrap();
-    let gate_evidence = snapshot.evaluate(evidence.request().clone()).unwrap();
     assert!(matches!(
         enforcement::handoff(
             &project,
@@ -50,24 +49,5 @@ fn public_consumer_prepares_current_cli_activation_and_rejects_stale_handoff() {
             |_, _| panic!("agent reached operator action")
         ),
         Err(enforcement::Error::ProtectedAccess)
-    ));
-    let changed = super::operator::interactive(
-        &root,
-        &["rule", "add"],
-        "other\nargv\nacme\n[\"other\"]\ndeny\nAcme other action\n\nyes\n",
-    );
-    assert_eq!(changed["code"], 0, "{changed}");
-    assert!(matches!(
-        project.with_current(&evidence, |_, _| panic!("stale evidence reached callback")),
-        Err(Error::StaleSnapshot)
-    ));
-    assert!(matches!(
-        enforcement::handoff(
-            &project,
-            AgentAccess::Ordinary,
-            gate_evidence,
-            |_, _| panic!("stale gate reached host")
-        ),
-        Err(enforcement::Error::Runtime(Error::StaleSnapshot))
     ));
 }

@@ -1,126 +1,6 @@
 //! The host-approved tool applies exact proposals through the shared atomic commit.
 use super::*;
 
-fn edit_rules_before_adoption(root: &Path) {
-    let path = root.join(".shield/rules.yml");
-    let source = std::fs::read_to_string(&path).unwrap();
-    std::fs::write(path, format!("{source}\n# Acme manual edit to adopt\n")).unwrap();
-}
-
-#[test]
-fn mcp_connection_adoption_requires_the_form_even_with_codex_tool_permission() {
-    let (root, mut context, connection) = fixture();
-    context.agent = Some("codex".into());
-    let first = prepare(
-        &context,
-        &connection,
-        &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
-    );
-    apply(&context, &connection, &first);
-    let path = root.path().join(".shield/config.yml");
-    let mut config: Value = crate::policy::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
-    config["mcp"] = json!({"cloud":{"transport":{"type":"stdio","command":"acme-connector"},"agents":{"codex":"cloud"}}});
-    std::fs::write(&path, config.to_string()).unwrap();
-    let args = prepare(
-        &context,
-        &connection,
-        &json!({"kind":"project_files_adopt"}),
-    );
-    let before = Store::open(root.path())
-        .unwrap()
-        .read()
-        .unwrap()
-        .policy_revision;
-    let refused = invoke(&context, &connection, "policy_apply", args.clone());
-    assert_eq!(
-        refused["error"]["code"], "operator_review_required",
-        "{refused}"
-    );
-    assert_eq!(
-        Store::open(root.path())
-            .unwrap()
-            .read()
-            .unwrap()
-            .policy_revision,
-        before
-    );
-    let result = apply(&context, &connection, &args);
-    assert_eq!(result["data"]["operator"]["mechanism"], "host-elicitation");
-    let state = Store::open(root.path()).unwrap().read().unwrap();
-    assert_eq!(
-        state.candidates["project"]["lock"]["mcp"]["cloud"]["agents"]["codex"],
-        "cloud"
-    );
-}
-
-#[test]
-fn mcp_connection_form_marks_masked_settings_changes_without_disclosure() {
-    for agent in ["claude", "codex"] {
-        let (root, mut context, connection) = fixture();
-        context.agent = Some(agent.into());
-        let initial = prepare(
-            &context,
-            &connection,
-            &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
-        );
-        apply(&context, &connection, &initial);
-        let path = root.path().join(".shield/config.local.yml");
-        let local = |value: &str| {
-            json!({"schema_version":1,"mcp":{"token":{
-                "transport":{"type":"stdio","command":"acme-connector","env":{"PROFILE":value}},
-                "agents":{agent:"cloud"}
-            }}})
-            .to_string()
-        };
-        // Credential fields are not admitted. A valid connection ID matching the
-        // redactor's sensitive-key grammar still masks this entire private entry.
-        std::fs::write(&path, local("before-private")).unwrap();
-        let first = prepare(
-            &context,
-            &connection,
-            &json!({"kind":"project_files_adopt"}),
-        );
-        apply(&context, &connection, &first);
-        let before = Store::open(root.path()).unwrap().read().unwrap();
-        let edited = local("after-private");
-        std::fs::write(&path, &edited).unwrap();
-        let args = prepare(
-            &context,
-            &connection,
-            &json!({"kind":"project_files_adopt"}),
-        );
-        let message = crate::review::mcp::apply_confirmation(&context, &connection, &args)
-            .unwrap()
-            .unwrap();
-        assert!(message.contains("[REDACTED - changed]"), "{message}");
-        assert!(
-            !message.contains("[REDACTED - added]"),
-            "replacement is not an addition: {message}"
-        );
-        for value in ["before-private", "after-private"] {
-            assert!(!message.contains(value), "{message}");
-            assert!(!args.to_string().contains(value));
-        }
-        assert_eq!(
-            Store::open(root.path())
-                .unwrap()
-                .read()
-                .unwrap()
-                .policy_revision,
-            before.policy_revision
-        );
-        apply(&context, &connection, &args);
-        let after = Store::open(root.path()).unwrap().read().unwrap();
-        assert_eq!(
-            after.candidates["project"]["lock"]["mcp"]["token"]["transport"]["env"]["PROFILE"],
-            "after-private"
-        );
-        let published: Value =
-            crate::policy::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(published, serde_json::from_str::<Value>(&edited).unwrap());
-    }
-}
-
 #[test]
 fn mcp_connection_default_changes_are_detected_without_declaration_edits() {
     let config = json!({"schema_version":1,"packs":[{
@@ -145,150 +25,6 @@ fn mcp_connection_default_changes_are_detected_without_declaration_edits() {
 }
 
 #[test]
-fn project_files_adopt_recovers_hand_edits_through_both_host_approvals() {
-    for agent in ["claude", "codex"] {
-        let (root, mut context, connection) = fixture();
-        context.agent = Some(agent.into());
-        let first = prepare(
-            &context,
-            &connection,
-            &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
-        );
-        apply(&context, &connection, &first);
-        let path = root.path().join(".shield/rules.yml");
-        let edited = crate::policy::rules::document(&[rule("adopted", "deny")])
-            .unwrap()
-            .to_string();
-        std::fs::write(&path, &edited).unwrap();
-        let status = invoke(&context, &connection, "status", json!({}));
-        assert!(status["error"].is_null(), "{status}");
-        assert_eq!(
-            status["data"]["coverage"]["repair_needed"], false,
-            "{status}"
-        );
-        assert_eq!(status["data"]["repair_route"], "shield policy review");
-        assert_eq!(status["data"]["project_file_inspection"], "unchecked");
-        assert_eq!(status["data"]["repair_assessment"]["complete"], false);
-        assert_eq!(
-            status["data"]["project_file_review"]["arguments"]["change"]["kind"],
-            "project_files_adopt"
-        );
-        let before = Store::open(root.path())
-            .unwrap()
-            .read()
-            .unwrap()
-            .policy_revision;
-        let args = prepare(
-            &context,
-            &connection,
-            &json!({"kind":"project_files_adopt"}),
-        );
-        assert_eq!(
-            args,
-            prepare(
-                &context,
-                &connection,
-                &json!({"kind":"project_files_adopt"})
-            )
-        );
-        assert!(args.to_string().contains("adopted"), "{args}");
-        assert_eq!(
-            Store::open(root.path())
-                .unwrap()
-                .read()
-                .unwrap()
-                .policy_revision,
-            before
-        );
-        if agent == "claude" {
-            let refused = invoke(&context, &connection, "policy_apply", args.clone());
-            assert_eq!(refused["error"]["code"], "operator_review_required");
-            assert_eq!(std::fs::read_to_string(&path).unwrap(), edited);
-        }
-        apply(&context, &connection, &args);
-        let after = Store::open(root.path()).unwrap().read().unwrap();
-        assert_ne!(after.policy_revision, before);
-        assert!(
-            after.candidates["project"]["rules"]
-                .as_str()
-                .unwrap()
-                .contains("adopted")
-        );
-        assert!(
-            !super::super::super::publication::projections::projection_changed(&context, &after)
-                .unwrap()
-        );
-        let next = prepare(
-            &context,
-            &connection,
-            &json!({"kind":"rule_add","rule":rule("next", "allow")}),
-        );
-        apply(&context, &connection, &next);
-    }
-}
-
-#[test]
-fn project_files_adopt_rejects_edits_during_confirmation_including_new_local_files() {
-    for local in [false, true] {
-        let (root, mut context, connection) = fixture();
-        context.agent = Some("codex".into());
-        let first = prepare(
-            &context,
-            &connection,
-            &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
-        );
-        apply(&context, &connection, &first);
-        let path = root.path().join(if local {
-            ".shield/config.local.yml"
-        } else {
-            ".shield/rules.yml"
-        });
-        if local {
-            std::fs::write(
-                &path,
-                "schema_version: 1\naccess_paths:\n  read: [/tmp/acme]\n",
-            )
-            .unwrap();
-        }
-        if !local {
-            edit_rules_before_adoption(root.path());
-        }
-        let args = prepare(
-            &context,
-            &connection,
-            &json!({"kind":"project_files_adopt"}),
-        );
-        let before = Store::open(root.path())
-            .unwrap()
-            .read()
-            .unwrap()
-            .policy_revision;
-        let edited = format!(
-            "{}\n# changed during confirmation\n",
-            std::fs::read_to_string(&path).unwrap()
-        );
-        std::fs::write(&path, &edited).unwrap();
-        let refused = invoke(&context, &connection, "policy_apply", args);
-        assert_eq!(refused["error"]["code"], "stale_revision", "{refused}");
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), edited);
-        assert_eq!(
-            Store::open(root.path())
-                .unwrap()
-                .read()
-                .unwrap()
-                .policy_revision,
-            before
-        );
-        let fresh = prepare(
-            &context,
-            &connection,
-            &json!({"kind":"project_files_adopt"}),
-        );
-        apply(&context, &connection, &fresh);
-    }
-}
-
-#[test]
 fn project_files_adopt_refuses_combined_permission_changes() {
     let (_root, context, connection) = fixture();
     let result = invoke(
@@ -307,30 +43,6 @@ fn project_files_adopt_refuses_combined_permission_changes() {
             .unwrap()
             .contains("separately")
     );
-}
-
-#[test]
-fn project_files_adopt_refuses_local_file_created_after_review() {
-    let (root, mut context, connection) = fixture();
-    context.agent = Some("codex".into());
-    let first = prepare(
-        &context,
-        &connection,
-        &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
-    );
-    apply(&context, &connection, &first);
-    edit_rules_before_adoption(root.path());
-    let args = prepare(
-        &context,
-        &connection,
-        &json!({"kind":"project_files_adopt"}),
-    );
-    let path = root.path().join(".shield/config.local.yml");
-    let source = "schema_version: 1\naccess_paths:\n  read: [/tmp/acme]\n";
-    std::fs::write(&path, source).unwrap();
-    let refused = invoke(&context, &connection, "policy_apply", args);
-    assert_eq!(refused["error"]["code"], "stale_revision", "{refused}");
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), source);
 }
 
 #[test]
@@ -358,48 +70,6 @@ fn project_files_adopt_status_leaves_deleted_source_unchecked_until_explicit_rev
     assert_eq!(status["data"]["repair_assessment"]["complete"], false);
     assert_eq!(status["data"]["repair_route"], "shield policy review");
     assert!(status["data"].get("repair_arguments").is_none());
-}
-
-#[test]
-fn project_files_adopt_explicit_retry_reports_stale_files() {
-    let (root, mut context, connection) = fixture();
-    context.agent = Some("codex".into());
-    let first = prepare(
-        &context,
-        &connection,
-        &json!({"kind":"rule_add","rule":rule("initial", "allow")}),
-    );
-    apply(&context, &connection, &first);
-    edit_rules_before_adoption(root.path());
-    let input = json!({"change":{"kind":"project_files_adopt"},"idempotency_key":"adopt-acme"});
-    let proposed = invoke(&context, &connection, "policy_propose", input.clone());
-    assert!(proposed["error"].is_null(), "{proposed}");
-    let retried = invoke(&context, &connection, "policy_propose", input.clone());
-    assert_eq!(
-        proposed["data"]["proposal_id"],
-        retried["data"]["proposal_id"]
-    );
-    let path = root.path().join(".shield/rules.yml");
-    let edited = format!(
-        "{}\n# changed after proposal\n",
-        std::fs::read_to_string(&path).unwrap()
-    );
-    std::fs::write(&path, &edited).unwrap();
-    let stale = invoke(&context, &connection, "policy_propose", input);
-    assert_eq!(stale["error"]["code"], "stale_revision", "{stale}");
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), edited);
-    let fresh = invoke(
-        &context,
-        &connection,
-        "policy_propose",
-        json!({"change":{"kind":"project_files_adopt"},"idempotency_key":"adopt-acme-fresh"}),
-    );
-    assert!(fresh["error"].is_null(), "{fresh}");
-    assert_ne!(
-        fresh["data"]["proposal_id"],
-        proposed["data"]["proposal_id"]
-    );
-    apply(&context, &connection, &fresh["data"]["apply_arguments"]);
 }
 
 #[cfg(unix)]
@@ -869,35 +539,6 @@ fn withdrawing_a_proposal_after_its_base_changed_reports_the_stale_revision() {
 }
 
 #[test]
-fn derived_cache_recovery_during_review_keeps_the_proposal_applicable() {
-    let (root, mut context, connection) = fixture();
-    context.agent = Some("claude".into());
-    let store = Store::open(root.path()).unwrap();
-    store
-        .update_checkpoint(&context, &|| Ok(()), |state| {
-            if let Some(fields) = state.operator.as_object_mut() {
-                fields.remove("compiled_cache_root");
-            }
-            Ok(Value::Null)
-        })
-        .unwrap();
-    let recorded_root = || {
-        store
-            .read()
-            .unwrap()
-            .operator
-            .get("compiled_cache_root")
-            .cloned()
-    };
-    let pending = proposal(&context, &connection, "acme-during-cache");
-    // A hook's first evaluation recovers the disposable cache in the default location.
-    crate::review::cache::recover(&context, &|| Ok(())).unwrap();
-    assert_eq!(recorded_root(), None);
-    apply(&context, &connection, &pending["data"]["apply_arguments"]);
-    assert_eq!(recorded_root(), None);
-}
-
-#[test]
 fn a_cache_location_change_during_review_still_refuses_the_proposal() {
     let (root, mut context, connection) = fixture();
     context.agent = Some("claude".into());
@@ -1080,11 +721,6 @@ fn host_application_refuses_after_a_hand_edit_and_keeps_the_edit() {
         &connection,
         &json!({"kind":"rule_add","rule":rule("write", "deny")}),
     );
-    let revision = Store::open(root.path())
-        .unwrap()
-        .read()
-        .unwrap()
-        .policy_revision;
     let rules = root.path().join(".shield/rules.yml");
     let edited = format!(
         "{}# Acme hand edit\n",
@@ -1104,70 +740,6 @@ fn host_application_refuses_after_a_hand_edit_and_keeps_the_edit() {
             .as_str()
             .is_some_and(|m| m.contains("would overwrite unreviewed edits to .shield files")),
         "{result}"
-    );
-    assert_eq!(std::fs::read_to_string(&rules).unwrap(), edited);
-    assert_eq!(
-        Store::open(root.path())
-            .unwrap()
-            .read()
-            .unwrap()
-            .policy_revision,
-        revision
-    );
-}
-
-#[test]
-fn host_application_of_a_change_to_other_files_keeps_the_hand_edit_pending() {
-    let (root, mut context, connection) = fixture();
-    context.agent = Some("codex".into());
-    let first = prepare(
-        &context,
-        &connection,
-        &json!({"kind":"rule_add","rule":rule("read", "allow")}),
-    );
-    apply(&context, &connection, &first);
-    let rules = root.path().join(".shield/rules.yml");
-    let edited = format!(
-        "{}# Acme hand edit\n",
-        std::fs::read_to_string(&rules).unwrap()
-    );
-    std::fs::write(&rules, &edited).unwrap();
-    // A folder change rewrites only the configuration, not the edited rules.
-    let reference = assert_fs::TempDir::new().unwrap();
-    let path = reference.path().canonicalize().unwrap();
-    let args = prepare(
-        &context,
-        &connection,
-        &json!({"kind":"access_path_add","access":"read","path":path}),
-    );
-    let result = apply(&context, &connection, &args);
-    assert_eq!(std::fs::read_to_string(&rules).unwrap(), edited);
-    let config = std::fs::read_to_string(root.path().join(".shield/config.yml")).unwrap();
-    assert!(config.contains(path.to_str().unwrap()), "{config}");
-    // The edit stays visible for the operator's review, and a repair or a
-    // later change to the same file cannot overwrite it.
-    assert_eq!(result["data"]["receipt"]["repair_needed"], true, "{result}");
-    let state = Store::open(root.path()).unwrap().read().unwrap();
-    crate::review::publication::reconcile(&context, &state).unwrap_err();
-    assert_eq!(std::fs::read_to_string(&rules).unwrap(), edited);
-    let next = prepare(
-        &context,
-        &connection,
-        &json!({"kind":"rule_add","rule":rule("write", "deny")}),
-    );
-    let refused = call_with_confirmation(
-        &context,
-        &connection,
-        "policy_apply",
-        &next,
-        &|| Ok(()),
-        true,
-    );
-    assert!(
-        refused["error"]["message"]
-            .as_str()
-            .is_some_and(|m| m.contains("would overwrite unreviewed edits to .shield files")),
-        "{refused}"
     );
     assert_eq!(std::fs::read_to_string(&rules).unwrap(), edited);
 }

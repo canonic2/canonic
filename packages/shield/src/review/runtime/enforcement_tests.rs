@@ -131,17 +131,8 @@ fn policy_allow_cannot_authorize_classified_operator_or_state_access() {
 }
 
 #[test]
-fn stale_foreign_and_corrupt_state_never_reach_allow_callback() {
-    let (root, context, project) = fixture();
-    let active = review::runtime::status(&context).unwrap()["active"].clone();
-    let old = evidence(&project, "read");
-    activate(&context, active["activation_id"].as_str());
-    assert!(matches!(
-        handoff(&project, AgentAccess::Ordinary, old, |_, _| panic!(
-            "stale allow"
-        )),
-        Err(Error::Runtime(runtime::Error::StaleSnapshot))
-    ));
+fn foreign_and_corrupt_state_never_reach_allow_callback() {
+    let (root, _context, project) = fixture();
     let (_other_root, _, other) = fixture();
     assert!(matches!(
         handoff(

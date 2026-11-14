@@ -255,6 +255,9 @@ pub(in crate::review) fn commit(
     // Keep observational evidence of the previous identity as recovery data.
     // The new history generation does not read or import those observations.
     checkpoint()?;
+    // The state holds what these files say. Their digest is taken before the
+    // recheck below, so files changed after it are followed on the next write.
+    state.followed_files = crate::review::files::digest(&plan.root).ok();
     publication.check(&context)?;
     let lock = store.lock(checkpoint)?;
     let latest = match store.checkpoint_bytes() {
@@ -312,6 +315,7 @@ fn fresh(plan: &Plan) -> Result<State, Error> {
     Ok(State {
         legacy_preview: None,
         remember_policy: false,
+        followed_files: None,
         history_generation: history::generation()?,
         history_owner: None,
         history_available: true,

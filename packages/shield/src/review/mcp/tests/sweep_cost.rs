@@ -416,7 +416,13 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
                 "an unchanged pack's patterns are compiled once and reused for the edit: {age}",
             );
         }
-        let captures = if tool == "policy_propose" { 2 } else { 0 };
+        // Status validates the policy files once, since no hook has compiled
+        // them into a plan under their exact key yet.
+        let captures = match tool {
+            "policy_propose" => 2,
+            "status" => 1,
+            _ => 0,
+        };
         assert_eq!(
             end["fields"]["counts"]["policy.source_captures"]
                 .as_u64()

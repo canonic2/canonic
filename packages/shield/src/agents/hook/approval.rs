@@ -104,7 +104,7 @@ pub(super) fn in_session(
             }
         }
         // A later callback of an attempt whose grant was just consumed.
-        Event::Permission => hook_approval::followup(root, &key, &identity)
+        Event::Permission => hook_approval::followup(root, &key)
             .ok()
             .filter(|covered| *covered)
             .map(|_| allowed()),

@@ -615,7 +615,16 @@ fn decide(
     };
     if exit != 0 {
         let code = receipt["code"].as_str().unwrap_or("protection-failure");
-        let reply = feedback::deny(code);
+        let reply = if code == "policy-files-invalid" {
+            feedback::invalid_policy_files(
+                adapter,
+                receipt["diagnostics"]["message"]
+                    .as_str()
+                    .unwrap_or_default(),
+            )
+        } else {
+            feedback::deny(code)
+        };
         return Some(NativeDecision {
             reply,
             refusal,

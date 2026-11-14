@@ -414,7 +414,12 @@ fn finish_response(
     let explanation = observed["evaluation"]
         .get("explanation")
         .unwrap_or(&observed["evaluation"]["evaluation"]);
+    // A failure without an evaluation keeps the message it was given.
+    let failure_message = value["diagnostics"]["message"].take();
     value["diagnostics"] = crate::agent_message::diagnostics(explanation);
+    if value["diagnostics"]["message"].is_null() && failure_message.is_string() {
+        value["diagnostics"]["message"] = failure_message;
+    }
     crate::evidence::redact(&mut value["diagnostics"]);
     // Finalize analyzer rewrite refusals before publication, so history records
     // the same blocked handoff the native feedback delivers to the host.
@@ -599,6 +604,11 @@ fn evaluate_inner(
     let id = Some(input.request_id.as_str());
     let mut prepared = match prepared.map_or_else(|| Prepared::load(root, stage), Ok) {
         Ok(prepared) => prepared,
+        Err(crate::runtime::Error::PolicyFiles(message)) => {
+            let mut value = failure(id, "policy-files-invalid");
+            value["diagnostics"] = json!({"message":message});
+            return (value, 2);
+        }
         Err(error) => return (failure(id, runtime_failure(&error)), 2),
     };
     if !matches!(input.operation, Operation::Register)

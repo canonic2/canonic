@@ -387,19 +387,13 @@ pub(crate) fn fallback(meta: &Value, agent: &str) -> Result<AskFallback, Error> 
 /// access the request was checked against are both still current.
 pub(crate) fn with_fallback<T>(
     root: &Path,
-    activation: &str,
     agent: &str,
     checked: super::path_access::PathAccess,
     handoff: impl FnOnce(AskFallback) -> T,
 ) -> Result<T, Error> {
     let context = review::open(root)?;
     Store::open(root)?.inspect_checkpoint(&context, &|| Ok(()), |state| {
-        if state
-            .active
-            .as_ref()
-            .is_none_or(|a| a.activation_id() != activation)
-            || super::path_access::load(&state.operator)? != checked
-        {
+        if super::path_access::load(&state.operator)? != checked {
             return Err(Error::StaleSnapshot);
         }
         Ok(handoff(fallback(&state.operator, agent)?))
@@ -448,16 +442,22 @@ pub(in crate::review) fn apply_owned_guarded(
     checkpoint()?;
     maintenance::validate(plan)?;
     privacy::validate(Path::new(&context.project_root), plan)?;
-    let store = Store::open(Path::new(&context.project_root))?;
+    let root = Path::new(&context.project_root);
+    // The connections reviewed came from the policy files; refuse files that
+    // changed since. Without files there are no connections to compare.
+    let files_revision = if root.join(".shield/config.yml").exists() {
+        Some(super::files::load(root)?.evaluator.revision().to_owned())
+    } else {
+        None
+    };
+    let store = Store::open(root)?;
     store.update_checkpoint(context, checkpoint, |state| {
         activation::check_owner(state, expected, activation)?;
         let current = crate::review::project::metadata(state);
         validate_pending_ownership(&current)?;
         if pending(&current)?.is_none()
-            && plan
-                .policy_revision
-                .as_ref()
-                .is_some_and(|revision| revision != &state.policy_revision)
+            && plan.policy_revision.is_some()
+            && plan.policy_revision != files_revision
         {
             return Err(Error::Invalid(
                 "active MCP configuration changed during setup; review again",

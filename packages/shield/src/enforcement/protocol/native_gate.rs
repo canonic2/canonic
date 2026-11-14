@@ -223,7 +223,7 @@ fn fixed(value: &Value, owner: &Path, cwd: &Path, guard: paths::Guard<'_>) -> bo
         allow: PathAccess {
             agent_settings_read: Read::Allow,
             agent_settings_change: Change::Allow,
-            shield_config_change: Change::Allow,
+            ..PathAccess::default()
         },
         ..guard
     };
@@ -309,15 +309,11 @@ fn resolve_fallback(
     // and failures are not Ask, even when the host cannot present a prompt.
     let asked = value["code"] == "approval-required"
         && value["_observation"]["evaluation"]["decision"] == "ask";
-    let activation = value["identity"]["activation_id"]
-        .as_str()
-        .ok_or("runtime-unavailable")?
-        .to_owned();
     // A command a Shield-written Codex prefix covers would run unsandboxed
     // without a prompt, so its Ask blocks whatever the configured fallback.
     let prefixed = value["_codex_covered"] == true
         && crate::agents::find(agent).is_some_and(|a| a.spec().prefix_rules_path.is_some());
-    integrations::with_fallback(root, &activation, agent, allow, |configured| {
+    integrations::with_fallback(root, agent, allow, |configured| {
         let fallback = if prefixed {
             AskFallback::Block
         } else {

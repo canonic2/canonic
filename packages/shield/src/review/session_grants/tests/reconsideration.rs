@@ -256,7 +256,6 @@ fn session_reconsideration_rejects_foreign_changed_and_unavailable_sources() {
         "digest",
         "scope",
         "duration",
-        "policy",
         "protection",
         "registration",
         "context",
@@ -273,12 +272,11 @@ fn session_reconsideration_rejects_foreign_changed_and_unavailable_sources() {
             "digest" => args["candidate_digest"] = json!("wrong"),
             "scope" => args["scope"] = scope(),
             "duration" => args["duration_seconds"] = json!(60),
-            "policy" | "protection" | "registration" | "context" => {
+            "protection" | "registration" | "context" => {
                 store(&context)
                     .unwrap()
                     .update_checkpoint(&context, &|| Ok(()), |state| {
                         match mutation {
-                            "policy" => state.policy_revision = "changed".into(),
                             "protection" => {
                                 state.operator["path_access"] =
                                     json!({"agent_settings_read":"allow"});

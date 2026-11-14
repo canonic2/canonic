@@ -15,6 +15,7 @@ fn historical_fixture() -> (assert_fs::TempDir, Value) {
         "policy_drafts",
         "dismissed_reviews",
         "enforcement",
+        "followed_files",
     ] {
         object.remove(key);
     }

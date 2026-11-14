@@ -279,6 +279,10 @@ pub(crate) struct State {
     /// Request-local publication work; never accepted from saved state.
     #[serde(skip)]
     pub(in crate::review) remember_policy: bool,
+    /// Digest of the policy files this state last followed. Bookkeeping only:
+    /// it is not policy or operator metadata. Absent until the first follow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(in crate::review) followed_files: Option<String>,
     pub(crate) history_generation: String,
     /// Journal ownership survives a checkout epoch change without rewriting
     /// immutable observations. Absent in legacy checkpoints.

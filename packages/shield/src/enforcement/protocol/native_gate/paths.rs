@@ -903,9 +903,9 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
         {
             Protection::Blocked
         }
-        Some(_) if access == Access::Write && !allowed(guard.allow.shield_config_change) => {
-            Protection::Blocked
-        }
+        // The policy files are the enforced policy: no choice or one-time
+        // approval lets an agent change them. Agents change policy by proposal.
+        Some(_) if access == Access::Write => Protection::Blocked,
         Some(_) => Protection::None,
     }
 }
@@ -1090,7 +1090,7 @@ mod portable_policy_guards {
             allow: PathAccess {
                 agent_settings_read: Read::Allow,
                 agent_settings_change: Change::Allow,
-                shield_config_change: Change::Allow,
+                ..PathAccess::default()
             },
             working_files: None,
         };
@@ -1112,7 +1112,7 @@ mod portable_policy_guards {
             allow: PathAccess {
                 agent_settings_read: Read::Allow,
                 agent_settings_change: Change::Allow,
-                shield_config_change: Change::Allow,
+                ..PathAccess::default()
             },
         };
         for name in [

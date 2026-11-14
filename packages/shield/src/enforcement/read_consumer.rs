@@ -396,6 +396,7 @@ fn runtime_error(error: crate::runtime::Error) -> Error {
         Runtime::Missing => Error::Missing,
         Runtime::StaleSnapshot => Error::StaleSnapshot,
         Runtime::CacheUnavailable => Error::CacheUnavailable,
+        Runtime::PolicyFiles(message) => Error::PolicyFiles(message),
         Runtime::RevokedPolicy { .. } => Error::Invalid("active policy is known revoked"),
     }
 }

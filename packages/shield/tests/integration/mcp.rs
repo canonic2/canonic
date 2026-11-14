@@ -223,6 +223,8 @@ fn historical_mcp_launch_forms_continue_to_serve_project_tools() {
             std::fs::read(&path).unwrap() == original_bytes,
             "status must not publish checkpoint conversion"
         );
+        // Every evaluation decides by the same policy files.
+        let mut revision = None;
         for (operation, decision) in [("read", "allow"), ("remove", "deny"), ("publish", "ask")] {
             server.send(&json!({"jsonrpc":"2.0","id":operation,"method":"tools/call",
                 "params":{"name":"policy_evaluate","arguments":{
@@ -238,10 +240,9 @@ fn historical_mcp_launch_forms_continue_to_serve_project_tools() {
                 evaluated["result"]["structuredContent"]["data"]["decision"], decision,
                 "{launch:?}: {evaluated}"
             );
-            assert_eq!(
-                evaluated["result"]["structuredContent"]["policy_revision"],
-                original["policy_revision"]
-            );
+            let current = evaluated["result"]["structuredContent"]["policy_revision"].clone();
+            assert!(current.is_string(), "{evaluated}");
+            assert_eq!(revision.get_or_insert_with(|| current.clone()), &current);
         }
         server.child.stdin.take();
         assert!(server.child.wait().unwrap().success());
@@ -257,7 +258,6 @@ fn historical_mcp_launch_forms_continue_to_serve_project_tools() {
         assert_eq!(target["active"]["binding_version"], 2);
         assert!(target.get("project_root").is_none());
         assert!(target["active"]["compiled"].is_object());
-        assert_eq!(target["policy_revision"], original["policy_revision"]);
     }
 }
 
@@ -330,6 +330,7 @@ pub(super) fn historical_checkpoint(root: &assert_fs::TempDir) -> Value {
         "history_owner",
         "configuration_changes",
         "terminal_receipts",
+        "followed_files",
     ] {
         raw.as_object_mut()
             .expect("checkpoint object")

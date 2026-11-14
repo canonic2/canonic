@@ -335,98 +335,6 @@ fn preparation_removes_only_exited_writers_temporaries() {
 }
 
 #[test]
-fn missing_and_corrupt_cache_recover_but_linked_artifacts_refuse() {
-    let (root, context) = fixture();
-    let project = Project::open(root.path()).unwrap();
-    let identity = project.snapshot().unwrap().identity().clone();
-    let current = artifact(root.path());
-    let original = fs::read(current.path()).unwrap();
-    for digest in [policy::fingerprint(&original), "blake3-v1:invalid".into()] {
-        let mut invalid = current.clone();
-        invalid.digest = digest;
-        assert!(
-            invalid
-                .load(&context.project_root, &context.project_id)
-                .is_err(),
-            "cache integrity requires a valid versioned digest"
-        );
-    }
-    fs::remove_file(current.path()).unwrap();
-    assert_eq!(project.snapshot().unwrap().identity(), &identity);
-    let mut corrupt = original.clone();
-    *corrupt.last_mut().unwrap() ^= 1;
-    fs::write(current.path(), &corrupt).unwrap();
-    let manifest = current.path().with_extension("inputs.json");
-    fs::write(
-        manifest,
-        json!({"compiled_digest":policy::fingerprint(&corrupt)}).to_string(),
-    )
-    .unwrap();
-    assert_eq!(project.snapshot().unwrap().identity(), &identity);
-    assert_eq!(fs::read(current.path()).unwrap(), original);
-    let mut mcp = context.clone();
-    mcp.surface = "mcp".into();
-    assert!(matches!(prepare(&mcp, None), Err(Error::ApprovalRequired)));
-    prepare(&context, None).unwrap();
-    assert_eq!(fs::read(current.path()).unwrap(), original);
-    #[cfg(unix)]
-    {
-        fs::remove_file(current.path()).unwrap();
-        let foreign = root.path().join("foreign.bin");
-        fs::write(&foreign, &original).unwrap();
-        std::os::unix::fs::symlink(foreign, current.path()).unwrap();
-        assert!(project.snapshot().is_err());
-        assert!(prepare(&context, None).is_err());
-    }
-}
-
-#[test]
-fn repair_retains_committed_generation_and_pending_source_objects_share_durable_bytes() {
-    let (root, _context) = fixture();
-    let project = Project::open(root.path()).unwrap();
-    let original = project.snapshot().unwrap().identity().clone();
-    let before = artifact(root.path());
-    let file = root.path().join(".shield/review/state.json");
-    let mut value: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
-    assert_eq!(value["candidates"], value["active"]["candidates"]);
-    assert_eq!(value["candidates"]["project"]["kind"], "retained-source-v2");
-    let rules =
-        json!({"schema_version":1,"rules":[{"id":"pending","decision":"allow","reason":"Acme pending","conditions":{"domain":"argv","executable":"acme","arguments":{"kind":"any"}}}],"kind":"custom","capabilities":["argument-rules-v1","structured-rules-v1"]})
-        .to_string();
-    let pending = Bundle::capture(
-        r#"{"schema_version":1,"packs":[],"rules":"rules.yml"}"#,
-        &[],
-        Some(&rules),
-    )
-    .unwrap();
-    let pending_revision =
-        Evaluator::new(vec![(policy::Scope::Project, pending.snapshot().unwrap())])
-            .unwrap()
-            .revision()
-            .to_owned();
-    value["candidates"]["project"] = json!(pending);
-    value["policy_revision"] = json!(pending_revision);
-    fs::write(&file, value.to_string()).unwrap();
-    fs::write(root.path().join(".shield/rules.yml"), rules).unwrap();
-    fs::remove_file(before.path()).unwrap();
-    assert_eq!(project.snapshot().unwrap().identity(), &original);
-    let loaded = Store::open(root.path()).unwrap().read().unwrap();
-    assert_eq!(loaded.policy_revision, pending_revision);
-    let checkpoint = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
-    assert_ne!(checkpoint.candidates, checkpoint.active.unwrap().candidates);
-    assert_eq!(
-        fs::read_dir(root.path().join(".shield/review/sources"))
-            .unwrap()
-            .filter(|entry| entry.as_ref().is_ok_and(|entry| entry
-                .path()
-                .extension()
-                .is_some_and(|extension| extension == "json")))
-            .count(),
-        2
-    );
-}
-
-#[test]
 fn explicit_roots_are_private_ignored_and_isolated_across_enrollments() {
     let (root, context) = fixture();
     let (other, other_context) = fixture();
@@ -522,57 +430,7 @@ fn status_reports_whether_this_engine_can_use_the_stored_plan() {
 }
 
 #[test]
-fn incompatible_plans_rebuild_on_demand_and_preserve_activation() {
-    let (root, context) = fixture();
-    let current = artifact(root.path());
-    let mut bytes = fs::read(current.path()).unwrap();
-    bytes[..8].copy_from_slice(b"SHPLAN13");
-    let mut corrupted = current.clone();
-    corrupted.digest = compiled_digest(&bytes);
-    fs::write(corrupted.path(), &bytes).unwrap();
-    assert!(
-        corrupted
-            .load(&context.project_root, &context.project_id)
-            .is_err()
-    );
-    let path = root.path().join(".shield/review/state.json");
-    let mut state: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    let activation = state["active"]["activation_id"].clone();
-    let revision = state["active"]["policy_revision"].clone();
-    state["active"]["compiled"] = json!(corrupted);
-    for event in state["authorization_events"].as_array_mut().unwrap() {
-        if event["details"]["compiled_digest"] == current.digest {
-            event["details"]["compiled_digest"] = json!(corrupted.digest);
-        }
-    }
-    fs::write(&path, state.to_string()).unwrap();
-    review::project::status(&context).unwrap();
-    assert_eq!(fs::read(corrupted.path()).unwrap(), bytes);
-    assert_eq!(
-        serde_json::from_slice::<Value>(&fs::read(&path).unwrap()).unwrap(),
-        state
-    );
-    Project::open(root.path()).unwrap().snapshot().unwrap();
-    let prepared = artifact(root.path());
-    assert!(prepared.digest.starts_with("blake3-v1:"));
-    assert_eq!(&fs::read(prepared.path()).unwrap()[..8], b"SHPLAN15");
-    let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
-    assert!(state.authorization_events.iter().any(|event| {
-        event["kind"] == "compiled_cache_prepared"
-            && event["operator"]["mechanism"] == "derived-cache"
-    }));
-    assert_eq!(
-        json!(state.active.as_ref().unwrap().activation_id()),
-        activation
-    );
-    assert_eq!(
-        state.active.unwrap().metadata()["policy_revision"],
-        revision
-    );
-}
-
-#[test]
-fn concurrent_cold_consumers_recover_and_hot_reads_do_not_republish() {
+fn concurrent_cold_consumers_agree_and_hot_reads_do_not_rewrite_the_plan() {
     let (root, _context) = fixture();
     let identity = Project::open(root.path())
         .unwrap()
@@ -580,8 +438,8 @@ fn concurrent_cold_consumers_recover_and_hot_reads_do_not_republish() {
         .unwrap()
         .identity()
         .clone();
-    let current = artifact(root.path());
-    fs::remove_file(current.path()).unwrap();
+    let plans = review::plan_cache_directory();
+    fs::remove_dir_all(&plans).unwrap();
     let start = std::sync::Barrier::new(4);
     std::thread::scope(|scope| {
         for _ in 0..4 {
@@ -598,59 +456,12 @@ fn concurrent_cold_consumers_recover_and_hot_reads_do_not_republish() {
             });
         }
     });
-    let checkpoint = root.path().join(".shield/review/state.json");
-    let before = fs::read(&checkpoint).unwrap();
-    let modified = fs::metadata(current.path()).unwrap().modified().unwrap();
+    let plan = fs::read_dir(&plans)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.extension().is_some_and(|e| e == "bin"))
+        .unwrap();
+    let modified = fs::metadata(&plan).unwrap().modified().unwrap();
     Project::open(root.path()).unwrap().snapshot().unwrap();
-    assert_eq!(fs::read(checkpoint).unwrap(), before);
-    assert_eq!(
-        fs::metadata(current.path()).unwrap().modified().unwrap(),
-        modified
-    );
-}
-
-#[test]
-fn cancelled_recovery_cannot_publish_and_missing_retained_source_cannot_use_projections() {
-    let (root, context) = fixture();
-    let current = artifact(root.path());
-    fs::remove_file(current.path()).unwrap();
-    assert!(matches!(
-        recover(&context, &|| Err(policy::Error::Interrupted)),
-        Err(Error::Policy(policy::Error::Interrupted))
-    ));
-    assert!(!current.path().exists());
-    let sources = root.path().join(".shield/review/sources");
-    for entry in fs::read_dir(sources).unwrap() {
-        fs::remove_file(entry.unwrap().path()).unwrap();
-    }
-    assert!(Project::open(root.path()).unwrap().snapshot().is_err());
-    assert!(!current.path().exists());
-}
-
-#[test]
-fn recovery_cannot_replace_a_generation_activated_during_compilation() {
-    let (root, context) = fixture();
-    fs::remove_file(artifact(root.path()).path()).unwrap();
-    let status = super::super::runtime::status(&context).unwrap();
-    let calls = std::cell::Cell::new(0);
-    let result = recover(&context, &|| {
-        calls.set(calls.get() + 1);
-        if calls.get() == 2 {
-            super::super::runtime::publish_fixture(
-                &context,
-                status["review"]["policy_revision"].as_str().unwrap(),
-                status["review"]["candidate_digest"].as_str().unwrap(),
-                status["active"]["activation_id"].as_str(),
-                &|| Ok(()),
-            )
-            .unwrap();
-        }
-        Ok(())
-    });
-    assert!(matches!(result, Err(Error::StaleSnapshot)));
-    assert_ne!(
-        super::super::runtime::status(&context).unwrap()["active"]["activation_id"],
-        status["active"]["activation_id"]
-    );
-    Project::open(root.path()).unwrap().snapshot().unwrap();
+    assert_eq!(fs::metadata(&plan).unwrap().modified().unwrap(), modified);
 }

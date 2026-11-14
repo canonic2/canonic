@@ -607,51 +607,6 @@ fn changed_request_origin_resources_deadline_and_activation_block() {
 }
 
 #[test]
-fn same_policy_reactivation_invalidates_grants_and_owned_evidence() {
-    let (_root, context, evidence, resource) = fixture();
-    let id = pending(&context, &evidence, &resource);
-    authorize(&operator(&context), &id, 300, None, false).expect("native approval fixture");
-    let project = Project::open(Path::new(&context.project_root)).expect("native approval fixture");
-    let status = review::runtime::status(&operator(&context)).expect("native approval fixture");
-    review::runtime::publish_fixture(
-        &operator(&context),
-        status["review"]["policy_revision"]
-            .as_str()
-            .expect("native approval fixture"),
-        status["review"]["candidate_digest"]
-            .as_str()
-            .expect("native approval fixture"),
-        status["active"]["activation_id"].as_str(),
-        &|| Ok(()),
-    )
-    .expect("native approval fixture");
-    assert!(
-        gate(
-            &context,
-            &evidence,
-            &resource,
-            Some(&id),
-            || true,
-            |_| panic!("stale evidence")
-        )
-        .is_err()
-    );
-    let refreshed = crate::execution::evaluate_approval(
-        &project.snapshot().expect("native approval fixture"),
-        evidence.request(),
-        &resource,
-    )
-    .expect("native approval fixture");
-    assert_eq!(
-        gate(&context, &refreshed, &resource, Some(&id), || true, |_| ())
-            .expect("native approval fixture")
-            .0["code"],
-        "approval-stale"
-    );
-    assert!(authorize(&operator(&context), &id, 300, None, false).is_err());
-}
-
-#[test]
 fn revocation_expiry_missing_and_pending_limits_fail_closed() {
     let (_root, context, evidence, resource) = fixture();
     let id = pending(&context, &evidence, &resource);

@@ -867,11 +867,6 @@ mod tests {
             Err(Error::StateCorrupt { .. })
         ));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), damaged);
-        std::fs::remove_file(&path).unwrap();
-        assert!(matches!(
-            setup_preview(root.path(), plan.as_ref()),
-            Err(Error::Io(_))
-        ));
         assert!(!root.path().join(".codex/rules/shield.rules").exists());
     }
 

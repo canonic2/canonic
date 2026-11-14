@@ -161,30 +161,25 @@ impl HookRequest {
             grant.expires_at_ms
         ]))
     }
-    fn matches(&self, key: &Key<'_>, identity: &Identity<'_>, access: &Value) -> bool {
+    /// The exact request the person approved, under the protection choice it
+    /// was refused under. The policy revision it was refused under is a record,
+    /// not a binding: a policy change, including an upgrade, does not revoke
+    /// a one-time approval.
+    fn matches(&self, key: &Key<'_>, access: &Value) -> bool {
         self.agent == key.agent
             && self.session_id == key.session
             && self.cwd == key.cwd
             && self.tool == key.tool
             && self.input_digest == key.input_digest
-            && self.activation_id == identity.activation_id
-            && self.policy_revision == identity.policy_revision
-            && self.candidate_digest == identity.candidate_digest
             && &self.path_access == access
     }
-    /// The active generation and protection choice are those it was refused under.
+    /// The protection choice is the one it was refused under.
     fn current(&self, state: &State) -> Result<bool, Error> {
-        Ok(self.current_with(state, &access(state)?))
+        Ok(self.current_with(&access(state)?))
     }
     /// [`Self::current`] with the protection choice already loaded.
-    fn current_with(&self, state: &State, access: &Value) -> bool {
-        state.active.as_ref().is_some_and(|active| {
-            active.matches_parts(
-                &self.activation_id,
-                &self.policy_revision,
-                &self.candidate_digest,
-            )
-        }) && &self.path_access == access
+    fn current_with(&self, access: &Value) -> bool {
+        &self.path_access == access
     }
 }
 
@@ -363,33 +358,14 @@ enum Found {
     Pending(String),
 }
 
-/// Whether the generation a hook decided under is still the active one.
-fn active(state: &State, identity: &Identity<'_>) -> bool {
-    state.active.as_ref().is_some_and(|active| {
-        active.matches_parts(
-            identity.activation_id,
-            identity.policy_revision,
-            identity.candidate_digest,
-        )
-    })
-}
-
 /// The live grant or pending request for this exact request under the current
 /// generation and protection choice.
-fn lookup(
-    state: &State,
-    key: &Key<'_>,
-    identity: &Identity<'_>,
-    time: u64,
-) -> Result<Option<Found>, Error> {
+fn lookup(state: &State, key: &Key<'_>, time: u64) -> Result<Option<Found>, Error> {
     state.check_operations()?;
-    if !active(state, identity) {
-        return Err(Error::StaleSnapshot);
-    }
     let access = access(state)?;
     if let Some(index) = state.hook_requests.iter().position(|row| {
         row.status == "approved"
-            && row.matches(key, identity, &access)
+            && row.matches(key, &access)
             && row
                 .grant
                 .as_ref()
@@ -401,9 +377,7 @@ fn lookup(
         .hook_requests
         .iter()
         .find(|row| {
-            row.status == "pending"
-                && time < row.pending_expires_at_ms
-                && row.matches(key, identity, &access)
+            row.status == "pending" && time < row.pending_expires_at_ms && row.matches(key, &access)
         })
         .map(|row| Found::Pending(row.request_id.clone())))
 }
@@ -421,7 +395,7 @@ pub(crate) fn refused(
     let store = Store::open(root)?;
     let found = store.inspect_checkpoint(&context, &|| Ok(()), |state| {
         let time = now()?;
-        Ok(match lookup(state, key, identity, time)? {
+        Ok(match lookup(state, key, time)? {
             Some(Found::Pending(id)) => {
                 let others = others_pending(state, key, &id, time)?;
                 Some(Outcome::Pending(id, others))
@@ -435,7 +409,7 @@ pub(crate) fn refused(
     let value = store.update_checkpoint(&context, &|| Ok(()), |state| {
         let time = now()?;
         state.compact_authorization_at(time);
-        match lookup(state, key, identity, time)? {
+        match lookup(state, key, time)? {
             Some(Found::Grant(index)) => {
                 let grant = state.hook_requests[index]
                     .grant
@@ -516,7 +490,7 @@ fn others_pending(state: &State, key: &Key<'_>, id: &str, time: u64) -> Result<b
             && time < row.pending_expires_at_ms
             && row.agent == key.agent
             && row.session_id == key.session
-            && row.current_with(state, &access)
+            && row.current_with(&access)
     }))
 }
 
@@ -535,19 +509,14 @@ fn consume(state: &mut State, context: &Context, index: usize, time: u64) {
 /// Whether a grant consumed moments ago covers this exact request's later
 /// permission callback in the same attempt. Each grant covers one; a callback
 /// with nothing to cover writes nothing.
-pub(crate) fn followup(root: &Path, key: &Key<'_>, identity: &Identity<'_>) -> Result<bool, Error> {
-    // Rechecked under the writer lock: a policy change since the hook decided
-    // ends the grant's cover.
+pub(crate) fn followup(root: &Path, key: &Key<'_>) -> Result<bool, Error> {
+    // Rechecked under the writer lock: the grant covers only the exact
+    // request it was consumed for.
     let covering = |state: &State, time: u64| -> Result<Option<usize>, Error> {
         state.check_operations()?;
-        if !active(state, identity) {
-            return Ok(None);
-        }
         let access = access(state)?;
         Ok(state.hook_requests.iter().position(|row| {
-            row.status == "consumed"
-                && row.matches(key, identity, &access)
-                && row.live_id(time).is_some()
+            row.status == "consumed" && row.matches(key, &access) && row.live_id(time).is_some()
         }))
     };
     let context = super::open(root)?;

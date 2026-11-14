@@ -119,14 +119,8 @@ fn protection(state: &State) -> Result<Value, Error> {
     Ok(json!(super::path_access::load(&state.operator)?))
 }
 
-fn activation(state: &State) -> Result<Value, Error> {
-    let active = state.active.as_ref().ok_or(Error::StaleSnapshot)?;
-    Ok(json!([active.activation_id(), state.policy_revision]))
-}
-
 /// Shared authority is stable throughout one inspection/compaction pass.
 struct Authority {
-    activation: Option<Value>,
     protection: Option<Value>,
     registrations: BTreeMap<String, String>,
     legacy_registration: Option<String>,
@@ -139,7 +133,6 @@ impl Authority {
             .flatten();
         let fingerprint = registration.as_ref().map(|r| hash(&json!(r)));
         Self {
-            activation: activation(state).ok(),
             protection: protection(state).ok(),
             legacy_registration: fingerprint,
             compatibility: state.session_grants.compatibility.clone(),
@@ -206,10 +199,10 @@ impl Record {
             |previous| hash(&json!(["reconsideration", original, previous])),
         )
     }
+    /// A grant binds its approved scope and the protection choice, not a
+    /// policy version: a change to the policy files does not revoke it.
     fn current_with(&self, authority: &Authority) -> bool {
-        authority.activation.as_ref() == Some(&self.activation)
-            && authority.protection.as_ref() == Some(&self.protection)
-            && authority.matches(self)
+        authority.protection.as_ref() == Some(&self.protection) && authority.matches(self)
     }
     fn effective(&self, state: &State, now: u64) -> &'static str {
         self.effective_with(&Authority::capture(state), now)
@@ -510,7 +503,9 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
             overrides: input.override_denies.clone(),
             override_evidence: override_evidence.clone(),
             reason: input.reason.clone(),
-            activation: activation(state)?,
+            // Earlier grants recorded the activation they were approved
+            // under; it stays in their digest but no longer binds them.
+            activation: Value::Null,
             protection: protection(state)?,
             provenance: context.provenance(),
             digest: String::new(),

@@ -46,6 +46,9 @@ pub enum RuntimeError {
     /// Derived policy is unavailable; operator preparation restores committed data.
     #[error("compiled policy unavailable; run shield cache prepare in an operator terminal")]
     CacheUnavailable,
+    /// The project's policy files are invalid, so there is no policy to apply.
+    #[error("the policy files in .shield/ are invalid: {0}")]
+    PolicyFiles(String),
 }
 impl From<Error> for RuntimeError {
     fn from(error: Error) -> Self {
@@ -85,6 +88,7 @@ impl From<Error> for RuntimeError {
             Error::StaleSnapshot => Self::StaleSnapshot,
             Error::CheckoutChanged => Self::Invalid("checkout runtime changed; reconnect Shield"),
             Error::CleanupPending | Error::CacheUnavailable => Self::CacheUnavailable,
+            Error::PolicyFiles(message) => Self::PolicyFiles(message),
             Error::ApprovalRequired => Self::Invalid("operator approval is required"),
             Error::AgentNotConnected => {
                 Self::Invalid("this agent is not connected to Shield in this project")
@@ -231,13 +235,11 @@ impl NativeAuthority {
     }
 }
 impl NativeSource {
+    /// The policy is the files; a request evaluated against them stays bound to
+    /// its project only.
     fn check(&self, state: &super::State) -> Result<(), Error> {
-        let active = state.active.as_ref().ok_or(Error::StaleSnapshot)?;
         if state.project_id != self.identity.project_id
             || state.project_root != self.identity.project_root
-            || active.activation_id != self.identity.activation_id
-            || active.binding != self.identity.binding
-            || active.compiled.digest != self.identity.compiled_digest
         {
             return Err(Error::StaleSnapshot);
         }
@@ -562,76 +564,43 @@ impl EvaluatedRequest {
     }
 }
 
+/// Load the policy the project's files say now. The review state supplies only
+/// the project's identity and registry trust; it holds no policy.
 pub(in crate::review) fn load(
     context: &Context,
     checkpoint: Checkpoint<'_>,
 ) -> Result<Snapshot, Error> {
-    load_plan(context, checkpoint, true, true)
-}
-
-fn load_plan(
-    context: &Context,
-    checkpoint: Checkpoint<'_>,
-    recover: bool,
-    reactivate: bool,
-) -> Result<Snapshot, Error> {
     checkpoint()?;
     let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
     state.check(context)?;
-    if reactivate && crate::review::registry_trust::may_reactivate(&state) {
-        Store::open(Path::new(&context.project_root))?
-            .reactivate_reviewed(context, state, checkpoint)?;
-        return load_plan(context, checkpoint, recover, false);
-    }
-    if let Some(error) = crate::review::registry_trust::inactive_error(&state) {
-        return Err(error);
-    }
-    let active = state.active.as_ref().ok_or(Error::Invalid(
-        "no active snapshot; initialize the project with shield init",
-    ))?;
-    let loaded = active.compiled.load(&state.project_root, &state.project_id);
-    let evaluator = match loaded {
-        Ok(evaluator) => evaluator,
-        Err(_) if recover => {
-            super::super::cache::recover(context, checkpoint)?;
-            return load_plan(context, checkpoint, false, reactivate);
-        }
-        Err(error) => return Err(error),
-    };
-    crate::review::registry_trust::recover_effective(&state.operator, evaluator.effective())?;
-    let mut snapshot = snapshot_from(&state, evaluator)?;
-    snapshot.input_status = super::super::cache::inputs::probe(&state);
+    let cache = crate::review::files::cache_for(&state.operator).ok();
+    let policy = crate::review::files::load_in(Path::new(&context.project_root), cache.as_deref())
+        .map_err(|error| Error::PolicyFiles(error.to_string()))?;
+    crate::review::registry_trust::recover_effective(
+        &state.operator,
+        policy.evaluator.effective(),
+    )?;
+    let registry_guard = crate::review::registry_trust::guard_effective(
+        &state.operator,
+        policy.evaluator.effective(),
+    )?;
+    let revision = policy.evaluator.revision().to_owned();
     checkpoint()?;
-    Ok(snapshot)
-}
-
-fn snapshot_from(
-    state: &super::State,
-    evaluator: crate::configuration::Evaluator,
-) -> Result<Snapshot, Error> {
-    let registry_guard =
-        crate::review::registry_trust::guard_effective(&state.operator, evaluator.effective())?;
-    let active = state.active.as_ref().ok_or(Error::Invalid(
-        "no active snapshot; initialize the project with shield init",
-    ))?;
-    if evaluator.revision() != active.policy_revision {
-        return Err(Error::StaleSnapshot);
-    }
     Ok(Snapshot {
         working_files: None,
-        input_status: serde_json::json!({"status":"unchecked","integrity":"unchecked","authorizes":false}),
+        input_status: serde_json::json!({"status":"current","authorizes":false}),
         identity: SnapshotIdentity {
             project_id: state.project_id.clone(),
             project_root: state.project_root.clone(),
-            activation_id: active.activation_id.clone(),
-            previous_activation_id: active.previous_activation_id.clone(),
-            policy_revision: active.policy_revision.clone(),
-            candidate_digest: active.candidate_digest.clone(),
+            activation_id: revision.clone(),
+            previous_activation_id: None,
+            policy_revision: revision.clone(),
+            candidate_digest: policy.digest,
             registry_revision: registry_guard.revision.clone(),
-            binding: active.binding.clone(),
-            compiled_digest: active.compiled.digest.clone(),
+            binding: revision.clone(),
+            compiled_digest: revision,
         },
-        evaluator: Arc::new(evaluator),
+        evaluator: Arc::new(policy.evaluator),
     })
 }
 

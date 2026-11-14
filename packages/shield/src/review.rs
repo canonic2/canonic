@@ -8,6 +8,7 @@ mod changes;
 pub(crate) mod cli;
 mod clock;
 mod configuration_changes;
+mod files;
 mod history;
 pub(crate) mod hook_approval;
 mod inspection;
@@ -141,6 +142,10 @@ pub(crate) enum Error {
     Overloaded,
     #[error("compiled policy unavailable; run shield cache prepare in an operator terminal")]
     CacheUnavailable,
+    /// The project's policy files cannot be read, parsed or resolved, so there
+    /// is no policy to apply. The message names the problem.
+    #[error("the policy files in .shield/ are invalid: {0}")]
+    PolicyFiles(String),
     /// Live review capacity is full. The counts say how many objects wait for
     /// the operator and which bound was reached.
     #[error(
@@ -242,6 +247,7 @@ impl Error {
             Self::CursorUnavailable => "cursor_unavailable",
             Self::Overloaded => "overloaded",
             Self::CacheUnavailable => "cache-unavailable",
+            Self::PolicyFiles(_) => "policy-files-invalid",
             Self::Capacity { .. } => "capacity-reached",
         }
     }
@@ -421,9 +427,17 @@ pub(crate) fn history_events(project: &Path) -> Result<Value, Error> {
     )
 }
 
+/// Where compiled plans of the policy files are cached in tests.
+#[cfg(test)]
+pub(crate) fn plan_cache_directory() -> std::path::PathBuf {
+    files::plans(&cache::default_directory().expect("test cache directory"))
+}
+
+/// The cache folder the policy loader reads this project's plans from, which
+/// native path guards protect.
 pub(crate) fn compiled_cache_root(project: &Path) -> Result<Option<std::path::PathBuf>, Error> {
     let state = Store::open(project)?.read_checkpoint()?;
-    Ok(state.active.map(|active| active.compiled.directory))
+    files::cache_for(&state.operator).map(Some)
 }
 
 #[cfg(test)]

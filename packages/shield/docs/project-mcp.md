@@ -67,10 +67,10 @@ Administrative tools show the person an exact captured review through the host.
 Tool permission and a chat response cannot confirm the change. Stale reviews
 refuse; inspect the result before requesting a fresh review.
 
-- `protection_set` changes protected-file access choices. Supply one or more of
-  `agent_settings_read` (`ask`/`allow`), `agent_settings_change` (`block`/`allow`)
-  and `shield_config_change` (`block`/`allow`). Shield's own review and cache
-  state remain protected.
+- `protection_set` changes protected-file access choices. Supply one or both of
+  `agent_settings_read` (`ask`/`allow`) and `agent_settings_change`
+  (`block`/`allow`). Shield's policy files, review state and cache stay
+  protected whatever the choice.
 - `disable {}` pauses native interception for this project;
   `enable {}` resumes it. Each requires Shield's human confirmation form,
   including while disabled. Policy and registration are preserved. Disabled

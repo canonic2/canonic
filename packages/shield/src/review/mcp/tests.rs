@@ -327,6 +327,147 @@ fn commit_pack_change(context: &Context, connection: &Connection, change: Value,
 }
 
 #[test]
+fn status_fetches_a_locked_pack_this_machine_lacks() {
+    let (root, context, connection) = fixture();
+    let _source = dependency_registry(&root, &context, &json!([]), false);
+    commit_pack_change(
+        &context,
+        &connection,
+        json!({"kind":"pack_add","reference":"acme-dependencies/acme/child"}),
+        "install",
+    );
+    // A fresh worktree has the files but not the ignored artifact cache, and
+    // this machine has never stored the release.
+    let cache = root.path().join(".shield/cache");
+    let artifacts: Vec<_> = std::fs::read_dir(&cache)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    std::fs::remove_dir_all(&cache).unwrap();
+    let store = super::super::files::artifact_store().unwrap();
+    for name in &artifacts {
+        let _ = std::fs::remove_file(store.join(name));
+    }
+    let status = review::project::status(&context).unwrap();
+    assert_eq!(
+        status["policy_files"]["fetched"],
+        json!(["acme/child@1.0.0"]),
+        "{status}"
+    );
+    assert!(status["policy_files"]["digest"].is_string(), "{status}");
+    for name in &artifacts {
+        assert!(store.join(name).exists(), "{name:?}");
+    }
+}
+
+/// A project with `acme/child` installed whose artifact this machine has lost.
+fn lost_child(
+    root: &assert_fs::TempDir,
+    context: &Context,
+    connection: &Connection,
+) -> std::path::PathBuf {
+    commit_pack_change(
+        context,
+        connection,
+        json!({"kind":"pack_add","reference":"acme-dependencies/acme/child"}),
+        "install",
+    );
+    let cache = root.path().join(".shield/cache");
+    let store = super::super::files::artifact_store().unwrap();
+    for entry in std::fs::read_dir(&cache).unwrap() {
+        let _ = std::fs::remove_file(store.join(entry.unwrap().file_name()));
+    }
+    std::fs::remove_dir_all(&cache).unwrap();
+    store
+}
+
+#[test]
+fn one_unfetchable_release_does_not_stop_the_others() {
+    let (root, context, connection) = fixture();
+    let _source = dependency_registry(&root, &context, &json!([]), false);
+    lost_child(&root, &context, &connection);
+    let lock = root.path().join(".shield/shield.lock");
+    let mut locked: Value = serde_json::from_str(&std::fs::read_to_string(&lock).unwrap()).unwrap();
+    locked["packs"].as_array_mut().unwrap().insert(
+        0,
+        json!({"id":"acme/ghost","version":"1.0.0","digest":"a".repeat(64),"source_identity":"acme-unconfigured"}),
+    );
+    std::fs::write(&lock, locked.to_string()).unwrap();
+    let status = review::project::status(&context).unwrap();
+    assert_eq!(
+        status["policy_files"]["fetched"],
+        json!(["acme/child@1.0.0"]),
+        "{status}"
+    );
+    let failures = &status["policy_files"]["fetch_failures"];
+    assert_eq!(failures[0]["release"], "acme/ghost@1.0.0", "{status}");
+    assert!(
+        failures[0]["error"]
+            .as_str()
+            .unwrap()
+            .contains("not configured"),
+        "{status}"
+    );
+}
+
+#[test]
+fn a_fetched_release_whose_bytes_differ_from_the_lock_is_refused() {
+    let (root, context, connection) = fixture();
+    let source = dependency_registry(&root, &context, &json!([]), false);
+    let store = lost_child(&root, &context, &connection);
+    // The registry now serves other bytes for the same release.
+    let path = source.path().join("child.yml");
+    let mut child: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    child["description"] = json!("Acme substituted");
+    let bytes = child.to_string();
+    std::fs::write(&path, &bytes).unwrap();
+    let catalog_path = source.path().join("catalog.json");
+    let mut catalog: Value =
+        serde_json::from_slice(&std::fs::read(&catalog_path).unwrap()).unwrap();
+    catalog["packs"][1]["sha256"] = json!(crate::policy::fingerprint(bytes.as_bytes()));
+    std::fs::write(&catalog_path, catalog.to_string()).unwrap();
+    let status = review::project::status(&context).unwrap();
+    let failures = &status["policy_files"]["fetch_failures"];
+    assert_eq!(failures[0]["release"], "acme/child@1.0.0", "{status}");
+    assert!(
+        failures[0]["error"]
+            .as_str()
+            .unwrap()
+            .contains("differ from the lock"),
+        "{status}"
+    );
+    assert!(
+        !store
+            .join(format!(
+                "{}.yml",
+                crate::policy::fingerprint(bytes.as_bytes())
+            ))
+            .exists()
+    );
+}
+
+#[test]
+fn cli_and_mcp_follow_files_whose_packs_come_from_the_store() {
+    let (root, context, connection) = fixture();
+    let _source = dependency_registry(&root, &context, &json!([]), false);
+    commit_pack_change(
+        &context,
+        &connection,
+        json!({"kind":"pack_add","reference":"acme-dependencies/acme/child"}),
+        "install",
+    );
+    // A fresh worktree after a pull: the ignored artifact cache is absent and
+    // the per-user store has the release. CLI and MCP follow the files hooks
+    // enforce instead of keeping an older copy.
+    std::fs::remove_dir_all(root.path().join(".shield/cache")).unwrap();
+    let state = review::project::load(&context).unwrap();
+    assert_eq!(
+        state.followed_files.as_deref(),
+        Some(super::super::files::digest(root.path()).unwrap().as_str())
+    );
+}
+
+#[test]
 fn dependency_removal_prunes_transitive_orphans_but_retains_explicit_selections() {
     let (root, context, connection) = fixture();
     let source = dependency_registry(

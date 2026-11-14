@@ -31,44 +31,6 @@ fn fixture() -> (assert_fs::TempDir, Context, BTreeMap<String, String>) {
 
 #[cfg(unix)]
 #[test]
-fn input_metadata_probe_detects_same_size_preserved_mtime_without_using_edited_source() {
-    let (root, context, _) = fixture();
-    let store = storage::Store::open(root.path()).unwrap();
-    let before = store.read_checkpoint().unwrap();
-    assert_eq!(probe(&before)["status"], "metadata-match");
-    let path = root.path().join(".shield/config.yml");
-    let original = fs::metadata(&path).unwrap();
-    let mut bytes = fs::read(&path).unwrap();
-    bytes[0] = if bytes[0] == b'?' { b'!' } else { b'?' };
-    fs::write(&path, bytes).unwrap();
-    fs::File::options()
-        .write(true)
-        .open(&path)
-        .unwrap()
-        .set_times(fs::FileTimes::new().set_modified(original.modified().unwrap()))
-        .unwrap();
-    let checkpoint = fs::read(root.path().join(".shield/review/state.json")).unwrap();
-    let snapshot = crate::runtime::Project::open(root.path())
-        .unwrap()
-        .snapshot()
-        .unwrap();
-    assert_eq!(snapshot.input_status()["status"], "changed");
-    assert_eq!(snapshot.input_status()["authorizes"], false);
-    assert_eq!(
-        snapshot.identity().policy_revision(),
-        before.policy_revision
-    );
-    assert_eq!(
-        fs::read(root.path().join(".shield/review/state.json")).unwrap(),
-        checkpoint
-    );
-    let status = crate::review::project::status(&context).unwrap();
-    assert_eq!(status["project_file_inspection"], "unchecked");
-    assert_eq!(status["project_input_metadata"]["probe"], "not-run");
-}
-
-#[cfg(unix)]
-#[test]
 fn input_metadata_probe_detects_optional_creation_parent_links_and_corrupt_hint() {
     let (root, _, _) = fixture();
     let state = storage::Store::open(root.path())

@@ -332,7 +332,7 @@ fn admin_inventory() -> Vec<Definition> {
             "Ask the user to change protected file access after an exact before/after review",
             || {
                 let mut schema = object(
-                    json!({"agent_settings_read":{"enum":["ask","allow"]},"agent_settings_change":{"enum":["block","allow"]},"shield_config_change":{"enum":["block","allow"]}}),
+                    json!({"agent_settings_read":{"enum":["ask","allow"]},"agent_settings_change":{"enum":["block","allow"]}}),
                     &[],
                 );
                 schema["minProperties"] = json!(1);

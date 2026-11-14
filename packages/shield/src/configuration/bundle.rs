@@ -80,6 +80,27 @@ impl Bundle {
         .map(|(bundle, _)| bundle)
     }
 
+    /// [`Self::capture_layers`] that also returns the snapshot its validation
+    /// produced, so callers needing both validate the sources once.
+    pub(crate) fn capture_with_snapshot(
+        config: &str,
+        local_config: Option<&str>,
+        packs: &[String],
+        rules: Option<&str>,
+        local_rules: Option<&str>,
+        disabled: &[String],
+    ) -> Result<(Self, Snapshot), Error> {
+        Self::capture_prepared(
+            config,
+            local_config,
+            packs,
+            rules,
+            local_rules,
+            disabled,
+            None,
+        )
+    }
+
     fn capture_prepared(
         config: &str,
         local_config: Option<&str>,

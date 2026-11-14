@@ -7,10 +7,8 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 const LIMIT: usize = super::MAX_STATE;
 pub(super) mod consent;
-mod reactivation;
 #[cfg(test)]
 mod tests;
-pub(super) use reactivation::reactivate;
 
 pub(super) fn directory() -> Result<PathBuf, Error> {
     #[cfg(test)]

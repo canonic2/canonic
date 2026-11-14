@@ -432,11 +432,11 @@ fn action_request_kinds_mixed_native_override_read_and_run_are_one_atomic_review
             .all(|v| v["allowed"] == false && v.get("approval_id").is_none())
     );
     // Closed metadata replay does not consume the native follow-up capability.
-    assert!(review::hook_approval::followup(root, &key, &identity).unwrap());
+    assert!(review::hook_approval::followup(root, &key).unwrap());
 }
 
 #[test]
-fn action_request_kinds_expiry_and_new_activation_cannot_issue_grants() {
+fn action_request_kinds_expiry_cannot_issue_grants() {
     let f = fixture("codex");
     let shown = request_view(&f.context, &f.ids[0]).unwrap().1;
     let expired = shown["pending_expires_at_ms"].as_u64().unwrap();
@@ -452,23 +452,6 @@ fn action_request_kinds_expiry_and_new_activation_cannot_issue_grants() {
     assert!(
         run_approval::review_in(&state, &f.context, &f.ids[1], &snapshot, run_expired).is_err()
     );
-    let args = json!({"request_ids":f.ids});
-    confirmation(&f.context, &args).unwrap();
-    let status = review::runtime::status(&f.context).unwrap();
-    let mut operator = f.context.clone();
-    operator.surface = "cli".into();
-    review::runtime::publish_fixture(
-        &operator,
-        status["review"]["policy_revision"].as_str().unwrap(),
-        status["review"]["candidate_digest"].as_str().unwrap(),
-        Some(f.read.identity().activation_id()),
-        &|| Ok(()),
-    )
-    .unwrap();
-    assert!(approve(&f.context, &args, true).is_err());
-    for id in &f.ids {
-        assert_eq!(request_view(&f.context, id).unwrap().1["status"], "pending");
-    }
 }
 
 #[test]

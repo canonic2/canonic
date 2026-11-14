@@ -298,7 +298,7 @@ pub(super) fn propose(
         );
     }
     let store = Store::open(Path::new(&context.project_root))?;
-    let mut before = store.read_checkpoint()?;
+    let mut before = store.read_following_files()?;
     before.check(context)?;
     before.check_operations()?;
     if input

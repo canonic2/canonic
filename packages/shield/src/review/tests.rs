@@ -285,7 +285,7 @@ fn accepting_an_older_proposal_keeps_the_current_protected_file_access() {
     let (root, context) = enrolled();
     let rule = propose(&context, &input("one"), &|| Ok(())).unwrap();
     let relaxed = PathAccess {
-        shield_config_change: Change::Allow,
+        agent_settings_change: Change::Allow,
         ..PathAccess::default()
     };
     path_access::configure_fixture(root.path(), relaxed);

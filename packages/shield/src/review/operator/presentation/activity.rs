@@ -81,7 +81,6 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
     let relaxed: Vec<_> = [
         ("agent_settings_read", "read agent settings without asking"),
         ("agent_settings_change", "change agent settings"),
-        ("shield_config_change", "change Shield policy files"),
     ]
     .into_iter()
     .filter(|(key, _)| access[*key] == "allow")

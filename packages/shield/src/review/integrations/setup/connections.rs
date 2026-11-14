@@ -11,31 +11,18 @@ pub(super) fn prepare_connections(
     changes: &mut Vec<files::Change>,
     targets: &[String],
 ) -> Result<(String, Option<String>), Error> {
-    let (configured, policy_revision) = if root.join(".shield/review/state.json").exists() {
-        // Planning must not run startup launcher maintenance after the caller
-        // captured the exact files and registration shown in this review.
-        let state = crate::review::storage::Store::open(root)?.read_checkpoint()?;
-        let context = crate::review::Context::new(state.project_id, state.project_root, "cli");
-        let snapshot = super::review::runtime::consumer::load(&context, &|| Ok(()))?;
+    // The connections are the policy files' connections. An enrolled
+    // project's plan records their revision so applying it can refuse files
+    // changed since review; init writes the files itself after planning.
+    let (configured, policy_revision) = if root.join(".shield/config.yml").exists() {
+        let policy = crate::review::files::load(root)?;
+        let enrolled = root.join(".shield/review/state.json").exists();
         (
-            snapshot.mcp_connections().clone(),
-            Some(snapshot.identity().policy_revision().into()),
+            policy.evaluator.effective().mcp_connections().clone(),
+            enrolled.then(|| policy.evaluator.revision().to_owned()),
         )
     } else {
-        // Init plans precede activation. Capture only bounded project sources;
-        // ordinary candidate validation still runs before the plan is applied.
-        let path = root.join(".shield/config.yml");
-        if path.exists() {
-            let captured = super::super::project_sources::capture(&path)
-                .map_err(|_| Error::Invalid("invalid project MCP configuration"))?;
-            let evaluator = crate::configuration::Evaluator::new(vec![(
-                crate::policy::Scope::Project,
-                captured.snapshot()?,
-            )])?;
-            (evaluator.effective().mcp_connections().clone(), None)
-        } else {
-            (BTreeMap::new(), None)
-        }
+        (BTreeMap::new(), None)
     };
     let shared = prepare_configured(
         root,

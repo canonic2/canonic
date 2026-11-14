@@ -350,31 +350,6 @@ pub(in crate::review) fn inactive_reviewed(state: &State) -> bool {
         })
 }
 
-pub(in crate::review) fn inactive_error(state: &State) -> Option<Error> {
-    if !inactive_reviewed(state) {
-        return None;
-    }
-    let proof = &state.operator["policy_consent"];
-    if proof["reason"] == "known-revoked" {
-        let revoked = &proof["revoked"];
-        Some(Error::RegistryRevoked {
-            source_identity: revoked["source_identity"].as_str()?.into(),
-            pack: revoked["id"].as_str()?.into(),
-            version: revoked["version"].as_str()?.into(),
-            digest: revoked["digest"].as_str()?.into(),
-        })
-    } else {
-        Some(Error::Invalid(
-            "reviewed policy is inactive; restore adopted registry trust metadata before activation",
-        ))
-    }
-}
-
-pub(in crate::review) fn may_reactivate(state: &State) -> bool {
-    inactive_reviewed(state)
-        && state.operator["policy_consent"]["reason"] == "authority-unavailable"
-}
-
 /// A frozen first-adoption plan: exact captured origin/anchor, signed root roles,
 /// revocations, catalog checkpoint and prior global head. Nothing is rediscovered
 /// after the person confirms these bytes.

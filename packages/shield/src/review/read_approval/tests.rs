@@ -718,54 +718,6 @@ fn different_origin_request_resource_and_activation_cannot_consume() {
 }
 
 #[test]
-fn reactivation_invalidates_evidence_and_approved_reference() {
-    let (_root, context, evidence, resource) = fixture();
-    let id = pending(&context, &evidence, &resource);
-    authorize(&context, &id, 300, None, false).unwrap();
-    let project = Project::open(Path::new(&context.project_root)).unwrap();
-    let status = review::runtime::status(&context).unwrap();
-    review::runtime::publish_fixture(
-        &context,
-        status["review"]["policy_revision"].as_str().unwrap(),
-        status["review"]["candidate_digest"].as_str().unwrap(),
-        Some(evidence.identity().activation_id()),
-        &|| Ok(()),
-    )
-    .unwrap();
-    assert!(matches!(
-        gate(
-            &context,
-            "factory-acme",
-            &evidence,
-            &resource,
-            Some(&id),
-            || true
-        ),
-        Err(Error::StaleSnapshot)
-    ));
-    let current = project
-        .snapshot()
-        .unwrap()
-        .evaluate_resource(
-            evidence.request().clone(),
-            evidence.resource().unwrap().clone(),
-        )
-        .unwrap();
-    assert_eq!(
-        gate(
-            &context,
-            "factory-acme",
-            &current,
-            &resource,
-            Some(&id),
-            || true
-        )
-        .unwrap()["code"],
-        "approval-stale"
-    );
-}
-
-#[test]
 fn file_changes_block_operator_approval_and_non_operator_cannot_approve() {
     let (root, context, evidence, resource) = fixture();
     let id = pending(&context, &evidence, &resource);
@@ -1075,6 +1027,7 @@ fn legacy_read_checkpoint_upgrade_preserves_policy_and_closes_unbound_operation_
             "enforcement",
             "configuration_changes",
             "terminal_receipts",
+            "followed_files",
         ] {
             wire.as_object_mut().unwrap().remove(name);
         }

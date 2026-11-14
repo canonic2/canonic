@@ -656,13 +656,6 @@ fn check(
     if time < row.created_at_ms || (row.grant.is_none() && time >= row.pending_expires_at_ms) {
         return Err(Error::Invalid("pending request expired"));
     }
-    if state
-        .active
-        .as_ref()
-        .is_none_or(|active| !active.matches(snapshot.identity()))
-    {
-        return Err(Error::StaleSnapshot);
-    }
     let evidence = crate::execution::evaluate_approval(snapshot, &row.request, &row.resource)?;
     if !row.matches(&evidence, &row.resource, &row.origin)
         || evidence.evaluation().decision != Decision::Ask

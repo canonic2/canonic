@@ -90,7 +90,8 @@ fn parity_admin_administration_preparation_is_inactive_and_cannot_self_confirm()
     let receipt = plan.commit(&context, &|| Ok(())).unwrap();
     assert_eq!(receipt["path_access"]["agent_settings_read"], "allow");
     assert_eq!(receipt["path_access"]["agent_settings_change"], "block");
-    assert_eq!(receipt["path_access"]["shield_config_change"], "block");
+    // Policy files are always protected; there is no choice to record.
+    assert!(receipt["path_access"].get("shield_config_change").is_none());
 }
 
 #[test]
@@ -106,7 +107,7 @@ fn parity_admin_administrative_reviews_reject_stale_and_foreign_confirmation() {
     let second = prepare(
         &context,
         "protection_set",
-        &json!({"shield_config_change":"allow"}),
+        &json!({"agent_settings_change":"allow"}),
         &|| Ok(()),
     )
     .unwrap();

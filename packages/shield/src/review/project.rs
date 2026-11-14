@@ -64,6 +64,30 @@ pub(super) fn status(context: &Context) -> Result<Value, Error> {
     if state.legacy_preview.is_none() {
         value["pack_updates"] = super::pack_updates::inspect(context, &state, None);
     }
+    // Requests are decided by the policy files; fetch any pack release they
+    // lock that this machine lacks, then report the files' state.
+    let root = Path::new(&context.project_root);
+    let fetched = super::files::fetch_missing(root, &state.operator);
+    let cache = super::files::cache_for(&state.operator).ok();
+    value["policy_files"] = match super::files::check(root, cache.as_deref()) {
+        Ok(digest) => json!({"digest":digest}),
+        Err(error) => json!({"error":error.to_string()}),
+    };
+    match fetched {
+        Ok(fetched) => {
+            if !fetched.releases.is_empty() {
+                value["policy_files"]["fetched"] = json!(fetched.releases);
+            }
+            if !fetched.failures.is_empty() {
+                value["policy_files"]["fetch_failures"] = fetched
+                    .failures
+                    .into_iter()
+                    .map(|(release, error)| json!({"release":release,"error":error}))
+                    .collect();
+            }
+        }
+        Err(error) => value["policy_files"]["fetch_error"] = json!(error.to_string()),
+    }
     value["checkpoint_upgrade_pending"] = json!(pending);
     Ok(value)
 }

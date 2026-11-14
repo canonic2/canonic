@@ -320,6 +320,9 @@ pub(in crate::review) fn refresh(
     Ok(())
 }
 
+// Runtime loading reads the policy files directly; only this module's tests
+// still probe the edited-input hints, until publication stops recording them.
+#[cfg(test)]
 pub(in crate::review) fn probe(state: &State) -> Value {
     let _span = crate::diagnostics::trace::span("cache.input_probe");
     if let Ok(changed) = probe_inner(state) {
@@ -338,6 +341,7 @@ pub(in crate::review) fn probe(state: &State) -> Value {
         json!({"status":"unchecked","integrity":"unchecked","authorizes":false})
     }
 }
+#[cfg(test)]
 fn probe_inner(state: &State) -> Result<Vec<String>, Error> {
     let active = state.active.as_ref().ok_or(Error::Missing)?;
     let artifact = &active.compiled;

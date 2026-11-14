@@ -289,6 +289,17 @@ fn operator_review_retains_its_plan_but_still_refuses_changed_files() {
     use std::sync::Arc;
     for drift in [false, true] {
         let (root, context) = fixture();
+        // Let the state follow the fixture's rendered files once, as a real
+        // project's does, so the measurement below is the review alone.
+        Store::open(root.path())
+            .unwrap()
+            .update(&context, &|| Ok(()), |_| Ok(json!({})))
+            .unwrap();
+        // A hook has already compiled the files' plan.
+        crate::runtime::Project::open(root.path())
+            .unwrap()
+            .snapshot()
+            .unwrap();
         let logs = assert_fs::TempDir::new().unwrap();
         let cli = crate::cli::Cli::parse_from([
             "shield",
@@ -372,56 +383,6 @@ fn operator_review_retains_its_plan_but_still_refuses_changed_files() {
         // Inspecting the committed state above is verification, outside the
         // measured review/commit work in the assertion below.
         assert_eq!(end["fields"]["counts"]["policy.preparations"], 1, "{end}");
-    }
-}
-
-/// A fresh worktree lacks the ignored pack cache. Reused reviewed policy then
-/// carries only the combined digest, as consent records no per-file hashes.
-#[test]
-fn missing_pack_artifacts_are_rewritten_not_treated_as_edits() {
-    let pack = |version: &str| {
-        json!({"schema_version":1,"kind":"pack","id":"acme/tools","version":version,"description":"Acme","license":"MIT","maintainers":["Acme"],"engines":{"shield":"*"},"capabilities":["structured-rules-v1"],"rules":[]}).to_string()
-    };
-    let candidate = |version: &str| {
-        let config = json!({"schema_version":1,"packs":[{"id":"acme/tools","version":version,"profile":"recommended","path":"cache/acme.yml"}]}).to_string();
-        json!(configuration::Bundle::capture(&config, &[pack(version)], None).unwrap())
-    };
-    for file_hashes in [false, true] {
-        let root = assert_fs::TempDir::new().unwrap();
-        let initial = candidate("1.0.0");
-        let mut meta = json!({"sources":{},"default":null,"installed":[],"projection":null});
-        let files = projections(&initial, &meta).unwrap();
-        meta["projection"] = json!(digest(&files));
-        if file_hashes {
-            meta["projection_file_hashes"] = json!(super::projections::file_hashes(&files));
-        }
-        let candidates = BTreeMap::from([("project".to_owned(), initial)]);
-        let evaluator =
-            configuration::Evaluator::new(review::snapshots(&candidates).unwrap()).unwrap();
-        Store::initialize_active(root.path(), candidates, evaluator.revision(), meta).unwrap();
-        let context = review::open(root.path()).unwrap();
-        materialize(&context, &files).unwrap();
-        let shield = root.path().join(".shield");
-        fs::remove_dir_all(shield.join("cache")).unwrap();
-
-        let before = load(&context).unwrap();
-        assert!(!projection_changed(&context, &before).unwrap());
-        commit(
-            &context,
-            &before,
-            candidate("1.1.0"),
-            metadata(&before),
-            None,
-        )
-        .unwrap();
-        assert_eq!(
-            fs::read_to_string(shield.join("cache/acme.yml")).unwrap(),
-            pack("1.1.0")
-        );
-
-        // An authored file deleted by hand still counts as drift.
-        fs::remove_file(shield.join("rules.yml")).unwrap();
-        assert!(projection_changed(&context, &load(&context).unwrap()).unwrap());
     }
 }
 
@@ -628,6 +589,12 @@ fn failed_initialization_reports_its_cause_instead_of_missing_state() {
 #[test]
 fn proposal_bytes_changed_after_review_cannot_be_committed() {
     let (root, context) = fixture();
+    // The fixture writes rendered files over its stored copy; let the state
+    // follow them once, as a real project's state does.
+    Store::open(root.path())
+        .expect("store")
+        .update(&context, &|| Ok(()), |_| Ok(json!({})))
+        .expect("follow files");
     let proposal = review::tests::propose(&context, &review::tests::input("reviewed"), &|| Ok(()))
         .expect("proposal");
     let id = proposal["proposal_id"].as_str().expect("id");
@@ -742,40 +709,6 @@ fn projection_writes_remove_only_exited_writers_temporaries() {
     for path in &kept {
         assert!(path.exists(), "{}", path.display());
     }
-}
-
-#[test]
-fn repair_recovers_partial_files_but_preserves_manual_edits_and_refuses_stale_review() {
-    let (root, context) = fixture();
-    let before = load(&context).expect("state");
-    let collision = root
-        .path()
-        .join(format!(".shield/rules.shield-{}.tmp", std::process::id()));
-    fs::write(&collision, "owned collision").expect("collision");
-    let receipt =
-        commit(&context, &before, changed(&before), metadata(&before), None).expect("committed");
-    assert_eq!(receipt["committed"], true);
-    assert_eq!(receipt["repair_needed"], true);
-    assert!(
-        projection_changed(&context, &load(&context).expect("state")).expect("projection status")
-    );
-    fs::remove_file(collision).expect("remove collision");
-    assert!(
-        reconcile(&context, &before).is_err(),
-        "stale review must refuse"
-    );
-    let current = load(&context).expect("state");
-    assert_eq!(
-        reconcile(&context, &current).expect("repair")["repair_needed"],
-        false
-    );
-    let manual = root.path().join(".shield/rules.yml");
-    fs::write(&manual, "manual edit").expect("manual edit");
-    assert!(reconcile(&context, &current).is_err());
-    assert_eq!(
-        fs::read_to_string(manual).expect("preserved"),
-        "manual edit"
-    );
 }
 
 #[test]

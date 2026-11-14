@@ -423,15 +423,20 @@ fn claude_hooks_follow_the_session_folder_after_a_move_or_into_a_worktree() {
             &|name| (name == "CLAUDE_PROJECT_DIR").then(|| session.clone()),
             &crate::diagnostics::Log::disabled(),
         );
-        value["hookSpecificOutput"]["permissionDecision"].clone()
+        (
+            value["hookSpecificOutput"]["permissionDecision"].clone(),
+            value.to_string(),
+        )
     };
     // The worktree's own policy decides, whether its hooks name the parent or
     // a folder the checkout was moved away from.
     for launch in [root.path(), moved.as_path()] {
-        assert_eq!(decide(launch, &worktree, &worktree), "allow");
+        let (decision, reply) = decide(launch, &worktree, &worktree);
+        assert_eq!(decision, "allow", "{reply}");
     }
     // A session started in the parent cannot reach the worktree's policy by cd.
-    assert_eq!(decide(root.path(), root.path(), &worktree), "deny");
+    let (decision, reply) = decide(root.path(), root.path(), &worktree);
+    assert_eq!(decision, "deny", "{reply}");
     // A worktree awaiting enrollment fails closed rather than borrowing the
     // parent's policy; its MCP server serves the same worktree for enrollment.
     let fresh = root.path().join(".gate/workspaces/fresh");
@@ -441,7 +446,8 @@ fn claude_hooks_follow_the_session_folder_after_a_move_or_into_a_worktree() {
         "schema_version: 1\npacks: []\n",
     )
     .unwrap();
-    assert_eq!(decide(root.path(), &fresh, &fresh), "deny");
+    let (decision, reply) = decide(root.path(), &fresh, &fresh);
+    assert_eq!(decision, "deny", "{reply}");
     assert_eq!(
         crate::mcp_io::serve_project(Some(root.path()), &fresh, Some(&fresh)).unwrap(),
         fresh.canonicalize().unwrap()
@@ -1340,17 +1346,11 @@ fn native_completion_history_joins_without_a_shield_receipt() {
 }
 
 #[test]
-fn native_decisions_recover_missing_plans_while_completions_leave_them_missing() {
+fn native_decisions_rebuild_missing_plans_while_completions_leave_them_missing() {
     for agent in ["codex", "claude"] {
         let (root, _) = fixture();
-        let state_path = root.path().join(".shield/review/state.json");
-        let status: Value = serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
-        let cache = &status["active"]["compiled"];
-        let path = Path::new(cache["directory"].as_str().unwrap())
-            .join("compiled")
-            .join(cache["project_key"].as_str().unwrap())
-            .join(format!("{}.bin", cache["plan_key"].as_str().unwrap()));
-        fs::remove_file(&path).unwrap();
+        let plans = crate::review::plan_cache_directory();
+        let _ = fs::remove_dir_all(&plans);
         let host = json!({"hook_event_name":"PostToolUse","tool_name":"Bash",
             "tool_use_id":"acme-cold-completion","session_id":"acme-session",
             "cwd":root.path(),"tool_input":{"command":"git status"}});
@@ -1360,11 +1360,38 @@ fn native_decisions_recover_missing_plans_while_completions_leave_them_missing()
             Event::Completed,
             &serde_json::to_vec(&host).unwrap(),
         );
-        assert!(!path.exists(), "completion must not compile");
+        assert!(!plans.exists(), "completion must not compile");
         assert_permitted(&call(root.path(), agent, "git status"), agent);
-        assert!(path.exists());
-        let after: Value = serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
-        assert_eq!(after["active"], status["active"]);
+        assert!(plans.exists());
+    }
+}
+
+#[test]
+fn a_configured_cache_holding_the_compiled_plans_is_protected() {
+    let (root, context) = fixture();
+    let custom = assert_fs::TempDir::new().unwrap();
+    let custom = custom.path().canonicalize().unwrap().join("shield");
+    review::update_operator_fixture(&context, |operator| {
+        operator["compiled_cache_root"] = json!(custom);
+    })
+    .unwrap();
+    // A decision compiles the plan into the configured cache.
+    assert_permitted(&call(root.path(), "codex", "git status"), "codex");
+    let plans = custom.join("plans");
+    assert!(plans.is_dir());
+    for source in [
+        format!("printf changed > {}/acme.bin", plans.display()),
+        format!("rm -rf {}", plans.display()),
+    ] {
+        let value = call(root.path(), "codex", &source);
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{source}: {value}"
+        );
+        assert!(
+            reason(&value).starts_with("Shield: protected path."),
+            "{source}: {value}"
+        );
     }
 }
 
@@ -1399,45 +1426,6 @@ fn effective_external_cache_and_ancestors_are_protected_under_allow_fallback() {
             .project_id(),
         context.project_id
     );
-}
-
-#[test]
-fn unrecoverable_compiled_plan_blocks_allow_fallback_with_a_short_repair_route() {
-    let (root, _context) = fixture();
-    review::operator::integrations::configure_fixture(
-        root.path(),
-        crate::cli::public::IntegrationChoice::agent("codex"),
-        crate::review::integrations::AskFallback::Allow,
-    );
-    let value: Value =
-        serde_json::from_slice(&fs::read(root.path().join(".shield/review/state.json")).unwrap())
-            .unwrap();
-    let artifact = &value["active"]["compiled"];
-    let file = std::path::Path::new(artifact["directory"].as_str().unwrap())
-        .join("compiled")
-        .join(artifact["project_key"].as_str().unwrap())
-        .join(format!("{}.bin", artifact["plan_key"].as_str().unwrap()));
-    fs::remove_file(&file).unwrap();
-    // A missing plan recovers even with an Allow fallback; a path occupied by
-    // another object cannot be replaced and must still fail closed.
-    assert_permitted(&call(root.path(), "codex", "git add acme.txt"), "codex");
-    fs::remove_file(&file).unwrap();
-    fs::create_dir(file).unwrap();
-    let value = call(root.path(), "codex", "git add acme.txt");
-    assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
-    let reason = value["hookSpecificOutput"]["permissionDecisionReason"]
-        .as_str()
-        .unwrap();
-    assert!(reason.contains("policy cache is unavailable"), "{reason}");
-    assert!(reason.contains("in this session"), "{reason}");
-    assert!(reason.len() < 200);
-    let agent = value["hookSpecificOutput"]["additionalContext"]
-        .as_str()
-        .unwrap();
-    assert!(agent.contains("Call cache_prepare"), "{agent}");
-    assert!(agent.contains("absolute cache_dir"), "{agent}");
-    assert!(agent.contains("in-session approval"), "{agent}");
-    assert!(agent.contains("committed policy only"), "{agent}");
 }
 
 #[test]
@@ -1776,6 +1764,31 @@ fn permission_batch_aggregation_keeps_ask_and_deny_before_encoding() {
 }
 
 #[test]
+fn invalid_policy_files_make_requests_ask_and_name_the_problem() {
+    let (root, _) = fixture();
+    fs::write(
+        root.path().join(".shield/config.yml"),
+        "schema_version: 1\npacks: [\n",
+    )
+    .unwrap();
+    // Claude prompts the person; Codex's pre-tool hook cannot prompt, so it
+    // refuses with the same explanation instead of allowing.
+    for (agent, decision) in [("claude", "ask"), ("codex", "deny")] {
+        let value = call(root.path(), agent, "git status");
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], decision,
+            "{agent}: {value}"
+        );
+        assert!(
+            value
+                .to_string()
+                .contains("policy files in .shield/ are invalid"),
+            "{agent}: {value}"
+        );
+    }
+}
+
+#[test]
 fn pinned_event_encodes_failures_without_trusting_the_input_event() {
     let (root, _) = fixture();
     let adapter = find("codex").unwrap();
@@ -1797,7 +1810,8 @@ fn pinned_event_encodes_failures_without_trusting_the_input_event() {
         );
         assert_eq!(value["hookSpecificOutput"]["decision"]["behavior"], "deny");
     }
-    // A new evaluation fails closed after an earlier policy allowance.
+    // The policy files decide; losing the folder's runtime state does not
+    // change what they allow.
     assert_eq!(
         permission(root.path(), "Bash", json!({"command":"git status"}))["hookSpecificOutput"]["decision"]
             ["behavior"],
@@ -1807,7 +1821,7 @@ fn pinned_event_encodes_failures_without_trusting_the_input_event() {
     assert_eq!(
         permission(root.path(), "Bash", json!({"command":"git status"}))["hookSpecificOutput"]["decision"]
             ["behavior"],
-        "deny"
+        "allow"
     );
 }
 
@@ -3146,23 +3160,6 @@ fn unmodeled_completions_are_quiet_without_hiding_supported_history_failures() {
         before,
         "Unsupported completions must not invent execution history"
     );
-
-    fs::remove_file(root.path().join(".shield/review/state.json")).unwrap();
-    for agent in ["claude", "codex"] {
-        let host = json!({"hook_event_name":"PostToolUse","tool_name":"Bash","tool_use_id":"acme-supported",
-            "session_id":"acme-session","cwd":root.path(),"tool_input":{"command":"git status"}});
-        let value = translate_for(
-            root.path(),
-            agent,
-            Event::Completed,
-            &serde_json::to_vec(&host).unwrap(),
-        );
-        assert_eq!(
-            value,
-            json!({"systemMessage":"Shield completion history unavailable; outcome remains unknown."}),
-            "{agent}: {value}"
-        );
-    }
 }
 
 #[test]
@@ -3948,7 +3945,27 @@ fn protected_blocks_name_the_first_path_and_what_the_command_does_to_it() {
 }
 
 #[test]
-fn operator_path_access_opens_settings_and_policy_files_but_never_review_state() {
+fn no_choice_or_one_time_approval_opens_a_policy_file() {
+    let (_root, context) = fixture();
+    let root = Path::new(&context.project_root);
+    // A record saved by an earlier release that opened policy files.
+    crate::review::path_access::store_fixture(
+        root,
+        json!({"agent_settings_change":"allow","shield_config_change":"allow"}),
+    );
+    let path = root.join(".shield/rules.yml");
+    let value = tool(
+        root,
+        "claude",
+        "Write",
+        &json!({"file_path":path,"content":"x"}),
+    );
+    assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert!(!value.to_string().contains("request_approve"), "{value}");
+}
+
+#[test]
+fn operator_path_access_opens_settings_but_never_policy_files_or_review_state() {
     use crate::review::path_access::{self, Change, PathAccess, Read};
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
@@ -3958,7 +3975,7 @@ fn operator_path_access_opens_settings_and_policy_files_but_never_review_state()
     let open = PathAccess {
         agent_settings_read: Read::Allow,
         agent_settings_change: Change::Allow,
-        shield_config_change: Change::Allow,
+        ..PathAccess::default()
     };
     path_access::configure_fixture(root, open);
     for (name, input, decision) in [
@@ -3968,9 +3985,15 @@ fn operator_path_access_opens_settings_and_policy_files_but_never_review_state()
             json!({"file_path":project(".claude/settings.local.json"),"old_string":"a","new_string":"b"}),
             "allow",
         ),
+        // The policy files are the enforced policy: always protected.
         (
             "Write",
             json!({"file_path":project(".shield/rules.yml"),"content":"x"}),
+            "deny",
+        ),
+        (
+            "Read",
+            json!({"file_path":project(".shield/rules.yml")}),
             "allow",
         ),
         (
@@ -3999,7 +4022,7 @@ fn operator_path_access_opens_settings_and_policy_files_but_never_review_state()
     for (source, locked) in [
         ("cat .mcp.json", false),
         ("git add .mcp.json .codex/hooks.json", false),
-        ("cat acme.txt > .shield/config.yml", false),
+        ("cat acme.txt > .shield/config.yml", true),
         ("cat acme.txt > .codex/config.toml", false),
         ("rm .codex/hooks.json", false),
         // Removing an ancestor also removes the protected skill-library root.

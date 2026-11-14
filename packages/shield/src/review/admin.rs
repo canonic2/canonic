@@ -30,7 +30,6 @@ enum Input {
     Protection {
         agent_settings_read: Option<super::path_access::Read>,
         agent_settings_change: Option<super::path_access::Change>,
-        shield_config_change: Option<super::path_access::Change>,
     },
     #[serde(rename = "cache_prepare")]
     Cache { cache_dir: Option<PathBuf> },
@@ -347,13 +346,7 @@ fn prepare_operation(
         Input::Protection {
             agent_settings_read,
             agent_settings_change,
-            shield_config_change,
-        } => protection(
-            context,
-            agent_settings_read,
-            agent_settings_change,
-            shield_config_change,
-        )?,
+        } => protection(context, agent_settings_read, agent_settings_change)?,
         Input::Cache { cache_dir } => {
             if cache_dir.as_ref().is_some_and(|path| !path.is_absolute()) {
                 return Err(Error::Invalid("cache_dir must be an absolute directory"));
@@ -476,12 +469,8 @@ fn protection(
     context: &Context,
     agent_settings_read: Option<super::path_access::Read>,
     agent_settings_change: Option<super::path_access::Change>,
-    shield_config_change: Option<super::path_access::Change>,
 ) -> Result<(Operation, Value), Error> {
-    if agent_settings_read.is_none()
-        && agent_settings_change.is_none()
-        && shield_config_change.is_none()
-    {
+    if agent_settings_read.is_none() && agent_settings_change.is_none() {
         return Err(Error::Invalid("choose at least one protected file setting"));
     }
     let mut access = super::path_access::load(&project::metadata(&project::checkpoint(context)?))
@@ -491,9 +480,6 @@ fn protection(
     }
     if let Some(value) = agent_settings_change {
         access.agent_settings_change = value;
-    }
-    if let Some(value) = shield_config_change {
-        access.shield_config_change = value;
     }
     let plan = protection::Prepared::new(context, access)?;
     let review = plan.review();

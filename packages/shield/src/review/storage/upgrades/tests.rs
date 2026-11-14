@@ -36,6 +36,7 @@ fn historical_fixture() -> (assert_fs::TempDir, review::Context, Value) {
         "policy_drafts",
         "dismissed_reviews",
         "enforcement",
+        "followed_files",
     ] {
         object.remove(key);
     }
@@ -181,46 +182,6 @@ fn upgrade_historical_active_source_preserves_identity_decisions_and_evidence() 
     assert!(report["error"].is_null(), "{report}");
 }
 
-fn cache_fault(cache: &Path, scratch: &Path, fault: &str) -> bool {
-    #[cfg(not(unix))]
-    let _ = scratch;
-    match fault {
-        "file" | "parent-file" => fs::write(cache, b"preserved cache obstacle").unwrap(),
-        "partition-file" => {
-            fs::create_dir(cache).unwrap();
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                fs::set_permissions(cache, fs::Permissions::from_mode(0o700)).unwrap();
-            }
-            fs::write(cache.join("compiled"), b"preserved cache obstacle").unwrap();
-        }
-        #[cfg(unix)]
-        "public-directory" => {
-            use std::os::unix::fs::PermissionsExt;
-            fs::create_dir(cache).unwrap();
-            fs::set_permissions(cache, fs::Permissions::from_mode(0o755)).unwrap();
-        }
-        #[cfg(unix)]
-        "symlink" => std::os::unix::fs::symlink(scratch, cache).unwrap(),
-        #[cfg(unix)]
-        "readonly" => {
-            use std::os::unix::fs::PermissionsExt;
-            fs::create_dir(cache).unwrap();
-            fs::set_permissions(cache, fs::Permissions::from_mode(0o500)).unwrap();
-            let probe = cache.join("write-probe");
-            if fs::write(&probe, b"probe").is_ok() {
-                // A privileged test host cannot model this filesystem refusal.
-                fs::remove_file(probe).unwrap();
-                fs::set_permissions(cache, fs::Permissions::from_mode(0o700)).unwrap();
-                return false;
-            }
-        }
-        _ => unreachable!(),
-    }
-    true
-}
-
 /// A converted activation keeps its identity and confirmation; its binding no
 /// longer names the folder, and its activation event records the original.
 pub(super) fn assert_converted_binding(state: &State, raw: &Value) {
@@ -232,123 +193,6 @@ pub(super) fn assert_converted_binding(state: &State, raw: &Value) {
             && event["details"]["binding"] == active["binding"]
             && event["details"]["converted_from_binding"] == raw["active"]["binding"]
     }));
-}
-
-fn assert_historical_cache_binding(raw: &Value, active: &Value, selected: &Path, fault: &str) {
-    for field in [
-        "activation_id",
-        "previous_activation_id",
-        "policy_revision",
-        "candidate_digest",
-    ] {
-        assert_eq!(active[field], raw["active"][field], "{fault}: {field}");
-    }
-    assert_eq!(active["binding_version"], 2, "{fault}: binding");
-    assert!(
-        active["compiled"]["digest"]
-            .as_str()
-            .unwrap()
-            .starts_with("blake3-v1:")
-    );
-    assert_eq!(active["compiled"]["directory"], json!(selected));
-}
-
-#[test]
-fn upgrade_cache_write_failures_keep_inspection_and_in_session_repair_reachable() {
-    let faults = [
-        "file",
-        "parent-file",
-        "partition-file",
-        #[cfg(unix)]
-        "public-directory",
-        #[cfg(unix)]
-        "symlink",
-        #[cfg(unix)]
-        "readonly",
-    ];
-    for fault in faults {
-        let (root, context, mut raw) = historical_fixture();
-        let scratch = assert_fs::TempDir::new().unwrap();
-        let cache = scratch.path().join("old-cache");
-        let selected = if fault == "parent-file" {
-            cache.join("nested")
-        } else {
-            cache.clone()
-        };
-        if !cache_fault(&cache, scratch.path(), fault) {
-            continue;
-        }
-        raw["operator"]["compiled_cache_root"] = json!(selected);
-        let original = save(root.path(), &raw);
-        let store = Store::open(root.path()).unwrap();
-        let converted = store
-            .read_checkpoint()
-            .unwrap_or_else(|error| panic!("{fault}: {error}"));
-        let active = json!(converted.active.as_ref().unwrap());
-        assert_historical_cache_binding(&raw, &active, &selected, fault);
-        assert!(
-            matches!(
-                consumer::load(&context, &|| Ok(())),
-                Err(Error::CacheUnavailable)
-            ),
-            "{fault}"
-        );
-        let checkpoint = store.checkpoint_bytes().unwrap();
-        store.read_checkpoint().unwrap();
-        assert_eq!(store.checkpoint_bytes().unwrap(), checkpoint);
-        assert_eq!(retained(&store, &source_name(&original)).unwrap(), original);
-        let mut session = context.clone();
-        session.surface = "mcp".into();
-        session.agent = Some("codex".into());
-        let server = crate::mcp::Server::for_review(session).unwrap();
-        let transport = crate::mcp::tests::Transport::start(server);
-        for message in crate::mcp::tests::initialize(&json!({"elicitation":{"form":{}}}), "codex") {
-            transport.send(&message);
-        }
-        assert!(transport.receive()["result"].is_object());
-        for tool in ["status", "doctor"] {
-            let response = transport.call(json!(2), tool, &json!({}));
-            assert_eq!(response["result"]["isError"], false, "{fault}: {response}");
-        }
-        let failed = transport.call(json!(3), "cache_prepare", &json!({}));
-        let error = &failed["result"]["structuredContent"]["error"];
-        assert_eq!(error["code"], "cache_unavailable", "{fault}: {failed}");
-        assert_eq!(
-            error["operator_route"], "cache_prepare",
-            "{fault}: {failed}"
-        );
-        assert!(error["message"].as_str().unwrap().contains("cache_dir"));
-        let repaired = scratch.path().join("repaired-cache");
-        let form = transport.call(json!(3), "cache_prepare", &json!({"cache_dir":repaired}));
-        assert_eq!(form["method"], "elicitation/create", "{fault}: {form}");
-        assert!(!repaired.exists());
-        let response = transport.request(&json!({"jsonrpc":"2.0","id":form["id"],
-            "result":{"action":"accept","content":{}}}));
-        assert_eq!(response["result"]["isError"], false, "{fault}: {response}");
-        assert_policy(root.path(), &context);
-        let after = store.read_checkpoint().unwrap();
-        assert_eq!(
-            after.active.as_ref().unwrap().activation_id(),
-            active["activation_id"]
-        );
-        assert_eq!(after.policy_revision, converted.policy_revision);
-        assert_eq!(
-            after
-                .authorization_events
-                .iter()
-                .filter(|event| event["kind"] == "runtime_activated")
-                .count(),
-            1
-        );
-        if ["file", "parent-file"].contains(&fault) {
-            assert_eq!(fs::read(&cache).unwrap(), b"preserved cache obstacle");
-        }
-        #[cfg(unix)]
-        if fault == "readonly" {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&cache, fs::Permissions::from_mode(0o700)).unwrap();
-        }
-    }
 }
 
 #[test]

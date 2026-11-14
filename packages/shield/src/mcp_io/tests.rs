@@ -41,49 +41,6 @@ fn action_request_kinds_sdk_uses_only_the_registered_claude_form_channel() {
 }
 
 #[test]
-fn bootstrap_healthy_launcher_remapping_requires_its_confirmed_receipt() {
-    let root = assert_fs::TempDir::new().unwrap();
-    let original = root.path().join("original");
-    let destination = root.path().join("destination");
-    let config = "schema_version: 1\npacks: []\n";
-    let bundle = crate::configuration::Bundle::capture(config, &[], None).unwrap();
-    for project in [&original, &destination] {
-        fs::create_dir(project).unwrap();
-        crate::review::mcp::initialize_fixture(project, &bundle);
-        fs::write(project.join(".shield/config.yml"), config).unwrap();
-    }
-    let original = original.canonicalize().unwrap();
-    let destination = destination.canonicalize().unwrap();
-    let checkpoint = destination.join(".shield/review/state.json");
-    let mut healthy: serde_json::Value =
-        serde_json::from_slice(&fs::read(&checkpoint).unwrap()).unwrap();
-    healthy["operator"]["bootstrap"] = json!({"launch_roots":[original]});
-    fs::write(&checkpoint, healthy.to_string()).unwrap();
-    assert!(!crate::review::bootstrap::accepts_launch(
-        &destination,
-        &original
-    ));
-    assert_eq!(
-        project_path(Some(&original), &destination).unwrap(),
-        original
-    );
-    // A real, explicitly accepted enrollment creates the independent proof.
-    fs::copy(original.join(".shield/review/state.json"), &checkpoint).unwrap();
-    crate::review::bootstrap::prepare_launch(&destination, &original)
-        .unwrap()
-        .commit()
-        .unwrap();
-    assert!(crate::review::bootstrap::accepts_launch(
-        &destination,
-        &original
-    ));
-    assert_eq!(
-        project_path(Some(&original), &destination).unwrap(),
-        destination
-    );
-}
-
-#[test]
 fn bootstrap_pinned_old_launch_selects_nearest_copy_or_move_for_review() {
     let root = assert_fs::TempDir::new().unwrap();
     let original = root.path().join("original");

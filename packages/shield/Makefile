@@ -9,13 +9,13 @@ format: ## Apply Rust formatting; FORMAT_FILES selects files and their child mod
 format-check: ## Check Rust formatting without changing files
 	PATH="$(dir $(CARGO)):$$PATH" "$(CARGO)" fmt --check
 
-lint: ## Run strict Clippy
+lint: prune ## Run strict Clippy
 	PATH="$(dir $(CARGO)):$$PATH" "$(CARGO)" clippy --locked --all-targets $(CARGO_FLAGS) -- -D warnings
 
-types: ## Type-check Rust targets
+types: prune ## Type-check Rust targets
 	PATH="$(dir $(CARGO)):$$PATH" "$(CARGO)" check --locked --all-targets $(CARGO_FLAGS)
 
-test: ## Run Rust tests
+test: prune ## Run Rust tests
 	PATH="$(dir $(CARGO)):$$PATH" "$(CARGO)" nextest run --locked $(CARGO_FLAGS)
 
 doctest: ## Run documentation examples
@@ -27,6 +27,14 @@ docs: ## Generate local API reference HTML
 deps: ## Audit dependency advisories, licenses and sources
 	PATH="$(dir $(CARGO)):$$PATH" "$(CARGO)" deny check
 
+# Cargo never deletes old build output. Builds first delete incremental caches
+# and test binaries that no build has touched for more than PRUNE_DAYS days.
+PRUNE_DAYS ?= 3
+.PHONY: prune
+prune: ## Delete incremental caches and test binaries unused for more than PRUNE_DAYS days
+	@test ! -d target || find target -mindepth 3 -maxdepth 4 -type d -path '*/incremental/*' -prune -mtime +$(PRUNE_DAYS) -exec rm -rf {} +
+	@test ! -d target || find target -mindepth 3 -maxdepth 4 -type f -path '*/deps/*' -perm -u+x ! -name '*.*' -mtime +$(PRUNE_DAYS) -delete
+
 # Development keeps Cargo's incremental artifacts in the existing target directory.
 TEST_TARGET ?= --lib
 # The apply-cost regression may clone only immutable pack artifacts from this
@@ -35,10 +43,10 @@ APPLY_PROFILE_PROJECT ?=
 PREVIOUS_BINARY ?=
 .PHONY: dev test-focus
 
-dev: ## Build incrementally without release optimization or installation
+dev: prune ## Build incrementally without release optimization or installation
 	"$(CARGO)" build --locked $(CARGO_FLAGS)
 
-test-focus: ## Run matching library tests; FILTER is required, TEST_TARGET selects other targets
+test-focus: prune ## Run matching library tests; FILTER is required, TEST_TARGET selects other targets
 	$(if $(strip $(FILTER)),,$(error Set FILTER to a test name or module; optionally set TEST_TARGET='--test integration'))
 	$(if $(filter -%,$(FILTER)),$(error FILTER must be a test-name substring, not a flag))
 	$(if $(strip $(APPLY_PROFILE_PROJECT)),SHIELD_APPLY_PROFILE_PROJECT="$(APPLY_PROFILE_PROJECT)") $(if $(strip $(PREVIOUS_BINARY)),SHIELD_PREVIOUS_BINARY="$(PREVIOUS_BINARY)") "$(CARGO)" nextest run --locked $(TEST_TARGET) $(CARGO_FLAGS) "$(FILTER)"
