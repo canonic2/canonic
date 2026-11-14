@@ -86,7 +86,7 @@ const docsMarkdown = [
     <div class="wrap">
       <div class="controls-block">
         <SectionHead kicker="Interface" title="Layout">
-          Workbench reads <code>workbench.yaml</code> at the root of your project. The sidebar lists the pages it declares, and the TypeScript previews it finds. Matching collection and group names bring those pages together in one list. Its bundled native compiler caches unchanged preview builds across restarts.
+          Workbench reads <code>workbench.yaml</code> at the root of your project, or <code>.config/workbench.yaml</code>, or the file a command’s <code>--config</code> names. The sidebar lists the pages it declares, and the TypeScript previews it finds. Matching collection and group names bring those pages together in one list. Its bundled native compiler caches unchanged preview builds across restarts.
         </SectionHead>
         <ol class="areas">
           <li><span class="n">01</span><h3>Page list</h3><p>The collections in <code>workbench.yaml</code>, such as Pages and Components, at the top; the selected collection’s groups and pages below; search at the bottom. A page’s scenarios are listed under it. In VS Code the list is in the sidebar, under a switcher for the spaces you’ve added.</p></li>
@@ -163,7 +163,7 @@ const docsMarkdown = [
                 <div data-label="Open the source"><dt>Open the source</dt><dd>Lists the page’s design file and any implementation code, and opens one in the editor.</dd></div>
                 <div data-label="Copy reference"><dt>Copy reference</dt><dd>Copies a short text reference to the page, scenario, and lens, for pasting into a conversation. It doesn’t include a screenshot or your annotations.</dd></div>
                 <div data-label="Open on its own"><dt>Open on its own</dt><dd>Opens the page directly in a browser tab.</dd></div>
-                <div data-label="More"><dt>More (⋯)</dt><dd><b>Configure pages</b>: a form for adding and removing collections, groups and pages, editing labels and paths, and choosing each page’s sizes; it rewrites only the <code>collections</code> part of <code>workbench.yaml</code>. <b>Export…</b>: choose a page, selected pages, a collection, or the space, then download sources, a PDF, images, or a portable viewer. ZIP parts stay at 10 MB or less. When the window is narrow, the controls that don’t fit move here too.</dd></div>
+                <div data-label="More"><dt>More (⋯)</dt><dd><b>Configure pages</b>: a form for adding and removing collections, groups and pages, editing labels and paths, and choosing each page’s sizes; it rewrites only the <code>collections</code> part of the project’s <code>workbench.yaml</code>, wherever it is. <b>Export…</b>: choose a page, selected pages, a collection, or the space, then download sources, a PDF, images, or a portable viewer. ZIP parts stay at 10 MB or less. When the window is narrow, the controls that don’t fit move here too.</dd></div>
               </dl>
             </div>
           </div>

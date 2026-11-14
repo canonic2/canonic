@@ -15,6 +15,11 @@ individual Make targets from the package or use `make -C packages/process-kit`.
 | `docs` | Generate local rustdoc HTML |
 | `deps` | cargo-deny advisory, license and source checks |
 | `coverage` | LLVM coverage through cargo-llvm-cov and nextest |
+| `prune` | Delete incremental caches and test binaries untouched for more than `PRUNE_DAYS` days (default 3) |
+
+Run `make prune` on its own, to free space, while no build or test run uses
+`target/`. It matches Unix test executables, so on Windows it removes only
+incremental caches.
 
 These targets are independent. Tests use one integration binary, temporary
 Acme roots, real sockets and locks, and the test binary itself for process

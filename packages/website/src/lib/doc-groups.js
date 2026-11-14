@@ -9,8 +9,8 @@ export const docGroups = [
 
 export const shieldDocGroups = [
   { title: 'Get started', ids: ['index', 'introduction', 'getting-started', 'policy-decisions', 'operator-experience'] },
-  { title: 'Work with your project', ids: ['project-review', 'local-registry', 'claude-project', 'mcp-connections', 'troubleshooting'] },
+  { title: 'Work with your project', ids: ['policy-files', 'project-review', 'local-registry', 'claude-project', 'mcp-connections', 'troubleshooting'] },
   { title: 'Write rules', ids: ['policy-rules', 'rule-reference', 'pack-validation'] },
   { title: 'Integrate Shield', ids: ['project-mcp', 'claude-read-only', 'native-run', 'enforcement-handoff'] },
-  { title: 'Recovery and development', ids: ['runtime-activation', 'compiled-cache', 'development'] },
+  { title: 'Recovery and development', ids: ['compiled-cache', 'development'] },
 ];
