@@ -102,7 +102,7 @@ impl Reject {
         }
         Ok(Self {
             id: id.into(),
-            before: proposal.public(false),
+            before: proposal.public(),
             revision: state.policy_revision,
             reason: reason.map(str::to_owned),
         })
@@ -122,14 +122,14 @@ impl Reject {
             if state.policy_revision != self.revision { return Err(Error::StaleSnapshot); }
             let index = state.proposals.iter().position(|p|p.id == self.id).ok_or(Error::Missing)?;
             store.hydrate_proposal(&mut state.proposals[index])?;
-            if state.proposals[index].public(false) != self.before { return Err(Error::StaleSnapshot); }
+            if state.proposals[index].public() != self.before { return Err(Error::StaleSnapshot); }
             let operator = json!({"operator_id":null,"display_name":null,"mechanism":if context.surface == "cli" {"operator-cli"} else {"host-elicitation"}});
             state.proposals[index].status = "rejected".into();
             state.proposals[index].operator = Some(operator.clone());
             let mut event = state.event("proposal_rejected",context,json!({"proposal_id":self.id}),json!({"operator_reason":self.reason}),json!({"policy_revision":state.policy_revision}));
             event["operator"] = operator;
             state.record(event);
-            Ok(state.proposals[index].public(false))
+            Ok(state.proposals[index].public())
         })
     }
 }

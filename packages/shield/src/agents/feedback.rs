@@ -21,7 +21,7 @@ fn raw_deny(code: &str) -> Reply {
         "unsupported-operation" => "Shield: unsupported tool; blocked. Continue without it, or explain to the user why it is needed.".to_owned(),
         "unsupported-shell" => "Shield: blocked this shell dialect because its file effects cannot be verified. Use supported file tools or ask the user to run the command.".to_owned(),
         "operator-cli" => "Shield's operator CLI is unavailable to agents. For diagnostics use doctor or status; for command help use docs_search or docs_read. For registrations use mcp_setup with explicit agents and repair: true to review conflicts; project may name an explicit enrolled repair target without changing this connection's project. For policy changes use policy_propose and copy apply_arguments unchanged into policy_apply. Registration and policy changes each require the user's confirmation; policy rules and session grants cannot open the operator CLI.".to_owned(),
-        "protected-access" => format!("{PROTECTED_ACCESS} Never read or change .shield/review or the cache. Propose policy changes with policy_propose. Do not bypass protection."),
+        "protected-access" => format!("{PROTECTED_ACCESS} Never read or change .shield/state or the cache. Propose policy changes with policy_propose. Do not bypass protection."),
         "sensitive-read" => "Shield: settings may contain credentials; this callback cannot request read approval. Continue without them unless essential.".to_owned(),
         "policy-file-unknown" => "Shield: this Git command can change Shield's policy files in .shield/, or Shield cannot tell whether it would, and this host cannot ask the user. Ask the user to run it, or name paths that leave .shield out.".to_owned(),
         "search-footprint-unavailable" => "Shield: the files this search reaches could not be verified. Search a narrower path with fewer entries. In a shell rg, --no-ignore without glob filters keeps hidden files out.".to_owned(),
@@ -31,7 +31,7 @@ fn raw_deny(code: &str) -> Reply {
         "runtime-busy" => "Shield: Shield state is briefly locked; retry the request.".to_owned(),
         "handoff-failed" | "project-changed" => "Shield: current authorization could not be verified. Inspect the status tool and retry only after the user resolves any protection problem.".to_owned(),
         "compiled-cache-unavailable" => "Shield: its compiled policy folder is unusable. Call the doctor tool and ask the user to fix the folder or choose another with shield mcp setup --cache-dir, then retry the original request.".to_owned(),
-        "protection-failure" => "Shield could not verify this hook's project state. Use the doctor or status MCP tool to diagnose it, then request any necessary integration repair with mcp_setup and in-session user confirmation. Do not edit protected review state.".to_owned(),
+        "protection-failure" => "Shield could not verify this hook's project state. Use the doctor or status MCP tool to diagnose it, then request any necessary integration repair with mcp_setup and in-session user confirmation. Do not edit protected runtime state.".to_owned(),
         _ => format!("Shield blocked this tool ({code}). Call the doctor or status MCP tool and follow its in-session recovery route before retrying."),
     };
     Reply {
@@ -96,13 +96,13 @@ fn protected_access(path: &str, group: Option<&str>) -> String {
             "{PROTECTED_ACCESS} This request changes {path}, a working-folder root. Use files and subdirectories inside it instead."
         ),
         Some("state") => format!(
-            "{PROTECTED_ACCESS} {path} is protected review state or cache. Never read or change it; continue without it."
+            "{PROTECTED_ACCESS} {path} is protected runtime state or cache. Never read or change it; continue without it."
         ),
         Some("folder") => format!(
-            "{PROTECTED_ACCESS} This request is treated as a change to {path}, which holds protected review state. Continue without changing it."
+            "{PROTECTED_ACCESS} This request is treated as a change to {path}, which holds protected runtime state. Continue without changing it."
         ),
         Some("ignore") => format!(
-            "{PROTECTED_ACCESS} This request is treated as a change to {path}, which keeps review state out of Git. Continue without changing it."
+            "{PROTECTED_ACCESS} This request is treated as a change to {path}, which keeps runtime state out of Git. Continue without changing it."
         ),
         Some("policy") => format!(
             "{PROTECTED_ACCESS} This command counts as a change to {path}, a policy file Shield protects. Propose policy changes with policy_propose."

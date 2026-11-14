@@ -116,7 +116,6 @@ fn history_volume_campaign() {
     let counters: serde_json::Map<String, Value> = [
         "policy.preparations",
         "policy.captures",
-        "source.read_bytes",
         "state.read_bytes",
         "state.checkpoint_reads",
         "storage.sync_calls",
@@ -139,7 +138,6 @@ fn history_volume_campaign() {
     for name in [
         "policy.preparations",
         "policy.captures",
-        "source.read_bytes",
         "history.captures",
         "history.read_bytes",
         "history.decoded_records",

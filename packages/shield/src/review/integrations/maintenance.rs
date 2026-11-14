@@ -9,6 +9,19 @@ impl Plan {
     /// Equivalent maintenance never authorizes a different executable payload,
     /// regardless of which automatic or explicit resume path reaches it.
     pub(super) fn check_maintenance_binary(&self) -> Result<(), Error> {
+        if self.scope_reason.as_deref() == Some(super::portable::ADOPT_REASON) {
+            let Some(desired) = self.desired.as_ref().filter(|_| self.previous.is_none()) else {
+                return Err(Error::StaleSnapshot);
+            };
+            if super::binary_digest(&std::env::current_exe()?.canonicalize()?)?
+                != desired.binary_digest
+            {
+                return Err(Error::Invalid(
+                    "automatic maintenance executable changed; review setup",
+                ));
+            }
+            return Ok(());
+        }
         if !matches!(
             self.scope_reason.as_deref(),
             Some(super::portable::REASON | super::rebind::REASON)

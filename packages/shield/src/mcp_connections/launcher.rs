@@ -99,10 +99,8 @@ impl Binding {
 }
 
 pub(crate) fn private_state(root: &Path) -> Result<(), crate::review::Error> {
-    for path in [
-        root.join(".shield/review"),
-        root.join(".shield/review/state.json"),
-    ] {
+    let state = crate::layout::state(root);
+    for path in [state.clone(), state.join("state.json")] {
         let metadata = std::fs::symlink_metadata(&path)?;
         if metadata.file_type().is_symlink() {
             return Err(crate::review::Error::Invalid(
@@ -114,7 +112,7 @@ pub(crate) fn private_state(root: &Path) -> Result<(), crate::review::Error> {
             use std::os::unix::fs::PermissionsExt;
             if metadata.permissions().mode() & 0o077 != 0 {
                 return Err(crate::review::Error::Invalid(
-                    "MCP launch settings require private review-state permissions",
+                    "MCP launch settings require private state permissions",
                 ));
             }
         }
@@ -248,6 +246,66 @@ mod tests {
         }
     }
 
+    /// A project whose only configuration is an explicit file: the generated
+    /// launcher names it, the CLI accepts that entry, and the launcher's own
+    /// policy reload finds the reviewed connection there.
+    #[test]
+    fn launchers_carry_an_explicit_configuration_and_find_their_connection_in_it() {
+        use clap::Parser as _;
+        let root = assert_fs::TempDir::new().unwrap();
+        let folder = root.path().canonicalize().unwrap();
+        std::fs::create_dir_all(folder.join("policy")).unwrap();
+        std::fs::write(
+            folder.join("policy/acme.yml"),
+            "schema_version: 1\npacks: []\n",
+        )
+        .unwrap();
+        std::fs::write(
+            folder.join("policy/config.local.yml"),
+            "schema_version: 1\nmcp:\n  acme:\n    transport:\n      type: stdio\n      command: acme-connector\n      args: [serve]\n    agents:\n      claude: acme\n    enabled: true\n",
+        )
+        .unwrap();
+        crate::layout::bind(
+            &folder.join("policy/acme.yml"),
+            crate::layout::Base::Invocation,
+        );
+        crate::review::open(&folder).unwrap();
+        assert!(!folder.join(".shield/config.yml").exists());
+
+        let snapshot = crate::runtime::Project::open(&folder)
+            .unwrap()
+            .snapshot()
+            .unwrap();
+        let connection = snapshot.mcp_connections().get("acme").unwrap();
+        assert!(connection.local);
+        let binding = Binding::new(connection).unwrap();
+        let Transport::Stdio { args, .. } = binding
+            .portable_projected(connection, Path::new("/acme/shield"), &folder)
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        assert_eq!(
+            args,
+            [
+                "__internal",
+                "mcp-connect",
+                "--project",
+                ".",
+                "--token",
+                binding.token.as_str(),
+                "--config",
+                "policy/acme.yml",
+            ]
+        );
+        let cli = crate::cli::Cli::try_parse_from(std::iter::once("shield".to_owned()).chain(args))
+            .unwrap();
+        assert_eq!(cli.config.as_deref(), Some(Path::new("policy/acme.yml")));
+        let launch = command(&folder, connection, &binding).unwrap();
+        assert_eq!(launch.get_program(), "acme-connector");
+        assert_eq!(launch.get_args().collect::<Vec<_>>(), ["serve"]);
+    }
+
     #[test]
     fn mcp_connections_launcher_preserves_argv_and_refuses_stale_or_public_settings() {
         let root = assert_fs::TempDir::new().unwrap();
@@ -287,7 +345,7 @@ mod tests {
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(
-                root.path().join(".shield/review"),
+                root.path().join(".shield/state"),
                 std::fs::Permissions::from_mode(0o755),
             )
             .unwrap();

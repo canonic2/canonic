@@ -430,12 +430,7 @@ fn project_with(start: &Path, open: fn(&Path) -> Result<Context, Error>) -> Resu
 }
 
 fn configured(root: &Path) -> bool {
-    [".shield/config.yml", ".shield/review"].iter().any(|name| {
-        match std::fs::symlink_metadata(root.join(name)) {
-            Ok(_) => true,
-            Err(error) => error.kind() != std::io::ErrorKind::NotFound,
-        }
-    })
+    crate::layout::discovery_root(root)
 }
 
 fn decide(context: &Context, id: &str, deny: bool, json_mode: bool) -> Result<Value, Error> {

@@ -110,7 +110,7 @@ fn a_copied_session_grant_serves_the_same_conversation_and_each_folder_revokes_i
     let (original, context, reference) = fixture();
     let proposed = proposal(&context, &reference);
     let granted = apply(&context, &proposed["apply_arguments"], true).unwrap();
-    let before = std::fs::read(original.path().join(".shield/review/state.json")).unwrap();
+    let before = std::fs::read(original.path().join(".shield/state/state.json")).unwrap();
     let copy = assert_fs::TempDir::new().unwrap();
     crate::test_support::copy_fixture_directory(original.path(), copy.path());
     let opened = super::super::open(copy.path()).unwrap();
@@ -131,7 +131,7 @@ fn a_copied_session_grant_serves_the_same_conversation_and_each_folder_revokes_i
     assert!(revoked["authorization"].is_null());
     // Revoking in the copy changes only the copy's state.
     assert_eq!(
-        std::fs::read(original.path().join(".shield/review/state.json")).unwrap(),
+        std::fs::read(original.path().join(".shield/state/state.json")).unwrap(),
         before
     );
     let mut request = receipt(&context, arguments("42"));
@@ -208,7 +208,7 @@ fn session_capture_is_best_effort_and_existing_context_needs_no_lock() {
     let (root, mut context, reference) = fixture();
     context.surface = "hook".into();
     let mut blocked = receipt(&context, arguments("42"));
-    let lock = root.path().join(".shield/review/state.lock");
+    let lock = root.path().join(".shield/state/state.lock");
     std::fs::write(&lock, "fixture writer").unwrap();
     let mut allowed = json!({"code":"policy-allow","decision":"allow","disposition":"allowed"});
     handoff(&context, &mut allowed, None).unwrap();
@@ -493,7 +493,7 @@ fn session_grants_do_not_cross_a_nested_review_enrollment_without_config() {
     let proposed = proposal(&context, &reference);
     apply(&context, &proposed["apply_arguments"], true).unwrap();
     let child = Path::new(&context.project_root).join("child");
-    std::fs::create_dir_all(child.join(".shield/review")).unwrap();
+    std::fs::create_dir_all(child.join(".shield/state")).unwrap();
     let mut request = receipt(&context, arguments("42"));
     request["_shell_analysis"]["operations"][0]["request"]["cwd"] = json!(child);
     handoff(

@@ -273,37 +273,71 @@ fn read_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
 }
 
 // grep reads explicit regular files; explicit operands follow their leaf links.
+// A recursive grep (-r) reads every existing descendant, hidden ones too, since
+// grep honours no ignore files; GNU and BSD walks follow no descendant links.
+// Include/exclude filters only narrow it and receive no credit. -R follows
+// links, and a recursive grep without a path differs between GNU and BSD, so
+// both stay unmodeled. A pattern given with -e makes every operand a path.
+// GNU and BSD grep move options written after operands to the front, unless
+// POSIXLY_CORRECT makes them operands: a later option naming an existing path,
+// or taking its value from the next word, stays unmodeled.
 fn grep_argv(arguments: &[String], cwd: &Path) -> Targets {
+    const FILTERS: &str = "--include --exclude --exclude-dir";
+    let listed = |list: &str, word: &str| list.split_whitespace().any(|item| item == word);
     let mut operands = Vec::new();
     let mut options = true;
-    let mut terminated = false;
+    let mut recursive = false;
+    let mut pattern_given = false;
     let mut complete = cfg!(any(unix, windows));
-    for argument in arguments {
-        if options && argument == "--" {
-            options = false;
-            terminated = true;
-        } else if options && argument.starts_with('-') && argument != "-" {
-            complete &= portable_flags(argument, "EFGinlcqvwxHh");
-        } else {
-            complete &= terminated || !argument.starts_with('-') || argument == "-";
-            options = false;
+    let mut arguments = arguments.iter();
+    while let Some(argument) = arguments.next() {
+        let long = argument
+            .split_once('=')
+            .map_or(argument.as_str(), |(name, _)| name);
+        if !options || argument == "-" || !argument.starts_with('-') {
             operands.push(argument);
+            continue;
+        }
+        let late = !operands.is_empty();
+        complete &= !late || cwd.join(argument).symlink_metadata().is_err();
+        if argument == "--" {
+            options = false;
+        } else if argument == "--recursive" {
+            recursive = true;
+        } else if argument == "-e" || argument == "--regexp" {
+            pattern_given = true;
+            complete &= !late && arguments.next().is_some();
+        } else if long == "--regexp" || (argument.starts_with("-e") && argument.len() > 2) {
+            pattern_given = true;
+        } else if listed(FILTERS, argument) {
+            complete &= !late && arguments.next().is_some();
+        } else if long == argument || !listed(FILTERS, long) {
+            recursive |= !argument.starts_with("--") && argument.contains('r');
+            complete &= portable_flags(argument, "EFGinlcqvwxHhr");
         }
     }
-    complete &= operands.len() >= 2;
-    let items = operands
+    let paths: Vec<&String> = operands
         .into_iter()
-        .skip(1)
+        .skip(usize::from(!pattern_given))
+        .collect();
+    complete &= !paths.is_empty();
+    let items = paths
+        .into_iter()
         .map(|operand| {
             let path = super::join_operand(cwd, operand, &mut complete);
             let metadata = fs::metadata(&path);
-            complete &= operand != "-" && metadata.is_ok_and(|m| m.is_file());
+            let directory = recursive && metadata.as_ref().is_ok_and(std::fs::Metadata::is_dir);
+            complete &= operand != "-" && (directory || metadata.is_ok_and(|m| m.is_file()));
             Target {
                 action: "read",
                 role: "source",
                 path,
-                recursive: false,
-                descendants: Descendants::Visible,
+                recursive: directory,
+                descendants: if directory {
+                    Descendants::Present
+                } else {
+                    Descendants::Visible
+                },
                 follow: true,
             }
         })

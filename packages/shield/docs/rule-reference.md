@@ -206,7 +206,9 @@ used only in cursor arguments. Supported output flags are `--silent`,
 
 File/stdin input, typed placeholders, object/list values, mutations,
 custom headers, alternate endpoints/hosts, `--jq`, templates and unknown syntax
-do not satisfy this predicate. A query classification without `selection` asserts
+do not satisfy a query predicate; [mutation predicates](#graphql-mutations)
+admit reviewed mutations and their input objects. A query classification
+without `selection` asserts
 no repository scope. Source names and related metadata checks do not attest the
 actual network destination or immutable repository identity.
 
@@ -253,6 +255,74 @@ this model; adding `parent { nameWithOwner }` does not. Use a Deny unmet branch
 when failure must block rather than follow Ask fallback. See
 [conditions and requirements](policy-rules.md#conditions-versus-requirements).
 
+### GraphQL mutations
+
+`graphql: {carrier: gh-api, operation: mutation, root_fields: [...], selection: ...}`
+classifies a selected mutation by the root fields it calls. It requires
+`graphql-mutations-v1` in addition to `graphql-v1`. It checks the request's
+shape, not its target: GitHub mutations name objects by opaque IDs, which Shield
+does not look up, so a mutation predicate never confirms which repository it
+changes.
+
+- `selection` is required, and its root state's `types` must be exactly
+  `[Mutation]`. List every mutation you review in that one model, with its
+  arguments and the payload fields it may return. A request calling any other
+  root field fails the predicate.
+- `root_fields` names one class of those mutations. The predicate is met when
+  the request calls at least one of them. Give each class its own rule with the
+  same model: a request calling fields from several classes meets each of their
+  rules, and the strictest decision applies. Fields under fragments or
+  `@skip`/`@include` count; aliases do not replace actual names.
+- An input object argument uses `match: {object: {FIELD: ARGUMENT}}`, whose
+  fields follow the argument rules above and may nest up to four levels. Every
+  input field must be declared, and a repeated key fails. Object matchers are
+  accepted only in mutation models. Lists, object-typed variables and
+  `--paginate` do not satisfy a mutation predicate.
+
+For example, this condition matches requests that resolve or unresolve review
+threads and return only the thread's ID and state:
+
+```yaml
+graphql:
+  carrier: gh-api
+  operation: mutation
+  root_fields: [resolveReviewThread, unresolveReviewThread]
+  selection:
+    root: mutation
+    states:
+      mutation:
+        types: [Mutation]
+        fields:
+          resolveReviewThread:
+            arguments:
+              input:
+                required: true
+                match:
+                  object:
+                    threadId: {required: true, match: {scalar: string}}
+            select: payload
+          unresolveReviewThread:
+            arguments:
+              input:
+                required: true
+                match:
+                  object:
+                    threadId: {required: true, match: {scalar: string}}
+            select: payload
+      payload:
+        types: [ResolveReviewThreadPayload, UnresolveReviewThreadPayload]
+        fields:
+          thread: {select: thread}
+      thread:
+        types: [PullRequestReviewThread]
+        fields:
+          id: {leaf: true}
+          isResolved: {leaf: true}
+```
+
+`mutation { resolveReviewThread(input:{threadId:"T1"}) { thread { id isResolved } } }`
+meets it; adding `pullRequest { title }` under `thread` does not.
+
 ## Capabilities
 
 Typed JSON field maps (`fields`, `request_fields` and MCP `connection`) accept
@@ -271,6 +341,7 @@ Declare exactly the capabilities used anywhere in the document, once each.
 | `argument-rules-v1` | Argument selectors in argv rules. |
 | `argument-paths-v1` | Explicit argument-path checks. |
 | `graphql-v1` | Parsed inline GitHub GraphQL query predicates and finite selection models. |
+| `graphql-mutations-v1` | GraphQL predicates with `operation: mutation`. |
 | `field-paths-v1` | Explicit path checks on MCP JSON fields. |
 | `glob-v1`, `regex-v1` | Their respective text selectors. |
 | `location-v1` | Path references/predicates, cwd, file domains, or targets. |

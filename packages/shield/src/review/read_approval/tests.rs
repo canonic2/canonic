@@ -104,7 +104,7 @@ fn copied_workspace_read_grant_cannot_replay_and_original_remains_usable() {
     let (root, context, evidence, resource) = fixture();
     let id = pending(&context, &evidence, &resource);
     authorize(&context, &id, 300, None, false).unwrap();
-    let original = std::fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let original = std::fs::read(root.path().join(".shield/state/state.json")).unwrap();
     let copy = assert_fs::TempDir::new().unwrap();
     crate::test_support::copy_fixture_directory(root.path(), copy.path());
     let opened = review::open(copy.path()).unwrap();
@@ -182,7 +182,7 @@ fn copied_workspace_read_grant_cannot_replay_and_original_remains_usable() {
         false
     );
     assert_eq!(
-        std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        std::fs::read(root.path().join(".shield/state/state.json")).unwrap(),
         original
     );
     assert_eq!(
@@ -898,7 +898,7 @@ fn legacy_read_pending_and_approved_continue_without_resigning() {
             let original_grant = wire["read_requests"][0]["grant"].clone();
             let original_events = wire["authorization_events"].clone();
             std::fs::write(
-                Path::new(&context.project_root).join(".shield/review/state.json"),
+                Path::new(&context.project_root).join(".shield/state/state.json"),
                 wire.to_string(),
             )
             .unwrap();
@@ -1055,7 +1055,7 @@ fn legacy_read_checkpoint_upgrade_preserves_policy_and_closes_unbound_operation_
             "previous_activation_id":null,"policy_revision":wire["policy_revision"],
             "candidate_digest":"acme-candidate-digest","binding":activation_binding});
         wire["history_generation"] = Value::Null;
-        let state_path = Path::new(&context.project_root).join(".shield/review/state.json");
+        let state_path = Path::new(&context.project_root).join(".shield/state/state.json");
         std::fs::write(&state_path, wire.to_string()).unwrap();
         let loaded = store.read_checkpoint().unwrap();
         validate(&loaded).unwrap();
@@ -1082,7 +1082,7 @@ fn malformed_optional_terminal_outcomes_do_not_block_active_policy_admission() {
     let mut wire = json!(store.read_checkpoint().unwrap());
     let opaque = json!({"records":[{"unsupported":"terminal receipt"}]});
     wire["terminal_receipts"] = opaque.clone();
-    let path = Path::new(&context.project_root).join(".shield/review/state.json");
+    let path = Path::new(&context.project_root).join(".shield/state/state.json");
     std::fs::write(&path, wire.to_string()).unwrap();
     let loaded = store.read_checkpoint().unwrap();
     assert_eq!(json!(loaded)["terminal_receipts"]["unavailable"], opaque);

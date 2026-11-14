@@ -11,7 +11,7 @@ pub(super) fn resource(request: &Request) -> Result<ResourceRequest, Error> {
     let path = Path::new(&request.arguments[0]);
     let root = Path::new(&request.project);
     if !path.starts_with(root)
-        || path.starts_with(root.join(".shield"))
+        || crate::layout::in_shield_files(root, path)
         || path.extension().is_none_or(|extension| extension != "txt")
         || [path, Path::new(&request.cwd)].into_iter().any(|path| {
             path.components().any(|component| {

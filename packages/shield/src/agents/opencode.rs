@@ -129,8 +129,11 @@ impl AgentAdapter for OpenCode {
     ) -> Result<String, Error> {
         setup::merge(source, old, new)
     }
-    fn mcp_entry(&self, _: &Path, _: &Path, _: &[String]) -> String {
-        json!({"type":"local","command":["shield","mcp","serve","--project",".","--agent",SPEC.id],"enabled":true}).to_string()
+    fn mcp_entry(&self, _: &Path, root: &Path, _: &[String]) -> String {
+        let command: Vec<String> = std::iter::once("shield".to_owned())
+            .chain(super::setup::serve_args(root, SPEC.id))
+            .collect();
+        json!({"type":"local","command":command,"enabled":true}).to_string()
     }
     fn has_mcp_entry(&self, source: &str) -> Result<bool, Error> {
         setup::has_mcp(source)

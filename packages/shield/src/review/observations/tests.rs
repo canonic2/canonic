@@ -149,17 +149,17 @@ fn exact_completion_is_idempotent_and_other_origins_or_windows_remain_uncorrelat
 #[test]
 fn optional_history_failure_opt_out_and_retention_preserve_authorization_and_missing_links() {
     let (root, ctx) = review::tests::enrolled();
-    let before = std::fs::read(root.child(".shield/review/state.json").path()).unwrap();
-    root.child(".shield/review/state.lock")
+    let before = std::fs::read(root.child(".shield/state/state.json").path()).unwrap();
+    root.child(".shield/state/state.lock")
         .write_str("owned test barrier")
         .unwrap();
     // An optional observation does not contend with the authorization writer.
     assert_eq!(decision(&ctx, json!({})).unwrap()["status"], "recorded");
     assert_eq!(
-        std::fs::read(root.child(".shield/review/state.json").path()).unwrap(),
+        std::fs::read(root.child(".shield/state/state.json").path()).unwrap(),
         before
     );
-    std::fs::remove_file(root.child(".shield/review/state.lock").path()).unwrap();
+    std::fs::remove_file(root.child(".shield/state/state.lock").path()).unwrap();
     review::history_settings(&ctx, None, None, true, &|| Ok(())).unwrap();
     review::history_settings(&ctx, Some(false), None, false, &|| Ok(())).unwrap();
     assert_eq!(decision(&ctx, json!({})).unwrap()["status"], "disabled");

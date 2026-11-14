@@ -98,7 +98,7 @@ fn propose(transport: &Transport, id: Value, arguments: &Value) -> Value {
 /// Commits `args` as a confirmed apply outside the connection.
 pub(super) fn commit_elsewhere(project: &Project, args: &Value) -> Value {
     let adapter = crate::agents::review::resolve(project.review.agent.as_deref());
-    let rows = crate::review::proposals(&project.review, None, false).unwrap();
+    let rows = crate::review::proposals(&project.review, None).unwrap();
     let id = rows["proposals"]
         .as_array()
         .unwrap()
@@ -192,7 +192,7 @@ fn modern_confirmation_accept_decline_cancel_and_receipt_replay() {
                     "approval_declined"
                 }
             );
-            let outcomes = crate::review::proposals(&project.review, None, false).unwrap();
+            let outcomes = crate::review::proposals(&project.review, None).unwrap();
             assert_eq!(
                 outcomes["proposals"][0]["status"],
                 if action == "cancel" {
@@ -242,7 +242,7 @@ fn accepted_confirmation_with_a_locked_store_preserves_a_retryable_proposal() {
         );
         // Store writers own this create-new token until publication completes.
         // Hold it only after the human form exists, across actual acceptance.
-        let lock_path = project.root.path().join(".shield/review/state.lock");
+        let lock_path = project.root.path().join(".shield/state/state.lock");
         let lock = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -263,7 +263,7 @@ fn accepted_confirmation_with_a_locked_store_preserves_a_retryable_proposal() {
         std::fs::remove_file(lock_path).unwrap();
         assert_eq!(error_code(&result), "overloaded", "{result}");
         assert_eq!(project.revision(), before);
-        let outcomes = crate::review::proposals(&project.review, None, false).unwrap();
+        let outcomes = crate::review::proposals(&project.review, None).unwrap();
         assert_eq!(outcomes["proposals"][0]["status"], "pending", "{outcomes}");
         // Releasing the writer does not grant anything; retry asks again.
         let retry = if modern {
@@ -298,7 +298,7 @@ fn cancelled_confirmation_persists_withdrawal_and_cannot_be_applied_later() {
     assert_eq!(form["method"], "elicitation/create", "{form}");
     let result = transport.request(&answer(&form, &json!({"action":"cancel"})));
     assert_eq!(error_code(&result), "approval_cancelled", "{result}");
-    let outcomes = crate::review::proposals(&project.review, None, false).unwrap();
+    let outcomes = crate::review::proposals(&project.review, None).unwrap();
     assert_eq!(
         outcomes["proposals"][0]["status"], "withdrawn",
         "{outcomes}"
@@ -792,7 +792,7 @@ fn cancellation_or_disconnection_withdraws_the_form_without_committing() {
             assert_eq!(reply(&outputs, &json!(3))["error"]["code"], -32800);
         }
         assert_eq!(project.revision(), before);
-        let outcomes = crate::review::proposals(&project.review, None, false).unwrap();
+        let outcomes = crate::review::proposals(&project.review, None).unwrap();
         assert_eq!(
             outcomes["proposals"][0]["status"], "withdrawn",
             "{outcomes}"

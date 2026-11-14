@@ -201,14 +201,14 @@ fn handoff_lock_prevents_state_writes_until_callback_finishes_and_unwinds_on_pan
         }))
         .is_err()
     );
-    assert!(!root.path().join(".shield/review/state.lock").exists());
+    assert!(!root.path().join(".shield/state/state.lock").exists());
     assert!(
         project
             .with_current(&current, |_, _| Err::<(), _>("consumer failure"))
             .unwrap()
             .is_err()
     );
-    assert!(!root.path().join(".shield/review/state.lock").exists());
+    assert!(!root.path().join(".shield/state/state.lock").exists());
 }
 
 #[test]
@@ -217,7 +217,7 @@ fn retained_evidence_cannot_cross_corruption_or_reenrollment_at_the_same_root() 
     let project = Project::open(root.path()).unwrap();
     let snapshot = project.snapshot().unwrap();
     let evaluated = snapshot.evaluate(request(&context)).unwrap();
-    let state_path = root.path().join(".shield/review/state.json");
+    let state_path = root.path().join(".shield/state/state.json");
     let bytes = std::fs::read(&state_path).unwrap();
     project.with_current(&evaluated, |_, _| ()).unwrap();
     assert_eq!(std::fs::read(&state_path).unwrap(), bytes);

@@ -143,8 +143,7 @@ fn history_metadata(context: &Context, state: &State) -> Value {
         .strip_prefix("journal-")
         .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()));
     let incomplete = digest.is_some_and(|digest| {
-        let path = Path::new(&context.project_root)
-            .join(".shield/review")
+        let path = crate::layout::state(Path::new(&context.project_root))
             .join(format!("history-{digest}.error"));
         super::storage::objects::read_file(&path)
             .ok()
@@ -160,6 +159,26 @@ fn history_metadata(context: &Context, state: &State) -> Value {
 /// location, so a moved, renamed or copied project needs no follow-up.
 pub(super) fn inspection_location(context: &Context, _state: &State, value: &mut Value) {
     value["project_root"] = json!(context.project_root);
+    value["configuration"] = configuration_selection(Path::new(&context.project_root));
+}
+
+/// The selected shared configuration file, where it came from and the default
+/// files it shadows, relative to the project when inside it.
+pub(crate) fn configuration_selection(root: &Path) -> Value {
+    let canonical = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let shown = |path: &Path| {
+        path.strip_prefix(&canonical)
+            .or_else(|_| path.strip_prefix(root))
+            .map_or_else(
+                |_| path.display().to_string(),
+                |relative| relative.display().to_string(),
+            )
+    };
+    match crate::layout::select(root) {
+        Ok(selection) => json!({"file":shown(&selection.file),"source":selection.source.label(),
+            "shadowed":selection.shadowed.iter().map(|path| shown(path)).collect::<Vec<_>>()}),
+        Err(error) => json!({"source":"explicit","error":error.to_string()}),
+    }
 }
 
 /// The command that repairs integration coverage diagnostics. `shield mcp

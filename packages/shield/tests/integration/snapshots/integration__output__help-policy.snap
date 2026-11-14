@@ -20,4 +20,5 @@ Options:
       --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
       --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
       --cache-dir <CACHE_DIR>          Folder for this project's compiled policy plans, chosen at init or MCP setup
+      --config <PATH>                  Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml
   -h, --help                           Print help

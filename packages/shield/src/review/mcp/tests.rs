@@ -197,7 +197,7 @@ fn record_only_proposal_inspection_exposes_lazy_handles_with_exact_arguments() {
     let proposed = proposal(&context, &connection, "lazy-inspection");
     assert!(proposed["error"].is_null(), "{proposed}");
     *connection.views.lock().unwrap() = views::Views::new("acme-fresh-inspection".into());
-    let checkpoint = root.path().join(".shield/review/state.json");
+    let checkpoint = root.path().join(".shield/state/state.json");
     let before = std::fs::read(&checkpoint).unwrap();
     let logs = assert_fs::TempDir::new().unwrap();
     let cli = crate::cli::Cli::parse_from([
@@ -1579,13 +1579,13 @@ fn normalized_diagnostics_reject_files_as_working_directories() {
     let (root, context, connection) = fixture();
     let path = root.path().join("acme.txt");
     std::fs::write(&path, "Acme fixture").unwrap();
-    let before = std::fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let before = std::fs::read(root.path().join(".shield/state/state.json")).unwrap();
     let mut input = request(&context);
     input["context"]["cwd"] = json!(path);
     let result = invoke(&context, &connection, "policy_evaluate", input);
     assert_eq!(result["error"]["code"], "invalid_input", "{result}");
     assert_eq!(
-        std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        std::fs::read(root.path().join(".shield/state/state.json")).unwrap(),
         before
     );
 }

@@ -216,7 +216,7 @@ fn shield_mode_pause_blocks_forged_authority_and_operator_commands() {
     context.agent = Some("claude".into());
     let connection = review::mcp::Connection::new("acme-guarded-pause".into());
     confirm_mode(&context, &connection, "disable");
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let before = fs::read(&path).unwrap();
     let mut forged: Value = serde_json::from_slice(&before).unwrap();
     forged["operator"]["path_access"] = json!({"agent_settings_change":"allow"});
@@ -274,6 +274,8 @@ fn shield_mode_pause_blocks_forged_authority_and_operator_commands() {
             denied(agent, write(&alias));
         }
         for source in [
+            "printf forged > .shield/state/state.json",
+            "sh -c 'printf forged > .shield/state/state.json'",
             "printf forged > .shield/review/state.json",
             "sh -c 'printf forged > .shield/review/state.json'",
             "rm -rf .shield",
@@ -555,7 +557,7 @@ fn claude_hooks_follow_the_session_folder_after_a_move_or_into_a_worktree() {
     .unwrap();
     let (decision, reply) = decide(root.path(), &fresh, &fresh);
     assert_eq!(decision, "ask", "{reply}");
-    assert!(fresh.join(".shield/review/state.json").is_file());
+    assert!(fresh.join(".shield/state/state.json").is_file());
     assert_eq!(
         crate::mcp_io::serve_project(Some(root.path()), &fresh, Some(&fresh)).unwrap(),
         fresh.canonicalize().unwrap()
@@ -579,7 +581,11 @@ fn native_pagers_keep_command_review_and_protected_path_guards() {
                 "{source}: {value}"
             );
         }
-        for source in ["less .mcp.json", "more .shield/review/state.json"] {
+        for source in [
+            "less .mcp.json",
+            "more .shield/state/state.json",
+            "more .shield/review/state.json",
+        ] {
             let value = call(root.path(), agent, source);
             assert_eq!(
                 value["hookSpecificOutput"]["permissionDecision"], "deny",
@@ -608,6 +614,7 @@ fn native_download_outputs_keep_protected_paths_blocked_in_attached_options() {
                 ".mcp.json",
                 ".shield/config.yml",
                 ".shield/rules.yml",
+                ".shield/state/state.json",
                 ".shield/review/state.json",
             ] {
                 let source = format!("{option}{path} https://docs.example.com/guide");
@@ -679,13 +686,13 @@ fn native_downloads_to_the_null_device_need_only_fetch_permission() {
 /// first, without segment headers: the raw bytes Shield keeps on disk.
 fn journal(root: &Path) -> String {
     let state: Value =
-        serde_json::from_slice(&fs::read(root.join(".shield/review/state.json")).unwrap()).unwrap();
+        serde_json::from_slice(&fs::read(root.join(".shield/state/state.json")).unwrap()).unwrap();
     let digest = state["history_generation"]
         .as_str()
         .unwrap()
         .trim_start_matches("journal-");
     let prefix = format!("history-{digest}.");
-    let mut segments: Vec<_> = fs::read_dir(root.join(".shield/review"))
+    let mut segments: Vec<_> = fs::read_dir(root.join(".shield/state"))
         .unwrap()
         .map(|entry| entry.unwrap().path())
         .filter(|path| {
@@ -754,8 +761,8 @@ fn allowed_native_shell_survives_session_capture_failures() {
     for fault in ["busy-lock", "corrupt-store"] {
         let (_root, context) = fixture();
         let root = Path::new(&context.project_root);
-        let lock = root.join(".shield/review/state.lock");
-        let state_path = root.join(".shield/review/state.json");
+        let lock = root.join(".shield/state/state.lock");
+        let state_path = root.join(".shield/state/state.json");
         let state = fs::read(&state_path).unwrap();
         let input = json!({"protocol_version":1,"request_id":"acme-lock","expected_project_id":context.project_id,
         "cwd":root,"operation":{"kind":"shell","source":"git status","dialect":"posix"},
@@ -881,6 +888,7 @@ fn heredoc_scaffolding_checks_destinations_without_an_extra_approval() {
         for source in [
             "cat > ../outside.js <<'EOF'\ndata\nEOF\n",
             "cat > .mcp.json <<'EOF'\n{}\nEOF\n",
+            "cat > .shield/state/state.json <<'EOF'\n{}\nEOF\n",
             "cat > .shield/review/state.json <<'EOF'\n{}\nEOF\n",
             "cat > app.js <<EOF\n$(acme write)\nEOF\n",
         ] {
@@ -919,6 +927,7 @@ fn output_text_is_not_a_protected_path_but_its_io_still_is() {
         for source in [
             "printf '%s\\n' '.DS_Store' '.claude/' '.codex/' '.mcp.json' '.shield/' > .gitignore\n git init -b main\n git add .gitignore\n git commit -m \"Initial commit\"\n git status --short --branch",
             "echo .shield/ .mcp.json > .gitignore",
+            "/usr/bin/printf '%s' .shield/state/state.json > notes.txt",
             "/usr/bin/printf '%s' .shield/review/state.json > notes.txt",
         ] {
             let value = call(root.path(), agent, source);
@@ -940,10 +949,14 @@ fn output_text_is_not_a_protected_path_but_its_io_still_is() {
         for source in [
             "printf '%s' .shield/ > .shield/config.yml",
             "echo .shield/ > .mcp.json",
+            "printf '%s' .shield/ < .shield/state/state.json > .gitignore",
+            "printf '%s' \"$(cat .shield/state/state.json)\" > .gitignore",
             "printf '%s' .shield/ < .shield/review/state.json > .gitignore",
             "printf '%s' \"$(cat .shield/review/state.json)\" > .gitignore",
             "echo .shield/ | tee .shield/config.yml",
+            "echo .shield/ > .gitignore; cat .shield/state/state.json",
             "echo .shield/ > .gitignore; cat .shield/review/state.json",
+            ".shield/state/printf '%s' .shield/ > .gitignore",
             ".shield/review/printf '%s' .shield/ > .gitignore",
         ] {
             let value = call(root.path(), agent, source);
@@ -1064,6 +1077,7 @@ fn ripgrep_missing_operand_names_the_path_and_recovery_in_both_hook_channels() {
             format!("rg --files .agents '{}'", outside.path().display()),
             "rg --files .agents secret".into(),
             "rg --files --follow .codex".into(),
+            "rg Acme .shield/state/state.json".into(),
             "rg Acme .shield/review/state.json".into(),
         ] {
             let value = call(root.path(), agent, &source);
@@ -1159,8 +1173,7 @@ fn ripgrep_lists_names_and_searches_bounded_trees_without_reading_protected_stat
             assert!(reason(&result).contains("may hold credentials"), "{result}");
         } else {
             assert!(
-                reason(&result)
-                    .contains(&Path::new(".shield").join("review").display().to_string()),
+                reason(&result).contains(&Path::new(".shield").join("state").display().to_string()),
                 "{result}"
             );
             assert!(
@@ -1199,8 +1212,14 @@ fn ripgrep_lists_names_and_searches_bounded_trees_without_reading_protected_stat
             );
             assert!(reason(&reply).contains(expected), "{source}: {reply}");
         }
-        fs::create_dir_all(root.path().join("src/nested/.shield/review")).unwrap();
-        assert!(reason(&call(root.path(), agent, "rg --no-config Acme src")).contains(".shield"));
+        for nested in ["src/nested/.shield/state", "src/nested/.shield/review"] {
+            fs::create_dir_all(root.path().join(nested)).unwrap();
+            assert!(
+                reason(&call(root.path(), agent, "rg --no-config Acme src")).contains(".shield"),
+                "{nested}"
+            );
+            fs::remove_dir_all(root.path().join("src/nested")).unwrap();
+        }
     }
 }
 
@@ -1735,13 +1754,14 @@ fn node_syntax_checks_read_source_and_keep_protected_paths_blocked() {
             assert_permitted(&call(root.path(), agent, source), agent);
         }
         for source in [
+            "node --check .shield/state/state.json",
             "node --check .shield/review/state.json",
             "node --check .codex/hooks.json",
         ] {
             let reply = call(root.path(), agent, source);
             assert_eq!(
                 reply["hookSpecificOutput"]["permissionDecision"],
-                if agent == "codex" || source.contains("review") {
+                if agent == "codex" || source.contains("state.json") {
                     "deny"
                 } else {
                     "ask"
@@ -1981,7 +2001,7 @@ fn pinned_event_encodes_failures_without_trusting_the_input_event() {
             ["behavior"],
         "allow"
     );
-    fs::remove_file(root.path().join(".shield/review/state.json")).unwrap();
+    fs::remove_file(root.path().join(".shield/state/state.json")).unwrap();
     assert_eq!(
         permission(root.path(), "Bash", json!({"command":"git status"}))["hookSpecificOutput"]["decision"]
             ["behavior"],
@@ -2081,7 +2101,7 @@ fn claude_file_tools_follow_location_policy_and_protected_state() {
             json!({"file_path":project(".claude/settings.local.json"),"old_string":"a","new_string":"b"}),
             "deny",
         ),
-        // A content search of the project root reaches `.shield/review`, which
+        // A content search of the project root reaches `.shield/state`, which
         // is blocked for reads; a narrower directory is searched by policy.
         ("Grep", json!({"pattern":"Acme"}), "deny"),
         (
@@ -3099,7 +3119,7 @@ fn native_bound_reads_allow_and_malformed_foreign_unknown_requests_block() {
             "deny"
         );
     }
-    let state = fs::read_to_string(root.join(".shield/review/state.json")).unwrap();
+    let state = fs::read_to_string(root.join(".shield/state/state.json")).unwrap();
     assert!(!state.contains("ACME_PRIVATE_READ_OUTPUT"));
 }
 
@@ -3109,8 +3129,8 @@ fn canonical_mcp_recovery_defers_to_host_when_hook_project_state_cannot_open() {
     let root = fixture.path();
     for corrupt in [false, true] {
         if corrupt {
-            fs::create_dir_all(root.join(".shield/review")).unwrap();
-            fs::write(root.join(".shield/review/state.json"), "invalid state").unwrap();
+            fs::create_dir_all(root.join(".shield/state")).unwrap();
+            fs::write(root.join(".shield/state/state.json"), "invalid state").unwrap();
         }
         for agent in ["claude", "codex"] {
             let mut host = json!({"hook_event_name":"PreToolUse",
@@ -3414,6 +3434,7 @@ fn powershell_tool_uses_its_own_grammar_and_preserves_claude_policy_decisions() 
         ("git push", "ask"),
         ("git reset --hard", "deny"),
         ("git status; git reset --hard", "deny"),
+        ("Get-Content .shield/state/state.json", "deny"),
         ("Get-Content .shield/review/state.json", "deny"),
         ("git status; Remove-Item .shield", "deny"),
     ] {
@@ -3450,11 +3471,14 @@ fn windows_powershell_native_commands_keep_policy_and_protected_access() {
     for source in [
         "git reset --hard",
         "git diff --output=.shield/config.yml",
+        "rg ACME .shield/state/state.json",
         "rg ACME .shield/review/state.json",
         "rg ACME .codex/hooks.json",
         "shield mcp serve",
         "node -e 'dangerous()'",
         "git status; Remove-Item .shield",
+        "git $(Get-Content .shield/state/state.json)",
+        "Get-Content .shield/state/state.json",
         "git $(Get-Content .shield/review/state.json)",
         "Get-Content .shield/review/state.json",
     ] {
@@ -3542,6 +3566,7 @@ fn native_ask_fallback_is_scoped_truthful_and_never_permits_failures_or_protecte
         "git status; git reset --hard",
         "shield mcp setup --agent codex",
         "shield request approve request-1",
+        "echo allow > .shield/state/state.json",
         "echo allow > .shield/review/state.json",
         "rm -rf .",
         "cd .codex; mv hooks.json backup.json",
@@ -3670,7 +3695,7 @@ fn native_paths_bind_cwd_and_distinguish_move_sources_from_directory_destination
             }
         }
     }
-    for (directory, file) in [(".codex", "hooks.json"), (".shield/review", "state.json")] {
+    for (directory, file) in [(".codex", "hooks.json"), (".shield/state", "state.json")] {
         let cwd = root.path().join(directory);
         let host = json!({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_use_id":"relative","session_id":"test","cwd":cwd,"tool_input":{"command":format!("printf test > {file}")}});
         assert_eq!(
@@ -3701,7 +3726,7 @@ fn native_protected_paths_cannot_hide_behind_file_or_directory_symlinks() {
     )
     .unwrap();
     symlink(
-        root.path().join(".shield/review"),
+        root.path().join(".shield/state"),
         root.path().join("ordinary-dir"),
     )
     .unwrap();
@@ -3795,7 +3820,12 @@ fn native_exact_allowances_bind_vendor_context_and_cannot_bypass_protection() {
     for (id, source, expiry) in [
         ("exact", "acme opaque", None),
         ("expired", "acme expired", Some("2020-01-01T00:00:00Z")),
-        ("protected", "printf test > .shield/review/state.json", None),
+        ("protected", "printf test > .shield/state/state.json", None),
+        (
+            "protected-earlier",
+            "printf test > .shield/review/state.json",
+            None,
+        ),
         ("nested-deny", "acme forbidden", None),
     ] {
         rows.push(json!({"id":id,"decision":"allow","conditions":{"domain":"exact_request","input":{"kind":"shell","source":source,"dialect":"bash","dialect_version":null,"original_input":{"command":source}},"context":{"cwd":root.path().canonicalize().unwrap(),"environment":null},"executable":null}}));
@@ -3816,6 +3846,7 @@ fn native_exact_allowances_bind_vendor_context_and_cannot_bypass_protection() {
         ("acme opaque", "allow"),
         ("acme expired", "ask"),
         ("acme changed", "ask"),
+        ("printf test > .shield/state/state.json", "deny"),
         ("printf test > .shield/review/state.json", "deny"),
         ("acme forbidden", "deny"),
     ] {
@@ -3856,6 +3887,11 @@ fn agents_read_and_record_policy_files_but_not_state_and_ask_for_agent_settings(
         ),
         (
             "Read",
+            json!({"file_path":project(".shield/state/state.json")}),
+            "deny",
+        ),
+        (
+            "Read",
             json!({"file_path":project(".shield/review/state.json")}),
             "deny",
         ),
@@ -3884,6 +3920,8 @@ fn agents_read_and_record_policy_files_but_not_state_and_ask_for_agent_settings(
         ("git add .shield/rules.yml .shield/shield.lock", false),
         ("git add .shield", false),
         ("ls .shield", false),
+        ("cat .shield/state/state.json", true),
+        ("ls .shield/state", true),
         ("cat .shield/review/state.json", true),
         ("ls .shield/review", true),
         ("grep -r acme .shield", true),
@@ -3903,6 +3941,7 @@ fn agents_read_and_record_policy_files_but_not_state_and_ask_for_agent_settings(
             "git add .shield/rules.yml; sed -i x .shield/rules.yml",
             true,
         ),
+        ("cat .shield/state/state.json; echo", true),
         ("cat .shield/review/state.json; echo", true),
     ] {
         let value = call(root, "claude", source);
@@ -3920,10 +3959,10 @@ fn agents_read_and_record_policy_files_but_not_state_and_ask_for_agent_settings(
         "{value}"
     );
     assert!(reason(&value).contains("credentials"), "{value}");
-    // Committing .shield shares policy files, never review state or the cache.
+    // Committing .shield shares policy files, never runtime state or the cache.
     assert_eq!(
         fs::read_to_string(root.join(".shield/.gitignore")).unwrap(),
-        "review/\ncache/\nconfig.local.yml\nrules.local.yml\nshield.local.lock\n"
+        "state/\ncache/\nconfig.local.yml\nrules.local.yml\nshield.local.lock\n"
     );
 }
 
@@ -4051,20 +4090,22 @@ fn protected_blocks_name_the_first_path_and_what_the_command_does_to_it() {
         "{value}"
     );
     assert!(reason(&value).contains("credentials"), "{value}");
-    // Review state comes first in the command, so it is the path named.
-    let value = call(
-        root,
-        "claude",
-        &format!("cat .shield/.gitignore .shield/review/.gitignore; echo ---; {redact}"),
-    );
-    assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
-    let text = reason(&value);
-    assert!(
-        text.starts_with(
-            "Shield: protected path. `.shield/review/.gitignore` is protected review state"
-        ),
-        "{text}"
-    );
+    // Runtime state comes first in the command, so it is the path named.
+    for state in [".shield/state", ".shield/review"] {
+        let value = call(
+            root,
+            "claude",
+            &format!("cat .shield/.gitignore {state}/.gitignore; echo ---; {redact}"),
+        );
+        assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
+        let text = reason(&value);
+        assert!(
+            text.starts_with(&format!(
+                "Shield: protected path. `{state}/.gitignore` is protected runtime state"
+            )),
+            "{text}"
+        );
+    }
     // Each protected group says what the command does and what to do instead.
     for (source, expected) in [
         ("sed -i 's/a/b/' .mcp.json", "can disable agent protection"),
@@ -4080,9 +4121,9 @@ fn protected_blocks_name_the_first_path_and_what_the_command_does_to_it() {
         ),
         ("cat acme.txt > .shield/config.yml", "policy_propose"),
         ("cat acme.txt > .shield/.gitignore", "out of Git"),
-        ("touch .shield", "holds protected review state"),
+        ("touch .shield", "holds protected runtime state"),
         // Removals blocked as a whole name no single path.
-        ("rm -rf .shield", "Never read or change .shield/review"),
+        ("rm -rf .shield", "Never read or change .shield/state"),
     ] {
         let value = call(root, "claude", source);
         assert_eq!(
@@ -4164,6 +4205,16 @@ fn operator_path_access_opens_settings_but_never_policy_files_or_review_state() 
         ),
         (
             "Write",
+            json!({"file_path":project(".shield/state/state.json"),"content":"x"}),
+            "deny",
+        ),
+        (
+            "Read",
+            json!({"file_path":project(".shield/state/state.json")}),
+            "deny",
+        ),
+        (
+            "Write",
             json!({"file_path":project(".shield/review/state.json"),"content":"x"}),
             "deny",
         ),
@@ -4189,8 +4240,10 @@ fn operator_path_access_opens_settings_but_never_policy_files_or_review_state() 
         // Removing an ancestor also removes the protected skill-library root.
         ("rm -rf .claude", true),
         ("rm -rf .shield", true),
+        ("mv .shield/state acme", true),
         ("mv .shield/review acme", true),
         ("cat acme.txt > .shield/.gitignore", true),
+        ("cat .shield/state/state.json", true),
         ("cat .shield/review/state.json", true),
         ("grep -r acme .shield", true),
     ] {
@@ -4415,11 +4468,13 @@ fn git_commands_that_move_the_tree_ask_only_when_the_policy_files_change() {
 fn protected_blocks_name_the_path_that_tripped_them() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
-    let value = call(root, "claude", "cat acme.txt .shield/review/state.json");
-    assert!(
-        reason(&value).contains("`.shield/review/state.json` is protected review state"),
-        "{value}"
-    );
+    for state in [".shield/state", ".shield/review"] {
+        let value = call(root, "claude", &format!("cat acme.txt {state}/state.json"));
+        assert!(
+            reason(&value).contains(&format!("`{state}/state.json` is protected runtime state")),
+            "{value}"
+        );
+    }
 }
 
 #[test]
@@ -4982,6 +5037,7 @@ fn command_output_cannot_print_agent_settings_while_names_and_metadata_can() {
             "ls",
             &[
                 ("ls -la .mcp.json .codex", false),
+                ("ls .shield/state", true),
                 ("ls .shield/review", true),
             ][..],
         ),

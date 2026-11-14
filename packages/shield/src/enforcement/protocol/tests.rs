@@ -216,8 +216,8 @@ fn shell_file_and_web_requests_without_native_context_fail_closed() {
     let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
     let project = Path::new(&context.project_root);
     for operation in [
-        json!({"kind":"shell","source":"cat .shield/review/state.json","dialect":"bash"}),
-        json!({"kind":"file","action":"read","path":project.join(".shield/review/state.json"),"recursive":false}),
+        json!({"kind":"shell","source":"cat .shield/state/state.json","dialect":"bash"}),
+        json!({"kind":"file","action":"read","path":project.join(".shield/state/state.json"),"recursive":false}),
         json!({"kind":"web","action":"fetch","url":"https://example.com/","query":null}),
     ] {
         let input = json!({"protocol_version":1,"request_id":"acme","expected_project_id":context.project_id,

@@ -108,7 +108,7 @@ impl Target {
     fn diff(&self, revisions: Vec<String>) -> Query {
         Query::Diff {
             revisions,
-            paths: vec![self.shield.clone()],
+            paths: self.policy.clone(),
         }
     }
 }
@@ -300,7 +300,7 @@ fn stash(target: &Target, options: &[&str]) -> Plan {
     }
     if widens(options, &["-u", "--include-untracked"], VALUED) {
         queries.push(Query::Untracked {
-            paths: vec![target.shield.clone()],
+            paths: target.policy.clone(),
         });
     }
     Plan::Queries(queries)

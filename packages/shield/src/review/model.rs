@@ -236,24 +236,18 @@ impl Proposal {
     }
     /// The proposal as inspection shows it. Apply arguments need a hydrated
     /// proposal and appear only while it is pending.
-    pub(crate) fn public(&self, reveal: bool) -> Value {
+    pub(crate) fn public(&self) -> Value {
         let mut value = self.metadata_view();
         value["comparison"] = self.comparison.clone();
         if self.status == "pending" && !self.candidate.is_null() {
             value["apply_arguments"] = self.apply_arguments();
         }
-        if reveal {
-            value["candidate"] = self.candidate.clone();
-        } else if let Some(source) = self.candidate["rules"].as_str() {
+        if let Some(source) = self.candidate["rules"].as_str() {
             value["rules"] = serde_saphyr::from_str::<Value>(source).unwrap_or(Value::Null);
         }
-        if reveal {
-            value["redacted"] = json!(false);
-        } else {
-            let private = redact_comparison(&mut value["comparison"]);
-            let changed = redact(&mut value);
-            value["redacted"] = json!(changed || private);
-        }
+        let private = redact_comparison(&mut value["comparison"]);
+        let changed = redact(&mut value);
+        value["redacted"] = json!(changed || private);
         value
     }
 }

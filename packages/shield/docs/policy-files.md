@@ -1,10 +1,13 @@
 # Policy files and settings
 
-Shield enforces exactly what your project's `.shield/` files say. There is no
+Shield enforces exactly what your project's policy files say. There is no
 saved copy to activate or repair: the next request after a file changes is
 decided by the changed file.
 
 ## The files
+
+The policy files live together in one folder, the authoring bundle: `.shield/`
+by default. The table uses that location.
 
 | File | Committed | Holds |
 | --- | --- | --- |
@@ -14,12 +17,63 @@ decided by the changed file.
 | `.shield/config.local.yml` | No | Your own settings and pack values, layered over `config.yml` |
 | `.shield/rules.local.yml` | No | Your own custom rules |
 | `.shield/shield.local.lock` | No | Releases your local layer selects |
-| `.shield/.gitignore` | Yes | Keeps the local files and `review/` out of Git |
-| `.shield/review/` | No | Runtime state: pending requests, grants, history and proposals |
+| `.shield/.gitignore` | Yes | Keeps the local files and `state/` out of Git |
+| `.shield/state/` | No | Runtime state: pending requests, grants, history and proposals |
 
 `shield init` writes these files. A copied, moved or cloned folder needs no
 follow-up command: its files are its policy, and a folder without runtime state
 gets it on first use.
+
+## Where the configuration lives
+
+Shield uses the first of these that applies:
+
+1. The file you pass with `--config PATH`.
+2. `.shield/config.yml`.
+3. `.config/shield/config.yml`, for projects that group tool settings under
+   `.config/`.
+
+The two default folders are never combined. When `.shield/config.yml` exists,
+Shield uses it even if it is invalid, and reports the problem rather than
+falling back to `.config/shield/`. A `--config` file that is missing or
+unreadable is refused; Shield does not use a default instead.
+
+The rules, locks and local files sit beside the selected `config.yml`, and
+paths inside the configuration are relative to that folder. With the grouped
+layout the bundle is `.config/shield/`, which gets its own `.gitignore` for the
+local files:
+
+```text
+.config/shield/
+  config.yml
+  rules.yml
+  shield.lock
+  config.local.yml   # not committed
+  .gitignore
+.shield/
+  .gitignore
+  state/             # runtime state, always here
+```
+
+Runtime state stays in `.shield/state/` whichever configuration is selected.
+`shield status` shows the selected file and any default file it is not using:
+
+```text
+Configuration: .config/shield/config.yml
+```
+
+`--config` works with every command, including `shield init`, which creates
+the file there. A relative path is resolved from the folder you run the command
+in. Without `--project`, the project is the nearest folder above you that
+holds the `--config` file or Shield's own files, so a checkout whose only
+configuration is that file works from its root or any subfolder. When you set agents up with `--config`, Shield adds the same file, relative
+to the project, to the hooks and MCP entries it writes, so agents enforce the
+same policy. That file must be inside the project. The Box integration uses a
+default location; use `.config/shield/` there instead of `--config`.
+
+Folders that earlier releases set up keep their state in `.shield/review/`;
+Shield renames it to `.shield/state/` the first time it opens the folder, and
+adds `state/` to `.shield/.gitignore`.
 
 ## Change the policy
 

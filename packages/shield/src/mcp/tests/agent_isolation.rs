@@ -3,7 +3,7 @@ use super::*;
 
 fn state(project: &Project) -> Value {
     serde_json::from_slice(
-        &std::fs::read(project.root.path().join(".shield/review/state.json")).unwrap(),
+        &std::fs::read(project.root.path().join(".shield/state/state.json")).unwrap(),
     )
     .unwrap()
 }

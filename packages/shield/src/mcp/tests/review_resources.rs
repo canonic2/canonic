@@ -47,7 +47,7 @@ fn review_resources_link_exact_comparisons_and_evidence_without_authority_or_pre
             serde_json::from_str(response["result"]["content"][1]["text"].as_str().unwrap())
                 .unwrap();
         assert_eq!(text["data"]["report_resources"], data["report_resources"]);
-        let checkpoint = project.root.path().join(".shield/review/state.json");
+        let checkpoint = project.root.path().join(".shield/state/state.json");
         let before = std::fs::read(&checkpoint).unwrap();
         for modern in [false, true] {
             let comparison = report(&read(

@@ -51,18 +51,9 @@ impl Binding {
         let roots = crate::location::Observer::readable_roots(root, cwd, paths).ok_or(())?;
         if canonical != path
             || !roots.iter().any(|root| canonical.starts_with(root))
-            || roots.iter().any(|root| {
-                canonical
-                    .strip_prefix(root)
-                    .ok()
-                    .and_then(|path| path.components().next())
-                    .is_some_and(|part| {
-                        crate::location::native_name(
-                            part.as_os_str(),
-                            std::ffi::OsStr::new(".shield"),
-                        )
-                    })
-            })
+            || roots
+                .iter()
+                .any(|root| crate::layout::in_shield_files(root, &canonical))
         {
             return Err(());
         }

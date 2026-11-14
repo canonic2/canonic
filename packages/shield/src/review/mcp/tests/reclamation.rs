@@ -77,7 +77,7 @@ fn inspection_reclamation_long_rule_list_then_policy_proposal_on_same_connection
     )
     .unwrap();
     let (root, context, connection) = fixture_with(&bundle);
-    let before = std::fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let before = std::fs::read(root.path().join(".shield/state/state.json")).unwrap();
     let first = invoke(&context, &connection, "rule_list", json!({"limit":1}));
     assert!(first["error"].is_null(), "{first}");
     let mut cursor = first["data"]["next_cursor"].clone();
@@ -96,7 +96,7 @@ fn inspection_reclamation_long_rule_list_then_policy_proposal_on_same_connection
     }
     assert_eq!(count, 310);
     assert_eq!(
-        std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        std::fs::read(root.path().join(".shield/state/state.json")).unwrap(),
         before
     );
     let proposed = proposal(&context, &connection, "after-large-list");

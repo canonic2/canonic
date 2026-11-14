@@ -36,7 +36,12 @@ fn asked(root: &Path, arguments: &[&str]) -> Result<Vec<Vec<String>>, Protection
         .into_iter()
         .map(|query| match query {
             Query::Diff { revisions, paths } => {
-                assert_eq!(paths, vec![root.join(".shield")], "{arguments:?}");
+                // Both default bundles; an explicit selection would add its files.
+                assert_eq!(
+                    paths,
+                    vec![root.join(".shield"), root.join(".config/shield")],
+                    "{arguments:?}"
+                );
                 revisions
             }
             Query::Untracked { .. } => vec!["untracked".to_owned()],

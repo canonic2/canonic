@@ -267,7 +267,7 @@ fn doctor_keeps_source_and_projection_integrity_unchecked_without_preparing_poli
         .commit(&context, &|| Ok(()))
         .unwrap();
     std::fs::write(root.path().join(".shield/config.yml"), [0xff]).unwrap();
-    let state_path = root.path().join(".shield/review/state.json");
+    let state_path = root.path().join(".shield/state/state.json");
     let before = std::fs::read(&state_path).unwrap();
     let report = crate::review::project::doctor(&context).unwrap();
     assert_eq!(report["project_file_inspection"], "unchecked");

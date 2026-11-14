@@ -35,7 +35,7 @@ fn portable_pending_maintenance_preserves_files_when_executable_digest_changes()
         })
         .unwrap();
     let before = state(&context);
-    let checkpoint = std::fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let checkpoint = std::fs::read(root.path().join(".shield/state/state.json")).unwrap();
     super::super::rebind_launchers(&context, &before);
     assert!(matches!(
         super::super::setup::resume_confirmed(&context),
@@ -45,7 +45,7 @@ fn portable_pending_maintenance_preserves_files_when_executable_digest_changes()
     ));
     assert_eq!(std::fs::read(path).unwrap(), bytes);
     assert_eq!(
-        std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        std::fs::read(root.path().join(".shield/state/state.json")).unwrap(),
         checkpoint
     );
     assert_eq!(state(&context).operator["integration_pending"], json!(plan));
@@ -310,11 +310,11 @@ fn runtime_native_migration_retries_missing_files_without_review_or_policy_chang
         1
     );
     let file = std::fs::read(&path).unwrap();
-    let checkpoint = std::fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let checkpoint = std::fs::read(root.path().join(".shield/state/state.json")).unwrap();
     crate::review::open(root.path()).unwrap();
     assert_eq!(std::fs::read(path).unwrap(), file);
     assert_eq!(
-        std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        std::fs::read(root.path().join(".shield/state/state.json")).unwrap(),
         checkpoint
     );
 }

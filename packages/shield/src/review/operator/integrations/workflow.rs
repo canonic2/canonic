@@ -343,7 +343,7 @@ pub(super) fn onboard(
 
 /// The packs existing project files configure, or null without a config file.
 fn configured_packs(root: &Path) -> Result<Value, Error> {
-    let config = root.join(".shield/config.yml");
+    let config = crate::layout::init_destination(root);
     if !config.exists() {
         return Ok(Value::Null);
     }

@@ -61,6 +61,7 @@ pub(super) type Finding = (Protection, Option<String>);
 /// and registry authority. Project policy-edit permission never opens them.
 fn state_component(part: &std::ffi::OsStr) -> bool {
     [
+        "state",
         "review",
         "cache",
         "reviewed-policies",
@@ -77,6 +78,29 @@ fn state_component(part: &std::ffi::OsStr) -> bool {
     ]
     .iter()
     .any(|name| native_name(part, std::ffi::OsStr::new(name)))
+}
+
+/// The index of a default authoring bundle's directory in `parts`: `.shield`,
+/// or `shield` directly under `.config`.
+fn bundle_index(parts: &[&std::ffi::OsStr]) -> Option<usize> {
+    parts.iter().enumerate().find_map(|(index, part)| {
+        if native_name(part, std::ffi::OsStr::new(".shield")) {
+            return Some(index);
+        }
+        (index > 0
+            && native_name(part, std::ffi::OsStr::new("shield"))
+            && native_name(parts[index - 1], std::ffi::OsStr::new(".config")))
+        .then_some(index)
+    })
+}
+
+/// Whether `path` is one of the explicit selection's policy files, or within
+/// its bundle's pack cache.
+fn explicit_policy(path: &Path) -> Option<bool> {
+    crate::layout::explicit_policy_files()
+        .into_iter()
+        .find(|file| path == file || (file.ends_with("cache") && path.starts_with(file)))
+        .map(|file| file.ends_with("cache"))
 }
 
 fn user_state_root() -> Option<&'static Path> {
@@ -120,11 +144,11 @@ pub(super) fn group(submitted: &str, cwd: &Path, guard: Guard<'_>) -> &'static s
     if guard.cache.is_some_and(|cache| path.starts_with(cache)) {
         return "state";
     }
+    if let Some(cache) = explicit_policy(&path) {
+        return if cache { "state" } else { "policy" };
+    }
     let parts: Vec<_> = path.components().map(Component::as_os_str).collect();
-    let Some(index) = parts
-        .iter()
-        .position(|part| native_name(part, std::ffi::OsStr::new(".shield")))
-    else {
+    let Some(index) = bundle_index(&parts) else {
         return "settings";
     };
     match parts.get(index + 1) {
@@ -801,14 +825,16 @@ fn search_protection(
         return (Protection::None, None);
     }
     let mut finding = strictest(
-        [root.join(".shield/review"), root.join(".shield/cache")]
+        crate::layout::state_directories(root)
             .into_iter()
+            .chain([root.join(".shield/cache")])
             .chain(
                 protected_files()
                     .iter()
                     .filter(|p| **p != ".shield")
                     .map(|p| root.join(p)),
             )
+            .chain(crate::layout::explicit_policy_files())
             .chain(guard.cache.map(Path::to_path_buf))
             .map(|path| match observer.search_reaches(&path) {
                 Some(true) => (
@@ -856,6 +882,15 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
     {
         return Protection::Blocked;
     }
+    // An explicitly selected bundle's policy files are policy files like the
+    // defaults': readable, never writable, and its pack cache closed.
+    if let Some(cache) = explicit_policy(path) {
+        return if cache || access == Access::Write {
+            Protection::Blocked
+        } else {
+            Protection::None
+        };
+    }
     let configuration = configuration_path(path, guard);
     if !configuration && !protected_path(path, guard.cache) {
         return Protection::None;
@@ -865,10 +900,7 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
     }
     let allowed = |change: Change| change == Change::Allow;
     let parts: Vec<_> = path.components().map(Component::as_os_str).collect();
-    let Some(index) = parts
-        .iter()
-        .position(|p| native_name(p, std::ffi::OsStr::new(".shield")))
-    else {
+    let Some(index) = bundle_index(&parts) else {
         if configuration
             && guard.working_files.is_some_and(|scope| {
                 scope
@@ -1025,6 +1057,129 @@ fn protected_path(path: &Path, cache: Option<&Path>) -> bool {
 mod portable_policy_guards {
     use super::*;
 
+    /// Grouped and explicit bundles hold policy files like `.shield/`: readable,
+    /// never writable even when agent settings are opened, caches closed.
+    #[test]
+    fn grouped_and_explicit_bundles_are_policy_files_whatever_the_settings_choice() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let cwd = root.path().canonicalize().unwrap();
+        std::fs::create_dir_all(cwd.join("policy")).unwrap();
+        std::fs::write(cwd.join("policy/acme.yml"), "schema_version: 1\n").unwrap();
+        crate::layout::bind(
+            &cwd.join("policy/acme.yml"),
+            crate::layout::Base::Invocation,
+        );
+        crate::layout::select(&cwd).unwrap();
+        let guard = Guard {
+            cache: None,
+            allow: PathAccess {
+                agent_settings_read: Read::Allow,
+                agent_settings_change: Change::Allow,
+                ..PathAccess::default()
+            },
+            working_files: None,
+        };
+        for policy in [
+            ".config/shield/config.yml",
+            ".config/shield/rules.yml",
+            ".config/shield/config.local.yml",
+            "policy/acme.yml",
+            "policy/shield.lock",
+            "policy/config.local.yml",
+        ] {
+            let path = cwd.join(policy);
+            assert_eq!(
+                classify(&path, guard, Access::Write),
+                Protection::Blocked,
+                "{policy}"
+            );
+            assert_eq!(
+                classify(&path, guard, Access::Read),
+                Protection::None,
+                "{policy}"
+            );
+        }
+        for closed in [
+            ".shield/state/state.json",
+            ".shield/review/state.json",
+            "policy/cache/acme.yml",
+        ] {
+            assert_eq!(
+                classify(&cwd.join(closed), guard, Access::Read),
+                Protection::Blocked,
+                "{closed}"
+            );
+        }
+        // Other files beside an explicit selection stay ordinary project files.
+        assert_eq!(
+            classify(&cwd.join("policy/notes.md"), guard, Access::Write),
+            Protection::None
+        );
+        assert_eq!(group(".config/shield/rules.yml", &cwd, guard), "policy");
+        assert_eq!(group("policy/acme.yml", &cwd, guard), "policy");
+    }
+
+    /// An explicit configuration's rules, local rules and pack artifacts are
+    /// policy files wherever it names them, not only at the usual names.
+    #[test]
+    fn files_an_explicit_configuration_names_are_policy_files() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let cwd = root.path().canonicalize().unwrap();
+        std::fs::create_dir_all(cwd.join("policy")).unwrap();
+        std::fs::write(
+            cwd.join("policy/acme.yml"),
+            "schema_version: 1\nrules: custom.yml\npacks:\n- id: acme/read\n  registry_identity: main\n  version: 1.0.0\n  profile: recommended\n  path: vendor/acme-read.yml\n",
+        )
+        .unwrap();
+        std::fs::write(
+            cwd.join("policy/config.local.yml"),
+            "schema_version: 1\nrules: personal.yml\n",
+        )
+        .unwrap();
+        crate::layout::bind(
+            &cwd.join("policy/acme.yml"),
+            crate::layout::Base::Invocation,
+        );
+        crate::layout::select(&cwd).unwrap();
+        let guard = Guard {
+            cache: None,
+            allow: PathAccess {
+                agent_settings_read: Read::Allow,
+                agent_settings_change: Change::Allow,
+                ..PathAccess::default()
+            },
+            working_files: None,
+        };
+        for policy in [
+            "policy/custom.yml",
+            "policy/personal.yml",
+            "policy/vendor/acme-read.yml",
+        ] {
+            let path = cwd.join(policy);
+            assert_eq!(
+                classify(&path, guard, Access::Write),
+                Protection::Blocked,
+                "{policy}"
+            );
+            assert!(crate::layout::in_shield_files(&cwd, &path), "{policy}");
+            assert_eq!(group(policy, &cwd, guard), "policy");
+        }
+        assert_eq!(
+            classify(&cwd.join("policy/vendor/notes.md"), guard, Access::Write),
+            Protection::None
+        );
+        // A changed reference moves the protection with it.
+        std::fs::write(
+            cwd.join("policy/acme.yml"),
+            "schema_version: 1\nrules: renamed.yml\npacks: []\n",
+        )
+        .unwrap();
+        assert_eq!(
+            classify(&cwd.join("policy/renamed.yml"), guard, Access::Write),
+            Protection::Blocked
+        );
+    }
+
     #[test]
     #[cfg(unix)]
     fn touch_unknown_cwd_blocks_relative_references_and_destinations_in_request_and_ast() {
@@ -1068,9 +1223,11 @@ mod portable_policy_guards {
             "Acme sensitive configuration",
         )
         .unwrap();
-        std::fs::create_dir_all(cwd.join(".shield/review")).unwrap();
-        std::fs::write(cwd.join(".shield/review/state.json"), "Acme private").unwrap();
-        std::os::unix::fs::symlink(cwd.join(".shield/review/state.json"), cwd.join("alias"))
+        for directory in [".shield/state", ".shield/review"] {
+            std::fs::create_dir_all(cwd.join(directory)).unwrap();
+            std::fs::write(cwd.join(directory).join("state.json"), "Acme private").unwrap();
+        }
+        std::os::unix::fs::symlink(cwd.join(".shield/state/state.json"), cwd.join("alias"))
             .unwrap();
         let guard = Guard {
             cache: None,
@@ -1080,8 +1237,10 @@ mod portable_policy_guards {
         for (reference, targets, blocked) in [
             (".shield/config.yml", vec!["one", "two"], false),
             (".codex/config.toml", vec!["one"], false),
+            (".shield/state/state.json", vec!["one"], true),
             (".shield/review/state.json", vec!["one"], true),
             ("alias", vec!["one"], true),
+            ("ordinary", vec!["one", ".shield/state/state.json"], true),
             ("ordinary", vec!["one", ".shield/review/state.json"], true),
         ] {
             let mut arguments = vec!["-r", reference];
@@ -1357,13 +1516,9 @@ mod editable_skills {
         assert!(removal(&config, root.path(), guard));
         assert!(!removal(&skills.join("new/SKILL.md"), root.path(), guard));
         assert!(classify(&config.join("config.toml"), guard, Access::Write) == Protection::Blocked);
-        assert!(
-            classify(
-                &skills.join(".shield/review/state.json"),
-                guard,
-                Access::Write
-            ) == Protection::Blocked
-        );
+        for state in [".shield/state/state.json", ".shield/review/state.json"] {
+            assert!(classify(&skills.join(state), guard, Access::Write) == Protection::Blocked);
+        }
         std::fs::remove_dir(&skills).unwrap();
         std::os::unix::fs::symlink(&config, &skills).unwrap();
         assert!(

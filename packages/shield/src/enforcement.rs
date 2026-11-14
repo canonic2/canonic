@@ -103,7 +103,7 @@ pub fn handoff<T>(
     })?
 }
 
-pub(crate) fn verify_access(access: AgentAccess) -> Result<(), Error> {
+fn verify_access(access: AgentAccess) -> Result<(), Error> {
     match access {
         AgentAccess::Operator | AgentAccess::AuthorizationStateWrite => {
             return Err(Error::ProtectedAccess);

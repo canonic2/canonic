@@ -2,8 +2,7 @@
 use crate::cli;
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
 use crate::{
-    enforcement::{self, AgentAccess},
-    policy, review,
+    enforcement, policy, review,
     runtime::Project,
 };
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
@@ -133,7 +132,6 @@ fn execute(input: &cli::Run) -> Result<u8, Box<dyn std::error::Error>> {
     let mut details = json!({"operation":operation,"request":request,"evaluation":evidence.evaluation(),"identity":evidence.identity(),"binding":binding.metadata(),"timeout_ms":input.timeout_ms,"execution":"unobserved"});
     let mut child = None;
     let mut prelaunch_error = None;
-    enforcement::verify_access(AgentAccess::Ordinary)?;
     let handoff = review::run_approval::gate(
         &context,
         &evidence,
@@ -356,12 +354,7 @@ fn prepare(input: &cli::Run) -> Result<PreparedRun, Box<dyn std::error::Error>> 
 }
 
 fn protected_cwd(cwd: &std::path::Path, project: &std::path::Path) -> bool {
-    cwd.strip_prefix(project)
-        .ok()
-        .and_then(|relative| relative.components().next())
-        .is_some_and(|part| {
-            crate::location::native_name(part.as_os_str(), std::ffi::OsStr::new(".shield"))
-        })
+    crate::layout::in_shield_files(project, cwd)
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]

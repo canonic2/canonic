@@ -42,7 +42,7 @@ pub(super) fn propose(
         input,
         checkpoint,
         &mut |_, _, _, _, _| Ok(()),
-        &|row| row.public(false),
+        &|row| row.public(),
     )
 }
 pub(super) fn receipt(context: &Context, id: &str) -> Value {
@@ -100,7 +100,7 @@ fn atomic_proposal_commit_and_receipts_preserve_origin_when_history_is_purged() 
     let mut mcp = context.clone();
     mcp.surface = "mcp".into();
     assert!(matches!(
-        transition(&mcp, id, "approve", None, &|| Ok(())),
+        transition(&mcp, id, "approve", &|| Ok(())),
         Err(Error::Invalid("invalid proposal transition"))
     ));
     operator::commit_proposal_fixture(&context, id).unwrap();
@@ -137,7 +137,7 @@ fn a_prepared_proposal_refuses_a_concurrently_activated_base() {
             operator::commit_proposal_fixture(&context, other["proposal_id"].as_str().unwrap())?;
             Ok(())
         },
-        &|row| row.public(false),
+        &|row| row.public(),
     );
     assert!(matches!(result, Err(Error::StaleSnapshot)));
     let state = Store::open(root.path()).unwrap().read_checkpoint().unwrap();
@@ -162,7 +162,6 @@ fn stale_rejected_changed_retries_and_cross_project_context_do_not_apply() {
             &independent,
             second["proposal_id"].as_str().unwrap(),
             "withdraw",
-            None,
             &|| Ok(())
         )
         .is_err()
@@ -176,7 +175,7 @@ fn stale_rejected_changed_retries_and_cross_project_context_do_not_apply() {
     assert!(history(&other, None).is_err());
     let third = propose(&context, &input("three"), &|| Ok(())).unwrap();
     let id = third["proposal_id"].as_str().unwrap();
-    transition(&context, id, "reject", None, &|| Ok(())).unwrap();
+    transition(&context, id, "reject", &|| Ok(())).unwrap();
     assert_eq!(receipt(&context, id)["data"]["status"], "rejected");
     assert!(operator::commit_proposal_fixture(&context, id).is_err());
 }
@@ -191,20 +190,20 @@ fn cancelled_writes_corruption_locks_and_snapshot_retention_are_visible() {
         .is_err()
     );
     assert_eq!(
-        proposals(&context, None, false).unwrap()["proposals"]
+        proposals(&context, None).unwrap()["proposals"]
             .as_array()
             .unwrap()
             .len(),
         0
     );
-    root.child(".shield/review/state.lock")
+    root.child(".shield/state/state.lock")
         .write_str("owned")
         .unwrap();
     assert!(matches!(
         propose(&context, &input("locked"), &|| Ok(())),
         Err(Error::Locked)
     ));
-    std::fs::remove_file(root.path().join(".shield/review/state.lock")).unwrap();
+    std::fs::remove_file(root.path().join(".shield/state/state.lock")).unwrap();
     history_settings(&context, None, Some(1), false, &|| Ok(())).unwrap();
     propose(&context, &input("one"), &|| Ok(())).unwrap();
     propose(&context, &input("two"), &|| Ok(())).unwrap();
@@ -216,18 +215,18 @@ fn cancelled_writes_corruption_locks_and_snapshot_retention_are_visible() {
         0
     );
     assert_eq!(
-        proposals(&context, None, false).unwrap()["proposals"]
+        proposals(&context, None).unwrap()["proposals"]
             .as_array()
             .unwrap()
             .len(),
         2
     );
-    root.child(".shield/review/state.json")
+    root.child(".shield/state/state.json")
         .write_str("broken")
         .unwrap();
     assert!(open(root.path()).is_err());
     assert_eq!(
-        std::fs::read_to_string(root.path().join(".shield/review/state.json")).unwrap(),
+        std::fs::read_to_string(root.path().join(".shield/state/state.json")).unwrap(),
         "broken"
     );
 }
@@ -254,7 +253,7 @@ fn concurrent_writers_keep_distinct_proposals() {
         .collect();
     assert_eq!(ids.len(), 4);
     assert_eq!(
-        proposals(&context, None, false).unwrap()["proposals"]
+        proposals(&context, None).unwrap()["proposals"]
             .as_array()
             .unwrap()
             .len(),

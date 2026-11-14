@@ -30,6 +30,9 @@ pub struct Cli {
     /// Folder for this project's compiled policy plans, chosen at init or MCP setup.
     #[arg(long, global = true)]
     pub cache_dir: Option<PathBuf>,
+    /// Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml.
+    #[arg(long, global = true, value_name = "PATH")]
+    pub config: Option<PathBuf>,
     /// Operation to perform.
     #[command(subcommand)]
     pub command: PublicCommand,

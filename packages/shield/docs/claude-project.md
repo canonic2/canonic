@@ -243,9 +243,9 @@ The hook sees the initial URL, not later redirect destinations.
 ### Protected files and policy changes
 
 Claude can read and commit `.shield/config.yml`, `rules.yml`, and `shield.lock`,
-but cannot edit them or read `.shield/review/`. Reading agent settings or
+but cannot edit them or read `.shield/state/`. Reading agent settings or
 `.mcp.json` asks because they may hold credentials. `.shield/.gitignore` excludes
-private review state and cache files. To let the agent make one blocked change,
+private runtime state and cache files. To let the agent make one blocked change,
 accept its [one-time request](project-review.md#allowing-one-blocked-request) in
 the conversation; change configurable protection with
 [`shield protection set`](project-review.md#protected-files).

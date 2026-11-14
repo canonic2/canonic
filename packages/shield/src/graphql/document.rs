@@ -15,8 +15,21 @@ pub(super) struct Document {
     selected: usize,
     variables: BTreeMap<String, Value>,
     fragments: BTreeMap<String, usize>,
-    query: bool,
+    kind: Kind,
     paginate: bool,
+}
+/// The selected operation's type.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Kind {
+    Query,
+    Mutation,
+    Subscription,
+}
+/// What one predicate asks of the selected operation.
+pub(super) struct Expectation<'a> {
+    pub(super) kind: Kind,
+    pub(super) model: Option<&'a Value>,
+    pub(super) root_fields: Option<&'a [Value]>,
 }
 fn selection<'a>(operation: &'a q::OperationDefinition<'static, String>) -> &'a Selection {
     match operation {
@@ -95,6 +108,11 @@ pub(super) fn parse(
         }
     };
     checkpoint()?;
+    // The parser keeps input objects in a map and drops repeated keys, so check
+    // the admitted source text before relying on any object literal.
+    if duplicate_object_keys(&carrier.query, visits, checkpoint)? {
+        return Ok(Err(Failure::new("document", "duplicate input object key")));
+    }
     if ast.definitions.len() > 64 {
         return Err(Error::Limit);
     }
@@ -168,7 +186,7 @@ pub(super) fn parse(
         selected,
         fragments,
         variables: BTreeMap::new(),
-        query: false,
+        kind: Kind::Query,
         paginate: carrier.paginate,
     };
     // Validate fragment graphs and structural uniqueness once, with memoized
@@ -218,10 +236,11 @@ pub(super) fn parse(
     let q::Definition::Operation(operation) = &document.ast.definitions[selected] else {
         return Err(Error::Syntax);
     };
-    document.query = matches!(
-        operation,
-        q::OperationDefinition::Query(_) | q::OperationDefinition::SelectionSet(_)
-    );
+    document.kind = match operation {
+        q::OperationDefinition::Query(_) | q::OperationDefinition::SelectionSet(_) => Kind::Query,
+        q::OperationDefinition::Mutation(_) => Kind::Mutation,
+        q::OperationDefinition::Subscription(_) => Kind::Subscription,
+    };
     for variable in definitions(operation) {
         let Some((ty, required)) = kind(&variable.var_type) else {
             return Ok(Err(fail()));
@@ -352,7 +371,7 @@ impl Document {
             let mut names = BTreeSet::new();
             for (name, value) in arguments {
                 visit(visits, checkpoint)?;
-                if !names.insert(name) || !scalar_or_variable(value, &mut refs) {
+                if !names.insert(name) || !input_value(value, 0, &mut refs, visits, checkpoint)? {
                     return Ok(Err(Failure::new(
                         "document",
                         "duplicate argument or unsupported value",
@@ -407,23 +426,33 @@ impl Document {
     }
     pub(super) fn check(
         &self,
-        model: Option<&Value>,
+        expected: &Expectation<'_>,
         patterns: &dyn Provider,
         visits: &mut usize,
         checkpoint: &dyn Fn() -> Result<(), Error>,
     ) -> Result<Option<Failure>, Error> {
-        if !self.query {
+        if self.kind != expected.kind {
             return Ok(Some(Failure::new(
                 "operation",
-                "selected operation is not a query",
+                match expected.kind {
+                    Kind::Mutation => "selected operation is not a mutation",
+                    _ => "selected operation is not a query",
+                },
+            )));
+        }
+        if self.kind == Kind::Mutation && self.paginate {
+            return Ok(Some(Failure::new(
+                "pagination",
+                "pagination is unsupported for a mutation",
             )));
         }
         let q::Definition::Operation(operation) = &self.ast.definitions[self.selected] else {
             return Err(Error::Syntax);
         };
+        let model = expected.model;
         let mut seen = BTreeSet::new();
         super::record("graphql.selection");
-        self.walk(
+        if let Some(failure) = self.walk(
             selection(operation),
             0,
             model,
@@ -433,7 +462,68 @@ impl Document {
             &mut vec![],
             visits,
             checkpoint,
-        )
+        )? {
+            return Ok(Some(failure));
+        }
+        if let Some(classes) = expected.root_fields {
+            let mut names = BTreeSet::new();
+            self.root_names(selection(operation), 0, &mut names, visits, checkpoint)?;
+            if !names.iter().any(|n| classes.iter().any(|c| c == n)) {
+                return Ok(Some(Failure::new(
+                    "operation",
+                    "no root field belongs to this mutation class",
+                )));
+            }
+        }
+        Ok(None)
+    }
+    /// Actual root field names, through fragments and both branches of
+    /// conditional directives; aliases never stand in for names.
+    fn root_names(
+        &self,
+        set: &Selection,
+        depth: usize,
+        names: &mut BTreeSet<String>,
+        visits: &mut usize,
+        checkpoint: &dyn Fn() -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        if depth > MAX_DEPTH {
+            return Err(Error::Limit);
+        }
+        for item in &set.items {
+            visit(visits, checkpoint)?;
+            match item {
+                q::Selection::Field(field) => {
+                    names.insert(field.name.clone());
+                }
+                q::Selection::InlineFragment(fragment) => {
+                    self.root_names(
+                        &fragment.selection_set,
+                        depth + 1,
+                        names,
+                        visits,
+                        checkpoint,
+                    )?;
+                }
+                q::Selection::FragmentSpread(spread) => {
+                    let index = *self
+                        .fragments
+                        .get(&spread.fragment_name)
+                        .ok_or(Error::Syntax)?;
+                    let q::Definition::Fragment(fragment) = &self.ast.definitions[index] else {
+                        return Err(Error::Syntax);
+                    };
+                    self.root_names(
+                        &fragment.selection_set,
+                        depth + 1,
+                        names,
+                        visits,
+                        checkpoint,
+                    )?;
+                }
+            }
+        }
+        Ok(())
     }
     fn check_directives(
         &self,
@@ -613,6 +703,19 @@ impl Document {
                         "cursor changes a non-cursor argument",
                     )));
                 }
+            } else if let q::Value::Object(object) = value {
+                // Object literals pass only through a declared object matcher.
+                let Some(fields) = rule.and_then(|r| r["match"].get("object")) else {
+                    return Ok(Some(Failure::new(
+                        "selection",
+                        "input object needs a declared object matcher",
+                    )));
+                };
+                if let Some(failure) =
+                    self.check_object(fields, object, patterns, visits, checkpoint)?
+                {
+                    return Ok(Some(failure));
+                }
             } else if declaration.is_some() {
                 let Some(rule) = rule else {
                     return Ok(Some(Failure::new("selection", "argument is not admitted")));
@@ -636,6 +739,179 @@ impl Document {
         }
         Ok(None)
     }
+    /// Check one input object literal against its declared fields, recursively.
+    fn check_object(
+        &self,
+        fields: &Value,
+        object: &BTreeMap<String, GValue>,
+        patterns: &dyn Provider,
+        visits: &mut usize,
+        checkpoint: &dyn Fn() -> Result<(), Error>,
+    ) -> Result<Option<Failure>, Error> {
+        let declared = fields.as_object().ok_or(Error::Syntax)?;
+        if declared
+            .iter()
+            .any(|(name, rule)| rule["required"] == true && !object.contains_key(name))
+        {
+            return Ok(Some(Failure::new(
+                "selection",
+                "required input field missing",
+            )));
+        }
+        for (name, value) in object {
+            visit(visits, checkpoint)?;
+            let Some(rule) = declared.get(name) else {
+                return Ok(Some(Failure::new(
+                    "selection",
+                    "input field is not admitted",
+                )));
+            };
+            if let q::Value::Object(nested) = value {
+                let Some(fields) = rule["match"].get("object") else {
+                    return Ok(Some(Failure::new(
+                        "selection",
+                        "input object needs a declared object matcher",
+                    )));
+                };
+                if let Some(failure) =
+                    self.check_object(fields, nested, patterns, visits, checkpoint)?
+                {
+                    return Ok(Some(failure));
+                }
+                continue;
+            }
+            match self.value(value) {
+                None if rule["required"] == true => {
+                    return Ok(Some(Failure::new(
+                        "selection",
+                        "input value is unavailable",
+                    )));
+                }
+                Some(actual) if !argument(rule, &actual, self.is_enum(value), patterns)? => {
+                    return Ok(Some(Failure::new(
+                        "selection",
+                        "input value does not match",
+                    )));
+                }
+                _ => {}
+            }
+        }
+        Ok(None)
+    }
+}
+/// Structural input check: scalars, variables and object literals nested at
+/// most `MAX_OBJECT_DEPTH` levels; lists stay unsupported.
+fn input_value(
+    value: &GValue,
+    depth: usize,
+    refs: &mut BTreeSet<String>,
+    visits: &mut usize,
+    checkpoint: &dyn Fn() -> Result<(), Error>,
+) -> Result<bool, Error> {
+    let q::Value::Object(fields) = value else {
+        return Ok(scalar_or_variable(value, refs));
+    };
+    if depth >= super::model::MAX_OBJECT_DEPTH || fields.is_empty() {
+        return Ok(false);
+    }
+    for child in fields.values() {
+        visit(visits, checkpoint)?;
+        if !input_value(child, depth + 1, refs, visits, checkpoint)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Report whether any input object literal in a parsed document repeats a key.
+/// Objects occur only inside parentheses (arguments and variable defaults);
+/// there, a name followed by `:` at an object's own level is one of its keys.
+fn duplicate_object_keys(
+    source: &str,
+    visits: &mut usize,
+    checkpoint: &dyn Fn() -> Result<(), Error>,
+) -> Result<bool, Error> {
+    enum Frame {
+        Parens,
+        List,
+        Object(BTreeSet<String>),
+    }
+    let bytes = source.as_bytes();
+    let mut stack: Vec<Frame> = vec![];
+    let mut pending: Option<String> = None;
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        match byte {
+            b'#' => {
+                while index < bytes.len() && !matches!(bytes[index], b'\n' | b'\r') {
+                    index += 1;
+                }
+                continue;
+            }
+            b'"' => {
+                pending = None;
+                if bytes[index..].starts_with(b"\"\"\"") {
+                    index += 3;
+                    while index < bytes.len() && !bytes[index..].starts_with(b"\"\"\"") {
+                        index += if bytes[index..].starts_with(b"\\\"\"\"") {
+                            4
+                        } else {
+                            1
+                        };
+                    }
+                    index += 3;
+                } else {
+                    index += 1;
+                    while index < bytes.len() && bytes[index] != b'"' {
+                        index += if bytes[index] == b'\\' { 2 } else { 1 };
+                    }
+                    index += 1;
+                }
+                continue;
+            }
+            b'_' | b'A'..=b'Z' | b'a'..=b'z' => {
+                let start = index;
+                while index < bytes.len()
+                    && (bytes[index].is_ascii_alphanumeric() || bytes[index] == b'_')
+                {
+                    index += 1;
+                }
+                pending = Some(source[start..index].to_owned());
+                continue;
+            }
+            b':' => {
+                if let (Some(key), Some(Frame::Object(keys))) = (pending.take(), stack.last_mut()) {
+                    visit(visits, checkpoint)?;
+                    if !keys.insert(key) {
+                        return Ok(true);
+                    }
+                }
+            }
+            b'(' => stack.push(Frame::Parens),
+            b'[' if !stack.is_empty() => stack.push(Frame::List),
+            b'{' if !stack.is_empty() => stack.push(Frame::Object(BTreeSet::new())),
+            b')' | b']' => {
+                stack.pop();
+            }
+            b'}' if !stack.is_empty() => {
+                stack.pop();
+            }
+            b' ' | b'\t' | b'\n' | b'\r' | b',' => {
+                index += 1;
+                continue;
+            }
+            // U+FEFF is whitespace to the parser, so it keeps the held key.
+            0xEF if bytes[index..].starts_with(&[0xEF, 0xBB, 0xBF]) => {
+                index += 3;
+                continue;
+            }
+            _ => {}
+        }
+        pending = None;
+        index += 1;
+    }
+    Ok(false)
 }
 fn scalar_or_variable(value: &GValue, refs: &mut BTreeSet<String>) -> bool {
     if let q::Value::Variable(name) = value {

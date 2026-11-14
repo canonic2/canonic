@@ -1,8 +1,77 @@
-//! Exact direct-registration maintenance, never publisher or permission adoption.
-use super::{Error, Plan, State, files, native, registration};
+//! Exact registration maintenance: direct installations, the Box pin, and a
+//! folder's committed Box definition. Never publisher or permission adoption.
+use super::{Error, Plan, State, box_definition, files, native, pending, registration};
 use std::path::{Path, PathBuf};
 
 pub(super) const REASON: &str = "equivalent native registration portability";
+/// A folder with no registration whose committed Box definition is exactly
+/// the one this executable renders, as in a fresh worktree or clone.
+pub(super) const ADOPT_REASON: &str = "committed Box definition";
+
+/// The identity of one adoption attempt: the committed definition's bytes,
+/// the private pin's bytes and the executable that would adopt them. `None`
+/// without a Box project or a committed definition, where there is nothing to
+/// adopt. Two small reads and a hash, so an unchanged attempt that already
+/// failed costs no parsing, rendering or binary hashing.
+pub(in crate::review) fn adoption_key(root: &Path, executable: &Path) -> Option<String> {
+    if !box_definition::box_project(root) {
+        return None;
+    }
+    let shared = files::read(root, box_definition::PATH).ok()??;
+    let local = files::read(root, box_definition::LOCAL_PATH).ok()?;
+    let key = serde_json::json!([shared, local, executable.to_str()]).to_string();
+    Some(crate::policy::fingerprint(key.as_bytes()))
+}
+
+/// The registration `shield mcp setup --agent box` would record for the
+/// committed definition, writing only a missing private pin. The definition
+/// is policy-equivalent to that setup: the same text grants the same tools.
+pub(in crate::review) fn adopt_box(
+    root: &Path,
+    state: &State,
+    executable: &Path,
+) -> Result<Option<Plan>, Error> {
+    if registration(&state.operator)?.is_some()
+        || pending(&state.operator)?.is_some()
+        || !box_definition::box_project(root)
+    {
+        return Ok(None);
+    }
+    let Some((definition, approved)) = box_definition::committed(root, executable)? else {
+        return Ok(None);
+    };
+    let mut desired = super::setup::desired(root)?;
+    if desired.binary != executable {
+        return Ok(None);
+    }
+    let mut changes = Vec::new();
+    if files::read(root, box_definition::LOCAL_PATH)?.is_none() {
+        changes.push(files::Change {
+            path: box_definition::LOCAL_PATH.into(),
+            before: None,
+            after: Some(definition.local.clone()),
+        });
+    }
+    desired.approved_tools = Some(approved);
+    desired.box_definition = Some(definition);
+    let before = super::read_file(root)?;
+    let after = before.clone().unwrap_or_default();
+    let plan = Plan {
+        targets: Some(vec![box_definition::ID.into()]),
+        scope_reason: Some(ADOPT_REASON.into()),
+        policy_revision: Some(state.policy_revision.clone()),
+        before,
+        after,
+        previous: None,
+        desired: Some(desired),
+        files: changes,
+        handed_over: Vec::new(),
+    };
+    super::maintenance::validate(&plan)?;
+    super::privacy::validate(root, &plan)?;
+    files::validate_plan_before(root, &plan)?;
+    Ok(Some(plan))
+}
 #[cfg(all(test, not(windows)))]
 mod tests;
 

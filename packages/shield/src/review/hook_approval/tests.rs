@@ -410,7 +410,7 @@ fn summary() -> Summary {
 }
 
 fn state_bytes(fixture: &Fixture) -> Vec<u8> {
-    std::fs::read(fixture.root().join(".shield/review/state.json")).unwrap()
+    std::fs::read(fixture.root().join(".shield/state/state.json")).unwrap()
 }
 
 #[test]
@@ -803,7 +803,7 @@ fn a_tampered_grant_is_refused_when_state_loads() {
         true,
     )
     .unwrap();
-    let path = fixture.root().join(".shield/review/state.json");
+    let path = fixture.root().join(".shield/state/state.json");
     let mut state: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     state["hook_requests"][0]["input_digest"] = json!(crate::policy::fingerprint(b"acme-other"));
     std::fs::write(&path, serde_json::to_vec(&state).unwrap()).unwrap();

@@ -27,11 +27,11 @@ pub(super) fn initialize(
     let project = project.canonicalize()?;
     // An enrolled folder's files are already its policy; there is nothing to
     // initialize or restore.
-    if project.join(".shield/review/state.json").exists() {
+    if crate::layout::state(&project).join("state.json").exists() {
         let context = review::open(&project)?;
         return status(&context);
     }
-    let config = project.join(".shield/config.yml");
+    let config = crate::layout::init_destination(&project);
     let candidate = if config.exists() {
         super::project_files::capture(&config).map_err(|_| {
             Error::Invalid("invalid project configuration; review config.yml and local artifacts")

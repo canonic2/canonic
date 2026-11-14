@@ -186,14 +186,7 @@ pub(crate) fn offer(arguments: &Value) -> String {
 
 /// No executable policy is guessed from one command. The agent reviews its
 /// effects and the documented grammar before authoring a reusable rule.
-pub(crate) fn command_offer(entry: Option<&str>) -> String {
-    let source = entry.map_or_else(String::new, |entry| {
-        format!(" Link source_entry_id {entry}.")
-    });
-    format!(
-        "After the task, offer one grouped review for eligible recurring requests or an explicit user request. Inspect scripts, lifecycle hooks, argument effects and relevant existing rules; skip unknown effects. Adapt the returned canonical authoring examples, preserving cwd and argument scope. Propose with policy_propose and link review_ids.{source} Copy apply_arguments unchanged to policy_apply for host confirmation. Decline or cancellation ends the offer."
-    )
-}
+pub(crate) const COMMAND_OFFER: &str = "After the task, offer one grouped review for eligible recurring requests or an explicit user request. Inspect scripts, lifecycle hooks, argument effects and relevant existing rules; skip unknown effects. Adapt the returned canonical authoring examples, preserving cwd and argument scope. Propose with policy_propose and link review_ids. Copy apply_arguments unchanged to policy_apply for host confirmation. Decline or cancellation ends the offer.";
 
 fn excerpt(text: &str) -> String {
     let mut short: String = text.chars().take(120).collect();

@@ -28,7 +28,7 @@ fn init_in_a_clone_needs_no_review_and_creates_no_activation() {
     assert_ne!(report["project_id"], before.project_id);
     assert!(report["policy_files"]["digest"].is_string(), "{report}");
     let saved: Value =
-        serde_json::from_slice(&fs::read(clone.path().join(".shield/review/state.json")).unwrap())
+        serde_json::from_slice(&fs::read(clone.path().join(".shield/state/state.json")).unwrap())
             .unwrap();
     assert!(saved.get("active").is_none(), "{saved}");
     // The next request is decided by the files.
@@ -1484,14 +1484,14 @@ fn installed_binary_upgrade_preserves_integration_without_rewriting_project_stat
             Ok(json!({}))
         })
         .unwrap();
-    let before = fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let before = fs::read(root.path().join(".shield/state/state.json")).unwrap();
     let files = read_file(root.path()).unwrap();
     let doctor = crate::review::project::doctor(&context).unwrap();
     assert_eq!(doctor["repair_needed"], false, "{doctor}");
     assert_eq!(doctor["checks"], json!([]), "{doctor}");
     assert_eq!(
         before,
-        fs::read(root.path().join(".shield/review/state.json")).unwrap()
+        fs::read(root.path().join(".shield/state/state.json")).unwrap()
     );
     assert_eq!(files, read_file(root.path()).unwrap());
 }
@@ -1507,7 +1507,7 @@ fn diagnostic_reads_detect_missing_binary_and_do_not_mutate_state_or_files() {
             Ok(json!({}))
         })
         .unwrap();
-    let before = fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let before = fs::read(root.path().join(".shield/state/state.json")).unwrap();
     let file = read_file(root.path()).unwrap();
     let report = status(&context, &crate::review::project::load(&context).unwrap());
     assert_eq!(report["registered_integrations"][0]["status"], "degraded");
@@ -1518,7 +1518,7 @@ fn diagnostic_reads_detect_missing_binary_and_do_not_mutate_state_or_files() {
     assert_eq!(report["installed_integrations"][0]["status"], "degraded");
     assert_eq!(
         before,
-        fs::read(root.path().join(".shield/review/state.json")).unwrap()
+        fs::read(root.path().join(".shield/state/state.json")).unwrap()
     );
     assert_eq!(file, read_file(root.path()).unwrap());
 }
@@ -1635,7 +1635,7 @@ fn retained_policy_proposal_cannot_restore_a_superseded_ask_fallback() {
     );
     let current = crate::review::project::load(&context).unwrap();
     assert_eq!(current.policy_revision, original.policy_revision);
-    let state_path = root.path().join(".shield/review/state.json");
+    let state_path = root.path().join(".shield/state/state.json");
     let before = fs::read(&state_path).unwrap();
     let applied = review::mcp::call(
         &mcp_context,

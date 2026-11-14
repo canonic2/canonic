@@ -199,8 +199,9 @@ impl AgentAdapter for ClaudeCode {
             "onFailure":"block","timeout":10,"statusMessage":"Shield project enforcement"}]}),
         )
     }
-    fn mcp_entry(&self, _binary: &Path, _root: &Path, _approved: &[String]) -> String {
-        json!({"type":"stdio","command":"shield","args":["mcp","serve","--project",".","--agent",SPEC.id]}).to_string()
+    fn mcp_entry(&self, _binary: &Path, root: &Path, _approved: &[String]) -> String {
+        json!({"type":"stdio","command":"shield","args":super::setup::serve_args(root, SPEC.id)})
+            .to_string()
     }
     fn has_mcp_entry(&self, source: &str) -> Result<bool, Error> {
         let config = crate::json::parse(source.as_bytes())

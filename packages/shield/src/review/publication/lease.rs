@@ -48,9 +48,7 @@ impl ProjectionLease {
         let shield = root.join(".shield");
         let metadata = std::fs::symlink_metadata(&shield)?;
         if !metadata.is_dir() || metadata.file_type().is_symlink() {
-            return Err(Error::Invalid(
-                "review directories cannot be links or files",
-            ));
+            return Err(Error::Invalid("state directories cannot be links or files"));
         }
         #[cfg(unix)]
         {
@@ -59,8 +57,9 @@ impl ProjectionLease {
                 return Err(Error::Invalid("private directory owner differs"));
             }
         }
-        normalize_owned_runtime(&root.join(".shield/review"))?;
-        let directory = root.join(".shield/review/publication");
+        let state = crate::layout::state(&root);
+        normalize_owned_runtime(&state)?;
+        let directory = state.join("publication");
         normalize_owned_runtime(&directory)?;
         let lease = Directory::enter(&directory)?;
         Ok(Self { root, lease })

@@ -76,19 +76,26 @@ impl Connection {
             .to_str()
             .ok_or(Error::Contract("MCP launcher path must be UTF-8"))?
             .to_owned();
+        // The launcher reloads policy to find its connection, so it selects
+        // the same configuration as the setup that wrote it.
+        let config = crate::layout::launch_args(root).map_err(|_| {
+            Error::Contract("MCP launchers can name only a --config file inside the project")
+        })?;
         let root = root
             .to_str()
             .ok_or(Error::Contract("MCP project path must be UTF-8"))?;
+        let mut args: Vec<String> = vec![
+            "__internal".into(),
+            "mcp-connect".into(),
+            "--project".into(),
+            root.into(),
+            "--token".into(),
+            token.into(),
+        ];
+        args.extend(config);
         Ok(Transport::Stdio {
             command,
-            args: vec![
-                "__internal".into(),
-                "mcp-connect".into(),
-                "--project".into(),
-                root.into(),
-                "--token".into(),
-                token.into(),
-            ],
+            args,
             env: BTreeMap::new(),
         })
     }

@@ -53,7 +53,8 @@ pub(crate) fn protected_files() -> &'static [&'static str] {
     static PATHS: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
     PATHS.get_or_init(|| {
         [
-            ".shield",
+            crate::layout::SHIELD,
+            crate::layout::GROUPED_BUNDLE,
             ".mcp.json",
             ".opencode/plugins",
             ".opencode/tool",
@@ -450,7 +451,7 @@ pub(in crate::review) fn apply_owned_guarded(
     let root = Path::new(&context.project_root);
     // The connections reviewed came from the policy files; refuse files that
     // changed since. Without files there are no connections to compare.
-    let files_revision = if root.join(".shield/config.yml").exists() {
+    let files_revision = if crate::layout::configured(root) {
         Some(super::files::load(root)?.evaluator.revision().to_owned())
     } else {
         None
@@ -551,11 +552,7 @@ fn write_fallbacks(
     state: &mut State,
     changes: std::collections::BTreeMap<String, AskFallback>,
 ) -> Result<(), Error> {
-    if changes.is_empty()
-        || !Path::new(&context.project_root)
-            .join(".shield/config.yml")
-            .is_file()
-    {
+    if changes.is_empty() || !crate::layout::configured(Path::new(&context.project_root)) {
         return Ok(());
     }
     super::settings::write(context, &super::settings::fallbacks(changes.clone()))?;

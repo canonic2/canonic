@@ -78,7 +78,7 @@ fn box_portability_copy_keeps_its_registration_and_local_pin() {
     let unrelated =
         "{\"mcpServers\":{\"gate\":{\"type\":\"http\",\"url\":\"https://gate.example.com/mcp\"}}}";
     fs::write(root.path().join(".mcp.json"), unrelated).unwrap();
-    let checkpoint = fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let checkpoint = fs::read(root.path().join(".shield/state/state.json")).unwrap();
     let copied = assert_fs::TempDir::new().unwrap();
     crate::test_support::copy_fixture_directory(root.path(), copied.path());
     let child = crate::review::open(copied.path()).unwrap();
@@ -99,7 +99,7 @@ fn box_portability_copy_keeps_its_registration_and_local_pin() {
     assert!(!copied.path().join(".codex/config.toml").exists());
     assert!(!copied.path().join(".claude/settings.local.json").exists());
     assert_eq!(
-        fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        fs::read(root.path().join(".shield/state/state.json")).unwrap(),
         checkpoint
     );
     assert_eq!(local(root.path()).unwrap(), previous.local);
@@ -112,6 +112,132 @@ fn box_portability_copy_keeps_its_registration_and_local_pin() {
     crate::review::open(edited.path()).unwrap();
     assert_eq!(local(edited.path()).unwrap(), text);
     assert_eq!(definition(edited.path()).unwrap(), previous.shared);
+}
+
+/// Box's expansion of the definition's hooks: the quoted pinned binary and an
+/// unquoted `--project .`.
+fn box_published_claude_hooks(root: &Path, binary: &Path) {
+    let adapter = agents::find("claude").unwrap();
+    let pinned = crate::review::integrations::native::quoted(binary).unwrap();
+    let hooks: serde_json::Map<String, Value> = adapter
+        .spec()
+        .events
+        .iter()
+        .map(|(event, _)| {
+            let command = format!(
+                "{pinned} __internal native-hook --project . --agent claude --event {event} || exit 2"
+            );
+            ((*event).to_owned(), json!([adapter.hook_group(&command)]))
+        })
+        .collect();
+    fs::create_dir_all(root.join(".claude")).unwrap();
+    fs::write(
+        root.join(".claude/settings.local.json"),
+        serde_json::to_string_pretty(&json!({"hooks":hooks})).unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn box_published_hooks_with_the_pinned_binary_are_installed() {
+    let (root, context) = fixture();
+    box_project(root.path());
+    let registered = setup(&context, choice(&["box"])).unwrap().desired.unwrap();
+    box_published_claude_hooks(root.path(), &registered.binary);
+    let report = coverage(&context);
+    let claude = report["installed_integrations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["agent"] == "claude")
+        .cloned()
+        .unwrap();
+    assert_eq!(claude["status"], "installed", "{report}");
+    assert!(
+        !report["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d.as_str().is_some_and(|d| d.starts_with("Box-published"))),
+        "{report}"
+    );
+}
+
+#[test]
+fn a_fresh_worktree_adopts_its_committed_box_definition() {
+    let (root, context) = fixture();
+    box_project(root.path());
+    let registered = setup(&context, choice(&["box"])).unwrap().desired.unwrap();
+    box_published_claude_hooks(root.path(), &registered.binary);
+    let shared = definition(root.path()).unwrap();
+    let pin = local(root.path()).unwrap();
+    // A worktree carries the committed files and Box's publications, but its
+    // own review state records no registration and Box's private layer is empty.
+    let worktree = assert_fs::TempDir::new().unwrap();
+    crate::test_support::copy_fixture_directory(root.path(), worktree.path());
+    fs::remove_file(worktree.path().join(box_definition::LOCAL_PATH)).unwrap();
+    let copied = crate::review::open(worktree.path()).unwrap();
+    crate::review::update_operator_fixture(&copied, |operator| {
+        operator["integration"] = Value::Null;
+    })
+    .unwrap();
+    assert_eq!(fallback_in(&copied, "codex").unwrap(), AskFallback::Block);
+
+    let adopted = crate::review::open(worktree.path()).unwrap();
+    let current = registration(&meta(&adopted)).unwrap().unwrap();
+    assert!(current.covers("claude") && current.covers("codex"));
+    assert!(current.box_definition == registered.box_definition);
+    assert_eq!(definition(worktree.path()).unwrap(), shared);
+    assert_eq!(local(worktree.path()).unwrap(), pin);
+    assert_eq!(
+        fallback_in(&adopted, "codex").unwrap(),
+        fallback_in(&context, "codex").unwrap()
+    );
+    let report = coverage(&adopted);
+    assert_eq!(report["box_integration"]["status"], "installed", "{report}");
+    assert_eq!(report["repair_needed"], false, "{report}");
+
+    // An edited committed definition is not adopted.
+    let edited = assert_fs::TempDir::new().unwrap();
+    crate::test_support::copy_fixture_directory(worktree.path(), edited.path());
+    let copied = crate::review::open(edited.path()).unwrap();
+    crate::review::update_operator_fixture(&copied, |operator| {
+        operator["integration"] = Value::Null;
+    })
+    .unwrap();
+    fs::write(
+        edited.path().join(box_definition::PATH),
+        format!("{shared}# Acme edit\n"),
+    )
+    .unwrap();
+    let reopened = crate::review::open(edited.path()).unwrap();
+    assert!(registration(&meta(&reopened)).unwrap().is_none());
+    // The attempt is recorded once, so later requests skip it without
+    // rendering the definition again; a further edit is tried afresh.
+    let checked = |root: &Path| {
+        crate::review::storage::Store::open(root)
+            .unwrap()
+            .read_checkpoint()
+            .unwrap()
+            .operator["box_adoption_checked"]
+            .clone()
+    };
+    let first = checked(edited.path());
+    assert!(first.is_string(), "{first}");
+    let state = fs::read(edited.path().join(".shield/state/state.json")).unwrap();
+    crate::review::open(edited.path()).unwrap();
+    assert_eq!(
+        fs::read(edited.path().join(".shield/state/state.json")).unwrap(),
+        state
+    );
+    fs::write(
+        edited.path().join(box_definition::PATH),
+        format!("{shared}# Another Acme edit\n"),
+    )
+    .unwrap();
+    crate::review::open(edited.path()).unwrap();
+    let second = checked(edited.path());
+    assert!(second.is_string() && second != first, "{second}");
 }
 
 #[test]

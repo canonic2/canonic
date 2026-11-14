@@ -3,7 +3,7 @@ use super::*;
 
 fn state(project: &Project) -> Value {
     serde_json::from_slice(
-        &std::fs::read(project.root.path().join(".shield/review/state.json"))
+        &std::fs::read(project.root.path().join(".shield/state/state.json"))
             .expect("checkpoint bytes"),
     )
     .expect("checkpoint document")
@@ -44,7 +44,7 @@ fn interrupted_setup_read_only_calls_preserve_files_and_pending_publication() {
     for conflict in [false, true] {
         let (transport, project) = prepared();
         let edited = edit(&project, conflict);
-        let checkpoint = project.root.path().join(".shield/review/state.json");
+        let checkpoint = project.root.path().join(".shield/state/state.json");
         let before = std::fs::read(&checkpoint).unwrap();
         let pending = state(&project)["operator"]["integration_pending"].clone();
         assert!(pending.is_object());

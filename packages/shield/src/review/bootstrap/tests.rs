@@ -83,7 +83,7 @@ fn integration_review_forms_require_exact_human_proof_and_current_project() {
             })
             .unwrap();
         assert!(forms_reviewed_at(root.path()));
-        let path = root.path().join(".shield/review/state.json");
+        let path = root.path().join(".shield/state/state.json");
         let baseline = fs::read(&path).unwrap();
         for fault in [
             "mechanism",

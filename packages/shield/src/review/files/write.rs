@@ -56,9 +56,9 @@ fn still_as_reviewed(
     if hashes(context, base.keys().cloned())? != *base {
         return Err(Error::StaleSnapshot);
     }
-    let shield = Path::new(&context.project_root).join(".shield");
+    let root = Path::new(&context.project_root);
     for (name, texts) in reviewed.into_iter().flatten() {
-        if project_files::read_file(&shield, name)? != texts.before {
+        if project_files::read_file(root, name)? != texts.before {
             return Err(Error::StaleSnapshot);
         }
     }
@@ -119,13 +119,13 @@ pub(in crate::review) fn texts(
     names.extend(after.keys().cloned());
     names.extend(project_sources::referenced(&before.candidates["project"]).map_err(super::error)?);
     names.extend(kept.iter().cloned());
-    let shield = Path::new(&context.project_root).join(".shield");
+    let root = Path::new(&context.project_root);
     let mut texts = BTreeMap::new();
     for name in names {
         if project_sources::digest_named(&name).is_some() {
             continue;
         }
-        let now = project_files::read_file(&shield, &name)?;
+        let now = project_files::read_file(root, &name)?;
         let written = match after.get(&name) {
             Some(text) => Some(text.clone()),
             None if kept.contains(&name) => now.clone(),
@@ -158,13 +158,13 @@ pub(in crate::review) fn bundle(
         })
     };
     let sources =
-        project_sources::from_texts(&root.join(".shield"), &side).map_err(super::error)?;
+        project_sources::from_texts(&crate::layout::bundle(root), &side).map_err(super::error)?;
     Ok(json!(sources.bundle().map_err(super::error)?))
 }
 
 /// The hashes of every policy file an edit from `before` to `candidate`
 /// reads or writes, as they are now. Capture this when the edit is prepared
-/// and pass it to [`write`].
+/// and pass it to [`write()`].
 pub(in crate::review) fn base(
     context: &Context,
     before: &State,
@@ -353,11 +353,11 @@ fn publish_files(
         .map(|(name, bytes)| (name.clone(), bytes.clone()))
         .collect();
     projections::materialize(context, &changed)?;
-    let shield = Path::new(&context.project_root).join(".shield");
+    let root = Path::new(&context.project_root);
     for (name, hash) in base {
         if hash.is_some() && !files.contains_key(name) {
             crate::configuration::portable_path(name)?;
-            match std::fs::remove_file(shield.join(name)) {
+            match std::fs::remove_file(crate::layout::bundle_file(root, name)) {
                 Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
                     return Err(error.into());
                 }

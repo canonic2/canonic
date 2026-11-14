@@ -66,7 +66,7 @@ fn data(response: &Value) -> &Value {
     &response["result"]["structuredContent"]
 }
 fn proposals(project: &Project) -> usize {
-    crate::review::proposals(&project.review, None, false).unwrap()["proposals"]
+    crate::review::proposals(&project.review, None).unwrap()["proposals"]
         .as_array()
         .unwrap()
         .len()

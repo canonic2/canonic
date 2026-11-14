@@ -72,7 +72,7 @@ fn unversioned_add_selects_the_highest_engine_compatible_stable_root() {
     engine_release(&source, "3.0.0-beta.1", "*");
     let store = Store::open(root.path()).unwrap();
     let before = store.read().unwrap();
-    let state_path = root.path().join(".shield/review/state.json");
+    let state_path = root.path().join(".shield/state/state.json");
     let original = std::fs::read(&state_path).unwrap();
     let change = json!({"kind":"pack_add","reference":"acme-dependencies/acme/child"});
     let parsed = serde_json::from_value(change.clone()).unwrap();
@@ -101,7 +101,7 @@ fn unversioned_add_never_falls_back_after_integrity_failure_or_for_an_exact_pin(
     let (root, context, connection) = fixture();
     let source = dependency_registry(&root, &context, &json!([]), false);
     engine_release(&source, "2.0.0", ">9999.0.0");
-    let state_path = root.path().join(".shield/review/state.json");
+    let state_path = root.path().join(".shield/state/state.json");
     let original = std::fs::read(&state_path).unwrap();
     let exact = pack_change(
         &context,
@@ -131,7 +131,7 @@ fn unversioned_add_refuses_a_verified_artifact_with_the_wrong_identity() {
     rewrite_release(&source, "2.0.0", |pack| {
         pack["id"] = json!("acme/other");
     });
-    let state_path = root.path().join(".shield/review/state.json");
+    let state_path = root.path().join(".shield/state/state.json");
     let original = std::fs::read(&state_path).unwrap();
     let before = Store::open(root.path()).unwrap().read().unwrap();
     let change = serde_json::from_value(
@@ -165,7 +165,7 @@ fn unversioned_add_refuses_a_malformed_newest_release_instead_of_an_older_one() 
         engine_release(&source, "1.1.0", "*");
         engine_release(&source, "2.0.0", "*");
         rewrite_release(&source, "2.0.0", edit);
-        let state_path = root.path().join(".shield/review/state.json");
+        let state_path = root.path().join(".shield/state/state.json");
         let original = std::fs::read(&state_path).unwrap();
         let before = Store::open(root.path()).unwrap().read().unwrap();
         let change = serde_json::from_value(

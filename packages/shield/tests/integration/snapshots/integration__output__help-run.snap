@@ -28,6 +28,8 @@ Options:
           Folder for this project's compiled policy plans, chosen at init or MCP setup
       --cwd <CWD>
           Canonical cwd inside the enrolled project; defaults to its root
+      --config <PATH>
+          Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml
       --timeout-ms <TIMEOUT_MS>
           Deadline including preparation; cleanup has a separate short grace period [default: 5000]
       --approval-request <APPROVAL_REQUEST>

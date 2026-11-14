@@ -73,7 +73,7 @@ fn review_resources_redact_private_evidence_and_require_retained_identity() {
     ]);
     let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
     let trace = log.request("mcp", "resources/read", None, None).unwrap();
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let before = std::fs::read(&path).unwrap();
     {
         let _scope = trace.enter();

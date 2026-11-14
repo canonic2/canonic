@@ -35,7 +35,7 @@ fn portable_launcher_rename_keeps_tokens_policy_and_neighbors() {
 fn portable_launcher_copy_keeps_its_own_tokens_and_leaves_the_original_alone() {
     let (original, context) = fixture(true);
     let previous = registered(&context);
-    let checkpoint = original.path().join(".shield/review/state.json");
+    let checkpoint = original.path().join(".shield/state/state.json");
     let original_bytes = std::fs::read(&checkpoint).unwrap();
     let original_host = std::fs::read(original.path().join(".mcp.json")).unwrap();
     let copied = assert_fs::TempDir::new().unwrap();

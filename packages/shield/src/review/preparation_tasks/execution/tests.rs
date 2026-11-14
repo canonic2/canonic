@@ -428,7 +428,7 @@ fn preparation_tasks_worker_finishes_private_capture_without_creating_live_autho
     assert_eq!(state.policy_revision, before);
     assert!(state.proposals.is_empty());
     let reopened = Runtime::new(&context);
-    let checkpoint_path = root.path().join(".shield/review/state.json");
+    let checkpoint_path = root.path().join(".shield/state/state.json");
     let checkpoint = std::fs::read(&checkpoint_path).unwrap();
     let record_path = store.directory(&record.id).unwrap().join("record.json");
     let recorded = std::fs::read(&record_path).unwrap();

@@ -193,7 +193,7 @@ fn pack_updates_are_selected_bounded_read_only_and_independent_of_registry_liven
     let now = DAY_MS * 10;
     let catalog = catalog(&source, 1, &[("acme/node", "2.0.0")]);
     retain_at(&context, &source, &catalog, now).unwrap();
-    let before = fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let before = fs::read(root.path().join(".shield/state/state.json")).unwrap();
     // No registry catalog or artifact exists. Cached inspection cannot fetch it.
     for id in 1..64 {
         let mut row = state.operator["installed"][0].clone();
@@ -216,7 +216,7 @@ fn pack_updates_are_selected_bounded_read_only_and_independent_of_registry_liven
     assert_eq!(selected["availability"], "available");
     assert_eq!(selected["sources"].as_array().unwrap().len(), 1);
     assert_eq!(
-        fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        fs::read(root.path().join(".shield/state/state.json")).unwrap(),
         before
     );
     let directory = cache::directory(&context, "catalogs", false).unwrap();

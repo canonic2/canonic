@@ -40,7 +40,7 @@ fn connect(fixture: &Fixture, forms: bool) -> Transport {
 }
 fn no_grants(f: &Fixture) {
     let state: Value = serde_json::from_slice(
-        &std::fs::read(f.root.path().join(".shield/review/state.json")).unwrap(),
+        &std::fs::read(f.root.path().join(".shield/state/state.json")).unwrap(),
     )
     .unwrap();
     assert!(

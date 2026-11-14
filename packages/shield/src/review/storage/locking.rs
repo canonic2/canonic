@@ -24,6 +24,18 @@ impl Drop for Lock {
 }
 
 impl Lock {
+    /// The same held lock after its directory was renamed from `from` to
+    /// `to`: the marker is released at its new path.
+    #[cfg(not(windows))]
+    pub(super) fn moved(mut self, from: &Path, to: &Path) -> Self {
+        if let Some(path) = self.marker.take() {
+            self.marker = Some(
+                path.strip_prefix(from)
+                    .map_or(path.clone(), |relative| to.join(relative)),
+            );
+        }
+        self
+    }
     pub(super) fn release(mut self) -> io::Result<()> {
         if let Some(path) = &self.marker {
             fs::remove_dir(path)?;

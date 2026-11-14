@@ -59,7 +59,7 @@ fn receipt(context: &Context, _connection: &Connection, id: &Value) -> Value {
 fn copied_policy_workflow_proposal_continuations_require_fresh_owned_review() {
     let (original, context, connection) = fixture();
     let proposed = prepare(&context, &connection, "acme-copy-change");
-    let path = original.path().join(".shield/review/state.json");
+    let path = original.path().join(".shield/state/state.json");
     let before = fs::read(&path).unwrap();
     let copy = assert_fs::TempDir::new().unwrap();
     crate::test_support::copy_fixture_directory(original.path(), copy.path());
@@ -572,7 +572,7 @@ fn typed_stale_failures_persist_and_a_concurrent_commit_wins_reconciliation() {
         .is_none()
     );
     let raw: Value =
-        serde_json::from_slice(&fs::read(root.path().join(".shield/review/state.json")).unwrap())
+        serde_json::from_slice(&fs::read(root.path().join(".shield/state/state.json")).unwrap())
             .unwrap();
     assert_eq!(raw["proposals"][0]["status"], "stale");
     let proposed = prepare(&context, &connection, "commit-race");

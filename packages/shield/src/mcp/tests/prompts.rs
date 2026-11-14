@@ -32,7 +32,7 @@ fn installation_prompts_render_without_acquisition_or_policy_changes() {
         }
         assert_eq!(project.revision(), before);
         assert_eq!(
-            crate::review::proposals(&project.review, None, false).unwrap()["proposals"]
+            crate::review::proposals(&project.review, None).unwrap()["proposals"]
                 .as_array()
                 .unwrap()
                 .as_slice(),

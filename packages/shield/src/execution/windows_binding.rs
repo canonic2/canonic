@@ -245,13 +245,7 @@ impl LeafBinding {
         if normalized(&request.cwd).get(..3) != normalized(&system.to_string_lossy()).get(..3)
             || cwd.canonicalize()? != cwd
             || !cwd.starts_with(&request.project)
-            || cwd
-                .strip_prefix(&request.project)
-                .ok()
-                .and_then(|path| path.components().next())
-                .is_some_and(|part| {
-                    crate::location::native_name(part.as_os_str(), std::ffi::OsStr::new(".shield"))
-                })
+            || crate::layout::in_shield_files(Path::new(&request.project), &cwd)
         {
             return Err(Error::Unsupported);
         }

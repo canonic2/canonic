@@ -447,7 +447,7 @@ fn live_proposals_are_selected_explicitly_in_shield_policy_review() {
         });
     }
     let state: Value = serde_json::from_slice(
-        &std::fs::read(root.path().join(".shield/review/state.json")).expect("checkpoint"),
+        &std::fs::read(root.path().join(".shield/state/state.json")).expect("checkpoint"),
     )
     .expect("checkpoint JSON");
     for (session, expected) in [(&first, "rejected"), (&second, "applied")] {

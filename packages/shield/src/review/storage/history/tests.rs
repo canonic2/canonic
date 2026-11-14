@@ -286,7 +286,7 @@ fn windows_history_refuses_an_explicit_public_acl_inside_a_private_directory() {
 #[test]
 fn parallel_append_preserves_all_unique_records_and_leaves_authority_unchanged() {
     let (root, context) = enrolled();
-    let before = fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let before = fs::read(root.path().join(".shield/state/state.json")).unwrap();
     thread::scope(|scope| {
         for worker in 0..16 {
             let context = &context;
@@ -305,7 +305,7 @@ fn parallel_append_preserves_all_unique_records_and_leaves_authority_unchanged()
         }
     });
     assert_eq!(
-        fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        fs::read(root.path().join(".shield/state/state.json")).unwrap(),
         before
     );
     let events = Store::open(root.path())

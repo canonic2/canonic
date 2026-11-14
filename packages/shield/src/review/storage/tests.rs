@@ -258,13 +258,13 @@ fn authority_lock_writer_process() {
 fn optional_session_capture_skips_unchanged_publication() {
     let (root, context) = enrolled();
     let store = Store::open(root.path()).unwrap();
-    let before = fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let before = fs::read(root.path().join(".shield/state/state.json")).unwrap();
     OBSERVER.with(|slot| slot.set(Some(|stage| panic!("unexpected publication: {stage:?}"))));
     let result = store.update_checkpoint_if_changed(&context, &|| Ok(()), |_| Ok(false));
     OBSERVER.with(|slot| slot.set(None));
     result.unwrap();
     assert_eq!(
-        fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        fs::read(root.path().join(".shield/state/state.json")).unwrap(),
         before
     );
 }
@@ -273,6 +273,7 @@ fn optional_session_capture_skips_unchanged_publication() {
 fn updates_append_missing_local_state_ignores_to_an_existing_file() {
     let (root, context) = enrolled();
     let path = root.path().join(".shield/.gitignore");
+    // An ignore file an earlier release wrote gains the current state name.
     fs::write(&path, "review/").unwrap();
     Store::open(root.path())
         .unwrap()
@@ -280,20 +281,20 @@ fn updates_append_missing_local_state_ignores_to_an_existing_file() {
         .unwrap();
     assert_eq!(
         fs::read_to_string(&path).unwrap(),
-        "review/\ncache/\nconfig.local.yml\nrules.local.yml\nshield.local.lock\n"
+        "review/\nstate/\ncache/\nconfig.local.yml\nrules.local.yml\nshield.local.lock\n"
     );
 }
 
 #[cfg(windows)]
 #[test]
 fn windows_review_state_refuses_junction_directories() {
-    for nested in [false, true] {
+    for nested in [None, Some("state"), Some("review")] {
         let project = assert_fs::TempDir::new().unwrap();
         let outside = assert_fs::TempDir::new().unwrap();
         let shield = project.path().join(".shield");
-        let path = if nested {
+        let path = if let Some(name) = nested {
             fs::create_dir(&shield).unwrap();
-            shield.join("review")
+            shield.join(name)
         } else {
             shield
         };
@@ -337,7 +338,7 @@ fn a_busy_history_lock_without_observations_is_not_a_history_failure() {
         .update_checkpoint(&context, &|| Ok(()), |_| Ok(Value::Null))
         .unwrap();
     drop(guard);
-    let review = root.path().join(".shield/review");
+    let review = root.path().join(".shield/state");
     assert!(!names(&review).iter().any(|name| {
         Path::new(name)
             .extension()
@@ -351,7 +352,7 @@ fn a_busy_history_lock_without_observations_is_not_a_history_failure() {
 fn writes_remove_leftover_temporaries_that_no_writer_owns() {
     let (root, context) = enrolled();
     let store = Store::open(root.path()).unwrap();
-    let review = root.path().join(".shield/review");
+    let review = root.path().join(".shield/state");
     let dead = super::exited_pid();
     // The writer lock serializes state writers, so every state leftover goes.
     let removed = [
@@ -386,7 +387,7 @@ fn incomplete_state_and_proposal_records_are_refused_without_mutation() {
     crate::review::tests::propose(&context, &crate::review::tests::input("read"), &|| Ok(()))
         .unwrap();
     let store = Store::open(root.path()).unwrap();
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let original = fs::read(&path).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&original).unwrap();
     for (proposal, fields) in [
@@ -519,7 +520,7 @@ fn mark(context: &Context) -> Result<Value, Error> {
 
 /// The committed checkpoint's marker, read without the writer lock.
 fn marked(root: &Path) -> bool {
-    let bytes = fs::read(root.join(".shield/review/state.json")).unwrap();
+    let bytes = fs::read(root.join(".shield/state/state.json")).unwrap();
     serde_json::from_slice::<Value>(&bytes).unwrap()["operator"]["acme_crash_marker"] == true
 }
 
@@ -692,7 +693,7 @@ fn publication_crashes_keep_complete_checkpoints() {
         Stage::Complete,
     ] {
         let (root, context) = enrolled();
-        let state_path = root.path().join(".shield/review/state.json");
+        let state_path = root.path().join(".shield/state/state.json");
         let before = fs::read(&state_path).unwrap();
         let mut child = OwnedChild(
             Command::new(std::env::current_exe().unwrap())
@@ -740,7 +741,7 @@ fn publication_crashes_keep_complete_checkpoints() {
         mark(&context).unwrap();
         assert!(marked(root.path()));
         assert!(
-            !names(&root.path().join(".shield/review"))
+            !names(&root.path().join(".shield/state"))
                 .iter()
                 .any(|name| name.starts_with(".state-")),
             "killed writer's temporary remains after {stage:?}"
@@ -758,4 +759,39 @@ fn reconnect(context: &Context, stage: Stage) {
     let connection = crate::review::mcp::Connection::enrolled(&context).unwrap();
     let status = crate::review::mcp::call(&context, &connection, "status", &json!({}), &|| Ok(()));
     assert!(status["error"].is_null(), "{status}");
+}
+
+/// The earlier state folder is renamed only by the holder of its writer lock:
+/// while another writer holds it the folder keeps serving under its earlier
+/// name, and the next open after the writer finishes converts it.
+#[cfg(unix)]
+#[test]
+fn earlier_state_is_converted_only_under_its_writer_lock() {
+    let (root, context) = enrolled();
+    let earlier = root.path().join(".shield/review");
+    fs::rename(root.path().join(".shield/state"), &earlier).unwrap();
+    let held = locking::acquire(&earlier, &|| Ok(())).unwrap();
+    let busy = Store::open(root.path()).unwrap();
+    assert_eq!(busy.directory, earlier.canonicalize().unwrap());
+    assert!(!root.path().join(".shield/state").exists());
+    held.release().unwrap();
+
+    let converted = Store::open(root.path()).unwrap();
+    assert!(converted.directory.ends_with(".shield/state"));
+    assert!(!earlier.exists());
+    // The lock's marker left with the converting writer.
+    assert!(!root.path().join(".shield/state/state.lock").exists());
+    converted
+        .read_checkpoint()
+        .unwrap()
+        .check(&context)
+        .unwrap();
+
+    // A link at the earlier name is refused, never renamed into place.
+    let linked = assert_fs::TempDir::new().unwrap();
+    let other = assert_fs::TempDir::new().unwrap();
+    fs::create_dir(linked.path().join(".shield")).unwrap();
+    std::os::unix::fs::symlink(other.path(), linked.path().join(".shield/review")).unwrap();
+    assert!(Store::open(linked.path()).is_err());
+    assert!(!linked.path().join(".shield/state").exists());
 }

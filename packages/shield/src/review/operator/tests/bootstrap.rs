@@ -10,7 +10,7 @@ fn source(root: &Path) -> Vec<u8> {
     let bundle = Bundle::capture(config, &[], None).expect("source policy");
     review::mcp::initialize_fixture(root, &bundle);
     fs::write(root.join(".shield/config.yml"), config).expect("project configuration");
-    fs::read(root.join(".shield/review/state.json")).expect("source checkpoint")
+    fs::read(root.join(".shield/state/state.json")).expect("source checkpoint")
 }
 
 fn diagnostic(root: &Path, command: &str) -> Value {
@@ -50,7 +50,7 @@ fn relocation_cli_copy_and_config_only_child_have_independent_runtime_state() {
     let bytes = source(&original);
     let copied = base.join("copy");
     source(&copied);
-    fs::write(copied.join(".shield/review/state.json"), &bytes).unwrap();
+    fs::write(copied.join(".shield/state/state.json"), &bytes).unwrap();
     let copy_report = diagnostic(&copied, "status");
     assert_eq!(copy_report["project_root"], json!(copied));
     assert!(review::open(&copied).is_ok());
@@ -67,7 +67,7 @@ fn relocation_cli_copy_and_config_only_child_have_independent_runtime_state() {
     let report = diagnostic(&child, "doctor");
     assert_eq!(report["project_root"], json!(child));
     assert!(report["policy_files"]["digest"].is_string(), "{report}");
-    assert!(child.join(".shield/review/state.json").is_file());
+    assert!(child.join(".shield/state/state.json").is_file());
     assert_ne!(report["project_id"], copy_report["project_id"]);
     assert_ne!(
         review::open(&original).unwrap().project_id,

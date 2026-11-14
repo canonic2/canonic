@@ -64,6 +64,7 @@ fn google_adapters_reach_policy_and_protected_paths_with_native_replies() {
         }
         for (path, expected) in [
             (root.path().join("acme.txt"), allowed),
+            (root.path().join(".shield/state/state.json"), "deny"),
             (root.path().join(".shield/review/state.json"), "deny"),
         ] {
             let args = if agent == "gemini" {
@@ -196,7 +197,7 @@ fn google_known_effectful_tools_cannot_bypass_policy() {
             "agy",
             root.path(),
             tool,
-            json!({field:root.path().join(".shield/review/state.json")}),
+            json!({field:root.path().join(".shield/state/state.json")}),
         );
         let response = translate_for(
             root.path(),

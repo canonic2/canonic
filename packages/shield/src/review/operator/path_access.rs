@@ -19,7 +19,7 @@ pub(super) fn configure(context: &Context, json_mode: bool) -> Result<Value, Err
     let before = crate::review::settings::path_access(&state.settings);
     tty.note(
         "Protected files",
-        "Shield's policy files, .shield/review, compiled caches, the .shield folder and .shield/.gitignore stay protected whatever you choose here.",
+        "Shield's policy files, .shield/state, compiled caches, the .shield folder and .shield/.gitignore stay protected whatever you choose here.",
     )?;
     let after = chosen(before, ask(&mut tty, before)?)?;
     let prepared = Prepared::from_current(context, before, after);

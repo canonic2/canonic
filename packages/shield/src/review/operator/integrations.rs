@@ -41,8 +41,8 @@ pub(super) fn initialize_in_cache(
     let root = start.canonicalize()?;
     // The policy files are the policy: a folder that has them, such as a clone,
     // worktree or copy, is already initialized and needs no review.
-    if root.join(".shield/config.yml").exists() {
-        let existing = root.join(".shield/review/state.json").exists();
+    if crate::layout::init_destination(&root).exists() {
+        let existing = crate::layout::state(&root).join("state.json").exists();
         let context = review::open(&root)?;
         if existing && choice.is_some_and(|c| !matches!(c, IntegrationChoice::Keep)) {
             return Err(Error::Invalid(
@@ -81,7 +81,7 @@ fn write_missing_locks(context: &Context) -> Result<(), Error> {
     let meta = crate::review::project::metadata(&state);
     let missing: std::collections::BTreeMap<_, _> = locks(&state.candidates["project"], &meta)?
         .into_iter()
-        .filter(|(name, _)| !root.join(".shield").join(name).exists())
+        .filter(|(name, _)| !crate::layout::bundle_file(root, name).exists())
         .collect();
     if !missing.is_empty() {
         materialize(context, &missing)?;

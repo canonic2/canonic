@@ -202,7 +202,7 @@ fn applying_a_proposal_writes_exactly_the_reviewed_texts() {
     let (id, files) = proposed(&context, "acme-read");
     // The proposal stores texts, not a retained copy of the policy.
     let raw: Value = serde_json::from_slice(
-        &std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        &std::fs::read(root.path().join(".shield/state/state.json")).unwrap(),
     )
     .unwrap();
     let stored = raw["proposals"]
@@ -238,7 +238,7 @@ fn a_file_changed_after_review_refuses_the_proposal() {
 fn a_proposal_an_earlier_release_stored_closes_as_stale() {
     let (root, context) = crate::review::tests::enrolled();
     let (id, _) = proposed(&context, "acme-read");
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let mut raw: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     for row in raw["proposals"].as_array_mut().unwrap() {
         let fields = row.as_object_mut().unwrap();

@@ -216,7 +216,7 @@ mod tests {
         let local = std::fs::read_to_string(root.path().join(".shield/config.local.yml")).unwrap();
         assert!(local.contains("enforcement: paused"), "{local}");
         let stored: Value = serde_json::from_slice(
-            &std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+            &std::fs::read(root.path().join(".shield/state/state.json")).unwrap(),
         )
         .unwrap();
         assert_ne!(stored["enforcement"]["enabled"], false, "{stored}");
@@ -246,7 +246,7 @@ mod tests {
         assert_eq!(before.operator, after.operator);
         assert_eq!(before.read_requests.len(), after.read_requests.len());
         assert_eq!(before.run_requests.len(), after.run_requests.len());
-        let state_path = root.path().join(".shield/review/state.json");
+        let state_path = root.path().join(".shield/state/state.json");
         let unchanged = std::fs::read(&state_path).unwrap();
         assert_eq!(
             Prepared::new(&context, true)
@@ -262,7 +262,7 @@ mod tests {
     #[test]
     fn shield_mode_defaults_to_enabled_but_malformed_state_cannot_disable_it() {
         let (root, context) = fixture();
-        let path = root.path().join(".shield/review/state.json");
+        let path = root.path().join(".shield/state/state.json");
         let mut value: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         value.as_object_mut().unwrap().remove("enforcement");
         std::fs::write(&path, value.to_string()).unwrap();

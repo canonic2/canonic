@@ -47,6 +47,9 @@ Options:
       --reset-tool-permissions
           Start from current tool permission defaults instead of the saved selection
 
+      --config <PATH>
+          Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml
+
       --dry-run
           Show the review without writing anything
 

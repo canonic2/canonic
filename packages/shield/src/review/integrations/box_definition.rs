@@ -191,6 +191,37 @@ pub(in crate::review) fn render(binary: &Path, approved: &[String]) -> Result<De
     }
 }
 
+/// The committed shared definition when it is exactly what `binary` renders,
+/// with the approved tools it names. The private pin may be absent, as in a
+/// fresh checkout, but an existing pin must be the one `binary` renders.
+pub(in crate::review) fn committed(
+    root: &Path,
+    binary: &Path,
+) -> Result<Option<(Definition, Vec<String>)>, Error> {
+    let Some(shared) = files::read(root, PATH)? else {
+        return Ok(None);
+    };
+    let Ok(parsed) = crate::policy::parse::<serde_json::Value>(&shared) else {
+        return Ok(None);
+    };
+    let approved: Vec<String> = parsed["permissions"]["tools"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(_, decision)| decision.as_str() == Some("allow"))
+        .map(|(name, _)| name.clone())
+        .collect();
+    let Ok(rendered) = render(binary, &approved) else {
+        return Ok(None);
+    };
+    if rendered.shared != shared
+        || files::read(root, LOCAL_PATH)?.is_some_and(|local| local != rendered.local)
+    {
+        return Ok(None);
+    }
+    Ok(Some((rendered, approved)))
+}
+
 /// Plan both definition files and return the texts Shield then owns.
 ///
 /// `binary` is `None` when removing. Owned files are deleted only while they
@@ -231,6 +262,11 @@ pub(in crate::review) fn prepare(
         }
         return Ok(None);
     };
+    if !crate::layout::launch_args(root)?.is_empty() {
+        return Err(Error::Invalid(
+            "the Box definition selects the default configuration; move it to .config/shield/ instead of --config, or set the agents up directly",
+        ));
+    }
     let unchanged = (0..2).all(|i| current[i].as_deref() == owned.map(|o| o[i]));
     // Setting up other agents keeps an edited or orphaned definition as recorded.
     if !selected && (!unchanged || !box_project(root)) {

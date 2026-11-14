@@ -12,6 +12,8 @@ mod history;
 pub(crate) mod hook_approval;
 mod inspection;
 pub(crate) mod integrations;
+#[cfg(test)]
+mod layout_tests;
 pub(crate) mod mcp;
 pub(crate) mod mode;
 mod model;
@@ -514,7 +516,7 @@ fn inspect_metadata(
 }
 
 #[cfg(test)]
-pub(crate) fn proposals(context: &Context, id: Option<&str>, reveal: bool) -> Result<Value, Error> {
+pub(crate) fn proposals(context: &Context, id: Option<&str>) -> Result<Value, Error> {
     let store = Store::open(Path::new(&context.project_root))?;
     let mut state = store.read_checkpoint()?;
     state.check(context)?;
@@ -528,7 +530,7 @@ pub(crate) fn proposals(context: &Context, id: Option<&str>, reveal: bool) -> Re
         // approval arguments bind and describe the captured candidate itself,
         // exactly as the proposal reply and apply do.
         store.hydrate_proposal(proposal)?;
-        let mut result = proposal.public(reveal);
+        let mut result = proposal.public();
         result["authorization_events"] = json!(
             state
                 .authorization_events
@@ -547,47 +549,36 @@ pub(crate) fn transition(
     context: &Context,
     id: &str,
     action: &str,
-    reason: Option<&str>,
     checkpoint: Checkpoint<'_>,
 ) -> Result<Value, Error> {
-    if reason.is_some_and(|reason| reason.len() > 4096) {
-        return Err(policy::Error::Limit.into());
-    }
     let store = Store::open(Path::new(&context.project_root))?;
-    if !matches!(action, "reject" | "withdraw") {
-        return Err(Error::Invalid("invalid proposal transition"));
-    }
-    if action == "reject" {
-        return admin::policy::Reject::new(context, id, reason)?.commit(context, checkpoint);
+    match action {
+        "reject" => return admin::policy::Reject::new(context, id, None)?.commit(context, checkpoint),
+        "withdraw" => {}
+        _ => return Err(Error::Invalid("invalid proposal transition")),
     }
     store.update_checkpoint(context, checkpoint, |state| {
         let index = state.proposals.iter().position(|p| p.id == id).ok_or(Error::Missing)?;
         store.hydrate_proposal(&mut state.proposals[index])?;
         let proposal = &state.proposals[index];
-        if action == "withdraw" && context.surface == "mcp" {
+        if context.surface == "mcp" {
             if !proposal_lifecycle::owns(proposal, context) { return Err(Error::ApprovalRequired); }
-            if proposal.status == "withdrawn" { return Ok(proposal.public(false)); }
+            if proposal.status == "withdrawn" { return Ok(proposal.public()); }
         }
         if proposal.status != "pending" { return Err(Error::Invalid("proposal is terminal or stale")); }
         if proposal.policy_revision != state.policy_revision {
             state.proposals[index].status = "stale".into();
             let event = state.event("proposal_stale", context, json!({"proposal_id":id}), json!({}), json!({"policy_revision":state.policy_revision}));
             state.record(event);
-            return Ok(json!({"schema_version":1,"error":{"code":"stale-proposal"},"proposal":state.proposals[index].public(false)}));
+            return Ok(json!({"schema_version":1,"error":{"code":"stale-proposal"},"proposal":state.proposals[index].public()}));
         }
-        let (status, kind) = if action == "reject" {
-            ("rejected", "proposal_rejected")
-        } else {
-            ("withdrawn", "proposal_withdrawn")
-        };
-        state.proposals[index].status = status.into();
-        let operator = (action == "reject").then(|| json!({"operator_id":null,"display_name":null,"mechanism":"operator-cli"}));
-        state.proposals[index].operator.clone_from(&operator);
-        let mut event = state.event(kind, context, json!({"proposal_id":id}), json!({"operator_reason":reason}),
+        state.proposals[index].status = "withdrawn".into();
+        state.proposals[index].operator = None;
+        let mut event = state.event("proposal_withdrawn", context, json!({"proposal_id":id}), json!({"operator_reason":null}),
             json!({"policy_revision":state.policy_revision}));
-        event["operator"] = json!(operator);
+        event["operator"] = Value::Null;
         state.record(event);
-        Ok(state.proposals[index].public(false))
+        Ok(state.proposals[index].public())
     })
 }
 

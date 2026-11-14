@@ -341,9 +341,7 @@ impl Plan {
                     if key.get(1..).is_some_and(|k| k.starts_with(b"graphql:")) {
                         let model: serde_json::Value =
                             serde_json::from_slice(row).map_err(|_| Error::Syntax)?;
-                        crate::graphql::validate(
-                            &serde_json::json!({"carrier":"gh-api","operation":"query","selection":model}),
-                        )?;
+                        crate::graphql::validate_model(&model)?;
                     } else {
                         patterns::load(row)?;
                     }

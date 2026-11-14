@@ -353,7 +353,7 @@ pub(super) fn run(root: &Path, args: &[&str], steps: &[(&str, &[u8])], expected:
                 || (args.first() == Some(&"__release-probe") && args.get(2) == Some(&"init"))
             {
                 assert!(
-                    !root.join(".shield/review/state.json").exists(),
+                    !root.join(".shield/state/state.json").exists(),
                     "no enrollment before explicit consent"
                 );
             }
@@ -423,7 +423,7 @@ fn windows_release_binary_runs_from_owned_installation() {
         &[("Review and confirm", b"2\r")],
         0,
     );
-    let state = project.path().join(".shield/review/state.json");
+    let state = project.path().join(".shield/state/state.json");
     let before = fs::read(&state).unwrap();
     // Replace only after the running CLI and its owned console have exited.
     fs::copy(source, &installed).unwrap();
@@ -478,7 +478,7 @@ fn windows_powershell_native_argument_contract_matches_literal_preview() {
 fn windows_agent_setup_repair_and_removal_preserve_policy_and_other_settings() {
     let root = assert_fs::TempDir::new().unwrap();
     enroll(root.path(), false);
-    let state_path = root.path().join(".shield/review/state.json");
+    let state_path = root.path().join(".shield/state/state.json");
     let before: serde_json::Value =
         serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
     fs::create_dir(root.path().join(".claude")).unwrap();
@@ -537,16 +537,16 @@ fn windows_console_break_cancels_enrollment_and_restores_modes() {
         &[("Review and confirm", CONTROL_BREAK)],
         130,
     );
-    assert!(!root.path().join(".shield/review/state.json").exists());
+    assert!(!root.path().join(".shield/state/state.json").exists());
 }
 
 #[test]
 fn windows_enrollment_requires_consent_and_restores_console() {
     let root = assert_fs::TempDir::new().unwrap();
     enroll(root.path(), true);
-    assert!(!root.path().join(".shield/review/state.json").exists());
+    assert!(!root.path().join(".shield/state/state.json").exists());
     enroll(root.path(), false);
-    assert!(root.path().join(".shield/review/state.json").is_file());
+    assert!(root.path().join(".shield/state/state.json").is_file());
     let status = Command::new(assert_cmd::cargo::cargo_bin!("shield"))
         .args(["status", "--json", "--no-debug-log", "--project"])
         .arg(root.path())

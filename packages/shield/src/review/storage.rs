@@ -116,7 +116,9 @@ impl Store {
     pub(in crate::review) fn root(&self) -> &str {
         &self.root
     }
-    fn location(project: &Path) -> Result<Self, Error> {
+    /// `convert` renames the earlier `.shield/review` state directory to
+    /// `.shield/state`; read-only inspection locates whichever exists.
+    fn location_with(project: &Path, convert: bool) -> Result<Self, Error> {
         let root = project.canonicalize()?;
         if !root.is_dir() {
             return Err(Error::Invalid("project must be a directory"));
@@ -125,24 +127,78 @@ impl Store {
             .to_str()
             .ok_or(Error::Invalid("project must be UTF-8"))?
             .to_owned();
-        let directory = root.join(".shield").join("review");
-        for p in [root.join(".shield"), directory.clone()] {
+        // Both state names are checked before the earlier one is renamed, so
+        // a link or file there is never moved into place as state.
+        let [current, earlier] = crate::layout::state_directories(&root);
+        for p in [root.join(crate::layout::SHIELD), current, earlier] {
             match fs::symlink_metadata(&p) {
                 Ok(m) if m.file_type().is_symlink() || !m.is_dir() => {
-                    return Err(Error::Invalid(
-                        "review directories cannot be links or files",
-                    ));
+                    return Err(Error::Invalid("state directories cannot be links or files"));
                 }
                 Ok(_) => {}
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                 Err(e) => return Err(e.into()),
             }
         }
+        if convert {
+            Self::convert_state_name(&root)?;
+        }
         Ok(Self {
-            directory,
+            directory: crate::layout::state(&root),
             root: root_text,
             writer_owned: Mutex::new(None),
         })
+    }
+    /// Rename the earlier `.shield/review` state directory to `.shield/state`
+    /// once, as its owning writer: under the earlier directory's writer lock,
+    /// after checking again that no other process converted it, then add
+    /// `state/` to `.shield/.gitignore`. A busy lock leaves the earlier name
+    /// serving until a later open. Windows refuses to rename a directory while
+    /// any process has a file open inside it, which excludes other writers, so
+    /// there the lock is released before the rename.
+    fn convert_state_name(root: &Path) -> Result<(), Error> {
+        let [current, earlier] = crate::layout::state_directories(root);
+        let real_directory = |path: &Path| {
+            fs::symlink_metadata(path).is_ok_and(|m| m.is_dir() && !m.file_type().is_symlink())
+        };
+        if fs::symlink_metadata(&current).is_ok() || !real_directory(&earlier) {
+            return Ok(());
+        }
+        let lock = match locking::acquire(&earlier, &|| Ok(())) {
+            Ok(lock) => lock,
+            Err(Error::Locked) => return Ok(()),
+            // Another process renamed the folder while this one waited for it.
+            Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(());
+            }
+            Err(error) => return Err(error),
+        };
+        if fs::symlink_metadata(&current).is_ok() || !real_directory(&earlier) {
+            lock.release()?;
+            return Ok(());
+        }
+        #[cfg(windows)]
+        let renamed = {
+            lock.release()?;
+            fs::rename(&earlier, &current)
+        };
+        #[cfg(not(windows))]
+        let renamed = match fs::rename(&earlier, &current) {
+            // The lock's marker moved with the directory.
+            Ok(()) => lock.moved(&earlier, &current).release(),
+            Err(error) => {
+                lock.release()?;
+                Err(error)
+            }
+        };
+        if renamed.is_ok() {
+            ignore_lines(&root.join(".shield/.gitignore"), LOCAL_STATE_IGNORE);
+        }
+        // A failed rename keeps serving the earlier name; a later open retries.
+        Ok(())
+    }
+    fn location(project: &Path) -> Result<Self, Error> {
+        Self::location_with(project, true)
     }
     /// Open this folder's runtime state. A folder whose policy files arrived
     /// by clone, worktree or copy gets empty runtime state on first use: the
@@ -150,7 +206,8 @@ impl Store {
     pub(crate) fn open(project: &Path) -> Result<Self, Error> {
         let store = Self::location(project)?;
         if !store.checkpoint_present()? {
-            if Path::new(&store.root).join(".shield/config.yml").is_file() {
+            let selection = crate::layout::select(Path::new(&store.root))?;
+            if selection.source != crate::layout::Source::Absent && selection.file.is_file() {
                 match Self::initialize_runtime(project) {
                     Ok(_) | Err(Error::Invalid("review project already enrolled")) => {}
                     Err(error) => return Err(error),
@@ -167,7 +224,7 @@ impl Store {
     /// Locate retained state for inspection without adopting source-only
     /// consent, repairing a checkout epoch or publishing any derived files.
     pub(crate) fn inspect(project: &Path) -> Result<Self, Error> {
-        let store = Self::location(project)?;
+        let store = Self::location_with(project, false)?;
         if !store.directory.is_dir() {
             return Err(Error::Missing);
         }
@@ -290,7 +347,7 @@ impl Store {
     /// it. Files that cannot be read are still the folder's policy: requests
     /// ask with the problem, so the state starts from an empty candidate.
     fn initialize_runtime(project: &Path) -> Result<Value, Error> {
-        let config = project.join(".shield/config.yml");
+        let config = crate::layout::config_file(project);
         let candidate = match super::integrations::project_sources::capture(&config) {
             Ok(bundle) => json!(bundle),
             Err(_) => json!(crate::configuration::Bundle::capture(
@@ -661,8 +718,7 @@ impl Store {
     /// policy files; without them they stay and keep applying.
     fn convertible(&self, state: &State) -> bool {
         state.earlier_format
-            || (super::settings::held(state)
-                && Path::new(&self.root).join(".shield/config.yml").is_file())
+            || (super::settings::held(state) && crate::layout::configured(Path::new(&self.root)))
     }
 
     // Current enrollment, authorization and source identities, without preparing policy.
@@ -897,52 +953,16 @@ impl Store {
         self.ignore_local_state();
         Ok(result)
     }
-    /// Keeps review state and the in-project cache out of version control, so
-    /// committing .shield shares only its policy files. Never replaces a file.
+    /// Keeps runtime state, the in-project cache and the selected bundle's
+    /// local files out of version control, so committing a bundle shares only
+    /// its policy files. Never replaces a file.
     fn ignore_local_state(&self) {
-        let Some(path) = self
-            .directory
-            .parent()
-            .map(|shield| shield.join(".gitignore"))
-        else {
-            return;
-        };
-        match fs::symlink_metadata(&path) {
-            Err(_) => {
-                let _ = fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(&path)
-                    .and_then(|mut file| std::io::Write::write_all(&mut file, LOCAL_STATE_IGNORE));
-            }
-            // An existing regular file keeps its lines; missing entries are appended.
-            Ok(metadata) if metadata.is_file() => {
-                let Ok(existing) = fs::read_to_string(&path) else {
-                    return;
-                };
-                let missing: String = String::from_utf8_lossy(LOCAL_STATE_IGNORE)
-                    .lines()
-                    .filter(|line| !existing.lines().any(|l| l.trim() == *line))
-                    .flat_map(|line| [line, "\n"])
-                    .collect();
-                if !missing.is_empty() {
-                    let separator = if existing.is_empty() || existing.ends_with('\n') {
-                        ""
-                    } else {
-                        "\n"
-                    };
-                    let _ = fs::OpenOptions::new()
-                        .append(true)
-                        .open(&path)
-                        .and_then(|mut file| {
-                            std::io::Write::write_all(
-                                &mut file,
-                                format!("{separator}{missing}").as_bytes(),
-                            )
-                        });
-                }
-            }
-            Ok(_) => {}
+        if let Some(shield) = self.directory.parent() {
+            ignore_lines(&shield.join(".gitignore"), LOCAL_STATE_IGNORE);
+        }
+        let bundle = crate::layout::bundle(Path::new(&self.root));
+        if bundle != Path::new(&self.root).join(crate::layout::SHIELD) && bundle.is_dir() {
+            ignore_lines(&bundle.join(".gitignore"), BUNDLE_IGNORE);
         }
     }
     pub(in crate::review) fn inspect_checkpoint<T>(
@@ -1063,7 +1083,50 @@ impl Store {
 pub(in crate::review) mod history;
 pub(in crate::review) mod objects;
 const LOCAL_STATE_IGNORE: &[u8] =
-    b"review/\ncache/\nconfig.local.yml\nrules.local.yml\nshield.local.lock\n";
+    b"state/\ncache/\nconfig.local.yml\nrules.local.yml\nshield.local.lock\n";
+/// The local files of a bundle outside `.shield/`, such as `.config/shield/`.
+const BUNDLE_IGNORE: &[u8] = b"config.local.yml\nrules.local.yml\nshield.local.lock\n";
+
+/// Create `path` with `lines`, or append the lines an existing regular file
+/// lacks. Links and other entries are left alone; failures are best effort.
+fn ignore_lines(path: &Path, lines: &[u8]) {
+    match fs::symlink_metadata(path) {
+        Err(_) => {
+            let _ = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+                .and_then(|mut file| std::io::Write::write_all(&mut file, lines));
+        }
+        Ok(metadata) if metadata.is_file() => {
+            let Ok(existing) = fs::read_to_string(path) else {
+                return;
+            };
+            let missing: String = String::from_utf8_lossy(lines)
+                .lines()
+                .filter(|line| !existing.lines().any(|l| l.trim() == *line))
+                .flat_map(|line| [line, "\n"])
+                .collect();
+            if !missing.is_empty() {
+                let separator = if existing.is_empty() || existing.ends_with('\n') {
+                    ""
+                } else {
+                    "\n"
+                };
+                let _ = fs::OpenOptions::new()
+                    .append(true)
+                    .open(path)
+                    .and_then(|mut file| {
+                        std::io::Write::write_all(
+                            &mut file,
+                            format!("{separator}{missing}").as_bytes(),
+                        )
+                    });
+            }
+        }
+        Ok(_) => {}
+    }
+}
 
 pub(in crate::review) fn private_directory(path: &Path) -> Result<(), Error> {
     match fs::create_dir(path) {

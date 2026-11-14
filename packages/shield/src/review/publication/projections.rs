@@ -196,10 +196,11 @@ pub(in crate::review) fn materialize(
     context: &Context,
     files: &BTreeMap<String, String>,
 ) -> Result<(), Error> {
-    let directory = root(context).join(".shield");
+    let project = root(context);
+    let directory = crate::layout::bundle(&project);
     for (name, bytes) in files {
         crate::configuration::portable_path(name)?;
-        let path = directory.join(name);
+        let path = crate::layout::bundle_file(&project, name);
         let parent = path.parent().ok_or(Error::Invalid("projection parent"))?;
         check_parent(&directory, parent)?;
         fs::create_dir_all(parent)?;
@@ -261,10 +262,11 @@ pub(in crate::review) fn projection_hashes(
     files: &BTreeMap<String, String>,
 ) -> Result<Value, Error> {
     let mut hashes = serde_json::Map::new();
-    let directory = root(context).join(".shield");
+    let project = root(context);
+    let directory = crate::layout::bundle(&project);
     for name in files.keys() {
         crate::configuration::portable_path(name)?;
-        let path = directory.join(name);
+        let path = crate::layout::bundle_file(&project, name);
         check_parent(
             &directory,
             path.parent().ok_or(Error::Invalid("projection parent"))?,

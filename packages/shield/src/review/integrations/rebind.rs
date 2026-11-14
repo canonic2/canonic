@@ -28,7 +28,7 @@ fn resume_inner(context: &Context, initial: &State) -> Result<(), Error> {
         // The owner is a policy revision, which only the files give.
         if matches!(
             plan.scope_reason.as_deref(),
-            Some(REASON | portable::REASON)
+            Some(REASON | portable::REASON | portable::ADOPT_REASON)
         ) && let Some(owner) = activation::current_owner(
             &Store::open(Path::new(&context.project_root))?.read_following_files()?,
         ) {
@@ -39,12 +39,11 @@ fn resume_inner(context: &Context, initial: &State) -> Result<(), Error> {
         }
         return Ok(());
     }
+    if registration(&initial.operator)?.is_none() {
+        return adopt_box(context, initial);
+    }
     let migrate_native = portable::needed(initial);
-    // Nothing to rebind before an agent is registered, as while a folder is
-    // still being initialized.
-    if registration(&initial.operator)?.is_none()
-        || (initial.operator["mcp_rebind_pending"] != true && !migrate_native)
-    {
+    if initial.operator["mcp_rebind_pending"] != true && !migrate_native {
         return Ok(());
     }
     initial.check_operations()?;
@@ -121,6 +120,57 @@ fn resume_inner(context: &Context, initial: &State) -> Result<(), Error> {
         &previous.binary_digest,
         migrate_native,
         native_retry,
+    )
+}
+
+/// Record the committed Box definition of a folder that has no registration,
+/// such as a fresh worktree or clone, so its agents are set up as the
+/// definition says. A folder without one, or with an edited one, is unchanged.
+fn adopt_box(context: &Context, initial: &State) -> Result<(), Error> {
+    let root = Path::new(&context.project_root);
+    let executable = std::env::current_exe()?.canonicalize()?;
+    // An attempt that did not adopt these exact files with this executable is
+    // not repeated on every request; a change to either tries again.
+    let Some(key) = portable::adoption_key(root, &executable) else {
+        return Ok(());
+    };
+    if initial.operator[ADOPTION_CHECKED] == key.as_str() {
+        return Ok(());
+    }
+    match portable::adopt_box(root, initial, &executable) {
+        Ok(Some(_)) => {}
+        outcome => {
+            record_adoption_checked(context, &key)?;
+            return outcome.map(|_| ());
+        }
+    }
+    initial.check_operations()?;
+    let guard = crate::review::publication::ProjectionLease::acquire(root)?;
+    guard.check(context)?;
+    let store = Store::open(root)?;
+    let state = store.read_following_files()?;
+    state.check(context)?;
+    state.check_operations()?;
+    match portable::adopt_box(root, &state, &executable)? {
+        Some(plan) => publish(context, &store, &state, &plan, &guard),
+        None => Ok(()),
+    }
+}
+
+/// Operator metadata naming the last Box adoption attempt that adopted nothing.
+const ADOPTION_CHECKED: &str = "box_adoption_checked";
+
+fn record_adoption_checked(context: &Context, key: &str) -> Result<(), Error> {
+    Store::open(Path::new(&context.project_root))?.update_checkpoint_if_changed(
+        context,
+        &|| Ok(()),
+        |state| {
+            if state.operator[ADOPTION_CHECKED] == key {
+                return Ok(false);
+            }
+            state.operator[ADOPTION_CHECKED] = json!(key);
+            Ok(true)
+        },
     )
 }
 
@@ -233,7 +283,12 @@ fn prepare(
     let Some(actual) = adapter.connection(&source, alias)? else {
         return Ok(None);
     };
-    if !known_launcher(&actual, &previous, &state.operator["portable_launch_roots"]) {
+    if !known_launcher(
+        &actual,
+        &previous,
+        &state.operator["portable_launch_roots"],
+        root,
+    ) {
         return Ok(None);
     }
     let binding = Binding::new(connection)?;
@@ -283,12 +338,22 @@ fn prepare(
     Ok(Some(plan))
 }
 
-fn known_launcher(transport: &Transport, registration: &Registration, roots: &Value) -> bool {
+fn known_launcher(
+    transport: &Transport,
+    registration: &Registration,
+    roots: &Value,
+    root: &Path,
+) -> bool {
     let Transport::Stdio { command, args, env } = transport else {
         return false;
     };
-    if args.len() != 6
-        || args[0] != "__internal"
+    // Launchers carry the project's own `--config` selection after the token,
+    // and only that one.
+    let config = crate::layout::launch_args(root).unwrap_or_default();
+    if args.len() < 6 || args[6..] != config[..] {
+        return false;
+    }
+    if args[0] != "__internal"
         || args[1] != "mcp-connect"
         || args[2] != "--project"
         || args[4] != "--token"

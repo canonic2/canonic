@@ -39,7 +39,7 @@ fn parity_admin_protection_answers_remain_bound_to_the_pre_question_snapshot() {
         before,
         review::path_access::PathAccess::default(),
     );
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let bytes = std::fs::read(&path).unwrap();
     assert_eq!(
         unchanged.commit(&context, &|| Ok(())).unwrap()["changed"],
@@ -442,7 +442,7 @@ fn parity_admin_interrupted_cross_project_setup_hands_off_target_recovery() {
     for action in ["review", "cancel"] {
         let (source, context) = enrolled();
         let (target, target_context) = enrolled();
-        let source_checkpoint = source.path().join(".shield/review/state.json");
+        let source_checkpoint = source.path().join(".shield/state/state.json");
         let before_source = std::fs::read(&source_checkpoint).unwrap();
         let before_policy = project::checkpoint(&target_context)
             .unwrap()

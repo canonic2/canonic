@@ -47,7 +47,7 @@ separate problems with their own recovery.
 
 New launch entries resolve `shield` from PATH and the project from the agent's
 session folder. Restart an older agent to load the current binary. Do not delete
-`.shield/review/` or edit project IDs after a move.
+`.shield/state/` or edit project IDs after a move.
 
 ## The agent does not seem to use Shield
 
@@ -97,8 +97,8 @@ process that the agent starts with its session. After installing a new build:
 3. Run `shield doctor` to confirm the integration. The new version compiles
    the policy files into a new plan on its first request.
 
-Policy files, proposals, history and approvals stay in `.shield/` across
-updates. Do not delete `.shield/review/` to recover; only the compiled cache is
+Policy files, proposals, history and approvals stay in place across updates.
+Do not delete `.shield/state/` to recover; only the compiled cache is
 disposable.
 
 ## The request was allowed or blocked unexpectedly

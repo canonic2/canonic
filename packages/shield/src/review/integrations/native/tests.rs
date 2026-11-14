@@ -169,6 +169,7 @@ fn windows_hook_paths_remain_literal_inside_an_encoded_command() {
         Path::new(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"),
         binary,
         project,
+        Some("policy/acme's shield.yml"),
         "codex",
         "PreToolUse",
     )
@@ -187,7 +188,9 @@ fn windows_hook_paths_remain_literal_inside_an_encoded_command() {
         .collect();
     let script = String::from_utf16(&utf16).unwrap();
     assert!(script.starts_with("& 'C:\\Acme tools\\shield.exe' __internal native-hook "));
-    assert!(script.contains("--project 'C:\\Acme''s $HOME & %TEMP%\\project'"));
+    assert!(script.contains(
+        "--project 'C:\\Acme''s $HOME & %TEMP%\\project' --config 'policy/acme''s shield.yml'"
+    ));
     assert!(script.contains("--agent 'codex' --event 'PreToolUse'"));
     assert!(script.ends_with("if ($LASTEXITCODE -ne 0) { exit 2 }"));
 }
@@ -203,13 +206,24 @@ fn windows_hooks_refuse_shell_lookup_and_control_characters_in_paths() {
         "C:\\shell&other.exe",
         "C:\\shell%PATH%.exe",
     ] {
-        assert!(windows_command(Path::new(shell), binary, project, "codex", "PreToolUse").is_err());
+        assert!(
+            windows_command(
+                Path::new(shell),
+                binary,
+                project,
+                None,
+                "codex",
+                "PreToolUse"
+            )
+            .is_err()
+        );
     }
     assert!(
         windows_command(
             Path::new(r"C:\Windows\powershell.exe"),
             binary,
             Path::new("C:\\Acme\nother"),
+            None,
             "codex",
             "PreToolUse",
         )
@@ -220,6 +234,7 @@ fn windows_hooks_refuse_shell_lookup_and_control_characters_in_paths() {
             Path::new(r"C:\Windows\powershell.exe"),
             binary,
             Path::new(&format!(r"C:\{}", "a".repeat(4096))),
+            None,
             "codex",
             "PreToolUse"
         )

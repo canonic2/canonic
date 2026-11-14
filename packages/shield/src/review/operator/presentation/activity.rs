@@ -37,6 +37,31 @@ fn integrations(coverage: &Value) -> Vec<String> {
 }
 
 /// `shield status` and, with `doctor`, `shield doctor`.
+/// The selected configuration file and the defaults it hides. The root
+/// default with nothing beside it needs no line.
+fn configuration_line(configuration: &Value, output: &mut String) {
+    let shadowed: Vec<_> = configuration["shadowed"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    if let Some(file) = configuration["file"]
+        .as_str()
+        .filter(|_| configuration["source"] != "root" || !shadowed.is_empty())
+    {
+        let _ = writeln!(
+            output,
+            "Configuration: {file}{}",
+            if shadowed.is_empty() {
+                String::new()
+            } else {
+                format!(" (not used: {})", shadowed.join(", "))
+            }
+        );
+    }
+}
+
 pub(super) fn status(value: &Value, doctor: bool) -> String {
     let agents = integrations(&value["coverage"]);
     let root = label(&value["project_root"]);
@@ -60,6 +85,7 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
         plural(packs, "pack", "packs"),
         short(&value["policy_files"]["digest"])
     );
+    configuration_line(&value["configuration"], &mut output);
     let history = &value["history"];
     let _ = writeln!(
         output,

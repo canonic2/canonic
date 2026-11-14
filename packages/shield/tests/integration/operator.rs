@@ -79,6 +79,50 @@ fn pack_updates_launch_preference_rejects_unknown_modes_without_starting_work() 
     );
 }
 
+/// A fresh checkout whose only configuration is a `--config` file, inside a
+/// folder that is itself a Shield project: discovery stops at the checkout that
+/// holds the file, from its root or a subfolder, and never uses the ancestor.
+#[test]
+fn an_explicit_only_checkout_is_its_own_project_without_prior_state() {
+    let root = TempDir::new().unwrap();
+    root.child(".shield/config.yml")
+        .write_str("schema_version: 1\npacks: []\n")
+        .unwrap();
+    let checkout = root.child("checkout");
+    checkout
+        .child("policy/acme.yml")
+        .write_str("schema_version: 1\npacks: []\n")
+        .unwrap();
+    checkout.child("src").create_dir_all().unwrap();
+    let expected = checkout.path().canonicalize().unwrap();
+    for (cwd, config) in [
+        (checkout.path().to_path_buf(), "policy/acme.yml"),
+        (checkout.path().join("src"), "../policy/acme.yml"),
+    ] {
+        let output = cargo_bin_cmd!("shield")
+            .args(["--json", "--no-debug-log", "--config", config, "status"])
+            .current_dir(&cwd)
+            .env("HOME", root.path())
+            .env("SHIELD_PACK_UPDATE_CHECK", "off")
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{config}: {stderr}");
+        let status: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(
+            status["project_root"],
+            expected.to_str().unwrap(),
+            "{config}"
+        );
+        assert_eq!(status["configuration"]["source"], "explicit", "{status}");
+        assert_eq!(status["configuration"]["file"], "policy/acme.yml");
+    }
+    assert!(checkout.path().join(".shield/state/state.json").is_file());
+    assert!(!checkout.path().join(".shield/config.yml").exists());
+    // The ancestor project was never opened.
+    assert!(!root.path().join(".shield/state").exists());
+}
+
 #[test]
 fn human_errors_are_actionable_plain_text_and_json_errors_keep_their_contract() {
     let root = TempDir::new().expect("unenrolled project");
@@ -131,13 +175,13 @@ fn onboarding_selects_both_agents_together_and_skip_leaves_integrations_absent()
         guided(&root, &["init"], "claude,codex\n\nno\n")["code"],
         130
     );
-    assert!(!root.path().join(".shield/review/state.json").exists());
+    assert!(!root.path().join(".shield/state/state.json").exists());
     assert!(!root.path().join(".claude").exists());
     assert!(!root.path().join(".codex").exists());
     let result = guided(&root, &["init"], "claude,codex\n\nyes\n");
     assert_eq!(result["code"], 0, "{result}");
     let saved: Value = serde_json::from_slice(
-        &std::fs::read(root.path().join(".shield/review/state.json")).expect("state"),
+        &std::fs::read(root.path().join(".shield/state/state.json")).expect("state"),
     )
     .expect("state JSON");
     assert_eq!(
@@ -167,7 +211,7 @@ fn onboarding_selects_both_agents_together_and_skip_leaves_integrations_absent()
         .iter()
         .map(|p| std::fs::read(root.path().join(p)).expect("host file"))
         .collect();
-    std::fs::remove_dir_all(root.path().join(".shield/review")).expect("remove fixture state");
+    std::fs::remove_dir_all(root.path().join(".shield/state")).expect("remove fixture state");
     let refused = guided(
         &root,
         &["mcp", "setup", "--agent", "claude", "--agent", "codex"],
@@ -285,7 +329,7 @@ fn guided_mcp_setup_cancellation_repair_and_removal_preserve_project_policy() {
         interactive(&root, &["init", "--agent", "claude"], "\nno\n")["code"],
         130
     );
-    assert!(!root.path().join(".shield/review/state.json").exists());
+    assert!(!root.path().join(".shield/state/state.json").exists());
     // Enter on the permissions page keeps the default approvals.
     assert_eq!(guided(&root, &["init"], "claude\n\nyes\n")["code"], 0);
     let before = query(&root, &["status"]);
@@ -312,11 +356,11 @@ fn guided_mcp_setup_cancellation_repair_and_removal_preserve_project_policy() {
         .expect("servers")
         .remove("shield");
     std::fs::write(root.path().join(".mcp.json"), settings.to_string()).expect("manual deletion");
-    let persisted = std::fs::read(root.path().join(".shield/review/state.json")).expect("state");
+    let persisted = std::fs::read(root.path().join(".shield/state/state.json")).expect("state");
     assert_eq!(query(&root, &["doctor"])["repair_needed"], true);
     assert_eq!(
         persisted,
-        std::fs::read(root.path().join(".shield/review/state.json")).expect("state")
+        std::fs::read(root.path().join(".shield/state/state.json")).expect("state")
     );
     assert_eq!(
         interactive(&root, &["mcp", "setup", "--agent", "claude"], "\nyes\n")["code"],
@@ -358,7 +402,7 @@ fn invalid_mcp_setup_and_json_requests_never_enroll_or_modify_a_project() {
         interactive(&root, &["init", "--agent", "claude"], "yes\n")["code"],
         1
     );
-    assert!(!root.path().join(".shield/review/state.json").exists());
+    assert!(!root.path().join(".shield/state/state.json").exists());
     cargo_bin_cmd!("shield")
         .args(["init", "--agent", "claude", "--json", "--project"])
         .arg(root.path())
@@ -380,7 +424,7 @@ fn setup_defaults_to_allow_and_refuses_unreviewed_fallback_edits() {
         .assert()
         .code(1)
         .stderr(predicates::str::contains("shield init"));
-    assert!(!root.path().join(".shield/review/state.json").exists());
+    assert!(!root.path().join(".shield/state/state.json").exists());
     assert_eq!(guided(&root, &["init"], "codex\n\nyes\n")["code"], 0);
     super::mcp::settle_startup(&root);
     let before = query(&root, &["status"]);
@@ -388,7 +432,7 @@ fn setup_defaults_to_allow_and_refuses_unreviewed_fallback_edits() {
         before["coverage"]["installed_integrations"][0]["ask_fallback"],
         "allow"
     );
-    let state_path = root.path().join(".shield/review/state.json");
+    let state_path = root.path().join(".shield/state/state.json");
     let bytes = std::fs::read(&state_path).unwrap();
     let codex = ["mcp", "setup", "--agent", "codex"];
     assert_eq!(interactive(&root, &codex, "\nno\n")["code"], 130);
@@ -476,7 +520,7 @@ fn global_sources_work_before_enrollment_and_project_defaults_take_precedence() 
         "yes\n",
     );
     assert_eq!(added["code"], 0, "{added}");
-    assert!(!root.path().join(".shield/review").exists());
+    assert!(!root.path().join(".shield/state").exists());
     assert_eq!(
         interactive(
             &root,
@@ -894,7 +938,7 @@ fn fresh_initialization_creates_projection_directory_only_after_confirmation() {
     assert!(!root.path().join(".shield").exists());
     let initialized = guided(&root, &args, "yes\n");
     assert_eq!(initialized["code"], 0, "{initialized}");
-    assert!(root.path().join(".shield/review/state.json").is_file());
+    assert!(root.path().join(".shield/state/state.json").is_file());
     assert!(root.path().join(".shield/config.yml").is_file());
     assert_eq!(query(&root, &["doctor"])["repair_needed"], false);
 }
@@ -959,6 +1003,9 @@ fn previous_binary_unreceipted_checkpoint_upgrades_in_place() {
     // The first command that opens the runtime converts once and continues.
     let listed = query(&root, &["rule", "list"]);
     assert!(listed.get("error").is_none_or(Value::is_null), "{listed}");
+    // The earlier `.shield/review` folder moves to `.shield/state` on that open.
+    assert!(!path.exists());
+    let path = root.path().join(".shield/state/state.json");
     let upgraded: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(upgraded["project_id"], checkpoint["project_id"]);
     // The converted checkpoint holds no copy of the policy or its activation.
@@ -1757,13 +1804,13 @@ fn escape_in_init_and_setup_goes_back_with_answers_kept() {
     let root = TempDir::new().expect("project");
     // The agent page is init's first step without a baseline question.
     assert_eq!(guided(&root, &["init"], "back\n")["code"], 130);
-    assert!(!root.path().join(".shield/review/state.json").exists());
+    assert!(!root.path().join(".shield/state/state.json").exists());
     // Back from the permissions keeps the marked agent.
     let result = guided(&root, &["init"], "claude\nback\n\n\nyes\n");
     assert_eq!(result["code"], 0, "{result}");
     let agents = |root: &TempDir| -> Vec<String> {
         let saved: Value = serde_json::from_slice(
-            &std::fs::read(root.path().join(".shield/review/state.json")).expect("state"),
+            &std::fs::read(root.path().join(".shield/state/state.json")).expect("state"),
         )
         .expect("state JSON");
         saved["operator"]["integration"]["agents"]
@@ -1785,7 +1832,7 @@ fn escape_in_init_and_setup_goes_back_with_answers_kept() {
 fn mcp_setup_dry_run_reviews_without_writing() {
     let root = TempDir::new().expect("project");
     assert_eq!(interactive(&root, &["init"], "yes\n")["code"], 0);
-    let state = root.path().join(".shield/review/state.json");
+    let state = root.path().join(".shield/state/state.json");
     let before = std::fs::read(&state).expect("state");
     let review = query(&root, &["mcp", "setup", "--agent", "codex", "--dry-run"]);
     assert_eq!(review["dry_run"], true, "{review}");

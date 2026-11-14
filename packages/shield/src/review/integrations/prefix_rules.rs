@@ -267,7 +267,7 @@ mod tests {
                 assert!(file.is_none());
             }
         }
-        assert!(!root.path().join(".shield/review").exists());
+        assert!(!root.path().join(".shield/state").exists());
         assert!(!root.path().join(".codex/rules/shield.rules").exists());
     }
 

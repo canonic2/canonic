@@ -66,9 +66,9 @@ fn copied_preparation_tasks_are_the_copys_own_and_leave_the_original_alone() {
     let source = connect(server);
     let arguments = rule("acme-copy-task", "acme");
     let old = completed_task(&source, &jobs, 2, &arguments);
-    let original_path = original.root.path().join(".shield/review/state.json");
+    let original_path = original.root.path().join(".shield/state/state.json");
     let original_bytes = std::fs::read(&original_path).unwrap();
-    let record = std::path::Path::new(".shield/review/preparation-tasks")
+    let record = std::path::Path::new(".shield/state/preparation-tasks")
         .join(old.as_str().unwrap())
         .join("record.json");
     let original_record = std::fs::read(original.root.path().join(&record)).unwrap();
@@ -147,7 +147,7 @@ fn preparation_tasks_lost_creation_reply_recovers_the_same_published_task() {
     let id = recovered["result"]["taskId"].clone();
     let directory = project.review.project_root.clone();
     let path = std::path::Path::new(&directory)
-        .join(".shield/review/preparation-tasks")
+        .join(".shield/state/preparation-tasks")
         .join(id.as_str().unwrap())
         .join("record.json");
     let before = std::fs::read(&path).unwrap();
@@ -184,7 +184,7 @@ fn preparation_tasks_pack_capture_survives_source_loss_and_engine_change_refuses
         "{review}"
     );
     let path = std::path::Path::new(&project.review.project_root)
-        .join(".shield/review/preparation-tasks")
+        .join(".shield/state/preparation-tasks")
         .join(id.as_str().unwrap())
         .join("record.json");
     let mut record: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
@@ -289,7 +289,7 @@ fn preparation_tasks_corrupt_optional_storage_preserves_ordinary_tools() {
     let (server, project) = fixture(Some("claude"));
     drop(server);
     let root =
-        std::path::Path::new(&project.review.project_root).join(".shield/review/preparation-tasks");
+        std::path::Path::new(&project.review.project_root).join(".shield/state/preparation-tasks");
     std::fs::write(&root, b"invalid retained task storage").unwrap();
     let server = Server::for_review((*project.review).clone()).unwrap();
     let jobs = server.preparations.clone();

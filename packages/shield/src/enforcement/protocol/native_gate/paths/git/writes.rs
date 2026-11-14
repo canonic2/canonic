@@ -54,20 +54,28 @@ fn policy_files_with(
             none()
         };
     };
+    // Both default bundles and an explicit selection's policy files.
+    let policy: Vec<PathBuf> = [crate::layout::SHIELD, crate::layout::GROUPED_BUNDLE]
+        .iter()
+        .map(|path| resolve_existing(&root.join(path)))
+        .chain(crate::layout::explicit_policy_files())
+        .collect();
     let target = Target {
         protected: crate::review::integrations::protected_files()
             .iter()
             .filter(|path| {
                 // Agent settings the policy files open to change are not
-                // protected from Git writes either; `.shield` always is.
-                **path == ".shield" || guard.allow.agent_settings_change != Change::Allow
+                // protected from Git writes either; the bundles always are.
+                guard.allow.agent_settings_change != Change::Allow
+                    && ![crate::layout::SHIELD, crate::layout::GROUPED_BUNDLE].contains(path)
             })
             .map(|path| resolve_existing(&root.join(path)))
+            .chain(policy.iter().cloned())
             .collect(),
         base: invocation.reach.base.clone(),
         known: invocation.reach.known,
-        file: root.join(".shield/config.yml"),
-        shield: resolve_existing(&root.join(".shield")),
+        file: crate::layout::config_file(root),
+        policy,
     };
     let rest = invocation.rest;
     let paths = written_paths(&target, invocation.subcommand, rest);
@@ -213,8 +221,8 @@ const WRITERS: &[&str] = &[
 ];
 
 struct Target {
-    /// The project's protected files and folders: `.shield` and, unless the
-    /// policy files open them, agents' settings.
+    /// The project's protected files and folders: the policy bundles and,
+    /// unless the policy files open them, agents' settings.
     protected: Vec<PathBuf>,
     /// Where pathspecs are resolved.
     base: PathBuf,
@@ -222,8 +230,8 @@ struct Target {
     known: bool,
     /// The file a finding names when a pathspec cannot be resolved.
     file: PathBuf,
-    /// The policy files' folder, which tree queries compare.
-    shield: PathBuf,
+    /// The policy bundles and explicit policy files, which tree queries compare.
+    policy: Vec<PathBuf>,
 }
 
 impl Target {

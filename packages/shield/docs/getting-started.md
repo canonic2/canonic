@@ -42,7 +42,10 @@ none marked skips agent setup; you can add it later.
 
 Review the packs, agent settings, and Shield binary path, then confirm. Shield
 saves the active policy and creates `.shield/` for policy files and private
-review state. Cancel leaves the project unchanged; a failed baseline download
+runtime state in `.shield/state/`. To keep the policy files in
+`.config/shield/` or another file instead, see
+[where the configuration lives](policy-files.md#where-the-configuration-lives).
+Cancel leaves the project unchanged; a failed baseline download
 or verification leaves a new project unenrolled.
 
 For a first setup with a different baseline profile, use

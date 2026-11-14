@@ -75,7 +75,7 @@ def pump(seconds):
             return
 
 def activated():
-    return (root / ".shield/review/state.json").exists()
+    return (root / ".shield/state/state.json").exists()
 
 def policy_files():
     # The policy is the files directly in .shield; review state is not policy.
@@ -198,7 +198,7 @@ try:
     if mode == "editor":
         result["policy_unchanged"] = before == policy_files()
     if mode == "agents":
-        result["agents"] = sorted(json.loads((root / ".shield/review/state.json").read_text())["operator"]["integration"]["agents"])
+        result["agents"] = sorted(json.loads((root / ".shield/state/state.json").read_text())["operator"]["integration"]["agents"])
     if mode == "error":
         feedback = seen.split(b'SHIELD_INIT_EXIT=0',1)[1]
         result["actionable_error"] = b'Error: Request is not available' in feedback and b'shield request list' in feedback

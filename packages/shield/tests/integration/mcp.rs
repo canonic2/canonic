@@ -128,7 +128,7 @@ fn historical_pinned_launcher_reuses_policy_after_repeated_moves() {
         std::fs::rename(&previous, &target).unwrap();
         let target = target.canonicalize().unwrap();
         let before: Value = serde_json::from_slice(
-            &std::fs::read(target.join(".shield/review/state.json")).unwrap(),
+            &std::fs::read(target.join(".shield/state/state.json")).unwrap(),
         )
         .unwrap();
         let mut server = Server::start_at(&target, &selected, &["mcp", "serve"]);
@@ -169,7 +169,7 @@ fn cli_init_in_a_moved_project_reports_it_set_up_without_writing() {
     enroll(&original);
     let destination = assert_fs::TempDir::new().unwrap();
     std::fs::rename(original.path(), destination.path()).unwrap();
-    let state_path = destination.path().join(".shield/review/state.json");
+    let state_path = destination.path().join(".shield/state/state.json");
     let bytes = std::fs::read(&state_path).unwrap();
     let before: Value = serde_json::from_slice(&bytes).unwrap();
     let init = super::operator::interactive(&destination, &["init"], "no\n");
@@ -293,7 +293,7 @@ fn historical_mcp_launch_forms_continue_to_serve_project_tools() {
         vec!["mcp", "serve", "--agent", "claude-code"],
     ] {
         let original = historical_checkpoint(&root);
-        let path = root.path().join(".shield/review/state.json");
+        let path = root.path().join(".shield/state/state.json");
         let original_bytes = std::fs::read(&path).unwrap();
         let mut server = Server::start_with(&root, &launch);
         server.initialize();
@@ -336,7 +336,7 @@ fn historical_mcp_launch_forms_continue_to_serve_project_tools() {
         server.child.stdin.take();
         assert!(server.child.wait().unwrap().success());
         let target: Value = serde_json::from_slice(
-            &std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+            &std::fs::read(root.path().join(".shield/state/state.json")).unwrap(),
         )
         .unwrap();
         // Conversion drops the recorded activation and the folder's root; the
@@ -352,7 +352,7 @@ fn historical_cli_inspection_is_read_only_without_manual_setup() {
     let root = assert_fs::TempDir::new().unwrap();
     enroll(&root);
     let original = historical_checkpoint(&root);
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let original_bytes = std::fs::read(&path).unwrap();
     let output = cargo_bin_cmd!("shield")
         .args(["status", "--json", "--project"])
@@ -364,7 +364,7 @@ fn historical_cli_inspection_is_read_only_without_manual_setup() {
     assert!(response["error"].is_null(), "{response}");
     assert_eq!(response["checkpoint_upgrade_pending"], true);
     let target: Value = serde_json::from_slice(
-        &std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        &std::fs::read(root.path().join(".shield/state/state.json")).unwrap(),
     )
     .unwrap();
     assert_eq!(
@@ -382,7 +382,7 @@ fn historical_cli_inspection_is_read_only_without_manual_setup() {
 fn historical_mcp_refuses_future_state_with_format_details_and_preserves_bytes() {
     let root = assert_fs::TempDir::new().unwrap();
     enroll(&root);
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let mut future: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     future["schema_version"] = json!(2);
     let bytes = serde_json::to_vec(&future).unwrap();
@@ -403,7 +403,7 @@ fn historical_mcp_refuses_future_state_with_format_details_and_preserves_bytes()
 /// Synthetic optional-cache checkpoint for isolating outer-format conversion.
 /// Source references and activation evidence come from current test enrollment.
 pub(super) fn historical_checkpoint(root: &assert_fs::TempDir) -> Value {
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let mut raw: Value =
         serde_json::from_slice(&std::fs::read(&path).expect("read enrolled checkpoint"))
             .expect("decode enrolled checkpoint");

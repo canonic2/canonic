@@ -36,6 +36,7 @@ fn windows_command(
     shell: &Path,
     binary: &Path,
     root: &Path,
+    config: Option<&str>,
     agent: &str,
     event: &str,
 ) -> Result<String, Error> {
@@ -63,8 +64,12 @@ fn windows_command(
         }
         Ok(format!("'{}'", text.replace('\'', "''")))
     };
+    let config = config
+        .map(|config| literal(config).map(|config| format!(" --config {config}")))
+        .transpose()?
+        .unwrap_or_default();
     let script = format!(
-        "& {} __internal native-hook --project {} --agent {} --event {}; if ($LASTEXITCODE -ne 0) {{ exit 2 }}",
+        "& {} __internal native-hook --project {}{config} --agent {} --event {}; if ($LASTEXITCODE -ne 0) {{ exit 2 }}",
         literal(
             binary
                 .to_str()
@@ -102,10 +107,13 @@ pub(super) fn posix_hook_command(binary: &str, project: &str, agent: &str, event
 
 pub(in crate::review) fn hook_command(
     _binary: &Path,
-    _root: &Path,
+    root: &Path,
     agent: &str,
     event: &str,
 ) -> Result<String, Error> {
+    // An explicit configuration selection travels with the hook, relative to
+    // the project, so the hook enforces the same policy files.
+    let config = crate::layout::launch_args(root)?.pop();
     #[cfg(windows)]
     {
         let shell = std::path::PathBuf::from(
@@ -116,15 +124,28 @@ pub(in crate::review) fn hook_command(
         if !shell.is_file() {
             return Err(Error::Invalid("Windows PowerShell unavailable"));
         }
-        windows_command(&shell, Path::new("shield"), Path::new("."), agent, event)
+        windows_command(
+            &shell,
+            Path::new("shield"),
+            Path::new("."),
+            config.as_deref(),
+            agent,
+            event,
+        )
     }
     #[cfg(not(windows))]
-    Ok(posix_hook_command(
-        &quoted(Path::new("shield"))?,
-        &quoted(Path::new("."))?,
-        agent,
-        event,
-    ))
+    {
+        let mut project = quoted(Path::new("."))?;
+        if let Some(config) = config {
+            project = format!("{project} --config {}", quoted(Path::new(&config))?);
+        }
+        Ok(posix_hook_command(
+            &quoted(Path::new("shield"))?,
+            &project,
+            agent,
+            event,
+        ))
+    }
 }
 
 fn installation(
@@ -322,21 +343,41 @@ fn published_groups(
         Ok(_) => Ok(portable),
         Err(error) => {
             #[cfg(not(windows))]
-            for root in std::iter::once(root).chain(previous_roots.iter().copied().take(2)) {
-                let binary = quoted(binary)?;
-                let project = quoted(root)?;
-                let historical = adapter
-                    .spec()
-                    .events
-                    .iter()
-                    .map(|(event, _)| {
-                        let command =
-                            posix_hook_command(&binary, &project, adapter.spec().id, event);
-                        ((*event).into(), adapter.hook_group(&command))
-                    })
-                    .collect();
-                if adapter.capture_hooks(source, &historical).is_ok() {
-                    return Ok(historical);
+            {
+                let generated = |binary: &str, project: &str| -> HookGroups {
+                    adapter
+                        .spec()
+                        .events
+                        .iter()
+                        .map(|(event, _)| {
+                            let command =
+                                posix_hook_command(binary, project, adapter.spec().id, event);
+                            ((*event).into(), adapter.hook_group(&command))
+                        })
+                        .collect()
+                };
+                // Box expands the definition's `{command} ... --project .` with
+                // the quoted pinned binary, or the bare command without a pin.
+                let pinned = quoted(binary)?;
+                let historical_roots = std::iter::once(root)
+                    .chain(previous_roots.iter().copied().take(2))
+                    .map(quoted)
+                    .collect::<Result<Vec<_>, _>>()?;
+                let candidates = [
+                    (pinned.clone(), ".".to_owned()),
+                    ("shield".into(), ".".into()),
+                ]
+                .into_iter()
+                .chain(
+                    historical_roots
+                        .into_iter()
+                        .map(|project| (pinned.clone(), project)),
+                );
+                for (binary, project) in candidates {
+                    let groups = generated(&binary, &project);
+                    if adapter.capture_hooks(source, &groups).is_ok() {
+                        return Ok(groups);
+                    }
                 }
             }
             #[cfg(windows)]

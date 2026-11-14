@@ -383,8 +383,14 @@ needs its own execution decision and `on_unmet` branch.
 
 ### Search files with grep and ripgrep
 
-Fixed `grep` forms model a positional pattern followed by explicit regular files.
-Fixed `rg` forms search a pattern in explicit files or
+Fixed `grep` forms model a pattern followed by explicit regular files, or with
+`-r`/`--recursive`, regular files and directories. A pattern given with `-e` or
+`--regexp` makes every operand a path. A recursive search reads every existing
+entry below each directory, hidden ones included, and follows no descendant
+links. `--include`, `--exclude` and `--exclude-dir` are accepted but do not narrow
+the checked footprint. Options may follow the operands, written as one word
+such as `--include=*.prisma`. A recursive grep needs an explicit path; `-R`, pattern
+files and other options remain unverified. Fixed `rg` forms search a pattern in explicit files or
 directories, the working directory when none is given, or list them with `--files`.
 Listed flags plus `-g`, `-t`, `-T`, context, count and depth values are modeled.
 Walks follow no descendant links; explicit operands still follow links and receive

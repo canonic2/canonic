@@ -104,7 +104,11 @@ pub(in crate::review) fn report(context: &Context) -> Result<Value, Error> {
 /// Report preserved storage anomalies without blocking unrelated operations.
 fn storage_checks(context: &Context) -> Vec<Value> {
     let mut checks = Vec::new();
-    let directories = [Path::new(&context.project_root).join(".shield/review/sources")];
+    if crate::layout::split_state(Path::new(&context.project_root)) {
+        checks.push(json!({"check":"state_folder","blocking":false,"path":".shield/review",
+            "detail":"An earlier Shield recreated .shield/review after this folder's state moved to .shield/state; requests it records there are not used. Restart agent sessions still running the earlier version, then remove .shield/review."}));
+    }
+    let directories = [crate::layout::state(Path::new(&context.project_root)).join("sources")];
     for directory in directories {
         match crate::review::storage::objects::anomalies(&directory) {
             Ok(paths) => {

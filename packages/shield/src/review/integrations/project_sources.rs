@@ -375,9 +375,13 @@ pub(in crate::review) fn stored_artifact(shield: &Path, path: &str) -> Option<St
         .and_then(|stem| stem.to_str())
         .filter(|stem| stem.len() == 64 && stem.bytes().all(|b| b.is_ascii_hexdigit()))?;
     let store = crate::review::files::artifact_store().ok();
+    // Retained sources were written by earlier releases into the state
+    // directory beside a root `.shield/` bundle, under either state name.
+    let blob = format!("{digest}.blob");
     let candidates = [
         store.map(|store| store.join(format!("{digest}.yml"))),
-        Some(shield.join("review/sources").join(format!("{digest}.blob"))),
+        Some(shield.join("state/sources").join(&blob)),
+        Some(shield.join("review/sources").join(&blob)),
     ];
     let text = candidates.into_iter().flatten().find_map(|candidate| {
         std::fs::read_to_string(candidate)

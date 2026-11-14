@@ -35,7 +35,7 @@ fn current_mcp_startup_and_cli_status_read_no_history() {
                 "host_decision":"allow","evaluation":{"decision":"allow"},"disposition":"allowed"
             })).unwrap();
         }
-        let checkpoint = root.path().join(".shield/review/state.json");
+        let checkpoint = root.path().join(".shield/state/state.json");
         let before = fs::read(&checkpoint).unwrap();
         let trace = log.request("command", "mcp_startup", None, None).unwrap();
         {

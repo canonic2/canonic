@@ -184,8 +184,8 @@ impl AgentAdapter for Copilot {
             true,
         )
     }
-    fn mcp_entry(&self, _: &Path, _: &Path, _: &[String]) -> String {
-        json!({"type":"stdio","command":"shield","args":["mcp","serve","--project",".","--agent",SPEC.id],"tools":["*"]}).to_string()
+    fn mcp_entry(&self, _: &Path, root: &Path, _: &[String]) -> String {
+        json!({"type":"stdio","command":"shield","args":super::setup::serve_args(root, SPEC.id),"tools":["*"]}).to_string()
     }
     fn has_mcp_entry(&self, source: &str) -> Result<bool, Error> {
         super::json_mcp::present(source)

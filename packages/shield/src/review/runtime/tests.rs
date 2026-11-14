@@ -77,7 +77,7 @@ fn checked_runs_decide_by_the_files_as_they_are_now() {
 #[test]
 fn corrupt_review_state_blocks_without_mutation() {
     let (root, context) = enrolled();
-    let file = root.path().join(".shield/review/state.json");
+    let file = root.path().join(".shield/state/state.json");
     let mut state: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
     state["project_id"] = json!("altered");
     fs::write(&file, state.to_string()).unwrap();

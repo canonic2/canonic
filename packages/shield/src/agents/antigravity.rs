@@ -259,9 +259,8 @@ impl AgentAdapter for Antigravity {
     ) -> Result<String, Error> {
         setup::merge(source, old, new)
     }
-    fn mcp_entry(&self, _binary: &Path, _root: &Path, _: &[String]) -> String {
-        json!({"command":"shield","args":["mcp","serve","--project",".","--agent",SPEC.id]})
-            .to_string()
+    fn mcp_entry(&self, _binary: &Path, root: &Path, _: &[String]) -> String {
+        json!({"command":"shield","args":super::setup::serve_args(root, SPEC.id)}).to_string()
     }
     fn migrate_hooks(
         &self,

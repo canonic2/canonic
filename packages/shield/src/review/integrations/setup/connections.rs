@@ -14,9 +14,9 @@ pub(super) fn prepare_connections(
     // The connections are the policy files' connections. An enrolled
     // project's plan records their revision so applying it can refuse files
     // changed since review; init writes the files itself after planning.
-    let (configured, policy_revision) = if root.join(".shield/config.yml").exists() {
+    let (configured, policy_revision) = if crate::layout::configured(root) {
         let policy = crate::review::files::load(root)?;
-        let enrolled = root.join(".shield/review/state.json").exists();
+        let enrolled = crate::layout::enrolled(root);
         (
             policy.evaluator.effective().mcp_connections().clone(),
             enrolled.then(|| policy.evaluator.revision().to_owned()),
@@ -74,7 +74,7 @@ pub(in crate::review::integrations) fn prepare_configured(
                         }
                         continue;
                     }
-                    if connection.local && root.join(".shield/review/state.json").exists() {
+                    if connection.local && crate::layout::enrolled(root) {
                         crate::mcp_connections::launcher::private_state(root)?;
                     }
                     let binding = launch_binding(old, id, alias, connection)?;

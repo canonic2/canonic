@@ -21,7 +21,7 @@ fn pack_updates_search_seeds_offline_cli_and_mcp_inspection_without_policy_chang
     );
     assert!(searched["error"].is_null(), "{searched}");
     std::fs::remove_file(source.path().join("catalog.json")).unwrap();
-    let checkpoint = root.path().join(".shield/review/state.json");
+    let checkpoint = root.path().join(".shield/state/state.json");
     let before = std::fs::read(&checkpoint).unwrap();
     let cli = crate::review::packs::list(&context).unwrap();
     let listed = invoke(&context, &connection, "pack_list", json!({}));

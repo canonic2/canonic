@@ -45,7 +45,7 @@ fn sdk_admission_does_not_read_policy_sources_or_rewrite_checkpoint() {
     fixture
         .scoped(|| {
             let issued = mint(root.path(), mapping::digest())?;
-            let path = root.path().join(".shield/review/state.json");
+            let path = root.path().join(".shield/state/state.json");
             let checkpoint = std::fs::read(&path)?;
             std::fs::write(root.path().join(".shield/config.yml"), b"invalid: [")?;
             let consumer = RegisteredReadConsumer::admit_secret(root.path(), issued.0)?;
@@ -63,7 +63,7 @@ fn expired_contexts_and_missing_namespace_mutex_refuse_without_diagnostic_repair
     fixture
         .scoped(|| {
             let issued = mint(root.path(), mapping::digest())?;
-            let checkpoint = std::fs::read(root.path().join(".shield/review/state.json"))?;
+            let checkpoint = std::fs::read(root.path().join(".shield/state/state.json"))?;
             let directory = files::directory("sdk-read-contexts", false)?;
             {
                 let _lease = objects::Directory::enter(&directory)?;
@@ -79,7 +79,7 @@ fn expired_contexts_and_missing_namespace_mutex_refuse_without_diagnostic_repair
             assert!(RegisteredReadConsumer::admit_secret(root.path(), issued.0).is_err());
             assert!(!directory.join(".objects.lock").exists());
             assert_eq!(
-                std::fs::read(root.path().join(".shield/review/state.json"))?,
+                std::fs::read(root.path().join(".shield/state/state.json"))?,
                 checkpoint
             );
             Ok(())

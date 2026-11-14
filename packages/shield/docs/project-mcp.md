@@ -69,7 +69,7 @@ refuse; inspect the result before requesting a fresh review.
 
 - `protection_set` changes protected-file access choices. Supply one or both of
   `agent_settings_read` (`ask`/`allow`) and `agent_settings_change`
-  (`block`/`allow`). Shield's policy files, review state and cache stay
+  (`block`/`allow`). Shield's policy files, runtime state and cache stay
   protected whatever the choice.
 - `disable {}` pauses native interception for this project;
   `enable {}` resumes it. Each requires Shield's human confirmation form,

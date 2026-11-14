@@ -201,23 +201,27 @@ mod tests {
         // The records outside the link still go.
         assert!(!base.path().join("reviewed-policies").exists());
 
-        // A project whose `.shield/review` links elsewhere keeps that folder.
-        let project = assert_fs::TempDir::new().unwrap();
-        let outside = assert_fs::TempDir::new().unwrap();
-        fs::create_dir_all(outside.path().join("portability")).unwrap();
-        fs::write(outside.path().join("portability/kept.json"), b"{}").unwrap();
-        fs::create_dir(project.path().join(".shield")).unwrap();
-        std::os::unix::fs::symlink(outside.path(), project.path().join(".shield/review")).unwrap();
-        let mut left = BATCH;
-        assert!(
-            remove_within(
-                project.path(),
-                &[".shield", "review", "portability"],
-                &mut left
-            )
-            .unwrap()
-        );
-        assert!(outside.path().join("portability/kept.json").exists());
-        assert_eq!(left, BATCH);
+        // A project whose state folder, under its current or earlier name,
+        // links elsewhere keeps that folder.
+        for state in ["state", "review"] {
+            let project = assert_fs::TempDir::new().unwrap();
+            let outside = assert_fs::TempDir::new().unwrap();
+            fs::create_dir_all(outside.path().join("portability")).unwrap();
+            fs::write(outside.path().join("portability/kept.json"), b"{}").unwrap();
+            fs::create_dir(project.path().join(".shield")).unwrap();
+            std::os::unix::fs::symlink(outside.path(), project.path().join(".shield").join(state))
+                .unwrap();
+            let mut left = BATCH;
+            assert!(
+                remove_within(
+                    project.path(),
+                    &[".shield", state, "portability"],
+                    &mut left
+                )
+                .unwrap()
+            );
+            assert!(outside.path().join("portability/kept.json").exists());
+            assert_eq!(left, BATCH);
+        }
     }
 }

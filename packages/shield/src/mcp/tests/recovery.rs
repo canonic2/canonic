@@ -142,17 +142,19 @@ fn recovery_stale_hooks_reach_reviewed_reconciliation_and_native_retry() {
                 retry["hookSpecificOutput"]["permissionDecision"], "deny",
                 "{retry}"
             );
-            let denied = native(
-                &project,
-                agent,
-                "Bash",
-                json!({"command":"cat .shield/review/state.json",
-                "workdir":project.review.project_root}),
-            );
-            assert_eq!(
-                denied["hookSpecificOutput"]["permissionDecision"], "deny",
-                "{denied}"
-            );
+            for protected in [".shield/state/state.json", ".shield/review/state.json"] {
+                let denied = native(
+                    &project,
+                    agent,
+                    "Bash",
+                    json!({"command":format!("cat {protected}"),
+                    "workdir":project.review.project_root}),
+                );
+                assert_eq!(
+                    denied["hookSpecificOutput"]["permissionDecision"], "deny",
+                    "{denied}"
+                );
+            }
             let doctor = transport.call(json!(30), "doctor", &json!({}));
             assert_eq!(doctor["result"]["isError"], false, "{doctor}");
             assert_eq!(

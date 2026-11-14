@@ -209,6 +209,7 @@ fn refusals_and_unrelated_commands_receive_no_pack_installation_advice() {
     for agent in ["claude", "codex"] {
         for source in [
             "git reset --hard",
+            "cat .shield/state/state.json",
             "cat .shield/review/state.json",
             "npm test $(acme-path)",
             "npm test; git reset --hard",

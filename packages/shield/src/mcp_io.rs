@@ -5,7 +5,7 @@ use crate::{
     mcp,
 };
 use std::{
-    fs, io,
+    io,
     path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
@@ -137,14 +137,8 @@ pub(crate) fn serve_project(
 
 /// The nearest folder at or above a canonical `cwd` that holds Shield project files.
 fn nearest_project(cwd: &Path) -> Option<&Path> {
-    cwd.ancestors().find(|path| {
-        [".shield/config.yml", ".shield/review"].iter().any(|name| {
-            match fs::symlink_metadata(path.join(name)) {
-                Ok(_) => true,
-                Err(error) => error.kind() != io::ErrorKind::NotFound,
-            }
-        })
-    })
+    cwd.ancestors()
+        .find(|path| crate::layout::discovery_root(path))
 }
 
 /// The project holding the folder a host started its session in, found the way

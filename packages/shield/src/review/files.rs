@@ -27,7 +27,7 @@ pub(in crate::review) fn load(root: &Path) -> Result<Policy, Error> {
 /// without a cache.
 pub(in crate::review) fn load_in(root: &Path, cache: Option<&Path>) -> Result<Policy, Error> {
     let _trace = crate::diagnostics::trace::span("policy.files");
-    let sources = project_sources::read(&root.join(".shield/config.yml")).map_err(error)?;
+    let sources = project_sources::read(&crate::layout::config_file(root)).map_err(error)?;
     let digest = key(&sources);
     // Without a cache folder every load compiles; the files still decide.
     let path = cache.map(|cache| plan_path(cache, &digest));
@@ -52,7 +52,7 @@ pub(in crate::review) fn load_in(root: &Path, cache: Option<&Path>) -> Result<Po
 /// without compiling them: a plan cached under their exact key was compiled
 /// from them; otherwise their sources are validated and composed.
 pub(in crate::review) fn check(root: &Path, cache: Option<&Path>) -> Result<String, Error> {
-    let sources = project_sources::read(&root.join(".shield/config.yml")).map_err(error)?;
+    let sources = project_sources::read(&crate::layout::config_file(root)).map_err(error)?;
     let digest = key(&sources);
     if cache.is_some_and(|cache| plan_recorded(&plan_path(cache, &digest), &digest)) {
         return Ok(digest);
@@ -74,7 +74,7 @@ fn plan_recorded(path: &Path, key: &str) -> bool {
 /// The digest of the policy files' exact bytes under `root`, settings
 /// included, without validating or compiling them.
 pub(in crate::review) fn digest(root: &Path) -> Result<String, Error> {
-    let sources = project_sources::read(&root.join(".shield/config.yml")).map_err(error)?;
+    let sources = project_sources::read(&crate::layout::config_file(root)).map_err(error)?;
     Ok(bytes_key(&sources))
 }
 
@@ -89,10 +89,13 @@ pub(in crate::review) fn sync(
     state: &mut super::model::State,
 ) -> Result<bool, Error> {
     let root = Path::new(&context.project_root);
-    if !root.join(".shield/config.yml").is_file() {
+    let invalid = |error: Error| Error::PolicyFiles(error.to_string());
+    // A selected file that cannot be read refuses; only a project with no
+    // configuration in either default location has nothing to follow.
+    let selection = crate::layout::select(root).map_err(|error| invalid(error.into()))?;
+    if selection.source == crate::layout::Source::Absent {
         return Ok(false);
     }
-    let invalid = |error: Error| Error::PolicyFiles(error.to_string());
     let digest = digest(root).map_err(invalid)?;
     if state.followed_files.as_deref() == Some(digest.as_str())
         && state.candidates.contains_key("project")
@@ -178,7 +181,7 @@ fn follow(
 ) -> Result<Captured, Error> {
     crate::diagnostics::trace::count("policy.captures", 1);
     if !state.candidates.contains_key("project") {
-        let fresh = project_sources::capture(&root.join(".shield/config.yml")).map_err(error)?;
+        let fresh = project_sources::capture(&crate::layout::config_file(root)).map_err(error)?;
         state
             .candidates
             .insert("project".into(), serde_json::json!(fresh));
@@ -215,7 +218,7 @@ pub(in crate::review) fn fetch_missing(
     root: &Path,
     settings: &crate::configuration::settings::Values,
 ) -> Result<Fetched, Error> {
-    let shield = root.join(".shield");
+    let shield = crate::layout::bundle(root);
     let store = artifact_store()?;
     let mut missing = Vec::new();
     for lock in ["shield.lock", "shield.local.lock"] {
@@ -297,7 +300,7 @@ fn fetch_release(
 /// The compiled plan of the policy files under `root` if one is cached in
 /// `cache`; never compiles.
 pub(in crate::review) fn cached_in(root: &Path, cache: &Path) -> Option<Evaluator> {
-    let sources = project_sources::read(&root.join(".shield/config.yml")).ok()?;
+    let sources = project_sources::read(&crate::layout::config_file(root)).ok()?;
     let digest = key(&sources);
     read_plan(&plan_path(cache, &digest), &digest)
 }
@@ -305,7 +308,7 @@ pub(in crate::review) fn cached_in(root: &Path, cache: &Path) -> Option<Evaluato
 /// Capture and validate the policy files under `root`.
 #[cfg(test)]
 pub(in crate::review) fn capture(root: &Path) -> Result<Bundle, Error> {
-    project_sources::capture(&root.join(".shield/config.yml")).map_err(error)
+    project_sources::capture(&crate::layout::config_file(root)).map_err(error)
 }
 
 fn error(error: application::Error) -> Error {

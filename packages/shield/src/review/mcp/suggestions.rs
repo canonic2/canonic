@@ -137,7 +137,7 @@ fn annotate(
             json!({"tool":"history_list","arguments":{"entry_id":row["source_entry_id"]},
                 "instruction":"Inspect the recorded source and effects. Partial analysis is evidence, not an executable rule draft."})
         } else {
-            json!({"instruction":crate::proposal_draft::command_offer(None),
+            json!({"instruction":crate::proposal_draft::COMMAND_OFFER,
                 "proposal_context":{"source_entry_id":row["source_entry_id"],"review_ids":[row["review_id"]]},
                 "defer":{"tool":"review_defer","arguments":{"session_id":row["session_id"],"review_ids":[row["review_id"]]}}})
         };

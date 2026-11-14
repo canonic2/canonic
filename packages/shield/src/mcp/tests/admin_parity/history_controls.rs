@@ -17,10 +17,10 @@ fn history_control_shipping_permission_drift_accepts_or_declines_on_the_same_con
             ] {
                 let (server, project) = fixture(Some(agent));
                 let context = project.review.as_ref();
-                let path = Path::new(&context.project_root).join(".shield/review/history.lock");
+                let path = Path::new(&context.project_root).join(".shield/state/history.lock");
                 let inode = fs::metadata(&path).unwrap().ino();
                 fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
-                let state_path = Path::new(&context.project_root).join(".shield/review/state.json");
+                let state_path = Path::new(&context.project_root).join(".shield/state/state.json");
                 let before: Value =
                     serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
                 let transport = connect(server);

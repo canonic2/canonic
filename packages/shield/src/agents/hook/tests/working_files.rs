@@ -95,7 +95,7 @@ fn default_temporary_access_fixture() {
     let file = temp.path().join("arbitrary-existing.output");
     let new_file = temp.path().join("new-unowned-name");
     fs::write(&file, "acme").unwrap();
-    let state = fs::read(root.join(".shield/review/state.json")).unwrap();
+    let state = fs::read(root.join(".shield/state/state.json")).unwrap();
     for agent in ["claude", "codex"] {
         let sources = [
             format!("cat '{}'", file.display()),
@@ -140,20 +140,22 @@ fn default_temporary_access_fixture() {
             call(root, agent, "acme-denied /tmp/acme")["hookSpecificOutput"]["permissionDecision"],
             "deny"
         );
-        let protected = temp.path().join(".shield/review/state.json");
-        let value = if cfg!(windows) && agent == "codex" {
-            input(true, &protected)
-        } else {
-            call(
-                root,
-                agent,
-                &format!("printf acme > '{}'", protected.display()),
-            )
-        };
-        assert_eq!(
-            value["hookSpecificOutput"]["permissionDecision"], "deny",
-            "{value}"
-        );
+        for state in [".shield/state/state.json", ".shield/review/state.json"] {
+            let protected = temp.path().join(state);
+            let value = if cfg!(windows) && agent == "codex" {
+                input(true, &protected)
+            } else {
+                call(
+                    root,
+                    agent,
+                    &format!("printf acme > '{}'", protected.display()),
+                )
+            };
+            assert_eq!(
+                value["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{value}"
+            );
+        }
     }
     // Refusals store requests for in-session approval; nothing else changes.
     let without_requests = |bytes: &[u8]| {
@@ -164,7 +166,7 @@ fn default_temporary_access_fixture() {
         state
     };
     assert_eq!(
-        without_requests(&fs::read(root.join(".shield/review/state.json")).unwrap()),
+        without_requests(&fs::read(root.join(".shield/state/state.json")).unwrap()),
         without_requests(&state)
     );
     assert!(!temp.path().join("new-unowned-name").exists());

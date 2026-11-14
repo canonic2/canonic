@@ -54,8 +54,8 @@ pub(super) struct Lease {
     path: PathBuf,
 }
 fn lease_path(root: &str, connection: &str) -> PathBuf {
-    Path::new(root)
-        .join(".shield/review/interactions")
+    crate::layout::state(Path::new(root))
+        .join("interactions")
         .join(format!(
             "{}.lock",
             crate::policy::fingerprint(connection.as_bytes())
@@ -176,10 +176,9 @@ pub(super) fn refresh(state: &mut State) {
 /// Preflight only the selected live capture. Publication still revalidates its
 /// exact complete file fingerprint inside the serialized commit boundary.
 pub(in crate::review) fn validate_capture(root: &str, row: &Proposal) -> Result<(), Error> {
-    let directory = Path::new(root).join(".shield");
     for (name, expected) in row.reviewed_paths.iter().flat_map(|paths| paths.iter()) {
         crate::diagnostics::trace::count("proposal.capture_file_reads", 1);
-        let bytes = super::changes::project_files::read_file(&directory, name)?;
+        let bytes = super::changes::project_files::read_file(Path::new(root), name)?;
         let actual = bytes.map(|bytes| {
             crate::diagnostics::trace::count("proposal.capture_read_bytes", bytes.len() as u64);
             crate::policy::fingerprint(bytes.as_bytes())

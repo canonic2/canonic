@@ -62,7 +62,7 @@ fn copied_workspace_run_grant_cannot_replay_and_original_remains_usable() {
     let (root, context, evidence, resource) = fixture();
     let id = pending(&context, &evidence, &resource);
     authorize(&operator(&context), &id, 300, None, false).unwrap();
-    let original = std::fs::read(root.path().join(".shield/review/state.json")).unwrap();
+    let original = std::fs::read(root.path().join(".shield/state/state.json")).unwrap();
     let copy = assert_fs::TempDir::new().unwrap();
     crate::test_support::copy_fixture_directory(root.path(), copy.path());
     let opened = review::open(copy.path()).unwrap();
@@ -129,7 +129,7 @@ fn copied_workspace_run_grant_cannot_replay_and_original_remains_usable() {
     assert_eq!(replay["allowed"], false);
     assert!(handoff.is_none());
     assert_eq!(
-        std::fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+        std::fs::read(root.path().join(".shield/state/state.json")).unwrap(),
         original
     );
     let (allowed, handoff) = gate(
@@ -716,7 +716,7 @@ fn release_failure_after_launch_keeps_consumption() {
                 assert_eq!(decision["allowed"], true);
                 std::fs::write(&effect, b"observed effect").expect("owned effect");
                 std::fs::remove_dir(
-                    Path::new(&context.project_root).join(".shield/review/state.lock"),
+                    Path::new(&context.project_root).join(".shield/state/state.lock"),
                 )
                 .expect("simulate release failure");
             }

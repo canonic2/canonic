@@ -134,7 +134,7 @@ impl Runtime {
 impl Store {
     fn new(context: &Context) -> Self {
         Self {
-            root: Path::new(&context.project_root).join(".shield/review/preparation-tasks"),
+            root: crate::layout::state(Path::new(&context.project_root)).join("preparation-tasks"),
             project: context.project_id.clone(),
             project_root: context.project_root.clone(),
         }

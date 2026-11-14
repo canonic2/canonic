@@ -63,6 +63,9 @@ pub(in crate::review) fn resume_plan_guarded(
 }
 
 pub(in crate::review) fn desired(root: &Path) -> Result<Registration, Error> {
+    // Hooks and servers carry an explicit selection project-relative; one
+    // outside the project cannot be named portably.
+    crate::layout::launch_args(root)?;
     let binary = std::env::current_exe()?.canonicalize()?;
     // Claude expands environment placeholders in command and argument strings.
     for path in [&binary, root] {
@@ -686,7 +689,7 @@ pub(in crate::review) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
         "box":box_next,
         "connections":p.desired.as_ref().map(|r|r.connections.iter().filter(|(agent,_)|p.affects(agent)).flat_map(|(agent,value)|value["review"].as_array().into_iter().flatten().map(move |row| {let mut row=row.clone();row["agent"]=json!(agent);row})).collect::<Vec<_>>()).unwrap_or_default(),
         "ask_fallbacks":fallbacks,
-        "adopt_existing_entries":p.previous.is_some() && !root.join(".shield/review/state.json").exists(),
+        "adopt_existing_entries":p.previous.is_some() && !crate::layout::enrolled(root),
         "files":files,
     })
 }
@@ -875,7 +878,7 @@ mod tests {
         let plan = prepare(root.path(), &metadata, IntegrationChoice::agent("codex")).unwrap();
         let shown = setup_preview(root.path(), plan.as_ref()).unwrap();
         assert!(!shown["codex_prefixes"].as_array().unwrap().is_empty());
-        let path = root.path().join(".shield/review/state.json");
+        let path = root.path().join(".shield/state/state.json");
         let mut state: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         state["enforcement"] = json!({"enabled":"unreadable-mode","generation":0});
         let damaged = state.to_string();

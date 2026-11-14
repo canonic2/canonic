@@ -21,7 +21,7 @@ fn without_files() -> (assert_fs::TempDir, crate::review::Context) {
 }
 
 fn stored(root: &assert_fs::TempDir) -> Value {
-    serde_json::from_slice(&std::fs::read(root.path().join(".shield/review/state.json")).unwrap())
+    serde_json::from_slice(&std::fs::read(root.path().join(".shield/state/state.json")).unwrap())
         .unwrap()
 }
 
@@ -71,7 +71,7 @@ fn unreadable_settings_keep_enforcement_on() {
 #[test]
 fn settings_of_an_earlier_checkpoint_move_into_the_local_file() {
     let (root, _) = project();
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let mut raw = stored(&root);
     raw["history_enabled"] = json!(false);
     raw["history_limit"] = json!(300);
@@ -120,7 +120,7 @@ fn settings_of_an_earlier_checkpoint_move_into_the_local_file() {
 #[test]
 fn settings_of_an_earlier_checkpoint_stay_in_effect_without_policy_files() {
     let (root, context) = without_files();
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let mut raw = stored(&root);
     raw["history_limit"] = json!(300);
     std::fs::write(&path, raw.to_string()).unwrap();
@@ -197,7 +197,7 @@ fn registries_of_an_earlier_checkpoint_move_into_the_local_file() {
     let (root, _) = project();
     let registry = assert_fs::TempDir::new().unwrap();
     let location = registry.path().canonicalize().unwrap();
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let mut raw = stored(&root);
     raw["operator"]["sources"] = json!({"acme":{
         "identity":crate::policy::fingerprint(location.to_str().unwrap().as_bytes()),

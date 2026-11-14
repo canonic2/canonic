@@ -188,7 +188,7 @@ fn handoff_session(
             if !std::path::Path::new(&request.cwd).starts_with(&context.project_root) {return Ok(None);}
             // Never share an outer project's authorization with a nested enrollment.
             if std::path::Path::new(&request.cwd).ancestors().take_while(|p|*p!=std::path::Path::new(&context.project_root))
-                .any(|p|p.join(".shield/review").exists()){return Ok(None);}
+                .any(crate::layout::is_project){return Ok(None);}
             let mut found=None;
             for (candidate,prepared) in candidates.iter().zip(&prepared) {
                 let Some(grant)=&candidate.grant else{continue;};

@@ -27,5 +27,7 @@ Options:
           Folder for this project's compiled policy plans, chosen at init or MCP setup
       --request-timeout-ms <REQUEST_TIMEOUT_MS>
           Cooperative work deadline including queue and encoding [default: 5000]
+      --config <PATH>
+          Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml
   -h, --help
           Print help

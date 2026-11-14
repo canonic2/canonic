@@ -193,21 +193,23 @@ leaves them in place. This verification does not require a Git repository.
 
 When Shield writes local stdio settings, it uses private indirection. Host files
 contain a Shield launcher, project selector and opaque random token; the connection ID, transport
-digest, command, arguments and environment stay in private review state. Tokens
+digest, command, arguments and environment stay in private runtime state. Tokens
 retain the same locator for the same connection, agent and alias; approved
 transport changes rotate a separate random host-entry generation. Cached launch
 commands resolve the current approved transport. Removal, disabling or renaming
 the binding revokes its locator. The launcher replaces itself with the connector,
-preserving native stdio and signal ownership. Review-state permissions must be private.
+preserving native stdio and signal ownership. `.shield/state/` permissions must be private.
 Approval publishes registered connection entries automatically, and interrupted
 publication resumes in the same session or from a cached launcher. Reloading an
 already running connector depends on the agent host.
 
 Launcher setup works without Git and with tracked host files, including
 `.mcp.json` and `.codex/config.toml`. It does not change repository tracking or
-ignore rules. Private transport settings remain in private review state; generated
+ignore rules. Private transport settings remain in private runtime state; generated
 host entries contain only launcher information. Supported project MCP launchers
-use the installed `shield` command and `--project .`. Copying or moving a workspace
+use the installed `shield` command and `--project .`, plus the project-relative
+`--config` file when setup ran with one
+([where the configuration lives](policy-files.md#where-the-configuration-lives)). Copying or moving a workspace
 closes its old private tokens. On runtime startup, Shield replaces an exactly
 owned launcher with a fresh token when the reviewed binary and connector settings
 still match. This needs no new permission review. Edited or missing entries stay

@@ -192,17 +192,12 @@ pub(super) fn prefix_rules(prefixes: &[CodexPrefix]) -> Option<String> {
 const ALWAYS_PROMPT: &str = "policy_apply";
 
 /// The server table; `approved` tools run without asking and the rest prompt.
-pub(super) fn mcp(_binary: &Path, _root: &Path, approved: &[String]) -> String {
+pub(super) fn mcp(_binary: &Path, root: &Path, approved: &[String]) -> String {
     let mut table = Table::new();
     table["command"] = value("shield");
-    table["args"] = value(toml_edit::Array::from_iter([
-        "mcp",
-        "serve",
-        "--project",
-        ".",
-        "--agent",
-        "codex",
-    ]));
+    table["args"] = value(toml_edit::Array::from_iter(
+        crate::agents::setup::serve_args(root, "codex"),
+    ));
     table["default_tools_approval_mode"] = value("prompt");
     let mut approvals = Table::new();
     for (name, _) in crate::review::mcp::tool_summaries() {

@@ -27,5 +27,7 @@ Options:
           Folder for this project's compiled policy plans, chosen at init or MCP setup
       --grant-id <GRANT_ID>
           Filter uses of one reusable grant
+      --config <PATH>
+          Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml
   -h, --help
           Print help

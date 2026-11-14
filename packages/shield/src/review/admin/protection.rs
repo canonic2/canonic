@@ -39,7 +39,7 @@ impl Prepared {
 
     pub(in crate::review) fn review(&self) -> Value {
         json!({"operation":"change protected file access","before":self.before,"after":self.after,
-            "fixed_protection":[".shield/review","compiled caches",".shield folder",".shield/.gitignore"],
+            "fixed_protection":[".shield/state","compiled caches",".shield folder",".shield/.gitignore"],
             "warning":"Allowing changes to agent settings permits removal of Shield hooks and host confirmation settings."})
     }
 

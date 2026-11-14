@@ -367,7 +367,7 @@ fn review_live_change(context: &Context, tty: &mut Terminal) -> Result<Value, Er
         &before.candidates["project"],
         &proposal.candidate,
     )?;
-    let row = proposal.public(false);
+    let row = proposal.public();
     let requested = row["links"]["source_entry_id"].as_str().and_then(|entry| {
         review::observations::requested(std::path::Path::new(&context.project_root), entry)
     });
@@ -375,7 +375,7 @@ fn review_live_change(context: &Context, tty: &mut Terminal) -> Result<Value, Er
     let choice = match tty.decide(&card, 0) {
         Ok(choice) => choice,
         Err(error) => {
-            let _ = review::transition(context, &id, "withdraw", None, &|| Ok(()));
+            let _ = review::transition(context, &id, "withdraw", &|| Ok(()));
             return Err(error);
         }
     };
@@ -398,8 +398,8 @@ fn review_live_change(context: &Context, tty: &mut Terminal) -> Result<Value, Er
             Some(&id),
             "operator-cli",
         )?,
-        "reject" => review::transition(context, &id, "reject", None, &|| Ok(()))?,
-        _ => review::transition(context, &id, "withdraw", None, &|| Ok(()))?,
+        "reject" => review::transition(context, &id, "reject", &|| Ok(()))?,
+        _ => review::transition(context, &id, "withdraw", &|| Ok(()))?,
     };
     Ok(
         json!({"reviewed":[{"proposal_id":id,"choice":choice,"summary":card.summary,"result":result}]}),

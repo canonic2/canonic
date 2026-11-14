@@ -52,7 +52,7 @@ fn a_held_snapshot_is_immutable_and_public_status_discovers_the_owner() {
 #[test]
 fn unsupported_internal_commands_leave_enrolled_state_unchanged() {
     let root = fixture();
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let before = std::fs::read(&path).unwrap();
     for args in [
         vec!["about"],

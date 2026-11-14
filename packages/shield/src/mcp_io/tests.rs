@@ -1,8 +1,9 @@
 use super::*;
 use serde_json::json;
+use std::fs;
 
 fn configured(root: &Path) {
-    fs::create_dir_all(root.join(".shield/review")).expect("fixture review directory");
+    fs::create_dir_all(root.join(".shield/state")).expect("fixture review directory");
     fs::write(
         root.join(".shield/config.yml"),
         "schema_version: 1\npacks: []\n",
@@ -90,7 +91,7 @@ fn other_projects_cannot_replace_an_explicit_selection() {
     let selected = selected.canonicalize().unwrap();
     let current = current.canonicalize().unwrap();
     fs::write(
-        current.join(".shield/review/state.json"),
+        current.join(".shield/state/state.json"),
         json!({"schema_version":1,"project_root":current}).to_string(),
     )
     .unwrap();
@@ -102,7 +103,7 @@ fn other_projects_cannot_replace_an_explicit_selection() {
     assert_eq!(project_path(Some(&selected), &nested).unwrap(), selected);
     assert_eq!(project_path(Some(&current), &nested).unwrap(), current);
     let pending = current.join("pending");
-    fs::create_dir_all(pending.join(".shield/review")).unwrap();
+    fs::create_dir_all(pending.join(".shield/state")).unwrap();
     assert_eq!(project_path(None, &pending).unwrap(), pending);
     assert_eq!(project_path(Some(&current), &pending).unwrap(), current);
     // An unconfigured working directory leaves an explicit selection intact.
@@ -125,7 +126,7 @@ fn discovery_canonicalizes_cwd_without_changing_an_explicit_selection() {
     let alias = root.path().join("current-alias");
     std::os::unix::fs::symlink(&current, &alias).unwrap();
     fs::write(
-        current.join(".shield/review/state.json"),
+        current.join(".shield/state/state.json"),
         json!({
             "schema_version":1,"project_root":current,
             "operator":{"bootstrap":{"launch_roots":[selected]}}
@@ -136,7 +137,7 @@ fn discovery_canonicalizes_cwd_without_changing_an_explicit_selection() {
     assert_eq!(project_path(Some(&selected), &alias).unwrap(), selected);
     assert_eq!(project_path(None, &alias).unwrap(), current);
     fs::remove_file(current.join(".shield/config.yml")).unwrap();
-    fs::remove_file(current.join(".shield/review/state.json")).unwrap();
+    fs::remove_file(current.join(".shield/state/state.json")).unwrap();
     std::os::unix::fs::symlink("missing-config", current.join(".shield/config.yml")).unwrap();
     assert_eq!(project_path(Some(&selected), &current).unwrap(), selected);
 }

@@ -733,15 +733,9 @@ pub(super) fn owns_context(root: &Path, cwd: &Path) -> bool {
     if !cwd.starts_with(root) {
         return false;
     }
-    for directory in cwd.ancestors().take_while(|path| *path != root) {
-        for marker in [".shield/config.yml", ".shield/review"] {
-            match fs::symlink_metadata(directory.join(marker)) {
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                _ => return false,
-            }
-        }
-    }
-    true
+    !cwd.ancestors()
+        .take_while(|path| *path != root)
+        .any(crate::layout::is_project)
 }
 
 #[expect(

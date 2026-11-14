@@ -90,7 +90,7 @@ pub(super) fn legacy_activation(raw: &mut Value) {
 
 fn save(root: &Path, raw: &Value) -> Vec<u8> {
     let bytes = serde_json::to_vec(raw).unwrap();
-    fs::write(root.join(".shield/review/state.json"), &bytes).unwrap();
+    fs::write(root.join(".shield/state/state.json"), &bytes).unwrap();
     bytes
 }
 
@@ -160,7 +160,7 @@ fn upgrade_checkpoint_with_a_policy_copy_converts_on_first_read() {
 #[test]
 fn upgrade_dispatch_keeps_current_policy_and_approval_state_read_only() {
     let (root, _) = review::tests::enrolled();
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let bytes = fs::read(&path).unwrap();
     let before: Value = serde_json::from_slice(&bytes).unwrap();
     let store = Store::open(root.path()).unwrap();

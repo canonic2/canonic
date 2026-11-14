@@ -55,6 +55,19 @@ pub(crate) fn migrate(
     repair(Some(source), desired)
 }
 
+/// The arguments of Shield's generated MCP server entry for `agent` in the
+/// project at `root`: `mcp serve --project . --agent <agent>`, followed by the
+/// project-relative `--config` of an explicit configuration selection, so the
+/// server selects the same policy files as the command that set it up.
+pub(crate) fn serve_args(root: &std::path::Path, agent: &str) -> Vec<String> {
+    let mut args: Vec<String> = ["mcp", "serve", "--project", ".", "--agent", agent]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    args.extend(crate::layout::launch_args(root).unwrap_or_default());
+    args
+}
+
 /// Recognize only the supported generated stdio argument shape. Other settings
 /// remain byte/semantic data of the caller's own codec, never regenerated here.
 pub(crate) fn portable_mcp_args(

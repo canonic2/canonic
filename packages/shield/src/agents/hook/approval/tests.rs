@@ -376,17 +376,21 @@ fn codex_offers_its_unpromptable_ask_only_when_the_form_shows_it_whole() {
 fn a_patch_that_also_reaches_review_state_is_not_offered() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
-    let patch = "*** Begin Patch\n*** Update File: .codex/config.toml\n@@\n-# Acme\n+# Acme changed\n*** Add File: .shield/review/acme.json\n+{}\n*** End Patch";
-    let value = hook(
-        root,
-        "codex",
-        Event::Before,
-        &json!({"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_use_id":"acme-call",
-            "session_id":"acme-session","cwd":root,"tool_input":{"command":patch}}),
-    );
-    assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
-    assert!(offered_id(&value).is_none(), "{value}");
-    assert!(!reason(&value).contains(super::OFFER), "{value}");
+    for state in [".shield/state", ".shield/review"] {
+        let patch = format!(
+            "*** Begin Patch\n*** Update File: .codex/config.toml\n@@\n-# Acme\n+# Acme changed\n*** Add File: {state}/acme.json\n+{{}}\n*** End Patch"
+        );
+        let value = hook(
+            root,
+            "codex",
+            Event::Before,
+            &json!({"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_use_id":"acme-call",
+                "session_id":"acme-session","cwd":root,"tool_input":{"command":patch}}),
+        );
+        assert_eq!(value["hookSpecificOutput"]["permissionDecision"], "deny");
+        assert!(offered_id(&value).is_none(), "{value}");
+        assert!(!reason(&value).contains(super::OFFER), "{value}");
+    }
 }
 
 #[test]
@@ -395,10 +399,12 @@ fn fixed_protected_state_never_offers_in_session_approval() {
     let root = Path::new(&context.project_root);
     for agent in ["codex", "claude"] {
         for command in [
+            "cat acme.txt > .shield/state/acme.json",
             "cat acme.txt > .shield/review/acme.json",
             "rm -rf .shield",
             "cat acme.txt > .shield/.gitignore",
-            // A settings change cannot carry review state with it.
+            // A settings change cannot carry runtime state with it.
+            "sed -i 's/a/b/' .codex/config.toml; touch .shield/state/acme",
             "sed -i 's/a/b/' .codex/config.toml; touch .shield/review/acme",
             "shield protection set",
         ] {

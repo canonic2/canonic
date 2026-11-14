@@ -655,7 +655,7 @@ impl Reach<'_> {
     fn settings(root: &Path) -> impl Iterator<Item = (&'static str, PathBuf)> + '_ {
         protected_files()
             .iter()
-            .filter(|name| !name.starts_with(".shield"))
+            .filter(|name| !name.starts_with(".shield") && **name != crate::layout::GROUPED_BUNDLE)
             .map(move |name| (*name, resolve_existing(&root.join(name))))
     }
 

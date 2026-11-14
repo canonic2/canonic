@@ -103,7 +103,7 @@ fn not_portable() -> Report {
 fn invalid_policy_files(problem: &str) -> Report {
     let mut report = Report::new(
         "The policy files are invalid",
-        "Shield cannot apply the policy in .shield/; agent requests ask until it is fixed.",
+        "Shield cannot apply the project's policy files; agent requests ask until they are fixed.",
         &["Fix the named file, then retry."],
     );
     report.field("Problem", problem);
@@ -478,7 +478,7 @@ fn invalid_source(reason: &str) -> Report {
             "Project configuration needs correction",
             "Shield could not use the supplied configuration or retained artifact.",
             &[
-                "Correct .shield/config.yml or its artifacts, then review with shield policy review.",
+                "Correct the selected config.yml or its artifacts, then review with shield policy review.",
                 "Correct the policy files; the next request uses them once they are valid.",
             ],
         );

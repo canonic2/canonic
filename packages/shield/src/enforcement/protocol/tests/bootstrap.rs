@@ -28,15 +28,15 @@ fn bootstrap_nested_copy_cannot_use_the_original_enrollment_for_sdk_reads() {
     assert_eq!(code, 0, "{allowed}");
     assert_eq!(allowed["decision"], "allow", "{allowed}");
     let copy = canonical.join("copy");
-    fs::create_dir_all(copy.join(".shield/review")).unwrap();
+    fs::create_dir_all(copy.join(".shield/state")).unwrap();
     fs::write(
         copy.join(".shield/config.yml"),
         "schema_version: 1\npacks: []\n",
     )
     .unwrap();
     fs::copy(
-        root.path().join(".shield/review/state.json"),
-        copy.join(".shield/review/state.json"),
+        root.path().join(".shield/state/state.json"),
+        copy.join(".shield/state/state.json"),
     )
     .unwrap();
     let nested = copy.join("src");

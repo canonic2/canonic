@@ -341,7 +341,7 @@ fn registry_enrollment_cancel_disconnect_and_missing_forms_never_grant_trust() {
             assert!(result.is_ok());
         }
         let state: Value = serde_json::from_slice(
-            &fs::read(project.root.path().join(".shield/review/state.json")).unwrap(),
+            &fs::read(project.root.path().join(".shield/state/state.json")).unwrap(),
         )
         .unwrap();
         assert!(state["operator"]["sources"]["cancelled"].is_null());
@@ -454,7 +454,7 @@ fn registry_enrollment_user_scope_child() {
             }
         }
         let state: Value =
-            serde_json::from_slice(&fs::read(root.join(".shield/review/state.json")).unwrap())
+            serde_json::from_slice(&fs::read(root.join(".shield/state/state.json")).unwrap())
                 .unwrap();
         assert!(state["operator"]["sources"]["local"].is_null());
         assert_eq!(project.revision(), before);

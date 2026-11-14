@@ -70,7 +70,7 @@ registrations remain in place. `status` and `doctor` report whether
 Shield is enabled.
 
 While disabled, native hooks retain protected-file and operator-command guards.
-Agents cannot use the pause to edit review state, forge grants or invoke the
+Agents cannot use the pause to edit runtime state, forge grants or invoke the
 operator CLI. Saved protected-file Allow choices remain in force; other
 protected accesses are blocked during the pause. Shell requests
 must have a verifiable protected footprint; unsupported or incomplete analysis
@@ -176,10 +176,12 @@ Git option values do not narrow this footprint: in
 diff can include settings outside that folder. Unknown option arity also keeps
 the complete footprint rather than guessing which words are paths.
 
-`.shield/review/`, compiled caches, the `.shield` folder itself and
+`.shield/state/`, compiled caches, the `.shield` folder itself and
 `.shield/.gitignore` stay protected whatever you choose, and agents still cannot
-run Shield operator actions. Help-only requests follow ordinary policy. The
-choice is the `protection` setting, written to your `.shield/config.local.yml`
+run Shield operator actions. Policy files are never writable by agents, in
+`.shield/`, `.config/shield/` or a `--config` file's folder. Help-only requests
+follow ordinary policy. The choice is the `protection` setting, written to your
+`config.local.yml`
 ([settings](policy-files.md#settings)); agents cannot change it. `status` lists
 any group you have opened. An invalid `protection` value makes every native
 request ask until you fix it or run `protection set` again.
@@ -217,7 +219,7 @@ agent reports that it could not ask you, choose an approval policy that allows
 prompts with `/permissions` in the same Codex session; the agent then asks
 again.
 
-Review state, caches, the `.shield` folder and its ignore file are never
+Runtime state, caches, the `.shield` folder and its ignore file are never
 offered, even once, and neither is a request that also touches them.
 
 ## Custom rules and proposed changes

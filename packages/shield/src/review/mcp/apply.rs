@@ -260,7 +260,7 @@ pub(super) fn present_cached_proposal(
 /// Build the response from the exact row already prepared by the workflow.
 /// Formatting before persistence avoids a full project reload after saving it.
 pub(super) fn proposal_result(context: &Context, proposal: &Proposal) -> Value {
-    let mut data = proposal.public(false);
+    let mut data = proposal.public();
     if proposal.status != "pending" || !crate::review::proposal_lifecycle::owns(proposal, context) {
         data.as_object_mut()
             .map(|object| object.remove("apply_arguments"));

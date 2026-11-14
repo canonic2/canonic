@@ -41,5 +41,8 @@ Options:
       --cache-dir <CACHE_DIR>
           Folder for this project's compiled policy plans, chosen at init or MCP setup
 
+      --config <PATH>
+          Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml
+
   -h, --help
           Print help (see a summary with '-h')

@@ -368,7 +368,7 @@ fn graphql_fragment_expansion_depth_is_bounded_in_both_validation_and_walk() {
             Ok(Ok(document)) => {
                 reached_walk = true;
                 assert!(matches!(
-                    document.check(None, &plan, &mut visits, &|| Ok(())),
+                    document.check(&read(None), &plan, &mut visits, &|| Ok(())),
                     Err(policy::Error::Limit)
                 ));
             }
@@ -394,10 +394,17 @@ fn graphql_fragment_expansion_depth_is_bounded_in_both_validation_and_walk() {
         .unwrap();
     assert!(
         document
-            .check(None, &plan, &mut visits, &|| Ok(()))
+            .check(&read(None), &plan, &mut visits, &|| Ok(()))
             .unwrap()
             .is_none()
     );
+}
+fn read(model: Option<&Value>) -> document::Expectation<'_> {
+    document::Expectation {
+        kind: document::Kind::Query,
+        model,
+        root_fields: None,
+    }
 }
 
 #[test]
@@ -418,7 +425,7 @@ fn graphql_enum_match_requires_a_literal_or_a_variable_with_nonbuiltin_type() {
             .unwrap();
         assert_eq!(
             document
-                .check(Some(&model), &plan, &mut visits, &|| Ok(()))
+                .check(&read(Some(&model)), &plan, &mut visits, &|| Ok(()))
                 .unwrap()
                 .is_none(),
             allowed,
@@ -548,4 +555,161 @@ fn graphql_host_selection_uses_supplied_context_and_explicit_host_precedence() {
             "GH_HOST={host:?}; --hostname={explicit:?}"
         );
     }
+}
+
+fn mutation_model() -> Value {
+    let input = |id: &str| {
+        json!({"input":{"required":true,"match":{"object":{
+            id:{"required":true,"match":{"scalar":"string"}},
+            "clientMutationId":{"match":{"scalar":"string"}}
+        }}}})
+    };
+    json!({"root":"mutation","states":{
+        "mutation":{"types":["Mutation"],"fields":{
+            "resolveReviewThread":{"arguments":input("threadId"),"select":"threadPayload"},
+            "unresolveReviewThread":{"arguments":input("threadId"),"select":"threadPayload"},
+            "mergePullRequest":{"arguments":input("pullRequestId"),"select":"payload"},
+            "deletePullRequestReviewComment":{"arguments":input("id"),"select":"payload"}
+        }},
+        "threadPayload":{"types":["ResolveReviewThreadPayload","UnresolveReviewThreadPayload"],"fields":{
+            "clientMutationId":{"leaf":true},"thread":{"select":"thread"}
+        }},
+        "thread":{"types":["PullRequestReviewThread"],"fields":{"id":{"leaf":true},"isResolved":{"leaf":true}}},
+        "payload":{"types":["MergePullRequestPayload","DeletePullRequestReviewCommentPayload"],"fields":{"clientMutationId":{"leaf":true}}}
+    }})
+}
+fn mutation_rule(id: &str, fields: &[&str], decision: &str) -> Value {
+    json!({"id":id,"conditions":{"domain":"argv","executable":"gh","arguments":{"kind":"prefix","values":["api"]},
+        "graphql":{"carrier":"gh-api","operation":"mutation","root_fields":fields,"selection":mutation_model()}},
+        "decision":decision})
+}
+fn mutation_rules() -> CustomRules {
+    CustomRules::from_yaml(&json!({"schema_version":1,"kind":"custom",
+        "capabilities":["structured-rules-v1","argument-rules-v1","graphql-v1","graphql-mutations-v1"],
+        "rules":[
+            mutation_rule("threads", &["resolveReviewThread", "unresolveReviewThread"], "allow"),
+            mutation_rule("merges", &["mergePullRequest"], "ask"),
+            mutation_rule("deletes", &["deletePullRequestReviewComment"], "deny"),
+            {"id":"other-api","conditions":{"domain":"argv","executable":"gh","arguments":{"kind":"prefix","values":["api"]}},"decision":"deny"}
+        ]
+    }).to_string()).unwrap()
+}
+
+#[test]
+fn graphql_mutations_take_the_strictest_listed_class_in_source_and_compiled_plans() {
+    let rules = mutation_rules();
+    let plan = policy::compiled::Plan::compile(vec![], Some(mutation_rules()), json!({})).unwrap();
+    // Full loading validates each rule on a copy whose model is a prepared reference.
+    let plan = policy::compiled::Plan::load(plan.bytes().to_vec()).unwrap();
+    let resolve = |id: &str| {
+        format!(r#"resolveReviewThread(input:{{threadId:"{id}"}}){{thread{{id isResolved}}}}"#)
+    };
+    let merge = r#"mergePullRequest(input:{pullRequestId:"P1"}){clientMutationId}"#;
+    for (query, extra, expected) in [
+        (format!("mutation{{{}}}", resolve("T1")), vec![], Decision::Allow),
+        (format!("mutation{{a:{} b:{}}}", resolve("T1"), resolve("T2")), vec![], Decision::Allow),
+        (r#"mutation{resolveReviewThread(input:{threadId:"threadId: T1"}){thread{id}}}"#.into(), vec![], Decision::Allow),
+        (
+            r#"mutation($id:ID!){resolveReviewThread(input:{threadId:$id,clientMutationId:"c"}){clientMutationId}}"#.into(),
+            vec!["-f", "id=T1"],
+            Decision::Allow,
+        ),
+        (format!("mutation{{{} {merge}}}", resolve("T1")), vec![], Decision::Ask),
+        (
+            format!(r#"mutation{{{} deletePullRequestReviewComment(input:{{id:"C1"}}){{clientMutationId}}}}"#, resolve("T1")),
+            vec![],
+            Decision::Deny,
+        ),
+        // Aliases never stand in for actual names; conditionals and fragments still count.
+        (format!("mutation{{resolveReviewThread:{merge}}}"), vec![], Decision::Ask),
+        (
+            format!("mutation($skip:Boolean=true){{{} mergePullRequest(input:{{pullRequestId:\"P1\"}}) @skip(if:$skip){{clientMutationId}}}}", resolve("T1")),
+            vec![],
+            Decision::Ask,
+        ),
+        (format!("mutation{{{} ...M}} fragment M on Mutation{{{merge}}}", resolve("T1")), vec![], Decision::Ask),
+        // Everything below leaves the reviewed model and falls to the broad rule.
+        (format!("mutation{{{} addStar(input:{{starrableId:\"R\"}}){{clientMutationId}}}}", resolve("T1")), vec![], Decision::Deny),
+        (r#"mutation{resolveReviewThread(input:{threadId:"T1",extra:1}){thread{id}}}"#.into(), vec![], Decision::Deny),
+        (r#"mutation{resolveReviewThread(input:{threadId:"T1",threadId:"T2"}){thread{id}}}"#.into(), vec![], Decision::Deny),
+        // The parser skips a byte-order mark like whitespace, so it cannot hide a key.
+        ("mutation{resolveReviewThread(input:{threadId:\"T1\",threadId\u{feff}:\"T2\"}){thread{id}}}".into(), vec![], Decision::Deny),
+        (r#"mutation{resolveReviewThread(input:{threadId:["T1"]}){thread{id}}}"#.into(), vec![], Decision::Deny),
+        (r#"mutation{resolveReviewThread(input:{clientMutationId:"c"}){thread{id}}}"#.into(), vec![], Decision::Deny),
+        (
+            "mutation($input:ResolveReviewThreadInput!){resolveReviewThread(input:$input){thread{id}}}".into(),
+            vec!["-f", "input=T1"],
+            Decision::Deny,
+        ),
+        (
+            r#"mutation{resolveReviewThread(input:{threadId:"T1"}){thread{id pullRequest{repository{nameWithOwner}}}}}"#.into(),
+            vec![],
+            Decision::Deny,
+        ),
+        (format!("mutation{{{}}}", resolve("T1")), vec!["--paginate"], Decision::Deny),
+        (r#"{repository(owner:"acme",name:"web"){nameWithOwner}}"#.into(), vec![], Decision::Deny),
+    ] {
+        let mut request = request(&query);
+        request.arguments.extend(extra.iter().map(|a| (*a).to_owned()));
+        let reference =
+            policy::evaluate(&[], Some(&rules), policy::Profile::Recommended, &request).unwrap();
+        assert_eq!(reference.decision, expected, "{query} {extra:?}");
+        let compiled = plan.evaluate(&request, &|| Ok(()), true, true).unwrap();
+        assert_eq!(json!(compiled), json!(reference), "{query} {extra:?}");
+    }
+}
+
+#[test]
+fn graphql_mutation_admission_requires_its_capability_classes_and_root_type() {
+    let valid = json!({"carrier":"gh-api","operation":"mutation","root_fields":["mergePullRequest"],"selection":mutation_model()});
+    assert!(validate(&valid).is_ok());
+    let mut missing_fields = valid.clone();
+    missing_fields
+        .as_object_mut()
+        .unwrap()
+        .remove("root_fields");
+    let mut missing_model = valid.clone();
+    missing_model.as_object_mut().unwrap().remove("selection");
+    let mut duplicate_fields = valid.clone();
+    duplicate_fields["root_fields"] = json!(["mergePullRequest", "mergePullRequest"]);
+    let mut query_root = valid.clone();
+    query_root["selection"]["states"]["mutation"]["types"] = json!(["Query"]);
+    let mut cursor = valid.clone();
+    cursor["selection"]["states"]["mutation"]["fields"]["mergePullRequest"]["arguments"]["input"]
+        ["match"]["object"]["after"] =
+        json!({"nullable":true,"cursor":true,"match":{"scalar":"string"}});
+    let mut deep = json!({"leaf":{"match":{"scalar":"string"}}});
+    for _ in 0..5 {
+        deep = json!({"nested":{"match":{"object":deep}}});
+    }
+    let mut too_deep = valid.clone();
+    too_deep["selection"]["states"]["mutation"]["fields"]["mergePullRequest"]["arguments"] = deep;
+    let mut query_fields = json!({"carrier":"gh-api","operation":"query","selection":model()});
+    query_fields["root_fields"] = json!(["repository"]);
+    let mut query_object = json!({"carrier":"gh-api","operation":"query","selection":model()});
+    query_object["selection"]["states"]["query"]["fields"]["repository"]["arguments"]["filter"] =
+        json!({"match":{"object":{"state":{"match":{"scalar":"enum"}}}}});
+    let mut query_mutation_root =
+        json!({"carrier":"gh-api","operation":"query","selection":mutation_model()});
+    query_mutation_root
+        .as_object_mut()
+        .unwrap()
+        .remove("root_fields");
+    for invalid in [
+        missing_fields,
+        missing_model,
+        duplicate_fields,
+        query_root,
+        cursor,
+        too_deep,
+        query_fields,
+        query_object,
+        query_mutation_root,
+    ] {
+        assert!(validate(&invalid).is_err(), "{invalid}");
+    }
+    let undeclared = json!({"schema_version":1,"kind":"custom",
+        "capabilities":["structured-rules-v1","argument-rules-v1","graphql-v1"],
+        "rules":[mutation_rule("threads", &["resolveReviewThread"], "allow")]});
+    assert!(CustomRules::from_yaml(&undeclared.to_string()).is_err());
 }

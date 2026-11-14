@@ -55,7 +55,7 @@ fn proposal(context: &Context, views: &mut Views, id: &str) -> Result<Value, Err
     };
     let row = &state.proposals[index];
     if !hydrated || (row.status != "pending" && row.reasons["historical_capture"].is_object()) {
-        let mut value = row.public(false);
+        let mut value = row.public();
         value["before_candidate_id"] = Value::Null;
         value["after_candidate_id"] = Value::Null;
         value["capture_availability"] = json!("historical_capture_unavailable");
@@ -83,7 +83,7 @@ fn proposal(context: &Context, views: &mut Views, id: &str) -> Result<Value, Err
     )?;
     let display =
         crate::review::inspection::source::policy(context, &row.candidate, &after_revision)?;
-    let mut value = row.public(false);
+    let mut value = row.public();
     value
         .as_object_mut()
         .map(|object| object.remove("apply_arguments"));
@@ -198,7 +198,7 @@ pub(super) fn withdraw(
         return Ok(row.summary());
     }
     drop(state);
-    match crate::review::transition(context, id, "withdraw", None, checkpoint) {
+    match crate::review::transition(context, id, "withdraw", checkpoint) {
         // The base revision changed: the proposal is saved as stale, not withdrawn.
         Ok(value) if value["error"]["code"] == "stale-proposal" => Err(Error::StaleSnapshot.into()),
         Ok(value) => Ok(value),

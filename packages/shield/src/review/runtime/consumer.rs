@@ -214,7 +214,6 @@ pub struct Snapshot {
     identity: SnapshotIdentity,
     evaluator: Arc<Evaluator>,
     working_files: Option<crate::location::WorkingFiles>,
-    input_status: serde_json::Value,
 }
 
 /// Exact authenticated source retained across the native adapter's final
@@ -333,12 +332,6 @@ impl Snapshot {
             identity: self.identity.clone(),
             evaluator: Arc::clone(&self.evaluator),
         }
-    }
-    /// Metadata-only observation of editable inputs at runtime loading. A match
-    /// is a hint, never content validation or permission to use edited source.
-    #[must_use]
-    pub fn input_status(&self) -> &serde_json::Value {
-        &self.input_status
     }
     pub(crate) fn has_mcp_integrations(&self) -> bool {
         self.evaluator.has_mcp_integrations()
@@ -590,7 +583,6 @@ pub(in crate::review) fn load(
     checkpoint()?;
     Ok(Snapshot {
         working_files: None,
-        input_status: serde_json::json!({"status":"current","authorizes":false}),
         identity: SnapshotIdentity {
             project_id: state.project_id.clone(),
             project_root: state.project_root.clone(),

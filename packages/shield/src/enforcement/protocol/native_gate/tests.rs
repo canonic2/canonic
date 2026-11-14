@@ -4,12 +4,15 @@ use super::*;
 #[test]
 fn native_dialect_sequences_preserve_protected_access_and_opaque_refusals() {
     let root = assert_fs::TempDir::new().unwrap();
-    std::fs::create_dir_all(root.path().join(".shield/review")).unwrap();
-    std::fs::write(
-        root.path().join(".shield/review/state.json"),
-        "Acme private state",
-    )
-    .unwrap();
+    // The current state directory and its earlier name are both protected.
+    for directory in [".shield/state", ".shield/review"] {
+        std::fs::create_dir_all(root.path().join(directory)).unwrap();
+        std::fs::write(
+            root.path().join(directory).join("state.json"),
+            "Acme private state",
+        )
+        .unwrap();
+    }
     let rules = crate::policy::rules::document(&[
         json!({"id":"native","decision":"allow","conditions":{"domain":"argv","executable":{"one_of":["git","rg","node"]},"arguments":{"kind":"any"}}}),
     ]).unwrap().to_string();
@@ -24,6 +27,14 @@ fn native_dialect_sequences_preserve_protected_access_and_opaque_refusals() {
             .unwrap();
     let path = root.path().canonicalize().unwrap();
     for (dialect, source) in [
+        (
+            crate::shell::Dialect::Powershell,
+            "git status; rg Acme .shield/state/state.json",
+        ),
+        (
+            crate::shell::Dialect::Cmd,
+            "git status & rg Acme .shield/state/state.json",
+        ),
         (
             crate::shell::Dialect::Powershell,
             "git status; rg Acme .shield/review/state.json",

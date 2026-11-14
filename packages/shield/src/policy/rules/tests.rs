@@ -1206,6 +1206,101 @@ fn search_models_check_paths_and_reject_explicit_helpers() {
 
 #[test]
 #[cfg(unix)]
+fn recursive_grep_checks_existing_descendants_without_following_links() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::create_dir_all(root.join("models/nested")).unwrap();
+    std::fs::write(root.join("models/item.prisma"), "Acme").unwrap();
+    std::fs::write(root.join("models/nested/.hidden"), "Acme").unwrap();
+    std::fs::write(root.join("-n"), "Acme").unwrap();
+    std::fs::create_dir(root.join(".aws")).unwrap();
+    std::fs::write(root.join(".aws/credentials"), "Acme").unwrap();
+    std::fs::create_dir_all(root.join("secrets/.aws")).unwrap();
+    let outside = assert_fs::TempDir::new().unwrap();
+    std::fs::write(outside.path().join("item"), "Acme").unwrap();
+    // grep -r does not follow descendant links, so this one is never read.
+    std::os::unix::fs::symlink(outside.path(), root.join("models/escape")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), root.join("linked")).unwrap();
+    let evaluator = prepared(vec![
+        json!({"id":"search","decision":"allow","conditions":{"domain":"argv","executable":"grep","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"project"},"exclude":[{"root":"project","path":".aws"},{"root":"project","path":"secrets/.aws"}]}}},"on_unmet":{"decision":"deny"}}),
+    ]);
+    let mut req = Request {
+        executable: "grep".into(),
+        arguments: vec![],
+        cwd: root.to_string_lossy().into_owned(),
+        project: root.to_string_lossy().into_owned(),
+    };
+    for (arguments, decision) in [
+        (vec!["-rn", "-i", "Tag {", "models"], Decision::Allow),
+        (vec!["--recursive", "Acme", "models"], Decision::Allow),
+        // Later options are moved to the front, as GNU and BSD grep do.
+        (
+            vec!["-rn", "-i", "Acme", "models", "--include=*.prisma"],
+            Decision::Allow,
+        ),
+        // POSIXLY_CORRECT would make these operands: a later option naming an
+        // existing file, or taking the next word as its value, is unverified.
+        (vec!["-r", "Acme", "models", "-n"], Decision::Deny),
+        (
+            vec!["-r", "Acme", "models", "--include", "*.prisma"],
+            Decision::Deny,
+        ),
+        (vec!["-r", "models", "-e", "Acme"], Decision::Deny),
+        (
+            vec!["-rn", "--include=*.prisma", "Acme", "models"],
+            Decision::Allow,
+        ),
+        (
+            vec![
+                "-r",
+                "--include",
+                "*.prisma",
+                "--exclude-dir",
+                "nested",
+                "Acme",
+                "models",
+            ],
+            Decision::Allow,
+        ),
+        (vec!["-r", "-e", "Acme", "-eTag", "models"], Decision::Allow),
+        (
+            vec!["-r", "--regexp=Acme", "models/item.prisma"],
+            Decision::Allow,
+        ),
+        (vec!["-e", "Acme", "models/item.prisma"], Decision::Allow),
+        // Without -r a directory is not searched.
+        (vec!["Acme", "models"], Decision::Deny),
+        // Filters do not narrow the footprint: an existing excluded folder blocks.
+        (
+            vec!["-r", "--include=*.prisma", "Acme", "."],
+            Decision::Deny,
+        ),
+        (vec!["-r", "Acme", "secrets"], Decision::Deny),
+        // An explicit operand still follows its own link.
+        (vec!["-r", "Acme", "linked"], Decision::Deny),
+        (vec!["-R", "Acme", "models"], Decision::Deny),
+        (vec!["-r", "Acme"], Decision::Deny),
+        (
+            vec!["-r", "-f", "models/item.prisma", "models"],
+            Decision::Deny,
+        ),
+        (
+            vec!["-r", "--directories=recurse", "Acme", "models"],
+            Decision::Deny,
+        ),
+        (vec!["-r", "Acme", "missing"], Decision::Deny),
+    ] {
+        req.arguments = arguments.into_iter().map(str::to_owned).collect();
+        assert_eq!(
+            evaluator.evaluate(&req).unwrap().decision,
+            decision,
+            "{req:?}"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
 fn ripgrep_visible_trees_preserve_exclusions_without_following_descendant_links() {
     let dir = assert_fs::TempDir::new().unwrap();
     let root = dir.path().canonicalize().unwrap();

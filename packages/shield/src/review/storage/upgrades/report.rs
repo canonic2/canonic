@@ -14,7 +14,7 @@ pub(in crate::review) fn differences(root: &Path, raw: &Value) -> Value {
         return json!({"compared":false,"reason":"the earlier approved copy is not readable"});
     };
     let files = match crate::review::integrations::project_sources::capture(
-        &root.join(".shield/config.yml"),
+        &crate::layout::config_file(root),
     ) {
         Ok(bundle) => json!(bundle),
         Err(_) => {
@@ -45,10 +45,13 @@ pub(in crate::review) fn recent(operator: &Value) -> Option<Value> {
 pub(in crate::review) fn retire_folder_records(root: &Path) {
     let mut budget = super::super::retired::BATCH;
     for name in ["configuration-changes", "reviewed-policy", "portability"] {
-        // `.shield` and `review` are checked on the way, so a linked folder
-        // never points the removal elsewhere.
-        let _ =
-            super::super::retired::remove_within(root, &[".shield", "review", name], &mut budget);
+        // `.shield` and the state folder are checked on the way, so a linked
+        // folder never points the removal elsewhere. The state folder may
+        // still carry its earlier name.
+        for state in ["state", "review"] {
+            let _ =
+                super::super::retired::remove_within(root, &[".shield", state, name], &mut budget);
+        }
     }
 }
 
@@ -64,7 +67,7 @@ fn approved(root: &Path, raw: &Value) -> Option<Value> {
     if candidate["config"].is_string() {
         return Some(candidate.clone());
     }
-    let sources = root.join(".shield/review/sources");
+    let sources = crate::layout::state(root).join("sources");
     if candidate["kind"] == "retained-source-v2" {
         return manifest(&sources, digest(&candidate["manifest_digest"])?);
     }

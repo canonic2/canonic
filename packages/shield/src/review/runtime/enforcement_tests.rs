@@ -102,13 +102,13 @@ fn allow_handoff_preserves_exact_input_and_host_failure_and_releases_lock() {
     .unwrap();
     assert_eq!(result, Err("host operation failed"));
     assert_eq!(invoked.get(), 1);
-    assert!(!root.path().join(".shield/review/state.lock").exists());
+    assert!(!root.path().join(".shield/state/state.lock").exists());
 }
 
 #[test]
 fn policy_allow_cannot_authorize_classified_operator_or_state_access() {
     let (root, context, project) = fixture();
-    let path = root.path().join(".shield/review/state.json");
+    let path = root.path().join(".shield/state/state.json");
     let original = fs::read(&path).unwrap();
     for access in [AgentAccess::Operator, AgentAccess::AuthorizationStateWrite] {
         let evidence = evidence(&project, "read");
@@ -139,7 +139,7 @@ fn foreign_and_corrupt_state_never_reach_allow_callback() {
         Err(Error::Runtime(runtime::Error::StaleSnapshot))
     ));
     let current = evidence(&project, "read");
-    fs::write(root.path().join(".shield/review/state.json"), "corrupt").unwrap();
+    fs::write(root.path().join(".shield/state/state.json"), "corrupt").unwrap();
     assert!(
         handoff(&project, AgentAccess::Ordinary, current, |_, _| panic!(
             "corrupt allow"
@@ -178,7 +178,7 @@ fn callback_panic_releases_the_writer_lock() {
         }))
         .is_err()
     );
-    assert!(!root.path().join(".shield/review/state.lock").exists());
+    assert!(!root.path().join(".shield/state/state.lock").exists());
     handoff(
         &project,
         AgentAccess::Ordinary,

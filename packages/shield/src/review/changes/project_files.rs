@@ -12,10 +12,11 @@ pub(in crate::review) struct Capture {
 type Reader<'a> = dyn FnMut(&str) -> Result<Option<String>, Error> + 'a;
 
 pub(in crate::review) fn capture(context: &Context, before: &State) -> Result<Capture, Error> {
-    let directory = crate::review::project::root(context).join(".shield");
+    let root = crate::review::project::root(context);
+    let directory = crate::layout::bundle(&root);
     // Missing pack artifacts resolve exactly as they do for enforcement.
     capture_with(before, &mut |name| {
-        Ok(read_file(&directory, name)?.or_else(|| {
+        Ok(read_file(&root, name)?.or_else(|| {
             crate::review::integrations::project_sources::stored_artifact(&directory, name)
         }))
     })
@@ -180,15 +181,19 @@ fn adopted_config(read: &mut Reader<'_>) -> Result<(String, Option<String>, Valu
 }
 
 /// Read one contained regular file, preserving absence as fingerprint evidence.
-pub(in crate::review) fn read_file(directory: &Path, path: &str) -> Result<Option<String>, Error> {
+/// Read the policy file `path` of the project at `root`, named relative to its
+/// selected bundle, as [`crate::layout::bundle_file`] places it.
+pub(in crate::review) fn read_file(root: &Path, path: &str) -> Result<Option<String>, Error> {
     crate::configuration::portable_path(path)?;
-    match std::fs::symlink_metadata(directory.join(path)) {
+    let directory = crate::layout::bundle(root);
+    let file = crate::layout::bundle_file(root, path);
+    match std::fs::symlink_metadata(&file) {
         Ok(metadata) if metadata.is_file() => {}
         Ok(_) => return Err(Error::Invalid("project projection must be a regular file")),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.into()),
     }
-    let resolved = directory.join(path).canonicalize()?;
+    let resolved = file.canonicalize()?;
     if !resolved.starts_with(directory.canonicalize()?) {
         return Err(Error::Invalid("manual artifact escapes project"));
     }
@@ -277,7 +282,7 @@ mod tests {
         std::fs::write(directory.join("rules.yml"), a).unwrap();
         let mut reads = 0;
         let captured = capture_with(&state, &mut |name| {
-            let bytes = read_file(&directory, name)?;
+            let bytes = read_file(root.path(), name)?;
             if name == "rules.yml" {
                 reads += 1;
                 // The reader observed A; immediately after it, disk is B.

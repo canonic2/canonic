@@ -20,4 +20,5 @@ Options:
       --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
       --cache-dir <CACHE_DIR>          Folder for this project's compiled policy plans, chosen at init or MCP setup
       --local                          Change your uncommitted local configuration instead of the shared one
+      --config <PATH>                  Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml
   -h, --help                           Print help

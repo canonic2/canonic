@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
-pub(crate) use model::{selectors, selectors_mut, validate};
+pub(crate) use model::{selectors, selectors_mut, validate, validate_model};
 pub(crate) use schema::definitions as schema;
 pub(crate) type Shared = Rc<RefCell<Analysis>>;
 
@@ -67,17 +67,36 @@ impl Analysis {
             .map(|key| patterns.model(key))
             .transpose()?;
         let model = loaded.as_deref().or(selection);
-        let key = if let Some(key) = selection.and_then(|m| m["prepared_graphql"].as_str()) {
+        let mutation = predicate["operation"] == "mutation";
+        let root_fields = predicate.get("root_fields").and_then(Value::as_array);
+        let model_key = if let Some(key) = selection.and_then(|m| m["prepared_graphql"].as_str()) {
             key.to_owned()
         } else if let Some(model) = model {
             crate::policy::fingerprint(&serde_json::to_vec(model).map_err(|_| Error::Syntax)?)
         } else {
             String::new()
         };
+        // Results are reused per operation type, mutation class and model.
+        let key = match root_fields {
+            Some(fields) if mutation => format!(
+                "mutation:{}:{model_key}",
+                serde_json::to_string(fields).map_err(|_| Error::Syntax)?
+            ),
+            _ => model_key,
+        };
         if let Some(result) = self.results.get(&key) {
             return Ok(result.clone());
         }
-        let result = document.check(model, patterns, &mut self.visits, checkpoint)?;
+        let expected = document::Expectation {
+            kind: if mutation {
+                document::Kind::Mutation
+            } else {
+                document::Kind::Query
+            },
+            model,
+            root_fields: root_fields.map(Vec::as_slice),
+        };
+        let result = document.check(&expected, patterns, &mut self.visits, checkpoint)?;
         self.results.insert(key, result.clone());
         Ok(result)
     }
@@ -151,10 +170,20 @@ pub(crate) fn descriptor(value: &mut Value) -> Result<(), Error> {
                         {
                             return Err(Error::Contract("invalid prepared GraphQL descriptor"));
                         }
-                        child
-                            .as_object_mut()
-                            .ok_or(Error::Syntax)?
-                            .remove("selection");
+                        let mutation = child["operation"] == "mutation";
+                        let fields = child.as_object_mut().ok_or(Error::Syntax)?;
+                        if mutation {
+                            // Admission requires a mutation's model. The prepared
+                            // image is validated separately, so this validation-only
+                            // copy carries a minimal stand-in rooted at Mutation.
+                            fields.insert(
+                                "selection".into(),
+                                serde_json::json!({"root":"mutation","states":{"mutation":{
+                                    "types":["Mutation"],"fields":{"__typename":{"leaf":true}}}}}),
+                            );
+                        } else {
+                            fields.remove("selection");
+                        }
                     }
                 } else if !matches!(key.as_str(), "exact" | "input" | "context") {
                     descriptor(child)?;

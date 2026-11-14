@@ -13,7 +13,6 @@ use std::{collections::BTreeMap, path::Path};
 #[cfg(test)]
 mod tests;
 
-const SHARED: &str = ".shield/config.yml";
 const LOCAL: &str = "config.local.yml";
 
 /// The settings of the policy files under `root`, local layer applied, or
@@ -22,12 +21,16 @@ const LOCAL: &str = "config.local.yml";
 /// # Errors
 /// Refuses unreadable files and invalid settings.
 pub(in crate::review) fn read(root: &Path) -> Result<Option<Layer>, Error> {
-    let Some(shared) = text(&root.join(SHARED))? else {
+    let selection = crate::layout::select(root)?;
+    if selection.source == crate::layout::Source::Absent {
+        return Ok(None);
+    }
+    let Some(shared) = text(&selection.file)? else {
         return Ok(None);
     };
     let shared: Layer = crate::policy::parse(&shared)?;
     shared.validate()?;
-    let local = match text(&root.join(".shield").join(LOCAL))? {
+    let local = match text(&selection.bundle().join(LOCAL))? {
         Some(local) => crate::policy::parse(&local)?,
         None => Layer::default(),
     };
@@ -242,7 +245,7 @@ impl Legacy {
 /// Whether `state` holds settings from an earlier checkpoint that its folder's
 /// policy files can take.
 pub(in crate::review) fn pending(state: &State) -> bool {
-    !state.legacy_settings.is_empty() && Path::new(&state.project_root).join(SHARED).is_file()
+    !state.legacy_settings.is_empty() && crate::layout::configured(Path::new(&state.project_root))
 }
 
 /// Move the settings an earlier checkpoint held into `config.local.yml`,
@@ -275,7 +278,7 @@ pub(in crate::review) fn convert(state: &mut State) -> Result<(), Error> {
 /// make the configuration invalid.
 pub(in crate::review) fn write(context: &Context, changes: &Layer) -> Result<(), Error> {
     let root = Path::new(&context.project_root);
-    if !root.join(SHARED).is_file() {
+    if !crate::layout::configured(root) {
         return Err(Error::Invalid(
             "this project has no policy files; run shield init to create them",
         ));
@@ -284,10 +287,9 @@ pub(in crate::review) fn write(context: &Context, changes: &Layer) -> Result<(),
 }
 
 fn write_local(context: &Context, root: &Path, changes: &Layer) -> Result<(), Error> {
-    let shield = root.join(".shield");
-    let shared =
-        text(&shield.join("config.yml"))?.ok_or(Error::Invalid("project configuration missing"))?;
-    let previous = text(&shield.join(LOCAL))?;
+    let selection = crate::layout::select(root)?;
+    let shared = text(&selection.file)?.ok_or(Error::Invalid("project configuration missing"))?;
+    let previous = text(&selection.bundle().join(LOCAL))?;
     let mut document: Value = match &previous {
         Some(previous) => crate::policy::parse(previous)?,
         None => json!({"schema_version":1}),
@@ -371,7 +373,7 @@ pub(in crate::review) fn fallbacks(fallbacks: BTreeMap<String, Fallback>) -> Lay
 #[cfg(test)]
 pub(crate) fn registries_fixture(context: &Context, edit: impl FnOnce(&mut Registrations)) {
     let root = Path::new(&context.project_root);
-    if root.join(SHARED).is_file() {
+    if crate::layout::configured(root) {
         let mut current = super::project::checkpoint(context)
             .unwrap()
             .settings
@@ -395,7 +397,7 @@ pub(crate) fn registries_fixture(context: &Context, edit: impl FnOnce(&mut Regis
 #[cfg(test)]
 pub(crate) fn history_fixture(context: &Context, enabled: bool) {
     let root = Path::new(&context.project_root);
-    if root.join(SHARED).is_file() {
+    if crate::layout::configured(root) {
         let limit = super::project::checkpoint(context)
             .unwrap()
             .settings
@@ -417,7 +419,7 @@ pub(crate) fn history_fixture(context: &Context, enabled: bool) {
 #[cfg(test)]
 pub(crate) fn fallback_fixture(context: &Context, agent: &str, fallback: Fallback) {
     let root = Path::new(&context.project_root);
-    if root.join(SHARED).is_file() {
+    if crate::layout::configured(root) {
         write(
             context,
             &fallbacks(BTreeMap::from([(agent.to_owned(), fallback)])),

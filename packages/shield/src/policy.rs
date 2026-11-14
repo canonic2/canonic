@@ -66,6 +66,7 @@ pub(crate) const CAPABILITIES: &[&str] = &[
     "argument-rules-v1",
     "argument-paths-v1",
     "graphql-v1",
+    "graphql-mutations-v1",
     "field-paths-v1",
     "glob-v1",
     "regex-v1",

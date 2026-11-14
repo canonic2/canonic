@@ -70,7 +70,7 @@ fn historical_interceptor_codec_preserves_ownership_without_native_hooks() {
     let (_root, context, record) = fixture();
     install(&context, &record);
     let before =
-        fs::read(Path::new(&context.project_root).join(".shield/review/state.json")).unwrap();
+        fs::read(Path::new(&context.project_root).join(".shield/state/state.json")).unwrap();
     let registered = integrations::registration(&metadata(&context))
         .unwrap()
         .unwrap();
@@ -90,7 +90,7 @@ fn historical_interceptor_codec_preserves_ownership_without_native_hooks() {
         Some("claude")
     );
     assert_eq!(
-        fs::read(Path::new(&context.project_root).join(".shield/review/state.json")).unwrap(),
+        fs::read(Path::new(&context.project_root).join(".shield/state/state.json")).unwrap(),
         before
     );
     let coverage = integrations::status(&context, &review::project::checkpoint(&context).unwrap());
@@ -105,7 +105,7 @@ fn historical_interceptor_codec_preserves_ownership_without_native_hooks() {
 fn historical_interceptor_folder_stays_protected_when_checkpoint_is_corrupt() {
     let (root, context, record) = fixture();
     install(&context, &record);
-    let checkpoint = root.path().join(".shield/review/state.json");
+    let checkpoint = root.path().join(".shield/state/state.json");
     fs::write(&checkpoint, b"{corrupt").unwrap();
     assert!(integrations::protects_legacy_path(
         &root.path().join(BASE).join("register.mjs")
@@ -274,7 +274,7 @@ fn interrupted_setup_edited_legacy_asset_refuses_impossible_review_but_keeps_can
         .unwrap();
     let edited = root.path().join(ASSETS[2]);
     fs::write(&edited, "Acme manually edited interceptor\n").unwrap();
-    let checkpoint = root.path().join(".shield/review/state.json");
+    let checkpoint = root.path().join(".shield/state/state.json");
     let bytes = fs::read(&checkpoint).unwrap();
     let Err(error) = integrations::recovery::prepare(
         root.path(),

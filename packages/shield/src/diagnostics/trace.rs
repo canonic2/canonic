@@ -221,7 +221,6 @@ impl Default for State {
             counts: BTreeMap::from([
                 ("policy.preparations", 0),
                 ("policy.captures", 0),
-                ("source.read_bytes", 0),
                 ("state.read_bytes", 0),
                 ("state.checkpoint_reads", 0),
                 ("storage.sync_calls", 0),

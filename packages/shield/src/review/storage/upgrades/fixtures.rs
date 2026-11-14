@@ -43,13 +43,16 @@ fn install(version: &str) -> assert_fs::TempDir {
     root
 }
 
+/// The converted checkpoint, which Shield keeps in `.shield/state` once it
+/// has opened the folder.
 fn state_json(root: &Path) -> Value {
-    serde_json::from_slice(&fs::read(root.join(".shield/review/state.json")).unwrap()).unwrap()
+    serde_json::from_slice(&fs::read(root.join(".shield/state/state.json")).unwrap()).unwrap()
 }
 
-/// How many conversion events the folder's history journal holds.
+/// How many conversion events the folder's history journal holds, after
+/// Shield has opened it.
 pub(super) fn conversions(root: &Path) -> usize {
-    fs::read_dir(root.join(".shield/review"))
+    fs::read_dir(root.join(".shield/state"))
         .unwrap()
         .map(|entry| entry.unwrap().path())
         .filter(|path| {
@@ -97,6 +100,8 @@ fn a_0_29_0_folder_converts_on_its_first_hook_and_keeps_its_records() {
         paused.is_some(),
         "the release's paused mode stays in effect"
     );
+    // The earlier `.shield/review` folder is now `.shield/state`.
+    assert!(!root.path().join(".shield/review").exists());
     let saved = state_json(root.path());
     for key in [
         "active",
@@ -135,13 +140,13 @@ fn a_0_29_0_folder_converts_on_its_first_hook_and_keeps_its_records() {
     );
     // History, the applied proposal and the recovery copy remain.
     for name in history {
-        assert!(root.path().join(".shield/review").join(name).exists());
+        assert!(root.path().join(".shield/state").join(name).exists());
     }
     let digest = crate::policy::fingerprint(&original);
     assert_eq!(
         fs::read(
             root.path()
-                .join(format!(".shield/review/upgrade-{digest}.json"))
+                .join(format!(".shield/state/upgrade-{digest}.json"))
         )
         .unwrap(),
         original
@@ -160,7 +165,7 @@ fn a_0_29_0_folder_converts_on_its_first_hook_and_keeps_its_records() {
     assert!(
         !root
             .path()
-            .join(".shield/review/configuration-changes")
+            .join(".shield/state/configuration-changes")
             .exists()
     );
     let context = review::open_diagnostics(root.path()).unwrap();
@@ -188,7 +193,7 @@ fn a_0_29_0_folder_names_the_rules_and_packs_its_files_changed() {
     assert_eq!(notice["packs"], json!([]));
 }
 
-/// The history segments a folder's journal holds, with their bytes.
+/// The history segments a release's unopened folder holds, with their bytes.
 fn history(root: &Path) -> Vec<(std::ffi::OsString, Vec<u8>)> {
     let mut segments: Vec<_> = fs::read_dir(root.join(".shield/review"))
         .unwrap()
@@ -254,7 +259,7 @@ fn folders_from_earlier_releases_convert_and_enforce_their_files() {
         assert_eq!(local["history"]["limit"], 300, "{version}");
         // Earlier records stay byte for byte; the conversion adds one event.
         for (name, bytes) in &earlier {
-            let now = fs::read(root.path().join(".shield/review").join(name)).unwrap();
+            let now = fs::read(root.path().join(".shield/state").join(name)).unwrap();
             assert!(now.starts_with(bytes), "{version}: {name:?} kept");
         }
         assert_eq!(conversions(root.path()), 1, "{version}");
@@ -262,7 +267,7 @@ fn folders_from_earlier_releases_convert_and_enforce_their_files() {
         assert_eq!(
             fs::read(
                 root.path()
-                    .join(format!(".shield/review/upgrade-{digest}.json"))
+                    .join(format!(".shield/state/upgrade-{digest}.json"))
             )
             .unwrap(),
             original,
@@ -273,11 +278,11 @@ fn folders_from_earlier_releases_convert_and_enforce_their_files() {
             "{version}"
         );
         // Repeated access neither converts again nor rewrites the state.
-        let converted = fs::read(root.path().join(".shield/review/state.json")).unwrap();
+        let converted = fs::read(root.path().join(".shield/state/state.json")).unwrap();
         Store::open(root.path()).unwrap().read_checkpoint().unwrap();
         assert_eq!(conversions(root.path()), 1, "{version}");
         assert_eq!(
-            fs::read(root.path().join(".shield/review/state.json")).unwrap(),
+            fs::read(root.path().join(".shield/state/state.json")).unwrap(),
             converted
         );
         // The files decide requests, and an edit to them decides the next one.
@@ -346,6 +351,7 @@ fn settings_the_files_cannot_take_yet_keep_applying_and_convert_later() {
     let state = state.unwrap();
     assert!(!state.settings.enabled(), "earlier settings keep applying");
     assert_eq!(state.settings.history_limit, 300);
+    // Nor can the earlier `review` folder be renamed, so it keeps serving.
     assert_eq!(
         fs::read(shield.join("review/state.json")).unwrap(),
         original
@@ -370,5 +376,7 @@ fn a_future_checkpoint_keeps_its_bytes_and_names_the_formats() {
         .err()
         .expect("future format refused");
     assert!(matches!(error, Error::StateFormat { .. }), "{error}");
+    // Opening moved the folder to its current name; the bytes are unchanged.
+    let path = root.path().join(".shield/state/state.json");
     assert_eq!(fs::read(&path).unwrap(), bytes);
 }

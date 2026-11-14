@@ -40,12 +40,6 @@ fn nullable_string<'de, D: serde::Deserializer<'de>>(input: D) -> Result<Option<
 }
 
 impl Bundle {
-    /// Return retained custom-rule source for a proposal, without activating it.
-    #[must_use]
-    pub fn rules_source(&self) -> Option<&str> {
-        self.rules.as_deref()
-    }
-
     /// Capture validated source bytes and their reproducible lock without filesystem I/O.
     ///
     /// # Errors
