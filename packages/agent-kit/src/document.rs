@@ -74,6 +74,76 @@ impl Prepared {
         };
         edit_allow_list(&self.source, root, remove, add)
     }
+
+    /// The groups under `hooks.<event>`: JSON hook files, or Codex's inline
+    /// TOML `[[hooks.<event>]]` tables, which are read but never edited.
+    pub(crate) fn hook_groups(&self, event: &str) -> Result<Vec<Value>> {
+        let list_error = || Error::invalid(format!("Hooks for {event} must be a list"));
+        let root = match &self.parsed {
+            Parsed::Json(root) => root,
+            Parsed::Toml(document) => {
+                let Some(item) = document.get("hooks").and_then(|hooks| hooks.get(event)) else {
+                    return Ok(Vec::new());
+                };
+                let Value::Array(groups) = toml_item(item, 0)? else {
+                    return Err(list_error());
+                };
+                return Ok(groups);
+            }
+            Parsed::Yaml(_) => return Err(Error::invalid("Hooks require JSON configuration")),
+        };
+        let (_, list) = hook_nodes(root, event)?;
+        list.map_or_else(
+            || Ok(Vec::new()),
+            |list| {
+                list.node
+                    .to_value()
+                    .as_array()
+                    .cloned()
+                    .ok_or_else(|| Error::invalid(format!("Hooks for {event} must be a list")))
+            },
+        )
+    }
+
+    pub(crate) fn replace_hook_groups(&self, event: &str, groups: &[Value]) -> Result<String> {
+        if self.hook_groups(event)? == groups {
+            return Ok(self.source.clone());
+        }
+        let Parsed::Json(root) = &self.parsed else {
+            return Err(Error::invalid("Hooks require JSON configuration"));
+        };
+        let (hooks, list) = hook_nodes(root, event)?;
+        let after = serde_json::json!(groups);
+        match (hooks, list) {
+            (_, Some(list)) => {
+                let mut result = self.source.clone();
+                result.replace_range(
+                    list.node.range.clone(),
+                    &serde_json::to_string_pretty(&after)
+                        .map_err(|e| Error::invalid(e.to_string()))?,
+                );
+                Ok(result)
+            }
+            (Some(hooks), None) => insert(&self.source, &hooks.node, event, &after),
+            (None, None) => insert(
+                &self.source,
+                root,
+                "hooks",
+                &serde_json::json!({event: after}),
+            ),
+        }
+    }
+}
+
+fn hook_nodes<'a>(root: &'a Node, event: &str) -> Result<(Option<&'a Member>, Option<&'a Member>)> {
+    let hooks = root.members.iter().find(|m| m.key == "hooks");
+    if hooks.is_some_and(|h| !h.node.value.is_object()) {
+        return Err(Error::invalid("Hooks must be an object of event lists"));
+    }
+    Ok((
+        hooks,
+        hooks.and_then(|h| h.node.members.iter().find(|m| m.key == event)),
+    ))
 }
 
 /// Replace or remove one named entry, returning its previous value and edited text.
@@ -618,6 +688,50 @@ fn json_value(v: &toml_edit::Value, depth: usize) -> Result<Value> {
     })
 }
 
+/// A bounded TOML item as JSON, including arrays of tables, for reading hook
+/// groups. Floats and datetimes are not part of the hook subset and refuse.
+fn toml_item(item: &toml_edit::Item, depth: usize) -> Result<Value> {
+    use toml_edit::Item;
+    if depth > 4 {
+        return Err(Error::invalid("Unsupported nested TOML hooks"));
+    }
+    let table = |table: &dyn toml_edit::TableLike| -> Result<Value> {
+        table
+            .iter()
+            .map(|(key, item)| Ok((key.to_owned(), toml_item(item, depth + 1)?)))
+            .collect::<Result<serde_json::Map<_, _>>>()
+            .map(Value::Object)
+    };
+    match item {
+        Item::None => Ok(Value::Null),
+        Item::Table(t) => table(t),
+        Item::ArrayOfTables(tables) => tables
+            .iter()
+            .map(|t| table(t))
+            .collect::<Result<_>>()
+            .map(Value::Array),
+        Item::Value(v) => {
+            if let Some(text) = v.as_str() {
+                Ok(Value::String(text.into()))
+            } else if let Some(boolean) = v.as_bool() {
+                Ok(Value::Bool(boolean))
+            } else if let Some(integer) = v.as_integer() {
+                Ok(Value::from(integer))
+            } else if let Some(array) = v.as_array() {
+                array
+                    .iter()
+                    .map(|v| toml_item(&Item::Value(v.clone()), depth + 1))
+                    .collect::<Result<_>>()
+                    .map(Value::Array)
+            } else if let Some(inline) = v.as_inline_table() {
+                table(inline)
+            } else {
+                Err(Error::invalid("Unsupported TOML hook value"))
+            }
+        }
+    }
+}
+
 fn toml_value(v: &Value) -> Result<toml_edit::Value> {
     Ok(match v {
         Value::String(s) => s.as_str().into(),
@@ -660,21 +774,8 @@ pub fn hook_group(
     group: &Value,
     present: bool,
 ) -> Result<(bool, String)> {
-    let root = Parser::parse(source, true)?;
-    let hooks = root.members.iter().find(|m| m.key == "hooks");
-    if hooks.is_some_and(|h| !h.node.value.is_object()) {
-        return Err(Error::invalid("Hooks must be an object of event lists"));
-    }
-    let list = hooks.and_then(|h| h.node.members.iter().find(|m| m.key == event));
-    let current: Vec<Value> = match list {
-        Some(list) => list
-            .node
-            .to_value()
-            .as_array()
-            .cloned()
-            .ok_or_else(|| Error::invalid(format!("Hooks for {event} must be a list")))?,
-        None => Vec::new(),
-    };
+    let document = Prepared::parse(source.to_owned(), Format::Json)?;
+    let current = document.hook_groups(event)?;
     let was = current.contains(group);
     if was == present {
         return Ok((was, source.into()));
@@ -683,19 +784,7 @@ pub fn hook_group(
     if present {
         after.push(group.clone());
     }
-    let after = Value::Array(after);
-    let edited = match (hooks, list) {
-        (_, Some(list)) => {
-            let mut result = source.to_owned();
-            result.replace_range(
-                list.node.range.clone(),
-                &serde_json::to_string_pretty(&after).map_err(|e| Error::invalid(e.to_string()))?,
-            );
-            result
-        }
-        (Some(hooks), None) => insert(source, &hooks.node, event, &after)?,
-        (None, None) => insert(source, &root, "hooks", &serde_json::json!({ event: after }))?,
-    };
+    let edited = document.replace_hook_groups(event, &after)?;
     Ok((was, edited))
 }
 

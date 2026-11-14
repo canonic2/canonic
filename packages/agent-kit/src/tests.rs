@@ -1,5 +1,5 @@
 use super::*;
-use serde_json::json;
+use serde_json::{Value, json};
 use std::fs;
 
 #[test]
@@ -14,7 +14,10 @@ fn reset_tool_permissions_restores_defaults_without_changing_saved_choices_on_pr
             fs::create_dir_all(context.root.join(".box")).unwrap();
             fs::write(context.root.join(".box/config.yml"), "schema_version: 1\n").unwrap();
             // Establish owned permission settings before saving a revised set.
-            prepare(&context, &options(&[agent])).unwrap().apply().unwrap();
+            prepare(&context, &options(&[agent]))
+                .unwrap()
+                .apply()
+                .unwrap();
             let saved_options = Options {
                 approved: Some(saved.clone()),
                 ..options(&[agent])
@@ -540,6 +543,7 @@ fn fixture() -> (tempfile::TempDir, Context) {
         state: base.join("state"),
         agent_homes: BTreeMap::default(),
         tools: Vec::new(),
+        prompt_hook: None,
     };
     fs::create_dir_all(&context.root).unwrap();
     fs::create_dir_all(&context.home).unwrap();
@@ -549,6 +553,401 @@ fn options(ids: &[&str]) -> Options {
     Options {
         agents: ids.iter().map(|s| (*s).into()).collect(),
         ..Options::default()
+    }
+}
+
+fn prompt_hook(command: &str) -> Value {
+    json!({"hooks":[{"type":"command","command":command,"timeout":5}]})
+}
+
+#[test]
+fn prompt_hook_setup_repeat_repair_and_removal_preserve_other_settings_in_both_scopes() {
+    for scope in [Scope::Project, Scope::User] {
+        let (_temp, mut context) = fixture();
+        context.prompt_hook = Some(prompt_hook("acme hook user-prompt"));
+        let mut options = options(&["claude", "codex"]);
+        options.scope = scope;
+        let base = if scope == Scope::Project {
+            &context.root
+        } else {
+            &context.home
+        };
+        let claude = agents::claude_settings(&context, scope);
+        let codex = base.join(".codex/hooks.json");
+        let other = prompt_hook("other audit");
+        for path in [&claude, &codex] {
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(
+                path,
+                json!({"model":"kept","hooks":{"UserPromptSubmit":[other],"Stop":[other]}})
+                    .to_string(),
+            )
+            .unwrap();
+        }
+        let plan = prepare(&context, &options).unwrap();
+        assert!(
+            !fs::read_to_string(&codex).unwrap().contains("acme hook"),
+            "preparation writes nothing"
+        );
+        assert!(human(&plan.review()).contains("UserPromptSubmit"));
+        plan.apply().unwrap();
+        let first: Vec<_> = [&claude, &codex]
+            .iter()
+            .map(|p| fs::read_to_string(p).unwrap())
+            .collect();
+        prepare(&context, &options).unwrap().apply().unwrap();
+        for (path, before) in [&claude, &codex].iter().zip(&first) {
+            assert_eq!(
+                &fs::read_to_string(path).unwrap(),
+                before,
+                "repeat is byte-stable"
+            );
+        }
+        fs::write(
+            &codex,
+            json!({"model":"kept","hooks":{"UserPromptSubmit":[other],"Stop":[other]}}).to_string(),
+        )
+        .unwrap();
+        prepare(&context, &options).unwrap().apply().unwrap();
+        let repaired: Value = serde_json::from_str(&fs::read_to_string(&codex).unwrap()).unwrap();
+        assert_eq!(
+            repaired["hooks"]["UserPromptSubmit"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        options.remove = true;
+        prepare(&context, &options).unwrap().apply().unwrap();
+        for path in [&claude, &codex] {
+            let value: Value = serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+            assert_eq!(value["model"], "kept");
+            assert_eq!(value["hooks"]["UserPromptSubmit"], json!([other]));
+            assert_eq!(value["hooks"]["Stop"], json!([other]));
+        }
+    }
+}
+
+#[test]
+fn prompt_hook_preserves_preexisting_equivalents_and_refuses_modified_or_stale_plans() {
+    let (_temp, mut context) = fixture();
+    let group = prompt_hook("acme hook user-prompt");
+    context.prompt_hook = Some(group.clone());
+    let mut options = options(&["codex"]);
+    let path = context.root.join(".codex/hooks.json");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        &path,
+        json!({"hooks":{"UserPromptSubmit":[group]}}).to_string(),
+    )
+    .unwrap();
+    prepare(&context, &options).unwrap().apply().unwrap();
+    options.remove = true;
+    prepare(&context, &options).unwrap().apply().unwrap();
+    assert!(
+        fs::read_to_string(&path).unwrap().contains("acme hook"),
+        "preexisting equivalent stays unowned"
+    );
+    options.remove = false;
+    fs::write(&path, "{}").unwrap();
+    let plan = prepare(&context, &options).unwrap();
+    fs::write(&path, "{\"external\":true}").unwrap();
+    assert!(matches!(plan.apply(), Err(Error::Conflict(_))));
+    prepare(&context, &options).unwrap().apply().unwrap();
+    let mut edited = group.clone();
+    edited["hooks"][0]["timeout"] = json!(12);
+    fs::write(
+        &path,
+        json!({"hooks":{"UserPromptSubmit":[edited]}}).to_string(),
+    )
+    .unwrap();
+    assert!(matches!(
+        prepare(&context, &options),
+        Err(Error::Conflict(_))
+    ));
+}
+
+#[test]
+fn prompt_hook_refuses_preexisting_command_with_different_fields_without_changing_it() {
+    let (_temp, mut context) = fixture();
+    let group = prompt_hook("acme hook user-prompt");
+    let options = options(&["codex"]);
+    // Own the server first so its independent registration conflict cannot
+    // hide the conflict in a preexisting, unowned hook.
+    context.prompt_hook = None;
+    prepare(&context, &options).unwrap().apply().unwrap();
+    context.prompt_hook = Some(group.clone());
+    let mut existing = group;
+    existing["hooks"][0]["statusMessage"] = json!("Another status message");
+    let path = context.root.join(".codex/hooks.json");
+    let before = json!({"hooks":{"UserPromptSubmit":[existing]}}).to_string();
+    fs::write(&path, &before).unwrap();
+    let Err(Error::Conflict(message)) = prepare(&context, &options) else {
+        panic!("different hook fields must conflict");
+    };
+    assert!(message.contains("UserPromptSubmit hook command exists with different fields"));
+    assert!(message.contains("align the existing group"));
+    assert_eq!(fs::read_to_string(path).unwrap(), before);
+}
+
+#[test]
+fn prompt_hook_composes_with_existing_claude_permission_ownership_and_codex_home() {
+    let (_temp, mut context) = fixture();
+    context.tools = vec![Tool::new("observe", "Observe", true)];
+    let mut options = options(&["claude", "codex"]);
+    options.scope = Scope::User;
+    let codex_home = context.home.join("custom-codex");
+    context
+        .agent_homes
+        .insert("codex".into(), codex_home.clone());
+    prepare(&context, &options).unwrap().apply().unwrap();
+    context.prompt_hook = Some(prompt_hook("acme hook user-prompt"));
+    prepare(&context, &options).unwrap().apply().unwrap();
+    assert!(codex_home.join("hooks.json").is_file());
+    assert!(!context.home.join(".codex/hooks.json").exists());
+    let path = agents::claude_settings(&context, Scope::User);
+    let value: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(value["permissions"]["allow"], json!(["mcp__acme__observe"]));
+    options.remove = true;
+    prepare(&context, &options).unwrap().apply().unwrap();
+    let value: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(value["permissions"]["allow"], json!([]));
+    assert_eq!(value["hooks"]["UserPromptSubmit"], json!([]));
+}
+
+#[test]
+fn prompt_hook_box_definition_carries_only_supported_agent_events_and_removes_owned_file() {
+    let (_temp, mut context) = fixture();
+    context.prompt_hook = Some(prompt_hook("acme hook user-prompt"));
+    fs::create_dir_all(context.root.join(".box")).unwrap();
+    fs::write(context.root.join(".box/config.yml"), "schema_version: 1\n").unwrap();
+    let mut options = options(&["box"]);
+    let plan = prepare(&context, &options).unwrap();
+    assert!(
+        plan.review()["registrations"][0]["definition"]
+            .as_str()
+            .unwrap()
+            .contains("user_prompt_submit")
+    );
+    plan.apply().unwrap();
+    let path = context.root.join(".box/mcp/acme.yml");
+    let value: Value = serde_saphyr::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(value["hooks"][0]["agents"], json!(["claude", "codex"]));
+    assert_eq!(value["hooks"][0]["events"], json!(["user_prompt_submit"]));
+    assert_eq!(value["hooks"][0]["command"], "acme hook user-prompt");
+    assert_eq!(value["hooks"][0]["timeout"], 5);
+    prepare(&context, &options).unwrap().apply().unwrap();
+    options.remove = true;
+    prepare(&context, &options).unwrap().apply().unwrap();
+    assert!(!path.exists());
+    assert!(
+        !context.root.join(".codex/hooks.json").exists(),
+        "Box owns native publication"
+    );
+}
+
+#[test]
+fn prompt_hook_recovers_either_side_of_an_interrupted_update() {
+    for agent in ["claude", "codex"] {
+        for published in [false, true] {
+            let (_temp, mut context) = fixture();
+            let old = prompt_hook("acme hook old");
+            let new = prompt_hook("acme hook user-prompt");
+            context.prompt_hook = Some(old.clone());
+            let options = options(&[agent]);
+            prepare(&context, &options).unwrap().apply().unwrap();
+            let path = if agent == "claude" {
+                agents::claude_settings(&context, Scope::Project)
+            } else {
+                context.root.join(".codex/hooks.json")
+            };
+            let ledger = context
+                .state
+                .join("acme")
+                .join(format!("{}.json", storage::identity(&path)));
+            let mut record: Value =
+                serde_json::from_str(&fs::read_to_string(&ledger).unwrap()).unwrap();
+            record["pending"] = json!(true);
+            record["previous"] = record["desired"].clone();
+            if agent == "claude" {
+                record["desired"]["prompt_hook"] = new.clone();
+            } else {
+                record["desired"] = new.clone();
+            }
+            fs::write(&ledger, record.to_string()).unwrap();
+            if published {
+                let mut value: Value =
+                    serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+                value["hooks"]["UserPromptSubmit"] = json!([new]);
+                fs::write(&path, value.to_string()).unwrap();
+            }
+            context.prompt_hook = Some(new.clone());
+            prepare(&context, &options).unwrap().apply().unwrap();
+            let value: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+            assert_eq!(value["hooks"]["UserPromptSubmit"], json!([new]));
+        }
+    }
+}
+
+#[test]
+fn prompt_hook_removal_does_not_recreate_missing_files_and_invalid_handlers_never_publish() {
+    let (_temp, mut context) = fixture();
+    let mut options = options(&["claude", "codex"]);
+    context.prompt_hook = Some(prompt_hook("acme hook user-prompt"));
+    prepare(&context, &options).unwrap().apply().unwrap();
+    let paths = [
+        agents::claude_settings(&context, Scope::Project),
+        context.root.join(".codex/hooks.json"),
+    ];
+    for path in &paths {
+        fs::remove_file(path).unwrap();
+    }
+    options.remove = true;
+    prepare(&context, &options).unwrap().apply().unwrap();
+    for path in &paths {
+        assert!(!path.exists());
+    }
+    options.remove = false;
+    context.prompt_hook =
+        Some(json!({"hooks":[{"type":"command","command":"acme hook","timeout":0}]}));
+    assert!(prepare(&context, &options).is_err());
+    for path in &paths {
+        assert!(!path.exists());
+    }
+}
+
+#[test]
+fn claude_setup_without_tools_or_hook_never_parses_the_settings_file() {
+    let (_temp, context) = fixture();
+    let settings = agents::claude_settings(&context, Scope::Project);
+    fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    fs::write(&settings, "{ not json").unwrap();
+    let plan = prepare(&context, &options(&["claude"])).unwrap();
+    let paths: Vec<_> = plan.review()["registrations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["path"].clone())
+        .collect();
+    assert!(!paths.contains(&json!(settings)));
+    plan.apply().unwrap();
+    assert_eq!(fs::read_to_string(settings).unwrap(), "{ not json");
+}
+
+#[test]
+fn dropped_claude_prompt_hook_records_plain_rules_immediately() {
+    let (_temp, mut context) = fixture();
+    context.tools = vec![Tool::new("observe", "Observe", true)];
+    context.prompt_hook = Some(prompt_hook("acme hook user-prompt"));
+    let options = options(&["claude"]);
+    prepare(&context, &options).unwrap().apply().unwrap();
+    context.prompt_hook = None;
+    prepare(&context, &options).unwrap().apply().unwrap();
+    let path = agents::claude_settings(&context, Scope::Project);
+    let ledger = context
+        .state
+        .join("acme")
+        .join(format!("{}.json", storage::identity(&path)));
+    let recorded = fs::read_to_string(&ledger).unwrap();
+    let record: storage::Record = serde_json::from_str(&recorded).unwrap();
+    // The settled shape on the first run, so the next run republishes nothing.
+    assert_eq!(record.desired, Some(json!(["mcp__acme__observe"])));
+    assert_eq!(record.previous, record.desired);
+    let value: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(value["hooks"]["UserPromptSubmit"], json!([]));
+    prepare(&context, &options).unwrap().apply().unwrap();
+    assert_eq!(fs::read_to_string(ledger).unwrap(), recorded);
+}
+
+#[test]
+fn codex_prompt_hook_respects_inline_config_hooks() {
+    for same_fields in [true, false] {
+        let (_temp, mut context) = fixture();
+        let group = prompt_hook("acme hook user-prompt");
+        context.prompt_hook = Some(group);
+        let config = context.root.join(".codex/config.toml");
+        fs::create_dir_all(config.parent().unwrap()).unwrap();
+        let timeout = if same_fields { 5 } else { 12 };
+        fs::write(
+            &config,
+            format!(
+                "[[hooks.UserPromptSubmit]]\n\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"acme hook user-prompt\"\ntimeout = {timeout}\n"
+            ),
+        )
+        .unwrap();
+        let hooks = context.root.join(".codex/hooks.json");
+        let result = prepare(&context, &options(&["codex"]));
+        if same_fields {
+            // The inline group already runs; a hooks.json copy would run twice.
+            result.unwrap().apply().unwrap();
+            assert!(!hooks.exists());
+            assert!(
+                fs::read_to_string(&config)
+                    .unwrap()
+                    .contains("[mcp_servers.acme]")
+            );
+        } else {
+            assert!(matches!(result, Err(Error::Conflict(_))));
+            assert!(!hooks.exists());
+        }
+    }
+}
+
+#[test]
+fn prompt_hook_commands_with_box_tokens_refuse_before_writes() {
+    for token in ["{project}", "{agent}", "{event}", "{command}"] {
+        let (_temp, mut context) = fixture();
+        context.prompt_hook = Some(prompt_hook(&format!("acme hook {token}")));
+        let Err(Error::Invalid(message)) = prepare(&context, &options(&["claude", "codex"])) else {
+            panic!("{token} must refuse");
+        };
+        assert!(message.contains("Box expands them"));
+        assert!(!context.root.join(".mcp.json").exists());
+    }
+}
+
+#[test]
+fn prompt_hook_repeat_keeps_the_order_after_another_product_adds_a_hook() {
+    let (_temp, mut context) = fixture();
+    context.prompt_hook = Some(prompt_hook("acme hook user-prompt"));
+    let options = options(&["claude", "codex"]);
+    prepare(&context, &options).unwrap().apply().unwrap();
+    let paths = [
+        agents::claude_settings(&context, Scope::Project),
+        context.root.join(".codex/hooks.json"),
+    ];
+    for path in &paths {
+        let mut value: Value = serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+        value["hooks"]["UserPromptSubmit"]
+            .as_array_mut()
+            .unwrap()
+            .push(prompt_hook("other audit"));
+        fs::write(path, value.to_string()).unwrap();
+    }
+    let before: Vec<_> = paths
+        .iter()
+        .map(|path| fs::read_to_string(path).unwrap())
+        .collect();
+    prepare(&context, &options).unwrap().apply().unwrap();
+    for (path, expected) in paths.iter().zip(before) {
+        assert_eq!(fs::read_to_string(path).unwrap(), expected);
+    }
+    prepare(
+        &context,
+        &Options {
+            remove: true,
+            ..options
+        },
+    )
+    .unwrap()
+    .apply()
+    .unwrap();
+    for path in &paths {
+        let value: Value = serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+        assert_eq!(
+            value["hooks"]["UserPromptSubmit"],
+            json!([prompt_hook("other audit")])
+        );
     }
 }
 

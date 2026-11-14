@@ -6,6 +6,8 @@ Register your application's MCP server in coding agents' native configuration.
 review configuration changes, and install, repair or remove the entries your
 application owns. It preserves unrelated settings and keeps ownership records
 for later repair and removal.
+Products can include a prompt-context hook for Claude Code and Codex in the
+same reviewed setup, directly or through a Box server definition.
 
 ## Add the library
 

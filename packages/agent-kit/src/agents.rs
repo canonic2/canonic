@@ -340,7 +340,79 @@ pub(crate) fn box_definition(
             text.push_str(": allow\n");
         }
     }
+    if let Some(group) = &context.prompt_hook {
+        let hooks = prompt_handlers(group)?;
+        let mut portable = Vec::new();
+        for hook in hooks {
+            let mut entry = json!({"agents":["claude","codex"],"events":["user_prompt_submit"],"command":hook["command"]});
+            for (native, key) in [("timeout", "timeout"), ("statusMessage", "status_message")] {
+                if let Some(value) = hook.get(native) {
+                    entry[key] = value.clone();
+                }
+            }
+            if let Some(matcher) = group.get("matcher") {
+                entry["matcher"] = matcher.clone();
+            }
+            portable.push(entry);
+        }
+        text.push_str("hooks: ");
+        text.push_str(
+            &serde_json::to_string(&portable).map_err(|e| Error::invalid(e.to_string()))?,
+        );
+        text.push('\n');
+    }
     Ok(text)
+}
+
+const BOX_HOOK_TOKENS: &[&str] = &["{project}", "{agent}", "{event}", "{command}"];
+
+/// The native command-hook subset that both direct hosts and Box can publish.
+pub(crate) fn prompt_handlers(group: &Value) -> Result<&Vec<Value>> {
+    let valid_group = group.as_object().is_some_and(|object| {
+        object
+            .keys()
+            .all(|key| matches!(key.as_str(), "hooks" | "matcher"))
+            && object.get("matcher").is_none_or(Value::is_string)
+    });
+    let handlers = group["hooks"].as_array().filter(|hooks| !hooks.is_empty());
+    let valid_handlers = handlers.is_some_and(|hooks| {
+        hooks.iter().all(|hook| {
+            hook.as_object().is_some_and(|object| {
+                object.keys().all(|key| {
+                    matches!(
+                        key.as_str(),
+                        "type" | "command" | "timeout" | "statusMessage"
+                    )
+                })
+            }) && hook["type"] == "command"
+                && hook["command"]
+                    .as_str()
+                    .is_some_and(|command| !command.trim().is_empty())
+                && hook.get("timeout").is_none_or(|timeout| {
+                    timeout
+                        .as_u64()
+                        .is_some_and(|n| n > 0 && u32::try_from(n).is_ok())
+                })
+                && hook.get("statusMessage").is_none_or(Value::is_string)
+        })
+    });
+    if !valid_group || !valid_handlers {
+        return Err(Error::invalid(
+            "Prompt hook requires command handlers with optional timeout, statusMessage and group matcher",
+        ));
+    }
+    // Box expands these tokens in hook commands and native hosts do not, so
+    // one group would run different commands depending on the route.
+    if handlers.into_iter().flatten().any(|hook| {
+        hook["command"]
+            .as_str()
+            .is_some_and(|command| BOX_HOOK_TOKENS.iter().any(|token| command.contains(token)))
+    }) {
+        return Err(Error::invalid(
+            "Prompt hook commands cannot contain {project}, {agent}, {event} or {command}; Box expands them and native hosts do not",
+        ));
+    }
+    handlers.ok_or_else(|| Error::invalid("Prompt hook must contain command hooks"))
 }
 
 /// Agents whose tool approvals setup writes: Codex in its server entry, Claude

@@ -9,6 +9,9 @@ use std::{
     io::{self, IsTerminal, Write},
     path::PathBuf,
 };
+mod hooks;
+mod portability;
+pub use portability::relocate_project;
 
 /// What a change owns in its file: the product's server entry, or the
 /// permission rules setup added for its tools.
@@ -16,6 +19,7 @@ use std::{
 enum Kind {
     Server,
     Approvals,
+    PromptHook,
     /// A whole Box server definition.
     Definition,
 }
@@ -114,7 +118,11 @@ impl Plan {
                 "format_note":if c.path.extension().is_some_and(|e| e == "yaml") {Some("YAML is rewritten as equivalent JSON; comments and formatting are not retained")} else {None}});
                 match c.kind {
                     Kind::Server => row["entry"] = json!(c.record.desired),
-                    Kind::Approvals => row["permission_rules"] = json!(c.record.desired),
+                    Kind::Approvals => {
+                        row["permission_rules"] = json!(setting_rules(c.record.desired.as_ref()));
+                        row["prompt_hook"] = json!(hooks::settings_hook(c.record.desired.as_ref()));
+                    }
+                    Kind::PromptHook => row["prompt_hook"] = json!(c.record.desired),
                     Kind::Definition => {
                         row["definition"] = json!(c.after);
                         row["entry"] = json!(c.launch);
@@ -332,13 +340,23 @@ fn prepare_inputs(
         }
         plan.changes
             .extend(server_change(context, options, destination, inputs)?);
+        if id == "codex"
+            && let Some(change) = hooks::codex(context, options, inputs)?
+        {
+            plan.changes.push(change);
+        }
     }
+    // Hooks need the settings change even without tools; other-rule coverage
+    // only matters for tools, so a product without them never parses the file
+    // unless it owns something there.
     if plan.approval_agents.iter().any(|id| id == "claude") {
         (plan.kept_by_other_rules, plan.other_rules) =
             claude_other_rules(context, options, &plan.approved, inputs)?;
-        if let Some(change) = claude_approvals(context, options, &plan.approved, inputs)? {
-            plan.changes.push(change);
-        }
+    }
+    if options.agents.iter().any(|id| id == "claude")
+        && let Some(change) = claude_approvals(context, options, &plan.approved, inputs)?
+    {
+        plan.changes.push(change);
     }
     Ok(plan)
 }
@@ -555,8 +573,7 @@ fn claude_other_rules(
         .into_iter()
         .flat_map(|record| [record.desired, record.previous.filter(|_| record.pending)])
         .flatten()
-        .filter_map(|rules| serde_json::from_value::<Vec<String>>(rules).ok())
-        .flatten()
+        .flat_map(|rules| setting_rules(Some(&rules)))
         .collect();
     let server = format!("mcp__{}", context.product);
     let others: Vec<String> = current
@@ -707,17 +724,12 @@ fn claude_approvals(
     let ledger = ledger(context, &path);
     let ledger_before = inputs.read(&ledger)?;
     let record = ownership(context, &path, ledger_before.as_deref())?;
-    let rules = |value: Option<&Value>| -> Vec<String> {
-        value
-            .and_then(|v| serde_json::from_value(v.clone()).ok())
-            .unwrap_or_default()
-    };
     // An interrupted publication may have written either side of the record.
     let mut owned = record
         .as_ref()
-        .map_or_else(Vec::new, |r| rules(r.desired.as_ref()));
+        .map_or_else(Vec::new, |r| setting_rules(r.desired.as_ref()));
     if let Some(r) = record.as_ref().filter(|r| r.pending) {
-        for rule in rules(r.previous.as_ref()) {
+        for rule in setting_rules(r.previous.as_ref()) {
             if !owned.contains(&rule) {
                 owned.push(rule);
             }
@@ -731,7 +743,8 @@ fn claude_approvals(
             .map(|tool| agents::claude_rule(&context.product, tool))
             .collect()
     };
-    if record.is_none() && (options.remove || desired.is_empty()) {
+    if record.is_none() && (options.remove || (desired.is_empty() && context.prompt_hook.is_none()))
+    {
         return Ok(None);
     }
     let source = before.as_deref().unwrap_or("{}\n");
@@ -743,6 +756,11 @@ fn claude_approvals(
     let (current, edited) = inputs
         .document(&path, agents::Format::Json)?
         .allow_list(&stale, &desired)?;
+    let (owned_hook, previous_hook, edited) = hooks::claude(
+        edited,
+        record.as_ref(),
+        context.prompt_hook.as_ref().filter(|_| !options.remove),
+    )?;
     let now_owned: Vec<String> = desired
         .iter()
         .filter(|rule| owned.contains(rule) || !current.contains(rule))
@@ -753,8 +771,15 @@ fn claude_approvals(
     } else {
         Some(edited)
     };
-    let desired = (!options.remove).then(|| json!(now_owned));
-    let previous = record.as_ref().map(|_| json!(owned));
+    // Each side carries the hook shape only when it holds a hook: `previous`
+    // keeps an observed owned hook until publication completes, even across
+    // repeated interruptions, and dropping a hook records the rule list at once.
+    let settings = |rules: &[String], hook: Option<Value>| match hook {
+        Some(hook) => json!({"permission_rules":rules,"prompt_hook":hook}),
+        None => json!(rules),
+    };
+    let desired = (!options.remove).then(|| settings(&now_owned, owned_hook));
+    let previous = record.as_ref().map(|_| settings(&owned, previous_hook));
     let ownership_unchanged = record
         .as_ref()
         .is_some_and(|r| !r.pending && r.desired == desired && r.previous == desired);
@@ -777,6 +802,19 @@ fn claude_approvals(
         ownership_unchanged,
         launch: None,
     }))
+}
+
+fn setting_rules(value: Option<&Value>) -> Vec<String> {
+    value
+        .map(|v| {
+            if v.is_array() {
+                v
+            } else {
+                &v["permission_rules"]
+            }
+        })
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default()
 }
 
 /// A concise human report over the same metadata exposed to JSON callers.
@@ -840,6 +878,11 @@ fn registration_lines(row: &Value, lines: &mut Vec<String>) {
         row["change"].as_str().unwrap_or(""),
         row["path"].as_str().unwrap_or("")
     ));
+    for hook in row["prompt_hook"]["hooks"].as_array().into_iter().flatten() {
+        if let Some(command) = hook["command"].as_str() {
+            lines.push(format!("    UserPromptSubmit: {command:?}"));
+        }
+    }
     if let Some(entry) = row.get("entry").filter(|v| !v.is_null()) {
         let argv: Vec<_> = if let Some(command) = entry["command"].as_array() {
             command.iter().filter_map(Value::as_str).collect()

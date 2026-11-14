@@ -4,7 +4,14 @@ CARGO_FLAGS ?=
 FILTER ?=
 TEST_TARGET ?= --lib
 .DEFAULT_GOAL := help
-.PHONY: help lock dev build format format-check test-focus test types lint doctest docs deps coverage
+.PHONY: help lock dev build format format-check test-focus test types lint doctest docs deps coverage prune
+
+# Cargo never deletes old build output. Run prune on its own, while no build or
+# test run uses target/: a running test may still launch an old test binary.
+PRUNE_DAYS ?= 3
+prune: ## Delete incremental caches and test binaries unused for more than PRUNE_DAYS days
+	@test ! -d target || find target -mindepth 3 -maxdepth 4 -type d -path '*/incremental/*' -prune -mtime +$(PRUNE_DAYS) -exec rm -rf {} +
+	@test ! -d target || find target -mindepth 3 -maxdepth 4 -type f -path '*/deps/*' -perm -u+x ! -name '*.*' -mtime +$(PRUNE_DAYS) -delete
 
 help:
 	@awk 'BEGIN { FS = ":.*## " } /^[a-z-]+:.*## / { printf "  %-24s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)

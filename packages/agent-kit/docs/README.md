@@ -4,6 +4,14 @@ For package tooling and test boundaries, see [Development and checks](developmen
 
 Add `canonic-agent-kit = { path = "../agent-kit" }` to a sibling Rust package.
 
+For a product that inherits the agent host's current project directory,
+`relocate_project(&context, &previous_root)` migrates an exactly owned
+registration by removing its old absolute `cwd`. It preserves the launcher and
+tool approvals, leaves the original copy's registration intact, and starts no
+catalog process. Edited or unowned entries stay unchanged. Other launch changes
+use the normal reviewed setup workflow. Reload the host after a migrated entry
+is written.
+
 ## Review a registration
 
 This example prints a proposed Codex registration without writing configuration,
@@ -52,6 +60,28 @@ tools through `with_tools`. `launch_command` can require a stable PATH name in
 both scopes; otherwise project configuration uses the product name and user
 configuration uses the installed executable path. `check_arguments` defaults
 to `--check` and is appended to the trusted executable's launch arguments.
+
+Set `Context.prompt_hook` to a native `UserPromptSubmit` group when your product
+supplies prompt context, for example
+`serde_json::json!({"hooks":[{"type":"command","command":"acme hook user-prompt","timeout":5}]})`.
+Setup reviews and publishes it alongside the selected Claude Code and Codex
+registrations. Claude hooks share its permission settings file; Codex hooks use
+`hooks.json` beside its MCP configuration. Box definitions carry the equivalent
+portable hook restricted to those two agents. Other hosts receive MCP only.
+The consumer owns hook behavior, launch quoting, timeout and host compatibility.
+Groups support `hooks` and an optional string `matcher`; handlers support
+`type: "command"`, a nonempty `command`, an optional positive integer `timeout`
+in seconds and an optional string `statusMessage`. Unsupported fields refuse
+before publication rather than being dropped from a Box definition. Commands
+cannot contain `{project}`, `{agent}`, `{event}` or `{command}`: Box expands
+those tokens and native hosts do not, so the same group would run differently.
+Reruns repair missing owned groups; removal preserves unrelated and pre-existing
+equivalent groups. A matching command in a different group conflicts for review.
+For Codex, an equal group in the same layer's inline `[[hooks.UserPromptSubmit]]`
+in `config.toml` counts as pre-existing, so setup writes no second copy to
+`hooks.json`. Removal leaves an emptied `UserPromptSubmit` list and a
+`hooks.json` that setup created in place.
+Writing a hook does not establish host approval or invocation.
 
 `run(context, options, machine)` handles selection, review and confirmation.
 Project scope is the default; user scope is explicit. `Options` supports

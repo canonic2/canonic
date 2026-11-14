@@ -94,6 +94,7 @@ mod tests {
             state: root.join("state"),
             agent_homes: BTreeMap::new(),
             tools: vec![crate::Tool::new("observe", "Observe", true)],
+            prompt_hook: None,
         };
         let path = project.join(".mcp.json");
         let source = format!("{{\"history\":\"{}\"}}", "x".repeat(1024 * 1024));

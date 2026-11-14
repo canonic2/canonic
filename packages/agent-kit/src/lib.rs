@@ -18,8 +18,8 @@ pub use agents::{Format, catalog};
 pub use detection::defaults_on_path as discovery_defaults;
 pub use preflight::check as check_catalog;
 pub use workflow::{
-    AgentStatus, Plan, PreparationSession, human, prepare, prepare_with_policy, run,
-    run_with_policy,
+    AgentStatus, Plan, PreparationSession, human, prepare, prepare_with_policy, relocate_project,
+    run, run_with_policy,
 };
 
 /// Authorization boundary selected by the embedding product.
@@ -59,6 +59,10 @@ pub enum Scope {
 
 /// Common options; writes require terminal confirmation or explicit `yes`.
 #[derive(Args, Clone, Debug, Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "clap represents independent command-line switches as booleans"
+)]
 pub struct Options {
     /// Agent to install or repair; repeat for multiple agents. Omit for a picker.
     #[arg(long = "agent")]
@@ -120,6 +124,9 @@ pub struct Context {
     pub agent_homes: BTreeMap<String, PathBuf>,
     /// The product's MCP tools, for the permissions page and approval settings.
     pub tools: Vec<Tool>,
+    /// Optional native `UserPromptSubmit` group for Claude Code and Codex.
+    /// The consumer owns its command, timeout and description.
+    pub prompt_hook: Option<serde_json::Value>,
 }
 
 impl Context {
@@ -174,6 +181,7 @@ impl Context {
             })
             .collect(),
             tools: Vec::new(),
+            prompt_hook: None,
         })
     }
 
