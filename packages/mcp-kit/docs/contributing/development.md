@@ -41,7 +41,9 @@ make test-focus FILTER='::' TEST_TARGET='--test integration' CARGO_FLAGS='--stre
 ```
 
 `test-focus` requires a substring filter and defaults to `--lib`. Keep this
-package's `target/` directory between runs.
+package's `target/` directory between runs. To free space, run `make prune` on
+its own while no build or test uses `target/`; it deletes incremental caches and
+test binaries untouched for more than `PRUNE_DAYS` days (default 3).
 
 ## Configuration
 

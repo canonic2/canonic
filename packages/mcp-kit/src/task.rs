@@ -189,6 +189,20 @@ impl Metadata {
         Ok(self)
     }
 
+    /// Removes the status message, for a successor whose earlier message no
+    /// longer describes the task.
+    #[must_use]
+    pub fn without_message(mut self) -> Self {
+        self.status_message = None;
+        self
+    }
+
+    /// The human-readable status message, when one is set.
+    #[must_use]
+    pub fn status_message(&self) -> Option<&str> {
+        self.status_message.as_deref()
+    }
+
     /// Sets a suggested positive polling interval.
     ///
     /// # Errors

@@ -347,6 +347,11 @@ fn tasks_validate_metadata_and_identifier_boundaries() {
             .with_message("x".repeat(MAX_STATUS_BYTES + 1))
             .is_err()
     );
+    let described = metadata().with_message("Copying 1 of 2").unwrap();
+    assert_eq!(described.status_message(), Some("Copying 1 of 2"));
+    let cleared = described.without_message();
+    assert_eq!(cleared.status_message(), None);
+    assert!(json!(cleared).get("statusMessage").is_none());
     for duration in [1, MAX_MILLIS] {
         assert!(Metadata::new(TaskId::new("acme").unwrap(), now(), duration).is_ok());
         assert!(metadata().with_poll_interval(duration).is_ok());

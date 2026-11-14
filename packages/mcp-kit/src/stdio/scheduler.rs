@@ -621,6 +621,9 @@ impl Scheduler {
         let Some(running) = self.running.remove(&sequence) else {
             return;
         };
+        // This handler run is over; a retained ProgressReporter now reports false
+        // instead of filling the shared progress buffer. A resumed run gets its own control.
+        running.control.cancel();
         drop(running.execution);
         running
             .meta

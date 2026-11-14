@@ -105,6 +105,14 @@ Progress draining is bounded per dispatcher turn so a busy producer cannot
 keep the dispatcher collecting notifications indefinitely. A successful enqueue
 does not guarantee delivery before the request ends.
 
+Use `context.progress_reporter()` when an operation needs an owned callback or
+passes progress across threads. It returns `None` without a token. The cloneable
+reporter's `progress` method stays bound to the original RPC and its cancellation
+and deadline; retaining it does not extend that RPC or send progress on another
+call. It returns `false` once the handler that captured it returns, so a
+continuation resumed after a confirmation or elicitation takes a new reporter
+from its own context. Keep progress values increasing across all clones.
+
 ## Extension methods
 
 List product methods in `SessionOptions::extension_methods` (requests) and

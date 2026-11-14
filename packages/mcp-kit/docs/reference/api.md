@@ -40,7 +40,7 @@
 | Attach presentation hints | `ContentAnnotations`, `Role`, `Content::with_annotations`, `Resource::annotations`, `ResourceTemplate::annotations` |
 | Reply to an extension request | `stdio::Outcome::Method`; list methods in `SessionOptions` |
 | Stop work on cancellation or deadline | `stdio::Context::check`, `Context::remaining` |
-| Report progress | `stdio::Context::progress` |
+| Report progress | `stdio::Context::progress`, `Context::progress_reporter`, `stdio::ProgressReporter` |
 | Ask the host's user | `stdio::Outcome::Confirm` with `stdio::Confirm`; `Decision` |
 | Ask on a modern request | `RequestContext::confirmation`, `Outcome::InputRequired`, consumer-owned state validation and `confirmation_decision` |
 | Change invalid-argument results | `Handler::invalid_arguments` |

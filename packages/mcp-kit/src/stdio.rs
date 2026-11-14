@@ -353,11 +353,35 @@ pub struct Context {
     result_schema: Option<crate::ResultSchema>,
 }
 
+#[derive(Clone)]
 struct Progress {
     token: Value,
     sequence: u64,
     sender: mpsc::SyncSender<(u64, Value)>,
     dispatcher: thread::Thread,
+}
+
+/// A cloneable progress sink bound to the handler run that captured it.
+/// Retaining this handle does not extend the request's lifetime or deadline.
+/// A run resumed after a confirmation or elicitation captures a new reporter.
+#[derive(Clone)]
+pub struct ProgressReporter {
+    control: Arc<Control>,
+    sink: Progress,
+}
+
+impl ProgressReporter {
+    /// Queues best-effort progress under the originating request's token.
+    /// Values must increase. Returns `false` when the buffer is full, the
+    /// request was cancelled or expired, or the capturing run has returned;
+    /// the dispatcher discards queued updates after the RPC settles.
+    #[expect(
+        clippy::must_use_candidate,
+        reason = "progress is best effort; callers may ignore buffering"
+    )]
+    pub fn progress(&self, progress: f64, total: Option<f64>, message: Option<&str>) -> bool {
+        self.sink.send(&self.control, progress, total, message)
+    }
 }
 
 impl Context {
@@ -414,20 +438,41 @@ impl Context {
     /// Sends a progress notification when the caller supplied a progress token.
     ///
     /// `progress` must increase with each call. Returns `false` when there is
-    /// no token, the buffer is full or the request has ended; progress is never
-    /// sent after the request's reply.
+    /// no token, the buffer is full or control was cancelled/expired. Buffered
+    /// updates are discarded after the request's reply.
     #[expect(
         clippy::must_use_candidate,
         reason = "progress is best effort; most callers ignore whether it was buffered"
     )]
     pub fn progress(&self, progress: f64, total: Option<f64>, message: Option<&str>) -> bool {
-        if self.control.check().is_err() {
+        self.progress
+            .as_ref()
+            .is_some_and(|sink| sink.send(&self.control, progress, total, message))
+    }
+
+    /// Captures a progress sink only when this RPC supplied a progress token.
+    /// The sink stops accepting progress once this handler run returns.
+    #[must_use]
+    pub fn progress_reporter(&self) -> Option<ProgressReporter> {
+        self.progress.as_ref().map(|sink| ProgressReporter {
+            control: self.control.clone(),
+            sink: sink.clone(),
+        })
+    }
+}
+
+impl Progress {
+    fn send(
+        &self,
+        control: &Control,
+        progress: f64,
+        total: Option<f64>,
+        message: Option<&str>,
+    ) -> bool {
+        if control.check().is_err() {
             return false;
         }
-        let Some(sink) = &self.progress else {
-            return false;
-        };
-        let mut params = json!({"progressToken": sink.token, "progress": progress});
+        let mut params = json!({"progressToken": self.token, "progress": progress});
         if let Some(total) = total {
             params["total"] = json!(total);
         }
@@ -435,8 +480,8 @@ impl Context {
             params["message"] = json!(message);
         }
         let notification = rpc::notification("notifications/progress", params);
-        let sent = sink.sender.try_send((sink.sequence, notification)).is_ok();
-        sink.dispatcher.unpark();
+        let sent = self.sender.try_send((self.sequence, notification)).is_ok();
+        self.dispatcher.unpark();
         sent
     }
 }

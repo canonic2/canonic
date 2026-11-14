@@ -205,7 +205,10 @@ information if cleanup still needs it. Deleting a handle does not stop a job.
 Frame, metadata and output budgets also apply. Results are refused rather
 than truncated. Large reports should remain consumer-owned artifacts with a
 compact tool result. No result streaming, subscriptions or task notifications
-are provided. Progress belongs in task snapshots, not on the completed RPC.
+are provided. Progress belongs in task snapshots, not on the completed RPC:
+build a working successor whose metadata carries the current step with
+`Metadata::with_message`, read it with `status_message`, and drop a message
+that no longer applies with `without_message`, for example before settling.
 
 An independent runtime drives `Inbound::Task` just like other admitted work.
 Capture `Session::request_context`, call your service, and encode typed

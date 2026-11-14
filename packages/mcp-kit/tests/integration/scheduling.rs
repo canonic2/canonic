@@ -181,3 +181,74 @@ fn progress_reaches_the_caller_before_the_reply() {
     host.call(1, "acme_change", json!({}));
     assert_eq!(result_text(&host.recv()), "done");
 }
+
+#[test]
+fn owned_progress_reporter_keeps_the_originating_token_and_cancellation() {
+    let (sent, received) = std::sync::mpsc::sync_channel(1);
+    let latch = Latch::default();
+    let worker_latch = latch.clone();
+    let script = Script::new(move |_, context| {
+        let reporter = context.progress_reporter();
+        sent.send(reporter).unwrap();
+        worker_latch.wait(context);
+        text("done")
+    });
+    let host = Host::ready(script, Options::default(), json!({}));
+    host.send(
+        &json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+        "name":"acme_change","arguments":{},"_meta":{"progressToken":73}}}),
+    );
+    let reporter = received
+        .recv_timeout(crate::fixture::WAIT)
+        .unwrap()
+        .unwrap();
+    assert!(
+        reporter
+            .clone()
+            .progress(1.0, None, Some("Acme acquisition"))
+    );
+    let progress = host.recv();
+    assert_eq!(progress["params"]["progressToken"], 73);
+    assert_eq!(progress["params"]["message"], "Acme acquisition");
+    host.send(
+        &json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}),
+    );
+    // Ping is a dispatcher barrier: cancellation has reached the original control.
+    host.send(&json!({"jsonrpc":"2.0","id":2,"method":"ping","params":{}}));
+    assert_eq!(host.recv()["id"], 2);
+    assert!(!reporter.progress(2.0, None, Some("late")));
+    latch.release();
+    host.assert_quiet();
+}
+
+#[test]
+fn owned_progress_reporter_never_routes_late_updates_to_another_rpc() {
+    let (sent, received) = std::sync::mpsc::sync_channel(1);
+    let script = Script::new(move |_, context| {
+        sent.send(context.progress_reporter()).unwrap();
+        text("done")
+    });
+    let host = Host::ready(script, Options::default(), json!({}));
+    host.send(
+        &json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+        "name":"acme_change","arguments":{},"_meta":{"progressToken":"acme-old"}}}),
+    );
+    let reporter = received
+        .recv_timeout(crate::fixture::WAIT)
+        .unwrap()
+        .unwrap();
+    assert_eq!(host.recv()["id"], 1);
+    // The reply is written after the dispatcher collects the run, which ends its control.
+    assert!(!reporter.progress(1.0, None, Some("late")));
+    host.send(&json!({"jsonrpc":"2.0","id":2,"method":"ping","params":{}}));
+    assert_eq!(host.recv()["id"], 2);
+    host.call(3, "acme_change", json!({}));
+    assert!(
+        received
+            .recv_timeout(crate::fixture::WAIT)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(host.recv()["id"], 3);
+    host.assert_quiet();
+}
