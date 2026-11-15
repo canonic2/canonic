@@ -26,6 +26,13 @@ allow = ["Zlib"]
 name = "borrow-or-share"
 allow = ["MIT-0"]
 
+# The authorization-server feature's RustCrypto signature crates use subtle's
+# constant-time primitives under the permissive BSD-3-Clause license. Keep
+# approval crate-scoped.
+[[licenses.exceptions]]
+name = "subtle"
+allow = ["BSD-3-Clause"]
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"

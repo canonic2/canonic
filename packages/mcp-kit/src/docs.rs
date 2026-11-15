@@ -28,11 +28,14 @@ pub mod build;
 #[cfg(all(test, not(feature = "docs-build")))]
 mod build;
 mod format;
+mod presentation;
+pub use presentation::human;
 #[cfg(test)]
 mod tests;
 
 use crate::{
     control::Interrupted,
+    page::{self, Builder, Casing, Limits, Position, Request, Scope},
     tool::{Annotations, Content, Tool, ToolResult},
 };
 use format::{Index, MAGIC, Page};
@@ -64,18 +67,22 @@ pub const MAX_TOTAL_BYTES: usize = 16 * 1024 * 1024;
 /// The longest search query, in UTF-8 bytes.
 pub const MAX_QUERY_BYTES: usize = 1024;
 /// The most rows a list or search page returns.
-pub const MAX_ROWS: u64 = 100;
+pub const MAX_ROWS: u64 = Limits::STANDARD.max;
 /// The default rows per list or search page.
-pub const DEFAULT_ROWS: u64 = 50;
+pub const DEFAULT_ROWS: u64 = Limits::STANDARD.default;
 /// The most lines one read returns.
 pub const MAX_READ_LINES: u64 = 400;
 /// The default lines per read.
 pub const DEFAULT_READ_LINES: u64 = 100;
-/// The largest offset or line number, the largest integer JSON represents exactly.
-pub const MAX_POSITION: u64 = (1 << 53) - 1;
-/// The most text one result carries, in bytes once escaped for a JSON string;
-/// a page ends early rather than exceed it.
-pub const MAX_RESULT_TEXT_BYTES: usize = 512 * 1024;
+/// The default encoded items-array budget; a page ends early before the next
+/// item exceeds it, except for one oversized first item within transport bounds.
+pub const MAX_RESULT_TEXT_BYTES: usize = Limits::STANDARD.max_bytes;
+
+const READ_LIMITS: Limits = Limits {
+    default: DEFAULT_READ_LINES,
+    max: MAX_READ_LINES,
+    max_bytes: MAX_RESULT_TEXT_BYTES,
+};
 
 /// How many lines a scan processes between interruption checks.
 const CHECK_INTERVAL: usize = 256;
@@ -97,6 +104,9 @@ macro_rules! include_docs {
 /// Why a documentation call failed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DocsError {
+    /// Shared page request or cursor failure.
+    #[error(transparent)]
+    Pagination(#[from] page::Error),
     /// An argument was missing, of the wrong type, out of range or unknown.
     #[error("{0}")]
     InvalidArguments(String),
@@ -131,6 +141,9 @@ pub struct Bundle {
     index: OnceLock<Option<(Index, usize)>>,
     text: OnceLock<Option<String>>,
     lowered: OnceLock<Vec<String>>,
+    lowered_lines: OnceLock<Vec<Vec<usize>>>,
+    lines: OnceLock<Vec<Vec<usize>>>,
+    digest: OnceLock<[u8; 32]>,
     #[cfg(test)]
     stages: tests::Stages,
 }
@@ -144,6 +157,9 @@ impl Bundle {
             index: OnceLock::new(),
             text: OnceLock::new(),
             lowered: OnceLock::new(),
+            lowered_lines: OnceLock::new(),
+            lines: OnceLock::new(),
+            digest: OnceLock::new(),
             #[cfg(test)]
             stages: tests::Stages::new(),
         }
@@ -187,6 +203,34 @@ impl Bundle {
                 .map(|page| text[page.start..page.end].to_lowercase())
                 .collect()
         }))
+    }
+
+    /// Sparse byte starts bound resume scans to at most one block of lines.
+    fn lines(&self) -> Result<&[Vec<usize>], DocsError> {
+        let (index, _) = self.index()?;
+        let text = self.text()?;
+        Ok(self.lines.get_or_init(|| {
+            index
+                .pages
+                .iter()
+                .map(|page| line_starts(&text[page.start..page.end]))
+                .collect()
+        }))
+    }
+
+    fn lowered_lines(&self) -> Result<&[Vec<usize>], DocsError> {
+        let text = self.lowered()?;
+        Ok(self
+            .lowered_lines
+            .get_or_init(|| text.iter().map(|page| line_starts(page)).collect()))
+    }
+
+    fn scope(&self, list: &str, query: &Value) -> Scope {
+        Scope::offset(
+            list,
+            page::digest(query.to_string().as_bytes()),
+            *self.digest.get_or_init(|| page::digest(self.bytes)),
+        )
     }
 }
 
@@ -304,10 +348,13 @@ impl Documentation {
     pub fn tools(&self) -> Vec<Tool> {
         let product = &self.product;
         let list = &self.list;
-        let offset = json!({"type":"integer","minimum":0,"maximum":MAX_POSITION,"default":0,
-            "description":"Zero-based position of the first row to return."});
-        let rows = json!({"type":"integer","minimum":1,"maximum":MAX_ROWS,"default":DEFAULT_ROWS,
-            "description":"Most rows to return; fewer are returned when more would exceed the result size."});
+        let properties = Limits::STANDARD.properties();
+        let cursor = &properties["cursor"];
+        let rows = &properties["limit"];
+        let mut read_properties = READ_LIMITS.properties();
+        read_properties["limit"]["description"] = json!(
+            "Most lines to return; fewer are returned when more would exceed the result size."
+        );
         let annotations = Annotations {
             title: None,
             read_only_hint: Some(true),
@@ -320,7 +367,7 @@ impl Documentation {
             Tool::new(
                 list.clone(),
                 format!("List the paths, titles and line counts of the {product} documentation bundled with this version."),
-                object(json!({"offset":offset,"limit":rows}), &[]),
+                object(properties.clone(), &[]),
             ),
             Tool::new(
                 self.search.clone(),
@@ -330,7 +377,7 @@ impl Documentation {
                         "description":"Case-insensitive literal text, not a pattern; surrounding spaces are kept. Must not be blank or contain line breaks."},
                     "path":{"type":"string","minLength":1,
                         "description":format!("Search only this exact page path from {list}.")},
-                    "offset":offset,"limit":rows}), &["query"]),
+                    "cursor":cursor,"limit":rows}), &["query"]),
             ),
             Tool::new(
                 self.read.clone(),
@@ -338,10 +385,8 @@ impl Documentation {
                 object(json!({
                     "path":{"type":"string","minLength":1,
                         "description":format!("Exact page path returned by {list}.")},
-                    "start_line":{"type":"integer","minimum":1,"maximum":MAX_POSITION,"default":1,
-                        "description":"One-based first line."},
-                    "limit":{"type":"integer","minimum":1,"maximum":MAX_READ_LINES,"default":DEFAULT_READ_LINES,
-                        "description":"Most lines to return; fewer are returned when more would exceed the result size."}}),
+                    "cursor":cursor,
+                    "limit":read_properties["limit"]}),
                     &["path"]),
             ),
         ]
@@ -370,36 +415,33 @@ impl Documentation {
     fn run(
         &self,
         kind: Kind,
-        arguments: &Value,
+        input: &Value,
         check: &dyn Fn() -> Result<(), Interrupted>,
     ) -> Result<Value, DocsError> {
-        let arguments = Arguments::new(arguments)?;
+        let arguments = Arguments::new(input)?;
         match kind {
             Kind::List => {
-                arguments.only(&["offset", "limit"])?;
-                let offset = arguments.integer("offset", 0, MAX_POSITION, 0)?;
-                let limit = arguments.integer("limit", 1, MAX_ROWS, DEFAULT_ROWS)?;
+                arguments.only(&["cursor", "limit"])?;
+                let request = Request::from_mcp(input, Limits::STANDARD)?;
                 check()?;
-                self.list(offset, limit, check)
+                self.list(&request, check)
             }
             Kind::Search => {
-                arguments.only(&["query", "path", "offset", "limit"])?;
+                arguments.only(&["query", "path", "cursor", "limit"])?;
                 let query = arguments.query()?;
                 let path = arguments.string("path")?;
-                let offset = arguments.integer("offset", 0, MAX_POSITION, 0)?;
-                let limit = arguments.integer("limit", 1, MAX_ROWS, DEFAULT_ROWS)?;
+                let request = Request::from_mcp(input, Limits::STANDARD)?;
                 check()?;
-                self.search(&query, path, offset, limit, check)
+                self.search(&query, path, &request, check)
             }
             Kind::Read => {
-                arguments.only(&["path", "start_line", "limit"])?;
+                arguments.only(&["path", "cursor", "limit"])?;
                 let path = arguments
                     .string("path")?
                     .ok_or_else(|| invalid("`path` is required."))?;
-                let start = arguments.integer("start_line", 1, MAX_POSITION, 1)?;
-                let limit = arguments.integer("limit", 1, MAX_READ_LINES, DEFAULT_READ_LINES)?;
+                let request = Request::from_mcp_units(input, READ_LIMITS)?;
                 check()?;
-                self.read(path, start, limit, check)
+                self.read(path, &request, check)
             }
         }
     }
@@ -416,122 +458,164 @@ impl Documentation {
 
     fn list(
         &self,
-        offset: u64,
-        limit: u64,
+        request: &Request,
         check: &dyn Fn() -> Result<(), Interrupted>,
     ) -> Result<Value, DocsError> {
         let (index, _) = self.bundle.index()?;
-        let mut rows = Vec::new();
-        let mut budget = Budget::default();
-        for page in index
-            .pages
-            .iter()
-            .skip(position(offset))
-            .take(position(limit))
-        {
+        let scope = self
+            .bundle
+            .scope(&format!("{}:{}", self.product, self.list), &json!({}));
+        let offset = offset(&scope, request)?;
+        if offset > index.pages.len() {
+            return Err(page::Error::InvalidCursor.into());
+        }
+        let mut builder = Builder::new(
+            &scope,
+            request.limit,
+            Limits::STANDARD,
+            1024 * 1024,
+            &self.read,
+        )?;
+        let mut next = offset;
+        for page in &index.pages[offset..] {
             check()?;
-            if !budget.fits(escaped(&page.path) + escaped(&page.title), rows.is_empty()) {
+            if !builder.push(
+                json!({"path":page.path,"title":page.title,"total_lines":page.lines}),
+                &Position::Offset((next + 1) as u64),
+            )? {
                 break;
             }
-            rows.push(json!({"path":page.path,"title":page.title,"total_lines":page.lines}));
+            next += 1;
+            if builder.is_full() {
+                break;
+            }
         }
-        Ok(self.rows("documents", rows, index.pages.len(), offset))
+        let mut result = self.rows("documents", builder.finish(next < index.pages.len()));
+        result["total"] = json!(index.pages.len());
+        Ok(result)
     }
 
     fn search(
         &self,
         query: &str,
         path: Option<&str>,
-        offset: u64,
-        limit: u64,
+        request: &Request,
         check: &dyn Fn() -> Result<(), Interrupted>,
     ) -> Result<Value, DocsError> {
         let (index, _) = self.bundle.index()?;
         let selected = path.map(|path| self.page(index, path)).transpose()?;
+        let scope = self.bundle.scope(
+            &format!("{}:{}", self.product, self.search),
+            &json!({"query":query,"path":path}),
+        );
+        let offset = offset(&scope, request)?;
+        let total_lines = index.pages.iter().map(|page| page.lines).sum::<usize>();
+        if offset > total_lines {
+            return Err(page::Error::InvalidCursor.into());
+        }
         let text = self.bundle.text()?;
         let lowered = self.bundle.lowered()?;
         let needle = query.to_lowercase();
-        let (offset, limit) = (position(offset), position(limit));
-        let mut rows = Vec::new();
-        let mut budget = Budget::default();
-        let mut full = false;
-        let mut total = 0usize;
+        let starts = self.bundle.lines()?;
+        let lowered_starts = self.bundle.lowered_lines()?;
+        let mut builder = Builder::new(
+            &scope,
+            request.limit,
+            Limits::STANDARD,
+            1024 * 1024,
+            &self.read,
+        )?;
+        let mut base = 0;
         for (position, page) in index.pages.iter().enumerate() {
-            if selected.is_some_and(|(selected, _)| selected != position) {
+            let page_base = base;
+            base += page.lines;
+            if base <= offset || selected.is_some_and(|(selected, _)| selected != position) {
                 continue;
             }
             check()?;
-            let lines = text[page.start..page.end].lines();
-            for (number, (line, lower)) in lines.zip(lowered[position].lines()).enumerate() {
+            let first = offset.saturating_sub(page_base);
+            let lines = lines_from(&text[page.start..page.end], &starts[position], first);
+            let lower = lines_from(&lowered[position], &lowered_starts[position], first);
+            for (relative, (line, lower)) in lines.zip(lower).enumerate() {
+                let number = first + relative;
                 if number % CHECK_INTERVAL == 0 {
                     check()?;
                 }
                 if !lower.contains(&needle) {
                     continue;
                 }
-                if total >= offset && !full {
-                    if rows.len() < limit
-                        && budget.fits(escaped(&page.path) + escaped(line), rows.is_empty())
-                    {
-                        rows.push(json!({"path":page.path,"line":number + 1,"text":line}));
+                let next = page_base + number + 1;
+                let line = line.lines().next().unwrap_or("");
+                if !builder.push(
+                    json!({"path":page.path,"line":number + 1,"text":line}),
+                    &Position::Offset(next as u64),
+                )? || builder.is_full()
+                {
+                    let more = if selected.is_some() {
+                        number + 1 < page.lines
                     } else {
-                        full = true;
-                    }
+                        next < total_lines
+                    };
+                    return Ok(self.rows("matches", builder.finish(more)));
                 }
-                total += 1;
             }
         }
-        Ok(self.rows("matches", rows, total, offset as u64))
+        Ok(self.rows("matches", builder.finish(false)))
     }
 
     fn read(
         &self,
         path: &str,
-        start: u64,
-        limit: u64,
+        request: &Request,
         check: &dyn Fn() -> Result<(), Interrupted>,
     ) -> Result<Value, DocsError> {
         let (index, _) = self.bundle.index()?;
-        let (_, page) = self.page(index, path)?;
+        let (page_index, page) = self.page(index, path)?;
         let text = self.bundle.text()?;
-        let first = position(start - 1);
+        let scope = self.bundle.scope(
+            &format!("{}:{}", self.product, self.read),
+            &json!({"path":path}),
+        );
+        let first = offset(&scope, request)?;
+        let lines = &self.bundle.lines()?[page_index];
+        if first > page.lines {
+            return Err(page::Error::InvalidCursor.into());
+        }
         let mut content = String::new();
         let mut taken = 0usize;
-        let mut budget = Budget::default();
-        // Polling counts from the page's first line, so every read checks once
-        // after preparation and periodically through skipped lines too.
-        for (number, line) in text[page.start..page.end].split_inclusive('\n').enumerate() {
-            if number % CHECK_INTERVAL == 0 {
+        let mut builder =
+            Builder::new(&scope, request.limit, READ_LIMITS, 1024 * 1024, &self.read)?;
+        for (relative, line) in lines_from(&text[page.start..page.end], lines, first).enumerate() {
+            let number = first + relative;
+            if (number - first) % CHECK_INTERVAL == 0 {
                 check()?;
             }
-            if number < first {
-                continue;
-            }
-            if taken == position(limit) || !budget.fits(escaped(line), taken == 0) {
+            if !builder.push(json!(line), &Position::Offset((number + 1) as u64))? {
                 break;
             }
             content.push_str(line);
             taken += 1;
+            if builder.is_full() {
+                break;
+            }
         }
         let next = first.saturating_add(taken);
         Ok(json!({
             "version": self.version,
             "path": page.path,
             "title": page.title,
-            "start_line": start,
+            "start_line": first + 1,
             "total_lines": page.lines,
             "content": content,
-            "next_start_line": (taken > 0 && next < page.lines).then_some(next + 1),
+            "next_cursor": builder.finish(next < page.lines).next_cursor,
         }))
     }
 
-    fn rows(&self, field: &str, rows: Vec<Value>, total: usize, offset: u64) -> Value {
-        let next = position(offset).saturating_add(rows.len());
+    fn rows(&self, field: &str, page: page::Page) -> Value {
         let mut result = Map::new();
         result.insert("version".into(), json!(self.version));
-        result.insert(field.into(), Value::Array(rows));
-        result.insert("total".into(), json!(total));
-        result.insert("next_offset".into(), json!((next < total).then_some(next)));
+        result.insert(field.into(), Value::Array(page.items));
+        result.insert(Casing::Snake.next_cursor().into(), json!(page.next_cursor));
         Value::Object(result)
     }
 
@@ -546,40 +630,41 @@ impl Documentation {
     }
 }
 
-/// Converts a bounded `u64` to `usize`, saturating on narrow platforms.
-fn position(value: u64) -> usize {
-    usize::try_from(value).unwrap_or(usize::MAX)
-}
-
-/// The bytes `text` takes inside a JSON string, as `serde_json` escapes it.
-///
-/// Budgeting escaped bytes bounds the encoded result: a control character
-/// takes six bytes, and the default result's JSON text copy at most doubles
-/// the structured content again.
-fn escaped(text: &str) -> usize {
-    text.bytes()
-        .map(|byte| match byte {
-            b'"' | b'\\' | b'\x08' | b'\t' | b'\n' | b'\x0c' | b'\r' => 2,
-            0..=0x1f => 6,
-            _ => 1,
+/// One seek checkpoint per scan block, rather than an allocation per line.
+fn line_starts(text: &str) -> Vec<usize> {
+    let mut offset = 0;
+    text.split_inclusive('\n')
+        .enumerate()
+        .filter_map(|(number, line)| {
+            let start = offset;
+            offset += line.len();
+            number.is_multiple_of(CHECK_INTERVAL).then_some(start)
         })
-        .sum()
+        .collect()
 }
 
-/// Escaped text accumulated into one result, bounded by [`MAX_RESULT_TEXT_BYTES`].
-#[derive(Default)]
-struct Budget(usize);
+fn lines_from<'a>(text: &'a str, starts: &[usize], first: usize) -> impl Iterator<Item = &'a str> {
+    let start = starts
+        .get(first / CHECK_INTERVAL)
+        .copied()
+        .unwrap_or(text.len());
+    text[start..]
+        .split_inclusive('\n')
+        .skip(first % CHECK_INTERVAL)
+}
 
-impl Budget {
-    /// Whether `bytes` more fit; the first item of a result always fits.
-    fn fits(&mut self, bytes: usize, first: bool) -> bool {
-        let used = self.0.saturating_add(bytes);
-        if first || used <= MAX_RESULT_TEXT_BYTES {
-            self.0 = used;
-            true
-        } else {
-            false
+fn offset(scope: &Scope, request: &Request) -> Result<usize, DocsError> {
+    match request
+        .cursor
+        .as_deref()
+        .map(|cursor| scope.decode(cursor))
+        .transpose()?
+    {
+        None => Ok(0),
+        Some(Position::Offset(value)) => {
+            usize::try_from(value).map_err(|_| page::Error::InvalidCursor.into())
         }
+        Some(Position::Keyset(_)) => Err(page::Error::InvalidCursor.into()),
     }
 }
 
@@ -602,18 +687,6 @@ impl<'a> Arguments<'a> {
         match self.0.keys().find(|key| !allowed.contains(&key.as_str())) {
             Some(key) => Err(invalid(&format!("`{key}` is not a supported argument."))),
             None => Ok(()),
-        }
-    }
-
-    fn integer(&self, key: &str, min: u64, max: u64, default: u64) -> Result<u64, DocsError> {
-        match self.0.get(key) {
-            None => Ok(default),
-            Some(value) => value
-                .as_u64()
-                .filter(|value| (min..=max).contains(value))
-                .ok_or_else(|| {
-                    invalid(&format!("`{key}` must be an integer from {min} to {max}."))
-                }),
         }
     }
 

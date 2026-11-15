@@ -47,6 +47,7 @@ pub mod metadata;
 pub mod modern;
 #[cfg(feature = "authorization-server")]
 pub mod oauth;
+pub mod page;
 pub mod prompt;
 pub mod resource;
 pub mod rpc;

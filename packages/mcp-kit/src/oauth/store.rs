@@ -5,7 +5,7 @@
 //! atomic; durable backends belong to the consumer.
 
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{BTreeSet, HashMap, VecDeque},
     sync::{Mutex, PoisonError},
     time::{Duration, SystemTime},
 };
@@ -16,7 +16,7 @@ pub const DEFAULT_MEMORY_CAPACITY: usize = 4096;
 pub const MAX_MEMORY_CAPACITY: usize = 1_048_576;
 
 /// A SHA-256 digest of a secret value with its type prefix.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Digest(pub [u8; 32]);
 
 impl Digest {
@@ -141,6 +141,15 @@ pub struct AccessRecord {
     /// The scopes it carries, at most the family's.
     pub scopes: Vec<String>,
     /// When it expires.
+    pub expires_at: SystemTime,
+}
+
+/// An identity assertion that was redeemed, kept to refuse its replay.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssertionRecord {
+    /// The digest of the assertion's issuer and `jti`.
+    pub digest: Digest,
+    /// When the assertion could no longer be accepted.
     pub expires_at: SystemTime,
 }
 
@@ -273,9 +282,9 @@ pub trait GrantStore: Send + Sync {
     fn get_family(&self, id: &str, now: SystemTime) -> Result<Option<FamilyRecord>, StoreError>;
 
     /// Inserts a `client_credentials` grant: a family of generation 0, which
-    /// has no refresh token, with its one access token. When the client
-    /// already holds `limit` such grants, the oldest is removed first, with
-    /// its access token.
+    /// has no refresh token, with its one access token. When the family's
+    /// client and subject already hold `limit` generation-0 grants, the oldest
+    /// is removed first, with its access token.
     ///
     /// # Errors
     /// Returns [`StoreError`] when it cannot be stored.
@@ -285,6 +294,32 @@ pub trait GrantStore: Send + Sync {
         access: AccessRecord,
         limit: usize,
     ) -> Result<(), StoreError>;
+
+    /// Whether an assertion with this digest was redeemed and its record is
+    /// unexpired at `now`. The library asks before the consumer's admission
+    /// hook runs; [`create_assertion_grant`](Self::create_assertion_grant)
+    /// remains the atomic check.
+    ///
+    /// # Errors
+    /// Returns [`StoreError::Unavailable`] when the backend fails.
+    fn assertion_redeemed(&self, digest: &Digest, now: SystemTime) -> Result<bool, StoreError>;
+
+    /// Inserts an identity-assertion grant like
+    /// [`create_client_grant`](Self::create_client_grant), atomically with
+    /// recording `assertion`. Returns `false`, inserting nothing, when a
+    /// record with the same digest is unexpired at `now`: the assertion was
+    /// replayed.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when it cannot be stored.
+    fn create_assertion_grant(
+        &self,
+        assertion: AssertionRecord,
+        family: FamilyRecord,
+        access: AccessRecord,
+        limit: usize,
+        now: SystemTime,
+    ) -> Result<bool, StoreError>;
 
     /// Rotates a family's refresh token: unless the family has moved past
     /// [`Rotation::expected`], which is stale, the current generation, or the
@@ -336,10 +371,36 @@ struct State {
     /// Pending references in insertion order, for evicting the oldest.
     order: VecDeque<String>,
     codes: HashMap<Digest, CodeRecord>,
+    /// The code that creates each family, for revocation.
+    family_codes: HashMap<String, Digest>,
     families: HashMap<String, FamilyRecord>,
     access: HashMap<Digest, AccessRecord>,
-    /// Each client's `client_credentials` families, oldest first.
-    client_grants: HashMap<String, VecDeque<String>>,
+    /// Each client and subject's generation-0 families, oldest first.
+    client_grants: HashMap<(String, String), VecDeque<String>>,
+    /// Redeemed identity assertions and when each record may go.
+    assertions: HashMap<Digest, SystemTime>,
+    /// Every record by when it expires, kept exact by every insertion and
+    /// removal, so a purge visits only the records that are due.
+    due: BTreeSet<(SystemTime, Record)>,
+    /// Records purges visited, for the work guard in tests.
+    #[cfg(test)]
+    visited: usize,
+}
+
+/// A record named in the expiry index. Access tokens sort before families, so
+/// a token expiring with its family is purged, and counted, on its own first.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Record {
+    Pending(String),
+    Code(Digest),
+    Access(Digest),
+    Family(String),
+    Assertion(Digest),
+}
+
+/// When a family stops being live: its absolute or refresh expiry.
+fn family_expiry(family: &FamilyRecord) -> SystemTime {
+    family.expires_at.min(family.refresh_expires_at)
 }
 
 impl MemoryStore {
@@ -376,6 +437,13 @@ impl MemoryStore {
     pub(super) fn queued_references(&self) -> usize {
         self.lock().order.len()
     }
+
+    /// Records purges have visited, and entries in the expiry index.
+    #[cfg(test)]
+    pub(super) fn purge_work(&self) -> (usize, usize) {
+        let state = self.lock();
+        (state.visited, state.due.len())
+    }
 }
 
 impl Default for MemoryStore {
@@ -385,36 +453,161 @@ impl Default for MemoryStore {
 }
 
 impl State {
+    /// Removes up to `limit` due records in expiry order, visiting no others,
+    /// and returns how many. A family that ends before its access token takes
+    /// the token with it; that token is not expired, so it is not counted.
     fn purge(&mut self, now: SystemTime, limit: usize) -> usize {
-        let mut left = limit;
-        let mut take = |expired: bool| {
-            let remove = expired && left > 0;
-            left -= usize::from(remove);
-            !remove
-        };
-        self.pending
-            .retain(|_, record| take(record.expires_at <= now));
-        self.codes
-            .retain(|_, record| take(record.expires_at <= now));
-        let mut ended = HashSet::new();
-        self.families.retain(|id, family| {
-            let keep = take(family.expires_at <= now || family.refresh_expires_at <= now);
-            if !keep {
-                ended.insert(id.clone());
+        let mut removed = 0;
+        while removed < limit && self.due.first().is_some_and(|(at, _)| *at <= now) {
+            let Some((_, record)) = self.due.pop_first() else {
+                break;
+            };
+            removed += 1;
+            #[cfg(test)]
+            {
+                self.visited += 1;
             }
-            keep
-        });
-        self.access
-            .retain(|_, record| take(record.expires_at <= now));
-        // One pass over the access tokens, however many families ended.
-        if !ended.is_empty() {
-            self.access
-                .retain(|_, record| !ended.contains(&record.family_id));
+            match record {
+                Record::Pending(reference) => {
+                    self.drop_pending(&reference);
+                }
+                Record::Code(digest) => {
+                    self.drop_code(&digest);
+                }
+                Record::Family(id) => {
+                    self.drop_family(&id);
+                }
+                Record::Access(digest) => {
+                    self.drop_access(&digest);
+                }
+                Record::Assertion(digest) => {
+                    self.assertions.remove(&digest);
+                }
+            }
         }
-        let pending = &self.pending;
-        self.order
-            .retain(|reference| pending.contains_key(reference));
-        limit - left
+        removed
+    }
+
+    // Each `add_*` removes the entry of a record it replaces before indexing
+    // the new one, so a replacement keeps exactly its own expiry entry.
+
+    fn add_pending(&mut self, record: PendingRecord) {
+        self.drop_pending(&record.reference);
+        self.due
+            .insert((record.expires_at, Record::Pending(record.reference.clone())));
+        self.pending.insert(record.reference.clone(), record);
+    }
+
+    fn drop_pending(&mut self, reference: &str) -> Option<PendingRecord> {
+        let record = self.pending.remove(reference)?;
+        self.due
+            .remove(&(record.expires_at, Record::Pending(reference.to_owned())));
+        Some(record)
+    }
+
+    fn add_code(&mut self, record: CodeRecord) {
+        self.drop_code(&record.digest);
+        self.due
+            .insert((record.expires_at, Record::Code(record.digest)));
+        self.family_codes
+            .insert(record.family_id.clone(), record.digest);
+        self.codes.insert(record.digest, record);
+    }
+
+    fn drop_code(&mut self, digest: &Digest) -> Option<CodeRecord> {
+        let record = self.codes.remove(digest)?;
+        self.due.remove(&(record.expires_at, Record::Code(*digest)));
+        if self.family_codes.get(&record.family_id) == Some(digest) {
+            self.family_codes.remove(&record.family_id);
+        }
+        Some(record)
+    }
+
+    fn add_access(&mut self, record: AccessRecord) {
+        self.drop_access(&record.digest);
+        self.due
+            .insert((record.expires_at, Record::Access(record.digest)));
+        self.access.insert(record.digest, record);
+    }
+
+    fn drop_access(&mut self, digest: &Digest) {
+        if let Some(record) = self.access.remove(digest) {
+            self.due
+                .remove(&(record.expires_at, Record::Access(*digest)));
+        }
+    }
+
+    fn add_family(&mut self, family: FamilyRecord) {
+        // Only the index entry: the replaced family's token and grant list
+        // entry belong to the caller.
+        if let Some(old) = self.families.get(&family.id) {
+            self.due
+                .remove(&(family_expiry(old), Record::Family(family.id.clone())));
+        }
+        self.due
+            .insert((family_expiry(&family), Record::Family(family.id.clone())));
+        self.families.insert(family.id.clone(), family);
+    }
+
+    /// Removes a family with its access token and grant list entry.
+    fn drop_family(&mut self, id: &str) -> Option<FamilyRecord> {
+        let family = self.families.remove(id)?;
+        self.due
+            .remove(&(family_expiry(&family), Record::Family(id.to_owned())));
+        self.drop_access(&family.access);
+        let key = (family.client_id.clone(), family.subject.clone());
+        if let Some(grants) = self.client_grants.get_mut(&key) {
+            grants.retain(|grant| grant != id);
+            if grants.is_empty() {
+                self.client_grants.remove(&key);
+            }
+        }
+        Some(family)
+    }
+
+    fn add_assertion(&mut self, digest: Digest, expires_at: SystemTime) {
+        if let Some(old) = self.assertions.remove(&digest) {
+            self.due.remove(&(old, Record::Assertion(digest)));
+        }
+        self.due.insert((expires_at, Record::Assertion(digest)));
+        self.assertions.insert(digest, expires_at);
+    }
+
+    /// Inserts a generation-0 family, first removing its client and subject's
+    /// oldest such family once they hold `limit`.
+    fn single_grant(
+        &mut self,
+        capacity: usize,
+        family: FamilyRecord,
+        access: AccessRecord,
+        limit: usize,
+    ) -> Result<(), StoreError> {
+        let key = (family.client_id.clone(), family.subject.clone());
+        while let Some(oldest) = self
+            .client_grants
+            .get(&key)
+            .filter(|grants| grants.len() >= limit.max(1))
+            .and_then(|grants| grants.front().cloned())
+        {
+            if self.drop_family(&oldest).is_none()
+                && let Some(grants) = self.client_grants.get_mut(&key)
+            {
+                grants.retain(|grant| *grant != oldest);
+            }
+        }
+        if self.families.len() >= capacity {
+            self.purge(SystemTime::now(), usize::MAX);
+            if self.families.len() >= capacity {
+                return Err(StoreError::Full);
+            }
+        }
+        self.client_grants
+            .entry(key)
+            .or_default()
+            .push_back(family.id.clone());
+        self.add_access(access);
+        self.add_family(family);
+        Ok(())
     }
 
     fn live_family(&self, id: &str, now: SystemTime) -> Option<&FamilyRecord> {
@@ -432,7 +625,7 @@ impl GrantStore for MemoryStore {
             let Some(oldest) = state.order.pop_front() else {
                 break;
             };
-            state.pending.remove(&oldest);
+            state.drop_pending(&oldest);
         }
         // Completed authorizations leave their references behind; drop them
         // once they could outnumber the live ones, which keeps the queue
@@ -442,7 +635,7 @@ impl GrantStore for MemoryStore {
             order.retain(|reference| pending.contains_key(reference));
         }
         state.order.push_back(record.reference.clone());
-        state.pending.insert(record.reference.clone(), record);
+        state.add_pending(record);
         Ok(())
     }
 
@@ -466,8 +659,7 @@ impl GrantStore for MemoryStore {
     ) -> Result<Option<PendingRecord>, StoreError> {
         Ok(self
             .lock()
-            .pending
-            .remove(reference)
+            .drop_pending(reference)
             .filter(|record| record.expires_at > now))
     }
 
@@ -479,7 +671,7 @@ impl GrantStore for MemoryStore {
                 return Err(StoreError::Full);
             }
         }
-        state.codes.insert(record.digest, record);
+        state.add_code(record);
         Ok(())
     }
 
@@ -521,8 +713,8 @@ impl GrantStore for MemoryStore {
         if !produced {
             return Ok(false);
         }
-        state.access.insert(access.digest, access);
-        state.families.insert(family.id.clone(), family);
+        state.add_access(access);
+        state.add_family(family);
         Ok(true)
     }
 
@@ -536,38 +728,43 @@ impl GrantStore for MemoryStore {
         access: AccessRecord,
         limit: usize,
     ) -> Result<(), StoreError> {
+        self.lock()
+            .single_grant(self.capacity, family, access, limit)
+    }
+
+    fn assertion_redeemed(&self, digest: &Digest, now: SystemTime) -> Result<bool, StoreError> {
+        Ok(self
+            .lock()
+            .assertions
+            .get(digest)
+            .is_some_and(|expires_at| *expires_at > now))
+    }
+
+    fn create_assertion_grant(
+        &self,
+        assertion: AssertionRecord,
+        family: FamilyRecord,
+        access: AccessRecord,
+        limit: usize,
+        now: SystemTime,
+    ) -> Result<bool, StoreError> {
         let mut state = self.lock();
-        let State {
-            families,
-            access: tokens,
-            client_grants,
-            ..
-        } = &mut *state;
-        let grants = client_grants.entry(family.client_id.clone()).or_default();
-        // Expired, revoked or purged grants no longer count.
-        grants.retain(|id| families.contains_key(id));
-        while grants.len() >= limit.max(1) {
-            let Some(oldest) = grants.pop_front() else {
-                break;
-            };
-            if let Some(ended) = families.remove(&oldest) {
-                tokens.remove(&ended.access);
-            }
+        if state
+            .assertions
+            .get(&assertion.digest)
+            .is_some_and(|expires_at| *expires_at > now)
+        {
+            return Ok(false);
         }
-        if families.len() >= self.capacity {
-            state.purge(SystemTime::now(), usize::MAX);
-            if state.families.len() >= self.capacity {
+        if state.assertions.len() >= self.capacity {
+            state.purge(now, usize::MAX);
+            if state.assertions.len() >= self.capacity {
                 return Err(StoreError::Full);
             }
         }
-        state
-            .client_grants
-            .entry(family.client_id.clone())
-            .or_default()
-            .push_back(family.id.clone());
-        state.access.insert(access.digest, access);
-        state.families.insert(family.id.clone(), family);
-        Ok(())
+        state.single_grant(self.capacity, family, access, limit)?;
+        state.add_assertion(assertion.digest, assertion.expires_at);
+        Ok(true)
     }
 
     fn rotate(&self, rotation: Rotation, now: SystemTime) -> Result<Rotated, StoreError> {
@@ -601,8 +798,8 @@ impl GrantStore for MemoryStore {
                 Rotated::Unknown
             });
         }
-        let old_access = family.access;
-        state.access.remove(&old_access);
+        let (old_access, old_expiry) = (family.access, family_expiry(family));
+        state.drop_access(&old_access);
         let family = state
             .families
             .get_mut(&rotation.family_id)
@@ -613,7 +810,10 @@ impl GrantStore for MemoryStore {
         family.refresh_expires_at = rotation.refresh_expires_at;
         family.access = rotation.access.digest;
         let family = family.clone();
-        state.access.insert(rotation.access.digest, rotation.access);
+        let id = Record::Family(family.id.clone());
+        state.due.remove(&(old_expiry, id.clone()));
+        state.due.insert((family_expiry(&family), id));
+        state.add_access(rotation.access);
         Ok(Rotated::Rotated(Box::new(family)))
     }
 
@@ -637,9 +837,11 @@ impl GrantStore for MemoryStore {
 
     fn revoke_family(&self, id: &str) -> Result<(), StoreError> {
         let mut state = self.lock();
-        state.families.remove(id);
-        state.access.retain(|_, record| record.family_id != id);
-        state.codes.retain(|_, record| record.family_id != id);
+        // A family holds one access token and is produced by at most one code.
+        state.drop_family(id);
+        if let Some(code) = state.family_codes.get(id).copied() {
+            state.drop_code(&code);
+        }
         Ok(())
     }
 

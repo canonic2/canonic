@@ -76,7 +76,7 @@ fn docs_tools_list_validate_and_answer_through_the_driver() {
     assert_eq!(reply["result"]["isError"], false);
     assert_eq!(
         reply["result"]["structuredContent"],
-        json!({"version":"2.0.0","total":1,"next_offset":null,
+        json!({"version":"2.0.0","next_cursor":null,
             "matches":[{"path":"guides/start.md","line":4,"text":"Run `acme start`."}]})
     );
 
@@ -115,19 +115,19 @@ fn escaping_heavy_pages_paginate_within_the_default_output_frame() {
     let (host, _) = serve(documentation_of(&page));
 
     let mut content = String::new();
-    let mut start = 1;
+    let mut cursor = None;
     for id in 1.. {
-        host.call(
-            id,
-            "docs_read",
-            json!({"path":"guides/start.md","start_line":start,"limit":400}),
-        );
+        host.call(id, "docs_read", {
+            let mut args = canonic_mcp_kit::page::arguments(cursor.as_deref(), Some(400));
+            args["path"] = json!("guides/start.md");
+            args
+        });
         let reply = host.recv();
         assert_eq!(reply["result"]["isError"], false, "read {id}");
         let result = &reply["result"]["structuredContent"];
         content.push_str(result["content"].as_str().unwrap());
-        match result["next_start_line"].as_u64() {
-            Some(next) => start = next,
+        match result["next_cursor"].as_str() {
+            Some(next) => cursor = Some(next.to_owned()),
             None => break,
         }
     }
@@ -139,10 +139,8 @@ fn escaping_heavy_pages_paginate_within_the_default_output_frame() {
     let result = &reply["result"]["structuredContent"];
     let rows = result["matches"].as_array().unwrap().len();
     assert!((1..8).contains(&rows));
-    assert_eq!(
-        (result["total"].clone(), result["next_offset"].clone()),
-        (json!(8), json!(rows))
-    );
+    assert!(result.get("total").is_none());
+    assert!(result["next_cursor"].is_string());
     host.assert_quiet();
 }
 

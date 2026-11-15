@@ -128,9 +128,9 @@ the version you passed to `Documentation::new`.
 
 | Tool | Arguments | Returns |
 | --- | --- | --- |
-| `list` | `offset` (default 0), `limit` (1–100, default 50) | `documents`: `path`, `title` and `total_lines` for each page; `total`; `next_offset` |
-| `search` | `query` (required), `path`, `offset`, `limit` as for list | `matches`: `path`, one-based `line` and the line's `text`; `total`; `next_offset` |
-| `read` | `path` (required), `start_line` (default 1), `limit` (1–400 lines, default 100) | `path`, `title`, `start_line`, `total_lines`, `content` and `next_start_line` |
+| `list` | Optional `cursor`, `limit` (1–100, default 50) | `documents`: `path`, `title` and `total_lines` for each page; `total`; nullable `next_cursor` |
+| `search` | `query` (required), `path`, `cursor`, `limit` as for list | `matches`: `path`, one-based `line` and the line's `text`; nullable `next_cursor` |
+| `read` | `path` (required), optional `cursor`, `limit` (1–400 lines, default 100) | `path`, `title`, `start_line`, `total_lines`, `content` and nullable `next_cursor` |
 
 Search is a literal, case-insensitive substring match within one line. `.*`
 and `[` match themselves, and spaces around the query are kept. A query must be
@@ -138,13 +138,15 @@ and `[` match themselves, and spaces around the query are kept. A query must be
 that page is searched.
 
 `read` returns the selected lines exactly as stored, line breaks included, so
-joining the `content` of successive reads reproduces the page. Reading past the
-end returns empty `content`.
+joining the `content` of successive reads reproduces the page. Without a cursor,
+reading begins at line 1. Search omits `total` to avoid scanning remaining matches.
 
-`limit` is a maximum. A result also stops before its text passes 512 KiB,
-counted as escaped in JSON, where a control character takes six bytes, so
-always continue from `next_offset` or `next_start_line` until it is `null`
-rather than assuming a full page.
+`limit` is a maximum. Pages stop at 256 KiB of serialized items (rows or line
+strings), except that one larger first item can be returned alone within the
+transport limit. Pass `next_cursor` as `cursor` until it is null. Cursors bind
+the tool, query/path filters and bundle digest. Keep filters unchanged;
+`invalid_cursor` means restart without a cursor. A conservative search cursor
+may lead to an empty final page. See [application pagination](application-pagination.md).
 
 ## Failures
 
@@ -154,6 +156,7 @@ the error kinds yourself if your server has its own result format.
 
 | Error | When |
 | --- | --- |
+| `Pagination` | Invalid limit (`invalid_arguments`) or malformed, foreign, changed-filter or stale cursor (`invalid_cursor`); inspect the nested `page::Error` |
 | `InvalidArguments` | A missing, mistyped, out-of-range, blank or multi-line argument, or an unknown one |
 | `NotFound` | A path that is not exactly one returned by list; the message names your list tool |
 | `Cancelled` | The interruption check failed: the request was cancelled or reached its deadline |

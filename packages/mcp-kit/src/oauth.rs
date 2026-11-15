@@ -7,27 +7,40 @@
 //! generates every code and token and gives the [`GrantStore`] only digests.
 //! The consumer authenticates users, shows consent and chooses the store. The
 //! server verifies its own access tokens through [`TokenVerifier`], the same
-//! boundary any external issuer uses. Nothing here opens sockets or threads.
+//! boundary any external issuer uses. With
+//! [`AuthorizationServer::with_identity_assertions`], it also accepts identity
+//! assertions from trusted enterprise identity providers (Enterprise-Managed
+//! Authorization). Nothing here opens sockets or threads.
 
+mod assertion;
 mod client;
 mod flow;
+mod jose;
 pub mod store;
 mod token;
 mod wire;
 
+pub use assertion::{
+    ASSERTION_CLOCK_SKEW, AssertionDecision, ENTERPRISE_MANAGED_AUTHORIZATION_EXTENSION,
+    ID_JAG_PROFILE, ID_JAG_TYPE, IdentityAssertion, IdentityAssertions, JWT_BEARER_GRANT,
+    MAX_ASSERTION_BYTES, MAX_ASSERTION_ID_BYTES, MAX_ASSERTION_LIFETIME, MAX_EMAIL_BYTES,
+    MAX_KEY_SET_BYTES, MAX_KEYS, MAX_TRUSTED_ISSUERS, RSA_MODULUS_BITS, SigningAlgorithm,
+    TrustedIssuer,
+};
 pub use client::{
     CLIENT_SECRET_BYTES, ClientAuth, ClientOptions, ClientRegistrar, ClientResolver,
     MAX_CLIENT_DOCUMENT_BYTES, MAX_CLIENT_NAME_BYTES, MAX_CLIENTS, MAX_REDIRECT_URIS,
     MAX_URI_BYTES, RegisteredClient,
 };
 pub use store::{
-    AccessRecord, CapacityError, CodeRecord, CodeTake, Digest, FamilyRecord, GrantStore,
-    MemoryStore, PendingRecord, Rotated, Rotation, StoreError,
+    AccessRecord, AssertionRecord, CapacityError, CodeRecord, CodeTake, Digest, FamilyRecord,
+    GrantStore, MemoryStore, PendingRecord, Rotated, Rotation, StoreError,
 };
 
 use crate::http::{
     BearerToken, Grant, Rejection, RequestHead, ResourceServer, Response, TokenVerifier, auth,
 };
+use assertion::Assertions;
 use client::Client;
 use serde_json::{Map, Value, json};
 use std::{
@@ -177,6 +190,10 @@ pub enum AuthorizationServerError {
     /// The per-client grant limit is out of range.
     #[error("client_grants must be from 1 to {MAX_CLIENT_GRANTS}")]
     ClientGrants,
+    /// The trusted issuer at this index is invalid, repeated or this server's
+    /// own issuer, or the list is empty or longer than [`MAX_TRUSTED_ISSUERS`].
+    #[error("trusted issuer {0} is invalid or repeated, or the issuer list is empty or too long")]
+    TrustedIssuer(usize),
 }
 
 /// Authenticates users and records their consent for a pending authorization.
@@ -257,6 +274,7 @@ pub struct AuthorizationServer {
     interaction: Arc<dyn Interaction>,
     resolver: Option<Arc<dyn ClientResolver>>,
     registrar: Option<Arc<dyn ClientRegistrar>>,
+    assertions: Option<Assertions>,
     metadata: Vec<u8>,
     /// The time every expiry is judged by; tests move it forward.
     clock: Arc<dyn Fn() -> SystemTime + Send + Sync>,
@@ -341,6 +359,7 @@ impl AuthorizationServer {
             interaction,
             resolver: None,
             registrar: None,
+            assertions: None,
             metadata: Vec::new(),
             clock: Arc::new(SystemTime::now),
         };
@@ -376,6 +395,25 @@ impl AuthorizationServer {
         self.registrar = Some(registrar);
         self.prepare_metadata();
         self
+    }
+
+    /// Accepts identity assertions that `issuers` sign for clients with
+    /// [`ClientOptions::identity_assertions`], through the JWT bearer grant.
+    /// `handler` supplies the issuers' keys and maps each enterprise user to
+    /// a subject and scopes.
+    ///
+    /// # Errors
+    /// Returns [`AuthorizationServerError::TrustedIssuer`] for an invalid,
+    /// repeated or self-naming issuer, or an empty or too long list.
+    pub fn with_identity_assertions(
+        mut self,
+        issuers: Vec<TrustedIssuer>,
+        handler: Arc<dyn IdentityAssertions>,
+    ) -> Result<Self, AuthorizationServerError> {
+        assertion::validate(&issuers, &self.issuer)?;
+        self.assertions = Some(Assertions::new(issuers, handler));
+        self.prepare_metadata();
+        Ok(self)
     }
 
     #[cfg(test)]
@@ -530,14 +568,20 @@ impl AuthorizationServer {
             );
         }
         document.insert("response_types_supported".into(), json!(["code"]));
-        document.insert(
-            "grant_types_supported".into(),
-            if self.clients.iter().any(|client| client.machine) {
-                json!(["authorization_code", "refresh_token", "client_credentials"])
-            } else {
-                json!(["authorization_code", "refresh_token"])
-            },
-        );
+        let mut grants = vec!["authorization_code", "refresh_token"];
+        if self.clients.iter().any(|client| client.machine) {
+            grants.push("client_credentials");
+        }
+        let assertions =
+            self.assertions.is_some() && self.clients.iter().any(|client| client.assertions);
+        if assertions {
+            grants.push(JWT_BEARER_GRANT);
+            document.insert(
+                "authorization_grant_profiles_supported".into(),
+                json!([ID_JAG_PROFILE]),
+            );
+        }
+        document.insert("grant_types_supported".into(), json!(grants));
         document.insert("code_challenge_methods_supported".into(), json!(["S256"]));
         document.insert(
             "token_endpoint_auth_methods_supported".into(),

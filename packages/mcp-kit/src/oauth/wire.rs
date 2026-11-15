@@ -27,7 +27,27 @@ pub(super) fn identifier() -> Result<String, getrandom::Error> {
 /// The store's digest of a secret value: SHA-256 over the whole value, whose
 /// type prefix keeps digests of different kinds apart.
 pub(super) fn digest(value: &str) -> Digest {
-    Digest(Sha256::digest(value.as_bytes()).into())
+    digest_bytes(value.as_bytes())
+}
+
+/// SHA-256 of raw bytes, such as a fetched key set.
+pub(super) fn digest_bytes(bytes: &[u8]) -> Digest {
+    Digest(Sha256::digest(bytes).into())
+}
+
+/// Decodes canonical unpadded base64url of at most `limit` decoded bytes.
+pub(super) fn decode_base64url(text: &str, limit: usize) -> Option<Vec<u8>> {
+    if text.bytes().any(|byte| matches!(byte, b'+' | b'/' | b'=')) {
+        return None;
+    }
+    let mut standard = text.replace('-', "+").replace('_', "/");
+    match standard.len() % 4 {
+        0 => {}
+        2 => standard.push_str("=="),
+        3 => standard.push('='),
+        _ => return None,
+    }
+    crate::content::decode_base64(&standard, limit).ok()
 }
 
 /// Unpadded base64url.

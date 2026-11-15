@@ -3,6 +3,8 @@
 //! revocation, client documents, registration and the storage contract.
 use super::*;
 use crate::http::{RequestHead, ResourceOptions};
+
+mod assertions;
 use std::{
     collections::HashMap,
     sync::{Barrier, Mutex},
@@ -129,6 +131,21 @@ impl GrantStore for Recording {
         self.record(&(&family, &access));
         self.inner.create_client_grant(family, access, limit)
     }
+    fn assertion_redeemed(&self, digest: &Digest, now: SystemTime) -> Result<bool, StoreError> {
+        self.inner.assertion_redeemed(digest, now)
+    }
+    fn create_assertion_grant(
+        &self,
+        assertion: AssertionRecord,
+        family: FamilyRecord,
+        access: AccessRecord,
+        limit: usize,
+        now: SystemTime,
+    ) -> Result<bool, StoreError> {
+        self.record(&(&assertion, &family, &access));
+        self.inner
+            .create_assertion_grant(assertion, family, access, limit, now)
+    }
     fn get_family(&self, id: &str, now: SystemTime) -> Result<Option<FamilyRecord>, StoreError> {
         let family = self.inner.get_family(id, now);
         let gate = self.gate.lock().unwrap().clone();
@@ -225,6 +242,7 @@ fn options() -> AuthorizationServerOptions {
             auth: ClientAuth::None,
             secret: None,
             client_credentials: false,
+            identity_assertions: false,
         },
         ClientOptions {
             client_id: CONFIDENTIAL.to_owned(),
@@ -234,6 +252,7 @@ fn options() -> AuthorizationServerOptions {
             auth: ClientAuth::SecretBasic,
             secret: Some(SECRET.to_owned()),
             client_credentials: false,
+            identity_assertions: false,
         },
         ClientOptions {
             client_id: MACHINE.to_owned(),
@@ -243,6 +262,7 @@ fn options() -> AuthorizationServerOptions {
             auth: ClientAuth::SecretPost,
             secret: Some(MACHINE_SECRET.to_owned()),
             client_credentials: true,
+            identity_assertions: false,
         },
     ];
     options
@@ -1697,4 +1717,232 @@ fn memory_store_evicts_old_pending_and_keeps_one_access_token_per_family() {
     assert_eq!(store.create_family(&a, family("b"), access("b")), Ok(false));
     let b = redeem("b");
     assert_eq!(store.create_family(&b, family("b"), access("b")), Ok(true));
+}
+
+#[test]
+fn memory_store_purges_visit_only_due_records() {
+    let now = SystemTime::now();
+    let later = now + Duration::from_hours(1);
+    let code = |index: usize, expires_at: SystemTime| CodeRecord {
+        digest: wire::digest(&format!("ac_{index}")),
+        family_id: format!("family-{index}"),
+        client_id: PUBLIC.to_owned(),
+        redirect_uri: REDIRECT.to_owned(),
+        challenge: wire::challenge(VERIFIER),
+        scopes: Vec::new(),
+        resource: RESOURCE.to_owned(),
+        subject: "user-1".to_owned(),
+        expires_at,
+        consumed: false,
+    };
+    let family = |id: &str, subject: &str| FamilyRecord {
+        id: id.to_owned(),
+        subject: subject.to_owned(),
+        client_id: MACHINE.to_owned(),
+        scopes: Vec::new(),
+        resource: RESOURCE.to_owned(),
+        created_at: now,
+        expires_at: later,
+        proof: wire::digest(&format!("rf_{id}")),
+        generation: 0,
+        refresh: wire::digest(&format!("rt_{id}")),
+        refresh_expires_at: later,
+        previous: None,
+        access: wire::digest(&format!("at_{id}")),
+    };
+    let access = |id: &str| AccessRecord {
+        digest: wire::digest(&format!("at_{id}")),
+        family_id: id.to_owned(),
+        scopes: Vec::new(),
+        expires_at: later,
+    };
+    // The same five due codes among few and many live records.
+    for live in [16, 4096] {
+        let store = MemoryStore::with_capacity(2 * live).unwrap();
+        for index in 0..live {
+            store.put_code(code(index, later)).unwrap();
+            let id = format!("grant-{index}");
+            store
+                .create_client_grant(family(&id, &id), access(&id), 4)
+                .unwrap();
+        }
+        for index in live..live + 5 {
+            store.put_code(code(index, now)).unwrap();
+        }
+        assert_eq!(store.purge_expired(now, 64), Ok(5), "{live} live");
+        assert_eq!(store.purge_expired(now, 64), Ok(0));
+        let (visited, indexed) = store.purge_work();
+        assert_eq!(visited, 5, "{live} live records were not visited");
+        // Codes, families and access tokens, each indexed once.
+        assert_eq!(indexed, 3 * live);
+    }
+
+    // Replacement, revocation and rotation keep the index exact.
+    let store = MemoryStore::with_capacity(64).unwrap();
+    for id in ["a", "b", "c"] {
+        store
+            .create_client_grant(family(id, "user-1"), access(id), 2)
+            .unwrap();
+    }
+    store.revoke_family("b").unwrap();
+    assert_eq!(store.purge_work().1, 2, "only grant c and its token remain");
+    assert_eq!(
+        store.purge_expired(later, usize::MAX),
+        Ok(2),
+        "the remaining grant ends with its token"
+    );
+    assert_eq!(store.purge_work().1, 0);
+}
+
+#[test]
+fn memory_store_purges_never_exceed_their_limit() {
+    let now = SystemTime::now();
+    let grant = |id: &str, family_ends: SystemTime, token_ends: SystemTime| {
+        let family = FamilyRecord {
+            id: id.to_owned(),
+            subject: id.to_owned(),
+            client_id: MACHINE.to_owned(),
+            scopes: Vec::new(),
+            resource: RESOURCE.to_owned(),
+            created_at: now,
+            expires_at: family_ends,
+            proof: wire::digest(&format!("rf_{id}")),
+            generation: 0,
+            refresh: wire::digest(&format!("rt_{id}")),
+            refresh_expires_at: family_ends,
+            previous: None,
+            access: wire::digest(&format!("at_{id}")),
+        };
+        let access = AccessRecord {
+            digest: family.access,
+            family_id: id.to_owned(),
+            scopes: Vec::new(),
+            expires_at: token_ends,
+        };
+        (family, access)
+    };
+    let store = MemoryStore::new();
+    let later = now + Duration::from_hours(1);
+    // A token that expires with its family, and a family that ends before
+    // its token.
+    let (family, access) = grant("with-token", now, now);
+    store.create_client_grant(family, access, 16).unwrap();
+    let (family, access) = grant("before-token", now, later);
+    store.create_client_grant(family, access, 16).unwrap();
+
+    assert_eq!(store.purge_expired(now, 0), Ok(0));
+    assert_eq!(store.purge_work().1, 4, "nothing was removed");
+    // One due record per call: the expired token first, then the family whose
+    // live token goes with it uncounted, then the token's own family.
+    for left in [3, 1, 0] {
+        assert_eq!(store.purge_expired(now, 1), Ok(1));
+        assert_eq!(store.purge_work().1, left);
+    }
+    assert_eq!(store.purge_expired(now, 1), Ok(0));
+    assert_eq!(
+        store.lookup_access(&wire::digest("at_before-token"), now),
+        Ok(None)
+    );
+}
+
+#[test]
+fn memory_store_replacements_keep_one_expiry_entry() {
+    let now = SystemTime::now();
+    let soon = now + Duration::from_secs(30);
+    let later = now + Duration::from_mins(5);
+    let store = MemoryStore::new();
+
+    // The same pending reference and expiry, stored twice, is still purged.
+    let pending = PendingRecord {
+        reference: "pr_acme".to_owned(),
+        binding: wire::digest("pb_acme"),
+        client_id: PUBLIC.to_owned(),
+        client_name: None,
+        redirect_uri: REDIRECT.to_owned(),
+        challenge: wire::challenge(VERIFIER),
+        scopes: Vec::new(),
+        resource: RESOURCE.to_owned(),
+        state: None,
+        expires_at: soon,
+    };
+    store.put_pending(pending.clone()).unwrap();
+    store.put_pending(pending).unwrap();
+    assert_eq!(store.purge_work().1, 1);
+    assert_eq!(store.purge_expired(soon, 64), Ok(1));
+    assert_eq!(store.purge_work().1, 0);
+
+    // A code replaced with a later expiry outlives the first one's.
+    let code = |expires_at| CodeRecord {
+        digest: wire::digest("ac_acme"),
+        family_id: "family-acme".to_owned(),
+        client_id: PUBLIC.to_owned(),
+        redirect_uri: REDIRECT.to_owned(),
+        challenge: wire::challenge(VERIFIER),
+        scopes: Vec::new(),
+        resource: RESOURCE.to_owned(),
+        subject: "user-1".to_owned(),
+        expires_at,
+        consumed: false,
+    };
+    store.put_code(code(soon)).unwrap();
+    store.put_code(code(later)).unwrap();
+    assert_eq!(store.purge_expired(soon, 64), Ok(0));
+    assert!(matches!(
+        store.take_code(&code(later).digest, soon),
+        Ok(CodeTake::Taken(_))
+    ));
+    assert_eq!(store.purge_work().1, 1);
+    assert_eq!(store.purge_expired(later, 64), Ok(1));
+
+    // An expired but unpurged assertion record is replaced, not duplicated.
+    let grant = |id: &str, expires_at| {
+        let family = FamilyRecord {
+            id: id.to_owned(),
+            subject: "user-1".to_owned(),
+            client_id: "acme-agent".to_owned(),
+            scopes: Vec::new(),
+            resource: RESOURCE.to_owned(),
+            created_at: now,
+            expires_at,
+            proof: wire::digest(&format!("rf_{id}")),
+            generation: 0,
+            refresh: wire::digest(&format!("rt_{id}")),
+            refresh_expires_at: expires_at,
+            previous: None,
+            access: wire::digest(&format!("at_{id}")),
+        };
+        let access = AccessRecord {
+            digest: family.access,
+            family_id: id.to_owned(),
+            scopes: Vec::new(),
+            expires_at,
+        };
+        (family, access)
+    };
+    let assertion = |expires_at| AssertionRecord {
+        digest: wire::digest("ja_https://idp.example.com jag-1"),
+        expires_at,
+    };
+    let (family, access) = grant("first", soon);
+    assert_eq!(
+        store.create_assertion_grant(assertion(soon), family, access, 16, now),
+        Ok(true)
+    );
+    let (family, access) = grant("second", later);
+    assert_eq!(
+        store.create_assertion_grant(assertion(later), family, access, 16, soon),
+        Ok(true)
+    );
+    // The first grant and its token, the second grant and its token, and one
+    // assertion record.
+    assert_eq!(store.purge_work().1, 5);
+    assert_eq!(store.purge_expired(soon, 64), Ok(2));
+    let (family, access) = grant("third", later);
+    assert_eq!(
+        store.create_assertion_grant(assertion(later), family, access, 16, soon),
+        Ok(false),
+        "the replacement still refuses a replay"
+    );
+    assert_eq!(store.purge_expired(later, 64), Ok(3));
+    assert_eq!(store.purge_work().1, 0);
 }

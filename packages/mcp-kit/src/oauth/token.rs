@@ -11,7 +11,10 @@ use crate::{
     http::{Response, auth},
 };
 use serde_json::json;
-use std::{collections::HashMap, time::SystemTime};
+use std::{
+    collections::HashMap,
+    time::{Duration, SystemTime},
+};
 
 /// Fresh tokens for a family generation.
 struct Issued {
@@ -44,12 +47,46 @@ impl AuthorizationServer {
             Some("authorization_code") => self.exchange_code(&client, &form, now),
             Some("refresh_token") => self.refresh(&client, &form, now),
             Some("client_credentials") => self.client_grant(&client, &form, now),
-            _ => wire::oauth_error(
-                400,
-                "unsupported_grant_type",
-                "Use authorization_code, refresh_token or client_credentials",
-            ),
+            Some(super::JWT_BEARER_GRANT) => self.assertion_grant(&client, &form, now),
+            _ => unsupported_grant(),
         }
+    }
+
+    /// A generation-0 family without a refresh token and its one access
+    /// token, for a grant that issues only an access token.
+    pub(super) fn single_grant(
+        &self,
+        client_id: &str,
+        subject: String,
+        scopes: &[String],
+        now: SystemTime,
+    ) -> Result<(String, FamilyRecord, AccessRecord), getrandom::Error> {
+        let (family_id, access, unused) =
+            (wire::identifier()?, wire::secret("at_")?, wire::secret("")?);
+        let expires_at = now + self.lifetimes.access;
+        let access_record = AccessRecord {
+            digest: wire::digest(&access),
+            family_id: family_id.clone(),
+            scopes: scopes.to_vec(),
+            expires_at,
+        };
+        // Generation 0 has no refresh token: no presented token can name it.
+        let family = FamilyRecord {
+            id: family_id,
+            subject,
+            client_id: client_id.to_owned(),
+            scopes: scopes.to_vec(),
+            resource: self.resource.clone(),
+            created_at: now,
+            expires_at,
+            proof: wire::digest(&format!("rf_{unused}")),
+            generation: 0,
+            refresh: wire::digest(&format!("rt_{unused}")),
+            refresh_expires_at: expires_at,
+            previous: None,
+            access: access_record.digest,
+        };
+        Ok((access, family, access_record))
     }
 
     /// The `client_credentials` grant: an access token for the client itself,
@@ -87,33 +124,10 @@ impl AuthorizationServer {
                 .cloned()
                 .collect(),
         };
-        let (Ok(family_id), Ok(access), Ok(unused)) =
-            (wire::identifier(), wire::secret("at_"), wire::secret(""))
+        let Ok((access, family, access_record)) =
+            self.single_grant(&client.id, client.id.clone(), &scopes, now)
         else {
             return unavailable();
-        };
-        let expires_at = now + self.lifetimes.access;
-        let access_record = AccessRecord {
-            digest: wire::digest(&access),
-            family_id: family_id.clone(),
-            scopes: scopes.clone(),
-            expires_at,
-        };
-        // Generation 0 has no refresh token: no presented token can name it.
-        let family = FamilyRecord {
-            id: family_id,
-            subject: client.id.clone(),
-            client_id: client.id.clone(),
-            scopes: scopes.clone(),
-            resource: self.resource.clone(),
-            created_at: now,
-            expires_at,
-            proof: wire::digest(&format!("rf_{unused}")),
-            generation: 0,
-            refresh: wire::digest(&format!("rt_{unused}")),
-            refresh_expires_at: expires_at,
-            previous: None,
-            access: access_record.digest,
         };
         if self
             .store
@@ -122,15 +136,7 @@ impl AuthorizationServer {
         {
             return unavailable();
         }
-        wire::json(
-            200,
-            &json!({
-                "access_token": access,
-                "token_type": "Bearer",
-                "expires_in": self.lifetimes.access.as_secs(),
-                "scope": scopes.join(" "),
-            }),
-        )
+        access_only(&access, &scopes, self.lifetimes.access)
     }
 
     fn exchange_code(
@@ -527,11 +533,32 @@ fn tokens(issued: &Issued, scopes: &[String], now: SystemTime) -> Response {
     )
 }
 
-fn invalid_request(description: &str) -> Response {
+/// The response of a grant that issues only an access token.
+pub(super) fn access_only(access: &str, scopes: &[String], lifetime: Duration) -> Response {
+    wire::json(
+        200,
+        &json!({
+            "access_token": access,
+            "token_type": "Bearer",
+            "expires_in": lifetime.as_secs(),
+            "scope": scopes.join(" "),
+        }),
+    )
+}
+
+pub(super) fn unsupported_grant() -> Response {
+    wire::oauth_error(
+        400,
+        "unsupported_grant_type",
+        "Use a grant type the metadata lists",
+    )
+}
+
+pub(super) fn invalid_request(description: &str) -> Response {
     wire::oauth_error(400, "invalid_request", description)
 }
 
-fn unavailable() -> Response {
+pub(super) fn unavailable() -> Response {
     let mut response = Response::empty(503);
     response.headers.push(("Cache-Control", "no-store".into()));
     response

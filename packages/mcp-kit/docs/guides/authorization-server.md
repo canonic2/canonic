@@ -11,7 +11,9 @@ guide: point `ResourceOptions::authorization_servers` at it and write a
 [token verifier](authorization.md#verify-tokens) instead.
 
 The server is behind the `authorization-server` Cargo feature, which adds
-operating-system randomness (`getrandom`) for the codes and tokens it issues.
+operating-system randomness (`getrandom`) for the codes and tokens it issues,
+and the pure-Rust RustCrypto `rsa` and `p256` crates that check
+[enterprise users'](#enterprise-users) identity assertions.
 
 ## What the library does and what you do
 
@@ -205,6 +207,103 @@ Keep machine secrets in a secrets manager and rotate them. Signed JWT client
 assertions (`private_key_jwt`), which the extension recommends, are not
 supported; use an external authorization server for them.
 
+## Enterprise users
+
+In a company that manages access centrally, users sign in to the company's
+identity provider (Okta, Entra ID and others), not to your server, and the
+provider decides who may use which AI client. The Enterprise-Managed
+Authorization extension supports this. The client signs the user in at the
+provider, asks it for an *identity assertion* (a signed ID-JAG) addressed to
+your authorization server, and trades it at your token endpoint for an access
+token. The user never sees your sign-in page.
+
+| The library | You |
+| --- | --- |
+| Verifies the assertion's RS256 or ES256 signature with the provider's keys | Choose which providers to trust |
+| Checks its type, audience, client, resource, lifetime and `tenant`, and refuses a replay | Fetch and cache each provider's key set |
+| Issues an access token, without a refresh token | Map each enterprise user to your own subject and scopes |
+
+Register the AI client as a confidential client with `identity_assertions:
+true`, using the client ID and secret the provider's administrator configured
+for your server. It may have no redirect URIs. Then trust the providers and
+supply an `IdentityAssertions` implementation:
+
+```rust,ignore
+use canonic_mcp_kit::oauth::{
+    AssertionDecision, IdentityAssertion, IdentityAssertions, TrustedIssuer,
+};
+
+struct Enterprise {
+    keys: KeyCache, // your HTTP client and cache, keyed by issuer
+}
+
+impl IdentityAssertions for Enterprise {
+    fn key_set(&self, issuer: &str, refresh: bool) -> Result<Vec<u8>, String> {
+        // The JSON Web Key Set at the `jwks_uri` of the issuer's metadata.
+        // `refresh` means the cached set lacks the assertion's key: fetch
+        // again, no more often than your rate limit allows.
+        self.keys.get(issuer, refresh).map_err(|error| error.to_string())
+    }
+
+    fn admit(&self, assertion: &IdentityAssertion<'_>) -> AssertionDecision {
+        // Identify users by issuer and `sub`, never by email alone.
+        match accounts::find(assertion.issuer, assertion.subject) {
+            Some(account) => AssertionDecision::Approve {
+                subject: account.id,
+                scopes: assertion.scopes.to_vec(),
+            },
+            None => AssertionDecision::Deny,
+        }
+    }
+}
+
+let server = AuthorizationServer::new(issuer, &resource, store, Arc::new(SignInPages))?
+    .with_identity_assertions(
+        vec![TrustedIssuer::new("https://acme.okta.com")],
+        Arc::new(Enterprise { keys }),
+    )?;
+```
+
+The client presents the assertion with its own credentials:
+
+```sh
+curl -sS https://mcp.example.com/token \
+  -u acme-agent:$ACME_AGENT_SECRET \
+  -d grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer \
+  -d assertion=$ID_JAG
+```
+
+The reply has an `access_token` for the subject you approved and the granted
+`scope`, and no `refresh_token`: when the token expires, the client gets a new
+assertion from the provider. The scopes offered to `admit` are the
+assertion's `scope` (or your default scopes without one), limited to the
+client's `scopes` and narrowed by a `scope` the client sends; you may narrow
+them further. `Deny` gives the client `access_denied`. An assertion that was
+already used is refused before `admit` runs, but two simultaneous requests with
+the same assertion can both reach it while only one gets a token, so keep
+side effects in `admit`, such as creating an account on first sign-in, safe to
+repeat.
+
+- **Algorithms and tenants.** `TrustedIssuer::new` accepts RS256 and ES256.
+  Set `algorithms` to what the provider actually uses. For a provider that
+  serves many companies from one issuer, set `tenant` to your company's
+  tenant, so other tenants' assertions are refused.
+- **Bounds.** An assertion may be at most 8 KiB and valid for at most an
+  hour from when it arrives, with 60 seconds of clock skew. A key set may be
+  at most 64 KiB with 32 keys; RSA keys must be 2,048 to 4,096 bits.
+- **Failures.** Anything wrong with the assertion gets `invalid_grant`. A
+  client without a secret gets `invalid_client`, and one without
+  `identity_assertions` gets `unauthorized_client`. When `key_set` fails, or
+  returns something that is not a key set, the client gets `503`.
+- **Not supported.** Sender-constrained assertions (`cnf`), encrypted
+  assertions and clients that authenticate with `private_key_jwt`, including
+  Client ID Metadata Document clients.
+
+Each user holds at most `client_grants` live tokens per client, as machine
+clients do, so one user's tokens never replace another's. Advertise the
+extension in `server/discover` the same way as for machine clients, with
+`canonic_mcp_kit::oauth::ENTERPRISE_MANAGED_AUTHORIZATION_EXTENSION`.
+
 ## Tokens
 
 Codes, access tokens and refresh tokens are 256 random bits. Access tokens are
@@ -227,9 +326,10 @@ restarting the process signs everyone out. For durable storage, implement
 records contain hashes, never usable secrets, so a copied database cannot be
 replayed. The library answers the client as soon as a method returns, so
 return success only after the change survives a restart. This matters most
-for `take_pending`, `take_code`, `rotate` and `revoke_family`: if one of them
-is lost, a used code works again, a replaced refresh token becomes current
-again, or a revoked sign-in comes back. A lost insertion only signs someone
+for `take_pending`, `take_code`, `rotate`, `revoke_family` and
+`create_assertion_grant`: if one of them is lost, a used code works again, a
+replaced refresh token becomes current again, a revoked sign-in comes back,
+or a used identity assertion works again until it expires. A lost insertion only signs someone
 out early, and a lost `purge_expired` is harmless. If your backend can lose
 acknowledged writes, tell your operators about that risk.
 
@@ -243,7 +343,7 @@ and otherwise refuses with `503` only when every record is still live.
 | --- | --- | --- |
 | `/.well-known/oauth-authorization-server` + issuer path | GET | — |
 | `/authorize` | GET | A `400` page for an unknown client or redirect URI; otherwise a redirect with `error`, `state` and `iss` |
-| `/token` | POST form | RFC 6749 JSON errors: `invalid_client` (`401`), `invalid_grant`, `invalid_scope`, `invalid_target`, `unauthorized_client`, `unsupported_grant_type` |
+| `/token` | POST form | RFC 6749 JSON errors: `invalid_client` (`401`), `invalid_grant`, `invalid_scope`, `invalid_target`, `unauthorized_client`, `unsupported_grant_type`; for identity assertions also `access_denied` and `server_error` (`500`) when `admit` widens the scopes or returns an invalid subject; `503` without a body when the store or a key set is unavailable |
 | `/revoke` | POST form | `invalid_client` only |
 | `/register` | POST JSON | `invalid_client_metadata` |
 

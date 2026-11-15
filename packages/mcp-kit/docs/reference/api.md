@@ -10,7 +10,8 @@
 | Publish generated workflows | `DynamicSkill`, `SkillCatalog::with_dynamic`; serve their files from `Request::Method`; see [generated skills](../guides/skills.md#publish-generated-skills) |
 | Serve skill directory reads | `SkillCatalog::with_directory_reads`, `ReadDirectoryResult`, `resource::DIRECTORY_MIME_TYPE`, `stdio::Outcome::Directory` |
 | Check generated replies in another runtime | `SkillCatalog::dynamic_document`, `SkillCatalog::check_read`, `SkillCatalog::check_directory` |
-| Publish your guides as documentation tools | `docs::build::embed` (feature `docs-build`), `include_docs!`, `docs::Bundle`, `docs::Documentation`, `docs::DocsError` |
+| Page application collections | `page::{Limits, Limit, Request, Scope, Position, Builder, Page, Casing}`, `page::{digest, arguments, output_properties}` |
+| Publish your guides as documentation tools | `docs::build::embed` (feature `docs-build`), `include_docs!`, `docs::Bundle`, `docs::Documentation`, `docs::DocsError`, `docs::human` |
 | Enable modern protocol handling | `ModernOptions`, `SessionOptions::modern`, `Session::try_new` |
 | Enable optional task handles | `task::TaskOptions`, `SessionOptions::tasks`, `RequestContext::task_eligible` |
 | Collect fields, choices or URL consent | `elicitation::Form`, `elicitation::Request`, `elicitation::Requests`, `elicitation::Response` |
@@ -31,6 +32,7 @@
 | Keep the standard streams to the protocol | `stdio::protect`, `stdio::Protocol` |
 | Run a Streamable HTTP server | `http::serve`, `http::HttpOptions`, `http::Shutdown` (feature `http-server`); see [HTTP](../guides/http.md) |
 | Issue tokens from the server | `oauth::AuthorizationServer`, `oauth::Interaction`, `oauth::GrantStore`, `oauth::MemoryStore`, `oauth::ClientResolver`, `oauth::ClientRegistrar`, `HttpOptions::authorization_server` (feature `authorization-server`); see [authorization server](../guides/authorization-server.md) |
+| Accept enterprise identity assertions | `AuthorizationServer::with_identity_assertions`, `oauth::TrustedIssuer`, `oauth::SigningAlgorithm`, `oauth::IdentityAssertions`, `oauth::IdentityAssertion`, `oauth::AssertionDecision`, `ClientOptions::identity_assertions`, `oauth::ENTERPRISE_MANAGED_AUTHORIZATION_EXTENSION`; see [enterprise users](../guides/authorization-server.md#enterprise-users) |
 | Require bearer tokens | `http::ResourceServer`, `http::TokenVerifier`, `http::ScopePolicy`, `http::Grant`, `http::HttpAuthorization`, `Context::authorization`; see [authorization](../guides/authorization.md) |
 | Serve HTTP from your own server | `http::Endpoint`, `http::EndpointOptions`, `http::RequestHead`, `http::Exchange`, `http::Admitted::check_parameters`, `http::Response`, `http::sse_event`, `http::status_for` |
 | Mirror tool arguments into HTTP headers | `x-mcp-header` on an input schema property; `tool::MAX_PARAMETER_HEADERS` |

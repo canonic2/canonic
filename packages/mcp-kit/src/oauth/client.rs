@@ -66,6 +66,13 @@ pub struct ClientOptions {
     /// access, with no user. Only confidential clients may; such a client may
     /// have no redirect URIs.
     pub client_credentials: bool,
+    /// The client may present enterprise identity assertions through the JWT
+    /// bearer grant, once [`AuthorizationServer::with_identity_assertions`]
+    /// trusts their issuers. Only confidential clients may; such a client may
+    /// have no redirect URIs.
+    ///
+    /// [`AuthorizationServer::with_identity_assertions`]: super::AuthorizationServer::with_identity_assertions
+    pub identity_assertions: bool,
 }
 
 /// A client registered through a [`ClientRegistrar`], as the registrar stores it.
@@ -120,6 +127,8 @@ pub(super) struct Client {
     pub(super) secret: Option<Digest>,
     /// May use the `client_credentials` grant.
     pub(super) machine: bool,
+    /// May present identity assertions.
+    pub(super) assertions: bool,
 }
 
 impl Client {
@@ -135,11 +144,12 @@ impl Client {
                 .as_deref()
                 .map(|secret| wire::digest(&format!("cs_{secret}"))),
             machine: options.client_credentials,
+            assertions: options.identity_assertions,
         }
     }
 
-    /// Registered clients never get `client_credentials`: its credentials are
-    /// provisioned out of band, not through registration.
+    /// Registered clients never get `client_credentials` or identity
+    /// assertions: those are provisioned out of band, not through registration.
     pub(super) fn registered(client: RegisteredClient) -> Self {
         Self {
             id: client.client_id,
@@ -149,6 +159,7 @@ impl Client {
             auth: client.auth,
             secret: client.secret,
             machine: false,
+            assertions: false,
         }
     }
 
@@ -192,9 +203,11 @@ pub(super) fn valid_options(options: &ClientOptions) -> bool {
             .all(|byte| (0x21..=0x7e).contains(&byte))
         && valid_name(options.client_name.as_deref())
         && (valid_redirects(&options.redirect_uris)
-            || (options.client_credentials && options.redirect_uris.is_empty()))
+            || ((options.client_credentials || options.identity_assertions)
+                && options.redirect_uris.is_empty()))
         && secret_fits
-        && (!options.client_credentials || options.auth != ClientAuth::None)
+        && (!(options.client_credentials || options.identity_assertions)
+            || options.auth != ClientAuth::None)
 }
 
 fn valid_name(name: Option<&str>) -> bool {
@@ -330,6 +343,7 @@ pub(super) fn from_document(client_id: &str, document: &[u8]) -> Result<Client, 
         auth: ClientAuth::None,
         secret: None,
         machine: false,
+        assertions: false,
     })
 }
 

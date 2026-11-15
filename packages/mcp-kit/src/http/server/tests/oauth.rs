@@ -49,6 +49,7 @@ fn embedded_at(interaction: &str, root_metadata: bool) -> HttpOptions {
         auth: ClientAuth::None,
         secret: None,
         client_credentials: false,
+        identity_assertions: false,
     }];
     let server = Arc::new(
         AuthorizationServer::new(

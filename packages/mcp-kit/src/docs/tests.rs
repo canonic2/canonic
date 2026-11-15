@@ -111,20 +111,41 @@ fn call(docs: &Documentation, tool: &str, arguments: &Value) -> Result<Value, Do
     docs.call(&format!("docs_{tool}"), arguments, &go).unwrap()
 }
 
+fn read_arguments(path: &str, cursor: Option<&str>, limit: u64) -> Value {
+    let mut arguments = page::arguments(cursor, Some(limit));
+    arguments["path"] = json!(path);
+    arguments
+}
+
+fn search_arguments(query: &str, cursor: Option<&str>, limit: u64) -> Value {
+    let mut arguments = page::arguments(cursor, Some(limit));
+    arguments["query"] = json!(query);
+    arguments
+}
+
+fn read_at(docs: &Documentation, path: &str, first: usize, limit: u64) -> Value {
+    let scope = docs.bundle.scope(
+        &format!("{}:{}", docs.product, docs.read),
+        &json!({"path":path}),
+    );
+    let cursor = scope.encode(&Position::Offset(first as u64)).unwrap();
+    read_arguments(path, Some(&cursor), limit)
+}
+
 /// Every page's bytes, reassembled from reads of `limit` lines.
 fn reassemble(docs: &Documentation, path: &str, limit: u64) -> String {
     let mut content = String::new();
-    let mut start = 1;
+    let mut cursor = None;
     loop {
         let read = call(
             docs,
             "read",
-            &json!({"path":path,"start_line":start,"limit":limit}),
+            &read_arguments(path, cursor.as_deref(), limit),
         )
         .unwrap();
         content.push_str(read["content"].as_str().unwrap());
-        match read["next_start_line"].as_u64() {
-            Some(next) => start = next,
+        match read["next_cursor"].as_str() {
+            Some(next) => cursor = Some(next.to_owned()),
             None => return content,
         }
     }
@@ -321,7 +342,7 @@ fn invalid_arguments_are_refused_before_preparation() {
         ("list", json!({"limit":101})),
         ("list", json!({"offset":1.5})),
         ("list", json!({"limit":null})),
-        ("list", json!({"offset":MAX_POSITION + 1})),
+        ("list", json!({"offset":9_007_199_254_740_992_u64})),
         ("list", json!({"project":"acme"})),
         ("list", json!([])),
         ("read", json!({})),
@@ -338,7 +359,11 @@ fn invalid_arguments_are_refused_before_preparation() {
     ] {
         let error = call(&docs, tool, &arguments).unwrap_err();
         assert!(
-            matches!(error, DocsError::InvalidArguments(_)),
+            matches!(
+                error,
+                DocsError::InvalidArguments(_)
+                    | DocsError::Pagination(page::Error::InvalidArguments(_))
+            ),
             "{tool} {arguments}"
         );
     }
@@ -357,16 +382,16 @@ fn invalid_arguments_are_refused_before_preparation() {
 fn defaults_equal_their_explicit_values() {
     let (docs, _) = sample();
     for (tool, implicit, explicit) in [
-        ("list", json!({}), json!({"offset":0,"limit":50})),
+        ("list", json!({}), json!({"limit":50})),
         (
             "search",
             json!({"query":"a"}),
-            json!({"query":"a","offset":0,"limit":50}),
+            json!({"query":"a","limit":50}),
         ),
         (
             "read",
             json!({"path":"faq.md"}),
-            json!({"path":"faq.md","start_line":1,"limit":100}),
+            json!({"path":"faq.md","limit":100}),
         ),
     ] {
         assert_eq!(call(&docs, tool, &implicit), call(&docs, tool, &explicit));
@@ -379,25 +404,23 @@ fn list_pages_through_titles_line_counts_and_version() {
     let all = call(&docs, "list", &json!({})).unwrap();
     assert_eq!(
         all,
-        json!({"version":"1.2.3","total":3,"next_offset":null,"documents":[
+        json!({"version":"1.2.3","total":3,"next_cursor":null,"documents":[
             {"path":"faq.md","title":"FAQ","total_lines":4},
             {"path":"guide.md","title":"Acme guide","total_lines":4},
             {"path":"guides/setup.md","title":"Setup","total_lines":4},
         ]})
     );
     let mut rows = Vec::new();
-    let mut offset = Some(0);
-    while let Some(next) = offset {
-        let page = call(&docs, "list", &json!({"offset":next,"limit":1})).unwrap();
+    let mut cursor = None;
+    loop {
+        let page = call(&docs, "list", &page::arguments(cursor.as_deref(), Some(1))).unwrap();
         rows.extend(page["documents"].as_array().unwrap().iter().cloned());
-        offset = page["next_offset"].as_u64();
+        let Some(next) = page["next_cursor"].as_str() else {
+            break;
+        };
+        cursor = Some(next.to_owned());
     }
     assert_eq!(Value::Array(rows), all["documents"]);
-    let past = call(&docs, "list", &json!({"offset":MAX_POSITION})).unwrap();
-    assert_eq!(
-        (past["documents"].clone(), past["next_offset"].clone()),
-        (json!([]), Value::Null)
-    );
 }
 
 #[test]
@@ -412,20 +435,15 @@ fn reads_reproduce_every_page_byte_for_byte() {
             assert_eq!(reassemble(&docs, path, limit), source, "{path} {limit}");
         }
     }
-    let read = call(
-        &docs,
-        "read",
-        &json!({"path":"guide.md","start_line":2,"limit":2}),
-    )
-    .unwrap();
+    let read = call(&docs, "read", &read_at(&docs, "guide.md", 1, 2)).unwrap();
     assert_eq!(
         read,
         json!({"version":"1.2.3","path":"guide.md","title":"Acme guide","start_line":2,
-            "total_lines":4,"content":"\r\nInstall Acme.\r\n","next_start_line":4})
+            "total_lines":4,"content":"\r\nInstall Acme.\r\n","next_cursor":read["next_cursor"]})
     );
-    let past = call(&docs, "read", &json!({"path":"guide.md","start_line":5})).unwrap();
+    let past = call(&docs, "read", &read_at(&docs, "guide.md", 4, 100)).unwrap();
     assert_eq!(
-        (past["content"].clone(), past["next_start_line"].clone()),
+        (past["content"].clone(), past["next_cursor"].clone()),
         (json!(""), Value::Null)
     );
 }
@@ -447,13 +465,13 @@ fn empty_pages_have_zero_lines_beside_others_and_alone() {
         let path = empty["path"].as_str().unwrap();
         let read = call(&docs, "read", &json!({"path":path})).unwrap();
         assert_eq!(
-            (read["content"].clone(), read["next_start_line"].clone()),
+            (read["content"].clone(), read["next_cursor"].clone()),
             (json!(""), Value::Null)
         );
         let found = call(&docs, "search", &json!({"query":"faq"})).unwrap();
-        assert_eq!(found["total"], json!(others));
+        assert_eq!(found["matches"].as_array().unwrap().len(), others);
         let scoped = call(&docs, "search", &json!({"query":"a","path":path})).unwrap();
-        assert_eq!(scoped["total"], json!(0));
+        assert_eq!(scoped["matches"], json!([]));
     }
 }
 
@@ -492,7 +510,7 @@ fn paths_must_match_a_bundled_page_exactly() {
 fn search_is_literal_case_insensitive_and_keeps_surrounding_spaces() {
     let (docs, _) = sample();
     let acme = call(&docs, "search", &json!({"query":"ACME"})).unwrap();
-    assert_eq!(acme["total"], 4);
+    assert!(acme.get("total").is_none());
     assert_eq!(
         acme["matches"],
         json!([
@@ -510,7 +528,10 @@ fn search_is_literal_case_insensitive_and_keeps_surrounding_spaces() {
         ("CAFÉ", 1),
     ] {
         assert_eq!(
-            call(&docs, "search", &json!({"query":query})).unwrap()["total"],
+            call(&docs, "search", &json!({"query":query})).unwrap()["matches"]
+                .as_array()
+                .unwrap()
+                .len(),
             total,
             "{query}"
         );
@@ -521,20 +542,23 @@ fn search_is_literal_case_insensitive_and_keeps_surrounding_spaces() {
         &json!({"query":"acme","path":"guides/setup.md"}),
     )
     .unwrap();
-    assert_eq!(filtered["total"], 1);
+    assert_eq!(filtered["matches"].as_array().unwrap().len(), 1);
 
     let mut rows = Vec::new();
-    let mut offset = Some(0);
-    while let Some(next) = offset {
+    let mut cursor = None;
+    loop {
         let page = call(
             &docs,
             "search",
-            &json!({"query":"acme","offset":next,"limit":1}),
+            &search_arguments("acme", cursor.as_deref(), 1),
         )
         .unwrap();
-        assert_eq!(page["total"], 4);
+        assert!(page.get("total").is_none());
         rows.extend(page["matches"].as_array().unwrap().iter().cloned());
-        offset = page["next_offset"].as_u64();
+        let Some(next) = page["next_cursor"].as_str() else {
+            break;
+        };
+        cursor = Some(next.to_owned());
     }
     assert_eq!(Value::Array(rows), acme["matches"]);
 }
@@ -551,16 +575,14 @@ fn large_lines_end_results_early_with_continuation() {
     assert!(returned.len() <= MAX_RESULT_TEXT_BYTES && returned.ends_with('\n'));
     let taken = returned.matches('\n').count();
     assert!(taken < 16);
-    assert_eq!(read["next_start_line"], taken + 1);
+    assert!(read["next_cursor"].is_string());
     assert_eq!(reassemble(&docs, "wide.md", 400), line.repeat(16));
 
     let search = call(&docs, "search", &json!({"query":"acme","limit":100})).unwrap();
     let rows = search["matches"].as_array().unwrap().len();
     assert!(rows < 16);
-    assert_eq!(
-        (search["total"].clone(), search["next_offset"].clone()),
-        (json!(16), json!(rows))
-    );
+    assert!(search.get("total").is_none());
+    assert!(search["next_cursor"].is_string());
 }
 
 #[test]
@@ -594,14 +616,14 @@ fn interruption_after_preparation_cancels_a_read_past_the_first_line() {
             Err(Interrupted)
         }
     };
-    let arguments = json!({"path":"faq.md","start_line":2,"limit":1});
+    let arguments = read_at(&docs, "faq.md", 1, 1);
     assert_eq!(
         docs.call("docs_read", &arguments, &once).unwrap(),
         Err(DocsError::Cancelled)
     );
     assert_eq!(bundle.stages.counts(), [1, 1, 0]);
 
-    let lines = "acme\n".repeat(CHECK_INTERVAL * 2);
+    let lines = "acme\n".repeat(CHECK_INTERVAL * 3);
     let long = Folder::new();
     long.write("long.md", &lines);
     let (docs, _) = docs_for(build::bundle(long.path()).unwrap());
@@ -613,7 +635,7 @@ fn interruption_after_preparation_cancels_a_read_past_the_first_line() {
             Err(Interrupted)
         }
     };
-    let skipped = json!({"path":"long.md","start_line":CHECK_INTERVAL * 2,"limit":1});
+    let skipped = read_at(&docs, "long.md", CHECK_INTERVAL, 400);
     assert_eq!(
         docs.call("docs_read", &skipped, &twice).unwrap(),
         Err(DocsError::Cancelled)
@@ -782,11 +804,127 @@ fn tools_publish_strict_read_only_schemas() {
         assert_eq!(tool.annotations.destructive_hint, Some(false));
         assert_eq!(tool.annotations.open_world_hint, Some(false));
         assert_eq!(tool.input_schema["additionalProperties"], false);
+        assert!(tool.input_schema["properties"]["cursor"].is_object());
+        assert!(tool.input_schema["properties"]["limit"].is_object());
         assert!(tool.description.contains("Acme"));
     }
     assert!(!docs.handles("docs_open"));
     assert!(!docs.handles("acme_docs_read"));
     assert_eq!(docs.list_tool(), "docs_list");
+}
+
+#[test]
+fn cursors_refuse_malformed_query_path_list_and_bundle_mismatches() {
+    let (docs, _) = sample();
+    let first = call(&docs, "search", &json!({"query":"acme","limit":1})).unwrap();
+    for arguments in [
+        json!({"query":"other","cursor":first["next_cursor"]}),
+        json!({"query":"acme","path":"guide.md","cursor":first["next_cursor"]}),
+        json!({"query":"acme","cursor":"malformed"}),
+        json!({"query":"acme","cursor":"a".repeat(257)}),
+    ] {
+        assert_eq!(
+            call(&docs, "search", &arguments),
+            Err(DocsError::Pagination(page::Error::InvalidCursor))
+        );
+    }
+    assert_eq!(
+        call(&docs, "list", &json!({"cursor":first["next_cursor"]})),
+        Err(DocsError::Pagination(page::Error::InvalidCursor))
+    );
+    let foreign = Documentation::new(docs.bundle, "Other", "1");
+    assert_eq!(
+        call(
+            &foreign,
+            "search",
+            &json!({"query":"acme","cursor":first["next_cursor"]})
+        ),
+        Err(DocsError::Pagination(page::Error::InvalidCursor))
+    );
+    let folder = guides();
+    folder.write("other.md", "# Other");
+    let (changed, _) = docs_for(build::bundle(folder.path()).unwrap());
+    assert_eq!(
+        call(
+            &changed,
+            "search",
+            &json!({"query":"acme","cursor":first["next_cursor"]})
+        ),
+        Err(DocsError::Pagination(page::Error::InvalidCursor))
+    );
+}
+
+#[test]
+fn search_seeks_and_stops_without_counting_the_remaining_corpus() {
+    let folder = Folder::new();
+    folder.write("long.md", "acme\n".repeat(2000));
+    let (docs, _) = docs_for(build::bundle(folder.path()).unwrap());
+    let first = call(&docs, "search", &json!({"query":"acme","limit":100})).unwrap();
+    let checks = AtomicUsize::new(0);
+    let next = docs
+        .call(
+            "docs_search",
+            &json!({"query":"acme","limit":100,"cursor":first["next_cursor"]}),
+            &|| {
+                checks.fetch_add(1, Ordering::Relaxed);
+                Ok(())
+            },
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(next["matches"][0]["line"], 101);
+    assert!(next.get("total").is_none());
+    assert!(checks.load(Ordering::Relaxed) <= 3);
+    assert!(docs.bundle.lines().unwrap()[0].len() < 16);
+    assert!(docs.bundle.lowered_lines().unwrap()[0].len() < 16);
+    assert_eq!(reassemble(&docs, "long.md", 127), "acme\n".repeat(2000));
+    let mut found = Vec::new();
+    let mut cursor = None;
+    loop {
+        let result = call(
+            &docs,
+            "search",
+            &search_arguments("acme", cursor.as_deref(), 100),
+        )
+        .unwrap();
+        found.extend(
+            result["matches"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|row| row["line"].as_u64().unwrap()),
+        );
+        let Some(next) = result["next_cursor"].as_str() else {
+            break;
+        };
+        cursor = Some(next.to_owned());
+    }
+    assert_eq!(found, (1..=2000).collect::<Vec<_>>());
+}
+
+#[test]
+fn list_byte_budget_ends_early_and_continues_without_losing_titles() {
+    let folder = Folder::new();
+    for number in 0..6 {
+        folder.write(
+            &format!("page-{number}.md"),
+            format!("# {}\n", "a".repeat(60 * 1024)),
+        );
+    }
+    let (docs, _) = docs_for(build::bundle(folder.path()).unwrap());
+    let first = call(&docs, "list", &json!({"limit":100})).unwrap();
+    let rows = first["documents"].as_array().unwrap();
+    assert!(rows.len() < 6);
+    assert!(first["next_cursor"].is_string());
+    assert!(first["documents"].to_string().len() <= MAX_RESULT_TEXT_BYTES);
+    let next = call(
+        &docs,
+        "list",
+        &json!({"limit":100,"cursor":first["next_cursor"]}),
+    )
+    .unwrap();
+    assert_eq!(rows.len() + next["documents"].as_array().unwrap().len(), 6);
+    assert!(next["next_cursor"].is_null());
 }
 
 #[test]

@@ -1,6 +1,6 @@
 [package]
 name = "canonic-mcp-kit"
-version = "0.23.0"
+version = "0.24.0"
 edition = "2024"
 rust-version = "1.97"
 publish = false
@@ -17,6 +17,9 @@ serde_json = "1.0"
 sha2 = "0.10"
 thiserror = "2.0"
 getrandom = { version = "0.4.3", optional = true }
+# Verify identity-provider signatures on enterprise identity assertions.
+p256 = { version = "0.14", default-features = false, features = ["ecdsa"], optional = true }
+rsa = { version = "0.10", default-features = false, features = ["pkcs1v15", "std"], optional = true }
 yaml-rust2 = { version = "0.13", default-features = false }
 
 # `stdio::protect` points descriptors 0 and 1 away from the protocol.
@@ -31,12 +34,16 @@ docs-build = []
 # starts threads, so consumers that only use the exchange leave it out.
 http-server = []
 # The embedded OAuth 2.1 authorization server. It adds operating-system
-# randomness for the codes and tokens it issues.
-authorization-server = ["dep:getrandom"]
+# randomness for the codes and tokens it issues, and RS256/ES256 signature
+# verification for enterprise identity assertions.
+authorization-server = ["dep:getrandom", "dep:p256", "dep:rsa"]
 
 [dev-dependencies]
 # Only the consumer example/fixtures generate IDs or persist task records.
 getrandom = "0.4.3"
+# Fixtures sign identity assertions with a checked-in test key.
+p256 = { version = "0.14", default-features = false, features = ["ecdsa"] }
+rsa = { version = "0.10", default-features = false, features = ["encoding", "pkcs1v15", "std"] }
 
 [target.'cfg(unix)'.dev-dependencies]
 rustix = { version = "1.1.5", features = ["fs"] }
