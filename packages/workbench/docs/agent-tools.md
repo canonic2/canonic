@@ -202,6 +202,13 @@ workbench page interact --handle pg_0123456789abcdef --steps '[{"action":"click"
 workbench page stop --handle pg_0123456789abcdef --json
 ```
 
+`page list` and `page_list` accept `cursor` and `limit` (`--cursor` and
+`--limit` in the CLI). Pages are ordered by handle and return `pages` and
+`nextCursor`, null at the end. The default limit is 50, maximum 100; zero and
+larger limits are invalid. A 256 KiB encoded item budget can end a page early.
+Pass the cursor with the same selectors to continue. Human output prints the
+next command when more remain.
+
 Replace the example handle with `page_start`'s `page`. Handles retain the
 page's state between calls; `page_interact` returns each step's outcome,
 new console entries and a screenshot, optionally a snapshot. Steps stop at
@@ -293,18 +300,23 @@ To read the user's drawings and notes, run:
 workbench annotation list --json
 ```
 
-`annotation_list` returns the latest published snapshot from the canvas used
-last, grouped by artboard with each target. Entries include kind, text, anchor,
+`annotation_list` reads a page of current drawings from the canvas used
+last. Each item includes its annotation identity, artboard and target, plus
+kind, text, anchor,
 box in local CSS pixels and a readable element description when available.
 Arrows point at their visible tip; comments use their pin. Text notes and
 unreadable external pages have no element description. Reading leaves drawings
 and selection intact and does not capture images or resume a preview.
 
-`available: false` means a renderer snapshot is unavailable, rather than empty.
-`total` and `omitted` disclose the publication limits of 200 complete entries
-and 64 KiB across the canvas. Notes that do not fit are omitted whole. Snapshots
-are session-only, follow renderer updates and disappear with canvas withdrawal
-or expiry. With no open canvas the result is `open: false`.
+The result has `open`, `annotations` and `nextCursor`. Use `cursor` and `limit`
+(`--cursor` and `--limit` in the CLI) to continue until `nextCursor` is null.
+The default is 50 drawings, maximum 100, with a 256 KiB encoded item budget.
+Order is annotation identity, then artboard identity. Invalid limits are refused;
+a cursor from another canvas is `invalid_cursor`. A disconnected canvas refuses
+with `canvas_closed`; reload it and retry. Invalid canvas annotation data returns
+`invalid_target` with reload guidance. With no open canvas the result is
+`open: false`, an empty list and null continuation. Published context holds only
+a preview; this reader reaches drawings beyond that preview.
 
 ```sh
 workbench view set pages/contact.html --size mobile --json
@@ -320,3 +332,13 @@ canvas's media color scheme; choose a page scenario for dark or light content.
 Calls default to a 60-second deadline; `--timeout` accepts milliseconds up
 to 120,000. Refusals name the next step. The offline `docs list`,
 `docs search <query>` and `docs read <path>` commands also work outside a project.
+
+Each docs command accepts `--cursor <CURSOR>` and `--limit <N>`. List and search
+default to 50 rows, at most 100; read defaults to 100 lines, at most 400. Search
+also accepts `--path`. Results return `next_cursor`; pass it back as `cursor`
+with the same filters until null. Cursors bind the tool, filters and bundled
+guide digest. An `invalid_cursor` error means restart without a cursor.
+Pages stop at 256 KiB of serialized rows or line strings, allowing one larger
+first item within transport bounds. Search omits `total`; a conservative cursor
+can lead to an empty final page. Read's `start_line` is output metadata.
+Human output prints the next command; `--json` carries the same page fields.

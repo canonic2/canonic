@@ -7,7 +7,7 @@ every annotation and the element under it.
 An agent can also read the current drawings and notes through
 `annotation_list` or `workbench annotation list --json`, without taking a
 screenshot or clearing them. See [Agent tools](agent-tools.md#change-the-canvas)
-for snapshot availability and publication limits.
+for cursor traversal and canvas availability.
 
 ## The toolbar
 
