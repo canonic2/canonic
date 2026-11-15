@@ -61,9 +61,9 @@ without `--agent` resumes a confirmed interrupted plan. `shield mcp setup --remo
 removes the agents you select, and with every agent selected removes all owned
 registrations while preserving policy, approvals and history.
 
-To prepare repair from another connected project, call `mcp_setup` with an
-absolute enrolled `project`, explicit `agents`, `repair: true` and
-`dry_run: true`. Remove `dry_run` to request the exact host confirmation.
+To prepare repair from another connected project, call `mcp_setup_preview` with an
+absolute enrolled `project`, explicit `agents` and `repair: true`.
+Call `mcp_setup` with the same selectors to request the exact host confirmation.
 For example: `{"project":"/projects/acme","agents":["claude","codex"],"repair":true}`.
 The review names the target project; ordinary tools remain bound to the original
 connection. Relative paths, unenrolled targets, removal and pending-plan actions
@@ -382,6 +382,9 @@ A literal `cd` to the already known current directory, including `cd .`, keeps
 that working-directory context and needs no extra approval unless an explicit
 command rule asks or denies it. Literal POSIX directory changes such as
 `cd ./subproject && command` use the observed target for the successful branch.
+Use `cd ./packages/ui && command` for a project-relative directory. Without
+command-shell environment metadata, `cd packages/ui` remains unresolved: the
+shell can use an unexported `CDPATH` that the hook process cannot observe.
 `||` retains the failure directory, and `;` checks both possibilities. Logical
 and physical `-L`/`-P` behavior follows observed symlinks. Unknown environment,
 directory shortcuts and preceding unclassified filesystem changes retain

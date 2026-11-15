@@ -456,10 +456,10 @@ fn policy_denial(
 fn operator_denial(receipt: &Value) -> Reply {
     let route = match receipt["operator_route"].as_str() {
         Some("diagnostics") => {
-            "Use the doctor or status MCP tool for this connection. To inspect registration repair in another enrolled project, use mcp_setup with that absolute project, explicit agents, repair: true and dry_run: true. This preview writes nothing."
+            "Use the doctor or status MCP tool for this connection. To inspect registration repair in another enrolled project, use mcp_setup_preview with that absolute project, explicit agents and repair: true. This preview writes nothing."
         }
         Some("registration") => {
-            "Use mcp_setup with explicit agents and repair: true for conflicting registrations. An absolute project can select another enrolled registration-repair target; preview with dry_run: true, then request the user's exact confirmation. Box-managed hooks use Box config_show and config_sync with the same project and repair_hooks: true."
+            "Use mcp_setup_preview with explicit agents and repair: true to inspect conflicting registrations, then mcp_setup for the user's exact confirmation. An absolute project can select another enrolled registration-repair target. Box-managed hooks use Box config_show and config_sync with the same project and repair_hooks: true."
         }
         Some("policy") => {
             "Inspect with rule_list or policy_show. Use policy_propose for a change and copy apply_arguments unchanged into policy_apply for the user's confirmation."

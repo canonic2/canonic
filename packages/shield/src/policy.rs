@@ -1175,6 +1175,12 @@ fn parse_yaml<T: DeserializeOwned>(input: &str) -> Result<T, Error> {
 /// `!!str`. Parser errors are left to the decoder, which reports them.
 fn tagged(input: &str) -> bool {
     use granit_parser::{Event, Parser};
+    // Every explicit YAML tag starts with `!`. Without it, the ordinary
+    // decoder can validate the document without a second tokenization pass.
+    if !input.contains('!') {
+        return false;
+    }
+    crate::diagnostics::trace::count("policy.tag_scans", 1);
     for next in Parser::new_from_str(input) {
         let Ok((event, _)) = next else {
             return false;

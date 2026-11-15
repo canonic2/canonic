@@ -341,11 +341,11 @@ fn setup_preview_schema() -> Value {
         .into_iter()
         .find(|(name, _, _)| *name == "mcp_setup")
         .expect("setup definition");
-    let mut tools = vec![canonic_mcp_kit::Tool::new(
-        "mcp_setup",
-        description,
-        schema(),
-    )];
+    let mut schema = schema();
+    // The shared helper derives previews from an internal dry-run handler.
+    // The public setup definition exposes only the applying tool's arguments.
+    schema["properties"]["dry_run"] = json!({"type":"boolean","default":false});
+    let mut tools = vec![canonic_mcp_kit::Tool::new("mcp_setup", description, schema)];
     canonic_mcp_kit::tool::preview::append(&mut tools, super::PREVIEWS)
         .expect("setup supports dry-run inspection");
     tools.pop().expect("setup preview").input_schema
@@ -435,7 +435,7 @@ fn admin_inventory() -> Vec<Definition> {
             "Review agent registration changes; repair with explicit agents may name another enrolled project without rebinding this connection; use mcp_setup_preview for read-only inspection; pending review/cancel handles interrupted setup",
             || {
                 object(
-                    json!({"project":{"type":"string","minLength":1,"maxLength":4096,"description":"Absolute enrolled project root for explicit registration repair only; requires repair: true and agents. The review names this target; ordinary tools remain bound to this connection's project."},"agents":{"type":"array","maxItems":64,"uniqueItems":true,"items":string()},"remove":{"type":"boolean","default":false},"repair":{"type":"boolean","default":false,"description":"Review reconciliation of conflicting Shield hooks and native MCP registration for explicitly selected Claude/Codex targets; other hooks and servers are preserved"},"pending":{"enum":["review","cancel"],"description":"Request a new human review of a conflicting confirmed setup, or cancel that interrupted publication"},"dry_run":{"type":"boolean","default":false},"scope":{"enum":["project"],"default":"project"}}),
+                    json!({"project":{"type":"string","minLength":1,"maxLength":4096,"description":"Absolute enrolled project root for explicit registration repair only; requires repair: true and agents. The review names this target; ordinary tools remain bound to this connection's project."},"agents":{"type":"array","maxItems":64,"uniqueItems":true,"items":string()},"remove":{"type":"boolean","default":false},"repair":{"type":"boolean","default":false,"description":"Review reconciliation of conflicting Shield hooks and native MCP registration for explicitly selected Claude/Codex targets; other hooks and servers are preserved"},"pending":{"enum":["review","cancel"],"description":"Request a new human review of a conflicting confirmed setup, or cancel that interrupted publication"},"scope":{"enum":["project"],"default":"project"}}),
                     &[],
                 )
             },
@@ -860,6 +860,30 @@ fn defer_tool() -> Definition {
 
 #[cfg(test)]
 mod metadata_tests {
+    #[test]
+    fn setup_definition_and_preview_reject_public_execution_flags() {
+        let (_, _, definition) = super::admin_inventory()
+            .into_iter()
+            .find(|(name, _, _)| *name == "mcp_setup")
+            .unwrap();
+        for schema in [definition(), super::setup_preview_schema()] {
+            canonic_mcp_kit::schema::validate(
+                &schema,
+                &serde_json::json!({"agents":["claude"],"repair":true}),
+            )
+            .unwrap();
+            for value in [true, false] {
+                assert!(
+                    canonic_mcp_kit::schema::validate(
+                        &schema,
+                        &serde_json::json!({"agents":["claude"],"dry_run":value}),
+                    )
+                    .is_err()
+                );
+            }
+        }
+    }
+
     #[test]
     fn shield_mode_tools_use_cli_words_without_repeating_the_binary_name() {
         let catalog = crate::review::mcp::tools_for(Some("claude"));

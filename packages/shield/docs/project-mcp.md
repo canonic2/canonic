@@ -11,10 +11,10 @@ For third-party servers and pack-contributed MCP permissions, see
 
 Use `mcp_setup_preview` to inspect proposed agent registration changes without
 approval or publication. It accepts the setup selectors and always runs a dry
-run; it rejects a `dry_run` override. Use `mcp_setup` to apply after confirmation.
+run. Use `mcp_setup` to apply after confirmation.
 The preview is published as read-only and approved by fresh setup. Saved host
-permissions remain authoritative; `mcp_setup` with `dry_run: true` stays compatible
-but may still trigger the applying tool's generic host permission prompt.
+permissions remain authoritative. Both MCP setup tools reject `dry_run`; the
+CLI retains `--dry-run`.
 
 | You want to… | Start here |
 | --- | --- |
@@ -126,8 +126,8 @@ refuse; inspect the result before requesting a fresh review.
 - `policy_reject` asks the user to reject a pending `proposal_id`.
 - `history_configure` accepts `enabled`, retention `limit` (1–10000) and
   `purge`. Clearing history requires confirmation.
-- `mcp_setup` accepts registered `agents`, optional `remove` and `dry_run`.
-  Dry runs return the captured review without writing. Setup is project scoped;
+- `mcp_setup` accepts registered `agents` and optional `remove`.
+  `mcp_setup_preview` returns the captured review without writing. Setup is project scoped;
   restart the affected connection after changing its registration.
   For conflicting or duplicate Shield hooks or a conflicting native Shield MCP
   registration, pass `repair: true` with explicit `claude` or `codex` targets.
@@ -135,7 +135,7 @@ refuse; inspect the result before requesting a fresh review.
   including entries in the same group, and other servers survive.
   An absolute `project` may select another enrolled root for explicit agent
   repair only. The review and frozen plan bind that target; the connection's
-  policy tools retain their original project. Preview with `dry_run: true`
+  policy tools retain their original project. Inspect with `mcp_setup_preview`
   before requesting confirmation. Hub-managed hooks use Hub's `setup`, and
   Box-managed hooks Box's `config_sync`, with the same project, agents and
   `repair_hooks: true` instead of direct setup.

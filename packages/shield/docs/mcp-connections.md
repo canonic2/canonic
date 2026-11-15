@@ -87,7 +87,7 @@ Shield reads the connection from the file on the next request. To write it into
 the agents' MCP settings, run `shield mcp setup`, or in an agent session have
 the agent call `mcp_setup` with the selected `agents` (for example,
 `["claude","codex"]`); `shield status` reports agents whose entries differ from
-the file. `dry_run: true` previews without writing. Connection changes an agent
+the file. `mcp_setup_preview` inspects the same selection without writing. Connection changes an agent
 proposes through `policy_propose` show a confirmation form that masks sensitive
 values and labels them as added, changed, removed or unchanged, so a masked edit
 is still visible for review; approval also writes the registered agents'

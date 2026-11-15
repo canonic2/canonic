@@ -47,11 +47,15 @@ fn setup_preview_is_read_only_and_needs_no_confirmation_capability() {
     assert!(transport.receive()["result"].is_object());
     let before = state(&project);
     let catalog = crate::mcp::catalog(Some("claude")).unwrap();
-    for tool in catalog
-        .tools()
-        .iter()
-        .filter(|tool| tool.input_schema["properties"].get("dry_run").is_some())
-    {
+    for tool in catalog.tools() {
+        assert!(
+            tool.input_schema["properties"].get("dry_run").is_none(),
+            "{}",
+            tool.name
+        );
+    }
+    for name in crate::review::mcp::PREVIEWS {
+        let tool = catalog.get(name).unwrap();
         let preview = catalog.get(&format!("{}_preview", tool.name)).unwrap();
         assert!(preview.read_only());
         assert_eq!(preview.annotations.destructive_hint, Some(false));
@@ -69,6 +73,14 @@ fn setup_preview_is_read_only_and_needs_no_confirmation_capability() {
         invalid["error"].is_object() || invalid["result"]["isError"] == true,
         "{invalid}"
     );
+    for (id, value) in [(22, true), (23, false)] {
+        let invalid = transport.call(json!(id), "mcp_setup", &json!({"dry_run":value}));
+        assert!(
+            invalid["error"].is_object() || invalid["result"]["isError"] == true,
+            "{invalid}"
+        );
+    }
+    assert_eq!(state(&project), before);
 }
 
 #[test]
@@ -80,9 +92,7 @@ fn explicit_project_repair_uses_the_published_schema_and_original_connection_con
     let path = target.root.path().join(".mcp.json");
     let host_before = std::fs::read(&path).ok();
     let args = json!({"project":target.root.path(),"agents":["claude"],"repair":true});
-    let mut preview = args.clone();
-    preview["dry_run"] = json!(true);
-    let response = transport.call(json!(20), "mcp_setup", &preview);
+    let response = transport.call(json!(20), "mcp_setup_preview", &args);
     assert_eq!(response["result"]["isError"], false, "{response}");
     assert_eq!(state(&target), target_before);
     assert_eq!(std::fs::read(&path).ok(), host_before);

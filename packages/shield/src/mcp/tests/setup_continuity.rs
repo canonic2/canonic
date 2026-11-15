@@ -136,11 +136,7 @@ fn interrupted_setup_conflict_review_decline_and_cancel_stay_in_session() {
         "{status}"
     );
     let before = state(&project);
-    let preview = transport.call(
-        json!(3),
-        "mcp_setup",
-        &json!({"pending":"review","dry_run":true}),
-    );
+    let preview = transport.call(json!(3), "mcp_setup_preview", &json!({"pending":"review"}));
     assert!(data(&preview)["error"].is_null(), "{preview}");
     assert!(
         !preview.to_string().contains("acme-manual-shield"),
@@ -228,7 +224,7 @@ fn interrupted_setup_preview_does_not_resume_or_mutate_confirmed_publication() {
     let (transport, project) = prepared();
     edit(&project, false);
     let before = state(&project);
-    let preview = transport.call(json!(2), "mcp_setup", &json!({"dry_run":true}));
+    let preview = transport.call(json!(2), "mcp_setup_preview", &json!({}));
     assert!(data(&preview)["error"].is_null(), "{preview}");
     assert_eq!(state(&project), before);
     assert!(

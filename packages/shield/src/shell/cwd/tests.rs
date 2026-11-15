@@ -51,6 +51,49 @@ fn commands<'a>(value: &'a Value, executable: &str) -> Vec<&'a Value> {
 }
 
 #[test]
+fn native_working_files_do_not_establish_command_shell_cdpath() {
+    let root = fixture();
+    let base = root.path().canonicalize().unwrap();
+    let scope = crate::location::WorkingFiles::default();
+    let run = |source: &str, environment: Option<&BTreeMap<String, String>>, scoped: bool| {
+        shell::analyze_with_working_files(
+            source,
+            Dialect::Bash,
+            base.to_str().unwrap(),
+            environment,
+            base.to_str().unwrap(),
+            &evaluator(),
+            &|| Ok(()),
+            scoped.then_some(&scope),
+        )
+        .unwrap()
+    };
+    let source = "cd sub && acme read";
+    let reported_empty = BTreeMap::new();
+    let observed = run(source, Some(&reported_empty), true);
+    assert_eq!(observed["decision"], "allow", "{observed}");
+    assert_eq!(
+        commands(&observed, "acme")[0]["cwd"],
+        base.join("sub").to_str().unwrap()
+    );
+    let reported_search = BTreeMap::from([("CDPATH".into(), "/unverified/search-root".into())]);
+    for value in [
+        run(source, None, false),
+        run(source, None, true),
+        run(source, Some(&reported_search), true),
+        run(
+            "CDPATH=/unverified/search-root; cd sub && acme read",
+            None,
+            true,
+        ),
+        run("cd sub; acme read", None, true),
+        run("cd sub && cd -L -- .. && acme read", None, true),
+    ] {
+        assert_ne!(value["decision"], "allow", "{value}");
+    }
+}
+
+#[test]
 fn previous_directory_requires_established_logical_bookkeeping_and_preserves_branch_pairs() {
     let root = fixture();
     let base = root.path().canonicalize().unwrap();

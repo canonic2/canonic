@@ -822,6 +822,36 @@ fn json_policy_preparation_preserves_strict_syntax_and_budgets() {
 }
 
 #[test]
+fn yaml_tag_detection_skips_redundant_tokenization_for_untagged_documents() {
+    use clap::Parser as _;
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let request = log.request("test", "yaml-tags", None, None).unwrap();
+    {
+        let _scope = request.enter();
+        assert_eq!(
+            parse::<Value>("key: [plain, text]\n").unwrap(),
+            json!({"key":["plain","text"]})
+        );
+        assert!(parse::<Value>("key: [unterminated").is_err());
+        assert_eq!(request.recorded_count("policy.tag_scans"), 0);
+        assert_eq!(
+            parse::<Value>("key: 'ordinary ! text'").unwrap(),
+            json!({"key":"ordinary ! text"})
+        );
+        assert!(parse::<Value>("%TAG !e! tag:example.com,2026:\n---\nkey: !e!item value").is_err());
+        assert_eq!(request.recorded_count("policy.tag_scans"), 2);
+    }
+    request.finish("success");
+}
+
+#[test]
 fn yaml_tags_are_refused_including_core_schema_tags() {
     for document in [
         "key: !!str 1",
