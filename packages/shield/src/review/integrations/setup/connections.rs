@@ -151,7 +151,7 @@ pub(in crate::review::integrations) fn prepare_configured(
 fn selected(targets: &[String], adapter: &dyn crate::agents::AgentAdapter) -> bool {
     targets.iter().any(|target| {
         target == adapter.spec().id
-            || target == super::box_definition::ID && adapter.supports_box_hooks()
+            || super::host_definition::find(target).is_some() && adapter.supports_box_hooks()
     })
 }
 

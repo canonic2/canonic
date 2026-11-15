@@ -24,8 +24,8 @@ fn omitted_snapshot(root: &Path, context: &Context) -> Value {
     for path in [
         ".mcp.json",
         ".claude/settings.local.json",
-        box_definition::PATH,
-        box_definition::LOCAL_PATH,
+        host_definition::BOX.path,
+        host_definition::BOX.local_path,
     ] {
         files.insert(path.into(), json!(fs::read(root.join(path)).unwrap()));
     }

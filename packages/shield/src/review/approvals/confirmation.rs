@@ -87,29 +87,29 @@ fn question(
         }
         session = origin;
         let row = match kind {
-            Kind::Read => read_approval::review_in(state, context, id, snapshot, time)?,
-            Kind::Execution => run_approval::review_in(state, context, id, snapshot, time)?,
-            Kind::Hook => String::new(),
-        };
-        let row = if matches!(kind, Kind::Hook) {
-            let (text, deny, settings) =
-                hook_approval::group_row(state, context, id).map_err(|error| match error {
-                    Error::AgentNotConnected if ids.len() > 1 => {
-                        hook_approval::not_connected_in_group(id)
-                    }
-                    error => error,
-                })?;
-            Row {
-                text,
-                deny,
-                settings,
+            Kind::Hook => {
+                let (text, deny, settings) =
+                    hook_approval::group_row(state, context, id).map_err(|error| match error {
+                        Error::AgentNotConnected if ids.len() > 1 => {
+                            hook_approval::not_connected_in_group(id)
+                        }
+                        error => error,
+                    })?;
+                Row {
+                    text,
+                    deny,
+                    settings,
+                }
             }
-        } else {
-            Row {
-                text: row,
+            Kind::Read | Kind::Execution => Row {
+                text: if matches!(kind, Kind::Read) {
+                    read_approval::review_in(state, context, id, snapshot, time)?
+                } else {
+                    run_approval::review_in(state, context, id, snapshot, time)?
+                },
                 deny: false,
                 settings: false,
-            }
+            },
         };
         if row.text.len() > hook_approval::MAX_FORM {
             return Err(Error::Grouped {
@@ -121,13 +121,9 @@ fn question(
         rows.push(row);
     }
     let text = compose(&rows);
+    // One row passed the form limit above, so only a group can exceed it.
     if text.len() <= hook_approval::MAX_FORM {
         return Ok(text);
-    }
-    if rows.len() == 1 {
-        return Err(Error::Invalid(
-            "the complete request exceeds the human confirmation form limit",
-        ));
     }
     let mut split = rows.len() - 1;
     while split > 1 && compose(&rows[..split]).len() > hook_approval::MAX_FORM {

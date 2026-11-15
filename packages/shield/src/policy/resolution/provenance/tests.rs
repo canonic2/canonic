@@ -1,5 +1,5 @@
 //! Branch provenance is identical in direct and persisted compiled decisions.
-use crate::policy::{self, Binding, Pack, Profile, Request, compiled::Plan};
+use crate::policy::{self, Binding, Pack, Profile, Request, resolution::compiled::Plan};
 use serde_json::{Value, json};
 
 fn source() -> Value {

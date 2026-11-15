@@ -59,12 +59,14 @@ Restart the agent, trust the project, enable native hooks, and approve the MCP
 connection. Codex also requires reviewing hook definitions through `/hooks`.
 Use `shield doctor` to check for missing or changed owned files and binaries.
 
-In JSON output, `enforcement` reports `installed`, `defined-for-box` (the Box
-definition exists but no published hooks were found), `degraded`, or
-`not-installed`. Policy-only inspection reports `not-checked` because it does not
-inspect agent integration files. `enabled` separately reports whether Shield is
-paused. For a Box installation, use `box config sync --server shield --dry-run`
-to review what Box would publish.
+In JSON output, `enforcement` reports `installed`, `defined-for-hub` or
+`defined-for-box` (the Hub or Box definition exists but no published hooks were
+found), `degraded`, or `not-installed`. `coverage.host_integration` describes
+that definition, with `agent` naming `hub` or `box`. Policy-only inspection
+reports `not-checked` because it does not inspect agent integration files.
+`enabled` separately reports whether Shield is paused. For a Hub installation,
+use `hub setup --dry-run` to review what Hub would publish; for Box, use
+`box config sync --server shield --dry-run`.
 
 Check `coverage.verification.agents` for recorded hook activity and its timestamp.
 Recorded events show that callbacks ran at those times; they do not prove that

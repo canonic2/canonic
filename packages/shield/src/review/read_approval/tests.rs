@@ -23,14 +23,14 @@ pub(crate) fn fixture() -> (assert_fs::TempDir, Context, EvaluatedRequest, Strin
     };
     let resource = review::runtime::consumer::ResourceRequest {
         mcp: None,
-        input: policy::normalized::Input::File {
+        input: policy::resolution::normalized::Input::File {
             action: "read".into(),
             sources: request.arguments.clone(),
             destination: None,
             recursive: false,
             original_input: json!({"file_path":path}),
         },
-        context: policy::normalized::Context {
+        context: policy::resolution::normalized::Context {
             cwd: request.cwd.clone(),
             environment: None,
             working_files: None,
@@ -140,14 +140,14 @@ fn copied_workspace_read_grant_cannot_replay_and_original_remains_usable() {
     };
     let claim = review::runtime::consumer::ResourceRequest {
         mcp: None,
-        input: policy::normalized::Input::File {
+        input: policy::resolution::normalized::Input::File {
             action: "read".into(),
             sources: request.arguments.clone(),
             destination: None,
             recursive: false,
             original_input: json!({"file_path":path}),
         },
-        context: policy::normalized::Context {
+        context: policy::resolution::normalized::Context {
             cwd: child.project_root.clone(),
             environment: None,
             working_files: None,
@@ -380,7 +380,7 @@ fn approval_replay_uses_grant_expiry_after_pending_window_closes() {
 
 #[test]
 fn additional_read_roots_support_exact_one_time_grants() {
-    use crate::policy::normalized::{Context as PolicyContext, Input};
+    use crate::policy::resolution::normalized::{Context as PolicyContext, Input};
     use crate::review::runtime::consumer::ResourceRequest;
     let root = assert_fs::TempDir::new().unwrap();
     let external = assert_fs::TempDir::new().unwrap();
@@ -472,7 +472,7 @@ fn consume_with_retry(
 
 #[test]
 fn typed_read_grants_bind_original_input_and_retain_resource_during_review() {
-    use crate::policy::normalized::{Context as PolicyContext, Input};
+    use crate::policy::resolution::normalized::{Context as PolicyContext, Input};
     use crate::review::runtime::consumer::ResourceRequest;
     let (_root, context, previous, digest) = fixture();
     let project = Project::open(Path::new(&context.project_root)).unwrap();
@@ -1134,7 +1134,7 @@ fn legacy_read_rejects_corrupt_bindings_and_widened_resources() {
         match variant {
             "environment" => resource.context.environment = Some(std::collections::BTreeMap::new()),
             _ => {
-                if let policy::normalized::Input::File {
+                if let policy::resolution::normalized::Input::File {
                     action,
                     sources,
                     original_input,

@@ -68,16 +68,13 @@ pub(crate) fn protected_files() -> &'static [&'static str] {
                 .chain(a.spec().prefix_rules_path)
                 .chain(a.spec().settings_paths.iter().copied())
         }))
-        .chain([
-            box_definition::PATH,
-            box_definition::LOCAL_PATH,
-            legacy::BASE,
-        ])
+        .chain(host_definition::paths())
+        .chain([legacy::BASE])
         .collect()
     })
 }
-pub(crate) mod box_definition;
 mod choice;
+pub(crate) mod host_definition;
 pub(crate) use choice::IntegrationChoice;
 pub(in crate::review) mod activation;
 mod connections;
@@ -129,9 +126,14 @@ pub(in crate::review) struct Registration {
     pub(in crate::review) approved_tools: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub(in crate::review) connections: std::collections::BTreeMap<String, Value>,
-    /// The exact Box definition files Shield wrote, when Box is set up.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(in crate::review) box_definition: Option<box_definition::Definition>,
+    /// The exact Hub or Box definition files Shield wrote, when one is set up.
+    /// The record key predates Hub and stays `box_definition`.
+    #[serde(
+        default,
+        rename = "box_definition",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(in crate::review) definition: Option<host_definition::Definition>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -149,7 +151,7 @@ pub(in crate::review) struct Plan {
     pub(in crate::review) desired: Option<Registration>,
     pub(in crate::review) files: Vec<files::Change>,
     /// Direct installations whose records the plan drops while their native
-    /// files stay in place for Box to adopt.
+    /// files stay in place for Hub or Box to adopt.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(in crate::review) handed_over: Vec<String>,
 }
@@ -339,14 +341,14 @@ pub(in crate::review) fn mcp_after(
 
 impl Registration {
     /// Whether this record installs `agent`'s hooks, directly or through the
-    /// Box definition, for adapters its publisher supports.
+    /// Hub or Box definition, for adapters its publisher supports.
     pub(in crate::review) fn covers(&self, agent: &str) -> bool {
         self.native_covers(agent) || (agent == "claude" && self.interceptor.is_some())
     }
 
     pub(in crate::review) fn native_covers(&self, agent: &str) -> bool {
         self.agents.contains_key(agent)
-            || (self.box_definition.is_some()
+            || (self.definition.is_some()
                 && agents::find(agent).is_some_and(agents::AgentAdapter::supports_box_hooks))
     }
 }
@@ -606,19 +608,21 @@ pub(in crate::review) fn publish(root: &Path, plan: &Plan) -> Result<(), Error> 
     Ok(())
 }
 
-/// The recorded Box definition's state and the Ask fallbacks it carries.
-fn box_status(
+/// The recorded Hub or Box definition's state and the Ask fallbacks it carries.
+fn host_status(
     root: &Path,
     project: &State,
-    owned: &box_definition::Definition,
+    owned: &host_definition::Definition,
     diagnostics: &mut Vec<&'static str>,
 ) -> Value {
-    let mut state = box_definition::diagnose(root, owned, diagnostics);
-    // Ownership compares text only; Box also refuses a private pin others can
-    // read, which `shield mcp setup --agent box` repairs in place.
-    if state == "installed" && files::private_exposed(root) {
-        diagnostics
-            .push("Box's private Shield definition is readable by other users, so Box refuses it");
+    let host = owned.host();
+    let mut state = host_definition::diagnose(root, owned, diagnostics);
+    // Ownership compares text only; the host also refuses a private pin others
+    // can read, which `shield mcp setup --agent <host>` repairs in place.
+    if state == "installed" && files::private_exposed(root, host) {
+        diagnostics.push(
+            "the private Shield definition is readable by other users, so Hub and Box refuse it",
+        );
         state = "changed";
     }
     let fallbacks: serde_json::Map<String, Value> = agents::ADAPTERS
@@ -632,9 +636,9 @@ fn box_status(
             )
         })
         .collect();
-    json!({"agent":box_definition::ID,"path":box_definition::PATH,
-        "local_path":box_definition::LOCAL_PATH,"status":state,
-        "ask_fallback":fallbacks,"publish":"box setup (first time) or box config sync"})
+    json!({"agent":host.id,"path":host.path,
+        "local_path":host.local_path,"status":state,
+        "ask_fallback":fallbacks,"publish":host.publish})
 }
 
 fn diagnose_binary(
@@ -758,8 +762,8 @@ fn diagnose_registered<'a>(
                 .filter(|id| agents::find(id).is_some_and(|a| a.spec().mcp_path.is_none())),
         );
     }
-    let mut box_integration = r.box_definition.as_ref().map_or(Value::Null, |owned| {
-        box_status(root, state, owned, diagnostics)
+    let mut host_integration = r.definition.as_ref().map_or(Value::Null, |owned| {
+        host_status(root, state, owned, diagnostics)
     });
     let before = diagnostics.len();
     if diagnose_binary(r, &state.operator, diagnostics).is_err() {
@@ -768,13 +772,13 @@ fn diagnose_registered<'a>(
     if diagnostics.len() != before {
         degraded.extend(agents.iter().copied());
     }
-    if !box_integration.is_null()
-        && (diagnostics.len() != before || unsettled.is_some_and(|p| p.affects(box_definition::ID)))
+    if let Some(owned) = &r.definition
+        && (diagnostics.len() != before || unsettled.is_some_and(|p| p.affects(owned.host().id)))
     {
-        box_integration["definition_status"] = box_integration["status"].clone();
-        box_integration["status"] = json!("degraded");
+        host_integration["definition_status"] = host_integration["status"].clone();
+        host_integration["status"] = json!("degraded");
     }
-    (agents, box_integration, legacy_interceptor)
+    (agents, host_integration, legacy_interceptor)
 }
 
 fn agent_output_drift(
@@ -862,7 +866,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                 diagnostics.push("shared MCP configuration is unreadable or invalid");
                 Value::Null
             });
-        let (agents, mut box_integration, legacy_interceptor) = registered.as_ref().map_or_else(
+        let (agents, mut host_integration, legacy_interceptor) = registered.as_ref().map_or_else(
             || (Vec::new(), Value::Null, Value::Null),
             |r| {
                 diagnose_registered(
@@ -901,7 +905,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                     degraded.insert(*agent);
                 }
             }
-            if r.box_definition.is_some()
+            if r.definition.is_some()
                 && agents::ADAPTERS.iter().any(|adapter| {
                     let agent = adapter.spec().id;
                     adapter.supports_box_hooks()
@@ -909,13 +913,13 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                         && agent_output_drift(root, state, snapshot, r, agent, &connections)
                 })
             {
-                if box_integration.get("definition_status").is_none() {
-                    box_integration["definition_status"] = box_integration["status"].clone();
+                if host_integration.get("definition_status").is_none() {
+                    host_integration["definition_status"] = host_integration["status"].clone();
                 }
-                box_integration["status"] = json!("degraded");
+                host_integration["status"] = json!("degraded");
             }
         }
-        let published = reporting::box_hooks(root, registered.as_ref(), state, &mut diagnostics);
+        let published = reporting::host_hooks(root, registered.as_ref(), state, &mut diagnostics);
         let healthy = diagnostics.is_empty();
         let mut report = json!({
             "binary_inspection":registered.as_ref().map(|registration| json!({
@@ -923,7 +927,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                 "payload_integrity":"unchecked","compatibility":"unchecked"
             })),
             "policy_inspection":{"availability":if snapshot.is_some() {"current"}else{"unchecked"},"source_validation":"not-performed","automatic_matching":"checked-on-interception"},
-            "box_integration":box_integration,
+            "host_integration":host_integration,
             "legacy_interceptor":legacy_interceptor,
             "mcp_connections":connections,
             "registered_integrations":agents.iter().map(|agent|json!({"agent":agent,"surface":"mcp","status":if degraded.contains(agent) {"degraded"} else {"registered"}})).collect::<Vec<_>>(),
@@ -938,7 +942,7 @@ pub(in crate::review) fn status(context: &Context, state: &State) -> Value {
                     "ask_fallback":if adapter.is_some_and(|a|a.spec().needs_ask_fallback) { json!(fallback(&meta,&state.settings,agent).unwrap_or_default()) } else { Value::Null }})
             }).collect::<Vec<_>>()).unwrap_or_default(),
             "diagnostics":diagnostics,"repair_needed":!healthy,
-            "tool_interception":if registered.as_ref().is_some_and(|r|!r.agents.is_empty()) {"native hooks installed; host loading is unverified"} else if !legacy_interceptor.is_null() {"legacy text-read interceptor installed; host loading is unverified"} else if box_integration.is_null() {"not installed"} else {"native hooks defined for Box to publish; host loading is unverified"},
+            "tool_interception":if registered.as_ref().is_some_and(|r|!r.agents.is_empty()) {"native hooks installed; host loading is unverified"} else if !legacy_interceptor.is_null() {"legacy text-read interceptor installed; host loading is unverified"} else if host_integration.is_null() {"not installed"} else if host_integration["agent"] == host_definition::HUB.id {"native hooks defined for Hub to publish; host loading is unverified"} else {"native hooks defined for Box to publish; host loading is unverified"},
             "live_host_verification":"unverified",
             "discovery":"restart host; trust project, review native hooks and approve MCP",
             "operator_protection":"native hooks can be skipped or fail open on host timeout/startup failure; no same-user OS isolation"

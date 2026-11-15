@@ -43,12 +43,12 @@ impl EffectiveLaunch {
     pub(super) fn resource(&self, submitted: &policy::Request) -> ResourceRequest {
         ResourceRequest {
             mcp: None,
-            input: policy::normalized::Input::Argv {
+            input: policy::resolution::normalized::Input::Argv {
                 executable: self.request.executable.clone(),
                 arguments: self.request.arguments.clone(),
                 original_input: json!(submitted),
             },
-            context: policy::normalized::Context {
+            context: policy::resolution::normalized::Context {
                 cwd: self.request.cwd.clone(),
                 environment: Some(self.environment.clone()),
                 working_files: None,

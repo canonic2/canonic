@@ -273,22 +273,24 @@ fn state_only_box_cancellation_preserves_independent_direct_connection() {
     let mut committed = plan.desired.clone().unwrap();
     let direct = committed.connections["claude"].clone();
     committed.connections.insert("codex".into(), direct.clone());
-    committed.box_definition = Some(super::super::box_definition::Definition {
+    let host = &super::super::host_definition::BOX;
+    committed.definition = Some(super::super::host_definition::Definition {
+        host: super::super::host_definition::HostId::Box,
         shared: "approved shared definition".into(),
         local: "approved local definition".into(),
     });
     let direct_agents = json!(committed.agents);
-    plan.targets = Some(vec![super::super::box_definition::ID.into()]);
+    plan.targets = Some(vec![host.id.into()]);
     plan.before = Some(plan.after.clone());
     plan.previous = Some(committed.clone());
     plan.desired = Some(committed.clone());
     plan.files = vec![files::Change {
-        path: super::super::box_definition::PATH.into(),
+        path: host.path.into(),
         before: Some("approved shared definition".into()),
         after: Some("replacement shared definition".into()),
     }];
     fs::create_dir_all(root.path().join(".box/mcp")).unwrap();
-    let definition = root.path().join(super::super::box_definition::PATH);
+    let definition = root.path().join(host.path);
     fs::write(&definition, "manual definition").unwrap();
     Store::open(root.path())
         .unwrap()
@@ -306,7 +308,7 @@ fn state_only_box_cancellation_preserves_independent_direct_connection() {
     assert_eq!(json!(retained.agents), direct_agents);
     assert_eq!(retained.connections["claude"], direct);
     assert!(!retained.connections.contains_key("codex"));
-    assert!(retained.box_definition.is_none());
+    assert!(retained.definition.is_none());
     assert!(pending(&metadata(&context)).unwrap().is_none());
     assert_eq!(fs::read_to_string(definition).unwrap(), "manual definition");
     assert_eq!(authority(&context), before);

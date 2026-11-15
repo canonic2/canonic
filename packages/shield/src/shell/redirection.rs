@@ -1,7 +1,7 @@
 //! Ordered descriptor flow from literal syntax, independent of filesystem facts.
 
 use super::structure::Redirection;
-use crate::policy::diagnostics::Private;
+use crate::policy::resolution::diagnostics::Private;
 use serde::Serialize;
 use std::collections::BTreeMap;
 

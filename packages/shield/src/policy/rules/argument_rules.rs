@@ -1,9 +1,12 @@
 //! Declared argv grammar, preserving token boundaries, option arity and phases.
-use super::{Error, patterns::Provider, selectors};
+use crate::policy::{
+    Error,
+    rules::{patterns::Provider, selectors},
+};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(super) fn validate(value: &Value) -> Result<(), Error> {
+pub(in crate::policy) fn validate(value: &Value) -> Result<(), Error> {
     let allowed: &[&str] = match value["kind"].as_str() {
         Some("any") => &["kind"],
         Some("exact") => &["kind", "values"],
@@ -319,19 +322,19 @@ fn grammar(value: &Value) -> Result<BTreeMap<String, Spec>, Error> {
 }
 
 #[derive(Debug, serde::Serialize)]
-pub(super) struct Record {
-    pub(super) name: String,
+pub(in crate::policy) struct Record {
+    pub(in crate::policy) name: String,
     #[serde(skip)]
-    pub(super) value: Option<String>,
-    pub(super) index: usize,
-    pub(super) phase: u8,
+    pub(in crate::policy) value: Option<String>,
+    pub(in crate::policy) index: usize,
+    pub(in crate::policy) phase: u8,
 }
 #[derive(Default)]
-pub(super) struct ResultSet {
-    pub(super) failures: Vec<&'static str>,
-    pub(super) records: Vec<Record>,
+pub(in crate::policy) struct ResultSet {
+    pub(in crate::policy) failures: Vec<&'static str>,
+    pub(in crate::policy) records: Vec<Record>,
     /// Positional operands after the declared prefix and option parsing.
-    pub(super) operands: Vec<String>,
+    pub(in crate::policy) operands: Vec<String>,
     /// Options whose value failed its match, in grammar order.
     mismatched: Vec<(String, Value)>,
 }
@@ -342,7 +345,7 @@ impl ResultSet {
         }
     }
 
-    pub(super) fn evidence(&self, grammar: &Value) -> Value {
+    pub(in crate::policy) fn evidence(&self, grammar: &Value) -> Value {
         let missing: Vec<_> = names(grammar, "require_all")
             .filter(|name| !self.records.iter().any(|r| r.name == *name))
             .collect();
@@ -383,7 +386,7 @@ fn expected_values(predicate: &Value) -> Option<Value> {
     (members.len() <= 8).then(|| Value::Array(members.clone()))
 }
 
-pub(super) fn matches(
+pub(in crate::policy) fn matches(
     value: &Value,
     args: &[String],
     patterns: &dyn Provider,

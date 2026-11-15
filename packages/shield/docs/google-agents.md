@@ -20,9 +20,10 @@ Gemini stores hooks and MCP in `.gemini/settings.json`. Antigravity uses
 entries and refuses changes to owned entries that you edited manually. Check
 the result with `shield doctor`. Remove an integration with
 `shield mcp setup --remove --agent gemini` or the corresponding `agy` command.
-In a Box project, `shield mcp setup --agent box` publishes a shared definition
-and private binary pin. With the matching Box build, `box config sync --adopt`
-can take over existing identical Google registrations. Box publishes their hooks
+In a Hub or Box project, `shield mcp setup --agent hub` or `--agent box`
+writes a shared definition and private binary pin in that host's folder. With
+the matching build, `hub setup --adopt` or `box config sync --adopt` can take
+over existing identical Google registrations. The host publishes their hooks
 and MCP entries; native per-tool approvals in this definition apply to Claude
 and Codex. Google clients retain their native permissions; in-session policy
 confirmation has the limitations described below.
@@ -94,7 +95,7 @@ server entries and settings.
 | Policy confirmation | Form adapter implemented; native 0.67.0 lacks forms | Form adapter implemented; native 1.5.1 cancels forms |
 | Skills and current-session outputs | Editable skills; read-only session outputs | Editable skills; read-only session outputs |
 | Session grant protocol | Shared implementation and transport fixtures | Shared implementation and transport fixtures |
-| Box-managed publication | Implemented; ownership fixtures | Implemented; ownership fixtures |
+| Hub- or Box-managed publication | Implemented; ownership fixtures | Implemented; ownership fixtures |
 | Linux/Windows native acceptance | Not established | Not established |
 
 ## Skill folders

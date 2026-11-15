@@ -147,7 +147,7 @@ mod tests {
             );
         }
         assert!(
-            serde_json::from_value::<crate::policy::normalized::Context>(
+            serde_json::from_value::<crate::policy::resolution::normalized::Context>(
                 json!({"cwd":project,"environment":null,"working_files":{"read":scope.read}})
             )
             .is_err()

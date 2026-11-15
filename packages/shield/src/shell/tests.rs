@@ -987,13 +987,13 @@ fn powershell_native_preview_uses_policy_without_posix_reinterpretation() {
         assert_eq!(result["coverage"], coverage, "{source}: {result}");
         let normalized = evaluator
             .evaluate_normalized(
-                &crate::policy::normalized::Input::Shell {
+                &crate::policy::resolution::normalized::Input::Shell {
                     source: source.into(),
                     dialect: "powershell".into(),
                     dialect_version: None,
                     original_input: json!({"command":source}),
                 },
-                &crate::policy::normalized::Context {
+                &crate::policy::resolution::normalized::Context {
                     cwd: crate::test_support::absolute("/acme").into_owned(),
                     environment: None,
                     working_files: None,

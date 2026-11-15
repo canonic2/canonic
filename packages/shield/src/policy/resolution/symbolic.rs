@@ -1,7 +1,7 @@
 //! Comparison-only effect overapproximation through the ordinary authority resolver.
 
-use super::{CustomRules, Decision, Error, Knowledge, Pack, Profile, Request};
 use crate::effects::{Effect, Hints};
+use crate::policy::{CustomRules, Decision, Error, Knowledge, Pack, Profile, Request};
 use std::collections::BTreeSet;
 
 pub(crate) fn effects(packs: &[(&Pack, Profile)], customs: &[&CustomRules]) -> Vec<Effect> {
@@ -12,7 +12,7 @@ pub(crate) fn effects(packs: &[(&Pack, Profile)], customs: &[&CustomRules]) -> V
                 .rules
                 .iter()
                 .filter_map(|rule| rule.matcher.as_ref())
-                .flat_map(super::model::Matcher::effects)
+                .flat_map(crate::policy::model::Matcher::effects)
         })
         .chain(customs.iter().flat_map(|custom| {
             custom
@@ -20,7 +20,7 @@ pub(crate) fn effects(packs: &[(&Pack, Profile)], customs: &[&CustomRules]) -> V
                 .rules
                 .iter()
                 .filter_map(|rule| rule.matcher.as_ref())
-                .flat_map(super::model::Matcher::effects)
+                .flat_map(crate::policy::model::Matcher::effects)
         }))
         .copied()
         .collect::<BTreeSet<_>>()
@@ -37,7 +37,7 @@ pub(crate) fn decision(
 ) -> Result<Decision, Error> {
     request.validate()?;
     let hints = Hints::symbolic(request, effects);
-    Ok(super::evaluate_evidence(
+    Ok(crate::policy::evaluate_evidence(
         packs,
         customs,
         request,

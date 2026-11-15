@@ -37,13 +37,13 @@ fn historical_display_reports_unsupported_without_changing_retained_runtime_supp
     let source = document(&[row("inspect", "exact", &["read"], "allow")]).to_string();
     assert!(PreparedPack::from_retained_yaml(&source).is_ok());
     assert!(
-        super::super::inspect_pack_rule(&source, "inspect")
+        crate::policy::inspect_pack_rule(&source, "inspect")
             .unwrap_err()
             .to_string()
             .contains("historical pack display")
     );
     assert!(
-        super::super::inspect_resolution(&source, &super::super::Binding::default())
+        crate::policy::inspect_resolution(&source, &crate::policy::Binding::default())
             .unwrap_err()
             .to_string()
             .contains("historical pack display")
@@ -51,7 +51,7 @@ fn historical_display_reports_unsupported_without_changing_retained_runtime_supp
     let custom = json!({"schema_version":1,"rules":[{"id":"inspect","scope":"project","decision":"allow","matcher":{"executable":"acme","arguments":{"kind":"exact","values":["read"]}},"reason":"Inspect Acme"}]}).to_string();
     assert!(super::custom(&custom).is_ok());
     assert!(
-        super::super::inspect_retained_custom(&custom)
+        crate::policy::inspect_retained_custom(&custom)
             .unwrap_err()
             .to_string()
             .contains("historical custom display")
@@ -63,7 +63,7 @@ fn retained_matcher_sources_keep_exact_digest_and_acquisition_stays_strict() {
     let source = document(&[row("read", "exact", &["read", "a b"], "allow")]).to_string();
     assert!(PreparedPack::from_yaml(&source).is_err());
     let pack = PreparedPack::from_retained_yaml(&source).unwrap();
-    assert_eq!(pack.digest, super::super::fingerprint(source.as_bytes()));
+    assert_eq!(pack.digest, crate::policy::fingerprint(source.as_bytes()));
     for (args, decision) in [
         (vec!["read", "a b"], Decision::Allow),
         (vec!["read", "a", "b"], Decision::Ask),
@@ -99,7 +99,7 @@ fn historical_custom_context_and_specificity_survive_translation() {
     narrow["matcher"]["project"] = json!(request(&[]).project);
     let source = json!({"schema_version":1,"rules":[broad,narrow]}).to_string();
     let rules = CustomRules::from_retained_yaml(&source).unwrap();
-    assert_eq!(rules.digest, super::super::fingerprint(source.as_bytes()));
+    assert_eq!(rules.digest, crate::policy::fingerprint(source.as_bytes()));
     let req = request(&["read"]);
     assert_eq!(
         evaluate(&[], Some(&rules), Profile::Recommended, &req)
@@ -193,7 +193,7 @@ fn reviewed_normalization_preserves_context_and_requires_explicit_capability() {
             "project":request(&[]).project}
     }]})
     .to_string();
-    let normalized = super::super::normalize_retained_custom(&source).unwrap();
+    let normalized = crate::policy::normalize_retained_custom(&source).unwrap();
     assert!(
         normalized["capabilities"]
             .as_array()
@@ -242,7 +242,7 @@ fn original_normalized_project_rules_keep_nullable_fields_and_source_identity() 
     }]})
     .to_string();
     let rules = CustomRules::from_retained_yaml(&source).unwrap();
-    assert_eq!(rules.digest, super::super::fingerprint(source.as_bytes()));
+    assert_eq!(rules.digest, crate::policy::fingerprint(source.as_bytes()));
     assert_eq!(
         evaluate(
             &[],
@@ -265,7 +265,7 @@ fn original_normalized_project_rules_keep_nullable_fields_and_source_identity() 
         .decision,
         Decision::Ask
     );
-    let normalized = super::super::normalize_retained_custom(&source).unwrap();
+    let normalized = crate::policy::normalize_retained_custom(&source).unwrap();
     assert!(
         normalized["capabilities"]
             .as_array()

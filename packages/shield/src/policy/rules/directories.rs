@@ -2,7 +2,7 @@
 //! folder a tool works in, such as `npm --prefix DIR` or `git -C DIR`. A request
 //! using one is matched as the same command without it, run from that folder,
 //! so one rule covers every way the tool is told where to work.
-use super::{Error, Request, portability::lexical};
+use crate::policy::{Error, Request, rules::portability::lexical};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -262,7 +262,7 @@ impl std::fmt::Display for Source<'_> {
 }
 
 /// A name shortened for a message, keeping at most 64 characters.
-pub(super) fn bounded(text: &str) -> String {
+pub(in crate::policy) fn bounded(text: &str) -> String {
     const LIMIT: usize = 64;
     if text.chars().count() <= LIMIT {
         text.to_owned()
@@ -361,8 +361,8 @@ pub(crate) fn join(
 /// # Errors
 /// Rejects conflicting declarations.
 pub(crate) fn selected(
-    packs: &[(&super::Pack, super::Profile)],
-    customs: &[&super::CustomRules],
+    packs: &[(&crate::policy::Pack, crate::policy::Profile)],
+    customs: &[&crate::policy::CustomRules],
 ) -> Result<Vec<DirectoryOption>, Error> {
     combine(
         packs

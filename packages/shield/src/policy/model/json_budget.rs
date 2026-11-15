@@ -3,7 +3,7 @@
 use super::Error;
 use serde_json::Value;
 
-pub(super) fn check(value: &Value) -> Result<(), Error> {
+pub(in crate::policy) fn check(value: &Value) -> Result<(), Error> {
     // YAML stream/document start and end contribute four events.
     visit(value, 0, &mut 0, &mut 4)
 }

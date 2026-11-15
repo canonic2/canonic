@@ -191,10 +191,13 @@ fn connected(value: &Value) -> String {
         .filter(|row| selected(row["agent"].as_str().unwrap_or_default()))
         .map(|row| crate::agents::label(row["agent"].as_str().unwrap_or("an agent")))
         .collect();
-    let boxed = coverage["box_integration"].is_object() && selected("box");
-    let mut output = if agents.is_empty() && !boxed && targets.is_some() {
+    let host = coverage["host_integration"]["agent"]
+        .as_str()
+        .and_then(crate::review::integrations::host_definition::find)
+        .filter(|host| selected(host.id));
+    let mut output = if agents.is_empty() && host.is_none() && targets.is_some() {
         "Selected agent integrations removed.\n".to_owned()
-    } else if agents.is_empty() && !boxed {
+    } else if agents.is_empty() && host.is_none() {
         "No agent is connected. Connect one with shield mcp setup.\n".to_owned()
     } else if agents.is_empty() {
         String::new()
@@ -204,8 +207,9 @@ fn connected(value: &Value) -> String {
             agents.join(" and ")
         )
     };
-    if boxed {
-        output.push_str("Shield's Box MCP definition is in .box/mcp/shield.yml. Run box setup (first time) or box config sync so Box publishes it to your agents.\n");
+    if let Some(host) = host {
+        output.push_str(host.next_step);
+        output.push('\n');
     }
     if value["repair_needed"] == true || value.get("setup_error").is_some() {
         output.push_str("Something still needs repair: run shield doctor.\n");
@@ -232,8 +236,11 @@ fn integrations(output: &mut String, value: &Value) {
         let _ = writeln!(output, "  Broader review: {reason}");
     }
     for agent in value["agents"].as_array().into_iter().flatten() {
-        if agent["agent"] == crate::review::integrations::box_definition::ID {
-            box_row(output, agent, &value["ask_fallbacks"]);
+        if let Some(host) = agent["agent"]
+            .as_str()
+            .and_then(crate::review::integrations::host_definition::find)
+        {
+            host_row(output, host, agent, &value["ask_fallbacks"]);
             continue;
         }
         let hooks: Vec<_> = agent["hooks"]
@@ -300,16 +307,22 @@ fn integrations(output: &mut String, value: &Value) {
             "After confirming, restart each agent, trust this project, review its hooks and approve the MCP server.\n"
         );
     }
-    box_steps(output, &value["box"]);
+    host_steps(output, &value["host"]);
 }
 
-/// The Box line: its change and the Ask fallbacks it carries for its agents.
-fn box_row(output: &mut String, agent: &Value, fallbacks: &Value) {
+/// The Hub or Box line: its change and the Ask fallbacks it carries for its agents.
+fn host_row(
+    output: &mut String,
+    host: &crate::review::integrations::host_definition::Host,
+    agent: &Value,
+    fallbacks: &Value,
+) {
     let _ = write!(
         output,
-        "  {:<12}{} · Shield MCP server, tool approvals and hooks for Box to publish",
-        crate::review::integrations::box_definition::LABEL,
+        "  {:<12}{} · Shield MCP server, tool approvals and hooks for {} to publish",
+        host.label,
         label(&agent["change"]),
+        host.label,
     );
     if agent["change"] != "removed" {
         for (id, setting) in fallbacks.as_object().into_iter().flatten() {
@@ -326,15 +339,27 @@ fn box_row(output: &mut String, agent: &Value, fallbacks: &Value) {
     output.push('\n');
 }
 
-/// What Box still has to do with the definition, and how the direct
-/// installations relate to the entries Box publishes.
-fn box_steps(output: &mut String, value: &Value) {
-    if value.is_null() {
+/// What Hub or Box still has to do with the definition, and how the direct
+/// installations relate to the entries it publishes.
+fn host_steps(output: &mut String, value: &Value) {
+    let Some(host) = value["agent"]
+        .as_str()
+        .and_then(crate::review::integrations::host_definition::find)
+    else {
         return;
-    }
+    };
+    let (name, adopt) = (
+        host.label,
+        if host == &crate::review::integrations::host_definition::HUB {
+            "hub setup --adopt"
+        } else {
+            "box config sync --adopt"
+        },
+    );
     let _ = writeln!(
         output,
-        "Then run box setup (first time) or box config sync so Box publishes Shield to the agents each developer chose."
+        "Then run {} so {name} publishes Shield to the agents each developer chose.",
+        host.publish
     );
     let handed: Vec<_> = value["handed_over"]
         .as_array()
@@ -346,14 +371,14 @@ fn box_steps(output: &mut String, value: &Value) {
     if !handed.is_empty() {
         let _ = writeln!(
             output,
-            "Shield hands {} over to Box: it stops managing those installations and leaves their hooks, MCP entries and settings in place. Run box config sync --adopt so Box takes them over.",
+            "Shield hands {} over to {name}: it stops managing those installations and leaves their hooks, MCP entries and settings in place. Run {adopt} so {name} takes them over.",
             handed.join(" and ")
         );
     }
     if value["direct_installations"] == true {
         let _ = writeln!(
             output,
-            "Shield's direct agent installations stay as they are. Box adopts identical existing entries with box config sync --adopt; removing a direct installation afterwards with shield mcp setup --remove also deletes the entries Box then uses."
+            "Shield's direct agent installations stay as they are. {name} adopts identical existing entries with {adopt}; removing a direct installation afterwards with shield mcp setup --remove also deletes the entries {name} then uses."
         );
     }
     output.push('\n');
@@ -422,13 +447,13 @@ fn file_change(output: &mut String, file: &Value, width: usize) {
         (Some(_), Some(_)) => "updated",
     };
     let path = file["path"].as_str().unwrap_or_default();
-    let boxed = if path == crate::review::integrations::box_definition::PATH {
-        Some("Box MCP definition".to_owned())
-    } else if path == crate::review::integrations::box_definition::LOCAL_PATH {
-        Some("Box local Shield path".to_owned())
-    } else {
-        None
-    };
+    let boxed = crate::review::integrations::host_definition::owning(path).map(|host| {
+        if path == host.path {
+            format!("{} MCP definition", host.label)
+        } else {
+            format!("{} local Shield path", host.label)
+        }
+    });
     let holds = boxed
         .or_else(|| {
             crate::agents::ADAPTERS.iter().find_map(|a| {
@@ -471,7 +496,7 @@ mod tests {
     #[test]
     fn configured_receipt_scopes_restart_and_box_instructions() {
         let mut receipt = json!({"maintenance_scope":{"targets":["claude"]},
-            "coverage":{"installed_integrations":[{"agent":"claude"},{"agent":"codex"}],"box_integration":{"status":"installed"}}});
+            "coverage":{"installed_integrations":[{"agent":"claude"},{"agent":"codex"}],"host_integration":{"agent":"box","status":"installed"}}});
         let shown = configured(&receipt);
         assert!(shown.contains("Connected Claude Code"));
         assert!(!shown.contains("Codex") && !shown.contains("box config sync"));
@@ -509,30 +534,39 @@ mod tests {
     }
 
     #[test]
-    fn box_reviews_and_receipts_name_the_box_publication_step() {
-        let plan = json!({"operation":"set up agent integrations","binary":"/opt/acme/shield",
-        "agents":[{"agent":"box","change":"added","mcp_server":"shield"}],
-        "box":{"publish":"box setup (first time) or box config sync","direct_installations":false},
-        "files":[{"path":".mcp.json","before":null,"after":""},
-            {"path":".box/mcp/shield.yml","before":null,"after":"schema_version: 1\n"}]});
-        let text = review(&plan).expect("integration review");
-        assert!(
-            text.contains("Box         added · Shield MCP server"),
-            "{text}"
-        );
-        assert!(
-            text.contains(".box/mcp/shield.yml  created    Box MCP definition"),
-            "{text}"
-        );
-        assert!(
-            text.contains("box setup (first time) or box config sync"),
-            "{text}"
-        );
-        assert!(!text.contains("--adopt"), "{text}");
-        let receipt = configured(&json!({"coverage":{"installed_integrations":[],
-            "box_integration":{"agent":"box","status":"installed"}}}));
-        assert!(!receipt.contains("No agent is connected"), "{receipt}");
-        assert!(receipt.contains("box config sync"), "{receipt}");
+    fn host_reviews_and_receipts_name_the_host_publication_step() {
+        for (id, label, publish) in [
+            ("hub", "Hub", "hub setup"),
+            ("box", "Box", "box setup (first time) or box config sync"),
+        ] {
+            let path = format!(".{id}/mcp/shield.yml");
+            let plan = json!({"operation":"set up agent integrations","binary":"/opt/acme/shield",
+            "agents":[{"agent":id,"change":"added","mcp_server":"shield"}],
+            "host":{"agent":id,"publish":publish,"direct_installations":false},
+            "files":[{"path":".mcp.json","before":null,"after":""},
+                {"path":path,"before":null,"after":"schema_version: 1\n"}]});
+            let text = review(&plan).expect("integration review");
+            assert!(
+                text.contains(&format!("{label:<12}added · Shield MCP server")),
+                "{text}"
+            );
+            assert!(
+                text.contains(&format!("{path}  created    {label} MCP definition")),
+                "{text}"
+            );
+            assert!(
+                text.contains(&format!("Then run {publish} so {label} publishes")),
+                "{text}"
+            );
+            assert!(!text.contains("--adopt"), "{text}");
+            let receipt = configured(&json!({"coverage":{"installed_integrations":[],
+                "host_integration":{"agent":id,"status":"installed"}}}));
+            assert!(!receipt.contains("No agent is connected"), "{receipt}");
+            assert!(
+                receipt.contains(&format!("Run {publish} so {label}")),
+                "{receipt}"
+            );
+        }
     }
 
     #[test]

@@ -1114,7 +1114,7 @@ fn ripgrep_unresolved_links_are_not_reported_as_missing_operands() {
     symlink("absent", root.path().join("dangling")).unwrap();
     symlink("loop", root.path().join("loop")).unwrap();
     for operand in ["dangling", "dangling/child", "loop"] {
-        let input = crate::policy::normalized::Input::Argv {
+        let input = crate::policy::resolution::normalized::Input::Argv {
             executable: "rg".into(),
             arguments: vec!["--files".into(), operand.into()],
             original_input: json!({}),
@@ -1122,7 +1122,8 @@ fn ripgrep_unresolved_links_are_not_reported_as_missing_operands() {
         let path = root.path().to_str().unwrap();
         let observer = crate::location::Observer::new(&input, path, path, None);
         let evidence =
-            crate::policy::resources::Resources::predicate_evidence(&observer, "targets").unwrap();
+            crate::policy::rules::resources::Resources::predicate_evidence(&observer, "targets")
+                .unwrap();
         assert_eq!(
             evidence["resource"]["code"], "unresolved",
             "{operand}: {evidence}"

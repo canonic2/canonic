@@ -2,7 +2,7 @@
 use crate::{
     policy::{
         self,
-        normalized::{Context as RequestContext, Input},
+        resolution::normalized::{Context as RequestContext, Input},
     },
     review::{
         Checkpoint, Context, Error,
@@ -443,7 +443,7 @@ struct Explanation<'a> {
     reason: &'static str,
     matches: &'a [policy::Match],
     requirement_checks: &'a [policy::rules::Check],
-    guidance: &'a [policy::diagnostics::GuidanceRecord],
+    guidance: &'a [policy::resolution::diagnostics::GuidanceRecord],
 }
 #[derive(Serialize)]
 struct Evaluation<'a> {

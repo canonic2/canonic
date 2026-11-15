@@ -3,7 +3,7 @@ use crate::{
     configuration::{Candidate, Evaluator},
     policy::{
         Scope,
-        normalized::{Context, Input},
+        resolution::normalized::{Context, Input},
     },
 };
 use serde_json::json;

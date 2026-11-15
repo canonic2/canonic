@@ -107,7 +107,7 @@ struct Case {
     name: String,
     profile: policy::Profile,
     argv: Option<Vec<String>>,
-    input: Option<policy::normalized::Input>,
+    input: Option<policy::resolution::normalized::Input>,
     expected: policy::Decision,
     #[serde(default)]
     variables: std::collections::BTreeMap<String, Value>,
@@ -225,7 +225,7 @@ fn fixture_evaluation(
             Ok((decision, value))
         }
         (None, Some(input)) => {
-            let context = policy::normalized::Context {
+            let context = policy::resolution::normalized::Context {
                 working_files: None,
                 cwd: cwd.into(),
                 environment: Some(std::collections::BTreeMap::new()),

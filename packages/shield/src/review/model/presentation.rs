@@ -1,7 +1,7 @@
 //! Bounded display-only approval presentation captured while the proposal is
 //! already prepared, kept inline in the proposal. Application always checks
 //! the proposal's own files; a missing or mismatched presentation is rebuilt.
-use super::{Context, Error, Proposal, State, approval};
+use super::{Error, Proposal, State, approval};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -70,11 +70,7 @@ pub(in crate::review) fn digest(presentation: &Value) -> Value {
 
 /// Missing/corrupt/future/unbound presentations supply no apply arguments.
 /// This never prepares policy or substitutes for actual validation.
-pub(in crate::review) fn read(
-    _context: &Context,
-    state: &State,
-    row: &Proposal,
-) -> Option<(Value, String)> {
+pub(in crate::review) fn read(state: &State, row: &Proposal) -> Option<(Value, String)> {
     let stored = &row.presentation;
     if stored["kind"] != KIND || !crate::json::fits(&stored["value"], LIMIT) {
         return None;

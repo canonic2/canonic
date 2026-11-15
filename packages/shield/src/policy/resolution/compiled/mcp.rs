@@ -92,7 +92,7 @@ impl Plan {
             resolved.connection_digest =
                 Some(crate::json::fingerprint(transport).map_err(|_| Error::Syntax)?);
         }
-        let memo = crate::policy::patterns::Memo::new(self, &|| Ok(()));
+        let memo = crate::policy::rules::patterns::Memo::new(self, &|| Ok(()));
         for (owner, pack) in self.metadata.packs.iter().enumerate() {
             for (name, integration) in &pack.document.mcp_integrations {
                 for (id, connection, transport) in &transports {

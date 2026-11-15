@@ -119,7 +119,7 @@ impl Prepared {
                 "agents":previous.as_ref().into_iter().flat_map(|registered|registered.agents.keys()).filter(|agent|after.is_none_or(|registered|!registered.agents.contains_key(*agent))).collect::<Vec<_>>(),
                 "private_launch_agents":previous.as_ref().into_iter().flat_map(|registered|registered.connections.keys()).filter(|agent|after.is_none_or(|registered|!registered.connections.contains_key(*agent))).collect::<Vec<_>>(),
                 "legacy_interceptor":previous.as_ref().is_some_and(|registered|registered.interceptor.is_some()) && after.is_none_or(|registered|registered.interceptor.is_none()),
-                "box":previous.as_ref().is_some_and(|registered|registered.box_definition.is_some()) && after.is_none_or(|registered|registered.box_definition.is_none())
+                "host":previous.as_ref().and_then(|registered|registered.definition.as_ref()).filter(|_|after.is_none_or(|registered|registered.definition.is_none())).map(|definition|definition.host().id)
             });
         }
         review["effect"] = if self.plan.is_none() {
@@ -364,14 +364,15 @@ fn drop_affected(registration: &mut Option<Registration>, paths: &[String]) {
     if paths.iter().any(|path| legacy::asset_path(path)) {
         registered.interceptor = None;
     }
-    if paths.iter().any(|path| {
-        [
-            super::box_definition::PATH,
-            super::box_definition::LOCAL_PATH,
-        ]
-        .contains(&path.as_str())
-    }) {
-        registered.box_definition = None;
+    if let Some(host) = registered
+        .definition
+        .as_ref()
+        .map(super::host_definition::Definition::host)
+        && paths
+            .iter()
+            .any(|path| [host.path, host.local_path].contains(&path.as_str()))
+    {
+        registered.definition = None;
         let retained: BTreeSet<String> = registered
             .connections
             .keys()
@@ -385,7 +386,7 @@ fn drop_affected(registration: &mut Option<Registration>, paths: &[String]) {
     }
     if registered.agents.is_empty()
         && registered.interceptor.is_none()
-        && registered.box_definition.is_none()
+        && registered.definition.is_none()
     {
         *registration = None;
     }

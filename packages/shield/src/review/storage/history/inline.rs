@@ -63,21 +63,18 @@ pub(super) fn receipt(name: &str) -> bool {
 
 /// Conversion already owns these exact bytes. Borrow the original JSON span,
 /// including its whitespace, rather than measuring a smaller re-encoding.
-pub(in crate::review::storage) fn retain(store: &Store, bytes: &[u8], kind: &str) {
+pub(in crate::review::storage) fn retain(store: &Store, bytes: &[u8]) {
     #[derive(Deserialize)]
     struct Fields<'a> {
         #[serde(borrow)]
         events: Option<&'a serde_json::value::RawValue>,
-    }
-    if !matches!(kind, "upgrade" | "bootstrap") {
-        return;
     }
     let inline_bytes = serde_json::from_slice::<Fields<'_>>(bytes)
         .map_or(bytes.len() as u64, |fields| {
             fields.events.map_or(0, |events| events.get().len()) as u64
         });
     let source_digest = crate::policy::fingerprint(bytes);
-    let name = format!("{kind}-{source_digest}.json");
+    let name = format!("upgrade-{source_digest}.json");
     let Some(file_version) = objects::read_file(&store.directory.join(&name))
         .ok()
         .and_then(|file| version(&file).ok().flatten())
@@ -100,13 +97,10 @@ pub(in crate::review::storage) fn retain(store: &Store, bytes: &[u8], kind: &str
     );
 }
 
-pub(in crate::review::storage) fn remove(store: &Store, source_digest: &str, kind: &str) {
-    if !matches!(kind, "upgrade" | "bootstrap") {
-        return;
-    }
+pub(in crate::review::storage) fn remove(store: &Store, source_digest: &str) {
     let path = store
         .directory
-        .join(receipt_name(&format!("{kind}-{source_digest}.json")));
+        .join(receipt_name(&format!("upgrade-{source_digest}.json")));
     if private_files::read(&path, RECEIPT_BYTES).is_ok() {
         let _ = std::fs::remove_file(path);
     }
@@ -160,7 +154,7 @@ mod tests {
             charge(&store, &path, &name).unwrap(),
             Some(bytes.len() as u64)
         );
-        retain(&store, bytes, "upgrade");
+        retain(&store, bytes);
         assert_eq!(
             charge(&store, &path, &name).unwrap(),
             Some(br#"[  { "kind" : "decision" }  ]"#.len() as u64)
@@ -172,7 +166,7 @@ mod tests {
             Some(bytes.len() as u64)
         );
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
-        retain(&store, bytes, "upgrade");
+        retain(&store, bytes);
         let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
         let mut edited = bytes.to_vec();
         let index = edited.iter().position(|byte| *byte == b'd').unwrap();

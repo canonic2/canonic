@@ -10,10 +10,14 @@ fn agent_name(agent: &Value) -> String {
         .map_or_else(|| label(agent), |name| crate::agents::label(name).into())
 }
 
-/// Each connected integration, Box first, with any repair or fallback note.
+/// Each connected integration, Hub or Box first, with any repair or fallback note.
 fn integrations(coverage: &Value) -> Vec<String> {
-    let boxed = coverage["box_integration"].as_object().map(|row| {
-        let name = crate::review::integrations::box_definition::LABEL;
+    let boxed = coverage["host_integration"].as_object().map(|row| {
+        let name = row
+            .get("agent")
+            .and_then(Value::as_str)
+            .and_then(crate::review::integrations::host_definition::find)
+            .map_or("Box", |host| host.label);
         if row.get("status").is_some_and(|s| s == "installed") {
             name.to_owned()
         } else {
@@ -196,21 +200,6 @@ fn diagnostics(value: &Value, connected: bool) -> String {
             "Problem: {}; run {}.",
             label(&check["detail"]),
             label(&check["repair"])
-        );
-    }
-    let cache = &value["compiled_cache"];
-    if !cache.is_null() && cache["presence"] != "present" {
-        let _ = writeln!(
-            output,
-            "Compiled policy: {}; run {}.",
-            label(&cache["presence"]),
-            label(&cache["repair_route"])
-        );
-    } else if !cache.is_null() && cache["compatibility"] == "rebuild-required" {
-        let _ = writeln!(
-            output,
-            "Compiled policy: needs rebuilding for this Shield version and policy; run {}.",
-            label(&cache["repair_route"])
         );
     }
     if coverage["operator_protection"].is_string() {
@@ -683,7 +672,7 @@ mod tests {
     }
 
     fn chain_history_fixture() -> (assert_fs::TempDir, crate::review::Context, Value) {
-        use crate::{configuration, policy::normalized, review};
+        use crate::{configuration, policy::resolution::normalized, review};
         use std::collections::BTreeMap;
 
         let rules = json!({"schema_version":1,"kind":"custom",

@@ -32,7 +32,7 @@ For an existing project, choose a task below or go to
 - [Check GitHub GraphQL permissions](local-registry.md#github-graphql-reads):
   distinguish engine analysis support from installed pack permissions.
 - [Connect Claude and Codex](claude-project.md): load hooks and MCP directly or
-  through Box, understand request coverage, and check the limits of native
+  through Hub or Box, understand request coverage, and check the limits of native
   interception.
 - [Connect Gemini and Antigravity](google-agents.md): set up native integrations,
   understand confirmation and session access, and check verification limits.

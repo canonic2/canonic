@@ -2,6 +2,7 @@
 
 use super::*;
 use proptest::prelude::*;
+use resolution::partition;
 use serde_json::{Value, json};
 
 #[test]
@@ -877,7 +878,7 @@ proptest! {
         changes in prop::collection::vec((0u8..3, 0u8..3, 0u8..3), 1..20),
         reverse in any::<bool>(),
     ) {
-        use super::profile_comparison::{self, Bound};
+        use super::dependencies::profile_comparison::{self, Bound};
         let decisions = ["allow", "ask", "deny"];
         let rules = changes.iter().enumerate().map(|(index, (from,to,shape))| {
             let (kind, values): (&str, &[&str]) = match shape {

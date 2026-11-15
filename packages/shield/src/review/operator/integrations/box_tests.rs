@@ -4,6 +4,7 @@
 #![cfg(not(windows))]
 use super::tests::fixture;
 use super::*;
+use crate::review::integrations::host_definition::{BOX, HUB};
 use crate::review::integrations::{fallback, status};
 
 fn meta(context: &Context) -> Value {
@@ -34,11 +35,11 @@ fn box_project(root: &Path) {
 }
 
 fn definition(root: &Path) -> Option<String> {
-    fs::read_to_string(root.join(box_definition::PATH)).ok()
+    fs::read_to_string(root.join(BOX.path)).ok()
 }
 
 fn local(root: &Path) -> Option<String> {
-    fs::read_to_string(root.join(box_definition::LOCAL_PATH)).ok()
+    fs::read_to_string(root.join(BOX.local_path)).ok()
 }
 
 /// Prepare and apply `choice` like a confirmed `shield mcp setup`.
@@ -62,14 +63,11 @@ fn box_portability_copy_keeps_its_registration_and_local_pin() {
     let mut owned = plan.desired.unwrap();
     owned.binary = Path::new("/acme/previous-install/shield").to_path_buf();
     let previous =
-        box_definition::render(&owned.binary, &crate::review::mcp::default_approved()).unwrap();
-    fs::write(root.path().join(box_definition::PATH), &previous.shared).unwrap();
-    fs::write(
-        root.path().join(box_definition::LOCAL_PATH),
-        &previous.local,
-    )
-    .unwrap();
-    owned.box_definition = Some(previous.clone());
+        host_definition::render(&BOX, &owned.binary, &crate::review::mcp::default_approved())
+            .unwrap();
+    fs::write(root.path().join(BOX.path), &previous.shared).unwrap();
+    fs::write(root.path().join(BOX.local_path), &previous.local).unwrap();
+    owned.definition = Some(previous.clone());
     crate::review::update_operator_fixture(&context, |operator| {
         operator["integration"] = json!(owned);
         operator["portable_registration_epoch"] = json!(context.project_id);
@@ -83,7 +81,7 @@ fn box_portability_copy_keeps_its_registration_and_local_pin() {
     crate::test_support::copy_fixture_directory(root.path(), copied.path());
     let child = crate::review::open(copied.path()).unwrap();
     let current = registration(&meta(&child)).unwrap().unwrap();
-    assert!(current.box_definition.is_some());
+    assert!(current.definition.is_some());
     assert!(current.covers("codex"));
     assert!(current.covers("claude"));
     assert_eq!(definition(copied.path()).unwrap(), previous.shared);
@@ -108,7 +106,7 @@ fn box_portability_copy_keeps_its_registration_and_local_pin() {
     let edited = assert_fs::TempDir::new().unwrap();
     crate::test_support::copy_fixture_directory(root.path(), edited.path());
     let text = "schema_version: 1\nconnection:\n  command: acme-user-connector\n";
-    fs::write(edited.path().join(box_definition::LOCAL_PATH), text).unwrap();
+    fs::write(edited.path().join(BOX.local_path), text).unwrap();
     crate::review::open(edited.path()).unwrap();
     assert_eq!(local(edited.path()).unwrap(), text);
     assert_eq!(definition(edited.path()).unwrap(), previous.shared);
@@ -158,7 +156,7 @@ fn box_published_hooks_with_the_pinned_binary_are_installed() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|d| d.as_str().is_some_and(|d| d.starts_with("Box-published"))),
+            .any(|d| d.as_str().is_some_and(|d| d.contains("Box-published"))),
         "{report}"
     );
 }
@@ -175,7 +173,7 @@ fn a_fresh_worktree_adopts_its_committed_box_definition() {
     // own review state records no registration and Box's private layer is empty.
     let worktree = assert_fs::TempDir::new().unwrap();
     crate::test_support::copy_fixture_directory(root.path(), worktree.path());
-    fs::remove_file(worktree.path().join(box_definition::LOCAL_PATH)).unwrap();
+    fs::remove_file(worktree.path().join(BOX.local_path)).unwrap();
     let copied = crate::review::open(worktree.path()).unwrap();
     crate::review::update_operator_fixture(&copied, |operator| {
         operator["integration"] = Value::Null;
@@ -186,7 +184,7 @@ fn a_fresh_worktree_adopts_its_committed_box_definition() {
     let adopted = crate::review::open(worktree.path()).unwrap();
     let current = registration(&meta(&adopted)).unwrap().unwrap();
     assert!(current.covers("claude") && current.covers("codex"));
-    assert!(current.box_definition == registered.box_definition);
+    assert!(current.definition == registered.definition);
     assert_eq!(definition(worktree.path()).unwrap(), shared);
     assert_eq!(local(worktree.path()).unwrap(), pin);
     assert_eq!(
@@ -194,7 +192,10 @@ fn a_fresh_worktree_adopts_its_committed_box_definition() {
         fallback_in(&context, "codex").unwrap()
     );
     let report = coverage(&adopted);
-    assert_eq!(report["box_integration"]["status"], "installed", "{report}");
+    assert_eq!(
+        report["host_integration"]["status"], "installed",
+        "{report}"
+    );
     assert_eq!(report["repair_needed"], false, "{report}");
 
     // An edited committed definition is not adopted.
@@ -206,7 +207,7 @@ fn a_fresh_worktree_adopts_its_committed_box_definition() {
     })
     .unwrap();
     fs::write(
-        edited.path().join(box_definition::PATH),
+        edited.path().join(BOX.path),
         format!("{shared}# Acme edit\n"),
     )
     .unwrap();
@@ -231,7 +232,7 @@ fn a_fresh_worktree_adopts_its_committed_box_definition() {
         state
     );
     fs::write(
-        edited.path().join(box_definition::PATH),
+        edited.path().join(BOX.path),
         format!("{shared}# Another Acme edit\n"),
     )
     .unwrap();
@@ -241,11 +242,11 @@ fn a_fresh_worktree_adopts_its_committed_box_definition() {
 }
 
 #[test]
-fn box_is_listed_first_on_every_agent_page() {
-    let rows = workflow::rows("Acme box", "Acme agent");
-    assert_eq!(rows[0].0, "box");
-    assert_eq!(rows[0].1, "Box");
-    let rest: Vec<_> = rows[1..].iter().map(|row| row.0).collect();
+fn hub_and_box_are_listed_first_on_every_agent_page() {
+    let rows = workflow::rows(|_| "Acme host", "Acme agent");
+    assert_eq!((rows[0].0, rows[0].1), ("hub", "Hub"));
+    assert_eq!((rows[1].0, rows[1].1), ("box", "Box"));
+    let rest: Vec<_> = rows[2..].iter().map(|row| row.0).collect();
     let adapters: Vec<_> = agents::ADAPTERS.iter().map(|a| a.spec().id).collect();
     assert_eq!(rest, adapters);
 }
@@ -270,15 +271,18 @@ fn box_setup_restricts_an_unchanged_private_pin_left_readable() {
     let (root, context) = fixture();
     box_project(root.path());
     setup(&context, choice(&["box"])).unwrap();
-    let pin = root.path().join(box_definition::LOCAL_PATH);
+    let pin = root.path().join(BOX.local_path);
     let text = local(root.path()).unwrap();
     fs::set_permissions(&pin, fs::Permissions::from_mode(0o644)).unwrap();
-    assert_eq!(coverage(&context)["box_integration"]["status"], "changed");
+    assert_eq!(coverage(&context)["host_integration"]["status"], "changed");
     setup(&context, choice(&["box"])).unwrap();
     let mode = fs::metadata(&pin).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o600, "{mode:o}");
     assert_eq!(local(root.path()).unwrap(), text);
-    assert_eq!(coverage(&context)["box_integration"]["status"], "installed");
+    assert_eq!(
+        coverage(&context)["host_integration"]["status"],
+        "installed"
+    );
 }
 
 #[test]
@@ -290,7 +294,7 @@ fn box_definition_renders_the_hooks_and_server_shield_installs_directly() {
     assert!(registered.agents.is_empty());
     let text = definition(root.path()).unwrap();
     let pinned = local(root.path()).unwrap();
-    let owned = registered.box_definition.as_ref().unwrap();
+    let owned = registered.definition.as_ref().unwrap();
     assert_eq!((&owned.shared, &owned.local), (&text, &pinned));
     let written: Value = crate::policy::parse(&text).unwrap();
     let binary = registered.binary.to_str().unwrap();
@@ -310,7 +314,7 @@ fn box_definition_renders_the_hooks_and_server_shield_installs_directly() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        for path in [".box/local/mcp", box_definition::LOCAL_PATH] {
+        for path in [".box/local/mcp", BOX.local_path] {
             let mode = fs::metadata(root.path().join(path))
                 .unwrap()
                 .permissions()
@@ -336,7 +340,7 @@ fn box_definition_renders_the_hooks_and_server_shield_installs_directly() {
     assert!(decisions.values().any(|decision| decision == "ask"));
     matches_direct_installation(root.path(), &written, &allowed);
     let report = coverage(&context);
-    assert_eq!(report["box_integration"]["status"], "installed");
+    assert_eq!(report["host_integration"]["status"], "installed");
     assert_eq!(report["repair_needed"], false, "{report}");
 }
 
@@ -381,10 +385,7 @@ fn matches_direct_installation(root: &Path, written: &Value, allowed: &[String])
                 .replace("--project . ", "--project '.' ")
                 .replace("{agent}", spec.id)
                 .replace("{event}", event);
-            assert_eq!(
-                command,
-                native::hook_command(binary, root, spec.id, event).unwrap()
-            );
+            assert_eq!(command, native::hook_command(root, spec.id, event).unwrap());
             let mut handler = json!({"type":"command","command":command,"timeout":hook["timeout"]});
             if spec.id == "gemini" {
                 handler["timeout"] = json!(hook["timeout"].as_u64().unwrap() * 1000);
@@ -488,7 +489,7 @@ fn reset_tool_permissions_previews_current_defaults_and_preserves_saved_choices(
             .as_array()
             .unwrap()
             .iter()
-            .find(|file| file["path"] == box_definition::PATH)
+            .find(|file| file["path"] == BOX.path)
             .unwrap();
         let projected: Value = crate::policy::parse(file["after"].as_str().unwrap()).unwrap();
         for (tool, _) in crate::review::mcp::tool_summaries() {
@@ -519,7 +520,7 @@ fn box_dry_run_reviews_the_definition_without_writing() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|f| f["path"] == box_definition::PATH)
+        .find(|f| f["path"] == BOX.path)
         .unwrap();
     assert!(file["before"].is_null() && file["after"].is_string());
     assert!(
@@ -527,7 +528,7 @@ fn box_dry_run_reviews_the_definition_without_writing() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|f| f["path"] == box_definition::LOCAL_PATH)
+            .any(|f| f["path"] == BOX.local_path)
     );
     let text = super::super::presentation::review(&review);
     assert!(text.contains("box config sync"), "{text}");
@@ -563,14 +564,14 @@ fn box_removal_deletes_only_the_definition_shield_wrote() {
     assert!(root.path().join(".box/mcp/acme.yml").is_file());
     assert!(root.path().join(".box/local/mcp/acme.yml").is_file());
     let registered = registration(&meta(&context)).unwrap().unwrap();
-    assert!(registered.box_definition.is_none());
+    assert!(registered.definition.is_none());
     assert!(registered.agents.contains_key("claude"));
 
     // An edited file of the pair is never deleted, nor is its partner.
     // Selecting Claude again keeps its direct installation.
     setup(&context, choice(&["box", "claude"])).unwrap();
     let edited = "schema_version: 1\n# Acme edit\n";
-    fs::write(root.path().join(box_definition::LOCAL_PATH), edited).unwrap();
+    fs::write(root.path().join(BOX.local_path), edited).unwrap();
     let shared = definition(root.path()).unwrap();
     let refused = setup(&context, removal(&["box"]))
         .err()
@@ -581,7 +582,7 @@ fn box_removal_deletes_only_the_definition_shield_wrote() {
     assert_eq!(definition(root.path()), Some(shared));
     // Once the operator deletes the edited file, removal deletes only the
     // unchanged one.
-    fs::remove_file(root.path().join(box_definition::LOCAL_PATH)).unwrap();
+    fs::remove_file(root.path().join(BOX.local_path)).unwrap();
     let forgotten = setup(&context, removal(&["box"])).unwrap();
     assert_eq!(
         forgotten
@@ -589,11 +590,11 @@ fn box_removal_deletes_only_the_definition_shield_wrote() {
             .iter()
             .map(|f| f.path.as_str())
             .collect::<Vec<_>>(),
-        [box_definition::PATH]
+        [BOX.path]
     );
     assert!(definition(root.path()).is_none());
     let registered = registration(&meta(&context)).unwrap().unwrap();
-    assert!(registered.box_definition.is_none());
+    assert!(registered.definition.is_none());
     setup(&context, IntegrationChoice::remove_all()).unwrap();
     assert!(meta(&context)["integration"].is_null());
 }
@@ -611,22 +612,16 @@ fn edited_or_deleted_definitions_are_reported_and_repaired() {
         registration(&meta(&context))
             .unwrap()
             .unwrap()
-            .box_definition
+            .definition
             .unwrap()
     };
     let pair = recorded();
     assert_eq!((pair.shared, pair.local), owned.clone());
     for (path, damage) in [
-        (
-            box_definition::PATH,
-            Some("schema_version: 1\n# Acme edit\n"),
-        ),
-        (box_definition::PATH, None),
-        (
-            box_definition::LOCAL_PATH,
-            Some("schema_version: 1\n# Acme edit\n"),
-        ),
-        (box_definition::LOCAL_PATH, None),
+        (BOX.path, Some("schema_version: 1\n# Acme edit\n")),
+        (BOX.path, None),
+        (BOX.local_path, Some("schema_version: 1\n# Acme edit\n")),
+        (BOX.local_path, None),
     ] {
         let path = root.path().join(path);
         match damage {
@@ -639,7 +634,7 @@ fn edited_or_deleted_definitions_are_reported_and_repaired() {
         } else {
             "missing"
         };
-        assert_eq!(report["box_integration"]["status"], expected);
+        assert_eq!(report["host_integration"]["status"], expected);
         assert_eq!(report["repair_needed"], true);
         let route = crate::review::project::status(&context).unwrap()["repair_route"].clone();
         assert_eq!(route, "shield mcp setup --agent box");
@@ -648,7 +643,7 @@ fn edited_or_deleted_definitions_are_reported_and_repaired() {
             .unwrap()
             .unwrap();
         assert!(other.files.iter().all(|f| !f.path.starts_with(".box/")));
-        assert!(other.desired.unwrap().box_definition == Some(recorded()));
+        assert!(other.desired.unwrap().definition == Some(recorded()));
         setup(&context, choice(&["box"])).unwrap();
         assert_eq!(
             (
@@ -657,7 +652,10 @@ fn edited_or_deleted_definitions_are_reported_and_repaired() {
             ),
             owned
         );
-        assert_eq!(coverage(&context)["box_integration"]["status"], "installed");
+        assert_eq!(
+            coverage(&context)["host_integration"]["status"],
+            "installed"
+        );
     }
 }
 
@@ -667,13 +665,13 @@ fn box_setup_never_replaces_a_definition_shield_did_not_write() {
     box_project(root.path());
     fs::create_dir_all(root.path().join(".box/mcp")).unwrap();
     let foreign = "schema_version: 1\n# Acme server\n";
-    fs::write(root.path().join(box_definition::PATH), foreign).unwrap();
+    fs::write(root.path().join(BOX.path), foreign).unwrap();
     assert!(prepare(root.path(), &meta(&context), choice(&["box"])).is_err());
     assert_eq!(definition(root.path()).as_deref(), Some(foreign));
     // A foreign private pin refuses too, and identical files are adopted.
-    fs::remove_file(root.path().join(box_definition::PATH)).unwrap();
+    fs::remove_file(root.path().join(BOX.path)).unwrap();
     fs::create_dir_all(root.path().join(".box/local/mcp")).unwrap();
-    fs::write(root.path().join(box_definition::LOCAL_PATH), foreign).unwrap();
+    fs::write(root.path().join(BOX.local_path), foreign).unwrap();
     assert!(prepare(root.path(), &meta(&context), choice(&["box"])).is_err());
     assert_eq!(local(root.path()).as_deref(), Some(foreign));
     let expected = prepare(root.path(), &json!({}), choice(&["claude"]))
@@ -683,20 +681,16 @@ fn box_setup_never_replaces_a_definition_shield_did_not_write() {
         .unwrap()
         .binary;
     let rendered =
-        box_definition::render(&expected, &crate::review::mcp::default_approved()).unwrap();
-    fs::write(root.path().join(box_definition::PATH), &rendered.shared).unwrap();
-    fs::write(
-        root.path().join(box_definition::LOCAL_PATH),
-        &rendered.local,
-    )
-    .unwrap();
+        host_definition::render(&BOX, &expected, &crate::review::mcp::default_approved()).unwrap();
+    fs::write(root.path().join(BOX.path), &rendered.shared).unwrap();
+    fs::write(root.path().join(BOX.local_path), &rendered.local).unwrap();
     let adopted = setup(&context, choice(&["box"])).unwrap();
     assert!(adopted.files.iter().all(|f| f.before == f.after));
 }
 
 #[test]
 fn box_definition_files_are_protected_integration_files() {
-    for path in [box_definition::PATH, box_definition::LOCAL_PATH] {
+    for path in [BOX.path, BOX.local_path] {
         assert!(crate::review::integrations::protected_files().contains(&path));
     }
 }
@@ -737,7 +731,7 @@ fn box_carries_the_codex_ask_fallback_used_at_hook_time() {
         AskFallback::Allow
     ));
     assert_eq!(
-        coverage(&context)["box_integration"]["ask_fallback"]["codex"],
+        coverage(&context)["host_integration"]["ask_fallback"]["codex"],
         "allow"
     );
     // Fallbacks remain limited to agents that need one.
@@ -790,7 +784,7 @@ fn box_install_hands_direct_installations_over_without_touching_their_files() {
     assert_eq!(kept.desired.as_ref().unwrap().agents.len(), 2);
     // The default hand-over is part of the reviewed plan.
     let review = workflow::review(&context, Some(choice(&["box"])), true, false).unwrap();
-    assert_eq!(review["box"]["handed_over"], json!(["claude", "codex"]));
+    assert_eq!(review["host"]["handed_over"], json!(["claude", "codex"]));
     assert_eq!(review["agents"][1]["change"], "handed over");
     let text = super::super::presentation::review(&review);
     assert!(text.contains("box config sync --adopt"), "{text}");
@@ -799,12 +793,12 @@ fn box_install_hands_direct_installations_over_without_touching_their_files() {
     assert!(
         plan.files
             .iter()
-            .all(|f| [box_definition::PATH, box_definition::LOCAL_PATH].contains(&f.path.as_str()))
+            .all(|f| [BOX.path, BOX.local_path].contains(&f.path.as_str()))
     );
     assert_eq!(snapshot(), before);
     let registered = registration(&meta(&context)).unwrap().unwrap();
     assert!(registered.agents.is_empty());
-    assert!(registered.box_definition.is_some());
+    assert!(registered.definition.is_some());
     let report = coverage(&context);
     assert_eq!(
         report["installed_integrations"],
@@ -889,13 +883,15 @@ fn guided_setup_preselects_only_box_in_a_box_project() {
 fn guided_setup_rows_report_registration_and_box_availability() {
     let (root, context) = fixture();
     let choices = workflow::setup_choices(root.path(), &meta(&context), false).unwrap();
-    assert!(
-        choices[0]
-            .disabled
-            .as_deref()
-            .unwrap()
-            .contains("Box project")
-    );
+    for (index, project) in [(0, "Hub project"), (1, "Box project")] {
+        assert!(
+            choices[index]
+                .disabled
+                .as_deref()
+                .unwrap()
+                .contains(project)
+        );
+    }
     assert!(
         choices
             .iter()
@@ -906,14 +902,16 @@ fn guided_setup_rows_report_registration_and_box_availability() {
     );
     // Removal stays available even after the Box marker is gone.
     assert!(
-        workflow::setup_choices(root.path(), &meta(&context), true).unwrap()[0]
+        workflow::setup_choices(root.path(), &meta(&context), true).unwrap()[1]
             .disabled
             .is_none()
     );
     box_project(root.path());
     setup(&context, choice(&["claude"])).unwrap();
     let choices = workflow::setup_choices(root.path(), &meta(&context), false).unwrap();
-    assert!(choices[0].disabled.is_none());
+    assert!(choices[1].disabled.is_none());
+    // Hub stays unavailable until the project is a Hub project.
+    assert!(choices[0].disabled.is_some());
     assert!(
         choices
             .iter()
@@ -996,7 +994,7 @@ fn setup_previews_codex_prefix_rules_box_writes_or_keeps() {
     allow_acme_logs(&context);
     let existing = fs::read_to_string(root.path().join(PREFIX_RULES)).unwrap();
     let review = workflow::review(&context, Some(choice(&["box"])), true, false).unwrap();
-    assert_eq!(review["box"]["handed_over"], json!(["codex"]));
+    assert_eq!(review["host"]["handed_over"], json!(["codex"]));
     assert_eq!(
         previewed_prefix_rules(&review),
         (json!(existing), json!(existing))
@@ -1005,6 +1003,195 @@ fn setup_previews_codex_prefix_rules_box_writes_or_keeps() {
     assert_eq!(
         fs::read_to_string(root.path().join(PREFIX_RULES)).unwrap(),
         existing
+    );
+}
+
+fn hub_project(root: &Path) {
+    fs::create_dir_all(root.join(".hub")).unwrap();
+    fs::write(root.join(".hub/config.yml"), "schema_version: 1\n").unwrap();
+}
+
+#[test]
+fn hub_setup_writes_the_box_format_into_hub_folders_and_removes_only_its_own() {
+    let (root, context) = fixture();
+    // Hub needs its own configuration; a Box project is not enough.
+    box_project(root.path());
+    let refused = prepare(root.path(), &meta(&context), choice(&["hub"]))
+        .err()
+        .expect("refusal")
+        .to_string();
+    assert!(refused.contains("hub setup"), "{refused}");
+    hub_project(root.path());
+    let registered = setup(&context, choice(&["hub"])).unwrap().desired.unwrap();
+    let owned = registered.definition.as_ref().unwrap();
+    assert_eq!(owned.host(), &HUB);
+    // Hub receives exactly the texts Box would, in its own folders only.
+    let expected = host_definition::render(
+        &BOX,
+        &registered.binary,
+        registered.approved_tools.as_deref().unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        fs::read_to_string(root.path().join(HUB.path)).unwrap(),
+        expected.shared
+    );
+    assert_eq!(
+        fs::read_to_string(root.path().join(HUB.local_path)).unwrap(),
+        expected.local
+    );
+    assert!(definition(root.path()).is_none() && local(root.path()).is_none());
+    assert!(registered.covers("claude") && registered.covers("codex"));
+    let report = coverage(&context);
+    assert_eq!(report["host_integration"]["agent"], "hub", "{report}");
+    assert_eq!(
+        report["host_integration"]["status"], "installed",
+        "{report}"
+    );
+    assert_eq!(report["host_integration"]["publish"], "hub setup");
+    // Removing Box leaves the Hub definition alone; removing Hub deletes it.
+    let unchanged = prepare(root.path(), &meta(&context), removal(&["box"])).unwrap();
+    assert!(unchanged.is_none_or(|plan| plan.files.is_empty()));
+    setup(&context, removal(&["hub"])).unwrap();
+    assert!(!root.path().join(HUB.path).exists());
+    assert!(!root.path().join(HUB.local_path).exists());
+}
+
+#[test]
+fn hub_installs_alone_and_replaces_an_owned_box_definition() {
+    let (root, context) = fixture();
+    box_project(root.path());
+    hub_project(root.path());
+    for agents in [&["hub", "box"][..], &["hub", "codex"]] {
+        let refused = prepare(root.path(), &meta(&context), choice(agents))
+            .err()
+            .expect("refusal")
+            .to_string();
+        assert!(refused.contains("hub"), "{refused}");
+    }
+    setup(&context, choice(&["box"])).unwrap();
+    assert!(definition(root.path()).is_some());
+    let review = workflow::review(&context, Some(choice(&["hub"])), true, false).unwrap();
+    let rows: Vec<_> = review["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| (row["agent"].clone(), row["change"].clone()))
+        .collect();
+    assert!(rows.contains(&(json!("hub"), json!("added"))), "{review}");
+    assert!(rows.contains(&(json!("box"), json!("removed"))), "{review}");
+    assert_eq!(review["host"]["agent"], "hub", "{review}");
+    let registered = setup(&context, choice(&["hub"])).unwrap().desired.unwrap();
+    assert_eq!(registered.definition.as_ref().unwrap().host(), &HUB);
+    assert!(definition(root.path()).is_none() && local(root.path()).is_none());
+    assert!(root.path().join(HUB.path).is_file());
+}
+
+#[test]
+fn hub_always_hands_direct_installations_over() {
+    let (root, context) = fixture();
+    hub_project(root.path());
+    setup(&context, choice(&["claude", "codex"])).unwrap();
+    // Declining the hand-over, as guided setup's Box question allows, still
+    // hands every covered direct installation over to Hub.
+    let plan = prepare_with(
+        root.path(),
+        &meta(&context),
+        choice(&["hub"]),
+        false,
+        None,
+        false,
+        false,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(plan.handed_over, ["claude", "codex"]);
+    assert!(plan.desired.as_ref().unwrap().agents.is_empty());
+}
+
+#[test]
+fn a_direct_installation_refuses_while_hub_is_recorded() {
+    let (root, context) = fixture();
+    hub_project(root.path());
+    setup(&context, choice(&["hub"])).unwrap();
+    let before = fs::read(root.path().join(HUB.path)).unwrap();
+    for agents in [&["claude"][..], &["codex"]] {
+        let refused = prepare(root.path(), &meta(&context), choice(agents))
+            .err()
+            .expect("refusal")
+            .to_string();
+        assert!(refused.contains("--agent hub"), "{refused}");
+        assert!(refused.contains("--remove --agent hub"), "{refused}");
+    }
+    assert_eq!(fs::read(root.path().join(HUB.path)).unwrap(), before);
+    // After Hub is removed, the direct installation proceeds.
+    setup(&context, removal(&["hub"])).unwrap();
+    let registered = setup(&context, choice(&["claude"]))
+        .unwrap()
+        .desired
+        .unwrap();
+    assert!(registered.agents.contains_key("claude"));
+    assert!(registered.definition.is_none());
+}
+
+#[test]
+fn switching_hosts_over_an_edited_definition_names_the_switch() {
+    let (root, context) = fixture();
+    box_project(root.path());
+    hub_project(root.path());
+    setup(&context, choice(&["box"])).unwrap();
+    fs::write(root.path().join(BOX.path), "edited: true\n").unwrap();
+    let refused = prepare(root.path(), &meta(&context), choice(&["hub"]))
+        .err()
+        .expect("refusal")
+        .to_string();
+    assert!(refused.contains("before switching hosts"), "{refused}");
+    assert!(refused.contains("--agent box"), "{refused}");
+    assert!(!refused.contains("before removal"), "{refused}");
+    // Plain removal keeps its own wording.
+    let refused = prepare(root.path(), &meta(&context), removal(&["box"]))
+        .err()
+        .expect("refusal")
+        .to_string();
+    assert!(refused.contains("before removal"), "{refused}");
+}
+
+#[test]
+fn guided_setup_preselects_hub_where_hub_and_box_are_configured() {
+    let (root, context) = fixture();
+    box_project(root.path());
+    hub_project(root.path());
+    assert_eq!(
+        workflow::preselected(root.path(), &meta(&context)).unwrap(),
+        ["hub"]
+    );
+    let choices = workflow::setup_choices(root.path(), &meta(&context), false).unwrap();
+    assert!(choices[0].disabled.is_none() && choices[1].disabled.is_none());
+    setup(&context, choice(&["hub"])).unwrap();
+    let choices = workflow::setup_choices(root.path(), &meta(&context), false).unwrap();
+    assert!(choices[0].detail.starts_with("configured"));
+    assert!(choices[1].detail.starts_with("not registered"));
+}
+
+#[test]
+fn a_fresh_worktree_adopts_its_committed_hub_definition() {
+    let (root, context) = fixture();
+    hub_project(root.path());
+    let registered = setup(&context, choice(&["hub"])).unwrap().desired.unwrap();
+    let worktree = assert_fs::TempDir::new().unwrap();
+    crate::test_support::copy_fixture_directory(root.path(), worktree.path());
+    fs::remove_file(worktree.path().join(HUB.local_path)).unwrap();
+    let copied = crate::review::open(worktree.path()).unwrap();
+    crate::review::update_operator_fixture(&copied, |operator| {
+        operator["integration"] = Value::Null;
+    })
+    .unwrap();
+    let adopted = crate::review::open(worktree.path()).unwrap();
+    let current = registration(&meta(&adopted)).unwrap().unwrap();
+    assert!(current.definition == registered.definition);
+    assert_eq!(
+        fs::read_to_string(worktree.path().join(HUB.local_path)).unwrap(),
+        registered.definition.unwrap().local
     );
 }
 

@@ -191,14 +191,14 @@ fn box_only_prefix_and_binary_drift_are_attributed_to_box() {
     fs::write(&prefix, "foreign Codex rules").unwrap();
     let report = status(&context, &state);
     assert_eq!(report["repair_needed"], true, "{report}");
-    assert_eq!(report["box_integration"]["status"], "degraded", "{report}");
-    assert_eq!(report["box_integration"]["definition_status"], "installed");
+    assert_eq!(report["host_integration"]["status"], "degraded", "{report}");
+    assert_eq!(report["host_integration"]["definition_status"], "installed");
     fs::remove_file(prefix).unwrap();
     state.operator["integration"]["binary"] = json!(root.path().join("missing-shield"));
     let report = status(&context, &state);
-    assert_eq!(report["box_integration"]["status"], "degraded", "{report}");
+    assert_eq!(report["host_integration"]["status"], "degraded", "{report}");
     assert_eq!(report["binary_inspection"]["compatibility"], "unchecked");
-    assert_eq!(report["box_integration"]["definition_status"], "installed");
+    assert_eq!(report["host_integration"]["definition_status"], "installed");
 }
 
 #[cfg(not(windows))]
@@ -212,7 +212,10 @@ fn healthy_box_is_not_blamed_for_damage_to_a_retained_direct_agent() {
     .unwrap();
     let report = status(&context, &state);
     assert_eq!(report["repair_needed"], true, "{report}");
-    assert_eq!(report["box_integration"]["status"], "installed", "{report}");
+    assert_eq!(
+        report["host_integration"]["status"], "installed",
+        "{report}"
+    );
     assert_agent(&report, "codex", "degraded", "degraded");
     assert_agent(&report, "claude", "installed", "registered");
 }

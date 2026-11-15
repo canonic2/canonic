@@ -151,8 +151,7 @@ fn init_plans_agent_setup_for_an_explicit_file_it_will_create() {
     assert!(!destination.exists());
 
     integrations::setup::desired(&folder).unwrap();
-    let hook =
-        integrations::native::hook_command(&folder, &folder, "claude", "PreToolUse").unwrap();
+    let hook = integrations::native::hook_command(&folder, "claude", "PreToolUse").unwrap();
     assert!(hook.contains("--config 'policy/acme.yml'"), "{hook}");
     let entry = crate::agents::find("claude")
         .unwrap()
@@ -181,8 +180,7 @@ fn agent_setup_records_an_explicit_file_relative_to_the_project() {
     assert!(!folder.join(".shield/config.yml").exists());
     assert!(folder.join(".shield/state/state.json").is_file());
 
-    let hook =
-        integrations::native::hook_command(&folder, &folder, "claude", "PreToolUse").unwrap();
+    let hook = integrations::native::hook_command(&folder, "claude", "PreToolUse").unwrap();
     assert!(
         hook.contains("--project '.' --config 'policy/config.yml' --agent claude"),
         "{hook}"

@@ -1,5 +1,5 @@
 //! Expand the human review only for changes shared by retained installations.
-use super::{Error, IntegrationChoice, Registration, box_definition};
+use super::{Error, IntegrationChoice, Registration};
 use std::collections::BTreeSet;
 
 pub(super) fn selection(
@@ -23,9 +23,23 @@ pub(super) fn selection(
         return Ok((choice, None));
     }
     let mut retained: BTreeSet<&str> = previous.agents.keys().map(String::as_str).collect();
-    retained.extend(previous.connections.keys().map(String::as_str));
-    if previous.box_definition.is_some() {
-        retained.insert(box_definition::ID);
+    // A connection of an agent without a direct installation belongs to the
+    // recorded host, which is retained below; it never adds a direct one.
+    retained.extend(
+        previous
+            .connections
+            .keys()
+            .map(String::as_str)
+            .filter(|agent| previous.definition.is_none() || previous.agents.contains_key(*agent)),
+    );
+    // A selected host already covers the definition, including a switch away
+    // from the other host's retained one.
+    if let Some(definition) = previous
+        .definition
+        .as_ref()
+        .filter(|_| choice.host().is_none())
+    {
+        retained.insert(definition.host().id);
     }
     if previous.interceptor.is_some() {
         retained.insert("claude");
@@ -112,6 +126,47 @@ mod tests {
             assert!(choice.contains("codex"));
             assert!(reason.is_some());
         }
+    }
+
+    #[test]
+    fn scope_widening_keeps_host_covered_connections_with_their_host() {
+        use crate::review::integrations::host_definition::{Definition, HostId};
+        let mut previous = registration();
+        // Hub covers both agents: no direct installation, only its connections.
+        previous.agents.clear();
+        for agent in ["claude", "codex"] {
+            previous
+                .connections
+                .insert(agent.into(), json!({"entries":{}}));
+        }
+        previous.definition = Some(Definition {
+            host: HostId::Hub,
+            shared: "shared".into(),
+            local: "local".into(),
+        });
+        let mut fresh = previous.clone();
+        fresh.binary = fresh.binary.with_file_name("another-shield");
+        let tools = crate::review::mcp::default_approved();
+        let (choice, _) = selection(
+            IntegrationChoice::Agents(IntegrationChoice::bits(&["hub"]).unwrap()),
+            Some(&previous),
+            Some(&fresh),
+            &tools,
+        )
+        .unwrap();
+        assert!(choice.contains("hub"));
+        assert!(!choice.contains("claude") && !choice.contains("codex"));
+        // Selecting an agent Hub does not cover retains the host, not direct
+        // installations of the agents it does.
+        let (choice, _) = selection(
+            IntegrationChoice::agent("copilot"),
+            Some(&previous),
+            Some(&fresh),
+            &tools,
+        )
+        .unwrap();
+        assert!(choice.contains("hub") && choice.contains("copilot"));
+        assert!(!choice.contains("claude") && !choice.contains("codex"));
     }
 
     #[test]

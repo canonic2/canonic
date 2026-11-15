@@ -1,6 +1,6 @@
 //! Native filesystem discovery helpers used explicitly by individual adapters.
 use crate::location::WorkingFiles;
-use crate::policy::portability::{Kind, Root};
+use crate::policy::rules::portability::{Kind, Root};
 use std::path::{Path, PathBuf};
 
 pub(super) fn configuration(override_name: &str, default: &str) -> Option<PathBuf> {

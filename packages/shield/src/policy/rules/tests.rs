@@ -2,7 +2,7 @@
 use super::*;
 use crate::{
     configuration,
-    policy::{CustomRules, Pack, Request, Scope, compiled::Plan},
+    policy::{CustomRules, Pack, Request, Scope, resolution::compiled::Plan},
 };
 
 fn rule(arguments: Value) -> Value {
@@ -464,7 +464,7 @@ fn options_have_explicit_arity_repetition_phases_and_separators() {
     ] {
         assert_eq!(evaluate(row.clone(), &args)["decision"], "ask");
     }
-    let store = crate::policy::patterns::Store::default();
+    let store = crate::policy::rules::patterns::Store::default();
     let parsed = argument_rules::matches(
         &row["conditions"]["arguments"],
         &["-v", "inspect", "--format=json"].map(String::from),
@@ -2020,7 +2020,7 @@ fn skipped_options_find_declared_global_options_anywhere() {
     let unique = argument_rules::matches(
         &scan,
         &["--p", "acme-ro"].map(String::from),
-        &crate::policy::patterns::Store::default(),
+        &crate::policy::rules::patterns::Store::default(),
     )
     .unwrap();
     assert_eq!(unique.failures, [] as [&str; 0]);
@@ -2030,7 +2030,7 @@ fn skipped_options_find_declared_global_options_anywhere() {
     let parsed = argument_rules::matches(
         &both,
         &["--pr", "acme-ro"].map(String::from),
-        &crate::policy::patterns::Store::default(),
+        &crate::policy::rules::patterns::Store::default(),
     )
     .unwrap();
     assert_eq!(

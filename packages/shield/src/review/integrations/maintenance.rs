@@ -1,5 +1,5 @@
 //! Persisted maintenance scope cannot widen while a reviewed plan resumes.
-use super::{Error, Plan, Registration, agents, box_definition, legacy};
+use super::{Error, Plan, Registration, agents, host_definition, legacy};
 use std::collections::BTreeSet;
 
 #[cfg(test)]
@@ -47,8 +47,19 @@ impl Plan {
     pub(in crate::review) fn affects(&self, agent: &str) -> bool {
         self.targets.as_ref().is_none_or(|targets| {
             targets.iter().any(|target| target == agent)
-                || (targets.iter().any(|target| target == box_definition::ID)
+                || (self.affects_definition()
                     && agents::find(agent).is_some_and(agents::AgentAdapter::supports_box_hooks))
+        })
+    }
+
+    /// Whether the plan may change the recorded Hub or Box definition. The
+    /// registration holds one, so a plan targeting either host may replace
+    /// the other's.
+    pub(in crate::review) fn affects_definition(&self) -> bool {
+        self.targets.as_ref().is_none_or(|targets| {
+            targets
+                .iter()
+                .any(|target| host_definition::find(target).is_some())
         })
     }
 
@@ -69,7 +80,7 @@ pub(super) fn validate(plan: &Plan) -> Result<(), Error> {
         || unique.len() != targets.len()
         || targets
             .iter()
-            .any(|id| id != box_definition::ID && agents::find(id).is_none())
+            .any(|id| host_definition::find(id).is_none() && agents::find(id).is_none())
     {
         return Err(Error::Invalid("invalid integration maintenance targets"));
     }
@@ -107,19 +118,15 @@ pub(super) fn validate(plan: &Plan) -> Result<(), Error> {
             ));
         }
     }
-    if !plan.affects(box_definition::ID) {
-        let old = plan
-            .previous
-            .as_ref()
-            .and_then(|r| r.box_definition.as_ref());
-        let new = plan
-            .desired
-            .as_ref()
-            .and_then(|r| r.box_definition.as_ref());
+    if !plan.affects_definition() {
+        let old = plan.previous.as_ref().and_then(|r| r.definition.as_ref());
+        let new = plan.desired.as_ref().and_then(|r| r.definition.as_ref());
         if old != new
             || (old.is_some() && shared_changed(plan.previous.as_ref(), plan.desired.as_ref()))
         {
-            return Err(Error::Invalid("maintenance changed omitted Box settings"));
+            return Err(Error::Invalid(
+                "maintenance changed omitted Hub or Box settings",
+            ));
         }
     }
     if !plan.touches_shared() && (plan.before.is_some() || !plan.after.is_empty()) {
@@ -160,8 +167,8 @@ fn shared_changed(old: Option<&Registration>, new: Option<&Registration>) -> boo
 }
 
 fn allowed_path(plan: &Plan, path: &str) -> bool {
-    if [box_definition::PATH, box_definition::LOCAL_PATH].contains(&path) {
-        return plan.affects(box_definition::ID);
+    if host_definition::owning(path).is_some() {
+        return plan.affects_definition();
     }
     if legacy::asset_path(path) {
         return plan.affects("claude");
@@ -261,16 +268,27 @@ mod tests {
     }
 
     #[test]
-    fn maintenance_historical_full_scope_and_explicit_box_scope_remain_available() {
+    fn maintenance_historical_full_scope_and_explicit_host_scope_remain_available() {
         let mut historic = plan();
         historic.targets = None;
         assert!(historic.affects("claude"));
         assert!(historic.touches_shared());
         assert!(validate(&historic).is_ok());
-        let mut boxed = plan();
-        boxed.targets = Some(vec![box_definition::ID.into()]);
-        assert!(boxed.affects("claude"));
-        assert!(boxed.touches_shared());
-        assert!(validate(&boxed).is_ok());
+        for host in host_definition::HOSTS {
+            let mut hosted = plan();
+            hosted.targets = Some(vec![host.id.into()]);
+            assert!(hosted.affects("claude"));
+            assert!(hosted.affects_definition());
+            assert!(hosted.touches_shared());
+            assert!(validate(&hosted).is_ok());
+        }
+        // A native-only scope never reaches either host's files.
+        let mut native = plan();
+        native.files.push(super::super::files::Change {
+            path: host_definition::HUB.path.into(),
+            before: None,
+            after: Some("schema_version: 1\n".into()),
+        });
+        assert!(validate(&native).is_err());
     }
 }

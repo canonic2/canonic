@@ -553,7 +553,9 @@ pub(crate) fn transition(
 ) -> Result<Value, Error> {
     let store = Store::open(Path::new(&context.project_root))?;
     match action {
-        "reject" => return admin::policy::Reject::new(context, id, None)?.commit(context, checkpoint),
+        "reject" => {
+            return admin::policy::Reject::new(context, id, None)?.commit(context, checkpoint);
+        }
         "withdraw" => {}
         _ => return Err(Error::Invalid("invalid proposal transition")),
     }

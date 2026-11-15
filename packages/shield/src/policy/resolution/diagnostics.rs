@@ -15,10 +15,10 @@ impl From<Option<String>> for TextField {
     }
 }
 impl TextField {
-    pub(super) fn is_present(&self) -> bool {
+    pub(in crate::policy) fn is_present(&self) -> bool {
         !matches!(self, Self::Absent)
     }
-    pub(super) fn text(&self) -> Option<&str> {
+    pub(in crate::policy) fn text(&self) -> Option<&str> {
         match self {
             Self::Text(value) => Some(value),
             Self::Absent | Self::Null => None,
@@ -46,11 +46,11 @@ impl<T: Serialize> Serialize for Private<T> {
 }
 
 pub(crate) struct RequestEvidence<'a> {
-    request: &'a super::Request,
+    request: &'a crate::policy::Request,
     private: bool,
 }
 impl<'a> RequestEvidence<'a> {
-    pub(crate) fn new(request: &'a super::Request, private: bool) -> Self {
+    pub(crate) fn new(request: &'a crate::policy::Request, private: bool) -> Self {
         Self { request, private }
     }
 }
@@ -109,7 +109,7 @@ impl Serialize for RuleReference {
 }
 
 impl RuleReference {
-    pub(super) fn for_rule(source: &str, rule_id: &str, tier: u8) -> Self {
+    pub(in crate::policy) fn for_rule(source: &str, rule_id: &str, tier: u8) -> Self {
         Self {
             pack_selector: (tier != 0).then(|| source.to_owned()),
             rule_id: rule_id.to_owned(),
@@ -121,7 +121,10 @@ impl RuleReference {
             unavailable: false,
         }
     }
-    pub(super) fn annotate(&mut self, selectors: &std::collections::BTreeMap<String, String>) {
+    pub(in crate::policy) fn annotate(
+        &mut self,
+        selectors: &std::collections::BTreeMap<String, String>,
+    ) {
         self.unavailable = false;
         if let Some(source) = &self.pack_selector {
             if source.starts_with("pack:") {

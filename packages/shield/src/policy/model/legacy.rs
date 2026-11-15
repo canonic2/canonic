@@ -2,7 +2,7 @@
 //!
 //! The historical documents are validated before translation. Their source bytes
 //! remain the digest identity; these codecs do not acquire or rewrite policy.
-use super::{Decision, Error, Scope, model, rules};
+use crate::policy::{Decision, Error, Scope, model, rules};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -11,15 +11,15 @@ mod dependencies;
 mod normalized;
 #[cfg(test)]
 mod tests;
-pub(super) use normalized::{NormalizedAuthority, validate_normalized_authority};
+pub(in crate::policy) use normalized::{NormalizedAuthority, validate_normalized_authority};
 
 /// Matching semantics authenticated alongside a compiled historical rule.
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Authority {
-    pub(super) matcher: model::Matcher,
-    pub(super) scope: Option<Scope>,
-    pub(super) mandatory: bool,
+pub(in crate::policy) struct Authority {
+    pub(in crate::policy) matcher: model::Matcher,
+    pub(in crate::policy) scope: Option<Scope>,
+    pub(in crate::policy) mandatory: bool,
 }
 
 #[derive(Deserialize)]
@@ -67,7 +67,7 @@ struct CustomRule {
 }
 
 fn source(input: &str) -> Result<(Value, bool), Error> {
-    if input.len() > super::MAX_DOCUMENT_BYTES {
+    if input.len() > crate::policy::MAX_DOCUMENT_BYTES {
         return Err(Error::Limit);
     }
     if input.len() > 1_048_576 {
@@ -79,12 +79,12 @@ fn source(input: &str) -> Result<(Value, bool), Error> {
         }
         let header: Header = serde_json::from_str(input)
             .map_err(|_| Error::Syntax)
-            .or_else(|_| super::parse_yaml(input))?;
+            .or_else(|_| crate::policy::parse_yaml(input))?;
         if header.kind.is_none() {
             return Err(Error::Limit);
         }
     }
-    let value: Value = super::parse(input)?;
+    let value: Value = crate::policy::parse(input)?;
     let historical = value.is_object() && value.get("kind").is_none();
     Ok((value, historical))
 }
@@ -94,10 +94,10 @@ fn decode<T: serde::de::DeserializeOwned>(value: Value, input: &str) -> Result<T
     // `reason: true`). The common value path must retain that compatibility.
     serde_json::from_value(value)
         .map_err(|_| Error::Syntax)
-        .or_else(|_| super::parse(input))
+        .or_else(|_| crate::policy::parse(input))
 }
 
-pub(super) fn pack(input: &str) -> Result<model::PackDocument, Error> {
+pub(in crate::policy) fn pack(input: &str) -> Result<model::PackDocument, Error> {
     let (value, historical) = source(input)?;
     if !historical {
         return decode(value, input);
@@ -142,7 +142,7 @@ pub(super) fn pack(input: &str) -> Result<model::PackDocument, Error> {
 }
 
 /// Recheck historical descriptive header limits after authenticated compilation.
-pub(super) fn validate_header(document: &model::PackDocument) -> Result<(), Error> {
+pub(in crate::policy) fn validate_header(document: &model::PackDocument) -> Result<(), Error> {
     let current = serde_json::to_value(document).map_err(|_| Error::Syntax)?;
     let dependencies = current.get("dependencies");
     let mut old = json!({
@@ -162,7 +162,7 @@ pub(super) fn validate_header(document: &model::PackDocument) -> Result<(), Erro
     source.validate()
 }
 
-pub(super) fn custom(input: &str) -> Result<model::CustomDocument, Error> {
+pub(in crate::policy) fn custom(input: &str) -> Result<model::CustomDocument, Error> {
     let (value, historical) = source(input)?;
     if !historical {
         let mut document: model::CustomDocument = decode(value, input)?;
@@ -230,7 +230,7 @@ fn translate(
 }
 
 /// The source feature carries a matcher, never a caller-chosen rank or tier.
-pub(super) fn validate_authority(rule: &rules::Rule, pack: bool) -> Result<(), Error> {
+pub(in crate::policy) fn validate_authority(rule: &rules::Rule, pack: bool) -> Result<(), Error> {
     let Some(authority) = &rule.legacy else {
         return Ok(());
     };

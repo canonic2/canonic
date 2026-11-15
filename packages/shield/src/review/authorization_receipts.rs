@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 
 const PER_KIND: usize = 128;
 const BYTES: usize = 1024;
-const RETENTION_MS: u64 = 600_000;
+pub(in crate::review) const RETENTION_MS: u64 = 600_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

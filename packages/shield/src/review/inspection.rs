@@ -41,14 +41,12 @@ impl RuleRef {
 pub(super) fn rules(context: &Context, selector: Option<&Value>) -> Result<Value, Error> {
     let state = project::captured_inspection(context)?;
     let candidate = source::rules(
-        context,
         &state.candidates["project"],
         &state.operator,
         &state.policy_revision,
         selector,
     )?;
     captured_rules(
-        context,
         &candidate,
         &state.operator,
         &state.policy_revision,
@@ -61,14 +59,12 @@ pub(super) fn rules(context: &Context, selector: Option<&Value>) -> Result<Value
 /// MCP supplies the selected retained capture; CLI uses the current review state.
 /// This constructs no evaluator: a lookup reads only the requested pack.
 pub(super) fn captured_rules(
-    context: &Context,
     candidate: &Value,
     metadata: &Value,
     revision: &str,
     selector: Option<&Value>,
 ) -> Result<Value, Error> {
     captured_rules_with_resolution(
-        context,
         candidate,
         metadata,
         revision,
@@ -79,7 +75,6 @@ pub(super) fn captured_rules(
 
 /// A connection can reuse only display rows bound to this immutable capture.
 pub(super) fn captured_rules_with_resolution(
-    context: &Context,
     candidate: &Value,
     metadata: &Value,
     revision: &str,
@@ -99,7 +94,7 @@ pub(super) fn captured_rules_with_resolution(
     let mut rows = if matches!(selected.as_ref(), Some(RuleRef::Pack { .. })) {
         Vec::new()
     } else {
-        layered_custom_rows(candidate, &context.project_root)?
+        layered_custom_rows(candidate)?
     };
     let mut shared = Vec::new();
     for (index, pack) in metadata["installed"]
@@ -179,7 +174,7 @@ pub(super) fn captured_rules_with_resolution(
 }
 
 /// Local rules replace shared rules with the same ID while retaining their position.
-fn layered_custom_rows(candidate: &Value, project: &str) -> Result<Vec<Value>, Error> {
+fn layered_custom_rows(candidate: &Value) -> Result<Vec<Value>, Error> {
     let mut rows = Vec::new();
     let mut positions = std::collections::BTreeMap::<String, usize>::new();
     for source in [
@@ -189,7 +184,7 @@ fn layered_custom_rows(candidate: &Value, project: &str) -> Result<Vec<Value>, E
     .into_iter()
     .flatten()
     {
-        for row in custom_rows(source, project)? {
+        for row in custom_rows(source)? {
             let id = row["id"]
                 .as_str()
                 .ok_or(Error::Invalid("rule ID missing"))?;
@@ -204,8 +199,8 @@ fn layered_custom_rows(candidate: &Value, project: &str) -> Result<Vec<Value>, E
     Ok(rows)
 }
 
-fn custom_rows(source: &str, project: &str) -> Result<Vec<Value>, Error> {
-    let doc = project_rules(source, project)?;
+fn custom_rows(source: &str) -> Result<Vec<Value>, Error> {
+    let doc = crate::policy::inspect_retained_custom(source)?;
     Ok(doc["rules"]
         .as_array()
         .into_iter()
@@ -330,9 +325,6 @@ pub(super) fn selection_settings(candidate: &Value, index: usize) -> Result<Sett
     })
 }
 
-pub(super) fn project_rules(source: &str, _project: &str) -> Result<Value, Error> {
-    crate::policy::inspect_retained_custom(source).map_err(Into::into)
-}
 pub(super) fn public_pack_rule(rule: &Value, profile: &Value) -> Value {
     let mut result = rule.clone();
     result["policy_schema_version"] = json!(1);

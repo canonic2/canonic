@@ -1,15 +1,26 @@
-//! Structured rule source, requirement branches and immutable preparation.
+//! Structured rule source, requirement branches and immutable preparation, with
+//! the predicates they use: argv grammars, patterns, selectors, resource
+//! evidence, directory options, portability and agent outputs.
 use super::{
-    Decision, Error, Match, Profile, argument_rules,
-    diagnostics::{RuleReference, TextField},
+    Decision, Error, Match, Profile,
     model::Matcher,
-    normalized::{Context, Input},
-    patterns::Provider,
-    selectors,
+    resolution::{
+        diagnostics::{RuleReference, TextField},
+        normalized::{Context, Input},
+    },
 };
+use patterns::Provider;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
+
+pub(crate) mod agent_outputs;
+pub(super) mod argument_rules;
+pub(crate) mod directories;
+pub(crate) mod patterns;
+pub(crate) mod portability;
+pub(crate) mod resources;
+pub(crate) mod selectors;
 
 mod evidence;
 mod preconditions;
@@ -217,7 +228,7 @@ pub(crate) struct Rule {
         deserialize_with = "present",
         skip_serializing_if = "Option::is_none"
     )]
-    pub(crate) agents: Option<super::agent_outputs::Agents>,
+    pub(crate) agents: Option<agent_outputs::Agents>,
     #[serde(skip)]
     pub(super) matcher: Option<Matcher>,
 }

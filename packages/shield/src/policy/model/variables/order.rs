@@ -1,5 +1,5 @@
 //! The order a pack source declares its variables in, which typed parsing loses.
-use super::super::{Error, parse_yaml};
+use crate::policy::{Error, parse_yaml};
 use serde::{
     Deserialize, Deserializer,
     de::{IgnoredAny, MapAccess, Visitor},

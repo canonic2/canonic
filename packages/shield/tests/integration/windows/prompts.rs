@@ -214,14 +214,22 @@ fn keys(answer: &Value, view: &[u8]) -> Vec<u8> {
     let selected = if (contains(view, b"Agentintegrations") || contains(view, b"Selectagents"))
         && contains(view, b"spaceselect")
     {
-        // Rows: Box first, then Claude Code and Codex.
-        match answer {
-            "box" => "1\r",
-            "claude" => "2\r",
-            "codex" => "3\r",
-            "claude,codex" => "23\r",
-            _ => "\r",
-        }
+        // The agent page lists Hub, Box and every adapter, more rows than
+        // digit shortcuts allow, so it filters: type each name, mark it with
+        // Space and clear the filter with Backspace before the next one.
+        return match answer {
+            "hub" | "box" | "claude" | "codex" | "claude,codex" => {
+                let mut keys = Vec::new();
+                for name in answer.split(',') {
+                    keys.extend_from_slice(name.as_bytes());
+                    keys.push(b' ');
+                    keys.extend(std::iter::repeat_n(0x7f, name.len()));
+                }
+                keys.push(b'\r');
+                keys
+            }
+            _ => b"\r".to_vec(),
+        };
     } else if contains(view, b"Recordrequesthistory") && ["yes", "no"].contains(&answer) {
         match answer {
             "yes" => "1\r",

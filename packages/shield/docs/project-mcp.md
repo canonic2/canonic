@@ -107,8 +107,9 @@ refuse; inspect the result before requesting a fresh review.
   An absolute `project` may select another enrolled root for explicit agent
   repair only. The review and frozen plan bind that target; the connection's
   policy tools retain their original project. Preview with `dry_run: true`
-  before requesting confirmation. Box-managed hooks use Box's `config_sync`
-  with the same project, agents and `repair_hooks: true` instead of direct setup.
+  before requesting confirmation. Hub-managed hooks use Hub's `setup`, and
+  Box-managed hooks Box's `config_sync`, with the same project, agents and
+  `repair_hooks: true` instead of direct setup.
   If cross-project publication is interrupted, the result uses
   `repair_route: operator_cli`. `operator_recovery` names the target project and
   gives `review` and `cancel` commands as executable/argument records. Ask the

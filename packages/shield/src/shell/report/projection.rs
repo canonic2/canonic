@@ -1,6 +1,6 @@
 //! Borrowed owner projections for operations inside private source geometry.
 use super::{Data, Input, Invocation, Operation, PolicyRequest, Serialize, effects};
-use crate::policy::diagnostics::{Private, RequestEvidence};
+use crate::policy::resolution::diagnostics::{Private, RequestEvidence};
 use serde::ser::SerializeMap;
 
 impl Serialize for Operation {

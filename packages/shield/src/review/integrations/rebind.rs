@@ -39,9 +39,9 @@ fn resume_inner(context: &Context, initial: &State) -> Result<(), Error> {
         }
         return Ok(());
     }
-    if registration(&initial.operator)?.is_none() {
-        return adopt_box(context, initial);
-    }
+    let Some(previous) = registration(&initial.operator)? else {
+        return adopt_host(context, initial);
+    };
     let migrate_native = portable::needed(initial);
     if initial.operator["mcp_rebind_pending"] != true && !migrate_native {
         return Ok(());
@@ -50,9 +50,6 @@ fn resume_inner(context: &Context, initial: &State) -> Result<(), Error> {
     let guard =
         crate::review::publication::ProjectionLease::acquire(Path::new(&context.project_root))?;
     guard.check(context)?;
-    let Some(previous) = registration(&initial.operator)? else {
-        return Ok(());
-    };
     // A different executable is an actual administrative change, not relocation.
     let executable = std::env::current_exe()?.canonicalize()?;
     if binary_digest(&executable)? != previous.binary_digest {
@@ -63,7 +60,7 @@ fn resume_inner(context: &Context, initial: &State) -> Result<(), Error> {
     let mut native_retry = false;
     if migrate_native {
         let state = store.read_following_files()?;
-        match portable::prepare_box(root, &state, &executable) {
+        match portable::prepare_pin(root, &state, &executable) {
             Ok(Some(plan)) => publish(context, &store, &state, &plan, &guard)?,
             Ok(None) => {}
             Err(error) => native_retry |= !portable::manual(&error),
@@ -123,10 +120,10 @@ fn resume_inner(context: &Context, initial: &State) -> Result<(), Error> {
     )
 }
 
-/// Record the committed Box definition of a folder that has no registration,
-/// such as a fresh worktree or clone, so its agents are set up as the
-/// definition says. A folder without one, or with an edited one, is unchanged.
-fn adopt_box(context: &Context, initial: &State) -> Result<(), Error> {
+/// Record the committed Hub or Box definition of a folder that has no
+/// registration, such as a fresh worktree or clone, so its agents are set up
+/// as the definition says. A folder without one, or with an edited one, is unchanged.
+fn adopt_host(context: &Context, initial: &State) -> Result<(), Error> {
     let root = Path::new(&context.project_root);
     let executable = std::env::current_exe()?.canonicalize()?;
     // An attempt that did not adopt these exact files with this executable is
@@ -137,7 +134,7 @@ fn adopt_box(context: &Context, initial: &State) -> Result<(), Error> {
     if initial.operator[ADOPTION_CHECKED] == key.as_str() {
         return Ok(());
     }
-    match portable::adopt_box(root, initial, &executable) {
+    match portable::adopt_host(root, initial, &executable) {
         Ok(Some(_)) => {}
         outcome => {
             record_adoption_checked(context, &key)?;
@@ -151,13 +148,14 @@ fn adopt_box(context: &Context, initial: &State) -> Result<(), Error> {
     let state = store.read_following_files()?;
     state.check(context)?;
     state.check_operations()?;
-    match portable::adopt_box(root, &state, &executable)? {
+    match portable::adopt_host(root, &state, &executable)? {
         Some(plan) => publish(context, &store, &state, &plan, &guard),
         None => Ok(()),
     }
 }
 
-/// Operator metadata naming the last Box adoption attempt that adopted nothing.
+/// Operator metadata naming the last Hub or Box adoption attempt that adopted
+/// nothing. The key predates Hub.
 const ADOPTION_CHECKED: &str = "box_adoption_checked";
 
 fn record_adoption_checked(context: &Context, key: &str) -> Result<(), Error> {

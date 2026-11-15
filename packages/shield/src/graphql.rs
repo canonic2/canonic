@@ -6,7 +6,7 @@ mod schema;
 #[cfg(test)]
 mod tests;
 
-use crate::policy::{Error, patterns::Provider};
+use crate::policy::{Error, rules::patterns::Provider};
 use serde::Serialize;
 use serde_json::Value;
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};

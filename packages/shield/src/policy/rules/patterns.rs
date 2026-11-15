@@ -1,5 +1,5 @@
 //! Bounded persisted Thompson programs, evaluated by regex-automata's Pike VM.
-use super::{Error, selectors};
+use crate::policy::{Error, rules::selectors};
 use regex_automata::{
     nfa::thompson::{self, NFA, State, Transition, pikevm::PikeVM},
     util::{look::Look, primitives::StateID, syntax},
@@ -11,8 +11,8 @@ use std::{
     collections::BTreeMap,
 };
 
-pub(super) const MAX_PATTERN_BYTES: usize = 8 * 1024 * 1024;
-pub(super) const MAX_PREPARED_BYTES: usize = 256 * 1024 * 1024;
+pub(in crate::policy) const MAX_PATTERN_BYTES: usize = 8 * 1024 * 1024;
+pub(in crate::policy) const MAX_PREPARED_BYTES: usize = 256 * 1024 * 1024;
 
 pub(crate) trait Provider {
     fn matches(&self, key: &str, value: &str) -> Result<bool, Error>;
@@ -35,7 +35,7 @@ enum Cached {
 
 // Sharing lasts for this evaluation only. Source keys include selector dialect;
 // each rule still retains its own owner, branch and diagnostics.
-pub(super) struct Memo<'a> {
+pub(in crate::policy) struct Memo<'a> {
     provider: &'a dyn Provider,
     checkpoint: &'a dyn Fn() -> Result<(), Error>,
     results: RefCell<BTreeMap<(String, String), Cached>>,
@@ -44,7 +44,7 @@ pub(super) struct Memo<'a> {
     bytes: Cell<usize>,
 }
 impl<'a> Memo<'a> {
-    pub(super) fn new(
+    pub(in crate::policy) fn new(
         provider: &'a dyn Provider,
         checkpoint: &'a dyn Fn() -> Result<(), Error>,
     ) -> Self {
@@ -57,7 +57,7 @@ impl<'a> Memo<'a> {
             bytes: Cell::new(0),
         }
     }
-    pub(super) fn sharing(
+    pub(in crate::policy) fn sharing(
         provider: &'a dyn Provider,
         checkpoint: &'a dyn Fn() -> Result<(), Error>,
         shared: &'a dyn Provider,
@@ -123,18 +123,18 @@ impl Provider for Memo<'_> {
 }
 
 #[derive(Default)]
-pub(super) struct Store {
-    pub(super) images: BTreeMap<String, Vec<u8>>,
+pub(in crate::policy) struct Store {
+    pub(in crate::policy) images: BTreeMap<String, Vec<u8>>,
     programs: BTreeMap<String, PikeVM>,
     bytes: usize,
 }
 
 impl Store {
-    pub(super) fn collect(&mut self, value: &Value, domain: &str) -> Result<(), Error> {
+    pub(in crate::policy) fn collect(&mut self, value: &Value, domain: &str) -> Result<(), Error> {
         self.collect_reusing(value, domain, None)
     }
 
-    pub(super) fn collect_reusing(
+    pub(in crate::policy) fn collect_reusing(
         &mut self,
         value: &Value,
         domain: &str,
@@ -508,7 +508,7 @@ impl Image {
     }
 }
 
-pub(super) fn load(bytes: &[u8]) -> Result<PikeVM, Error> {
+pub(in crate::policy) fn load(bytes: &[u8]) -> Result<PikeVM, Error> {
     if bytes.len() > MAX_PATTERN_BYTES {
         return Err(Error::Limit);
     }
@@ -516,7 +516,7 @@ pub(super) fn load(bytes: &[u8]) -> Result<PikeVM, Error> {
     image.restore()
 }
 
-pub(super) fn run(vm: &PikeVM, value: &str) -> Result<bool, Error> {
+pub(in crate::policy) fn run(vm: &PikeVM, value: &str) -> Result<bool, Error> {
     if work(vm, value)? > 8_000_000 {
         return Err(Error::Limit);
     }
@@ -527,7 +527,7 @@ pub(super) fn run(vm: &PikeVM, value: &str) -> Result<bool, Error> {
     Ok(vm.is_match(&mut cache, value))
 }
 
-pub(super) fn work(vm: &PikeVM, value: &str) -> Result<usize, Error> {
+pub(in crate::policy) fn work(vm: &PikeVM, value: &str) -> Result<usize, Error> {
     vm.get_nfa()
         .states()
         .len()

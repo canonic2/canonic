@@ -1,7 +1,7 @@
 //! Universal overapproximation proofs; synthetic effects are never witnesses.
 
 use super::{Prepared, partition, profiles};
-use crate::policy::{Error, profile_comparison::Bound, symbolic};
+use crate::policy::{Error, dependencies::profile_comparison::Bound, resolution::symbolic};
 
 pub(super) fn prepare(
     first: &Prepared<'_>,

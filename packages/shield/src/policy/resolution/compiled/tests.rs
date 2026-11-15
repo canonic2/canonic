@@ -234,7 +234,7 @@ fn environment_field_patterns_decide_alike_through_plans_and_sources() {
             now: &now,
             known_cwd: true,
             known_arguments: true,
-            locations: Some(&policy::resources::Unavailable),
+            locations: Some(&policy::rules::resources::Unavailable),
             effects: None,
         };
         let expected = policy::evaluate_facts(

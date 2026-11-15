@@ -365,7 +365,11 @@ fn bytes_key(sources: &project_sources::Sources) -> String {
 
 fn hash<'a>(label: &'a str, parts: impl Iterator<Item = Option<&'a str>>) -> String {
     let mut hasher = blake3::Hasher::new();
-    let header = [label, env!("CARGO_PKG_VERSION"), policy::compiled::FORMAT];
+    let header = [
+        label,
+        env!("CARGO_PKG_VERSION"),
+        policy::resolution::compiled::FORMAT,
+    ];
     for part in header.into_iter().map(Some).chain(parts) {
         match part {
             Some(bytes) => {
@@ -449,7 +453,7 @@ fn read_plan(path: &Path, key: &str) -> Option<Evaluator> {
     let (digest, plan) = rest.split_at_checked(32)?;
     if recorded != key.as_bytes()
         || blake3::hash(plan).as_bytes() != digest
-        || plan.len() > policy::compiled::MAX_BYTES
+        || plan.len() > policy::resolution::compiled::MAX_BYTES
     {
         return None;
     }

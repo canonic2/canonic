@@ -1,6 +1,6 @@
 //! Universal profile bounds over identical selected matcher/authority artifacts.
 
-use super::{CustomRules, Decision, Pack, Profile};
+use crate::policy::{CustomRules, Decision, Pack, Profile};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Bound {
@@ -18,7 +18,7 @@ pub(crate) fn profiles(
     before_custom: &[&CustomRules],
     after_custom: &[&CustomRules],
 ) -> Option<Bound> {
-    if !super::semantic_selection(before, before_custom) {
+    if !crate::policy::semantic_selection(before, before_custom) {
         return None;
     }
     let mut left_custom: Vec<_> = before_custom.iter().map(|custom| &custom.digest).collect();

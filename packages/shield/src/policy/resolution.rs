@@ -1,15 +1,29 @@
-//! Folds pack variables, `when` tests, templates and rule overrides into ordinary
-//! rules and preconditions before validation, so evaluation never sees a variable.
+//! Resolution family: compiled plans, the executable index, partitions,
+//! invocation routes, normalized input, provenance and resolver evidence.
+//!
+//! This file folds pack variables, `when` tests, templates and rule overrides
+//! into ordinary rules and preconditions before validation, so evaluation never
+//! sees a variable.
 use super::{
     Decision, Error,
-    model::PackDocument,
+    model::{
+        PackDocument, templates,
+        variables::{self, Declaration, Test},
+    },
     rules::{Decisions, Precondition, Rule},
-    templates,
-    variables::{self, Declaration, Test},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
+
+pub(crate) mod compiled;
+pub(crate) mod diagnostics;
+pub(super) mod index;
+pub(super) mod invocations;
+pub(crate) mod normalized;
+pub(crate) mod partition;
+pub(crate) mod provenance;
+pub(crate) mod symbolic;
 
 #[cfg(test)]
 mod diagnostics_tests;

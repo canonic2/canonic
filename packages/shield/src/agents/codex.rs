@@ -218,7 +218,7 @@ impl AgentAdapter for Codex {
     }
     fn prefix_rules(
         &self,
-        prefixes: &[crate::policy::agent_outputs::CodexPrefix],
+        prefixes: &[crate::policy::rules::agent_outputs::CodexPrefix],
     ) -> Option<String> {
         setup::prefix_rules(prefixes)
     }

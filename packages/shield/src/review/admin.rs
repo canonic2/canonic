@@ -139,7 +139,7 @@ impl Prepared {
             "agents",
             "ask_fallbacks",
             "tool_approvals",
-            "box",
+            "host",
             "adopt_existing_entries",
             "dry_run",
             "repair",
@@ -496,15 +496,20 @@ fn setup(
     let state = project::checkpoint(context)?;
     let metadata = project::metadata(&state);
     if repair_hooks
-        && integrations::registration(&metadata)?.is_some_and(|registration| {
-            registration.box_definition.is_some()
-                && agents
+        && let Some(definition) = integrations::registration(&metadata)?.and_then(|registration| {
+            registration.definition.clone().filter(|_| {
+                agents
                     .iter()
                     .any(|agent| !registration.agents.contains_key(agent))
+            })
         })
     {
         return Err(Error::Invalid(
-            "Box manages these hooks. Use Box config_show for this project, then config_sync with the same project, explicit agents, servers: [shield], and repair_hooks: true for a reviewed reconciliation that preserves Box ownership",
+            if definition.host() == &integrations::host_definition::HUB {
+                "Hub manages these hooks. Use Hub setup with the same project, explicit agents and repair_hooks: true for a reviewed reconciliation that preserves Hub ownership"
+            } else {
+                "Box manages these hooks. Use Box config_show for this project, then config_sync with the same project, explicit agents, servers: [shield], and repair_hooks: true for a reviewed reconciliation that preserves Box ownership"
+            },
         ));
     }
     let root = Path::new(&context.project_root);

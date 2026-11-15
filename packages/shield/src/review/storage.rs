@@ -550,15 +550,10 @@ impl Store {
         Ok((state, evaluator, snapshots))
     }
 
-    /// The current policy, following the policy files. Optional history stays
-    /// with history readers.
-    pub(in crate::review) fn read_current(&self) -> Result<State, Error> {
-        self.read_following_files()
-    }
-
     /// Read the checkpoint with its copy of the policy brought up to the policy
     /// files in memory. Readers never take the writer lock; the next writer
     /// persists the same result. Unchanged files cost one read and hash.
+    /// Optional history stays with history readers.
     pub(in crate::review) fn read_following_files(&self) -> Result<State, Error> {
         let mut state = self.read_checkpoint()?;
         let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
@@ -578,7 +573,7 @@ impl Store {
     pub(in crate::review) fn read_current_evaluated(
         &self,
     ) -> Result<(State, crate::configuration::Evaluator), Error> {
-        let state = self.read_current()?;
+        let state = self.read_following_files()?;
         let evaluator = match Self::cached_evaluator(&state) {
             Some(evaluator) => evaluator,
             None => crate::configuration::Evaluator::new_for_revision(
@@ -723,10 +718,6 @@ impl Store {
 
     // Current enrollment, authorization and source identities, without preparing policy.
     pub(in crate::review) fn read_checkpoint(&self) -> Result<State, Error> {
-        self.read_settled_checkpoint()
-    }
-
-    fn read_settled_checkpoint(&self) -> Result<State, Error> {
         let _trace = crate::diagnostics::trace::span("state.checkpoint");
         crate::diagnostics::trace::count("state.checkpoint_reads", 1);
         let bytes = self.checkpoint_bytes()?;

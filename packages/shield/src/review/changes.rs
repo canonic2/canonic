@@ -13,7 +13,7 @@ use std::{collections::BTreeMap, path::Path};
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum Change {
     RuleAdd {
-        rule: policy::normalized::Rule,
+        rule: policy::resolution::normalized::Rule,
         #[serde(
             default,
             deserialize_with = "present",
@@ -23,7 +23,7 @@ pub(super) enum Change {
     },
     RuleEdit {
         rule_id: String,
-        rule: policy::normalized::Rule,
+        rule: policy::resolution::normalized::Rule,
         #[serde(
             default,
             deserialize_with = "present",
@@ -705,7 +705,7 @@ pub(super) fn portable_edit(
         return Ok(());
     }
     let roots = crate::agents::machine_roots(Path::new(&context.project_root));
-    policy::portability::check(rule, &roots).map_err(Error::NotPortable)
+    policy::rules::portability::check(rule, &roots).map_err(Error::NotPortable)
 }
 
 /// Capture a changed configuration with the candidate's other artifacts, each

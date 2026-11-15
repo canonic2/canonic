@@ -26,8 +26,8 @@ struct Failure<'a> {
 
 #[derive(Serialize)]
 struct Normalized<'a> {
-    input: &'a policy::normalized::Input,
-    context: &'a policy::normalized::Context,
+    input: &'a policy::resolution::normalized::Input,
+    context: &'a policy::resolution::normalized::Context,
 }
 
 #[derive(Serialize)]
@@ -47,7 +47,7 @@ struct ReadResult<'a> {
     analysis_coverage: Coverage,
     approval_request_id: Option<&'a str>,
     requirement_checks: &'a [policy::rules::Check],
-    guidance: &'a [policy::diagnostics::GuidanceRecord],
+    guidance: &'a [policy::resolution::diagnostics::GuidanceRecord],
     retry_ref: Option<&'a str>,
     approval_id: Option<&'a str>,
     consumed: bool,

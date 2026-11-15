@@ -90,10 +90,7 @@ fn plural(count: usize, one: &str, many: &str) -> String {
 
 /// The review shown in the operator terminal before a change is confirmed.
 pub(super) fn review(value: &Value) -> String {
-    if let Some(message) = value["enrollment_review"]
-        .as_str()
-        .or_else(|| value["session_grant_review"].as_str())
-    {
+    if let Some(message) = value["session_grant_review"].as_str() {
         return format!(
             "{}\n",
             message

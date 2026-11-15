@@ -17,14 +17,12 @@ pub(super) fn rules(
     };
     let captured = views.get(&id)?;
     let source = crate::review::inspection::source::rules(
-        context,
         &captured.candidate,
         &captured.metadata,
         captured.revision(),
         selector,
     )?;
     let mut value = crate::review::inspection::captured_rules_with_resolution(
-        context,
         &source,
         &captured.metadata,
         captured.revision(),
@@ -76,13 +74,9 @@ fn proposal(context: &Context, views: &mut Views, id: &str) -> Result<Value, Err
             .or_else(|| {
                 (row.candidate_digest == row.base_digest).then(|| row.policy_revision.clone())
             });
-    let after_revision = crate::review::inspection::source::revision(
-        context,
-        &row.candidate,
-        after_revision.as_deref(),
-    )?;
-    let display =
-        crate::review::inspection::source::policy(context, &row.candidate, &after_revision)?;
+    let after_revision =
+        crate::review::inspection::source::revision(&row.candidate, after_revision.as_deref())?;
+    let display = crate::review::inspection::source::policy(&row.candidate, &after_revision)?;
     let mut value = row.public();
     value
         .as_object_mut()
@@ -93,9 +87,7 @@ fn proposal(context: &Context, views: &mut Views, id: &str) -> Result<Value, Err
         value["redacted"] = json!(redacted || value["redacted"] == true);
     }
     value["capture_freshness"] = json!("unchecked; apply revalidates exact reviewed files");
-    if let Some((arguments, summary)) =
-        crate::review::model::presentation::read(context, &state, row)
-    {
+    if let Some((arguments, summary)) = crate::review::model::presentation::read(&state, row) {
         value["presentation_availability"] = json!("available");
         super::apply::present_cached_proposal(context, row, &mut value, &arguments, &summary);
     } else {
@@ -150,7 +142,6 @@ pub(super) fn policy(context: &Context, views: &mut Views, args: &Value) -> Resu
     state.candidates.insert(
         "project".into(),
         crate::review::inspection::source::policy(
-            context,
             &state.candidates["project"],
             &state.policy_revision,
         )?,

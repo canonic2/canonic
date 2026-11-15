@@ -1,5 +1,5 @@
 //! Codex TOML MCP serialization, prefix rules, ownership merge and configuration diagnostics.
-use crate::{policy::agent_outputs::CodexPrefix, review::Error};
+use crate::{policy::rules::agent_outputs::CodexPrefix, review::Error};
 use std::{fmt::Write as _, path::Path};
 use toml_edit::{DocumentMut, Item, Table, value};
 

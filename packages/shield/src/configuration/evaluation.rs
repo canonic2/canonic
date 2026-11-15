@@ -45,7 +45,7 @@ impl Serialize for CandidateEvaluation {
         if let Some(request) = &self.directory_request {
             value.serialize_field(
                 "directory_request",
-                &policy::diagnostics::RequestEvidence::new(request, self.private_input),
+                &policy::resolution::diagnostics::RequestEvidence::new(request, self.private_input),
             )?;
         }
         value.end()
@@ -80,7 +80,7 @@ impl CandidateEvaluation {
 /// Prepared, immutable candidate evidence for repeated read-only evaluation.
 /// Owns captured artifacts; no cache hit, scope label, or revision establishes trust.
 pub struct Evaluator {
-    plan: Box<policy::compiled::Plan>,
+    plan: Box<policy::resolution::compiled::Plan>,
     effective: Arc<Effective>,
     revision: String,
 }
@@ -93,8 +93,8 @@ impl Evaluator {
     pub(crate) fn evaluate_resource(
         &self,
         request: &Request,
-        input: &policy::normalized::Input,
-        context: &policy::normalized::Context,
+        input: &policy::resolution::normalized::Input,
+        context: &policy::resolution::normalized::Context,
         checkpoint: &dyn Fn() -> Result<(), Error>,
     ) -> Result<CandidateEvaluation, Error> {
         self.evaluate_resource_mcp(request, input, context, None, checkpoint)
@@ -103,9 +103,9 @@ impl Evaluator {
     pub(crate) fn evaluate_resource_mcp(
         &self,
         request: &Request,
-        input: &policy::normalized::Input,
-        context: &policy::normalized::Context,
-        mcp: Option<&policy::compiled::ResolvedMcp>,
+        input: &policy::resolution::normalized::Input,
+        context: &policy::resolution::normalized::Context,
+        mcp: Option<&policy::resolution::compiled::ResolvedMcp>,
         checkpoint: &dyn Fn() -> Result<(), Error>,
     ) -> Result<CandidateEvaluation, Error> {
         let resolved = self.mcp_resolution(input, mcp)?;
@@ -135,14 +135,14 @@ impl Evaluator {
     }
 
     fn mcp_input<'a>(
-        input: &'a policy::normalized::Input,
-        resolved: Option<&policy::compiled::ResolvedMcp>,
-    ) -> std::borrow::Cow<'a, policy::normalized::Input> {
-        if !matches!(input, policy::normalized::Input::Mcp { .. }) {
+        input: &'a policy::resolution::normalized::Input,
+        resolved: Option<&policy::resolution::compiled::ResolvedMcp>,
+    ) -> std::borrow::Cow<'a, policy::resolution::normalized::Input> {
+        if !matches!(input, policy::resolution::normalized::Input::Mcp { .. }) {
             return std::borrow::Cow::Borrowed(input);
         }
         let mut input = input.clone();
-        if let policy::normalized::Input::Mcp {
+        if let policy::resolution::normalized::Input::Mcp {
             connection,
             arguments,
             ..
@@ -155,10 +155,11 @@ impl Evaluator {
 
     fn mcp_resolution<'a>(
         &self,
-        input: &policy::normalized::Input,
-        supplied: Option<&'a policy::compiled::ResolvedMcp>,
-    ) -> Result<Option<std::borrow::Cow<'a, policy::compiled::ResolvedMcp>>, Error> {
-        let policy::normalized::Input::Mcp { server, .. } = input else {
+        input: &policy::resolution::normalized::Input,
+        supplied: Option<&'a policy::resolution::compiled::ResolvedMcp>,
+    ) -> Result<Option<std::borrow::Cow<'a, policy::resolution::compiled::ResolvedMcp>>, Error>
+    {
+        let policy::resolution::normalized::Input::Mcp { server, .. } = input else {
             return Ok(None);
         };
         if let Some(supplied) = supplied {
@@ -185,7 +186,7 @@ impl Evaluator {
         server: &str,
         connections: &crate::mcp_connections::Connections,
         source: &str,
-    ) -> Result<policy::compiled::ResolvedMcp, Error> {
+    ) -> Result<policy::resolution::compiled::ResolvedMcp, Error> {
         self.plan
             .resolve_mcp(server, connections, source, &self.revision)
     }
@@ -193,12 +194,12 @@ impl Evaluator {
     fn constrain_mcp(
         &self,
         evaluation: &mut policy::Evaluation,
-        input: &policy::normalized::Input,
+        input: &policy::resolution::normalized::Input,
         request: &Request,
-        resolved: Option<&policy::compiled::ResolvedMcp>,
+        resolved: Option<&policy::resolution::compiled::ResolvedMcp>,
         checkpoint: &dyn Fn() -> Result<(), Error>,
     ) -> Result<(), Error> {
-        let policy::normalized::Input::Mcp {
+        let policy::resolution::normalized::Input::Mcp {
             tool, arguments, ..
         } = input
         else {
@@ -244,8 +245,8 @@ impl Evaluator {
 
     pub(crate) fn evaluate_normalized(
         &self,
-        input: &policy::normalized::Input,
-        context: &policy::normalized::Context,
+        input: &policy::resolution::normalized::Input,
+        context: &policy::resolution::normalized::Context,
         project: &str,
         executable: Option<&str>,
         now: &str,
@@ -259,14 +260,14 @@ impl Evaluator {
 
     pub(crate) fn evaluate_normalized_report(
         &self,
-        input: &policy::normalized::Input,
-        context: &policy::normalized::Context,
+        input: &policy::resolution::normalized::Input,
+        context: &policy::resolution::normalized::Context,
         project: &str,
         executable: Option<&str>,
         now: &str,
         checkpoint: &dyn Fn() -> Result<(), Error>,
     ) -> Result<NormalizedEvaluation, Error> {
-        use policy::normalized::Input;
+        use policy::resolution::normalized::Input;
         let resolved = self.mcp_resolution(input, None)?;
         let resolved = resolved.as_deref();
         let bound = Self::mcp_input(input, resolved);
@@ -313,13 +314,13 @@ impl Evaluator {
     // inspected operations. Uncertainty cannot erase a matched whole-request deny.
     fn shell_result(
         &self,
-        input: &policy::normalized::Input,
-        context: &policy::normalized::Context,
+        input: &policy::resolution::normalized::Input,
+        context: &policy::resolution::normalized::Context,
         project: &str,
         mut value: NormalizedEvaluation,
         checkpoint: &dyn Fn() -> Result<(), Error>,
     ) -> Result<NormalizedEvaluation, Error> {
-        let policy::normalized::Input::Shell {
+        let policy::resolution::normalized::Input::Shell {
             source,
             dialect,
             dialect_version,
@@ -394,7 +395,7 @@ impl Evaluator {
                 Ok((pack, profile))
             })
             .collect::<Result<Vec<_>, Error>>()?;
-        let plan = policy::compiled::Plan::compile(
+        let plan = policy::resolution::compiled::Plan::compile(
             packs,
             snapshot.custom,
             serde_json::to_value(&effective).map_err(|_| Error::Syntax)?,
@@ -415,9 +416,11 @@ impl Evaluator {
     }
 
     pub(crate) fn from_authenticated_compiled(bytes: Vec<u8>) -> Result<Self, Error> {
-        Self::from_plan(policy::compiled::Plan::load_authenticated(bytes)?)
+        Self::from_plan(policy::resolution::compiled::Plan::load_authenticated(
+            bytes,
+        )?)
     }
-    fn from_plan(plan: policy::compiled::Plan) -> Result<Self, Error> {
+    fn from_plan(plan: policy::resolution::compiled::Plan) -> Result<Self, Error> {
         let effective: Effective = serde_json::from_value(plan.effective().clone())
             .map_err(|_| Error::Contract("invalid compiled composition"))?;
         let revision = effective.revision()?;
@@ -433,12 +436,12 @@ impl Evaluator {
     }
 
     /// Directory options the selected packs and custom rules declare.
-    pub(crate) fn directory_options(&self) -> &[policy::directories::DirectoryOption] {
+    pub(crate) fn directory_options(&self) -> &[policy::rules::directories::DirectoryOption] {
         self.plan.directory_options()
     }
 
     /// Codex prefixes of the active rules that allow.
-    pub(crate) fn codex_prefixes(&self) -> &[policy::agent_outputs::CodexPrefix] {
+    pub(crate) fn codex_prefixes(&self) -> &[policy::rules::agent_outputs::CodexPrefix] {
         self.plan.codex_prefixes()
     }
 
@@ -527,7 +530,7 @@ impl Evaluator {
         if known_cwd
             && written.fallback_only_ask()
             && let Some(normalized) =
-                policy::directories::normalize(request, self.directory_options())
+                policy::rules::directories::normalize(request, self.directory_options())
         {
             let mut result = self.evaluate_written(
                 &normalized,
@@ -551,12 +554,12 @@ impl Evaluator {
         working_files: Option<&crate::location::WorkingFiles>,
     ) -> Result<CandidateEvaluation, Error> {
         checkpoint()?;
-        let input = policy::normalized::Input::Argv {
+        let input = policy::resolution::normalized::Input::Argv {
             executable: request.executable.clone(),
             arguments: request.arguments.clone(),
             original_input: serde_json::json!({}),
         };
-        let context = policy::normalized::Context {
+        let context = policy::resolution::normalized::Context {
             cwd: request.cwd.clone(),
             environment: None,
             working_files: working_files.cloned(),
@@ -572,22 +575,12 @@ impl Evaluator {
             now: &now,
             known_cwd,
             known_arguments,
-            locations: known_cwd.then_some(&observer as &dyn policy::resources::Resources),
+            locations: known_cwd.then_some(&observer as &dyn policy::rules::resources::Resources),
             effects: None,
         };
         let evaluation = self.plan.evaluate_input(request, &facts, checkpoint)?;
         checkpoint()?;
-        Ok(CandidateEvaluation {
-            schema_version: 1,
-            mode: "preview",
-            trust: "unverified",
-            decision: evaluation.decision,
-            revision: self.revision.clone(),
-            effective: self.effective.clone(),
-            evaluation,
-            directory_request: None,
-            private_input: false,
-        })
+        Ok(self.candidate(evaluation))
     }
 }
 
@@ -623,7 +616,7 @@ pub(super) struct Prepared<'a> {
     pub(super) effective: Effective,
     pub(super) packs: Vec<(&'a Pack, Profile)>,
     pub(super) custom: Vec<&'a CustomRules>,
-    pub(super) directory_options: Vec<policy::directories::DirectoryOption>,
+    pub(super) directory_options: Vec<policy::rules::directories::DirectoryOption>,
 }
 
 impl<'a> Prepared<'a> {
@@ -643,7 +636,7 @@ impl<'a> Prepared<'a> {
             packs.push((pack, profile));
         }
         let custom: Vec<_> = snapshot.custom.iter().collect();
-        let directory_options = policy::directories::selected(&packs, &custom)?;
+        let directory_options = policy::rules::directories::selected(&packs, &custom)?;
         Ok(Self {
             effective,
             packs,
@@ -663,7 +656,7 @@ impl<'a> Prepared<'a> {
         let written = policy::evaluate_selected(&self.packs, &self.custom, request)?;
         if written.fallback_only_ask()
             && let Some(normalized) =
-                policy::directories::normalize(request, &self.directory_options)
+                policy::rules::directories::normalize(request, &self.directory_options)
         {
             let evaluation = policy::evaluate_selected(&self.packs, &self.custom, &normalized)?;
             return Ok((evaluation, Some(normalized)));

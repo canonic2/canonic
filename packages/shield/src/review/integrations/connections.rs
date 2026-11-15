@@ -240,8 +240,12 @@ fn automatic(
         };
         let hooks = if registered.is_some_and(|r| r.agents.contains_key(agent)) {
             "registered; host loading unverified"
-        } else if registered.is_some_and(|r| r.box_definition.is_some()) {
-            "defined for Box; host loading unverified"
+        } else if let Some(definition) = registered.and_then(|r| r.definition.as_ref()) {
+            if definition.host() == &super::host_definition::HUB {
+                "defined for Hub; host loading unverified"
+            } else {
+                "defined for Box; host loading unverified"
+            }
         } else {
             "not registered"
         };

@@ -373,7 +373,7 @@ fn retain(store: &Store, bytes: &[u8], keep: &[String]) -> Result<(), Error> {
         if retained(store, &name)? != bytes {
             return Err(Error::Invalid("upgrade recovery source differs"));
         }
-        super::history::inline::retain(store, bytes, "upgrade");
+        super::history::inline::retain(store, bytes);
         cleanup(store, keep)?;
         return Ok(());
     }
@@ -405,7 +405,7 @@ fn retain(store: &Store, bytes: &[u8], keep: &[String]) -> Result<(), Error> {
     sync(&file)?;
     drop(file);
     super::replace(&temporary.path, &target)?;
-    super::history::inline::retain(store, bytes, "upgrade");
+    super::history::inline::retain(store, bytes);
     #[cfg(unix)]
     sync(&fs::File::open(&store.directory)?)?;
     Ok(())
@@ -454,7 +454,7 @@ fn cleanup(store: &Store, keep: &[String]) -> Result<(), Error> {
         }
         if retained(store, &name).is_ok_and(|old| crate::policy::fingerprint(&old) == digest) {
             fs::remove_file(entry.path())?;
-            super::history::inline::remove(store, digest, "upgrade");
+            super::history::inline::remove(store, digest);
         }
     }
     Ok(())

@@ -1,6 +1,10 @@
 //! Request-scoped filesystem observations for explicit resource predicates.
 //! Policy passes this observer explicitly; no observation authorizes execution.
-use crate::policy::{Error, normalized::Input, patterns::Provider, selectors};
+use crate::policy::{
+    Error,
+    resolution::normalized::Input,
+    rules::{patterns::Provider, selectors},
+};
 use serde_json::Value;
 use std::{
     cell::{Cell, OnceCell, RefCell},
@@ -662,7 +666,7 @@ impl Observer {
     }
 }
 
-impl crate::policy::resources::Resources for Observer {
+impl crate::policy::rules::resources::Resources for Observer {
     fn field_path(
         &self,
         path: &str,
@@ -830,7 +834,7 @@ fn resolve(
 #[cfg(all(test, any(unix, windows)))]
 mod tests {
     use super::*;
-    use crate::policy::resources::Resources;
+    use crate::policy::rules::resources::Resources;
 
     #[test]
     fn ripgrep_failure_evidence_reuses_observations_without_granting_coverage() {

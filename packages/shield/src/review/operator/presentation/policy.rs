@@ -588,9 +588,6 @@ pub(super) fn codex_prefixes(changes: &Value) -> String {
 
 /// `shield policy show` or `review`: the active policy view, or the result of a menu action.
 pub(super) fn policy(value: &Value) -> String {
-    if value["no_project_edits"] == true {
-        return "No project file edits to review; nothing changed.\nUpdate installed packs with shield pack update.\n".into();
-    }
     if value["inspected"] == true {
         return String::new();
     }
@@ -615,13 +612,6 @@ pub(super) fn policy(value: &Value) -> String {
             );
         }
         return output;
-    }
-    if value["restored_project_files"] == true {
-        let mut text = "Restored the .shield project files from the active policy.\n".to_owned();
-        if value["repair_needed"] == true {
-            text.push_str("Some files still conflict with your edits; check shield doctor.\n");
-        }
-        return text;
     }
     if value["enabled"].is_boolean() && !value["limit"].is_null() {
         return format!(

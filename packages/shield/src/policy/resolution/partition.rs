@@ -1,6 +1,6 @@
 //! Partitions current literal argv and context predicates with bounded resources.
 
-use super::{CustomRules, Error, Pack, Profile, Request, model::Matcher};
+use crate::policy::{CustomRules, Error, Pack, Profile, Request, model::Matcher};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 

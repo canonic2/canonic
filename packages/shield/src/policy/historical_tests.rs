@@ -1,5 +1,6 @@
 //! Retained matching decisions survive the authenticated compiled boundary.
 use super::*;
+use resolution::compiled;
 use serde_json::{Value, json};
 
 fn old_pack(rows: &[Value]) -> String {

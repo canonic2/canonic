@@ -3,13 +3,15 @@ use super::{Registration, State, agents, json, native};
 use serde_json::Value;
 use std::{collections::BTreeMap, path::Path};
 
-pub(super) fn box_hooks(
+pub(super) fn host_hooks(
     root: &Path,
     registered: Option<&Registration>,
     state: &State,
     diagnostics: &mut Vec<&'static str>,
 ) -> Vec<Value> {
-    let Some(registration) = registered.filter(|r| r.box_definition.is_some()) else {
+    let Some((registration, host)) =
+        registered.and_then(|r| r.definition.as_ref().map(|d| (r, d.host())))
+    else {
         return Vec::new();
     };
     let previous_roots: Vec<_> = state.operator["portable_launch_roots"]
@@ -33,19 +35,19 @@ pub(super) fn box_hooks(
                     Ok(Some(true)) => "installed",
                     Ok(Some(false)) => {
                         diagnostics.push(
-                        "Box-published native hooks or agent settings are incomplete or disabled",
+                        "Hub- or Box-published native hooks or agent settings are incomplete or disabled",
                     );
                         "degraded"
                     }
                     Err(_) => {
                         diagnostics.push(
-                            "Box-published native hooks are unreadable, conflicting or changed",
+                            "Hub- or Box-published native hooks are unreadable, conflicting or changed",
                         );
                         "degraded"
                     }
                 };
             Some(
-                json!({"agent":agent,"surface":"native-hooks","managed_by":"box","status":status,
+                json!({"agent":agent,"surface":"native-hooks","managed_by":host.id,"status":status,
                 "ask_fallback":state.settings.ask_fallback.get(agent)}),
             )
         })
@@ -61,7 +63,9 @@ pub(in crate::review) fn enforcement(coverage: &Value) -> &'static str {
         || !coverage["legacy_interceptor"].is_null()
     {
         "installed"
-    } else if !coverage["box_integration"].is_null() {
+    } else if coverage["host_integration"]["agent"] == "hub" {
+        "defined-for-hub"
+    } else if !coverage["host_integration"].is_null() {
         "defined-for-box"
     } else {
         "not-installed"

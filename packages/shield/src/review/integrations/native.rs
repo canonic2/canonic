@@ -106,7 +106,6 @@ pub(super) fn posix_hook_command(binary: &str, project: &str, agent: &str, event
 }
 
 pub(in crate::review) fn hook_command(
-    _binary: &Path,
     root: &Path,
     agent: &str,
     event: &str,
@@ -163,7 +162,7 @@ fn installation(
                 if let Some(group) = adapter.direct_hook_group(binary, root, event) {
                     return Ok(((*event).into(), group));
                 }
-                let command = hook_command(binary, root, adapter.spec().id, event)?;
+                let command = hook_command(root, adapter.spec().id, event)?;
                 Ok(((*event).into(), adapter.hook_group(&command)))
             })
             .collect::<Result<_, Error>>()?,
@@ -570,7 +569,7 @@ fn compatible_historical_hooks(
     });
     let Some(profile) = profile else { return false };
     if profile.iter().all(|event| {
-        hook_command(binary, root, adapter.spec().id, event).is_ok_and(|command| {
+        hook_command(root, adapter.spec().id, event).is_ok_and(|command| {
             installed.groups.get(*event) == Some(&adapter.hook_group(&command))
         })
     }) {

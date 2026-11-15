@@ -3,7 +3,7 @@
 use super::{Prepared, partition};
 use crate::policy::{
     Error, Request,
-    profile_comparison::{self, Bound},
+    dependencies::profile_comparison::{self, Bound},
 };
 use std::collections::BTreeSet;
 

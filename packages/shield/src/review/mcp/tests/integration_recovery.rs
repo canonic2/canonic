@@ -31,16 +31,21 @@ fn integration_recovery_targets_degraded_agents_instead_of_current_agent() {
         "{data}"
     );
 
-    // A healthy Box integration must not redirect repair of a direct agent.
-    data["repair_route"] = json!("shield mcp setup");
-    data["coverage"]["box_integration"] = json!({"status":"installed"});
-    integration_recovery(&context, &mut data);
-    assert_eq!(data["repair_arguments"], json!({"agents":["codex"]}));
+    // A healthy Hub or Box integration must not redirect repair of a direct
+    // agent; a changed one is repaired through its own host.
+    for host in ["hub", "box"] {
+        data["repair_route"] = json!("shield mcp setup");
+        data["coverage"]["host_integration"] = json!({"agent":host,"status":"installed"});
+        integration_recovery(&context, &mut data);
+        assert_eq!(data["repair_arguments"], json!({"agents":["codex"]}));
 
-    data["repair_route"] = json!("shield mcp setup");
-    data["coverage"]["box_integration"]["status"] = json!("changed");
-    integration_recovery(&context, &mut data);
-    assert_eq!(data["repair_arguments"], json!({"agents":["box", "codex"]}));
+        data["repair_route"] = json!("shield mcp setup");
+        data["coverage"]["host_integration"]["status"] = json!("changed");
+        integration_recovery(&context, &mut data);
+        let mut expected = vec![host, "codex"];
+        expected.sort_unstable();
+        assert_eq!(data["repair_arguments"], json!({"agents":expected}));
+    }
 
     data["repair_route"] = json!("shield mcp setup");
     data["coverage"]["diagnostics"] = json!(["confirmed setup requires repair"]);

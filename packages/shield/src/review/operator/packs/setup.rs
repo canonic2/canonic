@@ -3,7 +3,7 @@
 //! ordinary review and confirmation activate them.
 use super::super::terminal::{Step, Terminal};
 use crate::{
-    policy::{self, variables::Declaration},
+    policy::{self, model::variables::Declaration},
     review::Error,
     review::inspection::Settings,
 };
@@ -249,7 +249,7 @@ impl Flow {
                     let _ = write!(
                         kept,
                         "\n{name} keeps {} because its question does not apply.",
-                        policy::variables::render(value)
+                        policy::model::variables::render(value)
                     );
                 }
             }
@@ -376,5 +376,5 @@ fn asks_place(settings: &Settings, answers: &Answers) -> bool {
 fn suggests_local(settings: &Settings, name: &str, declaration: &Declaration) -> bool {
     let current = settings.layer(name);
     current == "local"
-        || (current != "project" && declaration.layer() == policy::variables::Layer::Local)
+        || (current != "project" && declaration.layer() == policy::model::variables::Layer::Local)
 }

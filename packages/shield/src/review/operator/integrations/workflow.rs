@@ -8,22 +8,20 @@ pub(super) use crate::review::integrations::setup::preview;
 pub(super) use crate::review::integrations::setup::with_fallbacks;
 use crate::review::integrations::setup::{finish, setup_preview};
 
-/// The agent page rows: Box first, then each native agent adapter.
+/// The agent page rows: Hub, then Box, then each native agent adapter.
 pub(super) fn rows(
-    box_description: &'static str,
+    host_description: impl Fn(&super::host_definition::Host) -> &'static str,
     agent_description: &'static str,
 ) -> Vec<(&'static str, &'static str, &'static str)> {
-    std::iter::once((
-        super::box_definition::ID,
-        super::box_definition::LABEL,
-        box_description,
-    ))
-    .chain(
-        crate::agents::ADAPTERS
-            .iter()
-            .map(|a| (a.spec().id, a.spec().label, agent_description)),
-    )
-    .collect()
+    super::host_definition::HOSTS
+        .into_iter()
+        .map(|host| (host.id, host.label, host_description(host)))
+        .chain(
+            crate::agents::ADAPTERS
+                .iter()
+                .map(|a| (a.spec().id, a.spec().label, agent_description)),
+        )
+        .collect()
 }
 
 /// The integration to set up. A confirmed repair resumes when no selection was
@@ -74,17 +72,21 @@ pub(super) fn setup_choices(
 ) -> Result<Vec<canonic_tui_kit::picker::Choice>, Error> {
     let registration = super::registration(meta)?;
     Ok(rows(
-        "Box publishes Shield hooks, MCP and permissions to each developer's agents",
+        |host| {
+            if host == &super::host_definition::HUB {
+                "Hub publishes Shield hooks, MCP and permissions to each developer's agents"
+            } else {
+                "Box publishes Shield hooks, MCP and permissions to each developer's agents"
+            }
+        },
         "Manage project hooks, Shield MCP and permission settings together",
     )
     .into_iter()
     .map(|(id, label, detail)| {
-        let configured = registration.as_ref().is_some_and(|r| {
-            if id == super::box_definition::ID {
-                r.box_definition.is_some()
-            } else {
-                r.agents.contains_key(id)
-            }
+        let host = super::host_definition::find(id);
+        let configured = registration.as_ref().is_some_and(|r| match host {
+            Some(host) => r.definition.as_ref().is_some_and(|d| d.host() == host),
+            None => r.agents.contains_key(id),
         });
         let mut choice = canonic_tui_kit::picker::Choice::new(id, label);
         choice.detail = format!(
@@ -95,11 +97,16 @@ pub(super) fn setup_choices(
                 "not registered"
             }
         );
-        if !remove && id == super::box_definition::ID && !super::box_definition::box_project(root) {
-            choice.disabled = Some("requires a Box project".into());
-        }
-        if !remove && id == super::box_definition::ID && cfg!(windows) {
-            choice.disabled = Some("Box hook integration requires a Unix host".into());
+        if let Some(host) = host.filter(|_| !remove) {
+            if !super::host_definition::configured(host, root) {
+                choice.disabled = Some(format!("requires a {} project", host.label));
+            }
+            if cfg!(windows) {
+                choice.disabled = Some(format!(
+                    "{} hook integration requires a Unix host",
+                    host.label
+                ));
+            }
         }
         choice
     })
@@ -107,23 +114,25 @@ pub(super) fn setup_choices(
 }
 
 /// The agents the guided page marks first: those already set up, otherwise
-/// Box alone in a Box project, otherwise the detected agent CLIs.
+/// Hub alone in a Hub project, Box alone in a Box project, otherwise the
+/// detected agent CLIs.
 pub(super) fn preselected(root: &Path, meta: &Value) -> Result<Vec<String>, Error> {
     let registered: Vec<String> = super::registration(meta)?
         .map(|r| {
-            r.box_definition
+            r.definition
                 .as_ref()
-                .map(|_| super::box_definition::ID.to_owned())
+                .map(|d| d.host().id.to_owned())
                 .into_iter()
                 .chain(r.agents.keys().cloned())
                 .collect()
         })
         .unwrap_or_default();
-    // Box setup is disabled on Windows, so it cannot be the preselection there.
+    // Hub and Box setup are disabled on Windows, so neither is the preselection there.
     Ok(if !registered.is_empty() {
         registered
-    } else if !cfg!(windows) && super::box_definition::box_project(root) {
-        vec![super::box_definition::ID.to_owned()]
+    } else if let Some(host) = super::host_definition::project_host(root).filter(|_| !cfg!(windows))
+    {
+        vec![host.id.to_owned()]
     } else {
         detected()
     })
@@ -204,39 +213,38 @@ fn plan(
     } else {
         None
     };
-    // Only guided setup asks; `--agent box` keeps the default hand-over, which
-    // the review states. Init has no earlier installations to hand over.
+    // Only guided Box setup asks; `--agent box` keeps the default hand-over, which
+    // the review states, and Hub always hands over. Init has no earlier
+    // installations to hand over.
     let guided = back && !initial;
     let handover = approved.is_none() || !guided || handover(tty, meta, selected)?;
     prepare_approving(root, meta, selected, initial, approved, handover).map(Step::Done)
 }
 
-/// Whether a Box install hands Shield's direct installations over to Box;
-/// asked only when there are some, with hand-over as the default.
+/// Whether a Box install hands Shield's direct installations over to it;
+/// asked only when there are some, with hand-over as the default. Hub installs
+/// alone, so a Hub install always hands them over without asking.
 fn handover(tty: &mut Terminal, meta: &Value, selected: IntegrationChoice) -> Result<bool, Error> {
     let direct = super::handed_over(super::registration(meta)?.as_ref(), selected, true);
-    if direct.is_empty() {
+    if direct.is_empty() || selected.host() == Some(&super::host_definition::HUB) {
         return Ok(true);
     }
     let names: Vec<_> = direct.iter().map(|id| crate::agents::label(id)).collect();
-    // Box does not publish Codex's prefix rules, so Shield keeps writing them.
+    // Hub and Box do not publish Codex's prefix rules, so Shield keeps writing them.
     let handover_effect = if direct.iter().any(|id| id == "codex") {
         "Shield stops managing their hooks and MCP entries; it keeps Codex's prefix rules in step with your policy"
     } else {
         "Shield stops managing them and changes none of their files"
     };
+    let title = "Hand over to Box";
     let answer = tty.choose(
-        "Hand over to Box",
+        title,
         &format!(
             "Shield also manages direct installations for {}. Handing them over keeps their hooks, MCP entries and settings in place for box config sync --adopt.",
             names.join(" and ")
         ),
         &[
-            (
-                "handover",
-                "Hand over to Box",
-                handover_effect,
-            ),
+            ("handover", title, handover_effect),
             (
                 "keep",
                 "Keep direct installations",
@@ -367,7 +375,7 @@ fn onboarding_answers(
     asks_profile: bool,
 ) -> Result<(crate::policy::Profile, Option<Plan>), Error> {
     let rows = rows(
-        "Write .box/mcp/shield.yml; Box publishes it to each developer's agents",
+        |host| host.write_note,
         "Install project hooks and Shield MCP",
     );
     // Profile, agents, then tool permissions. Escape goes back one step with
@@ -387,7 +395,6 @@ fn onboarding_answers(
                         "Baseline protection",
                         "Baseline is installed by default and can be removed with shield pack remove baseline.",
                         profile,
-                        false,
                     )?
                     .or_cancel()?;
                 Stage::Agents
@@ -397,7 +404,7 @@ fn onboarding_answers(
                 let marked: Vec<&str> = agents.iter().map(String::as_str).collect();
                 match tty.choose_many_step(
                     "Agent integrations",
-                    "Box is preselected in a Box project, otherwise detected CLIs. Select agents. Enter with nothing selected: Skip for now. You can configure agents later with shield mcp setup.",
+                    "Hub is preselected in a Hub project, Box in a Box project, otherwise detected CLIs. Select agents. Enter with nothing selected: Skip for now. You can configure agents later with shield mcp setup.",
                     &rows,
                     &marked,
                     "Skip for now",

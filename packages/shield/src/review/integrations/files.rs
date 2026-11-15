@@ -28,11 +28,7 @@ pub(in crate::review) struct Change {
 }
 
 fn checked_path(root: &Path, name: &str, legacy: bool) -> Result<std::path::PathBuf, Error> {
-    let allowed = [
-        super::box_definition::PATH,
-        super::box_definition::LOCAL_PATH,
-    ]
-    .contains(&name)
+    let allowed = super::host_definition::owning(name).is_some()
         || (legacy && super::legacy::asset_path(name))
         || crate::agents::ADAPTERS.iter().any(|a| {
             a.spec().hooks_path == name
@@ -155,10 +151,6 @@ fn validate_before_with(root: &Path, files: &[Change], legacy: bool) -> Result<(
     }
     Ok(())
 }
-pub(in crate::review) fn validate_recovery(root: &Path, files: &[Change]) -> Result<(), Error> {
-    validate_recovery_with(root, files, false)
-}
-
 pub(super) fn validate_plan_recovery(root: &Path, plan: &super::Plan) -> Result<(), Error> {
     super::legacy::validate_plan(plan)?;
     validate_recovery_with(root, &plan.files, true)
@@ -215,13 +207,18 @@ pub(in crate::review) fn create_like(temporary: &Path, target: &Path) -> Result<
     Ok(file)
 }
 
-/// Create a file's missing parent folders. Folders created for Box's private
-/// local layer are owner-only; existing folders keep their permissions.
+/// Whether `name` is a Hub or Box private local layer file.
+fn private_layer(name: &str) -> bool {
+    super::host_definition::owning(name).is_some_and(|host| host.local_path == name)
+}
+
+/// Create a file's missing parent folders. Folders created for a Hub or Box
+/// private local layer are owner-only; existing folders keep their permissions.
 fn create_parent(name: &str, parent: &Path) -> Result<(), Error> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
     #[cfg(unix)]
-    if name == super::box_definition::LOCAL_PATH || super::legacy::asset_path(name) {
+    if private_layer(name) || super::legacy::asset_path(name) {
         use std::os::unix::fs::DirBuilderExt;
         builder.mode(0o700);
     }
@@ -231,18 +228,18 @@ fn create_parent(name: &str, parent: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-/// Whether Box's private local file grants group or other access, which Box
-/// refuses. Absent files and non-Unix hosts report no exposure.
-pub(super) fn private_exposed(root: &Path) -> bool {
+/// Whether the host's private local file grants group or other access, which
+/// Hub and Box refuse. Absent files and non-Unix hosts report no exposure.
+pub(super) fn private_exposed(root: &Path, host: &super::host_definition::Host) -> bool {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::symlink_metadata(root.join(super::box_definition::LOCAL_PATH))
+        fs::symlink_metadata(root.join(host.local_path))
             .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o077 != 0)
     }
     #[cfg(not(unix))]
     {
-        let _ = root;
+        let _ = (root, host);
         false
     }
 }
@@ -272,11 +269,7 @@ pub(super) fn publish_plan(root: &Path, plan: &super::Plan) -> Result<(), Error>
 }
 
 fn publish_with(root: &Path, files: &[Change], legacy: bool) -> Result<(), Error> {
-    if legacy {
-        validate_recovery_with(root, files, true)?;
-    } else {
-        validate_recovery(root, files)?;
-    }
+    validate_recovery_with(root, files, legacy)?;
     for f in files {
         let current = read_with(root, &f.path, legacy)?;
         let after = super::reconcile::reconcile(
@@ -286,8 +279,8 @@ fn publish_with(root: &Path, files: &[Change], legacy: bool) -> Result<(), Error
             current.as_deref(),
         )?;
         if current == after {
-            // An earlier setup may have left the right text with a mode Box refuses.
-            if current.is_some() && f.path == super::box_definition::LOCAL_PATH {
+            // An earlier setup may have left the right text with a mode the host refuses.
+            if current.is_some() && private_layer(&f.path) {
                 restrict_private(&checked_path(root, &f.path, legacy)?)?;
             }
             continue;
@@ -301,10 +294,9 @@ fn publish_with(root: &Path, files: &[Change], legacy: bool) -> Result<(), Error
         if let Some(after) = &after {
             let tmp = parent.join(format!(".shield-{}.tmp", std::process::id()));
             let mut file = create_like(&tmp, &path)?;
-            // Box refuses its private local layer unless it is owner-only.
+            // Hub and Box refuse their private local layer unless it is owner-only.
             #[cfg(unix)]
-            if f.path == super::box_definition::LOCAL_PATH
-                || (super::legacy::asset_path(&f.path) && f.before.is_none())
+            if private_layer(&f.path) || (super::legacy::asset_path(&f.path) && f.before.is_none())
             {
                 use std::os::unix::fs::PermissionsExt;
                 file.set_permissions(fs::Permissions::from_mode(0o600))?;

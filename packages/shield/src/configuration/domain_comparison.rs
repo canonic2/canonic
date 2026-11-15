@@ -1,7 +1,7 @@
 //! Owns bounded literal-request domain comparison and unverified evidence.
 
 use super::{Comparison, Effective, Snapshot, compare, evaluation::Prepared};
-use crate::policy::{self, Error, Request, Scope, partition};
+use crate::policy::{self, Error, Request, Scope, resolution::partition};
 use serde::Serialize;
 mod feedback;
 mod profiles;
@@ -208,10 +208,10 @@ fn comparison(
 
 struct Findings {
     regions: partition::Partition,
-    custom_bound: Option<policy::profile_comparison::Bound>,
-    profile_bound: Option<policy::profile_comparison::Bound>,
-    symbolic: Option<(policy::profile_comparison::Bound, usize)>,
-    decision_bound: Option<policy::profile_comparison::Bound>,
+    custom_bound: Option<policy::dependencies::profile_comparison::Bound>,
+    profile_bound: Option<policy::dependencies::profile_comparison::Bound>,
+    symbolic: Option<(policy::dependencies::profile_comparison::Bound, usize)>,
+    decision_bound: Option<policy::dependencies::profile_comparison::Bound>,
     normalized: bool,
     semantic_identity: bool,
     expansion: Option<Comparison>,
@@ -467,7 +467,7 @@ fn normalized_comparison(
     fixed: Option<(&str, &str)>,
     feedback_changes: policy::feedback::Summary,
     identity_status: &'static str,
-    bound: Option<policy::profile_comparison::Bound>,
+    bound: Option<policy::dependencies::profile_comparison::Bound>,
 ) -> Result<DomainComparison, Error> {
     let mut result = DomainComparison {
         feedback_changes,

@@ -809,7 +809,7 @@ fn search_protection(
     }) else {
         return (Protection::Blocked, None);
     };
-    let input = crate::policy::normalized::Input::Argv {
+    let input = crate::policy::resolution::normalized::Input::Argv {
         executable: executable.into(),
         arguments,
         original_input: Value::Null,

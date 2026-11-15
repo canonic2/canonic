@@ -102,7 +102,7 @@ fn historical_native_profiles_keep_actual_coverage_without_requiring_advisory_up
         let groups = events
             .iter()
             .map(|event| {
-                let command = hook_command(&binary, root.path(), agent, event).unwrap();
+                let command = hook_command(root.path(), agent, event).unwrap();
                 ((*event).into(), adapter.hook_group(&command))
             })
             .collect();

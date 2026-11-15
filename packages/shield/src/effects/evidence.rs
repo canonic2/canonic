@@ -1,6 +1,6 @@
 //! Borrowed presentation of effects derived inside a private source span.
 use super::{Hints, NestedExecution, arguments::OptionValue};
-use crate::policy::diagnostics::{Private, RequestEvidence};
+use crate::policy::resolution::diagnostics::{Private, RequestEvidence};
 use serde::{Serialize, ser::SerializeSeq};
 
 pub(super) struct PrivateInput<'a>(pub(super) &'a Hints);

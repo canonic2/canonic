@@ -28,7 +28,8 @@ pub(super) fn scoped(registration: &Registration, agent: &str) -> Option<String>
             "connections":registration.connections.get(agent),"fallback":registration.ask_fallback.get(agent),
             "tools":tools,"entry":shared.then_some(&registration.entry),
             "legacy":(agent=="claude").then_some(&registration.interceptor),
-            "box":adapter.supports_box_hooks().then_some(&registration.box_definition)
+            // The key predates Hub; Box definitions keep their earlier encoding.
+            "box":adapter.supports_box_hooks().then_some(&registration.definition)
         }))
     ))
 }

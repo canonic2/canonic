@@ -7,7 +7,7 @@ use std::path::PathBuf;
 /// Nonauthorizing coverage facts of the policy files' plan: Codex prefix
 /// rules and MCP connections the agents' files should match.
 pub(in crate::review) struct Inspection {
-    prefixes: Vec<policy::agent_outputs::CodexPrefix>,
+    prefixes: Vec<policy::rules::agent_outputs::CodexPrefix>,
     connections: crate::mcp_connections::Connections,
     automatic_mcp: bool,
 }
@@ -21,7 +21,7 @@ impl Inspection {
             automatic_mcp: evaluator.has_mcp_integrations(),
         }
     }
-    pub(in crate::review) fn codex_prefixes(&self) -> &[policy::agent_outputs::CodexPrefix] {
+    pub(in crate::review) fn codex_prefixes(&self) -> &[policy::rules::agent_outputs::CodexPrefix] {
         &self.prefixes
     }
     pub(in crate::review) fn mcp_connections(&self) -> &crate::mcp_connections::Connections {

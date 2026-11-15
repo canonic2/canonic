@@ -31,8 +31,8 @@ pub(crate) fn recorded_revision(candidate: &serde_json::Value) -> Result<String,
 pub(crate) fn verify_recorded_fields(
     candidate: &serde_json::Value,
     expected: &str,
-) -> Result<Effective, Error> {
-    let effective = recorded_effective(candidate, expected)?;
+) -> Result<(), Error> {
+    recorded_effective(candidate, expected)?;
     let lock: LockDocument =
         serde_json::from_value(candidate["lock"].clone()).map_err(|_| Error::Syntax)?;
     for (field, artifact) in [("rules", &lock.rules), ("local_rules", &lock.local_rules)] {
@@ -80,7 +80,7 @@ pub(crate) fn verify_recorded_fields(
     } else if candidate.get("packs").is_some() {
         return Err(Error::ArtifactMismatch);
     }
-    Ok(effective)
+    Ok(())
 }
 
 fn recorded_composition(candidate: &serde_json::Value) -> Result<Effective, Error> {
@@ -645,10 +645,10 @@ fn custom_rules(shared: Option<&str>, local: Option<&str>) -> Result<Option<Cust
     }
     // Both documents validated above, so their declarations read back.
     let declarations = |values: Vec<serde_json::Value>| {
-        serde_json::from_value::<Vec<policy::directories::DirectoryOption>>(values.into())
+        serde_json::from_value::<Vec<policy::rules::directories::DirectoryOption>>(values.into())
             .map_err(|_| Error::Syntax)
     };
-    let directory_options = policy::directories::join(
+    let directory_options = policy::rules::directories::join(
         &declarations(directory_options)?,
         &declarations(field(&local, "directory_options"))?,
     )?;

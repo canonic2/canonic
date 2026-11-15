@@ -54,7 +54,7 @@ impl ToolMapping {
 
 /// The folders a portable rule must not name, discovered the way every adapter
 /// discovers its working files, with no agent session.
-pub(crate) fn machine_roots(project: &Path) -> Vec<crate::policy::portability::Root> {
+pub(crate) fn machine_roots(project: &Path) -> Vec<crate::policy::rules::portability::Root> {
     let scopes: Vec<_> = ADAPTERS
         .iter()
         .map(|adapter| adapter.working_files(&Value::Null, project))
@@ -399,7 +399,7 @@ pub(crate) trait AgentAdapter: Sync {
     /// The prefix rules file for `prefixes`, None when there are none to write.
     fn prefix_rules(
         &self,
-        _prefixes: &[crate::policy::agent_outputs::CodexPrefix],
+        _prefixes: &[crate::policy::rules::agent_outputs::CodexPrefix],
     ) -> Option<String> {
         None
     }

@@ -59,7 +59,7 @@ fn bootstrap_nested_scope_cannot_inherit_the_original_paused_mode() {
     let paused = crate::review::mode::Paused {
         root: canonical.clone(),
         cache: None,
-        access: Ok(crate::review::path_access::PathAccess::default()),
+        access: crate::review::path_access::PathAccess::default(),
     };
     let ordinary = canonical.join("ordinary/src");
     fs::create_dir_all(&ordinary).unwrap();

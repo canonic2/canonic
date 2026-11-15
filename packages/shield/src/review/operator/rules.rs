@@ -372,7 +372,7 @@ fn review_live_change(context: &Context, tty: &mut Terminal) -> Result<Value, Er
         review::observations::requested(std::path::Path::new(&context.project_root), entry)
     });
     let card = super::presentation::card(&row, &change, requested.as_ref(), obsolete);
-    let choice = match tty.decide(&card, 0) {
+    let choice = match tty.decide(&card) {
         Ok(choice) => choice,
         Err(error) => {
             let _ = review::transition(context, &id, "withdraw", &|| Ok(()));

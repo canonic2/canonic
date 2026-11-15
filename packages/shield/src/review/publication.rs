@@ -49,7 +49,8 @@ pub(super) fn initialize(
     if let Err(error) = initialization {
         // Recovery only confirms a commit that already happened; when no state
         // was written, the initialization failure is the cause to report.
-        let Ok(recovered) = Store::open(project).and_then(|store| store.read_current()) else {
+        let Ok(recovered) = Store::open(project).and_then(|store| store.read_following_files())
+        else {
             return Err(error);
         };
         if recovered.operator != *meta || recovered.candidates != *candidates {

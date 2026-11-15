@@ -681,14 +681,14 @@ fn observation_isolation_check(context: &review::Context) {
     let result = other_snapshot.evaluate_resource(
         request,
         crate::review::runtime::consumer::ResourceRequest {
-            input: crate::policy::normalized::Input::Mcp {
+            input: crate::policy::resolution::normalized::Input::Mcp {
                 server: "host:acme".into(),
                 tool: "docs_search".into(),
                 arguments: json!({"query":"rename"}),
                 connection: None,
                 original_input: json!({}),
             },
-            context: crate::policy::normalized::Context {
+            context: crate::policy::resolution::normalized::Context {
                 cwd: other.project_root,
                 environment: None,
                 working_files: None,

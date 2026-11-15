@@ -1,5 +1,5 @@
 //! Explicit resource evidence boundary; unavailable facts never prove containment.
-use super::{Error, patterns::Provider};
+use crate::policy::{Error, rules::patterns::Provider};
 use serde_json::Value;
 
 pub(crate) trait Resources {
@@ -60,5 +60,5 @@ pub(crate) trait Resources {
 }
 
 // Pure source/argv evaluation cannot manufacture mutable filesystem observations.
-pub(super) struct Unavailable;
+pub(in crate::policy) struct Unavailable;
 impl Resources for Unavailable {}

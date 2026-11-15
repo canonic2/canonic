@@ -37,14 +37,14 @@ pub(super) fn resource(request: &Request) -> Result<ResourceRequest, Error> {
     }
     Ok(ResourceRequest {
         mcp: None,
-        input: policy::normalized::Input::File {
+        input: policy::resolution::normalized::Input::File {
             action: "read".into(),
             sources: request.arguments[..1].to_vec(),
             destination: None,
             recursive: false,
             original_input: operation,
         },
-        context: policy::normalized::Context {
+        context: policy::resolution::normalized::Context {
             cwd: request.cwd.clone(),
             environment: None,
             working_files: None,
@@ -56,7 +56,7 @@ pub(super) fn matches(request: &Request, incoming: &ResourceRequest) -> bool {
     let Ok(expected) = resource(request) else {
         return false;
     };
-    let policy::normalized::Input::File {
+    let policy::resolution::normalized::Input::File {
         original_input: expected_input,
         ..
     } = &expected.input
@@ -69,7 +69,7 @@ pub(super) fn matches(request: &Request, incoming: &ResourceRequest) -> bool {
             sdk_input[name] = expected_input[name].clone();
         }
     }
-    let policy::normalized::Input::File {
+    let policy::resolution::normalized::Input::File {
         action,
         sources,
         destination: None,

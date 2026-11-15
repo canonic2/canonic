@@ -1,43 +1,51 @@
-//! Exact registration maintenance: direct installations, the Box pin, and a
-//! folder's committed Box definition. Never publisher or permission adoption.
-use super::{Error, Plan, State, box_definition, files, native, pending, registration};
+//! Exact registration maintenance: direct installations, the Hub or Box pin,
+//! and a folder's committed Hub or Box definition. Never publisher or
+//! permission adoption.
+use super::{Error, Plan, State, files, host_definition, native, pending, registration};
 use std::path::{Path, PathBuf};
 
 pub(super) const REASON: &str = "equivalent native registration portability";
-/// A folder with no registration whose committed Box definition is exactly
-/// the one this executable renders, as in a fresh worktree or clone.
-pub(super) const ADOPT_REASON: &str = "committed Box definition";
+/// A folder with no registration whose committed Hub or Box definition is
+/// exactly the one this executable renders, as in a fresh worktree or clone.
+pub(super) const ADOPT_REASON: &str = "committed Hub or Box definition";
+
+/// The configured host whose committed definition a folder carries: Hub
+/// before Box, as in setup's default.
+fn committed_host(root: &Path) -> Option<&'static host_definition::Host> {
+    host_definition::HOSTS.into_iter().find(|host| {
+        host_definition::configured(host, root)
+            && files::read(root, host.path).ok().flatten().is_some()
+    })
+}
 
 /// The identity of one adoption attempt: the committed definition's bytes,
 /// the private pin's bytes and the executable that would adopt them. `None`
-/// without a Box project or a committed definition, where there is nothing to
-/// adopt. Two small reads and a hash, so an unchanged attempt that already
-/// failed costs no parsing, rendering or binary hashing.
+/// without a Hub or Box project or a committed definition, where there is
+/// nothing to adopt. Small reads and a hash, so an unchanged attempt that
+/// already failed costs no parsing, rendering or binary hashing.
 pub(in crate::review) fn adoption_key(root: &Path, executable: &Path) -> Option<String> {
-    if !box_definition::box_project(root) {
-        return None;
-    }
-    let shared = files::read(root, box_definition::PATH).ok()??;
-    let local = files::read(root, box_definition::LOCAL_PATH).ok()?;
-    let key = serde_json::json!([shared, local, executable.to_str()]).to_string();
+    let host = committed_host(root)?;
+    let shared = files::read(root, host.path).ok()??;
+    let local = files::read(root, host.local_path).ok()?;
+    let key = serde_json::json!([host.id, shared, local, executable.to_str()]).to_string();
     Some(crate::policy::fingerprint(key.as_bytes()))
 }
 
-/// The registration `shield mcp setup --agent box` would record for the
+/// The registration `shield mcp setup --agent <host>` would record for the
 /// committed definition, writing only a missing private pin. The definition
 /// is policy-equivalent to that setup: the same text grants the same tools.
-pub(in crate::review) fn adopt_box(
+pub(in crate::review) fn adopt_host(
     root: &Path,
     state: &State,
     executable: &Path,
 ) -> Result<Option<Plan>, Error> {
-    if registration(&state.operator)?.is_some()
-        || pending(&state.operator)?.is_some()
-        || !box_definition::box_project(root)
-    {
+    if registration(&state.operator)?.is_some() || pending(&state.operator)?.is_some() {
         return Ok(None);
     }
-    let Some((definition, approved)) = box_definition::committed(root, executable)? else {
+    let Some(host) = committed_host(root) else {
+        return Ok(None);
+    };
+    let Some((definition, approved)) = host_definition::committed(host, root, executable)? else {
         return Ok(None);
     };
     let mut desired = super::setup::desired(root)?;
@@ -45,19 +53,19 @@ pub(in crate::review) fn adopt_box(
         return Ok(None);
     }
     let mut changes = Vec::new();
-    if files::read(root, box_definition::LOCAL_PATH)?.is_none() {
+    if files::read(root, host.local_path)?.is_none() {
         changes.push(files::Change {
-            path: box_definition::LOCAL_PATH.into(),
+            path: host.local_path.into(),
             before: None,
             after: Some(definition.local.clone()),
         });
     }
     desired.approved_tools = Some(approved);
-    desired.box_definition = Some(definition);
+    desired.definition = Some(definition);
     let before = super::read_file(root)?;
     let after = before.clone().unwrap_or_default();
     let plan = Plan {
-        targets: Some(vec![box_definition::ID.into()]),
+        targets: Some(vec![host.id.into()]),
         scope_reason: Some(ADOPT_REASON.into()),
         policy_revision: Some(state.policy_revision.clone()),
         before,
@@ -98,8 +106,8 @@ pub(super) fn needed(state: &State) -> bool {
             .ok()
             .flatten()
             .is_some_and(|owned| {
-                (owned.box_definition.is_none() && !owned.agents.is_empty())
-                    || owned.box_definition.as_ref().is_some_and(|definition| {
+                (owned.definition.is_none() && !owned.agents.is_empty())
+                    || owned.definition.as_ref().is_some_and(|definition| {
                         let defaults = crate::review::mcp::default_approved();
                         definition
                             .portable_codec(owned.approved_tools.as_deref().unwrap_or(&defaults))
@@ -110,8 +118,8 @@ pub(super) fn needed(state: &State) -> bool {
 }
 
 /// Shield owns only its two definition files. Host projections and their ledger
-/// remain with Box; equivalent pin maintenance does not republish them.
-pub(in crate::review) fn prepare_box(
+/// remain with Hub or Box; equivalent pin maintenance does not republish them.
+pub(in crate::review) fn prepare_pin(
     root: &Path,
     state: &State,
     executable: &Path,
@@ -119,23 +127,25 @@ pub(in crate::review) fn prepare_box(
     let Some(previous) = registration(&state.operator)? else {
         return Ok(None);
     };
-    let Some(owned) = &previous.box_definition else {
+    let Some(owned) = &previous.definition else {
         return Ok(None);
     };
+    let host = owned.host();
     let defaults = crate::review::mcp::default_approved();
     let approved = previous.approved_tools.as_deref().unwrap_or(&defaults);
     // Unknown/edited definitions are preserved for their explicit review owner.
-    let status = super::box_definition::diagnose(root, owned, &mut Vec::new());
-    if status == "missing" || !super::box_definition::box_project(root) {
+    let status = host_definition::diagnose(root, owned, &mut Vec::new());
+    if status == "missing" || !host_definition::configured(host, root) {
         return Err(Error::Invalid(
-            "owned Box definition temporarily unavailable",
+            "owned Hub or Box definition temporarily unavailable",
         ));
     }
     if !owned.portable_codec(approved) || status != "installed" {
         return Ok(None);
     }
     let mut changes = Vec::new();
-    let replacement = super::box_definition::prepare(
+    let replacement = host_definition::prepare(
+        host,
         root,
         Some(owned),
         Some(executable),
@@ -148,14 +158,14 @@ pub(in crate::review) fn prepare_box(
         return Ok(None);
     }
     let mut desired = previous.clone();
-    desired.box_definition = replacement;
+    desired.definition = replacement;
     if desired.agents.is_empty() {
         desired.binary = executable.to_path_buf();
     }
     let before = super::read_file(root)?;
     let after = before.clone().unwrap_or_default();
     let plan = Plan {
-        targets: Some(vec![super::box_definition::ID.into()]),
+        targets: Some(vec![host.id.into()]),
         scope_reason: Some(REASON.into()),
         policy_revision: Some(state.policy_revision.clone()),
         before,
@@ -175,7 +185,7 @@ pub(super) fn prepare(root: &Path, state: &State, agent: &str) -> Result<Option<
     let Some(previous) = registration(&state.operator)? else {
         return Ok(None);
     };
-    if previous.box_definition.is_some() {
+    if previous.definition.is_some() {
         return Ok(None);
     }
     let Some(installed) = previous.agents.get(agent) else {

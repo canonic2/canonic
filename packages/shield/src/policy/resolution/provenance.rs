@@ -1,5 +1,5 @@
 //! Bounded branch decision origins retained independently of resolved rules.
-use super::{Decision, Override, Profile, model::PackDocument, rules::Decisions};
+use crate::policy::{Decision, Override, Profile, model::PackDocument, rules::Decisions};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -46,7 +46,7 @@ pub(crate) struct Original {
     layer: Layer,
 }
 
-pub(super) fn capture(
+pub(in crate::policy) fn capture(
     document: &PackDocument,
     overrides: &BTreeMap<String, Override>,
 ) -> BTreeMap<String, Original> {
@@ -115,7 +115,7 @@ fn branch(overridden: &Override, unmet: bool) -> Option<Decision> {
     }
 }
 
-pub(super) fn evidence(
+pub(in crate::policy) fn evidence(
     original: Option<&Original>,
     profile: Profile,
     unmet: bool,

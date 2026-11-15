@@ -1,6 +1,6 @@
 //! Same-predicate custom outcomes: source identity never substitutes for consent.
 use super::{CustomDocument, CustomRules, Hash, Rule, SourceIdentity};
-use crate::policy::{Profile, profile_comparison::Bound, rules::Unmet};
+use crate::policy::{Profile, dependencies::profile_comparison::Bound, rules::Unmet};
 use serde::{Serialize, Serializer};
 
 struct Predicate<'a>(&'a Rule);

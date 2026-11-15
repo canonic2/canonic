@@ -39,7 +39,7 @@ pub(super) fn checkpoint(context: &Context) -> Result<State, Error> {
 }
 
 pub(super) fn captured(context: &Context) -> Result<State, Error> {
-    let state = Store::open(Path::new(&context.project_root))?.read_current()?;
+    let state = Store::open(Path::new(&context.project_root))?.read_following_files()?;
     state.check(context)?;
     Ok(state)
 }
@@ -200,7 +200,7 @@ fn integration_route(coverage: &Value) -> String {
 
 /// Setting up the installed agent again, or guided setup for several or none.
 pub(super) fn agent_setup_route(coverage: &Value) -> String {
-    let agents: Vec<_> = coverage["box_integration"]["agent"]
+    let agents: Vec<_> = coverage["host_integration"]["agent"]
         .as_str()
         .into_iter()
         .chain(
@@ -208,7 +208,7 @@ pub(super) fn agent_setup_route(coverage: &Value) -> String {
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter(|row| row["managed_by"] != "box")
+                .filter(|row| row["managed_by"].is_null())
                 .filter_map(|row| row["agent"].as_str()),
         )
         .collect();
@@ -222,11 +222,7 @@ pub(super) fn policy(context: &Context) -> Result<Value, Error> {
     let mut state = captured_inspection(context)?;
     state.candidates.insert(
         "project".into(),
-        super::inspection::source::policy(
-            context,
-            &state.candidates["project"],
-            &state.policy_revision,
-        )?,
+        super::inspection::source::policy(&state.candidates["project"], &state.policy_revision)?,
     );
     let mut value = review::inspect_recorded(context, &state)?;
     value["pending_configuration"] = json!(

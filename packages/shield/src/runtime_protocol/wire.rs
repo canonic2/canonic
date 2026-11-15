@@ -1,5 +1,5 @@
 //! Closed general envelopes. Payload claims never select registration authority.
-use crate::policy::normalized;
+use crate::policy::resolution::normalized;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

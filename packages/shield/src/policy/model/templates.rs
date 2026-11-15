@@ -1,5 +1,5 @@
 //! `{{name}}` placeholders in pack reasons and guidance, rendered during preparation.
-use super::{Error, variables};
+use crate::policy::{Error, model::variables};
 
 /// Whether text contains anything a template parser would read.
 pub(crate) fn templated(text: &str) -> bool {

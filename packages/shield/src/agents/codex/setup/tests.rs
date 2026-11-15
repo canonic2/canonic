@@ -115,7 +115,7 @@ fn marking_apply_still_prompts_in_codex() {
 
 #[test]
 fn prefix_rules_list_each_pattern_once_with_its_sources() {
-    use crate::policy::agent_outputs::CodexPrefix;
+    use crate::policy::rules::agent_outputs::CodexPrefix;
     assert_eq!(prefix_rules(&[]), None);
     let prefix = |rule: &str, pattern: Vec<Vec<&str>>| CodexPrefix {
         owner: "acme/tools".into(),

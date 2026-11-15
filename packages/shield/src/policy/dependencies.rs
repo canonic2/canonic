@@ -8,6 +8,7 @@ use canonic_registry_kit::resolution::{self, Dependency, Instance, Level, Releas
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+pub(crate) mod profile_comparison;
 #[cfg(test)]
 mod tests;
 
@@ -22,14 +23,14 @@ pub struct Declaration {
     /// Optional enrolled source identity; omission inherits the parent source.
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "super::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     pub registry: Option<String>,
     /// Optional complete monotonic parent-profile mapping.
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "super::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     pub profiles: Option<Mapping>,
@@ -65,12 +66,6 @@ impl Declaration {
                 .map(|p| vec![p.loose, p.recommended, p.strict]),
         )
     }
-}
-
-fn present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
-    input: D,
-) -> Result<Option<T>, D::Error> {
-    T::deserialize(input).map(Some)
 }
 
 pub(super) fn declarations<'de, D: serde::Deserializer<'de>>(

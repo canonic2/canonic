@@ -1,7 +1,10 @@
 //! Pack variable declarations, typed values, setup wording and `when` activation tests.
 pub(crate) mod order;
 
-use super::{Error, patterns, selectors};
+use crate::policy::{
+    Error,
+    rules::{patterns, selectors},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
@@ -50,20 +53,20 @@ struct Items {
     kind: Kind,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     values: Option<Vec<String>>,
     #[serde(
         default,
         rename = "match",
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     matcher: Option<Value>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     max_length: Option<usize>,
@@ -78,74 +81,74 @@ pub(crate) struct Declaration {
     pub(crate) description: String,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) default: Option<Value>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     required: Option<bool>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     layer: Option<Layer>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) suggest: Option<Vec<Suggestion>>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) values: Option<Vec<String>>,
     #[serde(
         default,
         rename = "match",
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     matcher: Option<Value>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     max_length: Option<usize>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     items: Option<Items>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     min_items: Option<usize>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     max_items: Option<usize>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     within: Option<Within>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) setup: Option<Setup>,
@@ -157,40 +160,34 @@ pub(crate) struct Declaration {
 pub(crate) struct Setup {
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) question: Option<String>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) unset: Option<String>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) value: Option<String>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) placeholder: Option<String>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     pub(crate) ask_when: Option<Vec<Test>>,
-}
-
-fn present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
-    input: D,
-) -> Result<Option<T>, D::Error> {
-    T::deserialize(input).map(Some)
 }
 
 pub(crate) fn valid_name(name: &str) -> bool {
@@ -498,7 +495,7 @@ impl Declaration {
         for selector in self.matcher.iter().chain(item) {
             let inner = selector.get("not");
             if inner.is_some() {
-                result.insert(super::rules::NEGATED_SELECTORS.into());
+                result.insert(crate::policy::rules::NEGATED_SELECTORS.into());
             }
             for (kind, capability) in [("regex", "regex-v1"), ("glob", "glob-v1")] {
                 if selector.get(kind).or_else(|| inner?.get(kind)).is_some() {
@@ -678,32 +675,32 @@ pub(crate) struct Test {
     var: String,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     set: Option<bool>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     equals: Option<Value>,
     #[serde(
         default,
         rename = "in",
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     within: Option<Vec<Value>>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     not_in: Option<Vec<Value>>,
     #[serde(
         default,
-        deserialize_with = "present",
+        deserialize_with = "crate::policy::rules::present",
         skip_serializing_if = "Option::is_none"
     )]
     contains: Option<Value>,

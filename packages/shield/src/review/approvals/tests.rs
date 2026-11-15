@@ -306,7 +306,9 @@ fn action_request_kinds_consumer_and_window_mismatch_leave_the_exact_grant_usabl
     let mut changed = f.read.request().clone();
     changed.arguments.extend(["--limit".into(), "1".into()]);
     let mut resource = f.read.resource().unwrap().clone();
-    if let crate::policy::normalized::Input::File { original_input, .. } = &mut resource.input {
+    if let crate::policy::resolution::normalized::Input::File { original_input, .. } =
+        &mut resource.input
+    {
         original_input["limit"] = json!(1);
     }
     let snapshot = Project::open(Path::new(&f.context.project_root))

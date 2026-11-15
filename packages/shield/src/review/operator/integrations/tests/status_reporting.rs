@@ -83,9 +83,11 @@ fn status_reporting_inspects_box_hooks_and_detects_foreign_duplicates() {
     apply(&context, &before, &plan).unwrap();
     let report = crate::review::project::status(&context).unwrap();
     assert_eq!(report["enforcement"], "defined-for-box", "{report}");
-    let registration = crate::review::integrations::registration(&meta(&context))
-        .unwrap()
-        .unwrap();
+    assert!(
+        crate::review::integrations::registration(&meta(&context))
+            .unwrap()
+            .is_some()
+    );
     let adapter = crate::agents::find("claude").unwrap();
     let groups = adapter
         .spec()
@@ -93,7 +95,6 @@ fn status_reporting_inspects_box_hooks_and_detects_foreign_duplicates() {
         .iter()
         .map(|(event, _)| {
             let command = crate::review::integrations::native::hook_command(
-                &registration.binary,
                 Path::new(&context.project_root),
                 "claude",
                 event,

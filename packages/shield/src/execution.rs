@@ -1,10 +1,7 @@
 //! Bounded native leaf-command orchestration; unknown identity/effects never launch.
 use crate::cli;
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
-use crate::{
-    enforcement, policy, review,
-    runtime::Project,
-};
+use crate::{enforcement, policy, review, runtime::Project};
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
 use serde_json::{Value, json};
 use std::process::ExitCode;

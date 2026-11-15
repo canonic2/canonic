@@ -47,7 +47,7 @@ fn historical_fixture() -> (assert_fs::TempDir, review::Context, Value) {
 /// The current checkpoint as earlier formats wrote it, with a copy of the
 /// policy the files hold.
 pub(super) fn earlier_checkpoint(root: &Path) -> Value {
-    let current = Store::open(root).unwrap().read_current().unwrap();
+    let current = Store::open(root).unwrap().read_following_files().unwrap();
     let mut raw = serde_json::to_value(&current).unwrap();
     raw["candidates"] = json!(current.candidates);
     raw["policy_revision"] = json!(current.policy_revision);

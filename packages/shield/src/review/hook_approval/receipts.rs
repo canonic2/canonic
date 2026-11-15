@@ -1,11 +1,9 @@
 //! Closed native outcomes never replace the separate live follow-up capability.
 use super::{Error, HookRequest, State};
 use crate::review::authorization_receipts::{
-    Capture, Claim, Decision, Granted, Kind, Registry, Status,
+    Capture, Claim, Decision, Granted, Kind, RETENTION_MS, Registry, Status,
 };
 use std::borrow::Cow;
-
-const RETENTION_MS: u64 = 600_000;
 
 fn capture(
     registry: &mut Registry,

@@ -162,7 +162,7 @@ pub(super) fn validate(state: &State) -> Result<(), Error> {
                 .input
                 .validate(&resource.context, &row.request.project)?;
             if resource.context.cwd != row.request.cwd
-                || !matches!(&resource.input, policy::normalized::Input::File { action, sources, destination: None, recursive: false, .. } if action == "read" && Some(sources.as_slice()) == row.request.arguments.get(..1))
+                || !matches!(&resource.input, policy::resolution::normalized::Input::File { action, sources, destination: None, recursive: false, .. } if action == "read" && Some(sources.as_slice()) == row.request.arguments.get(..1))
             {
                 return Err(Error::Invalid("invalid bound read resource"));
             }

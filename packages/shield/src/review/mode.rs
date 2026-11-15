@@ -34,7 +34,7 @@ pub(crate) fn current(root: &Path) -> Result<bool, Error> {
 pub(crate) struct Paused {
     pub(crate) root: PathBuf,
     pub(crate) cache: Option<PathBuf>,
-    pub(crate) access: Result<super::path_access::PathAccess, Error>,
+    pub(crate) access: super::path_access::PathAccess,
 }
 
 pub(super) fn paused(state: &super::model::State) -> Option<Paused> {
@@ -45,7 +45,7 @@ pub(super) fn paused(state: &super::model::State) -> Option<Paused> {
         root: PathBuf::from(&state.project_root),
         // The folder the policy files' compiled plans live in.
         cache: super::files::cache_for(&state.operator).ok(),
-        access: Ok(super::settings::path_access(&state.settings)),
+        access: super::settings::path_access(&state.settings),
     })
 }
 

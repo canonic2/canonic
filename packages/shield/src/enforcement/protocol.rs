@@ -250,7 +250,7 @@ pub(crate) struct Prepared {
 
 struct PreparedMcp {
     alias: String,
-    resolved: std::sync::Arc<policy::compiled::ResolvedMcp>,
+    resolved: std::sync::Arc<policy::resolution::compiled::ResolvedMcp>,
     observation: Option<crate::agents::McpObservation>,
 }
 
@@ -778,13 +778,13 @@ fn evaluate_shell(
     };
     let resource = crate::review::runtime::consumer::ResourceRequest {
         mcp: None,
-        input: policy::normalized::Input::Shell {
+        input: policy::resolution::normalized::Input::Shell {
             source: source.into(),
             dialect: json!(dialect).as_str().expect("dialect string").into(),
             dialect_version: dialect_version.map(str::to_owned),
             original_input: original.cloned().unwrap_or_else(|| json!({})),
         },
-        context: policy::normalized::Context {
+        context: policy::resolution::normalized::Context {
             cwd: request.cwd.clone(),
             environment: None,
             working_files: None,
@@ -871,14 +871,14 @@ fn evaluate_file(
     };
     let resource = crate::review::runtime::consumer::ResourceRequest {
         mcp: None,
-        input: policy::normalized::Input::File {
+        input: policy::resolution::normalized::Input::File {
             action: name.into(),
             sources,
             destination,
             recursive,
             original_input: original.cloned().unwrap_or_else(|| json!(input.operation)),
         },
-        context: policy::normalized::Context {
+        context: policy::resolution::normalized::Context {
             cwd: request.cwd.clone(),
             environment: None,
             working_files: None,
@@ -945,7 +945,7 @@ fn evaluate_web(
     };
     let resource = crate::review::runtime::consumer::ResourceRequest {
         mcp: None,
-        input: policy::normalized::Input::Web {
+        input: policy::resolution::normalized::Input::Web {
             action: name.into(),
             query,
             url,
@@ -958,7 +958,7 @@ fn evaluate_web(
             method,
             original_input: original.cloned().unwrap_or_else(|| json!(input.operation)),
         },
-        context: policy::normalized::Context {
+        context: policy::resolution::normalized::Context {
             cwd: request.cwd.clone(),
             environment: None,
             working_files: None,
@@ -1033,14 +1033,14 @@ fn evaluate_mcp_policy(
     };
     let resource = crate::review::runtime::consumer::ResourceRequest {
         mcp: Some(std::sync::Arc::clone(&prepared.resolved)),
-        input: policy::normalized::Input::Mcp {
+        input: policy::resolution::normalized::Input::Mcp {
             server: prepared.resolved.server.clone(),
             tool: tool.into(),
             arguments: arguments.clone(),
             connection: None,
             original_input: original.cloned().unwrap_or_else(|| json!(input.operation)),
         },
-        context: policy::normalized::Context {
+        context: policy::resolution::normalized::Context {
             cwd: request.cwd.clone(),
             environment: None,
             working_files: None,
@@ -1182,14 +1182,14 @@ fn read_resource(
 ) -> crate::review::runtime::consumer::ResourceRequest {
     crate::review::runtime::consumer::ResourceRequest {
         mcp: None,
-        input: policy::normalized::Input::File {
+        input: policy::resolution::normalized::Input::File {
             action: "read".into(),
             sources: vec![path.to_str().expect("UTF-8 path").into()],
             destination: None,
             recursive: false,
             original_input: original.cloned().unwrap_or_else(|| json!(operation)),
         },
-        context: policy::normalized::Context {
+        context: policy::resolution::normalized::Context {
             cwd: cwd.into(),
             environment: None,
             working_files: None,

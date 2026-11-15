@@ -11,7 +11,7 @@ use crate::{
     cli::public::IntegrationChoice,
     review::{
         self, Context, Error,
-        integrations::{Plan, box_definition, pending, registration},
+        integrations::{Plan, host_definition, pending, registration},
     },
 };
 use serde_json::{Value, json};

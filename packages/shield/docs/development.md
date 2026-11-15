@@ -264,12 +264,14 @@ and operator workflows. Start with the module for the behavior you are changing:
 | Area | Source |
 | --- | --- |
 | Operator commands and routing | `src/cli/public.rs`, `src/cli.rs`, `src/lib.rs` |
-| Policy documents, selectors, requirements | `src/policy.rs`, `policy/model.rs`, `policy/rules.rs`, `policy/argument_rules.rs` |
-| Typed requests and resource-evidence interface | `policy/normalized.rs`, `policy/resources.rs` |
+| Policy documents, schema, templates and variables | `src/policy.rs`, `policy/model.rs` and `policy/model/` |
+| Rule predicates, selectors and argv grammars | `policy/rules.rs` and `policy/rules/` |
+| Typed requests and resource-evidence interface | `policy/resolution/normalized.rs`, `policy/rules/resources.rs` |
 | Filesystem observations and supported command effects | `src/location.rs`, `location/directory.rs`, `location/text.rs`, `location/node.rs` |
 | Shell parsing, expansion, control flow, directory outcomes and PID provenance | `src/shell.rs` and `shell/` |
-| Declared directory options | `policy/directories.rs` |
-| Compiled plans, indexes, and policy comparison | `policy/compiled.rs`, `policy/index.rs`, `policy/partition.rs`, `policy/profile_comparison.rs`, `policy/symbolic.rs` |
+| Declared directory options | `policy/rules/directories.rs` |
+| Compiled plans, indexes, and policy comparison | `policy/resolution.rs` and `policy/resolution/` |
+| Pack dependencies and profile bounds | `policy/dependencies.rs` and `policy/dependencies/` |
 | Project composition, captured source, and evaluation | `src/configuration.rs` and `configuration/` |
 | Shared project, policy and request inspection | `review/project.rs`, `review/history.rs`, `review/approvals.rs` |
 | Pack discovery, acquisition and candidate preparation | `review/packs.rs`, `review/packs/`, `review/registries.rs` |

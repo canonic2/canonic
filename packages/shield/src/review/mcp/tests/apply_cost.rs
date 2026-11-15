@@ -12,7 +12,7 @@ pub(super) fn pack_fixture() -> Bundle {
         // credentials or project identity are copied into the temporary project.
         let state = Store::open(Path::new(&project))
             .unwrap()
-            .read_current()
+            .read_following_files()
             .unwrap();
         let candidate = &state.candidates["project"];
         for bytes in candidate["packs"].as_array().unwrap() {

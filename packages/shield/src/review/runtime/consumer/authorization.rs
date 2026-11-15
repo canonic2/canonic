@@ -71,7 +71,7 @@ impl EvaluatedAuthority {
             evaluator: Arc::clone(&evaluated.evaluator),
         }
         .check(state)?;
-        if evaluated.time_sensitive {
+        if evaluated.evaluator.time_sensitive() {
             let current = if let Some(resource) = &evaluated.resource {
                 evaluated.evaluator.evaluate_resource_mcp(
                     &evaluated.request,

@@ -1,6 +1,6 @@
 //! Fixed native operation models. Unknown flags and traversal retain partial coverage.
 use super::{Descendants, Target, Targets};
-use crate::policy::normalized::Input;
+use crate::policy::resolution::normalized::Input;
 use std::{fs, path::Path};
 
 /// `alone` reports that the request runs no other operation, which lets a
@@ -368,10 +368,12 @@ pub(super) fn rg_pattern_only(arguments: &[String], cwd: &Path) -> bool {
     targets.complete && !listing && rg_operands(arguments) == Some(1)
 }
 
+/// Ripgrep's modeled options that consume a value.
+const RG_VALUED: &str = "-g -t -T -C -A -B -m -d --glob --type --type-not --context         --after-context --before-context --max-count --max-depth";
+
 /// Operands after ripgrep's modeled options, or None when an option is not
 /// modeled. Valued options consume their value, as in `rg_model`.
 fn rg_operands(arguments: &[String]) -> Option<usize> {
-    const VALUED: &str = "-g -t -T -C -A -B -m -d --glob --type --type-not --context         --after-context --before-context --max-count --max-depth";
     let mut arguments = arguments.iter();
     while let Some(argument) = arguments.next() {
         if argument == "--" {
@@ -380,7 +382,7 @@ fn rg_operands(arguments: &[String]) -> Option<usize> {
         if argument == "-" || !argument.starts_with('-') {
             return Some(1 + arguments.count());
         }
-        if VALUED.split_whitespace().any(|item| item == argument) {
+        if RG_VALUED.split_whitespace().any(|item| item == argument) {
             arguments.next()?;
         }
     }
@@ -390,7 +392,7 @@ fn rg_operands(arguments: &[String]) -> Option<usize> {
 pub(super) fn rg_model(arguments: &[String], cwd: &Path) -> (Targets, bool) {
     const FLAGS: &str = "inlcqFwxSH";
     const LONG: &str = "--no-config --no-ignore --no-follow --no-hidden --files --smart-case         --ignore-case --line-number --files-with-matches --count --fixed-strings --word-regexp         --no-heading --with-filename";
-    const VALUED: &str = "-g -t -T -C -A -B -m -d --glob --type --type-not --context         --after-context --before-context --max-count --max-depth";
+    const VALUED: &str = RG_VALUED;
     const SELECTING: &str = "-g --glob";
     let listed = |list: &str, word: &str| list.split_whitespace().any(|item| item == word);
     let mut operands = Vec::new();

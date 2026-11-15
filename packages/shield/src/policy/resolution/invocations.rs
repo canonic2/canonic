@@ -1,5 +1,5 @@
 //! Finite shared argv routes, indexed command membership and reversible rule identities.
-use super::{Error, Request, model::PackDocument, rules::Rule};
+use crate::policy::{Error, Request, model::PackDocument, rules::Rule};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
@@ -8,19 +8,19 @@ use std::sync::OnceLock;
 #[cfg(test)]
 mod tests;
 
-pub(super) type Segments = Vec<Vec<Vec<String>>>;
+pub(in crate::policy) type Segments = Vec<Vec<Vec<String>>>;
 const MAX_ROUTES: usize = 4096;
 const MAX_WORK: usize = 1_000_000;
 const MAX_MATERIALIZED_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Default)]
-pub(super) struct Budget {
+pub(in crate::policy) struct Budget {
     bytes: usize,
     bodies: BTreeSet<(usize, usize)>,
 }
 
 impl Budget {
-    pub(super) fn consume(
+    pub(in crate::policy) fn consume(
         &mut self,
         identity: (usize, usize),
         body: usize,
@@ -48,17 +48,17 @@ impl Budget {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Invocation {
-    pub(super) segments: Segments,
-    pub(super) id_prefix: String,
+pub(in crate::policy) struct Invocation {
+    pub(in crate::policy) segments: Segments,
+    pub(in crate::policy) id_prefix: String,
     #[serde(skip)]
     extent: OnceLock<(u64, usize, bool)>,
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct Route {
-    pub(super) offset: usize,
-    pub(super) ordinal: u64,
+pub(in crate::policy) struct Route {
+    pub(in crate::policy) offset: usize,
+    pub(in crate::policy) ordinal: u64,
 }
 
 fn name(value: &str) -> bool {
@@ -141,12 +141,12 @@ impl Invocation {
         Ok(Some(pieces.into_iter().rev().flatten().cloned().collect()))
     }
 
-    pub(super) fn identity(&self, ordinal: u64, body: &str) -> String {
+    pub(in crate::policy) fn identity(&self, ordinal: u64, body: &str) -> String {
         format!("{}{ordinal}-{body}", self.id_prefix)
     }
 }
 
-pub(super) fn definitions(doc: &PackDocument) -> Result<(), Error> {
+pub(in crate::policy) fn definitions(doc: &PackDocument) -> Result<(), Error> {
     if doc.invocations.len() > 64 || doc.command_sets.len() > 500_000 {
         return Err(Error::Limit);
     }
@@ -177,7 +177,7 @@ pub(super) fn definitions(doc: &PackDocument) -> Result<(), Error> {
     Ok(())
 }
 
-pub(super) fn binding<'a>(
+pub(in crate::policy) fn binding<'a>(
     doc: &'a PackDocument,
     rule: &Rule,
 ) -> Result<Option<&'a Invocation>, Error> {
@@ -232,7 +232,7 @@ pub(super) fn binding<'a>(
     Ok(Some(group))
 }
 
-pub(super) fn validate(doc: &PackDocument) -> Result<(), Error> {
+pub(in crate::policy) fn validate(doc: &PackDocument) -> Result<(), Error> {
     definitions(doc)?;
     let mut used = BTreeSet::new();
     let mut sets = BTreeSet::new();
@@ -252,7 +252,7 @@ pub(super) fn validate(doc: &PackDocument) -> Result<(), Error> {
                 if group.identity(group.extent()?.0 - 1, id).len() > 128 {
                     return Err(Error::Limit);
                 }
-                if !super::rules::valid_id(id) {
+                if !crate::policy::rules::valid_id(id) {
                     return Err(Error::Contract("invalid member identity"));
                 }
                 Ok(())
@@ -293,7 +293,7 @@ pub(super) fn validate(doc: &PackDocument) -> Result<(), Error> {
     Ok(())
 }
 
-pub(super) fn routes(
+pub(in crate::policy) fn routes(
     segments: &Segments,
     args: &[String],
     checkpoint: &dyn Fn() -> Result<(), Error>,
@@ -335,7 +335,7 @@ pub(super) fn routes(
     Ok(states)
 }
 
-pub(super) fn materialize(
+pub(in crate::policy) fn materialize(
     rule: &Rule,
     group: &Invocation,
     route: Route,
@@ -369,7 +369,10 @@ pub(super) fn materialize(
     result
 }
 
-pub(super) fn inspect(doc: &PackDocument, identity: &str) -> Result<Option<Rule>, Error> {
+pub(in crate::policy) fn inspect(
+    doc: &PackDocument,
+    identity: &str,
+) -> Result<Option<Rule>, Error> {
     if let Some(rule) = doc.rules.iter().find(|r| r.id == identity) {
         return Ok(Some(rule.clone()));
     }
@@ -420,7 +423,7 @@ pub(super) fn inspect(doc: &PackDocument, identity: &str) -> Result<Option<Rule>
     Ok(None)
 }
 
-pub(super) fn matching<'a>(
+pub(in crate::policy) fn matching<'a>(
     doc: &'a PackDocument,
     rule: &'a Rule,
     request: &'a Request,

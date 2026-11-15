@@ -577,7 +577,7 @@ impl Analysis<'_> {
         redirect: &structure::Redirection,
         state: &mut State,
     ) -> Result<Decision, Error> {
-        use crate::policy::normalized::{Context, Input};
+        use crate::policy::resolution::normalized::{Context, Input};
         if let Some(coverage) = inert_redirection(redirect) {
             self.record(
                 Operation::new(
@@ -1141,7 +1141,7 @@ impl Analysis<'_> {
                     .collect::<Vec<_>>(),
             )
         {
-            use crate::policy::normalized::{Context, Input};
+            use crate::policy::resolution::normalized::{Context, Input};
             let input = Input::File {
                 action: "read".into(),
                 sources: vec![file.into()],
@@ -1181,7 +1181,7 @@ impl Analysis<'_> {
                 && let Some(files) = crate::location::text_files(&request.executable, &arguments)
                 && !files.is_empty()
             {
-                use crate::policy::normalized::{Context, Input};
+                use crate::policy::resolution::normalized::{Context, Input};
                 let input = Input::File {
                     action: "read".into(),
                     sources: files.into_iter().map(|(_, path)| path).collect(),
@@ -1235,7 +1235,7 @@ impl Analysis<'_> {
         ),
         Error,
     > {
-        use crate::policy::normalized::{Context, Input};
+        use crate::policy::resolution::normalized::{Context, Input};
         let context = Context {
             cwd: request.cwd.clone(),
             environment: None,

@@ -111,7 +111,7 @@ pub(super) fn custom_decision_bound(
     before: &[(Scope, Snapshot)],
     after: &[(Scope, Snapshot)],
     budget: usize,
-) -> Option<policy::profile_comparison::Bound> {
+) -> Option<policy::dependencies::profile_comparison::Bound> {
     let ([(first_scope, first)], [(second_scope, second)]) = (before, after) else {
         return None;
     };

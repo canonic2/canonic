@@ -1,6 +1,9 @@
 //! Bounded full-document validation and selected-operation traversal.
 use super::{Failure, carrier::Carrier, visit};
-use crate::policy::{Error, patterns::Provider, selectors};
+use crate::policy::{
+    Error,
+    rules::{patterns::Provider, selectors},
+};
 use graphql_parser::query as q;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};

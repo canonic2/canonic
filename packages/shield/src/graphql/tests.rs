@@ -155,7 +155,7 @@ fn graphql_semantic_rules_cannot_export_command_prefix_allowances() {
 fn graphql_recognizable_commands_without_applicable_predicates_do_no_analysis() {
     let source = json!({"schema_version":1,"kind":"custom","capabilities":["structured-rules-v1","argument-rules-v1","graphql-v1"],"rules":[{"id":"narrow","conditions":{"domain":"argv","executable":"gh","arguments":{"kind":"exact","values":["api","graphql","-fquery={viewer{login}}"]},"graphql":{"carrier":"gh-api","operation":"query"}},"decision":"allow"}]});
     let rules = CustomRules::from_yaml(&source.to_string()).unwrap();
-    let plan = policy::compiled::Plan::compile(vec![], Some(rules), json!({})).unwrap();
+    let plan = policy::resolution::compiled::Plan::compile(vec![], Some(rules), json!({})).unwrap();
     take_counts();
     assert_eq!(
         plan.evaluate(&request("{repository{name}}"), &|| Ok(()), true, true)
@@ -180,13 +180,13 @@ fn pack() -> policy::Pack {
 #[test]
 fn graphql_compiled_and_reference_share_analysis_and_preserve_complete_decision_evidence() {
     let source = pack();
-    let plan = policy::compiled::Plan::compile(
+    let plan = policy::resolution::compiled::Plan::compile(
         vec![(pack(), policy::Profile::Recommended)],
         None,
         json!({}),
     )
     .unwrap();
-    let loaded = policy::compiled::Plan::load(plan.bytes().to_vec()).unwrap();
+    let loaded = policy::resolution::compiled::Plan::load(plan.bytes().to_vec()).unwrap();
     for query in [
         r#"{repository(owner:"acme",name:"web"){nameWithOwner}}"#,
         r#"{repository(owner:"other",name:"web"){nameWithOwner}}"#,
@@ -213,13 +213,14 @@ fn graphql_compiled_and_reference_share_analysis_and_preserve_complete_decision_
 
 #[test]
 fn graphql_unrelated_commands_do_not_decode_parse_or_load_models() {
-    let plan = policy::compiled::Plan::compile(
+    let plan = policy::resolution::compiled::Plan::compile(
         vec![(pack(), policy::Profile::Recommended)],
         None,
         json!({}),
     )
     .unwrap();
-    let plan = policy::compiled::Plan::load_authenticated(plan.bytes().to_vec()).unwrap();
+    let plan =
+        policy::resolution::compiled::Plan::load_authenticated(plan.bytes().to_vec()).unwrap();
     for (executable, args) in [
         ("ls", vec![]),
         ("gh", vec!["pr", "list"]),
@@ -241,7 +242,7 @@ fn graphql_unrelated_commands_do_not_decode_parse_or_load_models() {
 
 #[test]
 fn graphql_unsupported_results_are_reused_without_parsing_or_model_loading() {
-    let plan = policy::compiled::Plan::compile(
+    let plan = policy::resolution::compiled::Plan::compile(
         vec![(pack(), policy::Profile::Recommended)],
         None,
         json!({}),
@@ -262,7 +263,7 @@ fn graphql_unsupported_results_are_reused_without_parsing_or_model_loading() {
 fn graphql_analysis_limits_block_instead_of_falling_back_and_cancellation_propagates() {
     let r = request(&format!("{}name{}", "{field ".repeat(80), "}".repeat(80)));
     assert!(policy::evaluate(&[], Some(&custom()), policy::Profile::Recommended, &r).is_err());
-    let plan = policy::compiled::Plan::compile(
+    let plan = policy::resolution::compiled::Plan::compile(
         vec![(pack(), policy::Profile::Recommended)],
         None,
         json!({}),
@@ -326,7 +327,7 @@ fn graphql_carrier_keeps_raw_and_typed_fields_distinct() {
 
 #[test]
 fn graphql_fragment_expansion_depth_is_bounded_in_both_validation_and_walk() {
-    let plan = policy::compiled::Plan::compile(vec![], None, json!({})).unwrap();
+    let plan = policy::resolution::compiled::Plan::compile(vec![], None, json!({})).unwrap();
     let mut reached_walk = false;
     for (fragments, levels, reverse) in [
         (16, 8, false),
@@ -409,7 +410,7 @@ fn read(model: Option<&Value>) -> document::Expectation<'_> {
 
 #[test]
 fn graphql_enum_match_requires_a_literal_or_a_variable_with_nonbuiltin_type() {
-    let plan = policy::compiled::Plan::compile(vec![], None, json!({})).unwrap();
+    let plan = policy::resolution::compiled::Plan::compile(vec![], None, json!({})).unwrap();
     let model = json!({"root":"query","states":{"query":{"types":["Query"],"fields":{"field":{"leaf":true,"arguments":{"order":{"required":true,"match":{"scalar":"enum"}}}}}}}});
     for (query, allowed) in [
         ("{field(order:OPEN)}", true),
@@ -437,8 +438,10 @@ fn graphql_enum_match_requires_a_literal_or_a_variable_with_nonbuiltin_type() {
 #[test]
 fn graphql_directives_and_operation_names_preserve_scope_in_source_and_compiled_plans() {
     let rules = custom();
-    let plan = policy::compiled::Plan::compile(vec![], Some(custom()), json!({})).unwrap();
-    let plan = policy::compiled::Plan::load_authenticated(plan.bytes().to_vec()).unwrap();
+    let plan =
+        policy::resolution::compiled::Plan::compile(vec![], Some(custom()), json!({})).unwrap();
+    let plan =
+        policy::resolution::compiled::Plan::load_authenticated(plan.bytes().to_vec()).unwrap();
     let read = r#"query Read { repository(owner:"acme",name:"web") { nameWithOwner } } mutation Write { field }"#;
     for (query, operation, expected) in [
         (
@@ -514,7 +517,8 @@ fn graphql_directives_and_operation_names_preserve_scope_in_source_and_compiled_
 
 #[test]
 fn graphql_host_selection_uses_supplied_context_and_explicit_host_precedence() {
-    let plan = policy::compiled::Plan::compile(vec![], Some(custom()), json!({})).unwrap();
+    let plan =
+        policy::resolution::compiled::Plan::compile(vec![], Some(custom()), json!({})).unwrap();
     for (host, explicit, expected) in [
         (None, None, Decision::Allow),
         (Some("github.com"), None, Decision::Allow),
@@ -526,12 +530,12 @@ fn graphql_host_selection_uses_supplied_context_and_explicit_host_precedence() {
         if let Some(host) = explicit {
             request.arguments.extend(["--hostname".into(), host.into()]);
         }
-        let input = policy::normalized::Input::Argv {
+        let input = policy::resolution::normalized::Input::Argv {
             executable: request.executable.clone(),
             arguments: request.arguments.clone(),
             original_input: json!({}),
         };
-        let context = policy::normalized::Context {
+        let context = policy::resolution::normalized::Context {
             cwd: request.cwd.clone(),
             working_files: None,
             environment: host
@@ -598,9 +602,11 @@ fn mutation_rules() -> CustomRules {
 #[test]
 fn graphql_mutations_take_the_strictest_listed_class_in_source_and_compiled_plans() {
     let rules = mutation_rules();
-    let plan = policy::compiled::Plan::compile(vec![], Some(mutation_rules()), json!({})).unwrap();
+    let plan =
+        policy::resolution::compiled::Plan::compile(vec![], Some(mutation_rules()), json!({}))
+            .unwrap();
     // Full loading validates each rule on a copy whose model is a prepared reference.
-    let plan = policy::compiled::Plan::load(plan.bytes().to_vec()).unwrap();
+    let plan = policy::resolution::compiled::Plan::load(plan.bytes().to_vec()).unwrap();
     let resolve = |id: &str| {
         format!(r#"resolveReviewThread(input:{{threadId:"{id}"}}){{thread{{id isResolved}}}}"#)
     };

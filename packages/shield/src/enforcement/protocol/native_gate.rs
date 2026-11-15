@@ -26,7 +26,7 @@ pub(crate) fn paused(
     }
     let guard = paths::Guard {
         cache: paused.cache.as_deref(),
-        allow: *paused.access.as_ref().map_err(|_| "protection-failure")?,
+        allow: paused.access,
         working_files,
     };
     let mut value = json!({});

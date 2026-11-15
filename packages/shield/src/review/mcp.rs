@@ -1078,17 +1078,20 @@ fn integration_recovery(context: &Context, data: &mut Value) {
             .filter_map(|row| row["agent"].as_str())
             .filter(|agent| crate::agents::find(agent).is_some())
             .collect::<std::collections::BTreeSet<_>>();
-        let box_status = data["coverage"]["box_integration"]["status"].as_str();
-        if matches!(box_status, Some("degraded" | "missing" | "changed"))
-            || (box_status.is_some()
-                && data["coverage"]["diagnostics"]
+        let host = &data["coverage"]["host_integration"];
+        let host_status = host["status"].as_str();
+        if let Some(id) = host["agent"].as_str().filter(|_| {
+            matches!(host_status, Some("degraded" | "missing" | "changed"))
+                || data["coverage"]["diagnostics"]
                     .as_array()
                     .is_some_and(|rows| {
-                        rows.iter()
-                            .any(|row| row.as_str().is_some_and(|text| text.contains("Box ")))
-                    }))
-        {
-            affected.insert("box");
+                        rows.iter().any(|row| {
+                            row.as_str()
+                                .is_some_and(|text| text.contains("Hub ") || text.contains("Box "))
+                        })
+                    })
+        }) {
+            affected.insert(id);
         }
         if data["coverage"]["legacy_interceptor"]["status"] == "degraded" {
             affected.insert("claude");

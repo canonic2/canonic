@@ -55,9 +55,13 @@ def key_bytes(answer, view):
         # Enter would leak into the next host step.
         return answer.encode()
     if b"Agentintegrations" in compact or b"Selectagents" in compact:
-        # Rows: Box first, then Claude Code and Codex.
-        return {"box": b"1\r", "claude": b"2\r", "codex": b"3\r",
-                "claude,codex": b"23\r"}.get(answer, b"\r")
+        # The agent page lists Hub, Box and every adapter, more rows than
+        # digit shortcuts allow, so it filters: type each name, mark it with
+        # Space and clear the filter with Backspace before the next one.
+        if answer in ("hub", "box", "claude", "codex", "claude,codex"):
+            return b"".join(name.encode() + b" " + b"\x7f" * len(name)
+                            for name in answer.split(",")) + b"\r"
+        return b"\r"
     if b"Recordrequesthistory" in compact:
         return {"yes": b"1\r", "no": b"2\r"}.get(answer, b"\r")
     if b"Clear existing history".replace(b" ", b"") in compact:

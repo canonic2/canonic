@@ -185,7 +185,7 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
                 schema = json!({"type":"object","oneOf":variants});
             }
         }
-        if ["policy_propose","rule_add","rule_edit","session_grant_propose"].contains(&name) { let mut definitions = crate::policy::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
+        if ["policy_propose","rule_add","rule_edit","session_grant_propose"].contains(&name) { let mut definitions = crate::policy::model::schema::definitions(); definitions["normalized_input"] = input(); schema["$defs"] = definitions; }
         let mutation=mutates(name);
         let mut result_schema = output.clone();
         if ["status", "pack_list", "pack_show"].contains(&name) {
@@ -696,7 +696,7 @@ fn session_grant_propose() -> Definition {
         "session_grant_propose",
         "Prepare temporary permission for a known batch or constrained argv family before repeated privileged operations. Inspect session_grant_show first. Default duration is two hours; project policy stays unchanged. Named Deny overrides are explicit, and the user confirms session_grant_approve. Do not repeat declined offers.",
         || {
-            let definitions = crate::policy::schema::definitions();
+            let definitions = crate::policy::model::schema::definitions();
             let conditions = definitions["conditions"].clone();
             let requirements = definitions["rule_custom"]["properties"]["requirements"].clone();
             let selector = object(

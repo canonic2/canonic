@@ -7,7 +7,7 @@ use crate::{
     configuration,
     policy::{
         self,
-        normalized::{Context as RequestContext, Input},
+        resolution::normalized::{Context as RequestContext, Input},
     },
 };
 use serde::Serialize;

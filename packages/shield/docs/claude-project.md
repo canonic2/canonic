@@ -28,8 +28,9 @@ Run `shield mcp setup` for guided management. Choose **Install or repair** or
 **Select agents**, then press Enter. Installation includes a **Tool permissions**
 page. Review the complete changes and choose **Apply reviewed changes** on
 **Apply MCP setup?**; **Cancel** is highlighted by default. Unmarked agents keep
-their configuration. Setup shows each integration's registration status, and
-Box is unavailable until this folder is a Box project, and on Windows. During first-time
+their configuration. Setup shows each integration's registration status. Hub is
+unavailable until this folder is a Hub project, Box until it is a Box project,
+and both on Windows. During first-time
 `shield init`, no marked agents means **Skip for now** instead.
 
 Initialize the project with `shield init`, then run `shield mcp setup --agent claude` in an operator terminal to install native
@@ -66,24 +67,36 @@ absolute enrolled `project`, explicit `agents`, `repair: true` and
 For example: `{"project":"/projects/acme","agents":["claude","codex"],"repair":true}`.
 The review names the target project; ordinary tools remain bound to the original
 connection. Relative paths, unenrolled targets, removal and pending-plan actions
-cannot use this target selector. When Box manages the selected hooks, Shield
-directs repair to Box's `config_show` and `config_sync` with that same project
-and `repair_hooks: true`, preserving Box's publication ownership.
+cannot use this target selector. When Hub or Box manages the selected hooks,
+Shield directs repair to that host with the same project and
+`repair_hooks: true`: Hub's `setup`, or Box's `config_show` and `config_sync`,
+preserving the host's publication ownership.
 
-## Set up through Box
+## Set up through Hub or Box
 
-In a project that uses Box, Shield can hand its integration to Box instead of
-writing each agent's files. Box then publishes Shield to whichever agents each
-developer chose with `box setup`, so nobody runs `shield mcp setup` per agent.
+In a project that uses Hub or Box, Shield can hand its integration to that host
+instead of writing each agent's files. The host then publishes Shield to
+whichever agents each developer chose, so nobody runs `shield mcp setup` per
+agent. Hub and Box read the same definition format from their own folders:
 
 ```sh
+# Hub project (.hub/config.yml, created by hub setup)
+shield mcp setup --agent hub
+hub setup
+
+# Box project (.box/config.yml, created by box config init)
 shield mcp setup --agent box
 box config sync
 ```
 
-`box` is the first row on the agent page, and in a folder with
-`.box/config.yml` it is the only row marked until you set something up. Setup
-writes two Box files:
+`hub` and `box` are the first rows on the agent page. In a folder with
+`.hub/config.yml` only `hub` is marked until you set something up; in a folder
+with `.box/config.yml` and no Hub configuration, only `box`. Hub installs
+alone: setup refuses `--agent hub` together with `box` or a native agent,
+because both routes would publish competing Shield entries. Choosing one host
+while Shield owns the other's definition replaces it, and the review lists the
+old definition as removed. Setup writes two files in the host's folder, shown
+here for Box; Hub's are `.hub/mcp/shield.yml` and `.hub/local/mcp/shield.yml`:
 
 - `.box/mcp/shield.yml` is shared with everyone who uses the project. It names
   the bare `shield` command, so it holds no path from your machine. It tells Box
@@ -104,52 +117,66 @@ writes two Box files:
   missing. If `shield status` reports the Box integration as `changed` because
   others can read this file, run `shield mcp setup --agent box` to restrict it.
 
-With both files Box writes the same hook entries a direct setup writes. After
-confirming, run `box setup` the first time or `box config sync` later, then
-restart and trust the agent as below.
+With both files the host writes the same hook entries a direct setup writes.
+After confirming, run `hub setup` for Hub (again after a change), or for Box
+`box setup` the first time and `box config sync` later, then restart and trust
+the agent as below.
 
-Setup refuses `--agent box` when the project has no `.box/config.yml`; run
-`box config init` first. It is not available on Windows, because Box hook
+Setup refuses `--agent hub` when the project has no `.hub/config.yml` (run
+`hub setup` first) and `--agent box` when it has no `.box/config.yml` (run
+`box config init` first). Neither is available on Windows, because the hook
 commands are POSIX shell commands. Shield adopts either file when it already
 holds exactly what Shield would write, and never replaces one it did not
 write.
 
-`shield status` lists Box with the other integrations, and `shield doctor`
-reports a file as missing or changed. `shield mcp setup --agent box` rewrites
-both. `shield mcp setup --remove --agent box` deletes them only while they still
-hold what Shield wrote; restore or delete an edited file yourself first.
-Removing them does not remove entries Box already published; Box manages those.
+`shield status` lists the host with the other integrations, and `shield doctor`
+reports a file as missing or changed. `shield mcp setup --agent hub` or
+`--agent box` rewrites both. `shield mcp setup --remove --agent hub` (or `box`)
+deletes them only while they still hold what Shield wrote; restore or delete an
+edited file yourself first. Removing one host never touches the other's
+definition. Removing them does not remove entries the host already published;
+the host manages those.
 
 Moving or copying a project on the same developer account can reuse a current
-private setup receipt. Shield keeps the shared Box definition portable and can
+private setup receipt. Shield keeps the shared definition portable and can
 refresh its exact owned local pin when the running binary's contents still match
-the review. Edited definitions need their normal setup review. Box continues to
-own the agent files it publishes; copying a workspace needs no Shield enrollment
-callback in Box.
+the review. A fresh worktree or clone with a committed definition and no
+recorded setup registers it on first use, Hub's before Box's. Edited
+definitions need their normal setup review. The host continues to own the
+agent files it publishes; copying a workspace needs no Shield enrollment
+callback in Hub or Box.
 
 Codex cannot ask at its hook, so the review shows the same
 [Ask fallback](#codex-approval-handling) a direct Codex setup uses, Allow for a
-new choice. Box carries it for the Codex hooks it publishes.
+new choice. The host carries it for the Codex hooks it publishes.
 
 If Claude Code or Codex already has a direct Shield installation, installing
-Box hands it over by default: Shield stops managing that installation and
-leaves its hooks, MCP entry, approvals and settings exactly as they are. Run
-`box config sync --adopt` so Box takes those identical entries over. Guided
-setup asks first; choose **Keep direct installations** to keep managing them.
-With `--agent box` the review lists the hand-over. Naming an agent too, as in
+Hub or Box hands it over: Shield stops managing that installation and leaves
+its hooks, MCP entry, approvals and settings exactly as they are. Run
+`hub setup --adopt` or `box config sync --adopt` so the host takes those
+identical entries over. The review lists the hand-over.
+
+Hub always hands direct installations over, and while Hub is set up, setting
+up Claude Code or Codex directly refuses: run `shield mcp setup --agent hub`,
+or remove Hub first with `shield mcp setup --remove --agent hub`.
+
+Box hands them over by default. Guided setup asks first; choose **Keep direct
+installations** to keep managing them. Naming an agent too, as in
 `shield mcp setup --agent box --agent claude`, keeps that agent's direct
 installation. A kept direct installation can still be removed with
 `shield mcp setup --remove`, which deletes its entries, including those Box
-then uses. Box does not publish Codex's prefix rules file, so Shield keeps
-writing it from your active policy while Codex is set up through Box.
+then uses.
+
+Neither host publishes Codex's prefix rules file, so Shield keeps writing it
+from your active policy while Codex is set up through Hub or Box.
 
 Shield manages declared [project MCP connections](mcp-connections.md) in the
-native agent files, including when Box supplies the hooks. Box setup reviews
-and repairs those entries, and retains their ownership during hand-over.
-Removing Box removes these Shield-owned connections when no direct integration
-still covers the agent. Entries published by Box remain managed by Box.
-Claude Code cannot pre-approve `policy_apply` through Box; use direct setup
-when you need that setting.
+native agent files, including when Hub or Box supplies the hooks. Hub or Box
+setup reviews and repairs those entries, and retains their ownership during
+hand-over. Removing the host definition removes these Shield-owned connections
+when no direct integration still covers the agent. Entries the host published
+remain managed by it. Claude Code cannot pre-approve `policy_apply` through Hub
+or Box; use direct setup when you need that setting.
 
 ## Load the hooks
 
@@ -160,8 +187,8 @@ override host trust or administrator restrictions.
 Setup's Tool permissions page marks tools that can run without prompting.
 All except `policy_apply` are marked by default; later setup preserves
 your choices and labels them as a saved selection. To start from the current
-defaults, run `shield mcp setup --reset-tool-permissions` (add `--agent box`
-for Box). Add `--dry-run` to inspect the reset without changing files. Setup
+defaults, run `shield mcp setup --reset-tool-permissions` (add `--agent hub`
+or `--agent box` for a host definition). Add `--dry-run` to inspect the reset without changing files. Setup
 still reviews the changes before confirmation.
 Codex uses a `prompt` server setting with `approve` for marked
 tools. Claude adds `mcp__shield__<tool>` entries to `permissions.allow` and
@@ -178,7 +205,8 @@ Repeating setup repairs missing tool approvals. Unmarking a tool or removing
 Shield deletes only approvals Shield added; other servers and existing approvals
 are preserved. Check `shield doctor --json` for missing or changed files and
 binaries. Status reports inspected hooks separately from retained hook activity.
-Box-published callbacks appear with `managed_by: box` when their generated
+Hub- or Box-published callbacks appear with `managed_by: hub` or
+`managed_by: box` when their generated
 settings match. Duplicate, changed or incomplete callbacks report degradation.
 `coverage.verification.agents` lists the latest retained hook event and timestamp
 for each observed agent; `coverage.live_host_verification: observed` describes that history, not

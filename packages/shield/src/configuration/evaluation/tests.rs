@@ -275,7 +275,7 @@ fn missing_nested_write_roots_keep_exclusions_for_future_entries() {
         cwd: project.to_str().unwrap().into(),
         project: project.to_str().unwrap().into(),
     };
-    let context = policy::normalized::Context {
+    let context = policy::resolution::normalized::Context {
         working_files: None,
         cwd: request.cwd.clone(),
         environment: None,
@@ -291,7 +291,7 @@ fn missing_nested_write_roots_keep_exclusions_for_future_entries() {
             ("vendor/acme/item", Decision::Allow),
             (".git/hooks/x", Decision::Deny),
         ] {
-            let input = policy::normalized::Input::File {
+            let input = policy::resolution::normalized::Input::File {
                 action: "write".into(),
                 sources: vec![],
                 destination: Some(project.join(path).to_str().unwrap().into()),
@@ -450,7 +450,7 @@ fn outside_checks_the_whole_read_union_and_exact_checks_each_member() {
         cwd: project.to_str().unwrap().into(),
         project: project.to_str().unwrap().into(),
     };
-    let context = policy::normalized::Context {
+    let context = policy::resolution::normalized::Context {
         working_files: None,
         cwd: request.cwd.clone(),
         environment: None,
@@ -461,7 +461,7 @@ fn outside_checks_the_whole_read_union_and_exact_checks_each_member() {
         ("scratch", Decision::Allow),
         ("outside", Decision::Deny),
     ] {
-        let input = policy::normalized::Input::File {
+        let input = policy::resolution::normalized::Input::File {
             action: "read".into(),
             sources: vec![dir.path().join(name).join("item").to_str().unwrap().into()],
             destination: None,

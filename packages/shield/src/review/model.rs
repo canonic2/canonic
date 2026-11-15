@@ -519,7 +519,6 @@ impl State {
         if event["kind"].as_str().is_some_and(|kind| {
             [
                 "proposal_rejected",
-                "project_enrolled",
                 "integration_review_confirmed",
                 "read_grant_issued",
                 "read_grant_consumed",

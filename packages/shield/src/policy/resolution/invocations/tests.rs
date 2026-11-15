@@ -1,6 +1,6 @@
 //! Flat-reference behavior, reversible provenance and non-expanding preparation.
 use super::*;
-use crate::policy::{self, Pack, Profile, compiled::Plan};
+use crate::policy::{self, Pack, Profile, resolution::compiled::Plan};
 
 fn document() -> Value {
     json!({"schema_version":1,"kind":"pack","id":"acme/shared","version":"0.1.0","description":"Acme shared commands","license":"MIT","maintainers":["Acme"],"engines":{"shield":"*"},

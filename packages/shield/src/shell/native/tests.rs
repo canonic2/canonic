@@ -152,7 +152,7 @@ fn evaluator() -> crate::configuration::Evaluator {
 #[test]
 fn native_sequence_diagnostics_share_parser_owned_coverage_and_decisions() {
     use crate::{
-        policy::normalized::{Context, Input},
+        policy::resolution::normalized::{Context, Input},
         shell::{self, Dialect},
     };
     let evaluator = evaluator();

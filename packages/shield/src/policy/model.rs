@@ -1,16 +1,24 @@
-//! Version-one policy documents; literal projections belong only to bounded comparison.
+//! Version-one policy documents and their schema, templates, variables, legacy
+//! forms and parsing budgets; literal projections belong only to bounded comparison.
 #[cfg(test)]
 use super::Request;
 use super::{
-    Error,
-    directories::{self, DirectoryOption},
-    patterns, resolution,
-    rules::{Precondition, Rule},
-    variables::Declaration,
+    Error, resolution,
+    rules::{
+        Precondition, Rule,
+        directories::{self, DirectoryOption},
+        patterns,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use variables::Declaration;
 pub(crate) mod feedback;
+pub(super) mod json_budget;
+pub(super) mod legacy;
+pub(crate) mod schema;
+pub(super) mod templates;
+pub(crate) mod variables;
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

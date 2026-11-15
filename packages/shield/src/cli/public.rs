@@ -43,7 +43,7 @@ pub struct Cli {
 pub enum PublicCommand {
     /// Create this project's Shield policy and optionally set up agents, after confirmation.
     Init {
-        /// Agent to set up with project hooks and MCP, or box for Box; repeat for several. Omission asks.
+        /// Agent to set up with project hooks and MCP, or hub or box for a Hub or Box definition; repeat for several. Omission asks.
         #[arg(long = "agent", value_parser = integration_names())]
         agents: Vec<String>,
         /// Set up no agents now.
@@ -182,7 +182,7 @@ pub struct Setup {
     /// Review conflicting pending setup or cancel that interrupted publication.
     #[arg(long, value_enum, conflicts_with_all = ["agents", "remove", "reset_tool_permissions"])]
     pub pending: Option<PendingSetup>,
-    /// Agent to set up or remove, or box for a Box MCP definition; repeat for several. Omission asks.
+    /// Agent to set up or remove, or hub or box for a Hub or Box MCP definition; repeat for several. Omission asks.
     #[arg(long = "agent", value_parser = integration_names())]
     pub agents: Vec<String>,
     /// Shield integrations are project scoped; user scope is refused.
@@ -205,10 +205,12 @@ pub enum PendingSetup {
     Cancel,
 }
 
-/// The integrations `--agent` accepts: Box first, then the native agent adapters.
+/// The integrations `--agent` accepts: Hub and Box first, then the native agent adapters.
 pub(crate) fn integration_names() -> clap::builder::PossibleValuesParser {
     clap::builder::PossibleValuesParser::new(
-        std::iter::once(crate::review::integrations::box_definition::ID)
+        crate::review::integrations::host_definition::HOSTS
+            .into_iter()
+            .map(|host| host.id)
             .chain(crate::agents::ADAPTERS.iter().map(|a| a.spec().id)),
     )
 }
@@ -659,32 +661,45 @@ mod mcp_setup_tests {
         ));
         assert!(setup(&["--scope", "user"]).choice().is_err());
         assert!(setup(&["--dry-run"]).dry_run);
-        let boxed = setup(&["--agent", "box"]).choice().unwrap().unwrap();
-        assert!(boxed.contains("box"));
-        for adapter in crate::agents::ADAPTERS {
-            assert!(!boxed.contains(adapter.spec().id));
-            assert!(!choice.contains("box"));
+        for (host, other) in [("hub", "box"), ("box", "hub")] {
+            let hosted = setup(&["--agent", host]).choice().unwrap().unwrap();
+            assert!(hosted.contains(host) && !hosted.contains(other));
+            for adapter in crate::agents::ADAPTERS {
+                assert!(!hosted.contains(adapter.spec().id));
+                assert!(!choice.contains(host));
+            }
+            let removal = setup(&["--remove", "--agent", host])
+                .choice()
+                .unwrap()
+                .unwrap();
+            assert!(removal.contains(host) && !removal.contains("claude"));
+            // Hub and Box are integration targets, never a native hook protocol.
+            assert!(
+                Cli::try_parse_from([
+                    "shield",
+                    "__internal",
+                    "native-hook",
+                    "--project",
+                    "/srv/acme",
+                    "--agent",
+                    host,
+                    "--event",
+                    "PreToolUse"
+                ])
+                .is_err()
+            );
         }
-        let removal = setup(&["--remove", "--agent", "box"])
+        // Hub installs alone: never with Box or native agents. Removal may combine.
+        for agents in [&["hub", "box"][..], &["hub", "codex"]] {
+            let args: Vec<&str> = agents.iter().flat_map(|a| ["--agent", *a]).collect();
+            let selected = setup(&args).choice().unwrap().unwrap();
+            assert!(selected.check_routes().is_err());
+        }
+        let both = setup(&["--remove", "--agent", "hub", "--agent", "box"])
             .choice()
             .unwrap()
             .unwrap();
-        assert!(removal.contains("box") && !removal.contains("claude"));
-        // Box is an integration target, never a native hook protocol.
-        assert!(
-            Cli::try_parse_from([
-                "shield",
-                "__internal",
-                "native-hook",
-                "--project",
-                "/srv/acme",
-                "--agent",
-                "box",
-                "--event",
-                "PreToolUse"
-            ])
-            .is_err()
-        );
+        assert!(both.check_routes().is_ok());
     }
 
     #[test]

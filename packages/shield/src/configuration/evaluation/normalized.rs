@@ -2,8 +2,10 @@
 use crate::{
     policy::{
         self, Decision,
-        diagnostics::{GuidanceRecord, GuidanceRequest},
-        normalized::Input,
+        resolution::{
+            diagnostics::{GuidanceRecord, GuidanceRequest},
+            normalized::Input,
+        },
     },
     shell::{Coverage, Operation, PolicyRequest, Report},
 };
@@ -300,7 +302,7 @@ fn item(
         rule_ref: None,
         source: Some(if rank < 2 { "shield" } else { "decisive" }),
         request: None,
-        fetch_url: policy::diagnostics::TextField::Absent,
+        fetch_url: policy::resolution::diagnostics::TextField::Absent,
         private_input,
     };
     if rank == 2

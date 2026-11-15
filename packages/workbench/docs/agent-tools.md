@@ -14,12 +14,13 @@ workbench mcp setup
 ```
 
 Choose the agents to configure and review the paths, launch command and tool
-approvals before applying. Project scope is the default. A Box-configured project
-offers a Box server definition; Box publishes it to the agents each developer
-selects. Direct host choices include `claude`, `codex`, `copilot-vscode`,
-`copilot-cli`, `cursor`, `gemini`, `kiro`, `kilo`, `kimi`, `opencode`, `qwen`,
-`amp` and `droid`. Other surfaces have user-only or manual setup routes, shown
-by the picker when automatic configuration is unavailable.
+approvals before applying. Project scope is the default. A project configured
+for Hub or Box offers a server definition for that host (`hub` or `box`); the
+host publishes it to the agents each developer selects. When a project has
+both, setup preselects `hub`. Direct host choices include `claude`, `codex`,
+`copilot-vscode`, `copilot-cli`, `cursor`, `gemini`, `kiro`, `kilo`, `kimi`,
+`opencode`, `qwen`, `amp` and `droid`. Other surfaces have user-only or manual
+setup routes, shown by the picker when automatic configuration is unavailable.
 
 For an explicit, noninteractive workflow, inspect first:
 
@@ -32,8 +33,9 @@ For Codex and Claude Code, setup also installs the `UserPromptSubmit` hook
 `workbench hook user-prompt`. It supplies the current canvas reference on each
 prompt while a canvas is open. Codex uses `.codex/hooks.json` beside its MCP
 configuration; Claude Code uses `.claude/settings.local.json` in project scope
-and `~/.claude/settings.json` in user scope. A Box definition includes this
-hook for Box to publish to Codex and Claude Code. Other agents use `view_show`.
+and `~/.claude/settings.json` in user scope. A Hub or Box definition includes
+this hook for the host to publish to Codex and Claude Code. Other agents use
+`view_show`.
 
 Setup edits only Workbench's server entry, its owned approval rules and prompt
 hook, keeping other servers, settings and hooks. Rerun it to repair an owned

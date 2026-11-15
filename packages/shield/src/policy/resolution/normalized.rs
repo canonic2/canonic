@@ -1,5 +1,5 @@
 //! Strict normalized input and project rule conditions, resolved by the shared policy resolver.
-use super::{Error, Request};
+use crate::policy::{Error, Request};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -154,4 +154,4 @@ impl Input {
     }
 }
 
-pub(crate) use super::rules::Rule;
+pub(crate) use crate::policy::rules::Rule;

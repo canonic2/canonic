@@ -3,7 +3,7 @@ use super::{Dialect, provenance, redirection, structure};
 use crate::{
     configuration::CandidateEvaluation,
     effects,
-    policy::{Decision, Request, normalized::Input},
+    policy::{Decision, Request, resolution::normalized::Input},
 };
 use serde::{Serialize, ser::SerializeStruct};
 mod projection;
@@ -282,7 +282,7 @@ impl Serialize for Report {
             "request",
             &single.and_then(|operation| {
                 operation.request().map(|request| {
-                    crate::policy::diagnostics::RequestEvidence::new(
+                    crate::policy::resolution::diagnostics::RequestEvidence::new(
                         request,
                         operation.private_input(),
                     )

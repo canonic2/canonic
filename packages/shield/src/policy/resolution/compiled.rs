@@ -2,11 +2,14 @@
 mod invocations;
 mod mcp;
 mod workspace;
-use super::{
-    CustomRules, Error, Pack, Profile, Request, index, model, normalized,
-    patterns::{self, Provider},
-    rules::{Facts, Rule},
-    selectors,
+use crate::policy::{
+    CustomRules, Error, Pack, Profile, Request, model,
+    resolution::{index, normalized},
+    rules::{
+        Facts, Rule,
+        patterns::{self, Provider},
+        selectors,
+    },
 };
 pub(crate) use mcp::ResolvedMcp;
 use regex_automata::nfa::thompson::pikevm::PikeVM;
@@ -35,7 +38,7 @@ struct Metadata {
     historical_semantic: bool,
     /// Codex prefixes of active rules that allow, in owner order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    codex_prefixes: Vec<super::agent_outputs::CodexPrefix>,
+    codex_prefixes: Vec<crate::policy::rules::agent_outputs::CodexPrefix>,
 }
 impl Metadata {
     fn validate(&self) -> Result<(), Error> {
@@ -44,7 +47,7 @@ impl Metadata {
                 return Err(Error::Limit);
             }
             pack.document.validate_schema()?;
-            super::invocations::definitions(&pack.document)?;
+            crate::policy::resolution::invocations::definitions(&pack.document)?;
             for precondition in &pack.document.preconditions {
                 let mut precondition = precondition.clone();
                 crate::graphql::descriptor(&mut precondition.conditions)?;
@@ -68,7 +71,7 @@ struct PackMetadata {
     digest: String,
     semantic: bool,
     profile: Profile,
-    origins: BTreeMap<String, super::provenance::Original>,
+    origins: BTreeMap<String, crate::policy::resolution::provenance::Original>,
 }
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -92,14 +95,14 @@ pub(crate) struct Plan {
     custom: Option<CustomRules>,
     programs: Mutex<Programs>,
     /// Directory options declared by the selected packs and custom rules.
-    directory_options: Vec<super::directories::DirectoryOption>,
+    directory_options: Vec<crate::policy::rules::directories::DirectoryOption>,
 }
 /// Codex prefixes of every pack rule under its profile, then of custom rules,
 /// which select as Recommended.
 fn codex_prefixes(
     packs: &[(Pack, Profile)],
     custom: Option<&CustomRules>,
-) -> Vec<super::agent_outputs::CodexPrefix> {
+) -> Vec<crate::policy::rules::agent_outputs::CodexPrefix> {
     let packs = packs.iter().flat_map(|(pack, profile)| {
         pack.document
             .rules
@@ -116,7 +119,7 @@ fn codex_prefixes(
     packs
         .chain(custom)
         .flat_map(|(rule, owner, profile)| {
-            super::agent_outputs::codex_prefixes(rule, owner, profile)
+            crate::policy::rules::agent_outputs::codex_prefixes(rule, owner, profile)
         })
         .collect()
 }
@@ -142,7 +145,7 @@ impl Plan {
             packs: vec![],
             custom: None,
             effective,
-            historical_semantic: super::historical_semantic_selection(
+            historical_semantic: crate::policy::historical_semantic_selection(
                 &packs
                     .iter()
                     .map(|(pack, profile)| (pack, *profile))
@@ -177,7 +180,7 @@ impl Plan {
         }
         if let Some(mut custom) = custom {
             encoding.patterns(std::mem::take(&mut custom.patterns))?;
-            let time_sensitive = super::has_expiration(&custom);
+            let time_sensitive = crate::policy::has_expiration(&custom);
             for mut rule in std::mem::take(&mut custom.document.rules) {
                 encoding.detach(&mut rule.conditions)?;
                 if let Some(requirements) = &mut rule.requirements {
@@ -277,19 +280,19 @@ impl Plan {
             return Err(Error::Contract("incompatible compiled metadata"));
         }
         metadata.validate()?;
-        let directory_options = super::directories::combine(
+        let directory_options = crate::policy::rules::directories::combine(
             metadata
                 .packs
                 .iter()
                 .map(|pack| {
                     (
-                        super::directories::Source::Pack(&pack.document.id),
+                        crate::policy::rules::directories::Source::Pack(&pack.document.id),
                         pack.document.directory_options.as_slice(),
                     )
                 })
                 .chain(metadata.custom.iter().map(|custom| {
                     (
-                        super::directories::Source::Project,
+                        crate::policy::rules::directories::Source::Project,
                         custom.document.directory_options.as_slice(),
                     )
                 })),
@@ -356,7 +359,7 @@ impl Plan {
                         || rule.legacy_normalized.is_some())
                         && rule.semantic();
                     if let Some(pack) = self.metadata.packs.get(entry.owner) {
-                        super::invocations::binding(&pack.document, &rule)?;
+                        crate::policy::resolution::invocations::binding(&pack.document, &rule)?;
                     }
                     // Shared-body keys also carry dispatch bindings, so each
                     // must equal its rule's own key.
@@ -382,10 +385,12 @@ impl Plan {
     pub(crate) fn effective(&self) -> &serde_json::Value {
         &self.metadata.effective
     }
-    pub(crate) fn codex_prefixes(&self) -> &[super::agent_outputs::CodexPrefix] {
+    pub(crate) fn codex_prefixes(&self) -> &[crate::policy::rules::agent_outputs::CodexPrefix] {
         &self.metadata.codex_prefixes
     }
-    pub(crate) fn directory_options(&self) -> &[super::directories::DirectoryOption] {
+    pub(crate) fn directory_options(
+        &self,
+    ) -> &[crate::policy::rules::directories::DirectoryOption] {
         &self.directory_options
     }
     pub(crate) fn time_sensitive(&self) -> bool {
@@ -405,7 +410,7 @@ impl Plan {
         checkpoint: &dyn Fn() -> Result<(), Error>,
         known_cwd: bool,
         known_arguments: bool,
-    ) -> Result<super::Evaluation, Error> {
+    ) -> Result<crate::policy::Evaluation, Error> {
         let input = normalized::Input::Argv {
             executable: request.executable.clone(),
             arguments: request.arguments.clone(),
@@ -424,7 +429,7 @@ impl Plan {
             now: &now,
             known_cwd,
             known_arguments,
-            locations: Some(&super::resources::Unavailable),
+            locations: Some(&crate::policy::rules::resources::Unavailable),
             effects: None,
         };
         self.evaluate_input(request, &facts, checkpoint)
@@ -434,7 +439,7 @@ impl Plan {
         request: &Request,
         facts: &Facts<'_>,
         checkpoint: &dyn Fn() -> Result<(), Error>,
-    ) -> Result<super::Evaluation, Error> {
+    ) -> Result<crate::policy::Evaluation, Error> {
         self.evaluate_input_mcp(request, facts, None, checkpoint)
     }
 
@@ -444,7 +449,7 @@ impl Plan {
         facts: &Facts<'_>,
         mcp: Option<&ResolvedMcp>,
         checkpoint: &dyn Fn() -> Result<(), Error>,
-    ) -> Result<super::Evaluation, Error> {
+    ) -> Result<crate::policy::Evaluation, Error> {
         request.validate()?;
         let mut packs = self
             .metadata
@@ -479,7 +484,7 @@ impl Plan {
             patterns: Arc::default(),
         });
         let argv = matches!(facts.input, normalized::Input::Argv { .. });
-        if argv || super::rules::legacy_read(request, facts) {
+        if argv || crate::policy::rules::legacy_read(request, facts) {
             if argv {
                 self.collect_invocations(request, &mut packs, checkpoint)?;
             }
@@ -517,7 +522,7 @@ impl Plan {
         }
         let selected: Vec<_> = packs.iter().map(|(p, profile)| (p, *profile)).collect();
         let customs: Vec<_> = custom.as_ref().into_iter().collect();
-        let mut evaluation = super::evaluate_facts(
+        let mut evaluation = crate::policy::evaluate_facts(
             &selected,
             &customs,
             request,
@@ -543,20 +548,21 @@ impl Plan {
         &self,
         request: &Request,
         facts: &Facts<'_>,
-        evaluation: &mut super::Evaluation,
+        evaluation: &mut crate::policy::Evaluation,
     ) {
         let argv = matches!(facts.input, normalized::Input::Argv { .. });
-        if self.metadata.historical_semantic && (argv || super::rules::legacy_read(request, facts))
+        if self.metadata.historical_semantic
+            && (argv || crate::policy::rules::legacy_read(request, facts))
         {
             evaluation.semantic_coverage = Some("incomplete-possible-effects-v1");
             let exact = evaluation.matches.iter().any(|matched| {
                 matched.exact_request
                     && matched.applied
-                    && matched.decision == super::Decision::Allow
+                    && matched.decision == crate::policy::Decision::Allow
             });
             if !argv || !exact {
-                evaluation.decision = evaluation.decision.max(super::Decision::Ask);
-                if evaluation.decision == super::Decision::Ask {
+                evaluation.decision = evaluation.decision.max(crate::policy::Decision::Ask);
+                if evaluation.decision == crate::policy::Decision::Ask {
                     evaluation.reason = "incomplete-effect-evidence";
                 }
             }

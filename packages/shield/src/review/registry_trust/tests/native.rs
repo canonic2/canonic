@@ -94,14 +94,14 @@ fn read_evidence(fixture: &Fixture) -> (crate::runtime::EvaluatedRequest, String
     };
     let resource = crate::review::runtime::consumer::ResourceRequest {
         mcp: None,
-        input: crate::policy::normalized::Input::File {
+        input: crate::policy::resolution::normalized::Input::File {
             action: "read".into(),
             sources: request.arguments.clone(),
             destination: None,
             recursive: false,
             original_input: json!({"file_path":path}),
         },
-        context: crate::policy::normalized::Context {
+        context: crate::policy::resolution::normalized::Context {
             cwd: request.cwd.clone(),
             environment: None,
             working_files: None,

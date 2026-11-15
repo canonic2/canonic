@@ -3,10 +3,10 @@
 use std::{collections::BTreeMap, ops::Range, slice};
 
 #[derive(Clone)]
-pub(super) struct Index(BTreeMap<String, Vec<usize>>);
+pub(in crate::policy) struct Index(BTreeMap<String, Vec<usize>>);
 
 impl Index {
-    pub(super) fn new<'a>(executables: impl Iterator<Item = Option<&'a str>>) -> Self {
+    pub(in crate::policy) fn new<'a>(executables: impl Iterator<Item = Option<&'a str>>) -> Self {
         let mut entries: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         for (position, executable) in executables.enumerate() {
             entries
@@ -17,7 +17,7 @@ impl Index {
         Self(entries)
     }
 
-    pub(super) fn candidates(
+    pub(in crate::policy) fn candidates(
         &self,
         executable: &str,
         length: usize,
@@ -37,7 +37,7 @@ impl Index {
     }
 }
 
-pub(super) enum Candidates<'a> {
+pub(in crate::policy) enum Candidates<'a> {
     Indexed(std::iter::Chain<slice::Iter<'a, usize>, slice::Iter<'a, usize>>),
     All(Range<usize>),
 }

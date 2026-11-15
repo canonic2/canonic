@@ -6,7 +6,10 @@ fn handles_charge_their_capture_and_prepare_only_on_evaluation() {
     let bundle =
         configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
     let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
-    let state = Store::open(root.path()).unwrap().read_current().unwrap();
+    let state = Store::open(root.path())
+        .unwrap()
+        .read_following_files()
+        .unwrap();
     let candidate = &state.candidates["project"];
     let mut views = Views::new("capture-admission".into());
     let id = views

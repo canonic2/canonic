@@ -16,9 +16,9 @@ Options:
           Select a project; otherwise discover the nearest enrolled ancestor
 
       --agent <AGENTS>
-          Agent to set up or remove, or box for a Box MCP definition; repeat for several. Omission asks
+          Agent to set up or remove, or hub or box for a Hub or Box MCP definition; repeat for several. Omission asks
 
-          [possible values: box, claude, codex, gemini, agy, copilot, opencode]
+          [possible values: hub, box, claude, codex, gemini, agy, copilot, opencode]
 
       --json
           Print one JSON result; commands that change policy refuse JSON mode

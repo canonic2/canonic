@@ -1,6 +1,6 @@
 //! Transport-neutral integration planning, exact review and publication.
 use super::{
-    IntegrationChoice, MAX_CONFIG, Plan, Registration, binary_digest, box_definition, files,
+    IntegrationChoice, MAX_CONFIG, Plan, Registration, binary_digest, files, host_definition,
     mcp_after, native, pending, read_file, registration,
 };
 use crate::configuration::settings::Values;
@@ -32,22 +32,17 @@ pub(in crate::review) fn resume_for(context: &Context, explicit: bool) -> Result
         {
             return Ok(false);
         }
-        resume_plan(context, &meta, &plan, None)?;
+        resume_plan(context, &meta, &plan)?;
         return Ok(true);
     }
     Ok(false)
 }
 
-pub(super) fn resume_plan(
-    context: &Context,
-    metadata: &Value,
-    plan: &Plan,
-    activation: Option<&str>,
-) -> Result<(), Error> {
+fn resume_plan(context: &Context, metadata: &Value, plan: &Plan) -> Result<(), Error> {
     review::project::checkpoint(context)?;
     let publication =
         review::publication::ProjectionLease::acquire(Path::new(&context.project_root))?;
-    resume_plan_guarded(context, metadata, plan, activation, &publication)
+    resume_plan_guarded(context, metadata, plan, None, &publication)
 }
 
 pub(in crate::review) fn resume_plan_guarded(
@@ -94,7 +89,7 @@ pub(in crate::review) fn desired(root: &Path) -> Result<Registration, Error> {
         ask_fallback: std::collections::BTreeMap::new(),
         approved_tools: None,
         connections: std::collections::BTreeMap::new(),
-        box_definition: None,
+        definition: None,
     })
 }
 
@@ -160,12 +155,13 @@ pub(in crate::review) fn prepare_with(
     let fresh = matches!(choice, IntegrationChoice::Agents(_))
         .then(|| desired(root))
         .transpose()?;
+    choice.check_routes()?;
     let approved = approved.unwrap_or(approved_tools(meta)?);
     let requested = choice;
     let (choice, scope_reason) =
         scope::selection(choice, previous.as_ref(), fresh.as_ref(), &approved)?;
     let targets = selected_targets(choice);
-    let shared = choice.contains(box_definition::ID)
+    let shared = choice.host().is_some()
         || agents::ADAPTERS
             .iter()
             .any(|a| a.spec().mcp_path.is_none() && choice.contains(a.spec().id));
@@ -199,9 +195,10 @@ pub(in crate::review) fn prepare_with(
         &mut files,
         repair_hooks,
     )?;
+    check_hub_alone(choice, desired.as_ref())?;
     if desired.as_ref().is_some_and(|registration| {
         registration.agents.is_empty()
-            && registration.box_definition.is_none()
+            && registration.definition.is_none()
             && registration.interceptor.is_none()
     }) {
         desired = None;
@@ -210,9 +207,9 @@ pub(in crate::review) fn prepare_with(
         return Ok(None);
     }
     let repair_shared = repair_hooks
-        && agents::ADAPTERS.iter().any(|adapter| {
-            adapter.spec().mcp_path.is_none() && selected_agent(choice, adapter.spec().id)
-        });
+        && agents::ADAPTERS
+            .iter()
+            .any(|adapter| adapter.spec().mcp_path.is_none() && choice.contains(adapter.spec().id));
     let after = if shared {
         mcp_after(
             before.as_deref(),
@@ -249,6 +246,30 @@ pub(in crate::review) fn prepare_with(
     Ok(Some(plan))
 }
 
+/// Refuse an installation whose result records Hub next to a direct
+/// installation of an agent Hub publishes to: both would publish Shield entries
+/// to that agent. The selection check cannot see installations already recorded.
+fn check_hub_alone(choice: IntegrationChoice, desired: Option<&Registration>) -> Result<(), Error> {
+    // Removal stays available for a record that already holds both.
+    let installs = matches!(choice, IntegrationChoice::Agents(_));
+    let competing = installs
+        && desired.is_some_and(|registration| {
+            registration
+                .definition
+                .as_ref()
+                .is_some_and(|definition| definition.host() == &host_definition::HUB)
+                && registration.agents.keys().any(|agent| {
+                    agents::find(agent).is_some_and(agents::AgentAdapter::supports_box_hooks)
+                })
+        });
+    if competing {
+        return Err(Error::Invalid(
+            "Hub covers this project's agents; set them up with --agent hub, or remove Hub first with --remove --agent hub",
+        ));
+    }
+    Ok(())
+}
+
 /// Shared-launcher review does not select an omitted SDK-to-native migration.
 fn file_selection(
     choice: IntegrationChoice,
@@ -269,7 +290,9 @@ fn file_selection(
 }
 
 fn selected_targets(choice: IntegrationChoice) -> Vec<String> {
-    std::iter::once(box_definition::ID)
+    host_definition::HOSTS
+        .into_iter()
+        .map(|host| host.id)
         .chain(agents::ADAPTERS.iter().map(|a| a.spec().id))
         .filter(|id| choice.contains(id))
         .map(str::to_owned)
@@ -322,8 +345,9 @@ fn next_registration(
     next
 }
 
-/// The direct installations an install of Box hands over: those recorded and
-/// not selected again, when the operator keeps the default hand-over.
+/// The direct installations an install of Hub or Box hands over: those recorded and
+/// not selected again, when the operator keeps Box's default hand-over. Hub
+/// installs alone, so it always hands them over.
 pub(in crate::review) fn handed_over(
     previous: Option<&Registration>,
     choice: IntegrationChoice,
@@ -342,9 +366,9 @@ fn handed_over_with(
 ) -> Vec<String> {
     match previous {
         Some(registration)
-            if handover
+            if (handover || choice.host() == Some(&host_definition::HUB))
                 && matches!(choice, IntegrationChoice::Agents(_))
-                && choice.contains(box_definition::ID) =>
+                && choice.host().is_some() =>
         {
             registration
                 .agents
@@ -358,7 +382,7 @@ fn handed_over_with(
     }
 }
 
-/// Plan native and Box files, then keep only the Ask fallbacks of agents the
+/// Plan native and Hub or Box files, then keep only the Ask fallbacks of agents the
 /// desired record still covers.
 pub(in crate::review) fn prepare_files(
     root: &Path,
@@ -378,7 +402,7 @@ pub(in crate::review) fn prepare_files(
         files,
         repair_hooks,
     )?;
-    prepare_box(
+    prepare_host(
         root,
         choice,
         previous,
@@ -386,7 +410,7 @@ pub(in crate::review) fn prepare_files(
         approved,
         files,
     )?;
-    let replace_legacy = selected_agent(choice, "claude")
+    let replace_legacy = choice.contains("claude")
         || (desired.as_ref().is_some_and(|r| r.native_covers("claude"))
             && previous.is_none_or(|r| !r.native_covers("claude")));
     super::legacy::prepare(
@@ -403,7 +427,7 @@ pub(in crate::review) fn prepare_files(
             .filter(|agent| {
                 registration.covers(agent)
                     || !(choice.contains(agent)
-                        || choice.contains(box_definition::ID)
+                        || choice.host().is_some()
                             && agents::find(agent)
                                 .is_some_and(agents::AgentAdapter::supports_box_hooks))
             })
@@ -431,8 +455,7 @@ pub(in crate::review) fn prepare_native(
     for adapter in agents::ADAPTERS {
         let agent = adapter.spec().id;
         let old = previous.and_then(|r| r.agents.get(agent));
-        let selected = selected_agent(choice, agent);
-        if !selected {
+        if !choice.contains(agent) {
             continue;
         }
         // Removal reaches here only for selected agents, which are removed.
@@ -448,7 +471,7 @@ pub(in crate::review) fn prepare_native(
             binary.as_deref(),
             approved,
             files,
-            repair_hooks && selected,
+            repair_hooks,
         )?;
         if let (Some(r), Some(installation)) = (desired.as_deref_mut(), installation) {
             r.agents.insert(agent.into(), installation);
@@ -474,9 +497,10 @@ pub(in crate::review) fn prepare_native(
     Ok(())
 }
 
-/// Add the Box MCP definition to the plan: written when Box is selected,
-/// or removed on request. Omitted definitions are preserved without inspection.
-pub(in crate::review) fn prepare_box(
+/// Add the Hub or Box MCP definition to the plan: written when its host is
+/// selected, replacing the other host's owned definition, or removed on
+/// request. Omitted definitions are preserved without inspection.
+pub(in crate::review) fn prepare_host(
     root: &Path,
     choice: IntegrationChoice,
     previous: Option<&Registration>,
@@ -484,17 +508,21 @@ pub(in crate::review) fn prepare_box(
     approved: &[String],
     files: &mut Vec<files::Change>,
 ) -> Result<(), Error> {
-    let old = previous.and_then(|r| r.box_definition.as_ref());
-    let selected = choice.contains(box_definition::ID);
+    let old = previous.and_then(|r| r.definition.as_ref());
     let removing = matches!(choice, IntegrationChoice::RemoveAgents(_));
-    let Some(desired) = desired else {
+    // Removal acts on the owned host when selected; removing one host never
+    // removes the other's definition.
+    let host = if removing {
+        old.map(host_definition::Definition::host)
+            .filter(|host| choice.contains(host.id))
+    } else {
+        choice.host()
+    };
+    let (Some(host), Some(desired)) = (host, desired) else {
         return Ok(());
     };
-    if !selected {
-        return Ok(());
-    }
-    let binary = (!removing && (selected || old.is_some())).then_some(desired.binary.as_path());
-    desired.box_definition = box_definition::prepare(root, old, binary, selected, approved, files)?;
+    let binary = (!removing).then_some(desired.binary.as_path());
+    desired.definition = host_definition::prepare(host, root, old, binary, true, approved, files)?;
     Ok(())
 }
 
@@ -506,7 +534,7 @@ pub(in crate::review) fn capture_initial(
     let mut captured = desired(root)?;
     for adapter in agents::ADAPTERS {
         let agent = adapter.spec().id;
-        if selected_agent(choice, agent) {
+        if choice.contains(agent) {
             let mcp_present = adapter.spec().mcp_path.is_none()
                 && before.is_some_and(|bytes| {
                     crate::json::parse(bytes.as_bytes())
@@ -520,10 +548,6 @@ pub(in crate::review) fn capture_initial(
         }
     }
     Ok((!captured.agents.is_empty()).then_some(captured))
-}
-
-pub(in crate::review) fn selected_agent(choice: IntegrationChoice, agent: &str) -> bool {
-    choice.contains(agent)
 }
 
 /// Put the Ask fallbacks into the plan: the one the policy files name for
@@ -560,7 +584,7 @@ pub(in crate::review) fn with_fallbacks(
         let id = adapter.spec().id;
         let chosen = !removing
             && (selected.contains(id)
-                || (selected.contains(super::box_definition::ID) && adapter.supports_box_hooks()));
+                || (selected.host().is_some() && adapter.supports_box_hooks()));
         let kept = plan.previous.as_ref().and_then(|r| r.ask_fallback.get(id));
         if chosen {
             desired.ask_fallback.insert(
@@ -590,24 +614,36 @@ pub(in crate::review) fn setup_preview(root: &Path, plan: Option<&Plan>) -> Resu
     Ok(review)
 }
 
+/// The Hub and Box rows of an integration review. A switch between hosts shows
+/// the old host removed and the new one added.
+fn host_rows(p: &Plan) -> Vec<Value> {
+    let before = p.previous.as_ref().and_then(|r| r.definition.as_ref());
+    let after = p.desired.as_ref().and_then(|r| r.definition.as_ref());
+    host_definition::HOSTS
+        .into_iter()
+        .filter(|_| p.affects_definition())
+        .filter_map(|host| {
+            let before = before.filter(|d| d.host() == host);
+            let after = after.filter(|d| d.host() == host);
+            let change = match (before, after) {
+                (None, None) => return None,
+                (None, Some(_)) => "added",
+                (Some(_), None) => "removed",
+                (Some(b), Some(a)) if b == a => "unchanged",
+                _ => "updated",
+            };
+            Some(json!({"agent":host.id,"change":change,"mcp_server":"shield"}))
+        })
+        .collect()
+}
+
 /// The operator review of an integration plan: each agent's hooks and MCP
 /// server, the Codex Ask fallback and every owned file's exact before/after.
 pub(in crate::review) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
     let Some(p) = plan else {
         return json!({"operation":"keep integrations"});
     };
-    let box_row = match (
-        p.previous.as_ref().and_then(|r| r.box_definition.as_ref()),
-        p.desired.as_ref().and_then(|r| r.box_definition.as_ref()),
-    ) {
-        (None, None) => None,
-        (None, Some(_)) => Some("added"),
-        (Some(_), None) => Some("removed"),
-        (Some(b), Some(a)) if b == a => Some("unchanged"),
-        _ => Some("updated"),
-    }
-    .filter(|_| p.affects(box_definition::ID))
-    .map(|change| json!({"agent":super::box_definition::ID,"change":change,"mcp_server":"shield"}));
+    let host_rows = host_rows(p);
     let direct = p.desired.as_ref().is_some_and(|r| !r.agents.is_empty());
     let native = crate::agents::ADAPTERS
         .iter()
@@ -641,14 +677,15 @@ pub(in crate::review) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
                 .collect();
             Some(json!({"agent":agent,"change":change,"hooks":hooks,"mcp_server":"shield"}))
         });
-    let agents: Vec<_> = box_row.iter().cloned().chain(native).collect();
-    let box_next = box_row
-        .as_ref()
-        .filter(|row| row["change"] != "removed")
-        .map(|_| {
-            json!({"publish":"box setup (first time) or box config sync",
+    let host_next = host_rows
+        .iter()
+        .find(|row| row["change"] != "removed")
+        .and_then(|row| row["agent"].as_str().and_then(host_definition::find))
+        .map(|host| {
+            json!({"agent":host.id,"label":host.label,"publish":host.publish,
             "direct_installations":direct,"handed_over":p.handed_over})
         });
+    let agents: Vec<_> = host_rows.into_iter().chain(native).collect();
     let fallbacks: Value = crate::agents::ADAPTERS
         .iter()
         .filter(|a| a.spec().needs_ask_fallback && p.affects(a.spec().id))
@@ -686,7 +723,7 @@ pub(in crate::review) fn preview(root: &Path, plan: Option<&Plan>) -> Value {
         "host_path_warning":super::HOST_PATH_WARNING,
         "binary":p.desired.as_ref().or(p.previous.as_ref()).map(|r| &r.binary),
         "agents":agents,
-        "box":box_next,
+        "host":host_next,
         "connections":p.desired.as_ref().map(|r|r.connections.iter().filter(|(agent,_)|p.affects(agent)).flat_map(|(agent,value)|value["review"].as_array().into_iter().flatten().map(move |row| {let mut row=row.clone();row["agent"]=json!(agent);row})).collect::<Vec<_>>()).unwrap_or_default(),
         "ask_fallbacks":fallbacks,
         "adopt_existing_entries":p.previous.is_some() && !crate::layout::enrolled(root),

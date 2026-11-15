@@ -1,12 +1,12 @@
 //! Selected raw bytes of a captured candidate, bound to its canonical lock.
-use super::{Context, Error, RuleRef};
+use super::{Error, RuleRef};
 use serde_json::{Value, json};
 
 struct Source<'a> {
     candidate: &'a Value,
 }
 impl<'a> Source<'a> {
-    fn open(_context: &Context, candidate: &'a Value) -> Result<Self, Error> {
+    fn open(candidate: &'a Value) -> Result<Self, Error> {
         if !candidate.is_object() {
             return Err(Error::CandidateUnavailable);
         }
@@ -30,12 +30,8 @@ impl<'a> Source<'a> {
     }
 }
 
-pub(in crate::review) fn policy(
-    context: &Context,
-    reference: &Value,
-    revision: &str,
-) -> Result<Value, Error> {
-    let source = Source::open(context, reference)?;
+pub(in crate::review) fn policy(reference: &Value, revision: &str) -> Result<Value, Error> {
+    let source = Source::open(reference)?;
     let mut candidate = source.header()?;
     crate::configuration::recorded_effective(&candidate, revision)?;
     candidate["rules"] = source.field("rules", None)?;
@@ -45,11 +41,10 @@ pub(in crate::review) fn policy(
 
 /// Canonical lock identity only. No body, matcher or whole-bundle claim.
 pub(in crate::review) fn revision(
-    context: &Context,
     reference: &Value,
     expected: Option<&str>,
 ) -> Result<String, Error> {
-    let candidate = Source::open(context, reference)?.header()?;
+    let candidate = Source::open(reference)?.header()?;
     match expected {
         Some(expected) => {
             crate::configuration::recorded_effective(&candidate, expected)?;
@@ -60,7 +55,6 @@ pub(in crate::review) fn revision(
 }
 
 pub(in crate::review) fn rules(
-    context: &Context,
     reference: &Value,
     metadata: &Value,
     revision: &str,
@@ -72,7 +66,7 @@ pub(in crate::review) fn rules(
                 .map_err(|_| Error::Invalid("invalid rule reference"))
         })
         .transpose()?;
-    let source = Source::open(context, reference)?;
+    let source = Source::open(reference)?;
     let mut candidate = source.header()?;
     // Validate the canonical lock/revision before using any selected body.
     crate::configuration::recorded_effective(&candidate, revision)?;

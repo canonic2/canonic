@@ -1,35 +1,26 @@
 //! Validates declarative project policy and composes decisions without I/O.
+//!
+//! The pure policy core is grouped by family, each a self-named module:
+//! - `model`: version-1 documents, schema, templates, variables, legacy forms.
+//! - `rules`: structured predicates, argv grammars, patterns, selectors,
+//!   directory options and portability.
+//! - `resolution`: compiled plans, executable index, partitions, provenance
+//!   and resolver evidence feeding the Allow/Ask/Deny decision.
+//! - `dependencies`: pack dependencies and profiles as ordered levels.
 
-pub(crate) mod agent_outputs;
-mod argument_rules;
-pub(crate) mod compiled;
 pub(crate) mod dependencies;
-pub(crate) mod diagnostics;
-pub(crate) mod directories;
 #[cfg(test)]
 mod historical_tests;
-mod index;
-mod invocations;
-mod json_budget;
-mod legacy;
-mod model;
+pub(crate) mod model;
 pub(crate) use model::feedback;
-pub(crate) mod normalized;
-pub(crate) mod partition;
-pub(crate) mod patterns;
-pub(crate) mod portability;
-pub(crate) mod profile_comparison;
-pub(crate) mod provenance;
 pub(crate) mod resolution;
-pub(crate) mod resources;
 pub(crate) mod rules;
-pub(crate) mod schema;
-pub(crate) mod selectors;
-pub(crate) mod symbolic;
-mod templates;
 #[cfg(test)]
 mod tests;
-pub(crate) mod variables;
+
+use model::{json_budget, legacy, variables};
+use resolution::{diagnostics, index, invocations, normalized, provenance};
+use rules::{directories, patterns, resources, selectors};
 
 pub(crate) fn validate_mcp_fields(fields: &serde_json::Value) -> Result<(), Error> {
     selectors::field_map(fields)?;

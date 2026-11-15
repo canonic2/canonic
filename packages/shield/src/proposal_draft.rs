@@ -236,7 +236,7 @@ mod tests {
 
     /// A typed agent web-tool fetch, as native hooks submit it.
     fn host_fetch(evaluator: &crate::configuration::Evaluator, cwd: &str, url: &str) -> String {
-        use crate::policy::normalized::{Context, Input};
+        use crate::policy::resolution::normalized::{Context, Input};
         let input = Input::Web {
             action: "fetch".into(),
             query: None,
@@ -345,7 +345,8 @@ mod tests {
             rule["reason"],
             "Allow `npm run dev` in the project without asking."
         );
-        let rule: crate::policy::normalized::Rule = serde_json::from_value(rule.clone()).unwrap();
+        let rule: crate::policy::resolution::normalized::Rule =
+            serde_json::from_value(rule.clone()).unwrap();
         assert!(rule.validate().is_ok());
     }
 
@@ -368,7 +369,7 @@ mod tests {
         assert_eq!(local, web_fetch("http://127.0.0.1:8080/").unwrap());
         assert_eq!(local["rule"]["conditions"]["url"].get("ports"), None);
         for change in [npm, web_search(), fetch, ported, local] {
-            let rule: crate::policy::normalized::Rule =
+            let rule: crate::policy::resolution::normalized::Rule =
                 serde_json::from_value(change["rule"].clone()).unwrap();
             rule.validate().unwrap();
         }

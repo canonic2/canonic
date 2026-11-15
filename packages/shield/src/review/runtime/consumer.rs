@@ -286,7 +286,7 @@ impl NativeSource {
 /// one part, covered when any of them is. Operations without an argv request
 /// are skipped, which errs toward reporting coverage.
 pub(crate) fn codex_covers(
-    prefixes: &[policy::agent_outputs::CodexPrefix],
+    prefixes: &[policy::rules::agent_outputs::CodexPrefix],
     operations: &serde_json::Value,
 ) -> bool {
     let span = |operation: &serde_json::Value| {
@@ -341,7 +341,7 @@ impl Snapshot {
         server: &str,
         connections: &crate::mcp_connections::Connections,
         source: &str,
-    ) -> Result<policy::compiled::ResolvedMcp, RuntimeError> {
+    ) -> Result<policy::resolution::compiled::ResolvedMcp, RuntimeError> {
         let mut resolved = self
             .evaluator
             .resolve_mcp(server, connections, source)
@@ -374,7 +374,7 @@ impl Snapshot {
         self.evaluator.time_sensitive()
     }
     /// Codex prefixes of this policy's active rules that allow.
-    pub(crate) fn codex_prefixes(&self) -> &[policy::agent_outputs::CodexPrefix] {
+    pub(crate) fn codex_prefixes(&self) -> &[policy::rules::agent_outputs::CodexPrefix] {
         self.evaluator.codex_prefixes()
     }
     /// Whether Codex would run the analyzed command outside its sandbox
@@ -391,7 +391,7 @@ impl Snapshot {
         cwd: &str,
         original: Option<&serde_json::Value>,
     ) -> Result<serde_json::Value, RuntimeError> {
-        let input = policy::normalized::Input::Shell {
+        let input = policy::resolution::normalized::Input::Shell {
             source: source.into(),
             dialect: serde_json::json!(dialect)
                 .as_str()
@@ -400,7 +400,7 @@ impl Snapshot {
             dialect_version: dialect_version.map(str::to_owned),
             original_input: original.cloned().unwrap_or_else(|| serde_json::json!({})),
         };
-        let context = policy::normalized::Context {
+        let context = policy::resolution::normalized::Context {
             cwd: cwd.into(),
             environment: None,
             working_files: self.working_files.clone(),
@@ -482,7 +482,6 @@ impl Snapshot {
             identity: self.identity.clone(),
             request,
             evaluation,
-            time_sensitive: self.evaluator.time_sensitive(),
             evaluator: Arc::clone(&self.evaluator),
             resource: Some(resource),
         })
@@ -501,7 +500,6 @@ impl Snapshot {
             identity: self.identity.clone(),
             request,
             evaluation,
-            time_sensitive: self.evaluator.time_sensitive(),
             evaluator: Arc::clone(&self.evaluator),
             resource: None,
         })
@@ -525,18 +523,17 @@ pub struct EvaluatedRequest {
     identity: SnapshotIdentity,
     request: policy::Request,
     evaluation: CandidateEvaluation,
-    time_sensitive: bool,
     evaluator: Arc<Evaluator>,
     resource: Option<ResourceRequest>,
 }
 #[derive(Clone, serde::Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ResourceRequest {
-    pub(crate) input: policy::normalized::Input,
-    pub(crate) context: policy::normalized::Context,
+    pub(crate) input: policy::resolution::normalized::Input,
+    pub(crate) context: policy::resolution::normalized::Context,
     /// Adapter-derived matching authority, never decoded from a request or grant.
     #[serde(skip)]
-    pub(crate) mcp: Option<Arc<policy::compiled::ResolvedMcp>>,
+    pub(crate) mcp: Option<Arc<policy::resolution::compiled::ResolvedMcp>>,
 }
 impl EvaluatedRequest {
     pub(crate) fn resource(&self) -> Option<&ResourceRequest> {

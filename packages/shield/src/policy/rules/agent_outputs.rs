@@ -1,6 +1,6 @@
 //! Agent-specific outputs a rule asks for, such as Codex command prefixes,
 //! each checked against the rule's own conditions.
-use super::{Decision, Error, Profile, rules::Rule};
+use crate::policy::{Decision, Error, Profile, rules::Rule};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -64,7 +64,7 @@ impl Agents {
     /// Refuse prefixes this rule cannot vouch for. Each prefix starts within
     /// the rule's literal executable and argument prefix, so it never names a
     /// command family wider than the rule; later positions narrow it further.
-    pub(super) fn validate(&self, rule: &Rule) -> Result<(), Error> {
+    pub(in crate::policy) fn validate(&self, rule: &Rule) -> Result<(), Error> {
         if rule.conditions.get("graphql").is_some()
             || rule
                 .requirements
@@ -104,7 +104,11 @@ impl Agents {
 }
 
 /// The Codex prefixes of an active rule that allows under `profile`.
-pub(super) fn codex_prefixes(rule: &Rule, owner: &str, profile: Profile) -> Vec<CodexPrefix> {
+pub(in crate::policy) fn codex_prefixes(
+    rule: &Rule,
+    owner: &str,
+    profile: Profile,
+) -> Vec<CodexPrefix> {
     let Some(agents) = &rule.agents else {
         return Vec::new();
     };

@@ -1,8 +1,8 @@
 //! Exercises variable resolution, activation, templates, preconditions and overrides
 //! through pack preparation and the shared resolver.
 
-use super::super::{Decision, Pack, Profile, Request, compiled::Plan, evaluate};
-use super::{Binding, Override};
+use super::super::{Decision, Pack, Profile, Request, evaluate};
+use super::{Binding, Override, compiled::Plan};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 

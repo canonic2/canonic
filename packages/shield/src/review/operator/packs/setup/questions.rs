@@ -2,7 +2,7 @@
 //! wording and preselection, and turning the reply into a checked value.
 use super::super::super::terminal::{Question, Reply, Step, Terminal};
 use crate::{
-    policy::variables::{Declaration, Kind, render},
+    policy::model::variables::{Declaration, Kind, render},
     review::Error,
 };
 use serde_json::{Value, json};

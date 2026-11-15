@@ -47,9 +47,12 @@ pub(super) fn list(context: &Context, session: Option<&str>) -> Value {
                     row["suggested_change"] = web;
                 }
                 let portable = if row.get("suggested_change").is_some() {
-                    crate::policy::portability::check(&row["suggested_change"]["rule"], &roots)
+                    crate::policy::rules::portability::check(
+                        &row["suggested_change"]["rule"],
+                        &roots,
+                    )
                 } else {
-                    crate::policy::portability::check_request(&row["request"], &roots)
+                    crate::policy::rules::portability::check_request(&row["request"], &roots)
                 };
                 if let Err(reason) = portable {
                     row["not_portable"] = json!(reason);

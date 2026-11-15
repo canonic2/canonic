@@ -87,7 +87,6 @@ pub(crate) struct Runtime {
 }
 struct RuntimeStore {
     store: Store,
-    used: bool,
     recovered: bool,
 }
 
@@ -97,7 +96,6 @@ impl Runtime {
         Self {
             store: Mutex::new(RuntimeStore {
                 store,
-                used: false,
                 recovered: false,
             }),
             workers: Mutex::new(Vec::new()),
@@ -113,14 +111,12 @@ impl Runtime {
             }
         }
         current.recovered = true;
-        current.used = true;
         Ok(current.store.clone())
     }
-    /// Retaining a task reference prevents epoch adoption, but never recovers
-    /// workers or creates storage merely to inspect their recorded result.
+    /// The store for inspecting recorded task results; it never recovers
+    /// workers or creates storage.
     pub(crate) fn observation_store(&self) -> Result<Store, Error> {
-        let mut current = self.store.lock().map_err(|_| Error::Locked)?;
-        current.used = true;
+        let current = self.store.lock().map_err(|_| Error::Locked)?;
         Ok(current.store.clone())
     }
     #[cfg(test)]

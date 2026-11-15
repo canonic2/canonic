@@ -338,7 +338,7 @@ fn identity_of(candidate: &str, metadata: &Value) -> String {
     crate::policy::fingerprint(
         json!([
             env!("CARGO_PKG_VERSION"),
-            crate::policy::compiled::FORMAT,
+            crate::policy::resolution::compiled::FORMAT,
             candidate,
             metadata
         ])
@@ -383,7 +383,10 @@ mod tests {
         let bundle =
             configuration::Bundle::capture(&config, std::slice::from_ref(&source), None).unwrap();
         let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
-        let state = Store::open(root.path()).unwrap().read_current().unwrap();
+        let state = Store::open(root.path())
+            .unwrap()
+            .read_following_files()
+            .unwrap();
         let mut views = Views::new("acme-resolution-memo".into());
         let id = views
             .retain(&context, &state.candidates["project"], &state.operator)
@@ -436,7 +439,10 @@ mod tests {
         let bundle =
             configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
         let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
-        let state = Store::open(root.path()).unwrap().read_current().unwrap();
+        let state = Store::open(root.path())
+            .unwrap()
+            .read_following_files()
+            .unwrap();
         let mut views = Views::new("acme-lazy-plan-budget".into());
         let id = views
             .retain(&context, &state.candidates["project"], &state.operator)

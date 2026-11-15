@@ -1,6 +1,6 @@
 //! Shield-owned agent prefix rules files, derived from the active policy.
 use super::{Error, Plan, Registration, files, registration};
-use crate::{agents, policy::agent_outputs::CodexPrefix};
+use crate::{agents, policy::rules::agent_outputs::CodexPrefix};
 use serde_json::Value;
 use std::path::Path;
 

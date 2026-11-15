@@ -43,6 +43,6 @@ enforcement.
 
 The adapter has macOS evidence with Copilot CLI 1.0.105 and an offline scripted
 provider. It does not claim Linux/Windows host loading, exact before/after
-correlation or Box-managed publication. Temporary folders and selected skill
+correlation or Hub- or Box-managed publication. Temporary folders and selected skill
 libraries receive ordinary working-file access; session outputs and other
 runtime assets do not.

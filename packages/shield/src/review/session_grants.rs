@@ -24,7 +24,7 @@ pub(crate) use view::{confirmation, show};
 
 const PENDING: u64 = 600_000;
 const RETAIN: u64 = 86_400_000;
-const MAX_FORM: usize = 12_000;
+use super::hook_approval::MAX_FORM;
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

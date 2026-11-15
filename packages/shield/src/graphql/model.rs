@@ -1,5 +1,5 @@
 //! Admission and selector positions of finite, data-only selection models.
-use crate::policy::{Error, selectors as text};
+use crate::policy::{Error, rules::selectors as text};
 use serde_json::Value;
 use std::collections::BTreeSet;
 

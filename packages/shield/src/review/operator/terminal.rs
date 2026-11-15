@@ -104,8 +104,8 @@ impl Terminal {
     }
     /// The operator's live decision: `accept`, `reject` or `cancel`.
     /// Choosing never applies it; the caller confirms and applies.
-    pub(super) fn decide(&mut self, card: &Card, waiting: usize) -> Result<String, Error> {
-        inline::review(self.host(12)?, card, waiting)
+    pub(super) fn decide(&mut self, card: &Card) -> Result<String, Error> {
+        inline::review(self.host(12)?, card, 0)
     }
     pub(super) fn display(&mut self, value: &Value) -> Result<(), Error> {
         write!(self.output, "{}", super::presentation::review(value))?;
@@ -163,7 +163,7 @@ impl Terminal {
         title: &str,
         context: &str,
     ) -> Result<crate::policy::Profile, Error> {
-        self.choose_profile_step(title, context, crate::policy::Profile::Recommended, false)?
+        self.choose_profile_step(title, context, crate::policy::Profile::Recommended)?
             .or_cancel()
     }
     /// The profile as one step of a guided flow, starting at `default`.
@@ -172,7 +172,6 @@ impl Terminal {
         title: &str,
         context: &str,
         default: crate::policy::Profile,
-        back: bool,
     ) -> Result<Step<crate::policy::Profile>, Error> {
         use crate::policy::Profile;
         let default = match default {
@@ -193,7 +192,7 @@ impl Terminal {
                 ("loose", "Loose", "The pack's least restrictive profile"),
             ],
             default,
-            back,
+            false,
         )?
         else {
             return Ok(Step::Back);

@@ -1,5 +1,5 @@
 //! Strict, reusable selectors. Patterns are prepared by the owning policy snapshot.
-use super::{Error, patterns::Provider};
+use crate::policy::{Error, rules::patterns::Provider};
 use serde_json::Value;
 use std::collections::BTreeSet;
 
@@ -16,7 +16,9 @@ pub(crate) fn fields(value: &Value, allowed: &[&str]) -> Result<(), Error> {
 /// The selector values of an `environment` predicate. Tree walkers descend
 /// only into these: `fields` keys are variable names, never predicate keys,
 /// and `exact` holds literal data.
-pub(super) fn environment_selectors(environment: &Value) -> impl Iterator<Item = &Value> {
+pub(in crate::policy) fn environment_selectors(
+    environment: &Value,
+) -> impl Iterator<Item = &Value> {
     environment
         .get("fields")
         .and_then(Value::as_object)
@@ -25,7 +27,7 @@ pub(super) fn environment_selectors(environment: &Value) -> impl Iterator<Item =
 }
 
 /// [`environment_selectors`] for walkers that rewrite selectors in place.
-pub(super) fn environment_selectors_mut(
+pub(in crate::policy) fn environment_selectors_mut(
     environment: &mut Value,
 ) -> impl Iterator<Item = &mut Value> {
     environment
@@ -64,7 +66,7 @@ pub(crate) fn text(value: &Value, nonempty: bool) -> Result<(), Error> {
     Ok(())
 }
 
-pub(super) fn literal(value: &str, nonempty: bool) -> Result<(), Error> {
+pub(in crate::policy) fn literal(value: &str, nonempty: bool) -> Result<(), Error> {
     if value.len() > 4096 {
         return Err(Error::Limit);
     }
@@ -74,7 +76,11 @@ pub(super) fn literal(value: &str, nonempty: bool) -> Result<(), Error> {
     Ok(())
 }
 
-pub(super) fn strings(value: &Value, nonempty: bool, members_nonempty: bool) -> Result<(), Error> {
+pub(in crate::policy) fn strings(
+    value: &Value,
+    nonempty: bool,
+    members_nonempty: bool,
+) -> Result<(), Error> {
     let values = value.as_array().ok_or(Error::Syntax)?;
     if values.len() > 256 {
         return Err(Error::Limit);
@@ -93,7 +99,7 @@ pub(super) fn strings(value: &Value, nonempty: bool, members_nonempty: bool) -> 
     Ok(())
 }
 
-pub(super) fn exact(value: &Value) -> Option<&str> {
+pub(in crate::policy) fn exact(value: &Value) -> Option<&str> {
     value
         .as_str()
         .or_else(|| value.get("exact").and_then(Value::as_str))
@@ -126,7 +132,7 @@ pub(crate) fn matches(
     Err(Error::Contract("invalid prepared text selector"))
 }
 
-pub(super) fn field_map(value: &Value) -> Result<(), Error> {
+pub(in crate::policy) fn field_map(value: &Value) -> Result<(), Error> {
     let fields = value.as_object().ok_or(Error::Syntax)?;
     if fields.is_empty() || fields.len() > 256 {
         return Err(Error::Limit);
@@ -150,7 +156,7 @@ pub(super) fn field_map(value: &Value) -> Result<(), Error> {
     Ok(())
 }
 
-pub(super) fn pointer_validate(pointer: &str) -> Result<(), Error> {
+pub(in crate::policy) fn pointer_validate(pointer: &str) -> Result<(), Error> {
     if pointer.len() > 1024 {
         return Err(Error::Limit);
     }
@@ -168,7 +174,7 @@ pub(super) fn pointer_validate(pointer: &str) -> Result<(), Error> {
     Ok(())
 }
 
-pub(super) fn fields_match(
+pub(in crate::policy) fn fields_match(
     fields: &Value,
     input: &Value,
     patterns: &dyn Provider,

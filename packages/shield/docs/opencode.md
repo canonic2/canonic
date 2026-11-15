@@ -19,7 +19,7 @@ The plugin checks file reads/writes, directory searches and
 fetch/search requests through the shared policy. It leaves tool execution with
 OpenCode. Unmapped tools, including `apply_patch` and `multiedit`, are withheld;
 only todo bookkeeping bypasses inspection. External MCP
-policy bindings and Box-managed publication are unsupported.
+policy bindings and Hub- or Box-managed publication are unsupported.
 
 After Allow, Shield installs a frozen copy of the exact evaluated arguments
 and locks the host's argument property. A later plugin that changes those
