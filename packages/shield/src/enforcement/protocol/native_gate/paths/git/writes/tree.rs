@@ -28,13 +28,20 @@ pub(super) enum Query {
     },
     /// Untracked files under `paths` that no ignore rule keeps.
     Untracked { paths: Vec<PathBuf> },
+    /// A stash's worktree, index and optional untracked trees against its base.
+    Stash {
+        reference: String,
+        paths: Vec<PathBuf>,
+    },
 }
 
 impl Query {
     /// The protected path a change is reported under.
     pub(super) fn path(&self) -> Option<&PathBuf> {
         match self {
-            Self::Diff { paths, .. } | Self::Untracked { paths } => paths.first(),
+            Self::Diff { paths, .. } | Self::Untracked { paths } | Self::Stash { paths, .. } => {
+                paths.first()
+            }
         }
     }
 }
@@ -47,7 +54,10 @@ pub(super) fn plan(target: &Target, subcommand: &str, rest: &[&str]) -> Plan {
         "merge" => merge(target, rest),
         "rebase" => rebase(target, rest),
         "cherry-pick" | "revert" => pick(target, rest),
-        "stash" => stash_options(rest).map_or(Plan::Leaves, |options| stash(target, options)),
+        "stash" => match rest.first().copied() {
+            Some("apply" | "pop") => stash_restore(target, &rest[1..]),
+            _ => stash_options(rest).map_or(Plan::Leaves, |options| stash(target, options)),
+        },
         "clean" => clean(target, rest),
         // Bisection and sparse patterns check out content no query names.
         "bisect" => match rest.first().copied() {
@@ -108,7 +118,7 @@ impl Target {
     fn diff(&self, revisions: Vec<String>) -> Query {
         Query::Diff {
             revisions,
-            paths: self.policy.clone(),
+            paths: self.protected.clone(),
         }
     }
 }
@@ -300,10 +310,32 @@ fn stash(target: &Target, options: &[&str]) -> Plan {
     }
     if widens(options, &["-u", "--include-untracked"], VALUED) {
         queries.push(Query::Untracked {
-            paths: target.policy.clone(),
+            paths: target.protected.clone(),
         });
     }
     Plan::Queries(queries)
+}
+
+fn stash_restore(target: &Target, rest: &[&str]) -> Plan {
+    let mut reference = None;
+    for word in rest {
+        if ["--index", "-q", "--quiet"].contains(word) {
+            continue;
+        }
+        if word.starts_with('-') || reference.is_some() || word.is_empty() {
+            return Plan::Asks;
+        }
+        // `git stash` interprets digits as a reflog index, whereas rev-list
+        // can interpret the same word as an object ID. Never inspect that alias.
+        if word.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Plan::Asks;
+        }
+        reference = Some(*word);
+    }
+    Plan::Queries(vec![Query::Stash {
+        reference: reference.unwrap_or("refs/stash@{0}").to_owned(),
+        paths: target.protected.clone(),
+    }])
 }
 
 /// `git clean` removes untracked files below its pathspecs or the folder it

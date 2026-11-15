@@ -69,6 +69,24 @@ to commands. Shield checks the recorded host conversation, current policy and
 protection state, expiry, every covered operation, and the scope on each use.
 It records the original policy decision separately from grant authorization.
 
+For exact Git alternatives with an exact project cwd, preparation returns
+`scope_checks` and includes the findings in the approval form. Each finding
+names its alternative and reports `clear_at_preparation`,
+`one_time_approval_required`, `protected_access_refused` or `context_unavailable`.
+A grant cannot override a failed protected-file check. Use the native
+`request_approve` route when one-time approval is available. These findings
+describe preparation time; every native use checks again. Argument families
+and varying cwd scopes are checked at use time.
+
+Git checks use the worktree root reported by Git, including when commands run
+through a separate repository entry directory. `stash apply` and `stash pop`
+can follow ordinary policy when inspection finds no protected-file changes in
+the saved worktree, index or untracked-file trees. Changed protected files,
+unavailable stash objects and unsupported arguments retain separate review.
+Numeric stash references require one-time review because Git interprets them as
+stash indexes. Use an explicit `refs/stash@{N}` reference for inspection; the
+omitted-reference default is `refs/stash@{0}`.
+
 Repeat proposals and accepted apply calls reuse the retained result; they do
 not extend its expiry. Equivalent pending, active or declined offers return the
 existing record. Do not repeatedly offer declined permission or broaden the

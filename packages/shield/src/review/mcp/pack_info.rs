@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 const PROFILES: [&str; 3] = ["loose", "recommended", "strict"];
 const SUMMARY_BYTES: usize = 16 * 1024;
 
-pub(super) fn inspect(context: &Context, views: &mut Views, args: &Value) -> Result<Value, Error> {
+pub(super) fn inspect(context: &Context, args: &Value) -> Result<Value, Error> {
     fields(
         args,
         &[
@@ -52,112 +52,20 @@ pub(super) fn inspect(context: &Context, views: &mut Views, args: &Value) -> Res
         }
     }
     if view == "settings" {
-        let mut settings = json!({"view":"settings","reference":reference,"selected_release":data["selected_release"],
-            "variables":data["variables"],"preconditions":data["preconditions"],"dependencies":data["dependencies"],"mcp_integrations":data["mcp_integrations"],"invocations":data["invocations"],"command_sets":data["command_sets"],"setup":setup(&data,reference)});
-        if let Some(section) = text(args, "section")? {
-            if ![
-                "variables",
-                "preconditions",
-                "dependencies",
-                "mcp_integrations",
-                "invocations",
-                "command_sets",
-            ]
-            .contains(&section)
-            {
-                return Err(Error::Invalid("invalid settings section"));
-            }
-            for field in [
-                "variables",
-                "preconditions",
-                "dependencies",
-                "mcp_integrations",
-                "invocations",
-                "command_sets",
-            ] {
-                if field != section {
-                    settings.as_object_mut().expect("settings").remove(field);
-                }
-            }
-            return views.page(context, "pack_info", args, settings, section);
-        }
-        for field in [
-            "variables",
-            "preconditions",
-            "dependencies",
-            "mcp_integrations",
-            "invocations",
-            "command_sets",
-        ] {
-            crate::review::page::preview(
-                &mut settings,
-                field,
-                json!({"tool":"pack_info","reference":reference,"view":"settings","section":field}),
-            );
-        }
-        canonic_mcp_kit::page::Request::from_mcp(args, canonic_mcp_kit::page::Limits::STANDARD)
-            .map_err(crate::review::page::error)?;
-        if args.get("cursor").is_some() {
-            return Err(Error::InvalidCursor);
-        }
-        return Ok(settings);
+        return settings(context, args, &data, reference);
     }
     if let Some(id) = rule_id {
-        let rule = data["rules"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .chain(data["preconditions"].as_array().into_iter().flatten())
-            .find(|rule| rule["id"] == id)
-            .ok_or(Error::Missing)?;
-        let rule = if rule.get("decision").is_some() {
-            packs::rule_view(rule.clone())
-        } else {
-            rule.clone()
-        };
-        let mut result = json!({"reference":reference,"selected_release":data["selected_release"],
-            "rule":rule,"rules":[rule],"invocations":data["invocations"],"command_sets":data["command_sets"]});
-        referenced_definitions(&mut result);
-        result.as_object_mut().expect("rule result").remove("rules");
-        return Ok(result);
+        return inspect_rule(&data, reference, id);
     }
     if view == "rules" {
-        // Shared invocation definitions belong to an explicit rule inspection,
-        // never the initial summary. Cursor pages retain the acquired bytes.
-        if let Some(query) = text(args, "query")? {
-            let query = query.to_lowercase();
-            data["rules"]
-                .as_array_mut()
-                .ok_or(Error::Invalid("pack rules missing"))?
-                .retain(|rule| {
-                    ["id", "reason"].iter().any(|field| {
-                        rule[field]
-                            .as_str()
-                            .is_some_and(|value| value.to_lowercase().contains(&query))
-                    })
-                });
-        }
-        for field in [
-            "variables",
-            "preconditions",
-            "dependencies",
-            "packs",
-            "mcp_integrations",
-        ] {
-            data.as_object_mut()
-                .ok_or(Error::Invalid("invalid pack info"))?
-                .remove(field);
-        }
-        let mut result = views.page(context, "pack_info", &page_args(args), data, "rules")?;
-        referenced_definitions(&mut result);
-        return Ok(result);
+        return rules(context, args, data);
     }
     let mut result = summary(&data, reference)?;
     if text(args, "section")? == Some("permission_groups") {
         result["permission_groups"] = json!(permission_groups(
             data["rules"].as_array().map_or(&[][..], Vec::as_slice)
         )?);
-        return views.page(context, "pack_info", args, result, "permission_groups");
+        return Views::page(context, "pack_info", args, result, "permission_groups");
     }
     if args.get("cursor").is_some() {
         return Err(Error::InvalidCursor);
@@ -165,6 +73,100 @@ pub(super) fn inspect(context: &Context, views: &mut Views, args: &Value) -> Res
     canonic_mcp_kit::page::Request::from_mcp(args, canonic_mcp_kit::page::Limits::STANDARD)
         .map_err(crate::review::page::error)?;
     Ok(result)
+}
+
+fn inspect_rule(data: &Value, reference: &str, id: &str) -> Result<Value, Error> {
+    let rule = data["rules"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .chain(data["preconditions"].as_array().into_iter().flatten())
+        .find(|rule| rule["id"] == id)
+        .ok_or(Error::Missing)?;
+    let rule = if rule.get("decision").is_some() {
+        packs::rule_view(rule)
+    } else {
+        rule.clone()
+    };
+    let mut result = json!({"reference":reference,"selected_release":data["selected_release"],
+            "rule":rule,"rules":[rule],"invocations":data["invocations"],"command_sets":data["command_sets"]});
+    referenced_definitions(&mut result);
+    result.as_object_mut().expect("rule result").remove("rules");
+    Ok(result)
+}
+
+fn rules(context: &Context, args: &Value, mut data: Value) -> Result<Value, Error> {
+    // Shared invocation definitions belong to an explicit rule inspection,
+    // never the initial summary. Cursor pages retain the acquired bytes.
+    if let Some(query) = text(args, "query")? {
+        let query = query.to_lowercase();
+        data["rules"]
+            .as_array_mut()
+            .ok_or(Error::Invalid("pack rules missing"))?
+            .retain(|rule| {
+                ["id", "reason"].iter().any(|field| {
+                    rule[field]
+                        .as_str()
+                        .is_some_and(|value| value.to_lowercase().contains(&query))
+                })
+            });
+    }
+    for field in [
+        "variables",
+        "preconditions",
+        "dependencies",
+        "packs",
+        "mcp_integrations",
+    ] {
+        data.as_object_mut()
+            .ok_or(Error::Invalid("invalid pack info"))?
+            .remove(field);
+    }
+    let mut result = Views::page(context, "pack_info", &page_args(args), data, "rules")?;
+    referenced_definitions(&mut result);
+    Ok(result)
+}
+
+fn settings(
+    context: &Context,
+    args: &Value,
+    data: &Value,
+    reference: &str,
+) -> Result<Value, Error> {
+    const FIELDS: [&str; 6] = [
+        "variables",
+        "preconditions",
+        "dependencies",
+        "mcp_integrations",
+        "invocations",
+        "command_sets",
+    ];
+    let mut settings = json!({"view":"settings","reference":reference,"selected_release":data["selected_release"],
+        "variables":data["variables"],"preconditions":data["preconditions"],"dependencies":data["dependencies"],"mcp_integrations":data["mcp_integrations"],"invocations":data["invocations"],"command_sets":data["command_sets"],"setup":setup(data,reference)});
+    if let Some(section) = text(args, "section")? {
+        if !FIELDS.contains(&section) {
+            return Err(Error::Invalid("invalid settings section"));
+        }
+        for field in FIELDS {
+            if field != section {
+                settings.as_object_mut().expect("settings").remove(field);
+            }
+        }
+        return Views::page(context, "pack_info", args, settings, section);
+    }
+    for field in FIELDS {
+        crate::review::page::preview(
+            &mut settings,
+            field,
+            json!({"tool":"pack_info","reference":reference,"view":"settings","section":field}),
+        );
+    }
+    canonic_mcp_kit::page::Request::from_mcp(args, canonic_mcp_kit::page::Limits::STANDARD)
+        .map_err(crate::review::page::error)?;
+    if args.get("cursor").is_some() {
+        return Err(Error::InvalidCursor);
+    }
+    Ok(settings)
 }
 
 fn view(args: &Value) -> Result<&str, Error> {
@@ -452,8 +454,6 @@ fn bound_summary(result: &mut Value) -> Result<(), Error> {
 
 /// Carry shared definitions only when this page actually references them.
 fn referenced_definitions(data: &mut Value) {
-    let mut invocations = std::collections::BTreeSet::new();
-    let mut commands = std::collections::BTreeSet::new();
     fn visit(
         value: &Value,
         invocations: &mut std::collections::BTreeSet<String>,
@@ -462,15 +462,15 @@ fn referenced_definitions(data: &mut Value) {
         match value {
             Value::Object(fields) => {
                 for (key, value) in fields {
-                    if key == "invocation" {
-                        if let Some(name) = value.as_str() {
-                            invocations.insert(name.to_owned());
-                        }
+                    if key == "invocation"
+                        && let Some(name) = value.as_str()
+                    {
+                        invocations.insert(name.to_owned());
                     }
-                    if key == "command_set" {
-                        if let Some(name) = value.as_str() {
-                            commands.insert(name.to_owned());
-                        }
+                    if key == "command_set"
+                        && let Some(name) = value.as_str()
+                    {
+                        commands.insert(name.to_owned());
                     }
                     visit(value, invocations, commands);
                 }
@@ -483,6 +483,8 @@ fn referenced_definitions(data: &mut Value) {
             _ => {}
         }
     }
+    let mut invocations = std::collections::BTreeSet::new();
+    let mut commands = std::collections::BTreeSet::new();
     visit(&data["rules"], &mut invocations, &mut commands);
     let mut visited = std::collections::BTreeSet::new();
     loop {

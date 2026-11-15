@@ -37,7 +37,12 @@ fn resolve_effective(
         Ok(Selector::Catalog(reference)) => reference,
         Err(SelectorError::Limit) => return Err(policy::Error::Limit.into()),
         Err(SelectorError::Version) => return Err(Error::Invalid("exact pack version required")),
-        Ok(Selector::Installed(_)) | Err(_) => {
+        Ok(Selector::Installed(_)) => {
+            return Err(Error::Invalid(
+                "pack_info requires a catalog reference; use pack_show with reference=pack:<uuid> to inspect an installed pack",
+            ));
+        }
+        Err(_) => {
             return Err(Error::Invalid("invalid pack reference"));
         }
     };
@@ -407,9 +412,14 @@ pub(super) fn list(context: &Context) -> Result<Value, Error> {
     Ok(value)
 }
 
-pub(super) fn show(context: &Context, reference: &str) -> Result<Value, Error> {
+/// Full retained artifact for configuration consumers, before display previews.
+pub(super) fn installed(context: &Context, reference: &str) -> Result<Value, Error> {
     let current = state::captured(context)?;
-    let meta = state::metadata(&current);
+    installed_in(&current, reference)
+}
+
+fn installed_in(current: &crate::review::model::State, reference: &str) -> Result<Value, Error> {
+    let meta = state::metadata(current);
     let rows = meta["installed"]
         .as_array()
         .ok_or(Error::Invalid("installed packs missing"))?;
@@ -419,10 +429,15 @@ pub(super) fn show(context: &Context, reference: &str) -> Result<Value, Error> {
             .as_str()
             .ok_or(Error::Invalid("pack bytes missing"))?,
     )?;
-    let mut value =
-        json!({"policy_revision":current.policy_revision,"pack":rows[index],"artifact":artifact});
+    Ok(json!({"policy_revision":current.policy_revision,"pack":rows[index],"artifact":artifact}))
+}
+
+pub(super) fn show(context: &Context, reference: &str) -> Result<Value, Error> {
+    let current = state::captured(context)?;
+    let mut value = installed_in(&current, reference)?;
+    let pack = value["pack"].clone();
     value["pack_updates"] =
-        super::pack_updates::inspect(context, &current, rows[index]["selector"].as_str());
+        super::pack_updates::inspect(context, &current, pack["selector"].as_str());
     value["artifact"]["command_set_members_total"] = json!(
         value["artifact"]["command_sets"]
             .as_object()
@@ -441,7 +456,7 @@ pub(super) fn show(context: &Context, reference: &str) -> Result<Value, Error> {
         "invocations",
         "command_sets",
     ] {
-        let mut route = json!({"tool":"pack_info","reference":format!("{}{}@{}",rows[index]["source_alias"].as_str().map(|alias|format!("{alias}/")).unwrap_or_default(),rows[index]["id"].as_str().unwrap_or(reference),rows[index]["version"].as_str().unwrap_or_default()),"view":"settings","section":field});
+        let mut route = json!({"tool":"pack_info","reference":format!("{}{}@{}",pack["source_alias"].as_str().map(|alias|format!("{alias}/")).unwrap_or_default(),pack["id"].as_str().unwrap_or(reference),pack["version"].as_str().unwrap_or_default()),"view":"settings","section":field});
         if field == "rules" {
             route = json!({"tool":"rule_list"});
         }
@@ -541,8 +556,8 @@ pub(super) fn info(context: &Context, query: &str) -> Result<Value, Error> {
     Ok(result)
 }
 
-pub(super) fn rule_view(row: Value) -> Value {
-    let mut rule = crate::review::inspection::public_pack_rule(&row, &json!("recommended"));
+pub(super) fn rule_view(row: &Value) -> Value {
+    let mut rule = crate::review::inspection::public_pack_rule(row, &json!("recommended"));
     rule["profile_decisions"] = row["decision"].clone();
     rule
 }

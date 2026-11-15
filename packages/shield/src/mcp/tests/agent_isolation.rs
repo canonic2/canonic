@@ -38,6 +38,40 @@ fn installed() -> (Transport, Project) {
 }
 
 #[test]
+fn setup_preview_is_read_only_and_needs_no_confirmation_capability() {
+    let (server, project) = fixture(Some("claude"));
+    let transport = Transport::start(server);
+    for message in initialize(&json!({}), "claude") {
+        transport.send(&message);
+    }
+    assert!(transport.receive()["result"].is_object());
+    let before = state(&project);
+    let catalog = crate::mcp::catalog(Some("claude")).unwrap();
+    for tool in catalog
+        .tools()
+        .iter()
+        .filter(|tool| tool.input_schema["properties"].get("dry_run").is_some())
+    {
+        let preview = catalog.get(&format!("{}_preview", tool.name)).unwrap();
+        assert!(preview.read_only());
+        assert_eq!(preview.annotations.destructive_hint, Some(false));
+        assert!(preview.input_schema["properties"].get("dry_run").is_none());
+    }
+    let result = transport.call(
+        json!(20),
+        "mcp_setup_preview",
+        &json!({"agents":["claude"]}),
+    );
+    assert_eq!(result["result"]["isError"], false, "{result}");
+    assert_eq!(state(&project), before);
+    let invalid = transport.call(json!(21), "mcp_setup_preview", &json!({"dry_run":false}));
+    assert!(
+        invalid["error"].is_object() || invalid["result"]["isError"] == true,
+        "{invalid}"
+    );
+}
+
+#[test]
 fn explicit_project_repair_uses_the_published_schema_and_original_connection_confirmation() {
     let (transport, source) = installed();
     let (_server, target) = fixture(Some("claude"));

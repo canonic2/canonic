@@ -30,12 +30,19 @@ pub(in crate::enforcement::protocol::native_gate::paths) fn policy_files(
     cwd_known: bool,
     guard: Guard<'_>,
 ) -> Finding {
-    policy_files_with(arguments, root, cwd, cwd_known, guard, &query::run)
+    policy_files_with(
+        arguments,
+        root,
+        cwd,
+        cwd_known,
+        guard,
+        &|target, question| query::run(&target.base, root, target.worktree()?, question),
+    )
 }
 
 /// Answers a [`Query`] in a folder: whether it finds a change, None when
 /// unknown.
-type Ask<'a> = &'a dyn Fn(&Path, &Query) -> Option<bool>;
+type Ask<'a> = &'a dyn Fn(&Target, &Query) -> Option<bool>;
 
 fn policy_files_with(
     arguments: &[&str],
@@ -60,29 +67,35 @@ fn policy_files_with(
         .map(|path| resolve_existing(&root.join(path)))
         .chain(crate::layout::explicit_policy_files())
         .collect();
+    let rest = invocation.rest;
+    let globals = &arguments[..arguments.len() - rest.len() - 1];
     let target = Target {
-        protected: crate::review::integrations::protected_files()
+        protected: policy
             .iter()
-            .filter(|path| {
-                // Agent settings the policy files open to change are not
-                // protected from Git writes either; the bundles always are.
-                guard.allow.agent_settings_change != Change::Allow
-                    && ![crate::layout::SHIELD, crate::layout::GROUPED_BUNDLE].contains(path)
-            })
-            .map(|path| resolve_existing(&root.join(path)))
-            .chain(policy.iter().cloned())
+            .cloned()
+            .chain(
+                crate::review::integrations::protected_files()
+                    .iter()
+                    .filter(|path| {
+                        // Agent settings the policy files open to change are not
+                        // protected from Git writes either; the bundles always are.
+                        guard.allow.agent_settings_change != Change::Allow
+                            && ![crate::layout::SHIELD, crate::layout::GROUPED_BUNDLE]
+                                .contains(path)
+                    })
+                    .map(|path| resolve_existing(&root.join(path))),
+            )
             .collect(),
         base: invocation.reach.base.clone(),
         known: invocation.reach.known,
+        root_query: plain(globals),
+        worktree: std::cell::OnceCell::new(),
         file: crate::layout::config_file(root),
-        policy,
     };
-    let rest = invocation.rest;
     let paths = written_paths(&target, invocation.subcommand, rest);
     if paths.0 != Protection::None {
         return paths;
     }
-    let globals = &arguments[..arguments.len() - rest.len() - 1];
     settle(
         tree::plan(&target, invocation.subcommand, rest),
         &target,
@@ -103,7 +116,7 @@ fn written_paths(target: &Target, subcommand: &str, rest: &[&str]) -> Finding {
         "apply" => apply(rest),
         "am" if !has(rest, &["--abort", "--quit", "--show-current-patch"], &[]) => undetermined(),
         "stash" => match rest.first().copied() {
-            Some("pop" | "apply" | "branch") => undetermined(),
+            Some("branch") => undetermined(),
             // `--all` removes ignored files anywhere in the repository.
             _ if tree::stash_options(rest)
                 .is_some_and(|options| widens(options, &["-a", "--all"], &["-m", "--message"])) =>
@@ -139,7 +152,7 @@ fn settle(plan: Plan, target: &Target, ordinary: bool, ask: Ask<'_>) -> Finding 
         return undetermined();
     }
     for query in &queries {
-        match ask(&target.base, query) {
+        match ask(target, query) {
             Some(false) => {}
             Some(true) => {
                 return (
@@ -228,40 +241,70 @@ struct Target {
     base: PathBuf,
     /// Whether `base` is where Git runs.
     known: bool,
+    /// Only ordinary global options permit a query with matching Git semantics.
+    root_query: bool,
+    worktree: std::cell::OnceCell<Option<PathBuf>>,
     /// The file a finding names when a pathspec cannot be resolved.
     file: PathBuf,
-    /// The policy bundles and explicit policy files, which tree queries compare.
-    policy: Vec<PathBuf>,
 }
 
 impl Target {
-    /// The protected path a pathspec can select: any of them for magic and
-    /// wildcard pathspecs or an unknown folder, else the one it is, lies in
-    /// or holds.
+    fn worktree(&self) -> Option<&Path> {
+        self.worktree
+            .get_or_init(|| query::worktree_root(&self.base))
+            .as_deref()
+    }
+    /// The protected path a pathspec can select: any of them for unmodeled
+    /// magic, wildcards or an unknown folder, else the one it is, lies in or holds.
     fn covered(&self, spec: &str) -> Option<&Path> {
-        if Self::anything(self.known, spec) {
+        let Some(path) = self.path(spec) else {
             return Some(&self.file);
-        }
-        let path = resolve_existing(&absolute(spec, &self.base));
+        };
         self.protected
             .iter()
             .find(|protected| protected.starts_with(&path) || path.starts_with(protected))
             .map(PathBuf::as_path)
     }
 
-    fn anything(known: bool, spec: &str) -> bool {
-        !known || spec.starts_with(':') || spec.contains(['*', '?', '['])
+    fn path(&self, spec: &str) -> Option<PathBuf> {
+        if !self.known || spec.contains(['*', '?', '[']) {
+            return None;
+        }
+        // Short-form magic can continue after '/': !/^ exclude, and ':'
+        // terminates the signature. Only admit an unambiguous literal start.
+        if let Some(short) = spec.strip_prefix(":/")
+            && short.as_bytes().first().is_some_and(|byte| {
+                !byte.is_ascii_alphanumeric() && ![b'.', b'_', b'-'].contains(byte)
+            })
+        {
+            return None;
+        }
+        let path = if let Some(top) = spec
+            .strip_prefix(":/")
+            .or_else(|| spec.strip_prefix(":(top)"))
+        {
+            if !self.root_query || Path::new(top).is_absolute() {
+                return None;
+            }
+            let root = self.worktree()?;
+            absolute(top, root)
+        } else if spec.starts_with(':') {
+            return None;
+        } else {
+            absolute(spec, &self.base)
+        };
+        Some(resolve_existing(&path))
     }
 
     /// Every protected path the pathspecs can select.
     fn reached(&self, specs: &[&str]) -> Vec<PathBuf> {
-        if specs.iter().any(|spec| Self::anything(self.known, spec)) {
-            return self.protected.clone();
-        }
-        let paths: Vec<PathBuf> = specs
+        let Some(paths) = specs
             .iter()
-            .map(|spec| resolve_existing(&absolute(spec, &self.base)))
-            .collect();
+            .map(|spec| self.path(spec))
+            .collect::<Option<Vec<_>>>()
+        else {
+            return self.protected.clone();
+        };
         self.protected
             .iter()
             .filter(|protected| {

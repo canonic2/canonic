@@ -70,7 +70,7 @@ impl PackQuestion {
         {
             return Err(Error::Invalid("choose project or local layer"));
         }
-        let installed = packs::show(context, reference)?;
+        let installed = packs::installed(context, reference)?;
         let all_names: Vec<Value> = installed["artifact"]["variables"]
             .as_object()
             .into_iter()
@@ -309,7 +309,7 @@ impl PackQuestion {
                     )
                 })
             {
-                let installed = packs::show(context, &self.selector)?;
+                let installed = packs::installed(context, &self.selector)?;
                 if installed["policy_revision"] != self.revision {
                     return Err(Error::StaleSnapshot);
                 }

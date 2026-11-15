@@ -16,6 +16,7 @@ mod admin_parity;
 mod agent_isolation;
 mod confirmation;
 mod elicitation;
+mod pack_discovery;
 pub(crate) mod progress;
 mod prompts;
 mod recovery;
@@ -509,6 +510,46 @@ fn enrolled_adapters_publish_their_own_apply_schema_and_claude_keeps_its_contrac
 }
 
 #[test]
+fn policy_evaluate_package_scripts_accept_empty_original_input_and_omitted_environment() {
+    let (server, project) = fixture(Some("codex"));
+    let revision = project.revision();
+    let mut messages = initialize(&json!({}), "codex").to_vec();
+    for (index, (package, arguments)) in [
+        ("acme-generator", json!(["generate"])),
+        (
+            "acme-components",
+            json!(["verify", "src/components/acme/acme.test.tsx"]),
+        ),
+        ("acme-device", json!(["launch"])),
+        ("acme-web", json!(["check", "src/main.tsx"])),
+        ("acme-preview", json!(["preview:device"])),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let cwd = project.root.path().join("packages").join(package);
+        std::fs::create_dir_all(&cwd).unwrap();
+        messages.push(tool(
+            json!(index + 2),
+            "policy_evaluate",
+            &json!({"context":{"cwd":cwd},"input":{"kind":"argv","executable":"yarn","arguments":arguments,"original_input":{}}}),
+        ));
+    }
+    let outputs = exchange(server, &messages);
+    for index in 0..5 {
+        let response = reply(&outputs, &json!(index + 2));
+        assert!(response["error"].is_null(), "{response}");
+        let result = &response["result"];
+        assert_eq!(result["isError"], false, "{result}");
+        let envelope = &result["structuredContent"];
+        assert!(envelope["error"].is_null(), "{envelope}");
+        assert_eq!(envelope["data"]["decision"], "ask", "{envelope}");
+        assert!(envelope["data"]["candidate_id"].is_string());
+    }
+    assert_eq!(project.revision(), revision);
+}
+
+#[test]
 fn evaluation_is_connection_local_and_never_executes_input() {
     for _ in 0..2 {
         let (server, project) = fixture(None);
@@ -868,7 +909,7 @@ fn structured_errors_carry_the_same_recovery_as_the_text_summary() {
             "pack_list",
             json!({"cursor":"acme-cursor"}),
             "invalid_cursor",
-            "without cursor",
+            "without a cursor",
         ),
         (
             "policy_show",

@@ -153,6 +153,11 @@ The same settings protection covers the adapter's configured agent home,
 including a relocated home. Verified session-output reads retain their separate
 scope; they do not permit configuration writes.
 
+Git merges, branch switches and other tree-changing commands also check protected
+agent settings. A change to files such as `.codex/config.toml` requires separate
+review unless changing agent settings is allowed; a session grant does not
+override that check.
+
 `protection set` asks about each group and confirms the result:
 
 | Group | Default | Other choice |

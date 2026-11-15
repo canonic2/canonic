@@ -177,10 +177,8 @@ pub(super) fn page(context: &Context, name: &str, args: &Value) -> Result<Value,
         .flatten()
         .any(|row| row["truncated"] == true);
     page["truncated"] = json!(truncated);
-    if truncated {
-        if let Some(missing) = page["missing"].as_array_mut() {
-            missing.push(json!("some_command_evidence"));
-        }
+    if truncated && let Some(missing) = page["missing"].as_array_mut() {
+        missing.push(json!("some_command_evidence"));
     }
     Ok(page)
 }

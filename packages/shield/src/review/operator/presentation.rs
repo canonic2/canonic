@@ -194,15 +194,15 @@ fn result(command: &PublicCommand, value: &Value) -> String {
         output.push_str(&hint);
         output.push('\n');
     }
-    if let Some(cursor) = value["next_cursor"].as_str() {
-        if let Some(mut words) = next_command(command) {
-            words.extend(["--cursor".into(), cursor.into()]);
-            let command = cli_command(words);
-            if !output.ends_with('\n') {
-                output.push('\n');
-            }
-            output.push_str(&format!("Next page: {command}\n"));
+    if let Some(cursor) = value["next_cursor"].as_str()
+        && let Some(mut words) = next_command(command)
+    {
+        words.extend(["--cursor".into(), cursor.into()]);
+        let command = cli_command(words);
+        if !output.ends_with('\n') {
+            output.push('\n');
         }
+        let _ = writeln!(output, "Next page: {command}");
     }
     output
 }
@@ -298,7 +298,7 @@ fn preview_hints(value: &Value, hints: &mut std::collections::BTreeSet<String>) 
 }
 
 fn next_command(command: &PublicCommand) -> Option<Vec<String>> {
-    use crate::cli::public::{HistoryCommand, SessionGrantCommand};
+    use crate::cli::public::SessionGrantCommand;
     let (mut words, limit) = match command {
         PublicCommand::Status(args) | PublicCommand::Doctor(args) => {
             let section = args.section.as_ref()?;
@@ -316,41 +316,7 @@ fn next_command(command: &PublicCommand) -> Option<Vec<String>> {
                 args.page.limit,
             )
         }
-        PublicCommand::Pack(pack) => match &pack.command {
-            PackCommand::List { page } => (
-                vec!["shield".into(), "pack".into(), "list".into()],
-                page.limit,
-            ),
-            PackCommand::Search { query, page } => (
-                vec![
-                    "shield".into(),
-                    "pack".into(),
-                    "search".into(),
-                    query.clone(),
-                ],
-                page.limit,
-            ),
-            PackCommand::Info {
-                reference,
-                view,
-                section,
-                page,
-            } => {
-                let mut words = vec![
-                    "shield".into(),
-                    "pack".into(),
-                    "info".into(),
-                    reference.clone(),
-                    "--view".into(),
-                    view.clone(),
-                ];
-                if let Some(section) = section {
-                    words.extend(["--section".into(), section.clone()]);
-                }
-                (words, page.limit)
-            }
-            _ => return None,
-        },
+        PublicCommand::Pack(pack) => pack_next(&pack.command)?,
         PublicCommand::Suggestion(crate::cli::public::SuggestionCommand::List {
             session_id,
             page,
@@ -412,68 +378,8 @@ fn next_command(command: &PublicCommand) -> Option<Vec<String>> {
             ),
             _ => return None,
         },
-        PublicCommand::Policy(policy) => match &policy.command {
-            PolicyCommand::Show {
-                proposal_id,
-                section,
-                page,
-            } => {
-                let mut words = vec!["shield".into(), "policy".into(), "show".into()];
-                if let Some(id) = proposal_id {
-                    words.push(id.clone());
-                }
-                if let Some(section) = section {
-                    words.extend(["--section".into(), section.clone()]);
-                }
-                (words, page.limit)
-            }
-            _ => return None,
-        },
-        PublicCommand::History(history) => match &history.command {
-            HistoryCommand::Show {
-                entry,
-                section,
-                page,
-            } => {
-                let mut words = vec![
-                    "shield".into(),
-                    "history".into(),
-                    "show".into(),
-                    entry.clone(),
-                ];
-                if let Some(section) = section {
-                    words.extend(["--section".into(), section.clone()]);
-                }
-                (words, page.limit)
-            }
-            HistoryCommand::List {
-                page,
-                denied,
-                approved,
-                agent,
-                authorization_kind,
-                grant_id,
-            } => {
-                let mut words = vec!["shield".into(), "history".into(), "list".into()];
-                if *denied {
-                    words.push("--denied".into());
-                }
-                if *approved {
-                    words.push("--approved".into());
-                }
-                for (flag, value) in [
-                    ("--agent", agent),
-                    ("--authorization-kind", authorization_kind),
-                    ("--grant-id", grant_id),
-                ] {
-                    if let Some(value) = value {
-                        words.extend([flag.into(), value.clone()]);
-                    }
-                }
-                (words, page.limit)
-            }
-            _ => return None,
-        },
+        PublicCommand::Policy(policy) => policy_next(&policy.command)?,
+        PublicCommand::History(history) => history_next(&history.command)?,
         PublicCommand::SessionGrant(grant) => match &grant.command {
             SessionGrantCommand::List {
                 session_ref, limit, ..
@@ -490,6 +396,111 @@ fn next_command(command: &PublicCommand) -> Option<Vec<String>> {
     };
     words.extend(["--limit".into(), limit.unwrap_or(50).to_string()]);
     Some(words)
+}
+
+fn pack_next(command: &PackCommand) -> Option<(Vec<String>, Option<u64>)> {
+    Some(match command {
+        PackCommand::List { page } => (
+            vec!["shield".into(), "pack".into(), "list".into()],
+            page.limit,
+        ),
+        PackCommand::Search { query, page } => (
+            vec![
+                "shield".into(),
+                "pack".into(),
+                "search".into(),
+                query.clone(),
+            ],
+            page.limit,
+        ),
+        PackCommand::Info {
+            reference,
+            view,
+            section,
+            page,
+        } => {
+            let mut words = vec![
+                "shield".into(),
+                "pack".into(),
+                "info".into(),
+                reference.clone(),
+                "--view".into(),
+                view.clone(),
+            ];
+            if let Some(section) = section {
+                words.extend(["--section".into(), section.clone()]);
+            }
+            (words, page.limit)
+        }
+        _ => return None,
+    })
+}
+
+fn policy_next(command: &PolicyCommand) -> Option<(Vec<String>, Option<u64>)> {
+    let PolicyCommand::Show {
+        proposal_id,
+        section,
+        page,
+    } = command
+    else {
+        return None;
+    };
+    let mut words = vec!["shield".into(), "policy".into(), "show".into()];
+    if let Some(id) = proposal_id {
+        words.push(id.clone());
+    }
+    if let Some(section) = section {
+        words.extend(["--section".into(), section.clone()]);
+    }
+    Some((words, page.limit))
+}
+
+fn history_next(command: &HistoryCommand) -> Option<(Vec<String>, Option<u64>)> {
+    Some(match command {
+        HistoryCommand::Show {
+            entry,
+            section,
+            page,
+        } => {
+            let mut words = vec![
+                "shield".into(),
+                "history".into(),
+                "show".into(),
+                entry.clone(),
+            ];
+            if let Some(section) = section {
+                words.extend(["--section".into(), section.clone()]);
+            }
+            (words, page.limit)
+        }
+        HistoryCommand::List {
+            page,
+            denied,
+            approved,
+            agent,
+            authorization_kind,
+            grant_id,
+        } => {
+            let mut words = vec!["shield".into(), "history".into(), "list".into()];
+            if *denied {
+                words.push("--denied".into());
+            }
+            if *approved {
+                words.push("--approved".into());
+            }
+            for (flag, value) in [
+                ("--agent", agent),
+                ("--authorization-kind", authorization_kind),
+                ("--grant-id", grant_id),
+            ] {
+                if let Some(value) = value {
+                    words.extend([flag.into(), value.clone()]);
+                }
+            }
+            (words, page.limit)
+        }
+        HistoryCommand::Configure { .. } => return None,
+    })
 }
 
 fn render(command: &PublicCommand, value: &Value) -> String {
@@ -572,29 +583,7 @@ fn primary_result(command: &PublicCommand, value: &Value) -> String {
             RuleCommand::List { .. } => policy::rules(value),
             _ => policy::receipt(value),
         },
-        PublicCommand::Pack(pack) => match &pack.command {
-            PackCommand::List { .. } => packs::list(value),
-            PackCommand::Show { .. } => packs::show(value),
-            PackCommand::Search { .. } => packs::search(value),
-            PackCommand::Info { view, .. } if view == "settings" => format!(
-                "{}\n",
-                serde_json::to_string_pretty(value).expect("JSON page")
-            ),
-            PackCommand::Info { .. } => packs::info(value),
-            PackCommand::Add { .. }
-            | PackCommand::Remove { .. }
-            | PackCommand::Configure { .. } => policy::receipt(value),
-            PackCommand::Update { .. } => {
-                let skipped = value["skipped_pinned"]
-                    .as_array()
-                    .map_or(&[][..], Vec::as_slice);
-                let mut output = policy::receipt(value);
-                if !skipped.is_empty() {
-                    let _ = writeln!(output, "Kept pinned {}.", pinned_list(skipped));
-                }
-                output
-            }
-        },
+        PublicCommand::Pack(pack) => pack_result(&pack.command, value),
         PublicCommand::Registry(registry) => match registry.command {
             RegistryCommand::List { .. } => registries::list(value),
             _ => registries::receipt(value),
@@ -608,15 +597,40 @@ fn primary_result(command: &PublicCommand, value: &Value) -> String {
         },
         PublicCommand::History(history) => match history.command {
             HistoryCommand::List { .. } => activity::history(value),
-            HistoryCommand::Show { section:Some(_), .. } => fallback(value),
+            HistoryCommand::Show { section:Some(_), .. } | HistoryCommand::Configure { .. } => fallback(value),
             HistoryCommand::Show { .. } => activity::entry(value),
-            HistoryCommand::Configure { .. } => fallback(value),
         },
         PublicCommand::Suggestion(_) | PublicCommand::PolicyDraft(_) => format!(
             "{}\n",
             serde_json::to_string_pretty(value).expect("JSON page")
         ),
         PublicCommand::Internal(_) => fallback(value),
+    }
+}
+
+fn pack_result(command: &PackCommand, value: &Value) -> String {
+    match command {
+        PackCommand::List { .. } => packs::list(value),
+        PackCommand::Show { .. } => packs::show(value),
+        PackCommand::Search { .. } => packs::search(value),
+        PackCommand::Info { view, .. } if view == "settings" => format!(
+            "{}\n",
+            serde_json::to_string_pretty(value).expect("JSON page")
+        ),
+        PackCommand::Info { .. } => packs::info(value),
+        PackCommand::Add { .. } | PackCommand::Remove { .. } | PackCommand::Configure { .. } => {
+            policy::receipt(value)
+        }
+        PackCommand::Update { .. } => {
+            let skipped = value["skipped_pinned"]
+                .as_array()
+                .map_or(&[][..], Vec::as_slice);
+            let mut output = policy::receipt(value);
+            if !skipped.is_empty() {
+                let _ = writeln!(output, "Kept pinned {}.", pinned_list(skipped));
+            }
+            output
+        }
     }
 }
 
@@ -724,7 +738,7 @@ mod tests {
     fn pack_updates_fresh_list_and_notice_do_not_repeat_the_release_list() {
         let command = PublicCommand::Pack(crate::cli::public::Pack {
             command: PackCommand::List {
-                page: Default::default(),
+                page: crate::cli::public::PageArgs::default(),
             },
         });
         let value = json!({"packs":[{"id":"acme/node","version":"1.0.0","profile":"recommended"}],
@@ -745,7 +759,10 @@ mod tests {
         Run shield pack update to review compatible updates.
         ");
         assert_eq!(
-            pack_update_notice(&PublicCommand::Status(Default::default()), &notice),
+            pack_update_notice(
+                &PublicCommand::Status(crate::cli::public::InspectionArgs::default()),
+                &notice
+            ),
             pack_update_notice(&command, &notice)
         );
     }

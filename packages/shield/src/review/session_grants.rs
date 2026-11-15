@@ -62,6 +62,8 @@ struct Record {
     created: u64,
     duration: u64,
     scope: Value,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    scope_checks: Vec<Value>,
     overrides: Value,
     override_evidence: Value,
     reason: Option<String>,
@@ -170,7 +172,7 @@ impl Authority {
 
 impl Record {
     fn digest(&self) -> String {
-        let original = json!([
+        let mut original = json!([
             self.id,
             self.session_key,
             self.session,
@@ -186,6 +188,11 @@ impl Record {
             self.protection,
             self.provenance
         ]);
+        // Preserve the digest of historical records that have no preparation
+        // evidence. New evidence is immutable and shown in the approved form.
+        if !self.scope_checks.is_empty() {
+            original = json!(["scope-checks-v1", original, self.scope_checks]);
+        }
         if let Some(digest) = &self.reconsiders_digest {
             return hash(&json!([
                 "reconsideration",
@@ -420,7 +427,37 @@ fn equivalent_offer<'a>(
         })
 }
 
+fn prepare_scope(context: &Context, input: &ProposalInput) -> Result<(bool, Vec<Value>), Error> {
+    let observed = super::clock::now_ms()?;
+    let retry_owner = context.retry_owner();
+    let reuse = store(context)?.inspect_checkpoint(context, &|| Ok(()), |state| {
+        state.check_operations()?;
+        let authority = Authority::capture(state);
+        let retained = |row: &Record| {
+            ["pending", "active", "declined", "suspended"]
+                .contains(&row.effective_with(&authority, observed))
+                && row
+                    .terminal
+                    .is_none_or(|end| observed < end.saturating_add(RETAIN))
+        };
+        Ok(state.session_grants.records.values().any(|row| {
+            row.reconsiders.is_none()
+                && row.owner == retry_owner
+                && row.session.reference == input.session_ref
+                && row.key == input.idempotency_key
+                && retained(row)
+        }) || equivalent_offer(state, &authority, input, observed).is_some_and(retained))
+    })?;
+    let scope_checks = if reuse {
+        Vec::new()
+    } else {
+        scope::check_git(context, &input.scope)?
+    };
+    Ok((reuse, scope_checks))
+}
+
 fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Error> {
+    let (reuse, scope_checks) = prepare_scope(context, input)?;
     let rules = super::inspection::rules(context, None)?;
     let override_evidence = scope::overrides(&input.override_denies, &rules)?;
     let now = super::clock::now_ms()?;
@@ -475,19 +512,12 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
         if let Some(row) = equivalent_offer(state, &authority, input, now) {
             return Ok(view::public(row, state, now));
         }
-        if state.session_grants.records.len() >= 1024
-            || state
-                .session_grants
-                .records
-                .values()
-                .filter(|r| r.effective_with(&authority, now) == "pending")
-                .count()
-                >= 64
-        {
-            return Err(Error::Invalid(
-                "capacity_exceeded: inspect session_grant_show before proposing more",
-            ));
+        // A concurrent reclamation must not create a fresh proposal without
+        // preparation evidence. Retry against the current metadata instead.
+        if reuse {
+            return Err(Error::StaleSnapshot);
         }
+        check_capacity(state, &authority, now)?;
         session.registration = registration(state, &session.agent)?;
         let mut row = Record {
             id: state.id("session-proposal"),
@@ -500,6 +530,7 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
             created: now,
             duration: input.duration_seconds,
             scope: input.scope.clone(),
+            scope_checks: scope_checks.clone(),
             overrides: input.override_denies.clone(),
             override_evidence: override_evidence.clone(),
             reason: input.reason.clone(),
@@ -521,6 +552,23 @@ fn propose_input(context: &Context, input: &ProposalInput) -> Result<Value, Erro
         state.session_grants.records.insert(row.id.clone(), row);
         Ok(result)
     })
+}
+
+fn check_capacity(state: &State, authority: &Authority, now: u64) -> Result<(), Error> {
+    if state.session_grants.records.len() >= 1024
+        || state
+            .session_grants
+            .records
+            .values()
+            .filter(|r| r.effective_with(authority, now) == "pending")
+            .count()
+            >= 64
+    {
+        return Err(Error::Invalid(
+            "capacity_exceeded: inspect session_grant_show before proposing more",
+        ));
+    }
+    Ok(())
 }
 
 fn event(state: &mut State, context: &Context, kind: &str, row: &Record) {

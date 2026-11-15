@@ -106,6 +106,94 @@ fn arguments(pr: &str) -> Vec<String> {
 }
 
 #[test]
+fn repeated_exact_git_grants_reuse_preparation_without_subprocesses() {
+    use clap::Parser as _;
+    let (root, context, reference) = fixture();
+    let initialized = crate::test_support::git()
+        .args(["init", "-q"])
+        .current_dir(root.path())
+        .output()
+        .unwrap();
+    assert!(initialized.status.success());
+    let args = json!({"session_ref":reference,"idempotency_key":"git-repeat",
+        "scope":[{"conditions":{"domain":"argv","executable":"git","arguments":{"kind":"exact","values":["merge","HEAD"]},"cwd":{"exact":{"root":"project"}}}}]});
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let trace = log.request("command", "git-grant", None, None).unwrap();
+    let scope = trace.enter();
+    let first = propose(&context, &args).unwrap();
+    assert!(trace.recorded_count("git.inspection_processes") > 0);
+    drop(scope);
+    trace.finish("success");
+    for key in ["git-repeat", "git-equivalent"] {
+        let mut repeated_args = args.clone();
+        repeated_args["idempotency_key"] = json!(key);
+        let trace = log.request("command", "git-grant", None, None).unwrap();
+        let scope = trace.enter();
+        let repeated = propose(&context, &repeated_args).unwrap();
+        assert_eq!(repeated["proposal_id"], first["proposal_id"]);
+        assert_eq!(repeated["scope_checks"], first["scope_checks"]);
+        assert_eq!(trace.recorded_count("session_grants.git_preparations"), 0);
+        assert_eq!(trace.recorded_count("git.inspection_processes"), 0);
+        drop(scope);
+        trace.finish("success");
+    }
+}
+
+#[test]
+fn exact_git_grants_expose_protected_file_checks_before_approval() {
+    let (_root, context, reference) = fixture();
+    let selectors: Vec<_> = ["status", "pull"]
+        .into_iter()
+        .map(|command| json!({
+            "conditions":{"domain":"argv","executable":"git","arguments":{"kind":"exact","values":[command]},
+                "cwd":{"exact":{"root":"project"}}}
+        }))
+        .collect();
+    let proposed = propose(
+        &context,
+        &json!({"session_ref":reference,"idempotency_key":"git-preparation","scope":selectors}),
+    )
+    .unwrap();
+    assert_eq!(
+        proposed["scope_checks"][0]["status"], "clear_at_preparation",
+        "{proposed}"
+    );
+    assert_eq!(proposed["scope_checks"][1]["alternative"], 2);
+    assert_eq!(
+        proposed["scope_checks"][1]["status"],
+        "one_time_approval_required"
+    );
+    assert!(
+        proposed["review"]
+            .as_str()
+            .unwrap()
+            .contains("request_approve")
+    );
+    let question = confirmation(&context, &proposed["apply_arguments"])
+        .unwrap()
+        .unwrap();
+    assert!(question.contains("cannot cover it"));
+    let state = store(&context).unwrap().read_checkpoint().unwrap();
+    let row = state
+        .session_grants
+        .records
+        .get(proposed["proposal_id"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(row.digest(), proposed["candidate_digest"]);
+    assert_eq!(
+        show(&context, &json!({"proposal_id":row.id})).unwrap()["scope_checks"],
+        proposed["scope_checks"]
+    );
+}
+
+#[test]
 fn a_copied_session_grant_serves_the_same_conversation_and_each_folder_revokes_its_own() {
     let (original, context, reference) = fixture();
     let proposed = proposal(&context, &reference);

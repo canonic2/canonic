@@ -7,7 +7,7 @@ $ shield mcp setup --agent codex --dry-run
 Agent integrations
   Codex       added · hooks Interrupt, PermissionRequest, PostToolUse, PreToolUse, SessionEnd, Stop · MCP server shield · Ask fallback allows requests
   Hooks and MCP run [SHIELD] for this project.
-  50 of 51 Shield MCP tools run without asking; ask each time: policy_apply.
+  51 of 52 Shield MCP tools run without asking; ask each time: policy_apply.
   Policy changes still require your confirmation.
   Agents can read/write their skill folders and system temporary folders. Session files use each agent's supported mappings.
 

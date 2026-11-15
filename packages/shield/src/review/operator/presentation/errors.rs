@@ -154,19 +154,7 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
         Error::RequiredPack { pack, dependents } => required_pack(pack, dependents),
         Error::UnsupportedReleases(pack) => unsupported_releases(pack),
         Error::StateCorrupt { path } => corrupt_state(path),
-        Error::StateFormat { path, observed } => {
-            let mut report = Report::new(
-                "Shield cannot read this checkpoint format",
-                "This CLI supports schema 1 and retained historical formats.",
-                &[
-                    "Keep the checkpoint unchanged; do not delete it or re-enroll the project.",
-                    "Use a Shield version that supports this format.",
-                ],
-            );
-            report.field("Checkpoint", path.display().to_string());
-            report.field("Observed schema", observed.clone());
-            report
-        }
+        Error::StateFormat { path, observed } => state_format(path, observed),
         Error::NotPortable(_) => not_portable(),
         // Only the agent's MCP group approval refuses this way.
         Error::Grouped { reason, .. } => Report::new(
@@ -214,6 +202,20 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             limit,
         } => capacity(*kind, *pending, *retained, *limit),
     }
+}
+
+fn state_format(path: &std::path::Path, observed: &str) -> Report {
+    let mut report = Report::new(
+        "Shield cannot read this checkpoint format",
+        "This CLI supports schema 1 and retained historical formats.",
+        &[
+            "Keep the checkpoint unchanged; do not delete it or re-enroll the project.",
+            "Use a Shield version that supports this format.",
+        ],
+    );
+    report.field("Checkpoint", path.display().to_string());
+    report.field("Observed schema", observed.to_owned());
+    report
 }
 
 fn required_pack(pack: &str, dependents: &[String]) -> Report {
@@ -766,7 +768,7 @@ mod tests {
     #[test]
     fn every_classification_fits_the_four_line_budget() {
         let commands = [
-            PublicCommand::Status(Default::default()),
+            PublicCommand::Status(crate::cli::public::InspectionArgs::default()),
             pack(PackCommand::Add {
                 reference: "acme/git".into(),
                 profile: None,

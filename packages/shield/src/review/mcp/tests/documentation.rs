@@ -212,7 +212,7 @@ fn documentation_search_returns_page_line_references_and_continuation() {
     assert_eq!(
         source
             .lines()
-            .nth(row["line"].as_u64().unwrap() as usize - 1)
+            .nth(usize::try_from(row["line"].as_u64().unwrap()).unwrap() - 1)
             .unwrap(),
         row["text"]
     );

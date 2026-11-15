@@ -25,6 +25,7 @@ pub(crate) struct NativeContext<'a> {
 }
 mod mcp;
 mod native_gate;
+pub(crate) use native_gate::git_scope_check;
 pub(crate) use native_gate::mandatory_read_allowed;
 pub(crate) use native_gate::paused as paused_protection;
 

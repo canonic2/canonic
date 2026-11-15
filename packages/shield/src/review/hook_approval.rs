@@ -61,12 +61,8 @@ pub(crate) struct Summary {
     pub(crate) settings_change: bool,
     /// Git may replace the enforced policy. Omit false to preserve existing
     /// stored request and grant bindings.
-    #[serde(default, skip_serializing_if = "is_false")]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub(crate) policy_change: bool,
-}
-
-fn is_false(value: &bool) -> bool {
-    !value
 }
 
 #[derive(Serialize, Deserialize)]

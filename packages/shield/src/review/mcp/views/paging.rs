@@ -1,10 +1,9 @@
 //! Stateless paging of bounded inspection collections.
-use super::*;
+use super::{Context, Error, Value, Views};
 use crate::review::page;
 
 impl Views {
     pub(in crate::review::mcp) fn page(
-        &mut self,
         context: &Context,
         name: &str,
         args: &Value,
@@ -13,7 +12,9 @@ impl Views {
     ) -> Result<Value, Error> {
         let query = page::query(context, name, args);
         if name == "pack_info" && field == "rules" {
-            page::bounded_with(name, &query, data, field, crate::review::packs::rule_view)
+            page::bounded_with(name, &query, data, field, |row| {
+                crate::review::packs::rule_view(&row)
+            })
         } else {
             page::bounded(name, &query, data, field)
         }

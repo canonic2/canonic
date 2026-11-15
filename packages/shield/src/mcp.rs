@@ -112,6 +112,7 @@ impl Server {
     }
 
     fn call_tool(&self, call: ToolCall, context: &stdio::Context) -> Outcome {
+        let call = canonic_mcp_kit::tool::preview::normalize(crate::review::mcp::PREVIEWS, call);
         if let Err(error) = self.check_runtime(&call.name, &call.arguments) {
             return self.runtime_refusal(&call, context, &error);
         }

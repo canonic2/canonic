@@ -56,10 +56,11 @@ pub(super) fn query(context: &super::Context, name: &str, args: &Value) -> Value
     if !(name == "registry_list" && args["scope"] == "user") {
         query["project_id"] = json!(context.project_id);
     }
-    if name == "suggestion_list" && query.get("session_id").is_none() {
-        if let Some(session) = &context.session_id {
-            query["session_id"] = json!(session);
-        }
+    if name == "suggestion_list"
+        && query.get("session_id").is_none()
+        && let Some(session) = &context.session_id
+    {
+        query["session_id"] = json!(session);
     }
     query
 }

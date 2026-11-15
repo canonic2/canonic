@@ -96,22 +96,7 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
     );
     configuration_line(&value["configuration"], &mut output);
     let history = &value["history"];
-    let _ = writeln!(
-        output,
-        "History: {}",
-        if history["available"] == false {
-            "unavailable".into()
-        } else if history["integrity"] == "unchecked" && history["enabled"] == true {
-            format!(
-                "on, keeping up to {} entries; integrity unchecked",
-                label(&history["limit"])
-            )
-        } else if history["enabled"] == true {
-            format!("on, keeping up to {} entries", label(&history["limit"]))
-        } else {
-            "off".into()
-        }
-    );
+    let _ = writeln!(output, "History: {}", history_status(history));
     let access = &value["path_access"];
     let relaxed: Vec<_> = [
         ("agent_settings_read", "read agent settings without asking"),
@@ -169,6 +154,21 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
         output.push_str(&diagnostics(value, !agents.is_empty()));
     }
     output
+}
+
+fn history_status(history: &Value) -> String {
+    if history["available"] == false {
+        "unavailable".into()
+    } else if history["integrity"] == "unchecked" && history["enabled"] == true {
+        format!(
+            "on, keeping up to {} entries; integrity unchecked",
+            label(&history["limit"])
+        )
+    } else if history["enabled"] == true {
+        format!("on, keeping up to {} entries", label(&history["limit"]))
+    } else {
+        "off".into()
+    }
 }
 
 /// The extra facts `shield doctor` reports.

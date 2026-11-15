@@ -1,6 +1,9 @@
 //! Canonical project MCP tools with connection-owned diagnostic and paging evidence.
 mod apply;
 mod confirmation;
+
+/// Administrative commands with a non-applying inspection mode.
+pub(crate) const PREVIEWS: &[&str] = &["mcp_setup"];
 mod connection_review;
 mod diagnostics;
 mod documentation;
@@ -945,6 +948,9 @@ fn invalid_input_message(error: &Error) -> String {
             format!("Invalid input: {error}")
         }
         // Static reasons name what to correct; they carry no submitted text.
+        Error::Invalid("invalid pack reference") => {
+            "Invalid pack reference: use name, publisher/name or alias/publisher/name, optionally followed by @version (for example main/canonic/node); inspect installed pack:<uuid> selectors with pack_show".into()
+        }
         Error::Invalid(reason) | Error::Policy(crate::policy::Error::Contract(reason)) => {
             format!("Invalid input: {reason}")
         }
@@ -1251,7 +1257,7 @@ fn review_tool(
             proposal["change"] = change;
             propose(context, views, &proposal, checkpoint)
         }
-        "pack_search" | "pack_info" => discovery(context, views, name, args),
+        "pack_search" | "pack_info" => discovery(context, name, args),
         _ => inspection_tool(context, views, name, args),
     }
 }
@@ -1284,7 +1290,7 @@ fn inspection_tool(
                 Some(reference) => packs::show(context, reference)?,
                 None => packs::list(context)?,
             };
-            views.page(context, name, args, data, "packs")
+            views::Views::page(context, name, args, data, "packs")
         }
         "pack_show" => {
             fields(args, &["reference"])?;
@@ -1301,31 +1307,7 @@ fn inspection_tool(
                 args,
             )
         }
-        "rule_list" => {
-            fields(
-                args,
-                &[
-                    "rule_ref",
-                    "candidate_id",
-                    "section",
-                    "pack_selector",
-                    "cursor",
-                    "limit",
-                ],
-            )?;
-            if args.get("rule_ref").is_some() {
-                fields(args, &["rule_ref", "candidate_id"])?;
-            } else {
-                return inspection::rules_page(context, views, args);
-            }
-            let data = inspection::rules(
-                context,
-                views,
-                args.get("rule_ref"),
-                text(args, "candidate_id")?,
-            )?;
-            views.page(context, name, args, data, "rules")
-        }
+        "rule_list" => rules_tool(context, views, args),
         "policy_show" => {
             fields(
                 args,
@@ -1359,7 +1341,7 @@ fn inspection_tool(
                 return approvals::list_page(context, args);
             }
             let data = approvals::inspect(context, text(args, "request_id")?)?;
-            views.page(context, name, args, data, "requests")
+            views::Views::page(context, name, args, data, "requests")
         }
         "history_list" | "history_show" => history_tool(context, views, name, args),
         "suggestion_list" => {
@@ -1368,6 +1350,32 @@ fn inspection_tool(
         }
         _ => Err(Error::Invalid("unknown tool")),
     }
+}
+
+fn rules_tool(context: &Context, views: &mut views::Views, args: &Value) -> Result<Value, Error> {
+    fields(
+        args,
+        &[
+            "rule_ref",
+            "candidate_id",
+            "section",
+            "pack_selector",
+            "cursor",
+            "limit",
+        ],
+    )?;
+    if args.get("rule_ref").is_some() {
+        fields(args, &["rule_ref", "candidate_id"])?;
+    } else {
+        return inspection::rules_page(context, views, args);
+    }
+    let data = inspection::rules(
+        context,
+        views,
+        args.get("rule_ref"),
+        text(args, "candidate_id")?,
+    )?;
+    views::Views::page(context, "rule_list", args, data, "rules")
 }
 
 fn history_tool(
@@ -1398,21 +1406,16 @@ fn history_tool(
     let _ = views;
     history::page(context, name, args)
 }
-fn discovery(
-    context: &Context,
-    views: &mut views::Views,
-    name: &str,
-    args: &Value,
-) -> Result<Value, Error> {
+fn discovery(context: &Context, name: &str, args: &Value) -> Result<Value, Error> {
     super::page::validate(context, name, args)?;
     if name == "pack_info" {
-        return pack_info::inspect(context, views, args);
+        return pack_info::inspect(context, args);
     }
     match name {
         "pack_search" => {
             fields(args, &["query", "cursor", "limit"])?;
             let data = packs::search(context, required(args, "query")?)?;
-            views.page(context, name, args, data, "packs")
+            views::Views::page(context, name, args, data, "packs")
         }
         _ => Err(Error::Invalid("unknown discovery command")),
     }

@@ -5,6 +5,7 @@ use crate::review::{
     path_access,
 };
 mod paths;
+pub(crate) use paths::git_scope_check;
 pub(crate) use paths::read_allowed as mandatory_read_allowed;
 #[cfg(test)]
 mod tests;
@@ -134,7 +135,7 @@ pub(super) fn resolve(
     let (owner, cwd) = (owner.as_path(), cwd.as_path());
     let cache = crate::review::compiled_cache_root(owner).map_err(|_| "runtime-unavailable")?;
     // An unreadable or invalid choice blocks; the handoff below rechecks it.
-    let allow = path_access::current(root).map_err(handoff_error)?;
+    let allow = path_access::current(root).map_err(|error| handoff_error(&error))?;
     let guard = paths::Guard {
         cache: cache.as_deref(),
         allow,
@@ -362,10 +363,10 @@ fn resolve_fallback(
         };
         value["disposition"] = json!(disposition(value, native, fallback, asked));
     })
-    .map_err(handoff_error)
+    .map_err(|error| handoff_error(&error))
 }
 
-fn handoff_error(error: crate::review::Error) -> &'static str {
+fn handoff_error(error: &crate::review::Error) -> &'static str {
     if matches!(error, crate::review::Error::Locked) {
         "runtime-busy"
     } else {

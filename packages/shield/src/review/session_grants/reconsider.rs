@@ -65,6 +65,13 @@ pub(crate) fn reconsider(context: &Context, args: &Value) -> Result<Value, Error
         return Err(Error::Invalid("invalid reconsideration idempotency key"));
     }
     let now = super::super::clock::now_ms()?;
+    let scope = store(context)?.inspect_checkpoint(context, &|| Ok(()), |state| {
+        let authority = Authority::capture(state);
+        Ok(declined(state, context, &input, &authority, now)?
+            .scope
+            .clone())
+    })?;
+    let scope_checks = super::scope::check_git(context, &scope)?;
     store(context)?.update_checkpoint(context, &|| Ok(()), |state| {
         state.check_operations()?;
         state.session_grants.compact(now);
@@ -112,6 +119,7 @@ pub(crate) fn reconsider(context: &Context, args: &Value) -> Result<Value, Error
         row.key = input.idempotency_key;
         row.created = now;
         row.provenance = context.provenance();
+        row.scope_checks.clone_from(&scope_checks);
         row.status = "pending".into();
         row.grant = None;
         row.terminal = None;

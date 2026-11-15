@@ -9,6 +9,27 @@ use crate::review::{
 };
 mod git;
 
+/// Non-authorizing preparation uses the same Git protected-file footprint as
+/// native handoff. A clear answer is provisional; every use checks again.
+pub(crate) fn git_scope_check(
+    root: &Path,
+    cwd: &Path,
+    arguments: &[String],
+    allow: PathAccess,
+) -> &'static str {
+    let request = serde_json::json!({"executable":"git","arguments":arguments});
+    let guard = Guard {
+        cache: None,
+        allow,
+        working_files: None,
+    };
+    match output_protection(&request, root, cwd, true, guard).0 {
+        Protection::None => "clear_at_preparation",
+        Protection::Undetermined => "one_time_approval_required",
+        _ => "protected_access_refused",
+    }
+}
+
 /// The compiled cache location and the operator's protected path access.
 #[derive(Clone, Copy)]
 pub(super) struct Guard<'a> {

@@ -154,12 +154,13 @@ pub(super) fn rules(context: &Context, views: &mut Views, args: &Value) -> Resul
         result["candidate_id"] = json!(id);
     }
     if let Some(field @ ("invocations" | "command_sets")) = section {
+        let pack_selector = pack_selector.ok_or(Error::Missing)?;
         let (position, _pack) = captured.metadata["installed"]
             .as_array()
             .into_iter()
             .flatten()
             .enumerate()
-            .find(|(_, pack)| pack["selector"] == pack_selector.unwrap())
+            .find(|(_, pack)| pack["selector"] == pack_selector)
             .ok_or(Error::Missing)?;
         let doc: Value = crate::policy::parse(
             source["packs"][position]
@@ -204,6 +205,30 @@ pub(super) fn rules(context: &Context, views: &mut Views, args: &Value) -> Resul
         result["total"] = json!(index.shared.len());
         return Ok(result);
     }
+    rule_page(
+        views,
+        &id,
+        &source,
+        &captured.metadata,
+        &index,
+        &query,
+        result,
+    )
+}
+
+fn rule_page(
+    views: &mut Views,
+    id: &str,
+    source: &Value,
+    metadata: &Value,
+    index: &Index,
+    query: &Value,
+    mut result: Value,
+) -> Result<Value, Error> {
+    let request =
+        canonic_mcp_kit::page::Request::from_mcp(query, canonic_mcp_kit::page::Limits::STANDARD)
+            .map_err(page::error)?;
+    let after = page::after(&page::scope("rule_list", query), &request)?;
     let mut documents = BTreeMap::<usize, Value>::new();
     let rows = index
         .rules
@@ -230,7 +255,7 @@ pub(super) fn rules(context: &Context, views: &mut Views, args: &Value) -> Resul
                     .flatten()
                     .find(|row| row["id"] == rule.id)
                     .ok_or(Error::Missing)?;
-                let pack = &captured.metadata["installed"][position];
+                let pack = &metadata["installed"][position];
                 let mut row = inspection::public_pack_rule(raw, &pack["profile"]);
                 if rule.precondition {
                     row["kind"] = json!("precondition");
@@ -238,7 +263,7 @@ pub(super) fn rules(context: &Context, views: &mut Views, args: &Value) -> Resul
                 row["rule_ref"] = rule.reference.clone();
                 row["source"] = pack.clone();
                 row["profile"] = pack["profile"].clone();
-                let resolution = views.resolution(&id, &source, position, artifact)?;
+                let resolution = views.resolution(id, source, position, artifact)?;
                 if let Some(resolved) = resolution.get(&rule.id) {
                     row["resolution"] = resolved.clone();
                 }
@@ -259,7 +284,7 @@ pub(super) fn rules(context: &Context, views: &mut Views, args: &Value) -> Resul
             row["rule_digest"] = json!(crate::policy::fingerprint(row.to_string().as_bytes()));
             Ok((rule.key.clone(), row))
         });
-    let page = page::collect_results("rule_list", &query, rows, "rule_list with rule_ref")?;
+    let page = page::collect_results("rule_list", query, rows, "rule_list with rule_ref")?;
     result["rules"] = json!(page.items);
     result["next_cursor"] = json!(page.next_cursor);
     result["total"] = json!(index.rules.len());
@@ -267,7 +292,7 @@ pub(super) fn rules(context: &Context, views: &mut Views, args: &Value) -> Resul
         result["shared"] = json!([]);
         result["shared_total"] = json!(index.shared.len());
         let mut route = json!({"tool":"rule_list","section":"shared"});
-        if let Some(candidate) = candidate {
+        if let Some(candidate) = query["candidate_id"].as_str() {
             route["candidate_id"] = json!(candidate);
         }
         result["shared_list"] = route;

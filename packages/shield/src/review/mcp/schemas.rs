@@ -325,13 +325,30 @@ pub(super) fn metadata() -> impl Iterator<Item = (&'static str, &'static str)> {
 }
 
 fn inventory() -> Vec<Definition> {
-    [
+    let mut inventory = [
         admin_inventory(),
         policy_inventory(),
         request_inventory(),
         rule_inventory(),
     ]
-    .concat()
+    .concat();
+    inventory.push(("mcp_setup_preview", "Inspect agent registration changes without approval or publication; use mcp_setup to apply.", setup_preview_schema));
+    inventory
+}
+
+fn setup_preview_schema() -> Value {
+    let (_, description, schema) = admin_inventory()
+        .into_iter()
+        .find(|(name, _, _)| *name == "mcp_setup")
+        .expect("setup definition");
+    let mut tools = vec![canonic_mcp_kit::Tool::new(
+        "mcp_setup",
+        description,
+        schema(),
+    )];
+    canonic_mcp_kit::tool::preview::append(&mut tools, super::PREVIEWS)
+        .expect("setup supports dry-run inspection");
+    tools.pop().expect("setup preview").input_schema
 }
 
 fn admin_inventory() -> Vec<Definition> {
@@ -415,7 +432,7 @@ fn admin_inventory() -> Vec<Definition> {
         ),
         (
             "mcp_setup",
-            "Review agent registration changes; repair with explicit agents may name another enrolled project without rebinding this connection. dry_run previews without writes; pending review/cancel handles interrupted setup",
+            "Review agent registration changes; repair with explicit agents may name another enrolled project without rebinding this connection; use mcp_setup_preview for read-only inspection; pending review/cancel handles interrupted setup",
             || {
                 object(
                     json!({"project":{"type":"string","minLength":1,"maxLength":4096,"description":"Absolute enrolled project root for explicit registration repair only; requires repair: true and agents. The review names this target; ordinary tools remain bound to this connection's project."},"agents":{"type":"array","maxItems":64,"uniqueItems":true,"items":string()},"remove":{"type":"boolean","default":false},"repair":{"type":"boolean","default":false,"description":"Review reconciliation of conflicting Shield hooks and native MCP registration for explicitly selected Claude/Codex targets; other hooks and servers are preserved"},"pending":{"enum":["review","cancel"],"description":"Request a new human review of a conflicting confirmed setup, or cancel that interrupted publication"},"dry_run":{"type":"boolean","default":false},"scope":{"enum":["project"],"default":"project"}}),
@@ -426,28 +443,27 @@ fn admin_inventory() -> Vec<Definition> {
     ]
 }
 
+fn inspection_page_schema() -> Value {
+    object(
+        paging(
+            json!({"section":{"type":"string","minLength":1,"maxLength":1024,"description":"JSON Pointer from a returned collection preview."}}),
+        ),
+        &[],
+    )
+}
+
 fn policy_inventory() -> Vec<Definition> {
     let mut tools: Vec<Definition> = vec![
         (
             "status",
             "Show policy status, protection coverage and cached pack update availability; compatibility is unchecked and updates require user intent",
-            || {
-                object(
-                    paging(
-                        json!({"section":{"type":"string","minLength":1,"maxLength":1024,"description":"JSON Pointer from a returned collection preview."}}),
-                    ),
-                    &[],
-                )
-            },
+            inspection_page_schema,
         ),
-        ("doctor", "Diagnose setup and coverage problems", || {
-            object(
-                paging(
-                    json!({"section":{"type":"string","minLength":1,"maxLength":1024,"description":"JSON Pointer from a returned collection preview."}}),
-                ),
-                &[],
-            )
-        }),
+        (
+            "doctor",
+            "Diagnose setup and coverage problems",
+            inspection_page_schema,
+        ),
         (
             "pack_list",
             "List installed packs, or show one, with cached pack update availability; this does not fetch metadata or prepare updates",
@@ -455,7 +471,7 @@ fn policy_inventory() -> Vec<Definition> {
         ),
         (
             "pack_show",
-            "Show one installed pack's selection, rules and source",
+            "Show one installed pack's selection, rules and source; accepts the pack:<uuid> selector returned by pack_list",
             || object(json!({"reference":string()}), &["reference"]),
         ),
         (
@@ -468,9 +484,11 @@ fn policy_inventory() -> Vec<Definition> {
                 )
             },
         ),
-        ("pack_search", "Search registries for packs", || {
-            object(paging(json!({"query":string()})), &["query"])
-        }),
+        (
+            "pack_search",
+            "Search available pack IDs in the default or named registry; inspect a match with pack_info",
+            pack_search_schema,
+        ),
         pack_info(),
         pack_add(),
         pack_configure(),
@@ -534,6 +552,15 @@ fn policy_inventory() -> Vec<Definition> {
         ),
     ]);
     tools
+}
+
+fn pack_search_schema() -> Value {
+    object(
+        paging(
+            json!({"query":{"type":"string","minLength":1,"maxLength":4096,"description":"Pack ID substring, optionally prefixed by a registry alias and slash; main/ lists the main registry. Matches pack names, not rules or commands within a pack."}}),
+        ),
+        &["query"],
+    )
 }
 
 fn draft_inventory() -> Vec<Definition> {
@@ -784,6 +811,9 @@ fn pack_info() -> Definition {
                     json!({"reference":string(),"view":{"enum":["summary","rules","settings"],"default":"summary"},"section":{"enum":["variables","preconditions","dependencies","mcp_integrations","invocations","command_sets","permission_groups"]},"query":{"type":"string","minLength":1,"maxLength":4096,"description":"Filter rule IDs and reasons in the rules view."},"rule_id":id()}),
                 ),
                 &["reference"],
+            );
+            schema["properties"]["reference"]["description"] = json!(
+                "Catalog reference: name, publisher/name or alias/publisher/name, optionally @version; for example main/canonic/node. Use pack_show for an installed pack:<uuid> selector."
             );
             schema["if"] = json!({"required":["rule_id"]});
             schema["then"] = json!({"properties":{"view":{"const":"rules"}},"not":{"anyOf":[{"required":["query"]},{"required":["cursor"]},{"required":["limit"]}]}});

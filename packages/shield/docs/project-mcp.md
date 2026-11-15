@@ -9,6 +9,13 @@ For third-party servers and pack-contributed MCP permissions, see
 
 ## Start with a task
 
+Use `mcp_setup_preview` to inspect proposed agent registration changes without
+approval or publication. It accepts the setup selectors and always runs a dry
+run; it rejects a `dry_run` override. Use `mcp_setup` to apply after confirmation.
+The preview is published as read-only and approved by fresh setup. Saved host
+permissions remain authoritative; `mcp_setup` with `dry_run: true` stays compatible
+but may still trigger the applying tool's generic host permission prompt.
+
 | You want to… | Start here |
 | --- | --- |
 | Check the active policy and setup | `status`, then `doctor` if needed. |
@@ -292,6 +299,15 @@ To expose only the static bundle without an enrolled project, launch
 policy tools. The installed executable contains the bundle and works offline.
 
 ## Reviewing an available pack
+
+`pack_search` matches pack IDs, not the commands or rules within a pack.
+Use `{"query":"main/","limit":100}` to browse the main registry, or a
+pack-name substring to narrow it. An empty result means no pack ID matched.
+
+`pack_info.reference` accepts `name`, `publisher/name` or
+`alias/publisher/name`, optionally followed by `@version`. Separate the alias
+with a slash, as in `main/canonic/node`. To inspect an installed
+`pack:<uuid>` selector from `pack_list`, use `pack_show`.
 
 Call `pack_info` with a `reference` for a compact summary: the selected release
 and provenance, description, rule count, declared outcomes for each profile,

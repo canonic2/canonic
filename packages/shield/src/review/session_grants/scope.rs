@@ -1,6 +1,55 @@
 //! Session-selector admission and matching through the shared prepared policy engine.
 use super::{Error, Value, json};
 use crate::policy::{CustomRules, Decision, Request};
+use std::path::Path;
+
+/// Inspect only an exact executable, argv and cwd. A family or a not-yet-created
+/// cwd cannot establish a current Git footprint and keeps runtime-only checks.
+pub(super) fn check_git(context: &super::Context, scope: &Value) -> Result<Vec<Value>, Error> {
+    crate::diagnostics::trace::count("session_grants.git_preparations", 1);
+    let root = Path::new(&context.project_root);
+    let mut allow = None;
+    let mut checks = Vec::new();
+    for (index, selector) in scope.as_array().into_iter().flatten().enumerate() {
+        let conditions = &selector["conditions"];
+        let Some(executable) = conditions["executable"].as_str() else {
+            continue;
+        };
+        if Path::new(executable).file_name().and_then(|s| s.to_str()) != Some("git") {
+            continue;
+        }
+        if conditions["arguments"]["kind"] != "exact"
+            || conditions["cwd"]["exact"]["root"] != "project"
+        {
+            continue;
+        }
+        let allow = if let Some(allow) = allow {
+            allow
+        } else {
+            let current = crate::review::path_access::current(root)?;
+            allow = Some(current);
+            current
+        };
+        let arguments: Vec<String> = conditions["arguments"]["values"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect();
+        let cwd = root.join(conditions["cwd"]["exact"]["path"].as_str().unwrap_or(""));
+        let status = cwd
+            .canonicalize()
+            .ok()
+            .filter(|cwd| cwd.is_dir() && cwd.starts_with(root))
+            .map_or("context_unavailable", |cwd| {
+                crate::enforcement::protocol::git_scope_check(root, &cwd, &arguments, allow)
+            });
+        checks.push(json!({"alternative":index+1,"check":"git_protected_files",
+            "status":status}));
+    }
+    Ok(checks)
+}
 
 /// A scope is an OR of closed, individually validated positive argv selectors.
 pub(super) fn prepare(value: &Value) -> Result<Vec<CustomRules>, Error> {

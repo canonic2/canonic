@@ -1186,6 +1186,7 @@ fn inventory_has_only_canonical_tools_and_no_operator_or_completion_authority() 
             "history_list",
             "policy_evaluate",
             "policy_compare",
+            "mcp_setup_preview",
             "docs_list",
             "docs_search",
             "docs_read"
@@ -1334,9 +1335,7 @@ fn rule_lookup_uses_retained_snapshots_for_exact_and_paged_inspection() {
         &context,
         &connection,
         "rule_list",
-        json!({
-            "candidate_id":candidate,"limit":1
-        }),
+        json!({"candidate_id":candidate,"limit":1}),
     );
     assert!(first["error"].is_null(), "{first}");
     assert_eq!(first["data"]["rules"][0]["id"], "a");
@@ -2279,7 +2278,7 @@ fn suggestions_list_a_sessions_asked_commands_for_one_batch_proposal() {
         .iter()
         .map(|s| s["command"].as_str().unwrap())
         .collect();
-    commands.sort();
+    commands.sort_unstable();
     assert_eq!(commands, ["acme build", "acme run dev"]);
     let run = requests
         .iter()

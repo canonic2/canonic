@@ -29,7 +29,7 @@ pub(crate) fn docs(name: &str, args: &Value) -> Result<Value, Error> {
 pub(crate) fn list(context: &Context, name: &str, args: &Value) -> Result<Value, Error> {
     let mut views = Views::new("operator".into());
     let mut data = match name {
-        "pack_info" | "pack_search" => super::discovery(context, &mut views, name, args),
+        "pack_info" | "pack_search" => super::discovery(context, name, args),
         _ => super::inspection_tool(context, &mut views, name, args),
     }?;
     let redacted = if matches!(name, "history_list" | "history_show") {
