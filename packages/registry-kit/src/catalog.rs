@@ -18,6 +18,8 @@ use std::{
 };
 
 pub mod history;
+pub mod page;
+pub use page::{EntryPosition, InvalidPageLimit, Page, PageLimit};
 
 /// Maximum releases a flat version-1/2 catalog may list.
 pub const MAX_ENTRIES: usize = 64;
@@ -66,6 +68,8 @@ pub struct Catalog {
     digest: String,
     entries: Vec<Entry>,
     heads: Vec<Entry>,
+    entries_by_id: page::Index,
+    heads_by_id: page::Index,
     registry_id: Option<String>,
     sequence: Option<u64>,
     expires_at: Option<String>,
@@ -237,10 +241,13 @@ impl Catalog {
                 }
             }
         }
+        let entries_by_id = page::index(&entries);
         Ok(Self {
             source: source.identity().to_owned(),
             digest: digest::sha256_hex(bytes),
             heads: entries.clone(),
+            heads_by_id: entries_by_id.clone(),
+            entries_by_id,
             entries,
             registry_id: document.registry_id,
             sequence: document.sequence,
@@ -306,7 +313,13 @@ impl Catalog {
         if existing.len().saturating_add(added.len()) > history::MAX_RELEASES {
             return Err(CatalogError::Limit);
         }
-        self.entries.extend(added);
+        for entry in added {
+            self.entries_by_id
+                .entry(entry.id.clone())
+                .or_default()
+                .insert(entry.version.clone(), self.entries.len());
+            self.entries.push(entry);
+        }
         if complete {
             self.loaded.insert(id.clone());
         }
@@ -333,12 +346,18 @@ impl Catalog {
     }
 
     /// Listed releases in catalog order.
+    ///
+    /// Whole access remains public for consumer integrity checks and resolution
+    /// across already loaded history. Consumer listings use [`Self::entries_page`].
     #[must_use]
     pub fn entries(&self) -> &[Entry] {
         &self.entries
     }
 
     /// Entries authenticated directly by discovery, excluding loaded history.
+    ///
+    /// Whole access remains public for consumer checkpoint and update comparison
+    /// workflows. Consumer listings use [`Self::heads_page`].
     #[must_use]
     pub fn heads(&self) -> &[Entry] {
         &self.heads
@@ -379,6 +398,10 @@ impl Catalog {
     }
 
     /// Releases of one pack, highest version first.
+    ///
+    /// Whole access remains public for dependency resolution and exact-pin
+    /// recovery. This allocates up to [`history::MAX_RELEASES`] references;
+    /// consumer listings use [`Self::releases_page`].
     #[must_use]
     pub fn releases(&self, id: &PackId) -> Vec<&Entry> {
         let mut releases: Vec<_> = self.entries.iter().filter(|e| e.id == *id).collect();
@@ -409,6 +432,10 @@ impl Catalog {
     }
 
     /// Releases whose `publisher/name` contains `query`, in catalog order.
+    ///
+    /// Whole access remains public for callers requiring catalog-order results.
+    /// Consumer listings use [`Self::search_page`] for bounded results and stable
+    /// identity ordering.
     #[must_use]
     pub fn search(&self, query: &str) -> Vec<&Entry> {
         self.entries

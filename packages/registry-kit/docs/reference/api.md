@@ -25,7 +25,8 @@ unpublished, so its API reference is built locally rather than hosted on docs.rs
 | Manage aliases and defaults | `registrations::{Registrations,Effective,Scope}` | [Registrations](../guides/registrations.md) |
 | Read, review and recover global generations | `registrations::{GlobalFile, Snapshot, Publication}` | [Registrations](../guides/registrations.md) |
 | Parse user input | `selector::{parse,Selector,Reference}` | [Selecting packs](../guides/selecting-packs.md) |
-| Browse releases | `Catalog::{lookup,select,release,releases,search,entries,heads,history}` | [Selecting packs](../guides/selecting-packs.md) |
+| Select releases and inspect catalog state | `Catalog::{lookup,select,release,releases,search,entries,heads,history}` | [Selecting packs](../guides/selecting-packs.md) |
+| Page catalog listings | `Catalog::{entries_page,heads_page,search_page,releases_page}`, `catalog::{PageLimit,EntryPosition,Page,InvalidPageLimit}` | [Browse a catalog](../guides/selecting-packs.md#browse-a-catalog) |
 | Verify indexed history pages | `catalog::history::{Page,Reference}` | [Catalog format](../publishing/catalog-format.md) |
 | Identify an installation | `selector::{InstalledSelector,Installed,find_installed}` | [Selecting packs](../guides/selecting-packs.md) |
 | Resolve versions and levels | `resolution::{resolve,Root,Release,Dependency,Instance,Selection,Level}` | [Dependencies](../guides/dependencies.md) |

@@ -39,6 +39,11 @@ Catalog v3 keeps current pack heads in discovery and authenticates per-pack
 version trees. `Fetcher::history` resolves old pins through the selected branch
 without fetching unrelated history. Flat v1/v2 catalogs remain supported.
 
+Browse loaded catalogs with `Catalog::entries_page`, `heads_page`, `search_page`
+and `releases_page`. Each takes a typed limit (default 50, maximum 100) and an
+optional typed keyset position, and returns borrowed entries plus the next
+position. Products own cursor encoding. See [Find and select packs](docs/guides/selecting-packs.md#browse-a-catalog).
+
 ## Documentation
 
 - [Documentation](docs/README.md): developer guides and reference, organized by task.

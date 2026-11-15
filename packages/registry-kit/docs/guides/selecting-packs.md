@@ -61,9 +61,47 @@ contains the matching `PackId` values so your UI can offer explicit choices.
 prereleases yields `None`. `select(&id, Some(&version))` selects that exact
 release, including prereleases. `release` also performs exact lookup.
 
-`releases` lists one pack's releases highest first. `entries` retains catalog
-order. `search` performs a case-sensitive substring match on `publisher/name`,
-returning releases in catalog order; it does not group results by pack.
+Use `entries_page`, `heads_page`, `search_page` and `releases_page` for listings.
+All take a validated `catalog::PageLimit` (default 50, maximum 100); zero and
+values above 100 return `InvalidPageLimit`, rather than being clamped.
+`Page.items` borrows the entries and `Page.next_position` is absent at the end.
+Pages also stop before the compact JSON items array would exceed 256 KiB,
+including array delimiters and separators. A single entry larger than that is
+returned alone so traversal advances. Products enforce their transport limits
+and any additional response fields when encoding these borrowed entries.
+
+```rust
+use canonic_registry_kit::catalog::{Catalog, EntryPosition, Page, PageLimit};
+
+fn search<'a>(
+    catalog: &'a Catalog, query: &str, after: Option<&EntryPosition>,
+) -> Page<'a, EntryPosition> {
+    catalog.search_page(query, PageLimit::default(), after)
+}
+```
+
+Pass `next_position.as_ref()` to the next call with the same query. Products
+encode these typed positions into their own cursors, binding the source,
+operation and query. Registry Kit has no MCP dependency or cursor encoding.
+
+`entries_page` includes loaded history; `heads_page` includes only discovery
+releases. Both order by publisher, name, then ascending version. `search_page`
+performs a case-sensitive substring match on `publisher/name` and returns each
+matching release in that same order. Every match has equal relevance; an empty
+query matches all. `EntryPosition { id, version }` holds the last returned key.
+
+`releases_page(&id, limit, after)` lists one pack's loaded releases in descending
+version order, with `Option<&semver::Version>` as its position. Version ordering
+uses `semver::Version::Ord`, including prereleases and build metadata to break
+ties. All page positions are exclusive: deleting the boundary entry or inserting
+entries before it does not shift the continuation. New entries before the key
+are visible on a fresh listing. Paging never fetches history; use
+`Fetcher::history` first when older versions are needed.
+
+The whole `entries` and `heads` slices remain public for integrity checks,
+checkpoint comparisons and dependency workflows. `releases` remains public for
+resolution and exact-pin recovery and can allocate up to 4,096 references.
+`search` returns every match in catalog order; use `search_page` for listings.
 
 ## Address installed instances
 

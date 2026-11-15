@@ -38,6 +38,10 @@ Retry after the deployment becomes consistent; do not bypass signature checks.
 An expired catalog prevents new signed acquisition, but cached installed bytes
 can still be read offline.
 
+`catalog::InvalidPageLimit` is returned by `PageLimit::new` and
+`PageLimit::try_from` for a limit of zero or above 100. Choose a value from
+1 through 100, or use `PageLimit::default()` for 50. Values are never clamped.
+
 ## Checkpoints
 
 `CheckpointError::Rollback` means a lower sequence, changed bytes at the same

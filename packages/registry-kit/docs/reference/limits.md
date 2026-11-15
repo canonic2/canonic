@@ -22,6 +22,8 @@ input even when its length fits. See [Catalog format](../publishing/catalog-form
 | --- | --- |
 | Catalog document | 1 MiB (`catalog::MAX_CATALOG_BYTES`, also exported by `acquisition`) |
 | Releases in a flat v1/v2 catalog | 64 (`catalog::MAX_ENTRIES`) |
+| Catalog listing page | Default 50, valid 1–100 (`catalog::PageLimit`); invalid values are refused |
+| Catalog listing items JSON | 256 KiB (`catalog::page::MAX_PAGE_BYTES`), including array delimiters/separators; an oversized entry is returned alone, subject to product transport limits |
 | Current heads in v3 discovery | 4096 (`catalog::MAX_HEADS`), within the byte bound |
 | Entries or children per history page | 64 (`catalog::history::PAGE_SIZE`) |
 | History query | 16 levels, 128 pages, 8 MiB and 4096 materialized releases per selected pack |
