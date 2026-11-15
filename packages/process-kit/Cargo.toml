@@ -1,6 +1,6 @@
 [package]
 name = "canonic-process-kit"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.97"
 publish = false
@@ -16,6 +16,8 @@ semver = "1.0"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["user", "socket", "process", "fs", "poll", "signal"] }
+# 1.1.6 bounds truncated SCM_RIGHTS control messages on Darwin.
+rustix = { version = "1.1.6", features = ["net", "fs"] }
 
 [target.'cfg(windows)'.dependencies]
 uds_windows = "1.2"

@@ -25,6 +25,8 @@ pub mod protocol;
 pub mod recovery;
 #[cfg(any(unix, windows))]
 pub mod server;
+#[cfg(any(unix, windows))]
+pub mod transfer;
 pub mod version;
 #[cfg(unix)]
 mod wakeup;
@@ -68,6 +70,12 @@ pub enum Error {
     /// A bound or timeout is zero or internally inconsistent.
     #[error("invalid manager options")]
     Options,
+    /// Another preparation owns the fence, it has ended, or a transfer channel failed.
+    #[error("handover preparation or transfer channel is not active")]
+    HandoverState,
+    /// Existing mutations or product obligations must settle before handover commit.
+    #[error("handover still owns work or resources")]
+    HandoverBusy,
     /// An inspection control tried to create resource ownership.
     #[error("inspection controls cannot create resource holds")]
     ReadOnly,

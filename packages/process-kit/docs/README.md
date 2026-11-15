@@ -8,3 +8,7 @@ Start with [a minimal manager and client](getting-started.md). Then read the
 [API reference](reference.md) for admission transfers, control extensions,
 launch choices, limits and failure handling. [Development](development.md)
 describes tests and checks.
+
+[Build a live manager handover](live-handover.md) when updates must preserve
+running resources. It covers admission fences, standby copies, platform boundaries
+and application-owned commit/recovery.

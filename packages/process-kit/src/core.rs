@@ -9,6 +9,9 @@ use std::{
     time::Duration,
 };
 
+mod quiescence;
+pub use quiescence::Quiescence;
+
 /// Externally visible lifecycle state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -105,6 +108,20 @@ pub struct Snapshot {
     /// A requested replacement will bypass the idle policy once work settles.
     #[serde(default)]
     pub retirement_pending: bool,
+    /// New work is paused for a product-coordinated handover.
+    #[serde(default)]
+    pub quiescing: bool,
+    /// Planned transfer crossed its irreversible fence; dropping preparation
+    /// cannot resume old admission, even if durable product commit fails.
+    #[serde(default)]
+    pub handover_fenced: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Handover {
+    None,
+    Preparing,
+    Fenced,
 }
 
 struct Inner {
@@ -113,6 +130,7 @@ struct Inner {
     observers: usize,
     held: usize,
     retirement_pending: bool,
+    handover: Handover,
     idle_since: Option<Duration>,
     changed: bool,
     reason: ExitReason,
@@ -121,6 +139,9 @@ struct Inner {
 }
 
 impl Inner {
+    fn quiescing(&self) -> bool {
+        self.handover != Handover::None && !self.closed()
+    }
     fn event(&mut self, event: Event) {
         if self.events.len() == 64 {
             self.events.pop_front();
@@ -155,6 +176,7 @@ impl Admission {
             observers: 0,
             held: 0,
             retirement_pending: false,
+            handover: Handover::None,
             idle_since: None,
             changed: false,
             reason: ExitReason::Policy,
@@ -214,7 +236,7 @@ impl Admission {
         if inner.state == State::Starting {
             return Err(Error::Starting);
         }
-        if inner.closed() {
+        if inner.closed() || inner.quiescing() {
             return Err(Error::Draining);
         }
         if observer {
@@ -259,7 +281,7 @@ impl Admission {
     /// transfer its obligation using [`Permit::hold`] even during drain.
     pub fn hold(&self) -> Result<Hold> {
         let mut inner = self.lock();
-        if inner.closed() {
+        if inner.closed() || inner.quiescing() {
             return Err(Error::Draining);
         }
         inner.held += 1;
@@ -278,6 +300,9 @@ impl Admission {
     #[must_use]
     pub fn retire_if_empty(&self) -> bool {
         let mut inner = self.lock();
+        if inner.quiescing() {
+            return false;
+        }
         if inner.closed() {
             return inner.empty();
         }
@@ -309,7 +334,7 @@ impl Admission {
             Self::notify(inner);
             return true;
         }
-        if !inner.empty() {
+        if !inner.empty() || inner.quiescing() {
             Self::notify(inner);
             return false;
         }
@@ -330,6 +355,9 @@ impl Admission {
         }
         inner.state = State::Draining;
         inner.reason = ExitReason::Drained;
+        if inner.handover == Handover::Preparing {
+            inner.handover = Handover::None;
+        }
         inner.event(Event::DrainAdmitted);
         Self::notify(inner);
         true
@@ -341,7 +369,7 @@ impl Admission {
     pub fn tick(&self, now: Duration, policy: &impl ExitPolicy) -> bool {
         let idle = {
             let mut inner = self.lock();
-            if inner.state == State::Starting {
+            if inner.state == State::Starting || inner.quiescing() {
                 return false;
             }
             if !inner.closed() && inner.empty() {
@@ -360,6 +388,7 @@ impl Admission {
         let mut inner = self.lock();
         if (exit || inner.retirement_pending)
             && !inner.closed()
+            && !inner.quiescing()
             && inner.empty()
             && !inner.changed
             && inner.idle_since == idle
@@ -387,7 +416,11 @@ impl Admission {
     pub fn next_check(&self, now: Duration, policy: &impl ExitPolicy) -> Option<Duration> {
         let idle = {
             let inner = self.lock();
-            if inner.state == State::Starting || inner.closed() || !inner.empty() {
+            if inner.state == State::Starting
+                || inner.closed()
+                || inner.quiescing()
+                || !inner.empty()
+            {
                 return None;
             }
             if inner.changed {
@@ -411,6 +444,8 @@ impl Admission {
             observers: inner.observers,
             held: inner.held,
             retirement_pending: inner.retirement_pending,
+            quiescing: inner.quiescing(),
+            handover_fenced: inner.handover == Handover::Fenced,
         }
     }
 
@@ -440,7 +475,10 @@ impl Permit {
             return Ok(());
         }
         let mut inner = self.gate.lock();
-        if inner.closed()
+        if inner.handover == Handover::Fenced && inner.quiescing() {
+            return Err(Error::Draining);
+        }
+        if (inner.closed() || inner.quiescing())
             && (role == ControlRole::Work || inner.state == State::Exiting || inner.empty())
         {
             return Err(Error::Draining);
@@ -454,7 +492,7 @@ impl Permit {
         if inner.state == State::Idle {
             inner.event(Event::IdleCancelled);
         }
-        if !inner.closed() {
+        if !inner.closed() && !inner.quiescing() {
             inner.state = State::Serving;
         }
         inner.changed = true;
@@ -467,7 +505,7 @@ impl Permit {
         if inner.state == State::Idle {
             inner.event(Event::IdleCancelled);
         }
-        if !inner.closed() {
+        if !inner.closed() && !inner.quiescing() {
             inner.state = State::Serving;
         }
         inner.changed = true;
@@ -495,7 +533,7 @@ impl Permit {
             return Err(Error::ReadOnly);
         }
         let mut inner = self.gate.lock();
-        if self.observer && inner.closed() {
+        if self.observer && (inner.closed() || inner.quiescing()) {
             return Err(Error::Draining);
         }
         inner.held += 1;

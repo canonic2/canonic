@@ -44,6 +44,11 @@ retires after its work settles. Optional recovery supports owner-death detection
 stable-ID replay and explicit force-stop. Your product still owns durable
 request-ID reconciliation and the meaning of a completed operation.
 
+For live takeover, [build a planned handover](docs/live-handover.md) with reversible
+admission quiescence, irreversible fencing and bounded file/socket copies. Your
+application coordinates durable ownership and adoption; automatic version retirement
+does not migrate running work.
+
 - [API reference](docs/reference.md): request handling, resource holds, control
   lanes, version handoff and recovery.
 - [Get started](docs/getting-started.md): the complete manager/client example.

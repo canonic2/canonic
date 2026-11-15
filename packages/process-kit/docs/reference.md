@@ -93,6 +93,11 @@ and persistence. `Snapshot` contains no credentials or request contents.
 
 ## Version handoff
 
+For product-coordinated live takeover, see [Build a live manager handover](live-handover.md):
+`Admission::quiesce`, `Quiescence::fence`/`commit` and `transfer::Sender`/`Receiver`
+are separate opt-in primitives. The version-aware connection below requests natural
+retirement.
+
 Commands allowed to start or replace a manager can use
 `client::connect_versioned(&root, &launcher, env!("CARGO_PKG_VERSION"), &options)`.
 Detection runs when that function connects. Ordinary `connect` remains an

@@ -114,7 +114,7 @@ pub(crate) fn clear_deadlines(stream: &Stream) -> Result<()> {
     Ok(())
 }
 
-fn peer_closed_timeout(error: &std::io::Error) -> bool {
+pub(crate) fn peer_closed_timeout(error: &std::io::Error) -> bool {
     #[cfg(target_os = "macos")]
     {
         error.raw_os_error() == Some(nix::errno::Errno::EINVAL as i32)

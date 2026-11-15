@@ -11,6 +11,7 @@ mod fixtures;
 mod lifecycle;
 mod processes;
 mod recovery;
+mod transfer;
 mod transport;
 mod upgrades;
 #[cfg(windows)]
