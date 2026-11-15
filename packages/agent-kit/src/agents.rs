@@ -3,10 +3,12 @@ use super::{Context, Error, Result, Scope, Tool};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
-/// Every setup choice with its CLI discovery names: Box first, then each host
-/// surface; Box, editor surfaces and ambiguous names have none.
+/// Every setup choice with its CLI discovery names: the configuration hosts
+/// first, then each agent surface; configuration hosts, editor surfaces and
+/// ambiguous names have none.
 pub(crate) const CATALOG: &[(&str, &[&str])] = &[
-    (BOX, &[]),
+    (HUB.id, &[]),
+    (BOX.id, &[]),
     ("claude", &["claude"]),
     ("codex", &["codex"]),
     ("copilot-vscode", &[]),
@@ -254,13 +256,75 @@ fn entry(context: &Context, id: &str, program: &str) -> Value {
     entry
 }
 
-/// The choice that writes a Box server definition instead of an agent's own
-/// file; Box then publishes it to every agent each developer chose.
-pub(crate) const BOX: &str = "box";
+/// A choice that writes a server definition into an agent manager's folder
+/// instead of an agent's own file; the manager then publishes it to every
+/// agent each developer chose. Hub and Box share the definition format.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ConfigHost {
+    pub(crate) id: &'static str,
+    pub(crate) name: &'static str,
+    /// The folder in the project or home folder: `.hub` or `.box`.
+    folder: &'static str,
+    /// The project folder the host reads instead when `folder` has no
+    /// `config.yml`; user scope always uses `folder`.
+    grouped: Option<&'static str>,
+    /// The command that creates the configuration marker.
+    init: &'static str,
+    /// The command that republishes a changed definition, when it is not
+    /// `<id> setup` again.
+    sync: Option<&'static str>,
+}
 
-/// `.box/mcp/<product>.yml` in the project, or in `~/.box` for user scope,
-/// refusing a folder Box does not configure.
-pub(crate) fn box_definition_path(
+impl ConfigHost {
+    /// How the manager publishes a written definition in `scope`; the
+    /// commands carry `--scope user` because they default to project scope.
+    pub(crate) fn publish(&self, scope: Scope) -> String {
+        let (agents, flag) = match scope {
+            Scope::Project => ("each developer's agents", ""),
+            Scope::User => ("your agents", " --scope user"),
+        };
+        let after = match self.sync {
+            Some(sync) => format!(", or `{sync}{flag}` after a change"),
+            None => " now and after each change".into(),
+        };
+        format!(
+            "{} publishes it to {agents}: run `{} setup{flag}`{after}",
+            self.name, self.id
+        )
+    }
+}
+
+pub(crate) const HUB: ConfigHost = ConfigHost {
+    id: "hub",
+    name: "Hub",
+    folder: ".hub",
+    grouped: Some(".config/hub"),
+    init: "hub setup",
+    sync: None,
+};
+
+pub(crate) const BOX: ConfigHost = ConfigHost {
+    id: "box",
+    name: "Box",
+    folder: ".box",
+    grouped: None,
+    init: "box config init",
+    sync: Some("box config sync"),
+};
+
+/// The configuration hosts in catalog and default-selection order.
+pub(crate) const CONFIG_HOSTS: &[&ConfigHost] = &[&HUB, &BOX];
+
+/// The configuration host an agent ID names, if any.
+pub(crate) fn config_host(id: &str) -> Option<&'static ConfigHost> {
+    CONFIG_HOSTS.iter().copied().find(|host| host.id == id)
+}
+
+/// `<folder>/mcp/<product>.yml` in the project, or in the home folder for user
+/// scope, refusing a folder the host does not configure. A project whose
+/// `folder` has no marker uses the host's grouped folder when that has one.
+pub(crate) fn definition_path(
+    host: &ConfigHost,
     context: &Context,
     scope: Scope,
     remove: bool,
@@ -268,8 +332,9 @@ pub(crate) fn box_definition_path(
     let project = scope == Scope::Project;
     if project && context.home.starts_with(&context.root) {
         return Err(Error::selection(format!(
-            "{} is your home folder or contains it, not a project; pass --scope user for your personal Box configuration",
-            context.root.display()
+            "{} is your home folder or contains it, not a project; pass --scope user for your personal {} configuration",
+            context.root.display(),
+            host.name
         )));
     }
     let base = if project {
@@ -277,16 +342,26 @@ pub(crate) fn box_definition_path(
     } else {
         &context.home
     };
-    if !remove && !base.join(".box/config.yml").is_file() {
+    let grouped = host.grouped.filter(|_| project);
+    let mut folder = base.join(host.folder);
+    if let Some(grouped) = grouped
+        && !folder.join("config.yml").is_file()
+        && base.join(grouped).join("config.yml").is_file()
+    {
+        folder = base.join(grouped);
+    }
+    if !remove && !folder.join("config.yml").is_file() {
         return Err(Error::selection(format!(
-            "{} has no Box configuration (.box/config.yml); run `box config init{}` first",
+            "{} has no {} configuration ({}/config.yml{}); run `{}{}` first",
             base.display(),
+            host.name,
+            host.folder,
+            grouped.map_or(String::new(), |grouped| format!(" or {grouped}/config.yml")),
+            host.init,
             if project { "" } else { " --scope user" }
         )));
     }
-    Ok(base
-        .join(".box/mcp")
-        .join(format!("{}.yml", context.product)))
+    Ok(folder.join("mcp").join(format!("{}.yml", context.product)))
 }
 
 pub(crate) fn project_directory(entry: &mut Value, id: &str, context: &Context) {
@@ -311,9 +386,10 @@ pub(crate) fn launch_command(context: &Context, scope: Scope) -> Result<&str> {
         .ok_or_else(|| Error::invalid("Executable path is not Unicode"))
 }
 
-/// The server definition Box publishes: the same launch as the agents' own
-/// entries, with the approved tools allowed and every other tool asking.
-pub(crate) fn box_definition(
+/// The server definition the host publishes: the same launch as the agents'
+/// own entries, with the approved tools allowed and every other tool asking.
+pub(crate) fn definition(
+    host: &ConfigHost,
     context: &Context,
     scope: Scope,
     approved: &[String],
@@ -322,7 +398,7 @@ pub(crate) fn box_definition(
     // JSON strings are YAML double-quoted scalars, so values need no YAML codec.
     let quote = |text: &str| serde_json::to_string(text).expect("serializing a string cannot fail");
     let mut text = format!(
-        "# Written by `{product} mcp setup --agent box`; rerun it to change this file.\nschema_version: 1\nconnection:\n  transport: stdio\n  command: {}\n  args: [{}]\n",
+        "# Written by `{product} mcp setup --agent {id}`; rerun it to change this file.\nschema_version: 1\nconnection:\n  transport: stdio\n  command: {}\n  args: [{}]\n",
         quote(command),
         context
             .arguments
@@ -331,6 +407,7 @@ pub(crate) fn box_definition(
             .collect::<Vec<_>>()
             .join(", "),
         product = context.product,
+        id = host.id,
     );
     if !approved.is_empty() {
         text.push_str("permissions:\n  tools:\n");
@@ -364,9 +441,10 @@ pub(crate) fn box_definition(
     Ok(text)
 }
 
-const BOX_HOOK_TOKENS: &[&str] = &["{project}", "{agent}", "{event}", "{command}"];
+const HOST_HOOK_TOKENS: &[&str] = &["{project}", "{agent}", "{event}", "{command}"];
 
-/// The native command-hook subset that both direct hosts and Box can publish.
+/// The native command-hook subset that both direct hosts and configuration
+/// hosts can publish.
 pub(crate) fn prompt_handlers(group: &Value) -> Result<&Vec<Value>> {
     let valid_group = group.as_object().is_some_and(|object| {
         object
@@ -401,24 +479,24 @@ pub(crate) fn prompt_handlers(group: &Value) -> Result<&Vec<Value>> {
             "Prompt hook requires command handlers with optional timeout, statusMessage and group matcher",
         ));
     }
-    // Box expands these tokens in hook commands and native hosts do not, so
-    // one group would run different commands depending on the route.
+    // Hub and Box expand these tokens in hook commands and native hosts do
+    // not, so one group would run different commands depending on the route.
     if handlers.into_iter().flatten().any(|hook| {
         hook["command"]
             .as_str()
-            .is_some_and(|command| BOX_HOOK_TOKENS.iter().any(|token| command.contains(token)))
+            .is_some_and(|command| HOST_HOOK_TOKENS.iter().any(|token| command.contains(token)))
     }) {
         return Err(Error::invalid(
-            "Prompt hook commands cannot contain {project}, {agent}, {event} or {command}; Box expands them and native hosts do not",
+            "Prompt hook commands cannot contain {project}, {agent}, {event} or {command}; Hub and Box expand them and native hosts do not",
         ));
     }
     handlers.ok_or_else(|| Error::invalid("Prompt hook must contain command hooks"))
 }
 
 /// Agents whose tool approvals setup writes: Codex in its server entry, Claude
-/// Code as `permissions.allow` rules in a separate settings file, and Box in
-/// the definition it publishes.
-pub(crate) const APPROVALS: &[&str] = &[BOX, "claude", "codex"];
+/// Code as `permissions.allow` rules in a separate settings file, and Hub and
+/// Box in the definition each publishes.
+pub(crate) const APPROVALS: &[&str] = &[HUB.id, BOX.id, "claude", "codex"];
 
 /// Codex asks before every tool except those approved here.
 pub(crate) fn codex_approvals(entry: &mut Value, tools: &[Tool], approved: &[String]) {

@@ -66,14 +66,14 @@ supplies prompt context, for example
 `serde_json::json!({"hooks":[{"type":"command","command":"acme hook user-prompt","timeout":5}]})`.
 Setup reviews and publishes it alongside the selected Claude Code and Codex
 registrations. Claude hooks share its permission settings file; Codex hooks use
-`hooks.json` beside its MCP configuration. Box definitions carry the equivalent
+`hooks.json` beside its MCP configuration. Hub and Box definitions carry the equivalent
 portable hook restricted to those two agents. Other hosts receive MCP only.
 The consumer owns hook behavior, launch quoting, timeout and host compatibility.
 Groups support `hooks` and an optional string `matcher`; handlers support
 `type: "command"`, a nonempty `command`, an optional positive integer `timeout`
 in seconds and an optional string `statusMessage`. Unsupported fields refuse
-before publication rather than being dropped from a Box definition. Commands
-cannot contain `{project}`, `{agent}`, `{event}` or `{command}`: Box expands
+before publication rather than being dropped from a Hub or Box definition. Commands
+cannot contain `{project}`, `{agent}`, `{event}` or `{command}`: Hub and Box expand
 those tokens and native hosts do not, so the same group would run differently.
 Reruns repair missing owned groups; removal preserves unrelated and pre-existing
 equivalent groups. A matching command in a different group conflicts for review.
@@ -97,8 +97,8 @@ interaction instead.
 Use `Context::local_at_root` when the consumer already selected an explicit root;
 it canonicalizes that root without replacing it with an enclosing checkout.
 `run_with_policy` and `prepare_with_policy` accept `SetupPolicy` for terminal-only
-authorization, optional project cwd on supported adapters, and exclusive Box/native
-install routes. `Authorization::TerminalOnly` rejects `yes` and requires terminal
+authorization, optional project cwd on supported adapters, and exclusive install routes
+(Hub alone, Box alone, or native agents alone). `Authorization::TerminalOnly` rejects `yes` and requires terminal
 acceptance for every applying action; the default `run` policy remains unchanged.
 The optional catalog observer receives only the executable path and returns a
 guard held through the shared bounded check, for tracing. It cannot replace
@@ -113,8 +113,13 @@ apply still reads fresh bytes. `catalog` supplies stable IDs/discovery names and
 The host catalog covers Claude Code, Codex, Copilot in VS Code and its CLI,
 Cursor, Gemini, Kilo, Kiro, Kimi, OpenCode, Qwen, Amp, Droid, Windsurf,
 Cline, Augment and Goose. Unsupported automatic scopes return a manual-setup
-reason. Box installation requires a configuration marker in the selected scope;
-removal can withdraw an owned definition after that marker is gone.
+reason. The `hub` and `box` choices write a whole server definition to
+`.hub/mcp/<product>.yml` or `.box/mcp/<product>.yml`; installation requires
+that host's `config.yml` marker in the selected scope (a project's Hub
+configuration may instead be in `.config/hub/`, which then holds the
+definition), and removal can
+withdraw an owned definition after the marker is gone. Where both markers
+exist, the picker preselects Hub.
 Install/repair checks the trusted executable's catalog before publication. The
 child has a 30-second deadline and a 16 MiB stdout limit; timeout kills and reaps
 the direct child and reports an error without changing agent configuration.

@@ -24,9 +24,13 @@ pub fn defaults_on_path(
     if options.remove || !options.agents.is_empty() {
         return options.agents.clone();
     }
-    // In a Box project, Box publishes to each developer's agents.
-    if agents::box_definition_path(context, options.scope, false).is_ok() {
-        return vec![agents::BOX.to_owned()];
+    // In a Hub or Box project, that host publishes to each developer's
+    // agents; Hub, Box's successor, wins where both are configured.
+    if let Some(host) = agents::CONFIG_HOSTS
+        .iter()
+        .find(|host| agents::definition_path(host, context, options.scope, false).is_ok())
+    {
+        return vec![host.id.to_owned()];
     }
     agents::CATALOG
         .iter()

@@ -38,7 +38,8 @@ pub struct SetupPolicy {
     pub authorization: Authorization,
     /// Set the project root as cwd only for adapters with a supported cwd field.
     pub project_directory: bool,
-    /// Refuse Box and native agents together for install/repair; allow removal.
+    /// Refuse a configuration host (Hub or Box) together with native agents or
+    /// the other host for install/repair; allow removal.
     pub exclusive_routes: bool,
     /// Payload-free trace observer. The returned guard lives through the bounded
     /// catalog check; the observer cannot replace execution or its validation.

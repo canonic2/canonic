@@ -20,7 +20,7 @@ enum Kind {
     Server,
     Approvals,
     PromptHook,
-    /// A whole Box server definition.
+    /// A whole Hub or Box server definition.
     Definition,
 }
 
@@ -318,9 +318,14 @@ fn prepare_inputs(
         if !selected.insert(id.as_str()) {
             continue;
         }
-        if id == agents::BOX {
-            plan.changes
-                .extend(definition_change(context, options, &plan.approved, inputs)?);
+        if let Some(host) = agents::config_host(id) {
+            plan.changes.extend(definition_change(
+                host,
+                context,
+                options,
+                &plan.approved,
+                inputs,
+            )?);
             continue;
         }
         let mut destination = agents::destination(context, id, options.scope)?;
@@ -372,14 +377,15 @@ fn validate_policy(options: &Options, policy: SetupPolicy) -> Result<()> {
             "Setup requires terminal confirmation; unattended authorization is unavailable",
         ));
     }
-    if policy.exclusive_routes
-        && !options.remove
-        && options.agents.iter().any(|a| a == agents::BOX)
-        && options.agents.iter().any(|a| a != agents::BOX)
-    {
-        return Err(Error::selection(
-            "Choose only --agent box, or native agents without Box; both routes would publish competing server entries",
-        ));
+    if policy.exclusive_routes && !options.remove {
+        let mut ids = options.agents.iter().map(String::as_str);
+        if let Some(host) = ids.clone().find_map(agents::config_host)
+            && ids.any(|a| a != host.id)
+        {
+            return Err(Error::selection(
+                "Choose only --agent hub, only --agent box, or native agents alone; combined routes would publish competing server entries",
+            ));
+        }
     }
     Ok(())
 }
@@ -478,16 +484,17 @@ fn server_change(
     }))
 }
 
-/// The change to the product's Box definition: a whole file setup owns, or
-/// `None` when removing one that is absent and unowned. An unowned file with
+/// The change to the product's Hub or Box definition: a whole file setup owns,
+/// or `None` when removing one that is absent and unowned. An unowned file with
 /// exactly the desired text is taken over; any other unowned file refuses.
 fn definition_change(
+    host: &agents::ConfigHost,
     context: &Context,
     options: &Options,
     approved: &[String],
     inputs: &Inputs,
 ) -> Result<Option<Change>> {
-    let path = agents::box_definition_path(context, options.scope, options.remove)?;
+    let path = agents::definition_path(host, context, options.scope, options.remove)?;
     let before = inputs.read(&path)?;
     let ledger = ledger(context, &path);
     let ledger_before = inputs.read(&ledger)?;
@@ -496,7 +503,7 @@ fn definition_change(
     let after = if options.remove {
         None
     } else {
-        Some(agents::box_definition(context, options.scope, approved)?)
+        Some(agents::definition(host, context, options.scope, approved)?)
     };
     let desired = after.clone().map(Value::String);
     match &owned {
@@ -533,7 +540,7 @@ fn definition_change(
                 json!({"command":agents::launch_command(context, options.scope)?,"args":context.arguments}),
             )
         },
-        agents: vec![agents::BOX.into()],
+        agents: vec![host.id.into()],
         record: storage::Record {
             version: 1,
             path: path.clone(),
@@ -656,8 +663,8 @@ fn approved(context: &Context, options: &Options, inputs: &Inputs) -> (Vec<Strin
 /// Approvals an earlier setup left for the selected agents: Codex's owned
 /// entry, or Claude Code's rules once setup owns any of them.
 fn current_approvals(context: &Context, options: &Options, inputs: &Inputs) -> Option<Vec<String>> {
-    if options.agents.iter().any(|a| a == agents::BOX)
-        && let Ok(path) = agents::box_definition_path(context, options.scope, options.remove)
+    if let Some(host) = options.agents.iter().find_map(|a| agents::config_host(a))
+        && let Ok(path) = agents::definition_path(host, context, options.scope, options.remove)
         && inputs
             .read(&ledger(context, &path))
             .ok()
@@ -832,8 +839,13 @@ pub fn human(value: &Value) -> String {
     if let Some(note) = value["launch_note"].as_str() {
         lines.push(format!("  {note}"));
     }
+    let scope = if value["scope"] == "user" {
+        Scope::User
+    } else {
+        Scope::Project
+    };
     for row in value["registrations"].as_array().into_iter().flatten() {
-        registration_lines(row, &mut lines);
+        registration_lines(row, scope, &mut lines);
     }
     approval_lines(&value["tool_approvals"], &mut lines);
     for row in value["other_scopes"].as_array().into_iter().flatten() {
@@ -865,7 +877,7 @@ pub fn human(value: &Value) -> String {
 }
 
 /// One registration's path, change, launch command and notes.
-fn registration_lines(row: &Value, lines: &mut Vec<String>) {
+fn registration_lines(row: &Value, scope: Scope, lines: &mut Vec<String>) {
     lines.push(format!(
         "  {}: {} {}",
         row["agents"]
@@ -911,10 +923,10 @@ fn registration_lines(row: &Value, lines: &mut Vec<String>) {
             lines.push(format!("    Folder: {directory}"));
         }
     }
-    if row["definition"].is_string() {
-        lines.push(
-            "    Box publishes it to each developer's agents: run `box setup`, or `box config sync` after a change".into(),
-        );
+    if row["definition"].is_string()
+        && let Some(host) = row["agents"][0].as_str().and_then(agents::config_host)
+    {
+        lines.push(format!("    {}", host.publish(scope)));
     }
     if let Some(rules) = row["permission_rules"].as_array() {
         lines.push(format!(
@@ -994,7 +1006,7 @@ fn permissions(
     Ok(canonic_tui_kit::runtime::prompts::choose_many(
         "Tool permissions",
         &format!(
-            "{source} Marked tools run without asking in Claude Code, Codex and the agents Box publishes to; unmarked tools ask each time. Other agents keep their own approval settings."
+            "{source} Marked tools run without asking in Claude Code, Codex and the agents Hub or Box publishes to; unmarked tools ask each time. Other agents keep their own approval settings."
         ),
         choices,
         &marked,
@@ -1041,15 +1053,16 @@ fn inspect_inputs(
         detail: String::new(),
         unavailable: None,
     };
-    if id == agents::BOX {
-        match agents::box_definition_path(context, scope, remove) {
+    if let Some(host) = agents::config_host(id) {
+        match agents::definition_path(host, context, scope, remove) {
             Ok(path) => {
                 choice.detail = match inputs.read(&path) {
-                    Ok(Some(_)) => "defined for Box; ownership checked on review",
-                    Ok(None) => "Box publishes it to each developer's agents",
-                    Err(_) => "unreadable definition",
-                }
-                .into();
+                    Ok(Some(_)) => {
+                        format!("defined for {}; ownership checked on review", host.name)
+                    }
+                    Ok(None) => format!("{} publishes it to each developer's agents", host.name),
+                    Err(_) => "unreadable definition".into(),
+                };
             }
             Err(error) => choice.unavailable = Some(error.to_string()),
         }

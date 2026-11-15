@@ -4,15 +4,21 @@ use std::fs;
 
 #[test]
 fn reset_tool_permissions_restores_defaults_without_changing_saved_choices_on_preview() {
-    for agent in ["box", "claude", "codex"] {
+    for agent in ["hub", "box", "claude", "codex"] {
         for saved in [vec![], vec!["app_uninstall".to_owned()]] {
             let (_temp, context) = fixture();
             let context = context.with_tools(vec![
                 Tool::new("observe", "Inspect.", true),
                 Tool::new("app_uninstall", "Remove an app.", false),
             ]);
-            fs::create_dir_all(context.root.join(".box")).unwrap();
-            fs::write(context.root.join(".box/config.yml"), "schema_version: 1\n").unwrap();
+            for host in [".hub", ".box"] {
+                fs::create_dir_all(context.root.join(host)).unwrap();
+                fs::write(
+                    context.root.join(host).join("config.yml"),
+                    "schema_version: 1\n",
+                )
+                .unwrap();
+            }
             // Establish owned permission settings before saving a revised set.
             prepare(&context, &options(&[agent]))
                 .unwrap()
@@ -91,15 +97,29 @@ fn shared_policy_exclusive_routes_refuse_install_and_allow_combined_removal() {
     };
     fs::create_dir_all(context.root.join(".box")).unwrap();
     fs::write(context.root.join(".box/config.yml"), "schema_version: 1\n").unwrap();
-    for agents in [&["box", "codex"][..], &["codex", "box"]] {
+    fs::create_dir_all(context.root.join(".hub")).unwrap();
+    fs::write(context.root.join(".hub/config.yml"), "schema_version: 1\n").unwrap();
+    for agents in [
+        &["box", "codex"][..],
+        &["codex", "box"],
+        &["hub", "codex"],
+        &["codex", "hub"],
+        &["hub", "box"],
+    ] {
         assert!(matches!(
             prepare_with_policy(&context, &options(agents), policy),
             Err(Error::InvalidSelection(_))
         ));
     }
+    // Hub, Box's successor, is the default where both are configured.
+    assert_eq!(
+        detection::defaults_on_path(&context, &Options::default(), &[]),
+        ["hub"]
+    );
     let definition = context.root.join(".box/mcp/acme.yml");
     let native = context.root.join(".codex/config.toml");
     assert!(!definition.exists());
+    assert!(!context.root.join(".hub/mcp/acme.yml").exists());
     assert!(!native.exists());
     assert!(!context.state.exists());
     for agent in ["box", "codex"] {
@@ -131,34 +151,36 @@ fn shared_policy_exclusive_routes_refuse_install_and_allow_combined_removal() {
 }
 
 #[test]
-fn shared_policy_box_removal_does_not_require_the_configuration_marker() {
-    let (_temp, context) = fixture();
-    let marker = context.root.join(".box/config.yml");
-    fs::create_dir_all(marker.parent().unwrap()).unwrap();
-    fs::write(&marker, "schema_version: 1\n").unwrap();
-    let selected = options(&["box"]);
-    prepare(&context, &selected).unwrap().apply().unwrap();
-    let definition = context.root.join(".box/mcp/acme.yml");
-    assert!(definition.is_file());
-    fs::remove_file(&marker).unwrap();
-    assert!(matches!(
-        prepare(&context, &selected),
-        Err(Error::InvalidSelection(_))
-    ));
-    let session = PreparationSession::new(&context, Scope::Project, SetupPolicy::default());
-    assert!(session.inspect("box", true).unavailable.is_none());
-    let removal = Options {
-        remove: true,
-        ..selected
-    };
-    session.prepare(&removal).unwrap().apply().unwrap();
-    assert!(!definition.exists());
-    assert!(!marker.exists());
-    let ledger = context
-        .state
-        .join("acme")
-        .join(format!("{}.json", storage::identity(&definition)));
-    assert!(!ledger.exists());
+fn shared_policy_config_host_removal_does_not_require_the_configuration_marker() {
+    for agent in ["hub", "box"] {
+        let (_temp, context) = fixture();
+        let marker = context.root.join(format!(".{agent}/config.yml"));
+        fs::create_dir_all(marker.parent().unwrap()).unwrap();
+        fs::write(&marker, "schema_version: 1\n").unwrap();
+        let selected = options(&[agent]);
+        prepare(&context, &selected).unwrap().apply().unwrap();
+        let definition = context.root.join(format!(".{agent}/mcp/acme.yml"));
+        assert!(definition.is_file());
+        fs::remove_file(&marker).unwrap();
+        assert!(matches!(
+            prepare(&context, &selected),
+            Err(Error::InvalidSelection(_))
+        ));
+        let session = PreparationSession::new(&context, Scope::Project, SetupPolicy::default());
+        assert!(session.inspect(agent, true).unavailable.is_none());
+        let removal = Options {
+            remove: true,
+            ..selected
+        };
+        session.prepare(&removal).unwrap().apply().unwrap();
+        assert!(!definition.exists());
+        assert!(!marker.exists());
+        let ledger = context
+            .state
+            .join("acme")
+            .join(format!("{}.json", storage::identity(&definition)));
+        assert!(!ledger.exists());
+    }
 }
 
 #[test]
@@ -403,41 +425,60 @@ fn discovery_defaults_follow_catalog_scope_and_explicit_intent() {
 }
 
 #[test]
-fn box_setup_writes_an_owned_definition_that_box_accepts() {
+fn config_host_setup_writes_an_owned_definition_the_host_accepts() {
+    // Hub and Box are offered first, Hub before Box.
+    assert_eq!(
+        agents::CATALOG
+            .iter()
+            .take(2)
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>(),
+        ["hub", "box"]
+    );
+    for (agent, init) in [("hub", "hub setup"), ("box", "box config init")] {
+        config_host_definition_round_trip(agent, init);
+    }
+}
+
+fn config_host_definition_round_trip(agent: &str, init: &str) {
     let (_temp, context) = fixture();
     let context = context.with_tools(vec![
         Tool::new("observe", "Read the screen.", true),
         Tool::new("app_uninstall", "Remove an app.", false),
     ]);
-    let options = options(&["box"]);
-    // Box is offered first, and only where Box is configured.
-    assert_eq!(agents::CATALOG.first().map(|(id, _)| *id), Some("box"));
+    let options = options(&[agent]);
+    // Each host is offered only where it is configured.
     let error = prepare(&context, &options).err().unwrap();
     assert!(matches!(error, Error::InvalidSelection(_)), "{error}");
-    assert!(error.to_string().contains("box config init"), "{error}");
-    fs::create_dir_all(context.root.join(".box")).unwrap();
-    fs::write(context.root.join(".box/config.yml"), "schema_version: 1\n").unwrap();
+    assert!(error.to_string().contains(init), "{error}");
+    let folder = context.root.join(format!(".{agent}"));
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("config.yml"), "schema_version: 1\n").unwrap();
     assert_eq!(
         detection::defaults_on_path(&context, &Options::default(), &[]),
-        ["box"]
+        [agent]
     );
 
     let plan = prepare(&context, &options).unwrap();
-    assert_eq!(
-        plan.review()["tool_approvals"]["approved"],
-        json!(["observe"])
-    );
+    let review = plan.review();
+    assert_eq!(review["tool_approvals"]["approved"], json!(["observe"]));
+    assert_eq!(review["registrations"][0]["agents"], json!([agent]));
+    let report = human(&review);
+    assert!(report.contains(&format!("run `{agent} setup`")), "{report}");
+    assert!(!report.contains("--scope user"), "{report}");
     plan.apply().unwrap();
-    let path = context.root.join(".box/mcp/acme.yml");
+    let path = folder.join("mcp/acme.yml");
     let text = fs::read_to_string(&path).unwrap();
-    // The definition Box reads: the PATH command, its own arguments, the
+    // The definition the host reads: the PATH command, its own arguments, the
     // approved tool allowed and the other left to ask.
     assert_eq!(
         text,
-        "# Written by `acme mcp setup --agent box`; rerun it to change this file.\n\
-         schema_version: 1\n\
-         connection:\n  transport: stdio\n  command: \"acme\"\n  args: [\"mcp\", \"serve\"]\n\
-         permissions:\n  tools:\n    \"observe\": allow\n"
+        format!(
+            "# Written by `acme mcp setup --agent {agent}`; rerun it to change this file.\n\
+             schema_version: 1\n\
+             connection:\n  transport: stdio\n  command: \"acme\"\n  args: [\"mcp\", \"serve\"]\n\
+             permissions:\n  tools:\n    \"observe\": allow\n"
+        )
     );
 
     // Rerunning changes nothing and keeps the earlier approvals.
@@ -469,6 +510,83 @@ fn box_setup_writes_an_owned_definition_that_box_accepts() {
     prepare(&context, &options).unwrap().apply().unwrap();
     prepare(&context, &removal).unwrap().apply().unwrap();
     assert!(!path.exists());
+
+    // A personal definition is published by the host's user-scope commands,
+    // since they default to the project.
+    let user_folder = context.home.join(format!(".{agent}"));
+    fs::create_dir_all(&user_folder).unwrap();
+    fs::write(user_folder.join("config.yml"), "schema_version: 1\n").unwrap();
+    let user = Options {
+        scope: Scope::User,
+        ..options
+    };
+    let report = human(&prepare(&context, &user).unwrap().review());
+    assert!(
+        report.contains(&format!("run `{agent} setup --scope user`")),
+        "{report}"
+    );
+    if agent == "box" {
+        assert!(
+            report.contains("`box config sync --scope user` after a change"),
+            "{report}"
+        );
+    }
+}
+
+#[test]
+fn hub_uses_its_grouped_folder_when_the_root_folder_has_no_marker() {
+    let (_temp, context) = fixture();
+    let grouped = context.root.join(".config/hub");
+    fs::create_dir_all(&grouped).unwrap();
+    fs::write(grouped.join("config.yml"), "schema_version: 1\n").unwrap();
+    // Hub's runtime state alone does not configure the root folder.
+    fs::create_dir_all(context.root.join(".hub/local")).unwrap();
+    assert_eq!(
+        detection::defaults_on_path(&context, &Options::default(), &[]),
+        ["hub"]
+    );
+    let selected = options(&["hub"]);
+    prepare(&context, &selected).unwrap().apply().unwrap();
+    let definition = grouped.join("mcp/acme.yml");
+    assert!(definition.is_file());
+    assert!(!context.root.join(".hub/mcp").exists());
+    let removal = Options {
+        remove: true,
+        ..selected.clone()
+    };
+    prepare(&context, &removal).unwrap().apply().unwrap();
+    assert!(!definition.exists());
+
+    // A root marker takes precedence, as in Hub's own discovery.
+    fs::write(context.root.join(".hub/config.yml"), "schema_version: 1\n").unwrap();
+    prepare(&context, &selected).unwrap().apply().unwrap();
+    assert!(context.root.join(".hub/mcp/acme.yml").is_file());
+    assert!(!definition.exists());
+
+    // Box has no grouped folder, and user scope always uses the home folder.
+    let (_temp, context) = fixture();
+    fs::create_dir_all(context.root.join(".config/box")).unwrap();
+    fs::write(
+        context.root.join(".config/box/config.yml"),
+        "schema_version: 1\n",
+    )
+    .unwrap();
+    fs::create_dir_all(context.home.join(".config/hub")).unwrap();
+    fs::write(
+        context.home.join(".config/hub/config.yml"),
+        "schema_version: 1\n",
+    )
+    .unwrap();
+    assert!(prepare(&context, &options(&["box"])).is_err());
+    let user = Options {
+        scope: Scope::User,
+        ..options(&["hub"])
+    };
+    let error = prepare(&context, &user).err().unwrap();
+    assert!(
+        error.to_string().contains("hub setup --scope user"),
+        "{error}"
+    );
 }
 
 #[cfg(unix)]
@@ -716,12 +834,19 @@ fn prompt_hook_composes_with_existing_claude_permission_ownership_and_codex_home
 }
 
 #[test]
-fn prompt_hook_box_definition_carries_only_supported_agent_events_and_removes_owned_file() {
+fn prompt_hook_host_definition_carries_only_supported_agent_events_and_removes_owned_file() {
+    for agent in ["hub", "box"] {
+        prompt_hook_host_definition(agent);
+    }
+}
+
+fn prompt_hook_host_definition(agent: &str) {
     let (_temp, mut context) = fixture();
     context.prompt_hook = Some(prompt_hook("acme hook user-prompt"));
-    fs::create_dir_all(context.root.join(".box")).unwrap();
-    fs::write(context.root.join(".box/config.yml"), "schema_version: 1\n").unwrap();
-    let mut options = options(&["box"]);
+    let folder = context.root.join(format!(".{agent}"));
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("config.yml"), "schema_version: 1\n").unwrap();
+    let mut options = options(&[agent]);
     let plan = prepare(&context, &options).unwrap();
     assert!(
         plan.review()["registrations"][0]["definition"]
@@ -730,7 +855,7 @@ fn prompt_hook_box_definition_carries_only_supported_agent_events_and_removes_ow
             .contains("user_prompt_submit")
     );
     plan.apply().unwrap();
-    let path = context.root.join(".box/mcp/acme.yml");
+    let path = folder.join("mcp/acme.yml");
     let value: Value = serde_saphyr::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(value["hooks"][0]["agents"], json!(["claude", "codex"]));
     assert_eq!(value["hooks"][0]["events"], json!(["user_prompt_submit"]));
@@ -742,7 +867,7 @@ fn prompt_hook_box_definition_carries_only_supported_agent_events_and_removes_ow
     assert!(!path.exists());
     assert!(
         !context.root.join(".codex/hooks.json").exists(),
-        "Box owns native publication"
+        "{agent} owns native publication"
     );
 }
 
@@ -894,14 +1019,14 @@ fn codex_prompt_hook_respects_inline_config_hooks() {
 }
 
 #[test]
-fn prompt_hook_commands_with_box_tokens_refuse_before_writes() {
+fn prompt_hook_commands_with_expansion_tokens_refuse_before_writes() {
     for token in ["{project}", "{agent}", "{event}", "{command}"] {
         let (_temp, mut context) = fixture();
         context.prompt_hook = Some(prompt_hook(&format!("acme hook {token}")));
         let Err(Error::Invalid(message)) = prepare(&context, &options(&["claude", "codex"])) else {
             panic!("{token} must refuse");
         };
-        assert!(message.contains("Box expands them"));
+        assert!(message.contains("Hub and Box expand them"));
         assert!(!context.root.join(".mcp.json").exists());
     }
 }
