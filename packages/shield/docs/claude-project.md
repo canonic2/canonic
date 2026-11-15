@@ -126,8 +126,9 @@ Setup refuses `--agent hub` when the project has no `.hub/config.yml` (run
 `hub setup` first) and `--agent box` when it has no `.box/config.yml` (run
 `box config init` first). Neither is available on Windows, because the hook
 commands are POSIX shell commands. Shield adopts either file when it already
-holds exactly what Shield would write, and never replaces one it did not
-write.
+has the generated connection, hooks and permissions. YAML formatting and
+known retired tool entries do not change that contract. Shield preserves an
+unrecognized definition for review.
 
 `shield status` lists the host with the other integrations, and `shield doctor`
 reports a file as missing or changed. `shield mcp setup --agent hub` or
@@ -141,8 +142,12 @@ Moving or copying a project on the same developer account can reuse a current
 private setup receipt. Shield keeps the shared definition portable and can
 refresh its exact owned local pin when the running binary's contents still match
 the review. A fresh worktree or clone with a committed definition and no
-recorded setup registers it on first use, Hub's before Box's. Edited
-definitions need their normal setup review. The host continues to own the
+recorded setup registers it on first use, Hub's before Box's. Formatting changes
+and entries for the retired `cache_prepare`, `policy_receipt` and `policy_repair`
+tools retain that registration. Omitted current tools get no automatic approval;
+changed launchers, hooks, unknown tools or a foreign binary pin need review.
+Replacing the executable retries recognition at its next runtime startup.
+The host continues to own the
 agent files it publishes; copying a workspace needs no Shield enrollment
 callback in Hub or Box.
 

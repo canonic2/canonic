@@ -349,141 +349,294 @@ fn grep_argv(arguments: &[String], cwd: &Path) -> Targets {
     }
 }
 
-// Ambient ripgrep configuration is trusted; --no-config is optional. Explicit
-// helper and link-following flags remain outside this model.
-// Ignore-file negations and -g globs can include hidden entries, so
-// their footprints conservatively include every existing descendant. --files
-// lists names only: without --no-ignore, every existing descendant counts, so
-// an existing excluded directory still blocks it. Without a path, ripgrep walks
-// the working directory. Explicit --hidden is modeled only for filename listings.
-// Types (-t) select after hidden entries are skipped in content searches.
+// Ripgrep 15 accepts options anywhere before `--`: short clusters (`-inw`),
+// attached values (`-g*.rs`, `-A3`) and `--name=VALUE`. Ambient configuration
+// is trusted; --no-config is optional. Helper programs (--pre, --pre-glob,
+// -z/--search-zip, --hostname-bin), link following (-L/--follow) and options
+// ripgrep does not define stay outside this model. Pattern and ignore files
+// (-f, --ignore-file) are read like explicit files. Ignore-file negations,
+// -g/--iglob globs and --hidden can include hidden entries, so their footprints
+// include every existing descendant. --files lists names only: without
+// --no-ignore, every existing descendant counts, so an existing excluded
+// directory still blocks it. Without a path, ripgrep walks the working
+// directory. Types (-t) select after hidden entries are skipped.
 fn rg_argv(arguments: &[String], cwd: &Path) -> Targets {
     rg_model(arguments, cwd).0
 }
 
-/// A modeled content search naming only its pattern, which ripgrep runs on
-/// its standard input when that is a pipe instead of walking the directory.
+/// A modeled content search naming no path, which ripgrep runs on its
+/// standard input when that is a pipe instead of walking the directory. It
+/// still reads its pattern and ignore files; see [`rg_auxiliary_reads`].
+/// With `-f -` the patterns take the standard input, so ripgrep walks the
+/// working directory instead.
 pub(super) fn rg_pattern_only(arguments: &[String], cwd: &Path) -> bool {
     let (targets, listing) = rg_model(arguments, cwd);
-    targets.complete && !listing && rg_operands(arguments) == Some(1)
+    let request = rg_parse(arguments);
+    targets.complete
+        && !listing
+        && request.pattern != RgPattern::Input
+        && request.paths().is_empty()
 }
 
-/// Ripgrep's modeled options that consume a value.
-const RG_VALUED: &str = "-g -t -T -C -A -B -m -d --glob --type --type-not --context         --after-context --before-context --max-count --max-depth";
+/// The files ripgrep reads besides its search paths: `-f` pattern files and
+/// `--ignore-file` files, as submitted.
+pub(super) fn rg_auxiliary_reads(arguments: &[String]) -> Vec<String> {
+    rg_parse(arguments)
+        .reads
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
 
-/// Operands after ripgrep's modeled options, or None when an option is not
-/// modeled. Valued options consume their value, as in `rg_model`.
-fn rg_operands(arguments: &[String]) -> Option<usize> {
-    let mut arguments = arguments.iter();
-    while let Some(argument) = arguments.next() {
-        if argument == "--" {
-            return Some(arguments.count());
-        }
-        if argument == "-" || !argument.starts_with('-') {
-            return Some(1 + arguments.count());
-        }
-        if RG_VALUED.split_whitespace().any(|item| item == argument) {
-            arguments.next()?;
+/// Ripgrep's short flags that change neither what it reads nor which program runs.
+const RG_SHORT_FLAGS: &str = "sivxFUPSawbnN0opqHIcl";
+/// Ripgrep's short options taking a value, with their long names.
+const RG_SHORT_VALUED: [(char, &str); 14] = [
+    ('e', "regexp"),
+    ('f', "file"),
+    ('E', "encoding"),
+    ('m', "max-count"),
+    ('j', "threads"),
+    ('g', "glob"),
+    ('d', "max-depth"),
+    ('t', "type"),
+    ('T', "type-not"),
+    ('A', "after-context"),
+    ('B', "before-context"),
+    ('C', "context"),
+    ('M', "max-columns"),
+    ('r', "replace"),
+];
+/// Ripgrep's long options taking a value.
+const RG_LONG_VALUED: &str = "regexp file pre pre-glob dfa-size-limit encoding engine max-count \
+    regex-size-limit threads glob iglob ignore-file max-depth max-filesize type type-not type-add \
+    type-clear after-context before-context color colors context context-separator \
+    field-context-separator field-match-separator hostname-bin hyperlink-format max-columns \
+    path-separator replace sort sortr generate";
+/// Ripgrep's long flags that change neither what it reads nor which program
+/// runs. Their `--no-` negations, and the positive forms of `--no-` flags here,
+/// only restore defaults.
+const RG_LONG_FLAGS: &str = "case-sensitive crlf fixed-strings ignore-case invert-match \
+    line-regexp mmap multiline multiline-dotall no-unicode null-data pcre2 smart-case \
+    stop-on-nonmatch text word-regexp auto-hybrid-regex no-pcre2-unicode binary \
+    glob-case-insensitive ignore-file-case-insensitive no-ignore-dot no-ignore-exclude \
+    no-ignore-files no-ignore-global no-ignore-parent no-ignore-vcs no-require-git \
+    one-file-system block-buffered byte-offset column heading include-zero line-buffered \
+    line-number no-line-number max-columns-preview null only-matching passthru pretty quiet \
+    trim vimgrep with-filename no-filename sort-files count count-matches files-with-matches \
+    files-without-match json debug no-ignore-messages no-messages stats trace no-config";
+/// Ripgrep's options that run other programs, follow links or print
+/// information without searching, which no target describes.
+const RG_UNMODELED: &str =
+    "pre pre-glob hostname-bin follow search-zip help version type-list pcre2-version generate";
+
+/// The filters that decide which descendants a ripgrep walk can reach.
+#[derive(Default)]
+struct RgFilters {
+    hidden: bool,
+    no_ignore: bool,
+    /// Glob selections override ripgrep's other filters, hidden ones too.
+    selects: bool,
+}
+
+impl RgFilters {
+    /// Without ignore files, globs or hidden entries, the walk skips hidden
+    /// descendants; otherwise it can reach every existing one.
+    fn descendants(&self) -> Descendants {
+        if self.no_ignore && !self.selects && !self.hidden {
+            Descendants::Visible
+        } else {
+            Descendants::Present
         }
     }
-    Some(0)
+}
+
+/// Where a ripgrep search takes its patterns from.
+#[derive(Default, PartialEq)]
+enum RgPattern {
+    /// The first operand.
+    #[default]
+    Operand,
+    /// `-e` or a `-f` file, so every operand is a path.
+    Option,
+    /// `-f -`: the standard input holds patterns, not searched data.
+    Input,
+}
+
+/// A ripgrep request parsed as ripgrep does. `modeled` is false for an
+/// option outside the model or a missing value.
+#[derive(Default)]
+struct RgRequest<'a> {
+    operands: Vec<&'a str>,
+    pattern: RgPattern,
+    files: bool,
+    filters: RgFilters,
+    reads: Vec<&'a str>,
+    unrestricted: u8,
+    modeled: bool,
+}
+
+impl<'a> RgRequest<'a> {
+    /// The searched paths: every operand for a listing or an option-given
+    /// pattern, otherwise the operands after the pattern.
+    fn paths(&self) -> &[&'a str] {
+        if self.files || self.pattern != RgPattern::Operand {
+            &self.operands
+        } else {
+            self.operands.get(1..).unwrap_or_default()
+        }
+    }
+
+    fn value(&mut self, name: &str, value: Option<&'a str>) {
+        let Some(value) = value else {
+            self.modeled = false;
+            return;
+        };
+        match name {
+            "regexp" if self.pattern == RgPattern::Operand => self.pattern = RgPattern::Option,
+            "regexp" => {}
+            "file" if value == "-" => self.pattern = RgPattern::Input,
+            "file" => {
+                if self.pattern == RgPattern::Operand {
+                    self.pattern = RgPattern::Option;
+                }
+                self.reads.push(value);
+            }
+            // --no-ignore leaves these files in force, and their `!` lines can
+            // include hidden entries, as globs can.
+            "ignore-file" => {
+                self.reads.push(value);
+                self.filters.selects = true;
+            }
+            "glob" | "iglob" => self.filters.selects = true,
+            _ if listed(RG_UNMODELED, name) => self.modeled = false,
+            _ => {}
+        }
+    }
+
+    fn flag(&mut self, name: &str) {
+        let known = |name: &str| listed(RG_LONG_FLAGS, name) || listed(RG_LONG_VALUED, name);
+        match name {
+            "hidden" => self.filters.hidden = true,
+            "no-hidden" => self.filters.hidden = false,
+            "no-ignore" => self.filters.no_ignore = true,
+            "ignore" => self.filters.no_ignore = false,
+            "files" => self.files = true,
+            "unrestricted" => self.unrestricted(),
+            _ if listed(RG_UNMODELED, name) => self.modeled = false,
+            _ if listed(RG_LONG_FLAGS, name) => {}
+            _ if name
+                .strip_prefix("no-")
+                .is_some_and(|base| known(base) || listed(RG_UNMODELED, base)) => {}
+            _ if known(&format!("no-{name}")) => {}
+            _ => self.modeled = false,
+        }
+    }
+
+    /// Each -u lifts one filter level: ignore files, then hidden entries,
+    /// then binary files.
+    fn unrestricted(&mut self) {
+        self.unrestricted = self.unrestricted.saturating_add(1);
+        self.filters.no_ignore = true;
+        self.filters.hidden |= self.unrestricted >= 2;
+    }
+}
+
+fn listed(list: &str, word: &str) -> bool {
+    list.split_whitespace().any(|item| item == word)
+}
+
+fn rg_parse(arguments: &[String]) -> RgRequest<'_> {
+    let mut request = RgRequest {
+        modeled: true,
+        ..RgRequest::default()
+    };
+    let mut options = true;
+    let mut words = arguments.iter().map(String::as_str);
+    while let Some(word) = words.next() {
+        if !options || word == "-" || !word.starts_with('-') {
+            request.operands.push(word);
+        } else if word == "--" {
+            options = false;
+        } else if let Some(long) = word.strip_prefix("--") {
+            let (name, attached) = long
+                .split_once('=')
+                .map_or((long, None), |(name, value)| (name, Some(value)));
+            if listed(RG_LONG_VALUED, name) {
+                let value = attached.or_else(|| words.next());
+                request.value(name, value);
+            } else if attached.is_some() {
+                request.modeled = false;
+            } else {
+                request.flag(name);
+            }
+        } else {
+            for (index, flag) in word.char_indices().skip(1) {
+                if let Some((_, name)) = RG_SHORT_VALUED.iter().find(|(short, _)| *short == flag) {
+                    let attached = &word[index + flag.len_utf8()..];
+                    // ripgrep drops one `=` before an attached value: `-f=x` reads `x`.
+                    let attached = attached.strip_prefix('=').unwrap_or(attached);
+                    let value = if attached.is_empty() {
+                        words.next()
+                    } else {
+                        Some(attached)
+                    };
+                    request.value(name, value);
+                    break;
+                }
+                match flag {
+                    '.' => request.filters.hidden = true,
+                    'u' => request.unrestricted(),
+                    _ if RG_SHORT_FLAGS.contains(flag) => {}
+                    _ => request.modeled = false,
+                }
+            }
+        }
+    }
+    request
 }
 
 pub(super) fn rg_model(arguments: &[String], cwd: &Path) -> (Targets, bool) {
-    const FLAGS: &str = "inlcqFwxSH";
-    const LONG: &str = "--no-config --no-ignore --no-follow --no-hidden --files --smart-case         --ignore-case --line-number --files-with-matches --count --fixed-strings --word-regexp         --no-heading --with-filename";
-    const VALUED: &str = RG_VALUED;
-    const SELECTING: &str = "-g --glob";
-    let listed = |list: &str, word: &str| list.split_whitespace().any(|item| item == word);
-    let mut operands = Vec::new();
-    let mut options = true;
-    let mut terminated = false;
-    let mut no_ignore = false;
-    let mut files = false;
-    let mut hidden = false;
-    // Glob and type selections override ripgrep's other filters, hidden ones too.
-    let mut selects = false;
-    let mut complete = cfg!(any(unix, windows));
-    let mut arguments = arguments.iter();
-    while let Some(argument) = arguments.next() {
-        let long = argument
-            .split_once('=')
-            .map_or(argument.as_str(), |(name, _)| name);
-        // Options precede operands; a later option-like word is unmodeled.
-        if !options {
-            complete &= terminated || !argument.starts_with('-');
-            operands.push(argument);
-        } else if argument == "--" {
-            options = false;
-            terminated = true;
-        } else if argument == "-" || !argument.starts_with('-') {
-            options = false;
-            operands.push(argument);
-        } else if argument == "--hidden" {
-            hidden = true;
-        } else if listed(LONG, argument) {
-            no_ignore |= argument == "--no-ignore";
-            files |= argument == "--files";
-        } else if listed(VALUED, argument) {
-            selects |= listed(SELECTING, argument);
-            complete &= arguments.next().is_some();
-        } else if argument.starts_with("--") && listed(VALUED, long) && long != argument {
-            selects |= listed(SELECTING, long);
-        } else if !argument.starts_with("--")
-            && argument.len() > 2
-            && listed(VALUED, &argument[..2])
-        {
-            selects |= listed(SELECTING, &argument[..2]);
-        } else {
-            complete &= portable_flags(argument, FLAGS);
-        }
-    }
-    complete &= !hidden || files;
-    let paths: Vec<&String> = if files {
-        operands
-    } else {
-        complete &= !operands.is_empty();
-        operands.into_iter().skip(1).collect()
+    let request = rg_parse(arguments);
+    let mut complete = cfg!(any(unix, windows)) && request.modeled;
+    // A content search needs a pattern, positional or given by -e/-f.
+    complete &=
+        request.files || request.pattern != RgPattern::Operand || !request.operands.is_empty();
+    let paths = match request.paths() {
+        [] => &["."][..],
+        paths => paths,
     };
-    let current = ".".to_owned();
-    let paths = if paths.is_empty() {
-        vec![&current]
-    } else {
-        paths
-    };
+    let descendants = request.filters.descendants();
     let mut unavailable = None;
-    let items = paths
-        .into_iter()
-        .map(|operand| {
-            let path = super::join_operand(cwd, operand, &mut complete);
-            let metadata = fs::metadata(&path);
-            let directory = metadata.as_ref().is_ok_and(std::fs::Metadata::is_dir);
-            let issue = rg_metadata_issue(&metadata);
-            if let Some(code) = issue {
-                unavailable.get_or_insert_with(|| (path.clone(), code));
-            }
-            complete &= operand != "-" && (directory || metadata.is_ok_and(|m| m.is_file()));
-            Target {
-                action: "read",
-                role: "source",
-                path,
-                recursive: directory,
-                descendants: if no_ignore && !selects && !hidden {
-                    Descendants::Visible
-                } else {
-                    Descendants::Present
-                },
-                follow: true,
-            }
-        })
-        .collect();
+    let mut items = Vec::new();
+    for (operand, searched) in paths
+        .iter()
+        .map(|path| (*path, true))
+        .chain(request.reads.iter().map(|path| (*path, false)))
+    {
+        let path = super::join_operand(cwd, operand, &mut complete);
+        let metadata = fs::metadata(&path);
+        let directory = searched && metadata.as_ref().is_ok_and(std::fs::Metadata::is_dir);
+        if let Some(code) = rg_metadata_issue(&metadata) {
+            unavailable.get_or_insert_with(|| (path.clone(), code));
+        }
+        complete &= operand != "-" && (directory || metadata.is_ok_and(|m| m.is_file()));
+        items.push(Target {
+            action: "read",
+            role: "source",
+            path,
+            recursive: directory,
+            descendants,
+            follow: true,
+        });
+    }
     (
         Targets {
             items,
             complete,
             unavailable,
         },
-        files,
+        request.files,
     )
 }
 

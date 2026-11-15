@@ -3,6 +3,15 @@ use super::{Checkpoint, Context, Error, FOREIGN_WITHDRAWAL, Failure, text, views
 use crate::review::storage::Store;
 use serde_json::{Value, json};
 use std::path::Path;
+mod paging;
+
+pub(super) fn rules_page(
+    context: &Context,
+    views: &mut Views,
+    args: &Value,
+) -> Result<Value, Error> {
+    paging::rules(context, views, args)
+}
 
 /// Resolve rules against an explicit retained capture or the active generation.
 pub(super) fn rules(
@@ -57,13 +66,7 @@ fn proposal(context: &Context, views: &mut Views, id: &str) -> Result<Value, Err
         value["before_candidate_id"] = Value::Null;
         value["after_candidate_id"] = Value::Null;
         value["capture_availability"] = json!("historical_capture_unavailable");
-        value["authorization_events"] = json!(
-            state
-                .authorization_events
-                .iter()
-                .filter(|event| event["links"]["proposal_id"] == id)
-                .collect::<Vec<_>>()
-        );
+        preview_events(&mut value, &state.authorization_events, id);
         return Ok(value);
     }
     let after_revision =
@@ -105,18 +108,74 @@ fn proposal(context: &Context, views: &mut Views, id: &str) -> Result<Value, Err
     )?;
     value["before_candidate_id"] = json!(before);
     value["after_candidate_id"] = json!(after);
-    value["authorization_events"] = json!(
-        state
-            .authorization_events
-            .iter()
-            .filter(|event| event["links"]["proposal_id"] == id)
-            .collect::<Vec<_>>()
-    );
+    preview_events(&mut value, &state.authorization_events, id);
     Ok(value)
+}
+
+fn preview_events(value: &mut Value, events: &[Value], id: &str) {
+    let matching = events
+        .iter()
+        .filter(|event| event["links"]["proposal_id"] == id);
+    let total = matching.clone().count();
+    value["authorization_events"] = json!(matching.take(16).collect::<Vec<_>>());
+    value["authorization_events_total"] = json!(total);
+    value["authorization_events_list"] =
+        json!({"tool":"policy_show","proposal_id":id,"section":"authorization_events"});
 }
 pub(super) fn policy(context: &Context, views: &mut Views, args: &Value) -> Result<Value, Error> {
     if let Some(id) = text(args, "proposal_id")? {
-        return proposal(context, views, id);
+        if text(args, "section")? == Some("authorization_events") {
+            let state = crate::review::project::checkpoint(context)?;
+            if !state.proposals.iter().any(|row| row.id == id) {
+                return Err(Error::Missing);
+            }
+            let events: Vec<_> = state
+                .authorization_events
+                .iter()
+                .filter(|event| event["links"]["proposal_id"] == id)
+                .collect();
+            let page = crate::review::page::borrowed(
+                context,
+                "policy_show",
+                args,
+                events.iter().copied(),
+                |event| {
+                    event
+                        .get("event_id")
+                        .cloned()
+                        .unwrap_or_else(|| event.clone())
+                },
+                Value::clone,
+                "policy_show with proposal_id",
+            )?;
+            return Ok(
+                json!({"proposal_id":id,"authorization_events":page.items,"authorization_events_total":events.len(),"next_cursor":page.next_cursor}),
+            );
+        }
+        if text(args, "section")?.is_some() {
+            return Err(Error::Invalid("invalid proposal section"));
+        }
+        if args.get("cursor").is_some() {
+            return Err(Error::InvalidCursor);
+        }
+        let mut value = proposal(context, views, id)?;
+        crate::review::page::preview(
+            &mut value,
+            "authorization_events",
+            json!({"tool":"policy_show","proposal_id":id,"section":"authorization_events"}),
+        );
+        let candidate = value["after_candidate_id"].clone();
+        let total = value["rules"]["rules"].as_array().map_or(0, Vec::len);
+        let route = json!({"tool":"rule_list","candidate_id":candidate});
+        crate::review::page::preview(&mut value["rules"], "rules", route.clone());
+        value["rules_total"] = json!(total);
+        value["rules_list"] = route;
+        return Ok(value);
+    }
+    if text(args, "section")?.is_some() {
+        return Err(Error::Invalid(
+            "authorization_events section requires proposal_id",
+        ));
     }
     let status = text(args, "status")?.unwrap_or("pending");
     if ![
@@ -131,42 +190,28 @@ pub(super) fn policy(context: &Context, views: &mut Views, args: &Value) -> Resu
     {
         return Err(Error::Invalid("invalid proposal status"));
     }
-    let mut state = crate::review::project::captured_inspection(context)?;
-    let active_id = views.active_readonly(context)?;
-    let captured = views.get(&active_id)?;
-    if crate::review::candidate_identity(&state.candidates["project"])
-        != crate::review::candidate_identity(&captured.candidate)
-    {
-        return Err(Error::StaleSnapshot);
-    }
-    state.candidates.insert(
-        "project".into(),
-        crate::review::inspection::source::policy(
-            &state.candidates["project"],
-            &state.policy_revision,
-        )?,
-    );
-    let mut value = crate::review::inspect_recorded(context, &state)?;
-    let mut rows: Vec<_> = state
-        .proposals
-        .iter()
-        .map(crate::review::model::Proposal::summary)
-        .collect();
+    let state = crate::review::project::checkpoint(context)?;
+    let mut value = json!({"policy_revision":state.policy_revision});
     let agent = text(args, "agent")?;
     let session = text(args, "session_id")?;
-    rows.retain(|p| {
-        p["status"] == status
-            && agent.is_none_or(|a| crate::review::history::agent_matches(p, a))
-            && session.is_none_or(|s| p["provenance"]["session_id"] == s)
+    let rows = state.proposals.iter().filter(|p| {
+        p.status == status
+            && agent.is_none_or(|a| p.provenance["agent"] == a)
+            && session.is_none_or(|s| p.provenance["session_id"] == s)
     });
-    value
-        .as_object_mut()
-        .ok_or(Error::Invalid("invalid policy view"))?
-        .remove("pending_configuration");
-    value["proposals"] = json!(rows);
+    let page = crate::review::page::borrowed(
+        context,
+        "policy_show",
+        args,
+        rows,
+        |row| json!(row.id),
+        crate::review::model::Proposal::summary,
+        "policy_show with proposal_id",
+    )?;
+    value["proposals"] = json!(page.items);
+    value["next_cursor"] = json!(page.next_cursor);
     value["capture_freshness"] = json!("unchecked; apply revalidates exact reviewed files");
-    value["policy_candidate_id"] = json!(active_id);
-    views.page("policy_show", args, value, "proposals")
+    Ok(value)
 }
 /// Withdraw this interaction's live review; a closed one returns its summary.
 pub(super) fn withdraw(

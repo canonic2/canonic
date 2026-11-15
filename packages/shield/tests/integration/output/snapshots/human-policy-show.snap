@@ -4,7 +4,5 @@ expression: text
 ---
 $ shield policy show
 --- terminal
-Active policy · revision [SHORT-DIGEST]
-  acme/parent 0.1.0 · strict
-  acme/test 0.1.0 · strict
+No proposals are waiting.
 --- exit 0

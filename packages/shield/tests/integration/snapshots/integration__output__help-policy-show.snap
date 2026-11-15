@@ -4,12 +4,18 @@ expression: "String::from_utf8_lossy(&output.get_output().stdout)"
 ---
 Show the policy, live reviews and history settings
 
-Usage: shield policy show [OPTIONS]
+Usage: shield policy show [OPTIONS] [PROPOSAL_ID]
+
+Arguments:
+  [PROPOSAL_ID]
 
 Options:
       --project <PROJECT>              Select a project; otherwise discover the nearest enrolled ancestor
+      --section <SECTION>              [possible values: authorization_events]
+      --cursor <CURSOR>                Continue with the previous result's opaque cursor
       --json                           Print one JSON result; commands that change policy refuse JSON mode
       --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+      --limit <N>                      Maximum rows, from 1 to 100
       --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
       --cache-dir <CACHE_DIR>          Folder for this project's compiled policy plans, chosen at init or MCP setup
       --config <PATH>                  Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml

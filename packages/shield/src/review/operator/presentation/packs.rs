@@ -3,9 +3,6 @@ use super::{label, plural, policy, short};
 use serde_json::Value;
 use std::{collections::BTreeMap, fmt::Write};
 
-/// Rules listed by `info` before the rest are counted.
-const MAX_SHOWN_RULES: usize = 10;
-
 /// One installed pack: identity, version, profile and how it was selected.
 fn installed(row: &Value, rows: &[Value]) -> String {
     let mut text = format!(
@@ -85,20 +82,37 @@ pub(super) fn show(value: &Value) -> String {
 }
 
 pub(super) fn rule_count(artifact: &Value) -> String {
-    let bodies = artifact["rules"].as_array().map_or(0, Vec::len);
-    let groups = artifact["invocations"]
-        .as_object()
-        .map_or(0, serde_json::Map::len);
+    let bodies = artifact["rules_total"]
+        .as_u64()
+        .or_else(|| artifact["rule_count"].as_u64())
+        .and_then(|total| usize::try_from(total).ok())
+        .unwrap_or_else(|| artifact["rules"].as_array().map_or(0, Vec::len));
+    if artifact["view"] == "summary" {
+        return plural(bodies, "rule", "rules");
+    }
+    let groups = artifact["invocations_total"]
+        .as_u64()
+        .and_then(|total| usize::try_from(total).ok())
+        .unwrap_or_else(|| {
+            artifact["invocations"]
+                .as_object()
+                .map_or(0, serde_json::Map::len)
+        });
     if groups == 0 {
         return plural(bodies, "rule", "rules");
     }
-    let members = artifact["command_sets"]
-        .as_object()
-        .into_iter()
-        .flat_map(serde_json::Map::values)
-        .filter_map(Value::as_object)
-        .map(serde_json::Map::len)
-        .sum();
+    let members = artifact["command_set_members_total"]
+        .as_u64()
+        .and_then(|total| usize::try_from(total).ok())
+        .unwrap_or_else(|| {
+            artifact["command_sets"]
+                .as_object()
+                .into_iter()
+                .flat_map(serde_json::Map::values)
+                .filter_map(Value::as_object)
+                .map(serde_json::Map::len)
+                .sum()
+        });
     let mut summary = format!(
         "{} · {}",
         plural(bodies, "rule body", "rule bodies"),
@@ -155,6 +169,29 @@ pub(super) fn info(value: &Value) -> String {
     if value["description"].is_string() {
         let _ = writeln!(output, "{}", label(&value["description"]));
     }
+    if let Some(groups) = value["permission_groups"].as_array() {
+        for group in groups {
+            let _ = writeln!(
+                output,
+                "  {} · {} rules",
+                label(&group["description"]),
+                label(&group["rule_count"])
+            );
+        }
+        let _ = writeln!(
+            output,
+            "Inspect rule pages: {}",
+            super::cli_command([
+                "shield".into(),
+                "pack".into(),
+                "info".into(),
+                value["reference"].as_str().unwrap_or_default().into(),
+                "--view".into(),
+                "rules".into()
+            ])
+        );
+        return output;
+    }
     let versions: Vec<_> = value["packs"]
         .as_array()
         .into_iter()
@@ -167,20 +204,13 @@ pub(super) fn info(value: &Value) -> String {
         versions.join(", "),
         label(&value["compatibility"]["engines"]["shield"])
     );
-    for rule in rules.iter().take(MAX_SHOWN_RULES) {
+    for rule in &rules {
         let _ = writeln!(
             output,
             "  {}  {} · {}",
             label(&rule["id"]),
             policy::rule_conditions(rule),
             policy::decision(&rule["profile_decisions"])
-        );
-    }
-    if rules.len() > MAX_SHOWN_RULES {
-        let _ = writeln!(
-            output,
-            "  … {} more; use --json for all rules",
-            rules.len() - MAX_SHOWN_RULES
         );
     }
     let _ = writeln!(

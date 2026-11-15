@@ -5,6 +5,6 @@ expression: text
 $ shield rule list
 --- terminal
 2 rules in the active policy
-  status    allow  git status · project rule
   mutation  deny   acme write · acme/test
+  status    allow  git status · project rule
 --- exit 0

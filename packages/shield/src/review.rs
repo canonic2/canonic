@@ -21,6 +21,7 @@ pub(crate) mod observations;
 pub(crate) mod operator;
 pub(crate) mod pack_updates;
 mod packs;
+mod page;
 pub(crate) mod path_access;
 pub(crate) mod preparation_tasks;
 pub(crate) mod progress;
@@ -134,8 +135,10 @@ pub(crate) enum Error {
     StateRecreated,
     #[error("diagnostic candidate is unavailable in this connection")]
     CandidateUnavailable,
-    #[error("cursor is unavailable or belongs to another query")]
-    CursorUnavailable,
+    #[error("invalid_cursor: restart without a cursor")]
+    InvalidCursor,
+    #[error("item exceeds the transport limit; read it alone with {0}")]
+    PageItemTooLarge(String),
     #[error("connection capacity reached; reconnect to continue")]
     Overloaded,
     #[error("compiled policy folder unusable; run shield doctor to find the cause")]
@@ -231,7 +234,8 @@ impl Error {
             Self::StaleSnapshot => "stale-snapshot",
             Self::StateRecreated => "state-recreated",
             Self::CandidateUnavailable => "candidate_unavailable",
-            Self::CursorUnavailable => "cursor_unavailable",
+            Self::InvalidCursor => "invalid_cursor",
+            Self::PageItemTooLarge(_) => "item_too_large",
             Self::Overloaded => "overloaded",
             Self::CacheUnavailable => "cache-unavailable",
             Self::PolicyFiles(_) => "policy-files-invalid",
@@ -474,19 +478,6 @@ pub(in crate::review) fn inspect_prepared(
         return Err(Error::StaleSnapshot);
     }
     inspect_metadata(context, state, evaluator.effective())
-}
-
-pub(in crate::review) fn inspect_recorded(
-    context: &Context,
-    state: &model::State,
-) -> Result<Value, Error> {
-    let candidate = state
-        .candidates
-        .get("project")
-        .filter(|_| state.candidates.len() == 1)
-        .ok_or(Error::Invalid("project candidate is required"))?;
-    let effective = configuration::recorded_effective(candidate, &state.policy_revision)?;
-    inspect_metadata(context, state, &effective)
 }
 
 fn inspect_metadata(

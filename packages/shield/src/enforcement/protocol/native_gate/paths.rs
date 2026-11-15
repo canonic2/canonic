@@ -820,9 +820,16 @@ fn search_protection(
         &cwd.to_string_lossy(),
         None,
     );
-    // Searching only a pattern after a pipe reads the pipe, not files.
+    // Searching only a pattern after a pipe reads the pipe instead of walking
+    // files, but still reads its pattern and ignore files, including attached
+    // forms such as -fPATH that argument inspection does not name.
     if piped && observer.search_reads_input() {
-        return (Protection::None, None);
+        return strictest(
+            observer
+                .search_auxiliary_reads()
+                .iter()
+                .map(|path| inspect_path(path, cwd, guard, Access::Read)),
+        );
     }
     let mut finding = strictest(
         crate::layout::state_directories(root)

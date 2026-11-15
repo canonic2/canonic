@@ -80,6 +80,10 @@ fn an_unenrolled_agent_is_routed_to_setup_instead_of_request_approve() {
     );
     assert!(!reason(&refused).contains(super::OFFER), "{refused}");
     assert!(
+        reason(&refused).contains("approval connection is not registered"),
+        "{refused}"
+    );
+    assert!(
         agent_context(&refused).contains("shield mcp setup"),
         "{refused}"
     );
@@ -96,6 +100,105 @@ fn an_unenrolled_agent_is_routed_to_setup_instead_of_request_approve() {
 
     let offered = shell(root, "codex", "acme config set codex");
     assert!(offered_id(&offered).is_some(), "{offered}");
+}
+
+#[test]
+fn an_older_hub_definition_restores_approval_in_a_fresh_checkout() {
+    let (_folder, context) = policy_fixture();
+    let root = Path::new(&context.project_root);
+    fs::create_dir_all(root.join(".hub/mcp")).unwrap();
+    fs::create_dir_all(root.join(".hub/local/mcp")).unwrap();
+    fs::write(root.join(".hub/config.yml"), "schema_version: 1\n").unwrap();
+    let shared = include_str!("../../../../fixtures/hub-shield-definition.yml");
+    fs::write(root.join(".hub/mcp/shield.yml"), shared).unwrap();
+    let local = json!({"schema_version":1,"connection":{
+        "transport":"stdio","command":std::env::current_exe().unwrap(),
+        "args":["mcp","serve","--project",".","--agent","{agent}"]}})
+    .to_string();
+    fs::write(root.join(".hub/local/mcp/shield.yml"), &local).unwrap();
+    review::update_operator_fixture(&context, |operator| {
+        operator["integration"] = Value::Null;
+        // Simulate a negative result cached by the previous implementation.
+        let old = json!([
+            "hub",
+            shared,
+            Some(&local),
+            std::env::current_exe().unwrap()
+        ])
+        .to_string();
+        operator["box_adoption_checked"] = json!(crate::policy::fingerprint(old.as_bytes()));
+    })
+    .unwrap();
+
+    let command = "acme config set codex";
+    let refused = shell(root, "codex", command);
+    let id = offered_id(&refused).expect("a fresh checkout keeps Shield's approval route");
+    assert!(review::cli::registered(&review::open(root).unwrap(), "codex").unwrap());
+    assert_eq!(
+        request_approve(root, "codex", &id, true)["data"]["status"],
+        "approved"
+    );
+    let retry = shell(root, "codex", command);
+    assert!(agent_context(&retry).contains("allowed once"), "{retry}");
+    assert_eq!(
+        fs::read_to_string(root.join(".hub/mcp/shield.yml")).unwrap(),
+        shared
+    );
+    assert_eq!(
+        fs::read_to_string(root.join(".hub/local/mcp/shield.yml")).unwrap(),
+        local
+    );
+}
+
+#[test]
+fn concurrent_native_hooks_capture_fresh_sessions_without_spurious_refusals() {
+    let (_folder, context) = fixture();
+    let root = Path::new(&context.project_root);
+    let rules = crate::policy::rules::document(&[
+        json!({"id":"acme-read","decision":"allow","conditions":{
+            "domain":"argv","executable":"acme","arguments":{"kind":"exact","values":["read"]}}}),
+    ])
+    .unwrap()
+    .to_string();
+    fs::write(root.join(".shield/rules.yml"), rules).unwrap();
+    fs::write(
+        root.join(".shield/config.yml"),
+        "schema_version: 1\npacks: []\nrules: rules.yml\n",
+    )
+    .unwrap();
+    // Every batch races to capture a new conversation; no command is executed.
+    for batch in 0..8 {
+        let barrier = std::sync::Barrier::new(4);
+        std::thread::scope(|scope| {
+            let calls: Vec<_> = (0..4)
+                .map(|call| {
+                    let barrier = &barrier;
+                    scope.spawn(move || {
+                        barrier.wait();
+                        hook(
+                            root,
+                            "codex",
+                            Event::Before,
+                            &json!({
+                        "hook_event_name":"PreToolUse","tool_name":"Bash",
+                        "tool_use_id":format!("acme-{batch}-{call}"),
+                        "session_id":format!("acme-fresh-{batch}"),"cwd":root,
+                        "tool_input":{"command":"acme read"}}),
+                        )
+                    })
+                })
+                .collect();
+            for call in calls {
+                let reply = call.join().unwrap();
+                assert!(
+                    reply["hookSpecificOutput"]
+                        .get("permissionDecision")
+                        .is_none(),
+                    "{reply}"
+                );
+            }
+        });
+    }
 }
 
 fn mcp(root: &Path, agent: &str) -> review::Context {
@@ -225,6 +328,160 @@ fn codex_settings_change_recovers_in_the_session_once() {
     let again = shell(root, "codex", command);
     assert_eq!(again["hookSpecificOutput"]["permissionDecision"], "deny");
     assert_ne!(offered_id(&again).unwrap(), id);
+}
+
+/// Gate keeps Git metadata in an entry folder and sets core.worktree. The
+/// command is evaluated by the hook here; no approved merge is executed.
+#[test]
+fn a_gate_fast_forward_that_changes_policy_can_be_approved_once() {
+    let (_folder, context) = fixture();
+    let root = Path::new(&context.project_root);
+    let entry = root.join(".gate/repos/private");
+    fs::create_dir_all(&entry).unwrap();
+    let metadata = entry.join(".git");
+    let git = |arguments: &[&str]| {
+        let output = crate::test_support::git()
+            .current_dir(root)
+            .args(["--git-dir", metadata.to_str().unwrap()])
+            .args(["-c", "user.name=Acme", "-c", "user.email=acme@example.com"])
+            .args(["-c", "commit.gpgsign=false"])
+            .args(arguments)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{arguments:?}: {output:?}");
+        String::from_utf8(output.stdout).unwrap().trim().to_owned()
+    };
+    git(&["init", "-q"]);
+    git(&["config", "core.worktree", root.to_str().unwrap()]);
+    git(&["add", "--", ".shield/config.yml"]);
+    git(&["commit", "-q", "-m", "Acme base"]);
+    let base = git(&["rev-parse", "HEAD"]);
+    let config = fs::read_to_string(root.join(".shield/config.yml")).unwrap();
+    fs::write(
+        root.join(".shield/config.yml"),
+        format!("{config}# Acme update\n"),
+    )
+    .unwrap();
+    git(&["commit", "-q", "-am", "Acme policy update"]);
+    let incoming = git(&["rev-parse", "HEAD"]);
+    git(&["reset", "--hard", &base]);
+
+    let command = format!(
+        "git -C .gate/repos/private merge --ff-only {}",
+        &incoming[..7]
+    );
+    let refused = shell(root, "codex", &command);
+    let id = offered_id(&refused).expect("Git policy changes offer Shield's approval form");
+    assert_eq!(refused["hookSpecificOutput"]["permissionDecision"], "deny");
+    let question =
+        review::hook_approval::confirmation(&mcp(root, "codex"), &json!({"request_id":id}))
+            .unwrap();
+    assert!(question.contains(&command), "{question}");
+    assert!(
+        question.contains("replace Shield's policy files"),
+        "{question}"
+    );
+    assert!(
+        question.contains("turn off Shield's protection"),
+        "{question}"
+    );
+    assert!(
+        !question.contains("does not change your policy"),
+        "{question}"
+    );
+    assert_eq!(
+        request_approve(root, "codex", &id, false)["error"]["code"],
+        "operator_review_required"
+    );
+    assert_eq!(
+        request_approve(root, "codex", &id, true)["data"]["status"],
+        "approved"
+    );
+
+    // A changed target cannot spend the grant for the reviewed command.
+    let other = shell(
+        root,
+        "codex",
+        "git -C .gate/repos/private merge --ff-only acme-other",
+    );
+    assert_eq!(other["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert_ne!(offered_id(&other).unwrap(), id);
+    let retry = shell(root, "codex", &command);
+    assert!(agent_context(&retry).contains("allowed once"), "{retry}");
+    let again = shell(root, "codex", &command);
+    assert_eq!(again["hookSpecificOutput"]["permissionDecision"], "deny");
+    assert_ne!(offered_id(&again).unwrap(), id);
+    assert_eq!(git(&["rev-parse", "HEAD"]), base);
+}
+
+#[test]
+fn git_policy_approval_does_not_open_direct_writes_or_fixed_state() {
+    let (_folder, context) = fixture();
+    let root = Path::new(&context.project_root);
+    for command in [
+        "git checkout HEAD -- .shield/config.yml",
+        "git merge --ff-only acme; touch .shield/state/acme",
+        "git merge --ff-only acme; rm -rf .shield",
+    ] {
+        let refused = shell(root, "codex", command);
+        assert_eq!(
+            refused["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{refused}"
+        );
+        assert!(offered_id(&refused).is_none(), "{refused}");
+    }
+    // Unknown Git writes have the same explicit warning and confirmation;
+    // approval does not turn their uncertainty into an ordinary policy Allow.
+    let command = "git stash pop";
+    let id = offered_id(&shell(root, "codex", command)).unwrap();
+    assert_eq!(
+        request_approve(root, "codex", &id, true)["data"]["status"],
+        "approved"
+    );
+    assert!(agent_context(&shell(root, "codex", command)).contains("allowed once"));
+}
+
+#[test]
+fn a_git_policy_change_beside_a_settings_write_keeps_both_warnings() {
+    let (_folder, context) = fixture();
+    let root = Path::new(&context.project_root);
+    let command = "git stash pop; cat acme.txt > .claude/settings.json";
+    let refused = shell(root, "codex", command);
+    let id = offered_id(&refused).expect("both effects can be opened once");
+    let question =
+        review::hook_approval::confirmation(&mcp(root, "codex"), &json!({"request_id":id}))
+            .unwrap();
+    assert!(question.contains("Changing agent settings"), "{question}");
+    assert!(question.contains("not a frozen Git revision"), "{question}");
+}
+
+#[test]
+fn a_git_policy_deny_override_also_warns_about_replacing_policy() {
+    let folder = assert_fs::TempDir::new().unwrap();
+    let rules = crate::policy::rules::document(&[
+        json!({"id":"acme-git-deny","decision":"deny","conditions":{
+            "domain":"argv","executable":"git","arguments":{"kind":"any"}}}),
+    ])
+    .unwrap()
+    .to_string();
+    let bundle = Bundle::capture(
+        "schema_version: 1\npacks: []\nrules: rules.yml\n",
+        &[],
+        Some(&rules),
+    )
+    .unwrap();
+    let context = review::mcp::initialize_fixture(folder.path(), &bundle);
+    let root = Path::new(&context.project_root);
+    enroll(root);
+    let id = offered_id(&shell(root, "codex", "git stash pop")).unwrap();
+    let question =
+        review::hook_approval::confirmation(&mcp(root, "codex"), &json!({"request_id":id}))
+            .unwrap();
+    assert!(question.contains("acme-git-deny"), "{question}");
+    assert!(
+        question.contains("turn off Shield's protection"),
+        "{question}"
+    );
 }
 
 #[test]

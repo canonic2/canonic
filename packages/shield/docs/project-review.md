@@ -195,9 +195,16 @@ approval, or a Codex tool Shield cannot check, the agent can ask you in the
 same conversation. It calls Shield's `request_approve` tool, and your agent
 shows Shield's form with the exact action, the folder, why Shield blocked it
 and what allowing it can do. If you accept, the agent repeats the identical
-request once within five minutes; anything else is still blocked, and your
-policy and protection settings do not change. If you decline, the agent
+request once within five minutes; anything else is still blocked. Approval
+creates no standing permission. If you decline, the agent
 continues without it.
+
+A Git merge, branch switch or other Git operation that may replace Shield's
+policy files also offers this route when Codex cannot ask at its hook. The form
+warns that the command may change permissions or turn off protection. You approve
+the exact submitted command once, including its options and working directory;
+the Git revision and resulting policy edit are not frozen or previewed. Direct
+file writes to Shield policy still require a policy proposal.
 
 When one task needs several blocked requests, such as deleting the same branch
 in two repositories, the agent can ask about up to eight of them in one form,
@@ -208,8 +215,8 @@ nothing and returns `retry_arguments` for a prefix that fits, plus
 confirmation. The agent can also ask about just one request, for example
 `request_approve({"request_id":"hook-request-acme-1"})`, using an ID from its refusal.
 The form starts by saying how many one-time permissions accepting creates and
-how many override a deny or change agent settings, then shows each request in
-full. Accepting allows each listed request once; the agent repeats each one
+how many override a deny, change agent settings or may replace Shield policy,
+then shows each request in full. Accepting allows each listed request once; the agent repeats each one
 identically within five minutes, in any order. If any request in the group can
 no longer be allowed, for example because it expired or your policy changed
 while the form was open, nothing is allowed.

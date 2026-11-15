@@ -41,6 +41,17 @@ fn help_text_for_every_command() {
         ("help-request-deny", vec!["request", "deny", "--help"]),
         ("help-history", vec!["history", "--help"]),
         ("help-history-list", vec!["history", "list", "--help"]),
+        (
+            "help-session-grant-list",
+            vec!["session-grant", "list", "--help"],
+        ),
+        ("help-suggestion", vec!["suggestion", "--help"]),
+        ("help-suggestion-list", vec!["suggestion", "list", "--help"]),
+        ("help-policy-draft", vec!["policy-draft", "--help"]),
+        (
+            "help-policy-draft-list",
+            vec!["policy-draft", "list", "--help"],
+        ),
         ("help-history-show", vec!["history", "show", "--help"]),
         ("help-protection", vec!["protection", "--help"]),
         ("help-protection-set", vec!["protection", "set", "--help"]),

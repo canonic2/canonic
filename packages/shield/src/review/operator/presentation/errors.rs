@@ -189,7 +189,15 @@ fn classify(command: &PublicCommand, error: &Error) -> Report {
             "An inspection or proposal cannot write this change to the policy files.",
             &["Review the pending proposal with shield policy review in an operator terminal."],
         ),
-        Error::CandidateUnavailable | Error::CursorUnavailable => Report::new(
+        Error::PageItemTooLarge(_) => Report::detailed(
+            "Item exceeds the transport limit",
+            "Read the item alone with the named tool.",
+            &[],
+        ),
+        Error::InvalidCursor => {
+            Report::new("Invalid cursor", "Restart the list without a cursor.", &[])
+        }
+        Error::CandidateUnavailable => Report::new(
             "Inspection result is no longer available",
             "The retained diagnostic handle cannot be used for this query.",
             &["Run the inspection again to obtain current results."],
@@ -510,7 +518,7 @@ fn missing(command: &PublicCommand) -> Report {
             Some(request),
         ),
         PublicCommand::History(History {
-            command: HistoryCommand::Show { entry },
+            command: HistoryCommand::Show { entry, .. },
         }) => (
             "History entry is not available",
             "This entry is not retained in the selected project's history.",
@@ -540,7 +548,7 @@ fn missing(command: &PublicCommand) -> Report {
             Some(reference),
         ),
         PublicCommand::Pack(Pack {
-            command: PackCommand::Add { reference, .. } | PackCommand::Info { reference },
+            command: PackCommand::Add { reference, .. } | PackCommand::Info { reference, .. },
         }) => (
             "Permission pack was not found",
             "No available release matches this reference in the selected source.",
@@ -758,7 +766,7 @@ mod tests {
     #[test]
     fn every_classification_fits_the_four_line_budget() {
         let commands = [
-            PublicCommand::Status,
+            PublicCommand::Status(Default::default()),
             pack(PackCommand::Add {
                 reference: "acme/git".into(),
                 profile: None,
@@ -851,7 +859,7 @@ mod tests {
             )),
             Error::ApprovalRequired,
             Error::CandidateUnavailable,
-            Error::CursorUnavailable,
+            Error::InvalidCursor,
             Error::Overloaded,
             Error::Capacity {
                 kind: crate::review::CapacityKind::RunRequests,

@@ -10,9 +10,11 @@ const MAX_REQUESTS: usize = 256;
 /// Review deferrals a project retains; deferrals survive reconnects.
 pub(super) const MAX_DEFERRALS: usize = 1024;
 
-pub(super) fn list(context: &Context, session: Option<&str>) -> Value {
+fn collected(
+    context: &Context,
+    session: Option<&str>,
+) -> (Value, Result<crate::review::model::State, Error>) {
     let root = Path::new(&context.project_root);
-    let roots = crate::agents::machine_roots(root);
     let collected = observations::asked_requests(root, session, MAX_REQUESTS);
     let mut rows: Vec<Value> = Vec::new();
     let mut capped = false;
@@ -46,17 +48,6 @@ pub(super) fn list(context: &Context, session: Option<&str>) -> Value {
                 if let Some(web) = web {
                     row["suggested_change"] = web;
                 }
-                let portable = if row.get("suggested_change").is_some() {
-                    crate::policy::rules::portability::check(
-                        &row["suggested_change"]["rule"],
-                        &roots,
-                    )
-                } else {
-                    crate::policy::rules::portability::check_request(&row["request"], &roots)
-                };
-                if let Err(reason) = portable {
-                    row["not_portable"] = json!(reason);
-                }
                 capped |= !push(&mut rows, request, &identity, row, context);
             }
         }
@@ -76,14 +67,37 @@ pub(super) fn list(context: &Context, session: Option<&str>) -> Value {
         }
     }
     let state = Store::open(root).and_then(|store| store.read_checkpoint());
-    annotate(&mut rows, &state, session);
-    json!({"session_id":session,"requests":rows,
+    let data = json!({"session_id":session,"requests":rows,
         "coverage":{"complete":collected.complete && !capped && state.is_ok(),"available":collected.available && state.is_ok(),
             "scope":"retained history","collection_limit":MAX_REQUESTS,
             "reason":if !collected.available || state.is_err(){"history or review state unavailable"} else if capped {"review item limit reached"} else if !collected.complete {"history scan or retained request limit reached"} else {"complete retained window"}},
         "next_action":"Review eligible groups after the task. Listing or deferral grants no permission. Incomplete evidence is not an empty successful review.",
         "authoring_examples":super::schemas::proposal_examples(),
-        "approval_guidance":crate::agents::review::for_context(context).guidance().ask})
+        "approval_guidance":crate::agents::review::for_context(context).guidance().ask});
+    (data, state)
+}
+
+pub(super) fn list_page(context: &Context, args: &Value) -> Result<Value, Error> {
+    let session = super::text(args, "session_id")?.or(context.session_id.as_deref());
+    let (data, state) = collected(context, session);
+    let roots = crate::agents::machine_roots(Path::new(&context.project_root));
+    let query = crate::review::page::query(context, "suggestion_list", args);
+    crate::review::page::bounded_with("suggestion_list", &query, data, "requests", |mut row| {
+        if row.get("request").is_some() {
+            let portable = if row.get("suggested_change").is_some() {
+                crate::policy::rules::portability::check(&row["suggested_change"]["rule"], &roots)
+            } else {
+                crate::policy::rules::portability::check_request(&row["request"], &roots)
+            };
+            if let Err(reason) = portable {
+                row["not_portable"] = json!(reason);
+            }
+        }
+        let mut page = [row];
+        annotate(&mut page, &state, session);
+        let [row] = page;
+        row
+    })
 }
 
 fn annotate(
@@ -191,7 +205,7 @@ pub(super) fn dismiss(
         .as_array()
         .filter(|ids| !ids.is_empty() && ids.len() <= 16)
         .ok_or(Error::Invalid("dismiss requires 1-16 review IDs"))?;
-    let current = list(context, session);
+    let (current, _state) = collected(context, session);
     if ids.iter().any(|id| {
         !current["requests"]
             .as_array()

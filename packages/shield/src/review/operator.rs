@@ -14,7 +14,9 @@ mod terminal;
 #[cfg(test)]
 mod tests;
 
-use super::{Context, Error, approvals, history, project};
+#[cfg(test)]
+use super::history;
+use super::{Context, Error, approvals, project};
 use crate::cli::{Cli, PublicCommand};
 use serde_json::{Value, json};
 use std::{path::Path, process::ExitCode};
@@ -65,7 +67,7 @@ pub(crate) fn run(input: &Cli) -> ExitCode {
             if input.json {
                 println!("{value}");
             } else {
-                presentation::print(&input.command, &value);
+                presentation::print(input, &value);
             }
             if let Some(context) = context.as_ref() {
                 pack_update_notice(input, &value, context);
@@ -160,15 +162,20 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
             .map(Output::independent);
         }
         PublicCommand::Registry(registry) if registry.scope == Scope::User => {
-            if matches!(registry.command, RegistryCommand::List) {
-                return super::registries::list(None).map(Output::independent);
+            if let RegistryCommand::List { page } = &registry.command {
+                let mut args = page.arguments();
+                args["scope"] = json!("user");
+                return super::registries::list_page(None, &args).map(Output::independent);
             }
             return registries::mutate(None, &super::registries::fetcher(), registry, input.json)
                 .map(Output::independent);
         }
         _ => {}
     }
-    let context = if matches!(input.command, PublicCommand::Status | PublicCommand::Doctor) {
+    let context = if matches!(
+        input.command,
+        PublicCommand::Status(_) | PublicCommand::Doctor(_)
+    ) {
         match project_with(&start, super::open_diagnostics) {
             Ok(context) => context,
             // A folder with policy files and no review state, such as a new
@@ -240,12 +247,52 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
         PublicCommand::SessionGrant(command) => {
             session_grants::run(&context, &command.command, input.json)
         }
-        PublicCommand::Status => project::status(&context),
+        PublicCommand::Status(args) => {
+            let mut values = args.page.arguments();
+            if let Some(section) = &args.section {
+                values["section"] = json!(section);
+            }
+            super::page::validate(&context, "status", &values)?;
+            super::page::sections(&context, "status", &values, project::status(&context)?)
+        }
+        PublicCommand::Suggestion(crate::cli::public::SuggestionCommand::List {
+            session_id,
+            page,
+        }) => {
+            let mut args = page.arguments();
+            if let Some(id) = session_id {
+                args["session_id"] = json!(id);
+            }
+            super::mcp::operator_list(&context, "suggestion_list", &args)
+        }
+        PublicCommand::PolicyDraft(crate::cli::public::DraftCommand::List { page }) => {
+            super::mcp::operator_list(&context, "policy_draft_list", &page.arguments())
+        }
         PublicCommand::Enable => administer(&context, "enable", &json!({}), input.json),
         PublicCommand::Disable => administer(&context, "disable", &json!({}), input.json),
-        PublicCommand::Doctor => project::doctor(&context),
+        PublicCommand::Doctor(args) => {
+            let mut values = args.page.arguments();
+            if let Some(section) = &args.section {
+                values["section"] = json!(section);
+            }
+            super::page::validate(&context, "doctor", &values)?;
+            super::page::sections(&context, "doctor", &values, project::doctor(&context)?)
+        }
         PublicCommand::Policy(policy) => match &policy.command {
-            PolicyCommand::Show => project::policy(&context),
+            PolicyCommand::Show {
+                proposal_id,
+                section,
+                page,
+            } => {
+                let mut args = page.arguments();
+                if let Some(id) = proposal_id {
+                    args["proposal_id"] = json!(id);
+                }
+                if let Some(section) = section {
+                    args["section"] = json!(section);
+                }
+                super::mcp::operator_list(&context, "policy_show", &args)
+            }
             PolicyCommand::Review => rules::policy(&context, input.json),
             PolicyCommand::Reject {
                 proposal_id,
@@ -260,18 +307,52 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
             command => diagnostics::diagnostic(&context, command),
         },
         PublicCommand::Rule(rule) => match &rule.command {
-            RuleCommand::List => super::inspection::rules(&context, None),
+            RuleCommand::List {
+                page,
+                section,
+                pack_selector,
+            } => {
+                let mut args = page.arguments();
+                if let Some(section) = section {
+                    args["section"] = json!(section);
+                }
+                if let Some(selector) = pack_selector {
+                    args["pack_selector"] = json!(selector);
+                }
+                super::mcp::operator_list(&context, "rule_list", &args)
+            }
             command => rules::mutate(&context, command, input.json),
         },
-        PublicCommand::Registry(registry) => match registry.command {
-            RegistryCommand::List => super::registries::list(Some(&context)),
+        PublicCommand::Registry(registry) => match &registry.command {
+            RegistryCommand::List { page } => {
+                super::mcp::operator_list(&context, "registry_list", &page.arguments())
+            }
             _ => registries::mutate(Some(&context), &context.fetcher, registry, input.json),
         },
         PublicCommand::Pack(pack) => match &pack.command {
-            PackCommand::List => super::packs::list(&context),
+            PackCommand::List { page } => {
+                super::mcp::operator_list(&context, "pack_list", &page.arguments())
+            }
             PackCommand::Show { reference } => super::packs::show(&context, reference),
-            PackCommand::Search { query } => super::packs::search(&context, query),
-            PackCommand::Info { reference } => super::packs::info(&context, reference),
+            PackCommand::Search { query, page } => {
+                let mut args = page.arguments();
+                args["query"] = json!(query);
+                super::mcp::operator_list(&context, "pack_search", &args)
+            }
+            PackCommand::Info {
+                reference,
+                view,
+                section,
+                page,
+            } => {
+                let mut args = page.arguments();
+                args["reference"] = json!(reference);
+                args["view"] = json!(view);
+                if let Some(section) = section {
+                    args["section"] = json!(section);
+                }
+                super::mcp::operator_list(&context, "pack_info", &args)
+            }
             PackCommand::Configure {
                 reference,
                 set,
@@ -305,7 +386,9 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
             }
         },
         PublicCommand::Request(request) => match &request.command {
-            RequestCommand::List => approvals::inspect(&context, None),
+            RequestCommand::List { page } => {
+                super::mcp::operator_list(&context, "request_list", &page.arguments())
+            }
             RequestCommand::Show { request } => approvals::inspect(&context, Some(request)),
             RequestCommand::Approve { request } => decide(&context, request, false, input.json),
             RequestCommand::Deny { request } => decide(&context, request, true, input.json),
@@ -327,39 +410,49 @@ fn dispatch(input: &Cli) -> Result<Output, Error> {
             }
             administer(&context, "history_configure", &args, input.json)
         }
-        PublicCommand::History(history) => history::inspect_filtered(
-            &context,
-            &match &history.command {
-                HistoryCommand::List {
-                    denied,
-                    approved,
-                    agent,
-                    ..
-                } => history::Query {
-                    entry: None,
-                    denied: *denied,
-                    approved: *approved,
-                    agent: agent.as_deref(),
-                },
-                HistoryCommand::Show { entry } => history::Query {
-                    entry: Some(entry.as_str()),
-                    denied: false,
-                    approved: false,
-                    agent: None,
-                },
-                HistoryCommand::Configure { .. } => unreachable!("handled above"),
-            },
-            match &history.command {
-                HistoryCommand::List {
-                    authorization_kind, ..
-                } => authorization_kind.as_deref(),
-                _ => None,
-            },
-            match &history.command {
-                HistoryCommand::List { grant_id, .. } => grant_id.as_deref(),
-                _ => None,
-            },
-        ),
+        PublicCommand::History(history) => {
+            if let HistoryCommand::List {
+                page,
+                denied,
+                approved,
+                agent,
+                authorization_kind,
+                grant_id,
+            } = &history.command
+            {
+                let mut args = page.arguments();
+                if *denied {
+                    args["denied"] = json!(true);
+                }
+                if *approved {
+                    args["approved"] = json!(true);
+                }
+                if let Some(value) = agent {
+                    args["agent"] = json!(value);
+                }
+                if let Some(value) = authorization_kind {
+                    args["authorization_kind"] = json!(value);
+                }
+                if let Some(value) = grant_id {
+                    args["grant_id"] = json!(value);
+                }
+                super::mcp::operator_list(&context, "history_list", &args)
+            } else if let HistoryCommand::Show {
+                entry,
+                section,
+                page,
+            } = &history.command
+            {
+                let mut args = page.arguments();
+                args["entry_id"] = json!(entry);
+                if let Some(section) = section {
+                    args["section"] = json!(section);
+                }
+                super::mcp::operator_list(&context, "history_show", &args)
+            } else {
+                unreachable!("configuration handled above")
+            }
+        }
         _ => Err(Error::Invalid("invalid operator command")),
     }?;
     finish_pack_updates(&context, input, &mut value);
@@ -382,9 +475,9 @@ fn finish_pack_updates(context: &Context, input: &Cli, value: &mut Value) {
 fn pack_update_notice(input: &Cli, value: &Value, context: &Context) {
     use crate::cli::public::PackCommand;
     use std::io::{IsTerminal as _, Write as _};
-    let eligible = matches!(&input.command, PublicCommand::Status)
+    let eligible = matches!(&input.command, PublicCommand::Status(_))
         || matches!(&input.command, PublicCommand::Pack(pack) if matches!(pack.command,
-            PackCommand::List | PackCommand::Add { .. } | PackCommand::Update { .. }
+            PackCommand::List { .. } | PackCommand::Add { .. } | PackCommand::Update { .. }
             | PackCommand::Remove { .. } | PackCommand::Configure { .. }));
     if !eligible
         || input.json

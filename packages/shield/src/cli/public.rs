@@ -57,13 +57,13 @@ pub enum PublicCommand {
         baseline_profile: Option<Profile>,
     },
     /// Show policy, integrations and pending requests.
-    Status,
+    Status(InspectionArgs),
     /// Resume this project's native Shield checks after confirmation.
     Enable,
     /// Pause this project's native Shield checks after confirmation, preserving policy and setup.
     Disable,
     /// Check configuration and installation prerequisites without changing policy.
-    Doctor,
+    Doctor(InspectionArgs),
     /// Read and search the documentation bundled with this version, without enrollment.
     Docs(Docs),
     /// Set up agent hooks and MCP, or serve Shield's MCP tools.
@@ -86,6 +86,12 @@ pub enum PublicCommand {
     SessionGrant(SessionGrant),
     /// List or inspect agent request decisions and outcomes.
     History(History),
+    /// Inspect recorded review suggestions.
+    #[command(subcommand)]
+    Suggestion(SuggestionCommand),
+    /// Inspect retained policy drafts.
+    #[command(subcommand)]
+    PolicyDraft(DraftCommand),
     /// Registered integration transports; not an operator workflow.
     #[command(name = "__internal", hide = true, subcommand)]
     Internal(Box<super::Command>),
@@ -126,11 +132,11 @@ pub enum SessionGrantCommand {
         /// Select one hook-issued session reference.
         #[arg(long)]
         session_ref: Option<String>,
-        /// Continue the selected immutable page.
+        /// Continue with the previous page's cursor.
         #[arg(long)]
         cursor: Option<String>,
-        /// Maximum rows, from 1 to 64.
-        #[arg(long, default_value_t = 16)]
+        /// Maximum rows, from 1 to 100.
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u64).range(1..=100))]
         limit: u64,
     },
     /// Inspect a proposal or grant.
@@ -259,11 +265,65 @@ pub struct Policy {
     pub command: PolicyCommand,
 }
 
+/// Pagination flags shared by Shield list commands.
+#[derive(Args, Default)]
+pub struct PageArgs {
+    /// Continue with the previous result's opaque cursor.
+    #[arg(long, value_name = "CURSOR")]
+    pub cursor: Option<String>,
+    /// Maximum rows, from 1 to 100.
+    #[arg(long, value_name = "N", value_parser = clap::value_parser!(u64).range(1..=100))]
+    pub limit: Option<u64>,
+}
+
+/// Summary inspection, or a page of one named collection section.
+#[derive(Args, Default)]
+pub struct InspectionArgs {
+    /// Page a collection at its returned JSON Pointer section.
+    #[arg(long)]
+    pub section: Option<String>,
+    #[command(flatten)]
+    pub page: PageArgs,
+}
+
+/// Recorded suggestion inspection.
+#[derive(Subcommand)]
+pub enum SuggestionCommand {
+    /// List recorded review suggestions, defaulting to 16 rows per page.
+    List {
+        #[arg(long)]
+        session_id: Option<String>,
+        #[command(flatten)]
+        page: PageArgs,
+    },
+}
+
+/// Retained draft inspection.
+#[derive(Subcommand)]
+pub enum DraftCommand {
+    /// List retained policy drafts.
+    List {
+        #[command(flatten)]
+        page: PageArgs,
+    },
+}
+impl PageArgs {
+    pub(crate) fn arguments(&self) -> serde_json::Value {
+        canonic_mcp_kit::page::arguments(self.cursor.as_deref(), self.limit)
+    }
+}
+
 /// Project policy operations.
 #[derive(Subcommand)]
 pub enum PolicyCommand {
     /// Show the policy, live reviews and history settings.
-    Show,
+    Show {
+        proposal_id: Option<String>,
+        #[arg(long, value_parser=["authorization_events"])]
+        section: Option<String>,
+        #[command(flatten)]
+        page: PageArgs,
+    },
     /// Review a live change or history settings in a terminal.
     Review,
     /// Reject a live proposal after confirmation.
@@ -307,9 +367,9 @@ pub struct Docs {
 pub enum DocsCommand {
     /// List bundled page paths, titles and line counts.
     List {
-        #[arg(long, default_value_t = 0)]
-        offset: u64,
-        #[arg(long, default_value_t = 50)]
+        #[arg(long, value_name = "CURSOR")]
+        cursor: Option<String>,
+        #[arg(long, value_name = "N", default_value_t = canonic_mcp_kit::docs::DEFAULT_ROWS, value_parser = clap::value_parser!(u64).range(1..=canonic_mcp_kit::docs::MAX_ROWS))]
         limit: u64,
     },
     /// Search for case-insensitive literal text.
@@ -317,17 +377,17 @@ pub enum DocsCommand {
         query: String,
         #[arg(long)]
         path: Option<String>,
-        #[arg(long, default_value_t = 0)]
-        offset: u64,
-        #[arg(long, default_value_t = 50)]
+        #[arg(long, value_name = "CURSOR")]
+        cursor: Option<String>,
+        #[arg(long, value_name = "N", default_value_t = canonic_mcp_kit::docs::DEFAULT_ROWS, value_parser = clap::value_parser!(u64).range(1..=canonic_mcp_kit::docs::MAX_ROWS))]
         limit: u64,
     },
     /// Read a page's lines.
     Read {
         path: String,
-        #[arg(long, default_value_t = 1)]
-        start_line: u64,
-        #[arg(long, default_value_t = 100)]
+        #[arg(long, value_name = "CURSOR")]
+        cursor: Option<String>,
+        #[arg(long, value_name = "N", default_value_t = canonic_mcp_kit::docs::DEFAULT_READ_LINES, value_parser = clap::value_parser!(u64).range(1..=canonic_mcp_kit::docs::MAX_READ_LINES))]
         limit: u64,
     },
 }
@@ -344,7 +404,10 @@ pub struct Pack {
 #[derive(Subcommand)]
 pub enum PackCommand {
     /// List installed packs.
-    List,
+    List {
+        #[command(flatten)]
+        page: PageArgs,
+    },
     /// Show an installed selection, its rules and source.
     Show { reference: String },
     /// Install a permission pack or change its profile, after confirmation.
@@ -391,9 +454,21 @@ pub enum PackCommand {
         local: bool,
     },
     /// Search the default or named source without installing policy.
-    Search { query: String },
+    Search {
+        query: String,
+        #[command(flatten)]
+        page: PageArgs,
+    },
     /// Show a pack's available releases and profiles from its registry.
-    Info { reference: String },
+    Info {
+        reference: String,
+        #[arg(long, value_parser=["summary","rules","settings"], default_value="summary")]
+        view: String,
+        #[arg(long, value_parser=["variables","preconditions","dependencies","mcp_integrations","invocations","command_sets","permission_groups"])]
+        section: Option<String>,
+        #[command(flatten)]
+        page: PageArgs,
+    },
 }
 
 /// Registry source arguments.
@@ -413,7 +488,10 @@ pub enum RegistryCommand {
     /// Review delegated root roles and signed revocations for a custom HTTPS source.
     Trust { name: String },
     /// List effective registry sources.
-    List,
+    List {
+        #[command(flatten)]
+        page: PageArgs,
+    },
     /// Enroll a local directory or signed HTTPS registry, after confirmation.
     Add { name: String, location: String },
     /// Remove a registration, preserving installed policy, after confirmation.
@@ -434,7 +512,16 @@ pub struct Rule {
 #[derive(Subcommand)]
 pub enum RuleCommand {
     /// List pack and custom rules.
-    List,
+    List {
+        /// Page shared definitions, or one pack's invocation/command-set definitions.
+        #[arg(long,value_parser=["shared","invocations","command_sets"])]
+        section: Option<String>,
+        /// Installed selector for invocation or command-set sections.
+        #[arg(long)]
+        pack_selector: Option<String>,
+        #[command(flatten)]
+        page: PageArgs,
+    },
     /// Create a project rule through guided input, after confirmation.
     Add {
         #[arg(long)]
@@ -466,7 +553,10 @@ pub struct Request {
 #[derive(Subcommand)]
 pub enum RequestCommand {
     /// List pending and approved requests.
-    List,
+    List {
+        #[command(flatten)]
+        page: PageArgs,
+    },
     /// Explain a stored request.
     Show { request: String },
     /// Authorize one stored Ask request once, after confirmation.
@@ -495,8 +585,10 @@ pub enum HistoryCommand {
         #[arg(long)]
         purge: bool,
     },
-    /// List request decisions, newest first.
+    /// List retained request decisions.
     List {
+        #[command(flatten)]
+        page: PageArgs,
         /// Show requests denied by policy or an operator.
         #[arg(long)]
         denied: bool,
@@ -514,7 +606,13 @@ pub enum HistoryCommand {
         grant_id: Option<String>,
     },
     /// Explain the request and its decision/approval/completion observations.
-    Show { entry: String },
+    Show {
+        entry: String,
+        #[arg(long,value_parser=["observations"])]
+        section: Option<String>,
+        #[command(flatten)]
+        page: PageArgs,
+    },
 }
 
 #[cfg(test)]

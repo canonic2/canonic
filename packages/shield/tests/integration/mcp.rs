@@ -519,7 +519,7 @@ fn startup_and_frame_failures_are_sanitized_and_never_emit_non_protocol_stdout()
 }
 
 #[test]
-fn copied_executable_serves_skill_bytes_without_a_project_or_source_files() {
+fn copied_executable_serves_bundled_content_without_a_project_or_source_files() {
     let root = assert_fs::TempDir::new().unwrap();
     let executable = root.child(if cfg!(windows) {
         "shield.exe"
@@ -527,8 +527,8 @@ fn copied_executable_serves_skill_bytes_without_a_project_or_source_files() {
         "shield"
     });
     std::fs::copy(assert_cmd::cargo::cargo_bin!("shield"), executable.path()).unwrap();
-    let request = json!({"jsonrpc":"2.0","id":1,"method":"resources/read","params":{
-        "uri":"skill://shield/policy-review/SKILL.md","_meta":{
+    let request = json!({"jsonrpc":"2.0","id":1,"method":"prompts/list","params":{
+        "_meta":{
             "io.modelcontextprotocol/protocolVersion":"2026-07-28",
             "io.modelcontextprotocol/clientCapabilities":{}
         }
@@ -541,10 +541,7 @@ fn copied_executable_serves_skill_bytes_without_a_project_or_source_files() {
         .assert()
         .success();
     let response: Value = serde_json::from_slice(&result.get_output().stdout).unwrap();
-    assert_eq!(
-        response["result"]["contents"][0]["text"],
-        include_str!("../../skills/policy-review/SKILL.md")
-    );
+    assert_eq!(response["result"]["prompts"][0]["name"], "install_pack");
     root.child(".shield").assert(predicates::path::missing());
 }
 

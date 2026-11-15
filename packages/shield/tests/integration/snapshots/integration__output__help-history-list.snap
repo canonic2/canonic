@@ -2,32 +2,36 @@
 source: tests/integration/output.rs
 expression: "String::from_utf8_lossy(&output.get_output().stdout)"
 ---
-List request decisions, newest first
+List retained request decisions
 
 Usage: shield history list [OPTIONS]
 
 Options:
-      --denied
-          Show requests denied by policy or an operator
+      --cursor <CURSOR>
+          Continue with the previous result's opaque cursor
       --project <PROJECT>
           Select a project; otherwise discover the nearest enrolled ancestor
-      --approved
-          Show requests explicitly approved by an operator
       --json
           Print one JSON result; commands that change policy refuse JSON mode
-      --agent <AGENT>
-          Filter the requesting agent
+      --limit <N>
+          Maximum rows, from 1 to 100
       --debug-log-dir <DEBUG_LOG_DIR>
           Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
-      --authorization-kind <AUTHORIZATION_KIND>
-          Show requests authorized by a reusable session grant [possible values: session_grant]
+      --denied
+          Show requests denied by policy or an operator
+      --approved
+          Show requests explicitly approved by an operator
       --no-debug-log
           Disable diagnostic logging, including automatic debug-build logs
+      --agent <AGENT>
+          Filter the requesting agent
       --cache-dir <CACHE_DIR>
           Folder for this project's compiled policy plans, chosen at init or MCP setup
-      --grant-id <GRANT_ID>
-          Filter uses of one reusable grant
+      --authorization-kind <AUTHORIZATION_KIND>
+          Show requests authorized by a reusable session grant [possible values: session_grant]
       --config <PATH>
           Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml
+      --grant-id <GRANT_ID>
+          Filter uses of one reusable grant
   -h, --help
           Print help

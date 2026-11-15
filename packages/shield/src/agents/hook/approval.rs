@@ -17,6 +17,7 @@ const APPROVABLE: &[&str] = &[
     "protected-access",
     "sensitive-read",
     "unsupported-operation",
+    "policy-file-unknown",
 ];
 /// What the person reads when a refusal offers in-session approval.
 pub(in crate::agents) const OFFER: &str = " The agent can ask you to allow it once.";
@@ -25,7 +26,7 @@ pub(in crate::agents) const OFFER: &str = " The agent can ask you to allow it on
 pub(super) fn refusal(receipt: &Value) -> Value {
     json!({"code":receipt["code"],"fixed_protection":receipt["fixed_protection"],
         "identity":receipt["identity"],"protected_path":receipt["protected_path"],
-        "protected_group":receipt["protected_group"],"deny_rules":receipt["deny_rules"],"mcp_match":receipt["mcp_match"],"_mcp_binding":receipt["_mcp_binding"]})
+        "protected_group":receipt["protected_group"],"policy_change":receipt["policy_change"],"deny_rules":receipt["deny_rules"],"mcp_match":receipt["mcp_match"],"_mcp_binding":receipt["_mcp_binding"]})
 }
 
 fn approvable(refusal: &Value) -> bool {
@@ -55,29 +56,39 @@ pub(super) fn in_session(
         candidate_digest: first["identity"]["candidate_digest"].as_str()?,
     };
     let cwd = hook_approval::relative_cwd(root, request.cwd.as_ref());
+    let input_digest = if refusals.iter().any(|r| !r["mcp_match"].is_null()) {
+        crate::json::fingerprint(&(
+            input_digest(request),
+            refusals
+                .iter()
+                .map(|r| (&r["mcp_match"], &r["_mcp_binding"]))
+                .collect::<Vec<_>>(),
+        ))
+        .ok()?
+    } else {
+        input_digest(request)
+    };
+    // An older deny override may have been reviewed without the Git-policy
+    // warning. Require a fresh review that includes this consequence, while
+    // leaving every other saved grant's request binding unchanged.
+    let input_digest = if refusals.iter().any(|r| r["policy_change"] == true) {
+        crate::json::fingerprint(&(input_digest, "git-policy-change")).ok()?
+    } else {
+        input_digest
+    };
     let key = Key {
         agent: adapter.spec().id,
         session: request.session,
         cwd: &cwd,
         tool: request.tool,
-        input_digest: if refusals.iter().any(|r| !r["mcp_match"].is_null()) {
-            crate::json::fingerprint(&(
-                input_digest(request),
-                refusals
-                    .iter()
-                    .map(|r| (&r["mcp_match"], &r["_mcp_binding"]))
-                    .collect::<Vec<_>>(),
-            ))
-            .ok()?
-        } else {
-            input_digest(request)
-        },
+        input_digest,
     };
     match request.event {
         Event::Before => {
             // A failed read is not a missing registration; recording the
             // request below reports it with a retry.
             if enrolled(root, key.agent) == Some(false) {
+                reply.reason.push_str(" Shield's approval connection is not registered in this checkout; repair Shield setup to restore in-session approval.");
                 append(&mut reply.agent_context, NOT_CONNECTED);
                 return None;
             }
@@ -211,6 +222,7 @@ fn summary(request: &Request<'_>, refusals: &[Value]) -> Option<Summary> {
         overrides_deny: refusals.iter().any(|r| r["code"] == "policy-deny"),
         deny_rules,
         settings_change: refusals.iter().any(settings),
+        policy_change: refusals.iter().any(|r| r["policy_change"] == true),
     };
     hook_approval::fits(&summary, request.cwd.as_ref()).then_some(summary)
 }
@@ -223,6 +235,9 @@ fn reason(refusal: &Value) -> String {
         ("policy-deny", _) => "the active policy denies it".into(),
         ("approval-required", _) => {
             "the active policy requires your approval and this agent cannot ask you directly".into()
+        }
+        ("policy-file-unknown", _) => {
+            "this Git command can replace Shield's policy files, or its writes to them cannot be determined".into()
         }
         ("protected-access", Some(path)) if refusal["protected_group"] == "policy" => {
             format!("it changes `{path}`, a Shield policy file")

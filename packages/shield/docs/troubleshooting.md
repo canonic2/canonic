@@ -21,6 +21,40 @@ remain available when you choose to use them directly.
 | Initialization fails while downloading | [Baseline acquisition](#initialization-cannot-download-the-baseline) |
 | Shield's project folder was moved or copied | [Portable policy](#the-project-was-moved-or-copied) |
 | A change cannot obtain confirmation | [Terminal confirmation](#terminal-confirmation-is-unavailable) |
+| The hook says Codex cannot request approval | [In-session approval connection](#the-hook-says-codex-cannot-request-approval) |
+| Shield says state is briefly locked | [Concurrent updates](#shield-says-state-is-briefly-locked) |
+
+## Shield says state is briefly locked
+
+Another Shield operation held a required lock beyond this request's bounded
+wait. The command has not been dispatched, so retry the same request after the
+other operation finishes. This message is contention, not a policy Deny or a
+rejected approval. Final authorization remains blocked until its required
+state can be checked.
+
+Repeated refusals during ordinary parallel requests need investigation. Use
+[diagnostic logs](development.md#debug-builds-and-diagnostics) to distinguish
+policy evaluation, final handoff and optional bookkeeping. Session-context
+capture uses a short metadata transaction and does not prepare policy artifacts
+under the writer lock.
+
+## The hook says Codex cannot request approval
+
+This message refers to the native command hook. A blocked approvable request
+normally names `request_approve` and its request ID; Shield's MCP connection
+then shows the human confirmation form. The native-hook message alone does not
+mean an automatic reviewer rejected the request.
+
+If the hook also says the approval connection is not registered, inspect
+`shield status` in that exact checkout. An empty `registered_integrations` list
+or an unowned MCP entry means the hook is checking requests without a registered
+approval connection. Use the reported setup repair route and restart the agent
+after publication. Keep unrelated hooks and MCP servers intact.
+
+Hub and Box definitions in a fresh worktree are recognized on runtime startup.
+Harmless YAML formatting and the known retired tool entries are compatible;
+changed launchers, hooks, permissions or a foreign private executable pin remain
+subject to review. See [Hub and Box setup](claude-project.md#set-up-through-hub-or-box).
 
 ## A pack proposal reports `candidate_error`
 

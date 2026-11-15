@@ -576,6 +576,7 @@ fn pending_hook_requests(project: &Project, action: String, count: usize) -> Vec
         overrides_deny: true,
         deny_rules: vec!["acme-branch-delete".into()],
         settings_change: false,
+        policy_change: false,
     };
     (0..count)
         .map(|n| {

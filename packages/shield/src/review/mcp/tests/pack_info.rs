@@ -208,10 +208,11 @@ fn pack_info_exact_rule_with_rules_view_passes_the_published_transport_schema() 
 }
 
 #[test]
-fn pack_info_filters_pages_retains_evidence_and_selects_exact_rules() {
+fn pack_info_filters_pages_reacquires_evidence_and_selects_exact_rules() {
     let (root, context, connection) = fixture();
     let source = available(&context, &root);
-    let args = json!({"reference":"tools/acme/runtime","view":"rules","query":"inspect"});
+    let args =
+        json!({"reference":"tools/acme/runtime","view":"rules","query":"inspect","limit":10});
     let first = invoke(&context, &connection, "pack_info", args.clone());
     assert_eq!(first["error"], Value::Null, "{first}");
     assert_eq!(first["data"]["rules"].as_array().unwrap().len(), 10);
@@ -258,17 +259,25 @@ fn pack_info_filters_pages_retains_evidence_and_selects_exact_rules() {
         json!({"reference":"tools/acme/runtime","rule_id":"absent"}),
     );
     assert_eq!(missing["error"]["code"], "not_found");
-    // Cursor continuation reads the acquired evidence, without another registry fetch.
-    std::fs::remove_file(source.path().join("runtime.json")).unwrap();
+    // A continuation has no retained artifact. An unavailable source refuses;
+    // restoring it makes the same stateless continuation usable again.
+    let path = source.path().join("runtime.json");
+    let bytes = std::fs::read(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
     let mut continuation = args;
     continuation["cursor"] = first["data"]["next_cursor"].clone();
+    assert_eq!(
+        invoke(&context, &connection, "pack_info", continuation.clone())["error"]["code"],
+        "io_failure"
+    );
+    std::fs::write(path, bytes).unwrap();
     let next = invoke(&context, &connection, "pack_info", continuation.clone());
     assert_eq!(next["error"], Value::Null, "{next}");
     assert_eq!(next["data"]["rules"][0]["id"], "inspect-010");
     continuation["query"] = json!("install");
     assert_eq!(
         invoke(&context, &connection, "pack_info", continuation)["error"]["code"],
-        "cursor_unavailable"
+        "invalid_cursor"
     );
 }
 

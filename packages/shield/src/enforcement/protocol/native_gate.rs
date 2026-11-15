@@ -134,7 +134,7 @@ pub(super) fn resolve(
     let (owner, cwd) = (owner.as_path(), cwd.as_path());
     let cache = crate::review::compiled_cache_root(owner).map_err(|_| "runtime-unavailable")?;
     // An unreadable or invalid choice blocks; the handoff below rechecks it.
-    let allow = path_access::current(root).map_err(|_| "handoff-failed")?;
+    let allow = path_access::current(root).map_err(handoff_error)?;
     let guard = paths::Guard {
         cache: cache.as_deref(),
         allow,
@@ -218,19 +218,25 @@ fn footprint(value: &Value, owner: &Path, cwd: &Path, guard: paths::Guard<'_>) -
 /// group open: review state, caches, the `.shield` folder or its ignore file, a
 /// working-folder root, the operator CLI, or a footprint Shield cannot verify.
 fn fixed(value: &Value, owner: &Path, cwd: &Path, guard: paths::Guard<'_>) -> bool {
+    let open = opened(guard);
+    opaque_shell(value)
+        || paths::operator_cli(&value["_shell_analysis"], cwd)
+        || protected_removal(value, cwd, owner, open)
+        || footprint(value, owner, cwd, open).0 >= paths::Protection::Unverified
+}
+
+/// The guard with every operator-openable group open: reading and changing
+/// agent settings.
+fn opened(guard: paths::Guard<'_>) -> paths::Guard<'_> {
     use crate::review::path_access::{Change, PathAccess, Read};
-    let open = paths::Guard {
+    paths::Guard {
         allow: PathAccess {
             agent_settings_read: Read::Allow,
             agent_settings_change: Change::Allow,
             ..PathAccess::default()
         },
         ..guard
-    };
-    opaque_shell(value)
-        || paths::operator_cli(&value["_shell_analysis"], cwd)
-        || protected_removal(value, cwd, owner, open)
-        || footprint(value, owner, cwd, open).0 >= paths::Protection::Unverified
+    }
 }
 
 fn gate(
@@ -250,6 +256,17 @@ fn gate(
         return Ok(());
     }
     let (protection, path) = footprint(value, owner, cwd, guard);
+    // Preserve this consequence even when a policy Deny takes precedence, so
+    // an in-session override cannot hide that Git may replace enforced policy.
+    // A stricter finding in the same request, such as an agent-settings write,
+    // can hide it; with the openable groups open it is the strictest left
+    // whenever the request can still be approved.
+    if protection == paths::Protection::Undetermined
+        || protection > paths::Protection::Undetermined
+            && footprint(value, owner, cwd, opened(guard)).0 == paths::Protection::Undetermined
+    {
+        value["policy_change"] = json!(true);
+    }
     // The operator CLI and a separately launched MCP server can activate policy;
     // agents use the registered MCP connection instead of starting either here.
     let blocked = if let Some(route) = paths::operator_route(&value["_shell_analysis"], cwd) {
@@ -345,7 +362,15 @@ fn resolve_fallback(
         };
         value["disposition"] = json!(disposition(value, native, fallback, asked));
     })
-    .map_err(|_| "handoff-failed")
+    .map_err(handoff_error)
+}
+
+fn handoff_error(error: crate::review::Error) -> &'static str {
+    if matches!(error, crate::review::Error::Locked) {
+        "runtime-busy"
+    } else {
+        "handoff-failed"
+    }
 }
 
 fn block(value: &mut Value, code: &str) {

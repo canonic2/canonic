@@ -30,6 +30,44 @@ fn fixture() -> (assert_fs::TempDir, Context, Connection) {
 }
 
 #[test]
+fn history_previews_name_a_complete_stateless_observation_route() {
+    let (root, context, connection) = fixture();
+    Store::open(root.path()).unwrap().update(&context, &||Ok(()), |state| {
+        for _ in 0..20 {
+            let event=state.event("decision",&context,json!({"request_id":"acme-history"}),json!({}),json!({"operation":{"kind":"argv","executable":"acme","arguments":[]},"evaluation":{"decision":"ask"}}));
+            state.record(event);
+        }
+        Ok(Value::Null)
+    }).unwrap();
+    let listed = invoke(&context, &connection, "history_list", json!({"limit":1}));
+    assert!(listed["error"].is_null(), "{listed}");
+    let entry = &listed["data"]["entries"][0];
+    assert_eq!(entry["observations_total"], 20);
+    assert!(entry["observations"].as_array().unwrap().len() <= 16);
+    assert_eq!(entry["observations_list"]["section"], "observations");
+    let connection = Connection::new("reconnected-history".into());
+    let mut args = json!({"entry_id":"acme-history","section":"observations","limit":3});
+    let mut seen = std::collections::BTreeSet::new();
+    loop {
+        let page = invoke(&context, &connection, "history_show", args.clone());
+        assert!(page["error"].is_null(), "{page}");
+        for event in page["data"]["observations"].as_array().unwrap() {
+            assert!(seen.insert(event["event_id"].as_str().unwrap().to_owned()));
+        }
+        if page["data"]["next_cursor"].is_null() {
+            break;
+        }
+        args["cursor"] = page["data"]["next_cursor"].clone();
+    }
+    assert_eq!(seen.len(), 20);
+    args["cursor"] = json!("malformed");
+    assert_eq!(
+        invoke(&context, &connection, "history_show", args)["error"]["code"],
+        "invalid_cursor"
+    );
+}
+
+#[test]
 fn first_runtime_use_keeps_diagnostic_handles() {
     let (_root, context, connection) = fixture();
     let status = call(&context, &connection, "status", &json!({}), &|| Ok(()));
@@ -1304,6 +1342,14 @@ fn rule_lookup_uses_retained_snapshots_for_exact_and_paged_inspection() {
     assert_eq!(first["data"]["rules"][0]["id"], "a");
     let cursor = first["data"]["next_cursor"].clone();
     assert!(cursor.is_string());
+    let reconnected = Connection::new("different-capture-owner".into());
+    let stale = invoke(
+        &context,
+        &reconnected,
+        "rule_list",
+        json!({"candidate_id":candidate,"cursor":cursor,"limit":1}),
+    );
+    assert_eq!(stale["error"]["code"], "invalid_cursor", "{stale}");
     review::operator::commit_proposal_fixture(
         &context,
         proposed["data"]["proposal_id"].as_str().unwrap(),
@@ -1425,9 +1471,9 @@ fn structured_error_messages_name_their_recovery() {
             "status",
         ),
         (
-            Error::CursorUnavailable,
-            "cursor_unavailable",
-            "Restart the list without cursor",
+            Error::InvalidCursor,
+            "invalid_cursor",
+            "Restart the list without a cursor",
         ),
         (Error::Missing, "not_found", "List current records"),
         (
@@ -1839,7 +1885,7 @@ fn cursors_keep_a_consistent_query_and_refuse_changed_filters_or_selectors() {
             "policy_show",
             json!({"cursor":cursor,"limit":1,"status":"withdrawn"})
         )["error"]["code"],
-        "cursor_unavailable"
+        "invalid_cursor"
     );
     assert_eq!(
         invoke(
@@ -2227,15 +2273,26 @@ fn suggestions_list_a_sessions_asked_commands_for_one_batch_proposal() {
         json!({"session_id":"acme-session"}),
     );
     assert!(result["error"].is_null(), "{result}");
-    // Every distinct asked command of the session, newest first; the agent
-    // decides which deserve a rule and drafts it.
+    // Every distinct asked command remains available in stable review-ID order.
     let requests = result["data"]["requests"].as_array().unwrap();
-    let commands: Vec<_> = requests.iter().map(|s| s["command"].clone()).collect();
-    assert_eq!(commands, [json!("acme build"), json!("acme run dev")]);
-    assert_eq!(requests[1]["times_asked"], 2);
-    assert_eq!(requests[1]["pack_requests_rule"], true);
-    assert_eq!(requests[0]["pack_requests_rule"], false);
-    assert_eq!(requests[0]["decided_as"], "command");
+    let mut commands: Vec<_> = requests
+        .iter()
+        .map(|s| s["command"].as_str().unwrap())
+        .collect();
+    commands.sort();
+    assert_eq!(commands, ["acme build", "acme run dev"]);
+    let run = requests
+        .iter()
+        .find(|row| row["command"] == "acme run dev")
+        .unwrap();
+    let build = requests
+        .iter()
+        .find(|row| row["command"] == "acme build")
+        .unwrap();
+    assert_eq!(run["times_asked"], 2);
+    assert_eq!(run["pack_requests_rule"], true);
+    assert_eq!(build["pack_requests_rule"], false);
+    assert_eq!(build["decided_as"], "command");
     for row in requests {
         assert!(row.get("exact_change").is_none(), "{row}");
         assert!(row.get("suggested_change").is_none(), "{row}");
@@ -2390,10 +2447,18 @@ fn suggestions_scope_pack_invitations_to_each_command_in_a_chain() {
     );
     let rows = result["data"]["requests"].as_array().unwrap();
     assert_eq!(rows.len(), 2, "{result}");
-    assert_eq!(rows[0]["command"], "npm test");
-    assert_eq!(rows[0]["pack_requests_rule"], true);
-    assert_eq!(rows[1]["command"], "acme-lint");
-    assert_eq!(rows[1]["pack_requests_rule"], false);
+    assert_eq!(
+        rows.iter()
+            .find(|row| row["command"] == "npm test")
+            .unwrap()["pack_requests_rule"],
+        true
+    );
+    assert_eq!(
+        rows.iter()
+            .find(|row| row["command"] == "acme-lint")
+            .unwrap()["pack_requests_rule"],
+        false
+    );
 }
 
 #[test]
@@ -2436,7 +2501,7 @@ fn suggestions_count_each_change_once_per_request() {
             let rows = result["data"]["requests"].as_array().unwrap();
             assert_eq!(rows.len(), 2, "{result}");
             assert_eq!(rows[0]["times_asked"], count, "{result}");
-            assert_eq!(rows[1]["command"], "acme-lint");
+            assert!(rows.iter().any(|row| row["command"] == "acme-lint"));
             assert_eq!(rows[1]["times_asked"], count, "{result}");
         }
         // A separate operation proposing the same change contributes once more.
@@ -2455,8 +2520,20 @@ fn suggestions_count_each_change_once_per_request() {
         );
         let rows = result["data"]["requests"].as_array().unwrap();
         assert_eq!(rows.len(), 2, "{result}");
-        assert_eq!(rows[0]["times_asked"], 3, "{result}");
-        assert_eq!(rows[1]["times_asked"], 2, "{result}");
+        assert_eq!(
+            rows.iter()
+                .find(|row| row["command"] != "acme-lint")
+                .unwrap()["times_asked"],
+            3,
+            "{result}"
+        );
+        assert_eq!(
+            rows.iter()
+                .find(|row| row["command"] == "acme-lint")
+                .unwrap()["times_asked"],
+            2,
+            "{result}"
+        );
     }
 }
 
@@ -2501,27 +2578,45 @@ fn suggestions_page_a_chain_without_losing_later_matches() {
     );
     let rows = result["data"]["requests"].as_array().unwrap();
     assert_eq!(rows.len(), 16, "{result}");
-    for (row, index) in rows[..15].iter().zip((0..15).rev()) {
-        assert_eq!(row["command"], format!("acme task-{index}"));
+    let mut all = rows.clone();
+    let mut cursor = result["data"]["next_cursor"].clone();
+    while cursor.is_string() {
+        let page = invoke(
+            &context,
+            &connection,
+            "suggestion_list",
+            json!({"session_id":"acme-chain-limit","cursor":cursor}),
+        );
+        assert!(page["error"].is_null(), "{page}");
+        all.extend(page["data"]["requests"].as_array().unwrap().iter().cloned());
+        cursor = page["data"]["next_cursor"].clone();
+    }
+    assert_eq!(all.len(), 17);
+    let ids: std::collections::BTreeSet<_> = all
+        .iter()
+        .map(|row| row["review_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids.len(), 17);
+    for index in 0..15 {
+        let row = all
+            .iter()
+            .find(|row| row["command"] == format!("acme task-{index}"))
+            .unwrap();
         assert_eq!(row["times_asked"], if index <= 1 { 2 } else { 1 });
     }
-    assert_eq!(rows[15]["command"], "acme older-one");
-    assert_eq!(rows[15]["times_asked"], 1);
-    assert_eq!(rows[15]["source_entry_id"], chain["request_id"]);
-    assert_eq!(rows[15]["request"]["arguments"], json!(["older-one"]));
-    // Remaining rows stay available through a consistent continuation.
-    assert!(rows.iter().all(|row| row["command"] != "acme older-two"));
-    let next = invoke(
-        &context,
-        &connection,
-        "suggestion_list",
-        json!({"session_id":"acme-chain-limit","cursor":result["data"]["next_cursor"]}),
-    );
-    assert_eq!(next["data"]["requests"][0]["command"], "acme older-two");
+    for command in ["older-one", "older-two"] {
+        let row = all
+            .iter()
+            .find(|row| row["command"] == format!("acme {command}"))
+            .unwrap();
+        assert_eq!(row["times_asked"], 1);
+        assert_eq!(row["source_entry_id"], chain["request_id"]);
+        assert_eq!(row["request"]["arguments"], json!([command]));
+    }
 }
 
 #[test]
-fn suggestions_list_only_the_sixteen_newest_requests() {
+fn suggestions_default_to_sixteen_and_page_every_stable_group() {
     let (_root, context, connection) = fixture();
     let mut hook = context.clone();
     hook.surface = "hook".into();
@@ -2552,13 +2647,38 @@ fn suggestions_list_only_the_sixteen_newest_requests() {
     );
     let requests = result["data"]["requests"].as_array().unwrap();
     assert_eq!(requests.len(), 16, "{result}");
-    // Newest first: the newest download, then the newest commands.
-    assert_eq!(requests[0]["decided_as"], "web_fetch");
-    assert_eq!(requests[1]["command"], "acme task 19");
-    assert_eq!(requests[15]["command"], "acme task 5");
-    // Paging does not prevent an older retained observation joining its group.
-    assert_eq!(requests[0]["times_asked"], 2);
     assert!(result["data"]["next_cursor"].is_string());
+    let mut all = requests.clone();
+    let mut cursor = result["data"]["next_cursor"].clone();
+    while cursor.is_string() {
+        let page = invoke(
+            &context,
+            &connection,
+            "suggestion_list",
+            json!({"session_id":"acme-session","cursor":cursor}),
+        );
+        assert!(page["error"].is_null(), "{page}");
+        all.extend(page["data"]["requests"].as_array().unwrap().iter().cloned());
+        cursor = page["data"]["next_cursor"].clone();
+    }
+    assert_eq!(all.len(), 21);
+    let ids: std::collections::BTreeSet<_> = all
+        .iter()
+        .map(|row| row["review_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids.len(), 21);
+    for index in 0..20 {
+        assert!(
+            all.iter()
+                .any(|row| row["command"] == format!("acme task {index}"))
+        );
+    }
+    assert_eq!(
+        all.iter()
+            .find(|row| row["decided_as"] == "web_fetch")
+            .unwrap()["times_asked"],
+        2
+    );
 }
 
 #[test]

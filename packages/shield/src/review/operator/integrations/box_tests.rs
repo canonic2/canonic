@@ -208,7 +208,7 @@ fn a_fresh_worktree_adopts_its_committed_box_definition() {
     .unwrap();
     fs::write(
         edited.path().join(BOX.path),
-        format!("{shared}# Acme edit\n"),
+        shared.replace("timeout: 10", "timeout: 11"),
     )
     .unwrap();
     let reopened = crate::review::open(edited.path()).unwrap();
@@ -233,7 +233,7 @@ fn a_fresh_worktree_adopts_its_committed_box_definition() {
     );
     fs::write(
         edited.path().join(BOX.path),
-        format!("{shared}# Another Acme edit\n"),
+        shared.replace("timeout: 10", "timeout: 12"),
     )
     .unwrap();
     crate::review::open(edited.path()).unwrap();

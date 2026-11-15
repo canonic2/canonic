@@ -124,6 +124,37 @@ fn unversioned_add_never_falls_back_after_integrity_failure_or_for_an_exact_pin(
 }
 
 #[test]
+fn pack_info_reports_what_an_unsupported_release_requires() {
+    let (root, context, connection) = fixture();
+    let source = dependency_registry(&root, &context, &json!([]), false);
+    engine_release(&source, "1.1.0", "*");
+    engine_release(&source, "2.0.0", ">9999.0.0");
+    let info = |version: &str| {
+        let result = invoke(
+            &context,
+            &connection,
+            "pack_info",
+            json!({"reference":format!("acme-dependencies/acme/child@{version}")}),
+        );
+        assert_eq!(result["error"], Value::Null, "{result}");
+        result["data"]["compatibility"].clone()
+    };
+    let held = info("2.0.0");
+    assert_eq!(held["supported"], false, "{held}");
+    assert_eq!(held["engines"]["shield"], ">9999.0.0");
+    assert_eq!(info("1.1.0")["supported"], true);
+    // A tampered release still refuses instead of reporting requirements.
+    std::fs::write(source.path().join("acme-child-2.0.0.yml"), "tampered").unwrap();
+    let tampered = invoke(
+        &context,
+        &connection,
+        "pack_info",
+        json!({"reference":"acme-dependencies/acme/child@2.0.0"}),
+    );
+    assert_ne!(tampered["error"], Value::Null);
+}
+
+#[test]
 fn unversioned_add_refuses_a_verified_artifact_with_the_wrong_identity() {
     let (root, context, _connection) = fixture();
     let source = dependency_registry(&root, &context, &json!([]), false);

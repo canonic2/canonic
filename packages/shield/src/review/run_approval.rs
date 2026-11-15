@@ -62,6 +62,9 @@ fn hash(value: &Value) -> String {
     policy::fingerprint(value.to_string().as_bytes())
 }
 impl RunRequest {
+    pub(super) fn list_view(&self) -> Value {
+        json!({"request_id":self.request_id,"status":self.status,"request":self.request,"created_at_ms":self.created_at_ms,"pending_expires_at_ms":self.pending_expires_at_ms,"provenance":self.provenance,"policy":self.policy,"grant_expires_at_ms":self.grant.as_ref().map(|grant|grant.expires_at_ms)})
+    }
     pub(super) fn id(&self) -> &str {
         &self.request_id
     }
@@ -229,9 +232,7 @@ pub(super) fn inspect_from(state: &State, id: Option<&str>, time: u64) -> Result
                 .ok_or(Error::Missing)?
         ),
         None => {
-            json!({"schema_version":1,"requests":state.run_requests.iter().filter(|r| r.live_id(time).is_some()).map(|r| json!({"request_id":r.request_id,
-            "status":r.status,"request":r.request,"created_at_ms":r.created_at_ms,"pending_expires_at_ms":r.pending_expires_at_ms,
-            "provenance":r.provenance,"policy":r.policy,"grant_expires_at_ms":r.grant.as_ref().map(|g|g.expires_at_ms)})).collect::<Vec<_>>()})
+            json!({"schema_version":1,"requests":state.run_requests.iter().filter(|r|r.live_id(time).is_some()).map(RunRequest::list_view).collect::<Vec<_>>()})
         }
     };
     let redacted = super::model::redact(&mut value);

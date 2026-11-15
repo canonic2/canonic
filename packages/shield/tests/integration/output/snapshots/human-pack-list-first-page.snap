@@ -1,0 +1,10 @@
+---
+source: tests/integration/output/human.rs
+expression: text
+---
+$ shield pack list --limit 1
+--- terminal
+acme/parent 0.1.0 · recommended
+Pack updates available: acme/acme/parent 0.1.0 → 0.2.0.
+Next page: shield --project [PROJECT] pack list --limit 1 --cursor [CURSOR]
+--- exit 0

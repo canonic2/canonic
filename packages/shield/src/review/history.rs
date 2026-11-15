@@ -40,11 +40,22 @@ pub(super) fn inspect(context: &Context, input: &Query<'_>) -> Result<Value, Err
     inspect_filtered(context, input, None, None)
 }
 
+#[cfg(test)]
 pub(super) fn inspect_filtered(
     context: &Context,
     input: &Query<'_>,
     authorization_kind: Option<&str>,
     grant_id: Option<&str>,
+) -> Result<Value, Error> {
+    inspect_rows(context, input, authorization_kind, grant_id, true)
+}
+
+fn inspect_rows(
+    context: &Context,
+    input: &Query<'_>,
+    authorization_kind: Option<&str>,
+    grant_id: Option<&str>,
+    bounded: bool,
 ) -> Result<Value, Error> {
     if authorization_kind.is_some_and(|k| k != "session_grant") {
         return Err(Error::Invalid("authorization_kind must be session_grant"));
@@ -80,7 +91,9 @@ pub(super) fn inspect_filtered(
         if let Some(fields) = row.as_object_mut() {
             fields.remove("_order");
         }
-        bound_entry(row);
+        if bounded {
+            bound_entry(row);
+        }
     }
     if let Some(entry) = input.entry {
         return rows
@@ -102,6 +115,82 @@ pub(super) fn inspect_filtered(
     Ok(
         json!({"policy_revision":(!state.policy_revision.is_empty()).then_some(&state.policy_revision),"enabled":state.settings.history_enabled,"limit":state.settings.history_limit,"available":state.history_available,"missing":missing,"truncated":truncated,"entries":rows}),
     )
+}
+
+/// Both list pages and the complete observation route share the receipt owner.
+pub(super) fn page(context: &Context, name: &str, args: &Value) -> Result<Value, Error> {
+    use super::mcp::{boolean, text};
+    let entry = text(args, "entry_id")?;
+    let mut data = inspect_rows(
+        context,
+        &Query {
+            entry,
+            denied: boolean(args, "denied")?,
+            approved: boolean(args, "approved")?,
+            agent: text(args, "agent")?,
+        },
+        text(args, "authorization_kind")?,
+        text(args, "grant_id")?,
+        false,
+    )?;
+    let query = super::page::query(context, name, args);
+    if let Some(id) = entry {
+        if text(args, "section")? == Some("observations") {
+            let total = data["observations"].as_array().map_or(0, Vec::len);
+            let rows = data["observations"].take();
+            let mut rows: Vec<_> = rows
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|event| {
+                    (
+                        super::page::key(&json!([event["recorded_at"], event["event_id"]])),
+                        event.clone(),
+                    )
+                })
+                .collect();
+            rows.sort_by(|a, b| a.0.cmp(&b.0));
+            let page = super::page::collect(name, &query, rows, "history_show with entry_id")?;
+            return Ok(
+                json!({"entry_id":id,"observations":page.items,"observations_total":total,"next_cursor":page.next_cursor}),
+            );
+        }
+        if text(args, "section")?.is_some() {
+            return Err(Error::Invalid("invalid history section"));
+        }
+        if args.get("cursor").is_some() {
+            return Err(Error::InvalidCursor);
+        }
+        preview(&mut data);
+        return Ok(data);
+    }
+    if text(args, "section")?.is_some() {
+        return Err(Error::Invalid("history section requires entry_id"));
+    }
+    let mut page = super::page::bounded_with(name, &query, data, "entries", |mut row| {
+        preview(&mut row);
+        row
+    })?;
+    let truncated = page["entries"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|row| row["truncated"] == true);
+    page["truncated"] = json!(truncated);
+    if truncated {
+        if let Some(missing) = page["missing"].as_array_mut() {
+            missing.push(json!("some_command_evidence"));
+        }
+    }
+    Ok(page)
+}
+
+fn preview(row: &mut Value) {
+    let total = row["observations"].as_array().map_or(0, Vec::len);
+    bound_entry(row);
+    let route = json!({"tool":"history_show","entry_id":row["entry_id"],"section":"observations"});
+    super::page::preview(row, "observations", route);
+    row["observations_total"] = json!(total);
 }
 
 /// Match an agent filter against the recorded agent ID, which has one spelling.

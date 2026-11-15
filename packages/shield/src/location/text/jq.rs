@@ -24,6 +24,8 @@ impl Reader<'_> {
             return false;
         }
         let mut field = false;
+        // Whether the last token ended a value, where `..` cannot follow.
+        let mut value = false;
         let mut object_key = end == Some(b'}');
         while let Some(&byte) = self.bytes.get(self.position) {
             self.position += 1;
@@ -55,19 +57,35 @@ impl Reader<'_> {
                 }
                 b')' | b']' | b'}' => return false,
                 b'.' => {
+                    // `..` recurses through the input like `recurse`, and starts
+                    // a value; a name after it is not a field, so it must be a
+                    // listed builtin.
                     if self.bytes.get(self.position) == Some(&b'.') {
-                        return false;
+                        if value {
+                            return false;
+                        }
+                        self.position += 1;
+                        field = false;
+                    } else {
+                        field = true;
                     }
-                    field = true;
+                    value = true;
                     continue;
                 }
                 b'@' => {
                     if ![
                         "text", "json", "html", "uri", "urid", "csv", "tsv", "sh", "base64",
-                        "base64d",
+                        "base64d", "base32", "base32d",
                     ]
                     .contains(&self.identifier())
                     {
+                        return false;
+                    }
+                }
+                // Variables hold supplied values, `as` bindings or --arg
+                // values; only $ENV reads the environment.
+                b'$' => {
+                    if matches!(self.identifier(), "" | "ENV") {
                         return false;
                     }
                 }
@@ -103,6 +121,8 @@ impl Reader<'_> {
                 | b'=' | b'!' | b'?' => {}
                 _ => return false,
             }
+            // Operators leave room for a new value; anything else ends one.
+            value = !b"|,;:+-*/%<>=!".contains(&byte);
             field = false;
             object_key = end == Some(b'}') && byte == b',';
         }
@@ -156,64 +176,20 @@ impl Reader<'_> {
     }
 }
 
+/// Keywords and builtins that compute only from their input and arguments.
+const BUILTINS: &str = "keys keys_unsorted length type sort sort_by unique unique_by values \
+    tostring tonumber tojson fromjson select map map_values test match capture contains inside \
+    has startswith endswith split join ltrimstr rtrimstr ascii_downcase ascii_upcase add min \
+    max min_by max_by flatten reverse group_by any all not empty true false null and or if then \
+    elif else end try catch as reduce foreach label break to_entries from_entries with_entries \
+    paths leaf_paths getpath setpath del delpaths pick range limit first last nth until while \
+    repeat recurse walk transpose combinations indices index rindex splits sub gsub scan ascii \
+    implode explode trim ltrim rtrim tostream fromstream floor ceil round sqrt abs toarray \
+    utf8bytelength isempty error numbers strings arrays objects iterables booleans nulls scalars \
+    now todate fromdate todateiso8601 fromdateiso8601 strftime strptime mktime gmtime IN INDEX";
+
 fn builtin(name: &str) -> bool {
-    matches!(
-        name,
-        "keys"
-            | "keys_unsorted"
-            | "length"
-            | "type"
-            | "sort"
-            | "sort_by"
-            | "unique"
-            | "unique_by"
-            | "values"
-            | "tostring"
-            | "tonumber"
-            | "tojson"
-            | "fromjson"
-            | "select"
-            | "map"
-            | "map_values"
-            | "test"
-            | "match"
-            | "capture"
-            | "contains"
-            | "inside"
-            | "has"
-            | "startswith"
-            | "endswith"
-            | "split"
-            | "join"
-            | "ltrimstr"
-            | "rtrimstr"
-            | "ascii_downcase"
-            | "ascii_upcase"
-            | "add"
-            | "min"
-            | "max"
-            | "min_by"
-            | "max_by"
-            | "flatten"
-            | "reverse"
-            | "group_by"
-            | "any"
-            | "all"
-            | "not"
-            | "empty"
-            | "true"
-            | "false"
-            | "null"
-            | "and"
-            | "or"
-            | "if"
-            | "then"
-            | "elif"
-            | "else"
-            | "end"
-            | "try"
-            | "catch"
-    )
+    BUILTINS.split_whitespace().any(|builtin| builtin == name)
 }
 
 #[cfg(test)]
@@ -255,6 +231,37 @@ mod tests {
             assert!(!read_only(source), "{source}");
         }
     }
+    #[test]
+    fn jq_variables_bindings_and_pure_builtins_only_consume_input_data() {
+        for source in [
+            r"$name",
+            r". as $run | {sha: $run.head_sha, event}",
+            r"reduce .[] as $item (0; . + $item.count)",
+            r".jobs | map({name, conclusion}) | to_entries | limit(3; .[])",
+            r#".items[] | select(.name | test("^api")) | .name | sub("^api-"; "")"#,
+            r"{head_sha,event,run_attempt,status,conclusion}",
+            r".created_at | fromdateiso8601 | todate",
+            // `..` recurses like `recurse`; both read only the input.
+            r"[.. | numbers] | add",
+            r"[.. | objects | .name]",
+            r"[recurse | strings]",
+        ] {
+            assert!(read_only(source), "{source}");
+        }
+        for source in ["..env", ".. | env", "..|input"] {
+            assert!(!read_only(source), "{source}");
+        }
+        for source in [
+            "$ENV.HOME",
+            "$ENV",
+            "$",
+            ". as $x | $ENV",
+            "{home: $ENV.HOME}",
+        ] {
+            assert!(!read_only(source), "{source}");
+        }
+    }
+
     #[test]
     fn jq_hidden_effects_are_rejected_even_inside_interpolation() {
         for source in [

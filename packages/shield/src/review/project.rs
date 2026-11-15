@@ -101,11 +101,25 @@ pub(super) fn status_from(context: &Context, state: &State) -> Value {
     }
     value["enabled"] = json!(state.settings.enabled());
     value["installed_packs"] = crate::review::packs::summaries(&metadata(state));
+    super::page::preview(
+        &mut value["installed_packs"],
+        "packs",
+        json!({"tool":"pack_list"}),
+    );
+    value["pending_configuration_total"] = json!(
+        state
+            .proposals
+            .iter()
+            .filter(|p| p.status == "pending")
+            .count()
+    );
+    value["pending_configuration_list"] = json!({"tool":"policy_show","status":"pending"});
     value["pending_configuration"] = json!(
         state
             .proposals
             .iter()
             .filter(|p| p.status == "pending")
+            .take(16)
             .map(crate::review::model::Proposal::summary)
             .collect::<Vec<_>>()
     );
@@ -216,25 +230,6 @@ pub(super) fn agent_setup_route(coverage: &Value) -> String {
         [agent] => format!("shield mcp setup --agent {agent}"),
         _ => "shield mcp setup".into(),
     }
-}
-
-pub(super) fn policy(context: &Context) -> Result<Value, Error> {
-    let mut state = captured_inspection(context)?;
-    state.candidates.insert(
-        "project".into(),
-        super::inspection::source::policy(&state.candidates["project"], &state.policy_revision)?,
-    );
-    let mut value = review::inspect_recorded(context, &state)?;
-    value["pending_configuration"] = json!(
-        state
-            .proposals
-            .iter()
-            .filter(|row| row.status == "pending")
-            .map(crate::review::model::Proposal::summary)
-            .collect::<Vec<_>>()
-    );
-    inspection_location(context, &state, &mut value);
-    Ok(value)
 }
 
 pub(super) fn policy_prepared(

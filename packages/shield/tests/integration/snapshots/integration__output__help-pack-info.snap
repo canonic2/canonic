@@ -11,8 +11,12 @@ Arguments:
 
 Options:
       --project <PROJECT>              Select a project; otherwise discover the nearest enrolled ancestor
+      --view <VIEW>                    [default: summary] [possible values: summary, rules, settings]
       --json                           Print one JSON result; commands that change policy refuse JSON mode
+      --section <SECTION>              [possible values: variables, preconditions, dependencies, mcp_integrations, invocations, command_sets, permission_groups]
+      --cursor <CURSOR>                Continue with the previous result's opaque cursor
       --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
+      --limit <N>                      Maximum rows, from 1 to 100
       --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
       --cache-dir <CACHE_DIR>          Folder for this project's compiled policy plans, chosen at init or MCP setup
       --config <PATH>                  Shared configuration file; otherwise .shield/config.yml, then .config/shield/config.yml

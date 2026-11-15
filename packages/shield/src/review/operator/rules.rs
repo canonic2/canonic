@@ -28,7 +28,7 @@ pub(super) fn mutate(
         RuleCommand::Add { local }
         | RuleCommand::Edit { local, .. }
         | RuleCommand::Remove { local, .. } => *local,
-        RuleCommand::List => return Err(Error::Invalid("invalid operator command")),
+        RuleCommand::List { .. } => return Err(Error::Invalid("invalid operator command")),
     };
     let layer = Some(if local { Layer::Local } else { Layer::Project });
     let document = rules(&before.candidates["project"], local)?;
@@ -65,7 +65,7 @@ pub(super) fn mutate(
                 Change::RuleAdd { rule, layer }
             }
         }
-        RuleCommand::List => return Err(Error::Invalid("invalid operator command")),
+        RuleCommand::List { .. } => return Err(Error::Invalid("invalid operator command")),
     };
     let (next, meta, _) = crate::review::changes::custom_rule(context, &before, &change, None)?;
     state::write_reviewed(context, &before, next, meta, &mut tty, &base)

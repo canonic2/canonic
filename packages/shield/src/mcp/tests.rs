@@ -349,7 +349,7 @@ fn registered_host_tools_avoid_top_level_schema_unions() {
 }
 
 #[test]
-fn legacy_skills_methods_are_refused_but_bundled_resources_remain_readable() {
+fn legacy_skills_methods_are_refused_while_tools_keep_working() {
     for version in ["2025-06-18", "2025-11-25"] {
         for agent in [None, Some("claude"), Some("codex")] {
             let (server, project) = fixture(agent);
@@ -358,8 +358,7 @@ fn legacy_skills_methods_are_refused_but_bundled_resources_remain_readable() {
             messages[0]["params"]["protocolVersion"] = json!(version);
             messages.extend([
                 json!({"jsonrpc":"2.0","id":2,"method":"skills/list","params":{}}),
-                json!({"jsonrpc":"2.0","id":3,"method":"skills/get","params":{"name":"policy-review"}}),
-                json!({"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"skill://shield/policy-review/SKILL.md"}}),
+                json!({"jsonrpc":"2.0","id":3,"method":"skills/get","params":{"name":"acme-skill"}}),
                 json!({"jsonrpc":"2.0","id":5,"method":"server/discover","params":{}}),
                 tool(json!(6), "docs_list", &json!({"limit":1})),
                 tool(json!(7), "policy_show", &json!({"status":"pending"})),
@@ -376,12 +375,6 @@ fn legacy_skills_methods_are_refused_but_bundled_resources_remain_readable() {
                 let refused = reply(&outputs, &json!(id));
                 assert_eq!(refused["error"]["code"], rpc::METHOD_NOT_FOUND, "{refused}");
             }
-            assert!(
-                reply(&outputs, &json!(4))["result"]["contents"][0]["text"]
-                    .as_str()
-                    .unwrap()
-                    .contains("# Review Shield permissions")
-            );
             let docs = reply(&outputs, &json!(6));
             assert_eq!(docs["result"]["isError"], false, "{docs}");
             let pending = reply(&outputs, &json!(7));
@@ -440,7 +433,7 @@ fn documentation_tools_deliver_bundled_text_and_validate_page_arguments() {
         );
     }
     let listed = reply(&outputs, &json!(2));
-    assert!(listed["result"]["structuredContent"]["data"]["next_offset"].is_number());
+    assert!(listed["result"]["structuredContent"]["data"]["next_cursor"].is_string());
     let searched = reply(&outputs, &json!(3));
     assert_eq!(
         searched["result"]["structuredContent"]["data"]["matches"][0]["path"],
@@ -874,7 +867,7 @@ fn structured_errors_carry_the_same_recovery_as_the_text_summary() {
         (
             "pack_list",
             json!({"cursor":"acme-cursor"}),
-            "cursor_unavailable",
+            "invalid_cursor",
             "without cursor",
         ),
         (

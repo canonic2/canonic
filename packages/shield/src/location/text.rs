@@ -232,10 +232,12 @@ fn parse_reading(executable: &str, arguments: &[String]) -> Option<Parsed> {
     let (flags, values, long, max) = match leaf {
         "sed" => ("nEru", "", "", 256),
         "awk" => ("", "F", "", 256),
+        // --arg, --argjson and --indent are read in `parse_reading`; file-loading
+        // options (-f, -L, --slurpfile, --rawfile) and --args stay unmodeled.
         "jq" => (
-            "rceSMCasR",
+            "rceSMCasRnj",
             "",
-            "--raw-output --compact-output --exit-status --sort-keys --monochrome-output --color-output --ascii-output --slurp --raw-input",
+            "--raw-output --compact-output --exit-status --sort-keys --monochrome-output --color-output --ascii-output --slurp --raw-input --null-input --join-output --tab",
             256,
         ),
         "sort" => ("bdfghiMnrRsuV", "kt", "", 256),
@@ -294,6 +296,11 @@ fn parse_reading(executable: &str, arguments: &[String]) -> Option<Parsed> {
                     String::new()
                 }
             });
+        } else if options && leaf == "jq" && ["--arg", "--argjson"].contains(&argument.as_str()) {
+            // A variable name and its value; the program reads them as $name.
+            parsed.complete &= arguments.next().is_some() && arguments.next().is_some();
+        } else if options && leaf == "jq" && argument == "--indent" {
+            parsed.complete &= arguments.next().is_some_and(|count| digits(count));
         } else if options && argument.starts_with('-') && argument != "-" {
             parsed.complete &= option(argument, flags, values, long, &mut arguments);
         } else if !script {
@@ -965,6 +972,34 @@ mod tests {
             ".foo | debug",
         ] {
             assert!(!jq(script), "{script}");
+        }
+    }
+
+    #[test]
+    fn jq_variable_and_output_options_are_modeled_but_file_loading_is_not() {
+        let model = |arguments: &[&str]| {
+            let arguments: Vec<String> = arguments.iter().map(|a| (*a).to_owned()).collect();
+            read_only("jq", &arguments)
+        };
+        for arguments in [
+            &["-n", "--arg", "sha", "abc123", "{sha: $sha}"][..],
+            &["--argjson", "limit", "3", "limit($limit; .[])"],
+            &["-r", "--indent", "2", "{head_sha,event}"],
+            &["-j", "--tab", ".name"],
+        ] {
+            assert!(model(arguments), "{arguments:?}");
+        }
+        for arguments in [
+            &["--arg", "sha"][..],
+            &["--indent", "two", "."],
+            &["--slurpfile", "data", "data.json", "$data"],
+            &["--rawfile", "text", "notes.txt", "$text"],
+            &["-f", "filter.jq"],
+            &["-L", "lib", "."],
+            &["--args", ".", "one"],
+            &["-n", "$ENV.HOME"],
+        ] {
+            assert!(!model(arguments), "{arguments:?}");
         }
     }
 }

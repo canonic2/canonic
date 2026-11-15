@@ -93,6 +93,7 @@ fn pending(project: &Project) -> String {
         overrides_deny: false,
         deny_rules: Vec::new(),
         settings_change: false,
+        policy_change: false,
     };
     match refused(project.root.path(), &key, &identity, &summary).unwrap() {
         Outcome::Pending(id, _) => id,

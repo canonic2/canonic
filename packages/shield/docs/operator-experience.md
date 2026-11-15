@@ -102,9 +102,9 @@ Project commands require enrollment; user-scope registry commands do not. See
 ## Documentation and diagnostic inputs
 
 `shield docs list --json` returns bundled paths. `shield docs search "pack update"`
-searches literal text; `shield docs read project-mcp.md --start-line 1 --limit 100`
-reads a page. Listing and searching accept `--offset` and `--limit`; reading
-accepts `--start-line` and `--limit`, with the same defaults and bounds as MCP.
+searches literal text; `shield docs read project-mcp.md --limit 100`
+reads a page. Each accepts `--cursor <CURSOR>` and `--limit <N>`, with the same defaults and
+bounds as MCP. Human output prints the exact next-page command.
 
 `shield policy evaluate request.json --json` reads a JSON object containing
 normalized `input` and `context`, as described in

@@ -221,7 +221,48 @@ impl Definition {
         };
         let binary = Path::new(command);
         binary.is_absolute()
-            && render(self.host(), binary, approved).is_ok_and(|expected| expected == *self)
+            && render(self.host(), binary, approved)
+                .is_ok_and(|expected| self.equivalent(&expected))
+    }
+
+    /// Compare the entire generated contract, allowing formatting and the
+    /// closed historical tool inventory. No launcher or hook field is ignored.
+    fn equivalent(&self, expected: &Self) -> bool {
+        if self.host != expected.host {
+            return false;
+        }
+        let parse = crate::policy::parse::<serde_json::Value>;
+        let (Ok(mut actual), Ok(mut generated), Ok(local), Ok(pin)) = (
+            parse(&self.shared),
+            parse(&expected.shared),
+            parse(&self.local),
+            parse(&expected.local),
+        ) else {
+            return false;
+        };
+        if local != pin {
+            return false;
+        }
+        let Some(tools) = actual["permissions"]["tools"].as_object_mut() else {
+            return false;
+        };
+        // These names no longer dispatch a tool. Historical allow/ask entries
+        // grant no current authority and must not orphan the approval channel.
+        for name in ["cache_prepare", "policy_receipt", "policy_repair"] {
+            if let Some(decision) = tools.remove(name)
+                && !matches!(decision.as_str(), Some("allow" | "ask"))
+            {
+                return false;
+            }
+        }
+        let Some(current) = generated["permissions"]["tools"].as_object_mut() else {
+            return false;
+        };
+        // An older publisher has no entry for a new tool. Its omission is
+        // retained, and registration grants no automatic approval for it.
+        current
+            .retain(|name, decision| tools.contains_key(name) || decision.as_str() != Some("ask"));
+        actual == generated
     }
 
     pub(in crate::review) fn pinned_to(&self, binary: &Path) -> bool {
@@ -376,7 +417,7 @@ pub(in crate::review) fn render(
     }
 }
 
-/// The committed shared definition when it is exactly what `binary` renders,
+/// The committed shared definition when it has the contract `binary` renders,
 /// with the approved tools it names. The private pin may be absent, as in a
 /// fresh checkout, but an existing pin must be the one `binary` renders.
 pub(in crate::review) fn committed(
@@ -400,12 +441,21 @@ pub(in crate::review) fn committed(
     let Ok(rendered) = render(host, binary, &approved) else {
         return Ok(None);
     };
-    if rendered.shared != shared
-        || files::read(root, host.local_path)?.is_some_and(|local| local != rendered.local)
-    {
+    let owned = Definition {
+        host: rendered.host,
+        shared,
+        local: files::read(root, host.local_path)?.unwrap_or_else(|| rendered.local.clone()),
+    };
+    if !owned.equivalent(&rendered) {
         return Ok(None);
     }
-    Ok(Some((rendered, approved)))
+    // Retired names never become permissions if a future catalog reuses them.
+    let active = crate::review::mcp::tool_summaries();
+    let approved = approved
+        .into_iter()
+        .filter(|name| active.iter().any(|(tool, _)| tool == name))
+        .collect();
+    Ok(Some((owned, approved)))
 }
 
 /// Plan both definition files for `host` and return the texts Shield then owns.
@@ -480,9 +530,12 @@ pub(in crate::review) fn prepare(
     }
     let desired = render(host, binary, approved)?;
     let texts = desired.texts();
-    if previous.is_none()
-        && (0..2).any(|i| current[i].as_deref().is_some_and(|text| text != texts[i]))
-    {
+    let existing = Definition {
+        host: desired.host,
+        shared: current[0].clone().unwrap_or_else(|| desired.shared.clone()),
+        local: current[1].clone().unwrap_or_else(|| desired.local.clone()),
+    };
+    if previous.is_none() && !existing.equivalent(&desired) {
         return Err(Error::Invalid(host.unowned));
     }
     for ((path, before), after) in paths.into_iter().zip(current).zip(texts) {
@@ -531,6 +584,94 @@ pub(in crate::review) fn diagnose(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(windows))]
+    #[test]
+    fn a_published_hub_definition_keeps_approval_after_tool_retirement_and_reformatting() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let binary = Path::new("/acme/bin/shield");
+        // A generic published definition from the previous YAML renderer.
+        let shared = include_str!("../../../fixtures/hub-shield-definition.yml");
+        let parsed: Value = crate::policy::parse(shared).unwrap();
+        let approved: Vec<_> = parsed["permissions"]["tools"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter(|(_, decision)| *decision == "allow")
+            .map(|(name, _)| name.clone())
+            .collect();
+        let generated = render(&HUB, binary, &approved).unwrap();
+        std::fs::create_dir_all(root.path().join(".hub/local/mcp")).unwrap();
+        std::fs::create_dir_all(root.path().join(".hub/mcp")).unwrap();
+        std::fs::write(root.path().join(HUB.path), shared).unwrap();
+        // Private pins may be formatted independently by the host too.
+        let local =
+            serde_json::to_string_pretty(&crate::policy::parse::<Value>(&generated.local).unwrap())
+                .unwrap();
+        std::fs::write(root.path().join(HUB.local_path), &local).unwrap();
+        let (owned, tools) = committed(&HUB, root.path(), binary)
+            .unwrap()
+            .expect("equivalent definitions retain the approval connection");
+        assert_eq!(owned.shared, shared);
+        assert_eq!(owned.local, local);
+        assert!(tools.iter().all(|name| {
+            !["cache_prepare", "policy_receipt", "policy_repair"].contains(&name.as_str())
+        }));
+        assert!(owned.portable_codec(&tools));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn host_definition_compatibility_preserves_missing_tool_restrictions_and_rejects_changed_authority()
+     {
+        let root = assert_fs::TempDir::new().unwrap();
+        let binary = Path::new("/acme/bin/shield");
+        let generated = render(&HUB, binary, &crate::review::mcp::default_approved()).unwrap();
+        std::fs::create_dir_all(root.path().join(".hub/mcp")).unwrap();
+        std::fs::create_dir_all(root.path().join(".hub/local/mcp")).unwrap();
+        std::fs::write(root.path().join(HUB.local_path), &generated.local).unwrap();
+        let original: Value = crate::policy::parse(&generated.shared).unwrap();
+        let mut missing = original.clone();
+        missing["permissions"]["tools"]
+            .as_object_mut()
+            .unwrap()
+            .remove("status");
+        std::fs::write(root.path().join(HUB.path), missing.to_string()).unwrap();
+        let (owned, approved) = committed(&HUB, root.path(), binary).unwrap().unwrap();
+        assert!(!approved.iter().any(|name| name == "status"));
+        assert!(owned.portable_codec(&approved));
+        for (pointer, replacement) in [
+            ("/connection/command", json!("acme-shield")),
+            ("/connection/args/3", json!("/acme/another-project")),
+            ("/hooks/1/command", json!("acme-hook")),
+            ("/hooks/1/timeout", json!(11)),
+            ("/hooks/1/events", json!(["post_tool_use"])),
+            ("/permissions/tools/policy_apply", json!("allow")),
+            ("/permissions/agents", json!(["codex"])),
+        ] {
+            let mut changed = original.clone();
+            *changed.pointer_mut(pointer).unwrap() = replacement;
+            std::fs::write(root.path().join(HUB.path), changed.to_string()).unwrap();
+            assert!(
+                committed(&HUB, root.path(), binary).unwrap().is_none(),
+                "{pointer}"
+            );
+        }
+        for (tool, decision) in [("acme-unknown", "allow"), ("cache_prepare", "acme-invalid")] {
+            let mut changed = original.clone();
+            changed["permissions"]["tools"][tool] = json!(decision);
+            std::fs::write(root.path().join(HUB.path), changed.to_string()).unwrap();
+            assert!(
+                committed(&HUB, root.path(), binary).unwrap().is_none(),
+                "{tool}"
+            );
+        }
+        std::fs::write(root.path().join(HUB.path), &generated.shared).unwrap();
+        let mut local: Value = crate::policy::parse(&generated.local).unwrap();
+        local["connection"]["command"] = json!("/acme/foreign/shield");
+        std::fs::write(root.path().join(HUB.local_path), local.to_string()).unwrap();
+        assert!(committed(&HUB, root.path(), binary).unwrap().is_none());
+    }
 
     #[cfg(not(windows))]
     #[test]

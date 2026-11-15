@@ -22,6 +22,7 @@ use std::sync::Mutex;
 #[cfg(test)]
 pub(crate) use elicitation::PackQuestion;
 pub(crate) use elicitation::Question;
+pub(super) use operator::list as operator_list;
 pub(super) use operator::{Diagnostic, diagnostic as operator_diagnostic, docs as operator_docs};
 pub(in crate::review) fn captured_summary(
     candidate: &Value,
@@ -847,8 +848,12 @@ fn bound_policy_result(data: &mut Value) -> Result<(), Error> {
 }
 /// The code and recovery-bearing message of a shared review error.
 fn error_fields(error: &Error) -> (&'static str, String) {
+    if let Error::PageItemTooLarge(_) = error {
+        return ("item_too_large", error.to_string());
+    }
     if let Error::Invalid(message) = error {
         for code in [
+            "invalid_cursor",
             "session_unavailable",
             "unsupported_scope",
             "idempotency_conflict",
@@ -979,9 +984,9 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
             "candidate_unavailable",
             "This handle is unavailable in this connection. Call status for current context, then request a fresh view",
         ),
-        Error::CursorUnavailable => (
-            "cursor_unavailable",
-            "This cursor is unavailable for this query or connection. Restart the list without cursor; continue by copying next_cursor into cursor with the same tool, filters and limit, including omitted fields",
+        Error::InvalidCursor => (
+            "invalid_cursor",
+            "Invalid cursor. Restart the list without a cursor; keep the same tool and filters when following next_cursor",
         ),
         Error::Overloaded | Error::Locked => (
             "overloaded",
@@ -1191,22 +1196,6 @@ fn review_tool(
     checkpoint: Checkpoint<'_>,
     confirmed: bool,
 ) -> Result<Value, Error> {
-    let mut normalized;
-    let args = if name == "suggestion_list" && args.get("limit").is_none() {
-        normalized = args.clone();
-        normalized["limit"] = json!(16);
-        &normalized
-    } else {
-        args
-    };
-    if args.get("cursor").is_some() {
-        cursor_fields(name, args)?;
-        if name == "pack_info" {
-            return pack_info::resume(views, args);
-        }
-        return views.resume(name, args);
-    }
-
     match name {
         "policy_apply" => apply::apply(context, args, checkpoint, confirmed, views),
         "policy_propose" => propose(context, views, args, checkpoint),
@@ -1274,18 +1263,19 @@ fn inspection_tool(
     name: &str,
     args: &Value,
 ) -> Result<Value, Error> {
+    super::page::validate(context, name, args)?;
     match name {
         "policy_draft_list" => {
             fields(args, &["draft_id", "cursor", "limit"])?;
-            let data = super::proposal_lifecycle::drafts::list(context, text(args, "draft_id")?)?;
-            if args.get("draft_id").is_some() {
-                return Ok(data);
+            if let Some(id) = text(args, "draft_id")? {
+                return super::proposal_lifecycle::drafts::list(context, Some(id));
             }
-            views.page(name, args, data, "drafts")
+            super::proposal_lifecycle::drafts::list_page(context, args)
         }
         "status" | "doctor" => {
-            fields(args, &[])?;
-            status(context, views, name == "doctor")
+            fields(args, &["section", "cursor", "limit"])?;
+            let data = status(context, views, name == "doctor")?;
+            super::page::sections(context, name, args, data)
         }
         "pack_list" => {
             fields(args, &["reference", "cursor", "limit"])?;
@@ -1294,24 +1284,39 @@ fn inspection_tool(
                 Some(reference) => packs::show(context, reference)?,
                 None => packs::list(context)?,
             };
-            views.page(name, args, data, "packs")
+            views.page(context, name, args, data, "packs")
         }
         "pack_show" => {
             fields(args, &["reference"])?;
             packs::show(context, required(args, "reference")?)
         }
         "registry_list" => {
-            fields(args, &["scope"])?;
-            registries::list(match args.get("scope").and_then(Value::as_str) {
-                None | Some("project") => Some(context),
-                Some("user") => None,
-                Some(_) => return Err(Error::Invalid("scope must be project or user")),
-            })
+            fields(args, &["scope", "cursor", "limit"])?;
+            registries::list_page(
+                match text(args, "scope")? {
+                    None | Some("project") => Some(context),
+                    Some("user") => None,
+                    Some(_) => return Err(Error::Invalid("scope must be project or user")),
+                },
+                args,
+            )
         }
         "rule_list" => {
-            fields(args, &["rule_ref", "candidate_id", "cursor", "limit"])?;
+            fields(
+                args,
+                &[
+                    "rule_ref",
+                    "candidate_id",
+                    "section",
+                    "pack_selector",
+                    "cursor",
+                    "limit",
+                ],
+            )?;
             if args.get("rule_ref").is_some() {
                 fields(args, &["rule_ref", "candidate_id"])?;
+            } else {
+                return inspection::rules_page(context, views, args);
             }
             let data = inspection::rules(
                 context,
@@ -1319,13 +1324,14 @@ fn inspection_tool(
                 args.get("rule_ref"),
                 text(args, "candidate_id")?,
             )?;
-            views.page(name, args, data, "rules")
+            views.page(context, name, args, data, "rules")
         }
         "policy_show" => {
             fields(
                 args,
                 &[
                     "proposal_id",
+                    "section",
                     "agent",
                     "session_id",
                     "status",
@@ -1333,7 +1339,13 @@ fn inspection_tool(
                     "limit",
                 ],
             )?;
-            selector(args, "proposal_id")?;
+            if args.get("proposal_id").is_some()
+                && ["agent", "session_id", "status"]
+                    .iter()
+                    .any(|field| args.get(field).is_some())
+            {
+                return Err(Error::Invalid("proposal selection cannot include filters"));
+            }
             inspection::policy(context, views, args)
         }
         "request_list" | "request_show" => {
@@ -1343,14 +1355,16 @@ fn inspection_tool(
                 required(args, "request_id")?;
             }
             selector(args, "request_id")?;
+            if name == "request_list" && args.get("request_id").is_none() {
+                return approvals::list_page(context, args);
+            }
             let data = approvals::inspect(context, text(args, "request_id")?)?;
-            views.page(name, args, data, "requests")
+            views.page(context, name, args, data, "requests")
         }
         "history_list" | "history_show" => history_tool(context, views, name, args),
         "suggestion_list" => {
             fields(args, &["session_id", "cursor", "limit"])?;
-            let session = text(args, "session_id")?.or(context.session_id.as_deref());
-            views.page(name, args, suggestions::list(context, session), "requests")
+            suggestions::list_page(context, args)
         }
         _ => Err(Error::Invalid("unknown tool")),
     }
@@ -1363,8 +1377,9 @@ fn history_tool(
     args: &Value,
 ) -> Result<Value, Error> {
     if name == "history_show" {
-        fields(args, &["entry_id"])?;
+        fields(args, &["entry_id", "section", "cursor", "limit"])?;
         required(args, "entry_id")?;
+        return history::page(context, name, args);
     }
     fields(
         args,
@@ -1380,41 +1395,8 @@ fn history_tool(
         ],
     )?;
     selector(args, "entry_id")?;
-    let data = history::inspect_filtered(
-        context,
-        &history::Query {
-            entry: text(args, "entry_id")?,
-            denied: boolean(args, "denied")?,
-            approved: boolean(args, "approved")?,
-            agent: text(args, "agent")?,
-        },
-        text(args, "authorization_kind")?,
-        text(args, "grant_id")?,
-    )?;
-    views.page(name, args, data, "entries")
-}
-fn cursor_fields(name: &str, args: &Value) -> Result<(), Error> {
-    fields(
-        args,
-        match name {
-            "pack_list" | "request_list" | "policy_draft_list" => &["cursor", "limit"],
-            "rule_list" => &["candidate_id", "cursor", "limit"],
-            "pack_search" => &["query", "cursor", "limit"],
-            "pack_info" => &["reference", "view", "query", "cursor", "limit"],
-            "policy_show" => &["agent", "session_id", "status", "cursor", "limit"],
-            "history_list" => &[
-                "denied",
-                "approved",
-                "agent",
-                "authorization_kind",
-                "grant_id",
-                "cursor",
-                "limit",
-            ],
-            "suggestion_list" => &["session_id", "cursor", "limit"],
-            _ => return Err(Error::Invalid("tool does not support paging")),
-        },
-    )
+    let _ = views;
+    history::page(context, name, args)
 }
 fn discovery(
     context: &Context,
@@ -1422,6 +1404,7 @@ fn discovery(
     name: &str,
     args: &Value,
 ) -> Result<Value, Error> {
+    super::page::validate(context, name, args)?;
     if name == "pack_info" {
         return pack_info::inspect(context, views, args);
     }
@@ -1429,7 +1412,7 @@ fn discovery(
         "pack_search" => {
             fields(args, &["query", "cursor", "limit"])?;
             let data = packs::search(context, required(args, "query")?)?;
-            views.page(name, args, data, "packs")
+            views.page(context, name, args, data, "packs")
         }
         _ => Err(Error::Invalid("unknown discovery command")),
     }
@@ -1557,7 +1540,7 @@ pub(super) fn text<'a>(value: &'a Value, key: &str) -> Result<Option<&'a str>, E
 pub(super) fn required<'a>(value: &'a Value, key: &str) -> Result<&'a str, Error> {
     text(value, key)?.ok_or(Error::Invalid("required field missing"))
 }
-fn boolean(value: &Value, key: &str) -> Result<bool, Error> {
+pub(super) fn boolean(value: &Value, key: &str) -> Result<bool, Error> {
     match value.get(key) {
         None => Ok(false),
         Some(Value::Bool(b)) => Ok(*b),

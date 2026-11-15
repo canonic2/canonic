@@ -1150,13 +1150,15 @@ fn ripgrep_lists_names_and_searches_bounded_trees_without_reading_protected_stat
             "rg --no-config Acme src",
             "rg --no-config -g '*.js' Acme src",
             "rg --no-config --no-ignore Acme src",
+            // Hidden searches and later options read the same checked tree.
+            "rg --hidden Acme src",
+            "rg Acme src -g '*.js' --sort path",
         ] {
             assert_permitted(&call(root.path(), agent, source), agent);
         }
         for source in [
             "rg Acme .",
             "rg --hidden Acme .",
-            "rg --hidden Acme src",
             "rg --hidden --files-with-matches Acme .",
             "rg --files --hidden --pre sh src",
             "rg --files --hidden --follow .",
@@ -1193,6 +1195,36 @@ fn ripgrep_lists_names_and_searches_bounded_trees_without_reading_protected_stat
                 assert_permitted(&reply, agent);
             }
         }
+        // It still reads its pattern and ignore files, in every spelling.
+        fs::write(root.path().join("patterns"), "app").unwrap();
+        for (source, permitted) in [
+            ("rg --files | rg -f patterns", true),
+            // With -f - the pipe holds patterns, so ripgrep walks the folder.
+            ("rg --files | rg -f -", false),
+            ("rg --files | rg --hidden --file=-", false),
+            ("rg --files | rg -f.shield/state/state.json", false),
+            ("rg --files | rg -f .shield/state/state.json", false),
+            ("rg --files | rg --file=.shield/state/state.json", false),
+            (
+                "rg --files | rg --ignore-file .shield/state/state.json app",
+                false,
+            ),
+        ] {
+            let reply = call(root.path(), agent, source);
+            if cfg!(windows) && agent == "codex" {
+                assert_eq!(reply["hookSpecificOutput"]["permissionDecision"], "deny");
+                assert!(reason(&reply).contains("shell dialect"), "{reply}");
+            } else if permitted {
+                assert_permitted(&reply, agent);
+            } else {
+                assert_eq!(
+                    reply["hookSpecificOutput"]["permissionDecision"], "deny",
+                    "{source}: {reply}"
+                );
+                assert!(reason(&reply).contains(".shield"), "{source}: {reply}");
+            }
+        }
+        fs::remove_file(root.path().join("patterns")).unwrap();
         for source in [
             "rg --no-config Acme",
             "rg --files | rg --no-config Acme .",
@@ -4331,7 +4363,10 @@ fn approved_asks_tell_claude_and_suggest_a_rule_once_routine() {
             "{text}"
         );
         assert!(text.contains("will ask again"), "{text}");
-        assert!(text.contains("suggestion_list"), "{text}");
+        assert!(
+            text.contains("rule_add") && text.contains("skill://shield/custom-rules/SKILL.md"),
+            "{text}"
+        );
         assert!(!text.contains("Approved at least"), "{text}");
     }
     // Allowed calls, and Codex, which cannot prompt, get no note.
@@ -4645,8 +4680,16 @@ fn refusals_offer_command_drafting_guidance_or_non_command_proposals() {
     let value = call(root, "codex", "git add acme.txt");
     let guidance = reason(&value);
     assert!(guidance.contains("suggestion_list"), "{guidance}");
-    assert!(guidance.contains("eligible recurring"), "{guidance}");
-    assert!(guidance.contains("source_entry_id"), "{guidance}");
+    assert!(
+        guidance.contains("propose a narrow custom rule now")
+            && guidance.contains("skill://shield/custom-rules/SKILL.md"),
+        "{guidance}"
+    );
+    // rule_add takes no source_entry_id; only policy_propose links the request.
+    assert!(
+        guidance.contains("policy_propose and source_entry_id"),
+        "{guidance}"
+    );
     assert!(!guidance.contains("with change {"), "{guidance}");
     // A path outside the project: the folder it needs.
     let outside = assert_fs::TempDir::new().unwrap();

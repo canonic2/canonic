@@ -51,15 +51,37 @@ For client implementation, see [transport details](#responses-and-transport-life
 
 Packs, rules, policy, approvals and history support list/show through optional
 selectors (`reference`, `rule_ref`, `proposal_id`, `request_id`, `entry_id`). A
-selector cannot coexist with filters or paging. Lists accept a limit of 1–100
-(default 50) and an opaque cursor bound to that connection and unchanged query.
-To continue, copy `next_cursor` into `cursor` on the same tool and connection,
-preserving all other arguments, including the limit and omitted fields. If the
-cursor is unavailable, restart the list without `cursor`.
-Retained cursor results remain stable while project data changes. Rules use
-owner-qualified references: custom rule ID, or installed pack selector plus rule ID.
+selector cannot coexist with list filters. Lists accept a limit of 1–100
+(default 50; suggestions default to 16). Copy `next_cursor` into `cursor` on
+the same tool with unchanged filters. Page size may change. Cursors are
+stateless and work across connections; invalid cursors return `invalid_cursor`
+and say to restart without a cursor. Pages end early at 256 KiB of serialized
+items. A null `next_cursor` marks the end. CLI lists have `--cursor` and
+`--limit`; human output gives the exact next command.
+
+Lists use stable identity order with a unique tie-breaker. Insertions before the
+last returned key do not repeat earlier rows. Rules use owner-qualified
+references: custom rule ID, or installed pack selector plus rule ID.
 History returns joined request entries; configuration proposals and diagnostics
 create no request entries or action requests.
+
+Status, doctor and individual records preview at most 16 members of a collection.
+Each preview has a sibling total and a route to the rest. For example,
+`doctor {"section":"/agents"}` pages its agents; follow the returned nested
+section routes for an agent's diagnostics. `history_show` with `entry_id` and
+`section: "observations"` pages a request's observations by recorded time and
+event ID. The CLI equivalents are `shield doctor --section /agents` and
+`shield history show <ENTRY> --section observations`.
+
+`rule_list` returns rule bodies without repeating shared definitions. Use
+`section: "shared"` to page their pack owners, then the supplied
+`section: "invocations"` or `section: "command_sets"` route with its
+`pack_selector`. CLI callers use `shield rule list --section shared` and
+`shield rule list --section invocations --pack-selector <SELECTOR>`.
+`policy_show` with a proposal ID previews its rules and authorization events;
+the event route uses `section: "authorization_events"`. CLI callers can also
+page suggestions with `shield suggestion list` and deferred intent with
+`shield policy-draft list`.
 
 ## Administration and recovery
 
@@ -169,35 +191,37 @@ with additional tools, rerun `shield mcp setup --agent codex` or `shield mcp set
 mark the documentation tools on the Tool permissions page, then restart the
 agent session. Rerunning setup preserves saved selections until you change them.
 
-- `docs_list`: list page paths, titles and line counts. Optional `offset`
-  starts at zero; `limit` is 1–100, default 50. Continue with `next_offset`.
+- `docs_list`: list page paths, titles and line counts. Optional `cursor`
+  continues a page; `limit` is 1–100, default 50. Continue with `next_cursor`.
 - `docs_search`: find case-insensitive literal `query` text in the guides.
   The query matches within one line: `.*` and `[` match themselves, surrounding
   spaces are significant, and a query must be 1–1024 bytes, not only whitespace
   and without line breaks. Optional `path` selects one listed page. Results
   contain `path`, one-based `line` and the matching line's `text` without its
-  line break, in path and line order. Use `offset` and `limit` as for listing;
-  continue with `next_offset` and the same query and path.
-- `docs_read`: read a listed `path`, optionally starting at `start_line`
-  (one-based, default 1). `limit` is 1–400 lines, default 100. The result includes
-  `content`, `total_lines` and `next_start_line` for continuation. `content`
+  line break, in path and line order. Use `cursor` and `limit` as for listing;
+  continue with `next_cursor` and the same query and path.
+- `docs_read`: read a listed `path`, optionally continuing with `cursor`. `limit` is 1–400 lines, default 100. The result includes
+  `content`, `total_lines` and `next_cursor` for continuation. `content`
   holds the lines exactly as stored, line breaks included, so joining the
   `content` of successive reads reproduces the page.
 
-`limit` is a maximum: a result also ends early before its text passes 512 KiB,
-so continue from `next_offset` or `next_start_line` until it is null.
+`limit` is a maximum: a result also ends early at 256 KiB of serialized rows or line strings,
+so continue from `next_cursor` until it is null.
 Every result includes `version`, the Shield version whose guides it returns.
 Unknown arguments are refused.
 
 An unknown page returns `not_found` and directs the agent to `docs_list`;
 these are exact catalog paths, not filesystem paths, so `../README.md` or a
 differently cased name is not found. Searches with no matches return an empty
-list, and a read past the last line returns empty content. Pagination is stable
-for the lifetime of the installed binary.
+list. Cursors bind the tool, filters and exact bundle digest. Keep filters
+unchanged; `invalid_cursor` means restart without a cursor. Search omits `total`
+and stops at the page boundary; a conservative cursor may lead to an empty final
+page. A first item larger than the page budget is returned alone within transport
+bounds. Reads without a cursor begin at line 1.
 
-Before drafting a reusable command rule, search for the relevant matching
-grammar and read its explanation and examples. Inspect the current rules with
-`rule_list` so reviewed variants can extend an existing custom rule.
+When the custom-rules skill's examples do not cover a command's grammar,
+`docs_search` finds the matching guide and its examples. Inspect the current
+rules with `rule_list` so reviewed variants can extend an existing custom rule.
 
 ### Example: find the argument-matching guide
 
@@ -212,41 +236,60 @@ relevant match in `policy-rules.md`. To read that guide from its beginning,
 call `docs_read` with:
 
 ```json
-{"path":"policy-rules.md","start_line":1,"limit":100}
+{"path":"policy-rules.md","limit":100}
 ```
 
-The result's `content` contains Markdown. If `next_start_line` is present and
-non-null, use that number as the next `start_line` to continue reading. To jump
-to a search result instead, use its returned `line` as `start_line`; do not
-assume that line numbers are the same in another installed build.
+The result's `content` contains Markdown. Pass a non-null `next_cursor` as
+`cursor` to continue reading with the same path. `start_line` is returned
+metadata; search line numbers identify matches within this installed bundle.
 
 For a new reader, read `introduction.md` or `README.md` first. These tools
 expose the same public guides used by people configuring Shield.
 
-## Optional policy-review skill
+## Bundled skills and prompts
 
-Shield bundles `policy-review` at `skill://shield/policy-review/SKILL.md` for
-user-requested reviews of recurring permission interruptions. A host that supports
-MCP skills can discover and activate it. Tools and documentation remain usable
-without activation. The skill is guidance; reading it never approves an action
-or changes policy. Shield does not install it into local agent skill directories.
-
-Modern clients use MCP `2026-07-28` per-request metadata. For example, send this
+The server advertises the MCP skills extension for modern clients, which use
+MCP `2026-07-28` per-request metadata. For example, send this
 newline-delimited request to the registered server:
 
 ```json
 {"jsonrpc":"2.0","id":1,"method":"skills/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}
 ```
 
-Use the same `_meta` with `skills/get` and
-`{"uri":"skill://shield/policy-review/SKILL.md"}`, or with `resources/read`
-and that URI. Discovery and reads return private cache scope and zero TTL.
-The manifest includes exact byte lengths and SHA-256 digests. Host support for
-discovery does not establish support for skill activation or user approval.
+The list names each bundled skill and its files; the tools and documentation
+work without activating any of them. Each skill is served at
+`skill://shield/<name>/SKILL.md`, and each change it proposes still needs your
+approval in the form:
+
+- `project-setup`: ask your agent to set up Shield for an initialized project.
+  It reads every package's development commands and checks what each one runs,
+  then asks you to approve two changes: the packs that match the project's
+  tools, and project rules for the development commands no pack covers, listed
+  one line per command. It only adds, and anything it leaves out keeps asking.
+- `custom-rules`: your agent writes a project rule when Shield keeps asking
+  about work that will come up again, or when you ask to allow, block or always
+  ask about something.
+- `policy-audit`: ask your agent to audit or clean up the project's policy. It
+  finds expired, unused and redundant custom rules, packs the project no longer
+  uses and overrides that repeat or loosen a pack, and flags a custom rule as
+  dangerous only with a concrete harmful command it allows. It lists the
+  findings, then proposes removing or narrowing them in one change. Rule use
+  comes from this machine's request history, so it keeps rules that look
+  unused but whose target still exists.
+- `pack-update`: ask your agent to update the installed packs. It refreshes
+  release metadata, prepares one update of the packs that track the latest
+  release, and tells you each version change and which commands now decide
+  differently before you approve it. Pinned packs stay at their version unless
+  you ask to move them, and a release that needs a newer Shield is reported
+  rather than installed.
+
+The server also publishes the `install_pack` prompt through
+`prompts/list` and `prompts/get`. Discovery and reads return private cache
+scope and zero TTL.
 
 To expose only the static bundle without an enrolled project, launch
 `shield mcp serve --skills-only`. This mode opens no project and advertises no
-policy tools. The installed executable contains all skill bytes and works offline.
+policy tools. The installed executable contains the bundle and works offline.
 
 ## Reviewing an available pack
 
@@ -260,13 +303,13 @@ identify omitted sections in `missing` and set `truncated`.
 
 For exact evidence, use the same tool with `rule_id`, or set `view` to `rules`
 and optionally `query` to filter rule IDs and reasons. Rule listings default to
-10 entries per page; `limit` accepts 1–100. Continue with `next_cursor` and the
-same reference, view, query and limit. Cursor pages retain the acquired evidence
-even if the registry changes. A `rule_id` accepts `view: "rules"` or no view,
-without filters or paging. Summaries do not accept filters or paging.
-Use `view: "settings"` for complete variable definitions, preconditions and
-dependencies, including sections omitted from a large summary. This view also
-does not accept filters or paging.
+50 entries per page; `limit` accepts 1–100. Continue with `next_cursor` and the
+same reference, view and query. A `rule_id` accepts `view: "rules"` or no view,
+without filters or paging. Rule pages include only their referenced shared
+definitions. Use `view: "settings"` with `section` to page variables,
+preconditions, dependencies, MCP integrations, invocations or command sets.
+Without a section, settings preview at most 16 items per collection and name
+the route to the rest. Permission groups use `section: "permission_groups"`.
 
 Summary and settings results include `setup`: whether configuration is available,
 installation arguments, and a `settings_arguments_template` for requesting
@@ -944,9 +987,8 @@ are declarations. Shield generates a new connection ID on each launch.
 
 The client initializes with a supported protocol version, sends
 `notifications/initialized`, then uses `tools/list` or `tools/call`. The server
-supports ping and cancellation and advertises tools and bundled resources. Legacy
-clients read the skill through `resources/list` and `resources/read`; `skills/*`
-requires modern metadata. Every tool publishes
+supports ping and cancellation and advertises tools, resources and prompts.
+`skills/*` requires modern metadata. Every tool publishes
 strict input and output schemas, with authority annotations. Shield echoes a
 supported requested version. For other version strings it offers `2025-11-25`;
 the client decides whether it supports that version.
@@ -1014,14 +1056,10 @@ JSON-RPC framing uses newline-delimited UTF-8, with no batches or Content-Length
 headers. Duplicate decoded keys, NULs, positional parameters, invalid IDs and
 unknown fields refuse. Arguments that do not match a tool's input schema return
 an `invalid_input` tool result. Frames are limited to 524,288 bytes plus the
-newline; responses to 4 MiB plus newline; pages to 1 MiB. Each connection's snapshot handles
-may pin up to 1 GiB of source and compiled bytes, enough for the largest bundle and
-plan that policy limits allow; retained cursor views have a 64 MiB budget and at
-most 256 continuations and page receipts. Retrying a retained cursor returns the
-same page and successor. Completed traversals release their full lists. Old page
-receipts and abandoned continuations are reclaimed automatically; if a cursor
-expires, restart that list without `cursor` on the same connection. A view that
-cannot fit alongside its replay receipt returns `overloaded`. Pending-review captures
+newline; responses to 4 MiB plus newline. Pages have a 256 KiB serialized-items
+budget and end early when it is reached. Each connection's snapshot handles
+may pin up to 1 GiB of source and compiled bytes, enough for the largest bundle
+and plan that policy limits allow. Cursors retain no result data. Pending-review captures
 remain protected. A session accepts at most 1,024 inbound messages; the next one
 ends it with `-32000` "Session message limit reached".
 

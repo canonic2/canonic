@@ -129,6 +129,23 @@ pub(in crate::review) fn list(context: &Context, id: Option<&str>) -> Result<Val
     Ok(json!({"drafts":state.policy_drafts}))
 }
 
+pub(in crate::review) fn list_page(context: &Context, args: &Value) -> Result<Value, Error> {
+    let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
+    state.check(context)?;
+    let page = crate::review::page::borrowed(
+        context,
+        "policy_draft_list",
+        args,
+        &state.policy_drafts,
+        |row| json!(row.id),
+        |row| json!(row),
+        "policy_draft_list with draft_id",
+    )?;
+    Ok(
+        json!({"drafts":page.items,"next_cursor":page.next_cursor,"total":state.policy_drafts.len()}),
+    )
+}
+
 pub(in crate::review) fn remove(context: &Context, id: &str) -> Result<Value, Error> {
     Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
         if let Some(draft) = state.policy_drafts.iter().find(|d| d.id == id)

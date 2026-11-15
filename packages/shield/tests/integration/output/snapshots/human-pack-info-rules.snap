@@ -7,7 +7,6 @@ $ shield pack info acme/test
 Checking registry metadata…
 acme/test 0.1.0 · registry acme · 1 rule
 Acme integration fixture
-Versions 0.1.0 · requires Shield [SHIELD-VERSION]
-  mutation  acme write · loose allow, recommended ask, strict deny
-Add it with shield pack add acme/test.
+  Preview profile choices · 1 rules
+Inspect rule pages: shield pack info acme/test --view rules
 --- exit 0

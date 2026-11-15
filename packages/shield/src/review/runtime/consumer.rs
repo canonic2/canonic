@@ -93,9 +93,10 @@ impl From<Error> for RuntimeError {
             Error::AgentNotConnected => {
                 Self::Invalid("this agent is not connected to Shield in this project")
             }
-            Error::CandidateUnavailable | Error::CursorUnavailable => {
+            Error::CandidateUnavailable | Error::InvalidCursor => {
                 Self::Invalid("diagnostic view is unavailable")
             }
+            Error::PageItemTooLarge(_) => Self::Invalid("page item exceeds the transport limit"),
         }
     }
 }

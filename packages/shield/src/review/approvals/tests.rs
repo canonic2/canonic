@@ -359,11 +359,12 @@ fn action_request_kinds_mixed_native_override_read_and_run_are_one_atomic_review
         input_digest: "acme-native-operation".into(),
     };
     let summary = Summary {
-        action: "Run acme verify".into(),
+        action: "Run git merge --ff-only acme-main".into(),
         reason: "a rule denies it".into(),
         overrides_deny: true,
         deny_rules: vec!["acme-deny".into()],
         settings_change: false,
+        policy_change: true,
     };
     let root = Path::new(&f.context.project_root);
     let id = match review::hook_approval::refused(root, &key, &identity, &summary).unwrap() {
@@ -374,6 +375,12 @@ fn action_request_kinds_mixed_native_override_read_and_run_are_one_atomic_review
     let args = json!({"request_ids":f.ids});
     let text = confirmation(&f.context, &args).unwrap();
     assert!(text.contains("overrides the rule that denies it"));
+    assert!(text.contains("turn off Shield's protection"), "{text}");
+    assert!(
+        text.contains("1 may replace Shield's policy files"),
+        "{text}"
+    );
+    assert!(!text.contains("No policy changes"), "{text}");
     let header = text.split("Request 1").next().unwrap();
     assert!(
         header.contains("1 override a deny; 0 change protected agent settings"),

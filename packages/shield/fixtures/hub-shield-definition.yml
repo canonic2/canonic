@@ -1,0 +1,115 @@
+schema_version: 1
+connection:
+  args:
+  - mcp
+  - serve
+  - --project
+  - '.'
+  - --agent
+  - "{agent}"
+  command: shield
+  transport: stdio
+hooks:
+- agents:
+  - claude
+  command: "{command} __internal native-hook --project . --agent {agent} --event {event} || exit 2"
+  events:
+  - pre_tool_use
+  - post_tool_use
+  - post_tool_use_failure
+  - stop
+  - session_end
+  matcher: .*
+  status_message: Shield project enforcement
+  timeout: 10
+- agents:
+  - codex
+  command: "{command} __internal native-hook --project . --agent {agent} --event {event} || exit 2"
+  events:
+  - pre_tool_use
+  - permission_request
+  - post_tool_use
+  - stop
+  - session_end
+  - interrupt
+  matcher: .*
+  status_message: Shield project enforcement
+  timeout: 10
+- agents:
+  - gemini
+  command: "{command} __internal native-hook --project . --agent {agent} --event {event} || exit 2"
+  description: Shield project enforcement
+  events:
+  - pre_tool_use
+  - post_tool_use
+  matcher: .*
+  name: shield-project-enforcement
+  timeout: 10
+- agents:
+  - agy
+  command: "{command} __internal native-hook --project . --agent {agent} --event {event} || exit 2"
+  events:
+  - pre_tool_use
+  - post_tool_use
+  matcher: "*"
+  name: shield-project-enforcement
+  timeout: 10
+permissions:
+  agents:
+  - claude
+  - codex
+  tools:
+    cache_prepare: allow
+    disable: allow
+    docs_list: allow
+    docs_read: allow
+    docs_search: allow
+    doctor: allow
+    enable: allow
+    history_configure: allow
+    history_list: allow
+    history_show: allow
+    mcp_setup: allow
+    pack_add: allow
+    pack_configure: allow
+    pack_info: allow
+    pack_list: allow
+    pack_remove: allow
+    pack_search: allow
+    pack_show: allow
+    pack_update: allow
+    policy_apply: ask
+    policy_compare: allow
+    policy_defer: allow
+    policy_draft_list: allow
+    policy_draft_remove: allow
+    policy_evaluate: allow
+    policy_propose: allow
+    policy_receipt: allow
+    policy_reject: allow
+    policy_repair: allow
+    policy_show: allow
+    policy_withdraw: allow
+    protection_set: allow
+    registry_add: allow
+    registry_default: allow
+    registry_list: allow
+    registry_remove: allow
+    registry_trust: allow
+    request_approve: allow
+    request_deny: allow
+    request_list: allow
+    request_show: allow
+    review_defer: allow
+    rule_add: allow
+    rule_edit: allow
+    rule_list: allow
+    rule_remove: allow
+    session_grant_approve: allow
+    session_grant_list: allow
+    session_grant_propose: allow
+    session_grant_reconsider: allow
+    session_grant_revoke: allow
+    session_grant_show: allow
+    status: allow
+    suggestion_list: allow

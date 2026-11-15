@@ -151,6 +151,14 @@ fn compact_mcp_preview_references_materialize_and_lists_keep_shared_definitions(
     );
     let listed = mcp::call(&context, &connection, "rule_list", &json!({}), &|| Ok(()));
     assert_eq!(listed["data"]["rules"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["data"]["shared_total"], 1);
+    let listed = mcp::call(
+        &context,
+        &connection,
+        "rule_list",
+        &json!({"section":"shared"}),
+        &|| Ok(()),
+    );
     assert_eq!(
         listed["data"]["shared"][0]["command_sets"]["safe"]["status"],
         "base-status"

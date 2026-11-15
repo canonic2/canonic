@@ -1,6 +1,5 @@
 ---
 source: tests/integration/output/human.rs
-assertion_line: 368
 expression: text
 ---
 $ shield history show [ENTRY]
@@ -9,4 +8,5 @@ $ shield history show [ENTRY]
 Requested [TIME] by an unidentified agent via run in .
 Rule echo: Acme echo needs approval
 Outcome: completed, exit 0
+More observations: shield --project [PROJECT] history show [ENTRY] --section observations --limit 50
 --- exit 0

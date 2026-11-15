@@ -16,6 +16,24 @@ fn state(context: &Context) -> State {
 }
 
 #[test]
+fn a_replaced_binary_retries_a_previously_refused_host_definition() {
+    let root = assert_fs::TempDir::new().unwrap();
+    std::fs::create_dir_all(root.path().join(".hub/mcp")).unwrap();
+    std::fs::write(root.path().join(".hub/config.yml"), "schema_version: 1\n").unwrap();
+    std::fs::write(
+        root.path().join(".hub/mcp/shield.yml"),
+        "schema_version: 1\n",
+    )
+    .unwrap();
+    let executable = root.path().join("acme-shield");
+    std::fs::write(&executable, "previous executable").unwrap();
+    let previous = adoption_key(root.path(), &executable).unwrap();
+    assert_eq!(adoption_key(root.path(), &executable).unwrap(), previous);
+    std::fs::write(&executable, "replacement executable at the same path").unwrap();
+    assert_ne!(adoption_key(root.path(), &executable).unwrap(), previous);
+}
+
+#[test]
 fn portable_pending_maintenance_preserves_files_when_executable_digest_changes() {
     let (root, context, _) = historical("codex");
     let before = state(&context);

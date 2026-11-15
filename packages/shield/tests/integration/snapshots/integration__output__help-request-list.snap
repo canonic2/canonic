@@ -7,8 +7,10 @@ List pending and approved requests
 Usage: shield request list [OPTIONS]
 
 Options:
+      --cursor <CURSOR>                Continue with the previous result's opaque cursor
       --project <PROJECT>              Select a project; otherwise discover the nearest enrolled ancestor
       --json                           Print one JSON result; commands that change policy refuse JSON mode
+      --limit <N>                      Maximum rows, from 1 to 100
       --debug-log-dir <DEBUG_LOG_DIR>  Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)
       --no-debug-log                   Disable diagnostic logging, including automatic debug-build logs
       --cache-dir <CACHE_DIR>          Folder for this project's compiled policy plans, chosen at init or MCP setup

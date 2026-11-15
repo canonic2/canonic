@@ -308,7 +308,7 @@ tables. Packs and custom rules supply permissions; `location/` supplies fresh
 request facts. Shell analysis uses submitted source and available context,
 without attesting execution.
 
-`build.rs` checks the bundled skill's sources and calls `canonic-mcp-kit`'s
+`build.rs` checks any bundled skill folders under `skills/` and calls `canonic-mcp-kit`'s
 documentation build helper, which validates every guide under `docs/` and
 writes one compressed bundle to `OUT_DIR`. An invalid guide, such as a symbolic
 link or a page that is not UTF-8, fails the build with its relative path.

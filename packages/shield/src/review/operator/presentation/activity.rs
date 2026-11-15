@@ -80,9 +80,14 @@ pub(super) fn status(value: &Value, doctor: bool) -> String {
     } else {
         format!("Shield is active in {root} for {}.\n", agents.join(" and "))
     };
-    let packs = value["installed_packs"]["packs"]
-        .as_array()
-        .map_or(0, Vec::len);
+    let packs = value["installed_packs"]["packs_total"]
+        .as_u64()
+        .and_then(|total| usize::try_from(total).ok())
+        .unwrap_or_else(|| {
+            value["installed_packs"]["packs"]
+                .as_array()
+                .map_or(0, Vec::len)
+        });
     let _ = writeln!(
         output,
         "Policy: {} · revision {}",
@@ -749,8 +754,11 @@ mod tests {
             );
             let rows = suggestions["data"]["requests"].as_array().unwrap();
             assert_eq!(rows.len(), 5, "{suggestions}");
-            for (row, argument) in rows.iter().zip(["one", "two", "three", "four", "five"]) {
-                assert_eq!(row["command"], format!("acme {argument}"));
+            for argument in ["one", "two", "three", "four", "five"] {
+                let row = rows
+                    .iter()
+                    .find(|row| row["command"] == format!("acme {argument}"))
+                    .unwrap();
                 assert_eq!(row["request"]["arguments"], json!([argument]));
             }
             let row = review::history::inspect(

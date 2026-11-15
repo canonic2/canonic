@@ -83,6 +83,7 @@ fn filters(paths: &[(&Path, &str)]) -> Vec<(String, String)> {
     filters.extend(
         [
             (r"pack:[0-9a-f-]{36}", "pack:[SELECTOR]"),
+            (r"--cursor [A-Za-z0-9_-]+", "--cursor [CURSOR]"),
             (r"\b[0-9a-f]{64}\b", "[DIGEST]"),
             (r"\b[0-9a-f]{12}\b", "[SHORT-DIGEST]"),
             (r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z", "[TIME]"),
@@ -180,6 +181,11 @@ fn public_command_steps(source: &str) -> Vec<(&'static str, Vec<&str>, &'static 
         ("pack-add", vec!["pack", "add", "acme/parent"], "\nyes\n"),
         ("pack-add-missing", vec!["pack", "add", "acme/missing"], ""),
         ("pack-list", vec!["pack", "list"], ""),
+        (
+            "pack-list-first-page",
+            vec!["pack", "list", "--limit", "1"],
+            "",
+        ),
         ("pack-show", vec!["pack", "show", "acme/parent"], ""),
         (
             "pack-show-missing",

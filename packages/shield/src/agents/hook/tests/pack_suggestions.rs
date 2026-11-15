@@ -361,7 +361,11 @@ fn initial_script_asks_keep_proposal_instructions_in_agent_feedback() {
             .unwrap();
         assert!(!text.contains(instruction));
         assert!(text.contains("suggestion_list"), "{text}");
-        assert!(text.contains("eligible recurring"), "{text}");
+        assert!(
+            text.contains("propose a narrow custom rule now")
+                && text.contains("skill://shield/custom-rules/SKILL.md"),
+            "{text}"
+        );
         assert!(!text.contains("with change {"), "{text}");
         // Drafting guidance has not approved the command or activated a rule.
         assert_eq!(

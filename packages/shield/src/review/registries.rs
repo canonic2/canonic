@@ -225,17 +225,47 @@ pub(in crate::review) fn effective_from(settings: &Values) -> Result<Effective, 
     merge(&global()?, Some(&project(settings)))
 }
 
-pub(in crate::review) fn list(context: Option<&Context>) -> Result<Value, Error> {
+pub(in crate::review) fn list_page(
+    context: Option<&Context>,
+    args: &Value,
+) -> Result<Value, Error> {
+    let query = context.map_or_else(
+        || args.clone(),
+        |context| super::page::query(context, "registry_list", args),
+    );
+    let request =
+        canonic_mcp_kit::page::Request::from_mcp(args, canonic_mcp_kit::page::Limits::STANDARD)
+            .map_err(super::page::error)?;
+    let position = super::page::after(&super::page::scope("registry_list", &query), &request)?;
     let effective = effective(context)?;
-    let sources: serde_json::Map<_, _> = effective
+    let mut records: Vec<_> = effective
         .iter()
-        .map(|(alias, source, scope)| {
+        .map(|(alias, source, scope)| (super::page::key(&json!(alias)), alias, source, scope))
+        .collect();
+    records.sort_by(|a, b| a.0.cmp(&b.0));
+    let total = records.len();
+    let rows = records
+        .into_iter()
+        .filter(|(key, _, _, _)| position.as_ref().is_none_or(|last| key > last))
+        .map(|(key, alias, source, scope)| {
             let mut value = json!(source);
             value["scope"] = json!(scope);
-            (alias.to_owned(), value)
+            (key, json!({"id":alias,"value":value}))
+        });
+    let page = super::page::collect("registry_list", &query, rows, "registry_list with limit 1")?;
+    let sources: serde_json::Map<_, _> = page
+        .items
+        .into_iter()
+        .map(|mut row| {
+            (
+                row["id"].as_str().expect("registry alias").to_owned(),
+                row["value"].take(),
+            )
         })
         .collect();
-    Ok(json!({"schema_version":1,"sources":sources,"default":effective.default_alias()}))
+    Ok(
+        json!({"schema_version":1,"sources":sources,"default":effective.default_alias(),"next_cursor":page.next_cursor,"total":total}),
+    )
 }
 
 /// Discovers a new source and authenticates its first catalog for review.

@@ -136,6 +136,65 @@ pub(super) fn inspect(context: &Context, id: Option<&str>) -> Result<Value, Erro
     Ok(json!({"schema_version":1,"project_id":context.project_id,"requests":requests}))
 }
 
+/// Read one bounded checkpoint and build public views only for the page.
+pub(super) fn list_page(context: &Context, args: &Value) -> Result<Value, Error> {
+    let state = super::project::checkpoint(context)?;
+    let time = super::clock::now_ms()?;
+    let query = super::page::query(context, "request_list", args);
+    let request =
+        canonic_mcp_kit::page::Request::from_mcp(args, canonic_mcp_kit::page::Limits::STANDARD)
+            .map_err(super::page::error)?;
+    let after = super::page::after(&super::page::scope("request_list", &query), &request)?;
+    let mut records = Vec::new();
+    for row in &state.read_requests {
+        if let Some(id) = row.live_id(time) {
+            records.push((super::page::key(&json!(id)), "read", id));
+        }
+    }
+    for row in &state.run_requests {
+        if let Some(id) = row.live_id(time) {
+            records.push((super::page::key(&json!(id)), "execution", id));
+        }
+    }
+    for row in &state.hook_requests {
+        if let Some(id) = row.listed_id(&state, time) {
+            records.push((super::page::key(&json!(id)), "hook", id));
+        }
+    }
+    records.sort_by(|a, b| a.0.cmp(&b.0));
+    let total = records.len();
+    let redacted = std::cell::Cell::new(false);
+    let rows = records
+        .into_iter()
+        .filter(|(key, _, _)| after.as_ref().is_none_or(|last| key > last))
+        .map(|(key, kind, id)| {
+            let mut row = match kind {
+                "read" => state
+                    .read_requests
+                    .iter()
+                    .find(|row| row.id() == id)
+                    .expect("selected retained read")
+                    .list_view(),
+                "execution" => state
+                    .run_requests
+                    .iter()
+                    .find(|row| row.id() == id)
+                    .expect("selected retained execution")
+                    .list_view(),
+                _ => super::hook_approval::inspect_from(&state, context, Some(id), time)?,
+            };
+            if super::model::redact(&mut row) || row["redacted"] == true {
+                redacted.set(true);
+            }
+            row["type"] = json!(kind);
+            Ok((key, row))
+        });
+    let page = super::page::collect_results("request_list", &query, rows, "request_show")?;
+    Ok(
+        json!({"schema_version":1,"project_id":context.project_id,"requests":page.items,"next_cursor":page.next_cursor,"total":total,"redacted":redacted.get()}),
+    )
+}
+
 /// Count unexpired requests that wait for an operator decision.
 pub(super) fn pending_count(state: &super::model::State, time: u64) -> usize {
     state

@@ -208,6 +208,15 @@ impl Observer {
         targets::rg_pattern_only(arguments, &self.cwd)
     }
 
+    /// The pattern and ignore files a ripgrep request reads, as submitted; a
+    /// search of its standard input still reads them.
+    pub(crate) fn search_auxiliary_reads(&self) -> Vec<String> {
+        let Input::Argv { arguments, .. } = &self.input else {
+            return Vec::new();
+        };
+        targets::rg_auxiliary_reads(arguments)
+    }
+
     /// Conservative content footprint for modeled ripgrep requests. Listings do
     /// not read file contents; ignore files and globs may expose hidden entries.
     pub(crate) fn search_reaches(&self, excluded: &Path) -> Option<bool> {

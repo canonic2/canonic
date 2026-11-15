@@ -29,7 +29,7 @@ pub(super) fn mutate(
         RegistryCommand::Add { name, location } => Change::Add { name, location },
         RegistryCommand::Remove { name } => Change::Remove { name },
         RegistryCommand::Default { name } => Change::Default { name },
-        RegistryCommand::List | RegistryCommand::Trust { .. } => {
+        RegistryCommand::List { .. } | RegistryCommand::Trust { .. } => {
             return Err(Error::Invalid("invalid operator command"));
         }
     };

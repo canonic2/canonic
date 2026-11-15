@@ -23,6 +23,8 @@ Commands:
   request        List, inspect, approve or deny stored agent requests
   session-grant  Inspect or revoke temporary conversation grants, or approve a retained candidate
   history        List or inspect agent request decisions and outcomes
+  suggestion     Inspect recorded review suggestions
+  policy-draft   Inspect retained policy drafts
   help           Print this message or the help of the given subcommand(s)
 
 Options:

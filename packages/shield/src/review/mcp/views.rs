@@ -1,5 +1,5 @@
-//! Immutable connection-local snapshot handles and retained cursor views.
-use super::{Context, Error, required};
+//! Immutable connection-local snapshot handles and stateless list views.
+use super::{Context, Error};
 use crate::{
     configuration,
     review::{snapshots, storage::Store},
@@ -54,12 +54,6 @@ impl Captured {
     }
 }
 #[derive(Clone)]
-struct Cursor {
-    query: String,
-    used: u64,
-    content: paging::Content,
-}
-#[derive(Clone)]
 struct Handle {
     captured: Arc<Captured>,
     key: String,
@@ -72,10 +66,8 @@ pub(super) struct Views {
     seed: String,
     sequence: u64,
     bytes: usize,
-    cursor_bytes: usize,
     handles: BTreeMap<String, Handle>,
     identities: BTreeMap<String, String>,
-    cursors: BTreeMap<String, Cursor>,
     approvals: BTreeMap<String, (Arc<Value>, bool)>,
     approval_bytes: usize,
 }
@@ -85,10 +77,8 @@ impl Views {
             seed,
             sequence: 0,
             bytes: 0,
-            cursor_bytes: 0,
             handles: BTreeMap::new(),
             identities: BTreeMap::new(),
-            cursors: BTreeMap::new(),
             approvals: BTreeMap::new(),
             approval_bytes: 0,
         }
@@ -346,21 +336,6 @@ fn identity_of(candidate: &str, metadata: &Value) -> String {
         .as_bytes(),
     )
 }
-fn query(name: &str, args: &Value) -> String {
-    let mut args = args.clone();
-    if let Some(o) = args.as_object_mut() {
-        o.remove("cursor");
-    }
-    json!([name, args]).to_string()
-}
-fn limit(args: &Value) -> Result<usize, Error> {
-    let limit = args
-        .get("limit")
-        .map_or(Some(50), Value::as_u64)
-        .filter(|v| (1..=100).contains(v))
-        .ok_or(Error::Invalid("invalid page limit"))?;
-    usize::try_from(limit).map_err(|_| Error::Invalid("invalid page limit"))
-}
 
 #[cfg(test)]
 mod tests {
@@ -497,35 +472,5 @@ mod tests {
             views.get(&second).unwrap().revision(),
             edited.evaluator.revision()
         );
-    }
-
-    #[test]
-    fn pages_preserve_envelopes_and_cursor_binding_for_large_retained_lists() {
-        let mut views = Views::new("acme-pages".into());
-        let rows: Vec<_> = (0..1000)
-            .map(|id| json!({"id":id,"detail":"é\\\"".repeat(1000)}))
-            .collect();
-        let first = views
-            .page(
-                "acme",
-                &json!({"limit":2}),
-                json!({"rows":rows,"metadata":{"complete":true}}),
-                "rows",
-            )
-            .unwrap();
-        assert_eq!(first["rows"].as_array().unwrap().len(), 2);
-        assert_eq!(first["rows"][0]["id"], 0);
-        assert_eq!(first["metadata"], json!({"complete":true}));
-        let args = json!({"limit":2,"cursor":first["next_cursor"]});
-        assert!(matches!(
-            views.resume("different", &args),
-            Err(Error::CursorUnavailable)
-        ));
-        let second = views.resume("acme", &args).unwrap();
-        assert_eq!(second["rows"][0]["id"], 2);
-        assert_eq!(second["metadata"], first["metadata"]);
-        assert!(crate::json::fits(&second, 1024 * 1024));
-        let oversized = json!({"rows":[{"detail":"x".repeat(1024 * 1024)}]});
-        assert!(views.page("acme", &json!({}), oversized, "rows").is_err());
     }
 }

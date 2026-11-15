@@ -65,7 +65,41 @@ fn deny_summary(branch: &str) -> Summary {
         overrides_deny: true,
         deny_rules: vec!["acme-branch-delete".into()],
         settings_change: false,
+        policy_change: false,
     }
+}
+
+#[test]
+fn git_policy_changes_are_explicit_in_single_and_group_reviews() {
+    let fixture = fixture();
+    let mut policy = summary();
+    policy.policy_change = true;
+    policy.settings_change = false;
+    policy.action = "Run this command:\ngit merge --ff-only acme-main".into();
+    policy.reason = "this Git command may replace Shield's policy files".into();
+    let id = pending(fixture.refuse_with("acme-session", "acme-merge", &policy));
+    let other = pending(fixture.refuse("acme-settings"));
+    let context = fixture.connection("codex");
+    let single = confirmation(&context, &json!({"request_id":id})).unwrap();
+    assert!(single.contains("turn off Shield's protection"), "{single}");
+    assert!(!single.contains("does not change your policy"), "{single}");
+    let group = confirmation(&context, &json!({"request_ids":[id,other]})).unwrap();
+    assert!(
+        group.contains("1 of them may replace Shield's policy files."),
+        "{group}"
+    );
+    assert!(group.contains("turn off Shield's protection"), "{group}");
+}
+
+#[test]
+fn summaries_without_git_policy_changes_keep_their_saved_binding_bytes() {
+    let old = json!({
+        "action":"Run acme", "reason":"the policy asks", "overrides_deny":false,
+        "settings_change":false,
+    });
+    let decoded: Summary = serde_json::from_value(old.clone()).unwrap();
+    assert!(!decoded.policy_change);
+    assert_eq!(serde_json::to_value(decoded).unwrap(), old);
 }
 
 #[test]
@@ -406,6 +440,7 @@ fn summary() -> Summary {
         overrides_deny: false,
         deny_rules: vec![],
         settings_change: true,
+        policy_change: false,
     }
 }
 

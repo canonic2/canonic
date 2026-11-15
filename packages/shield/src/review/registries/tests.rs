@@ -182,7 +182,7 @@ fn main_source_is_binary_pinned_without_enrollment_or_network_key_discovery() {
     let (_project, context) = crate::review::tests::enrolled();
     let registered = effective(Some(&context)).expect("registrations");
     assert_eq!(registered.select(Some("main")).expect("main"), &source);
-    let listed = list(Some(&context)).expect("listing");
+    let listed = list_page(Some(&context), &json!({})).expect("listing");
     let mut expected = json!(source);
     expected["scope"] = json!("builtin");
     assert_eq!(listed["sources"]["main"], expected);

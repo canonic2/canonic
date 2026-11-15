@@ -224,7 +224,8 @@ fn ordinary_request_sweep_tracks_fresh_and_aged_work() {
         for (name, run) in [
             (
                 "cli_policy",
-                review::project::policy as fn(&Context) -> Result<Value, Error>,
+                (|context: &Context| review::mcp::operator_list(context, "policy_show", &json!({})))
+                    as fn(&Context) -> Result<Value, Error>,
             ),
             ("cli_pack_list", review::packs::list),
             ("native_tool_lookup", |_: &Context| {

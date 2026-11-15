@@ -27,7 +27,27 @@ pub(in crate::review) fn adoption_key(root: &Path, executable: &Path) -> Option<
     let host = committed_host(root)?;
     let shared = files::read(root, host.path).ok()??;
     let local = files::read(root, host.local_path).ok()?;
-    let key = serde_json::json!([host.id, shared, local, executable.to_str()]).to_string();
+    // This is only a negative-cache invalidator, never executable authority.
+    // A replacement at the same path (including a same-version development
+    // build) must retry a refusal made by an older implementation.
+    let metadata = std::fs::metadata(executable).ok()?;
+    let modified = metadata
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_nanos()
+        .to_string();
+    let key = serde_json::json!([
+        host.id,
+        shared,
+        local,
+        executable.to_str(),
+        env!("CARGO_PKG_VERSION"),
+        metadata.len(),
+        modified
+    ])
+    .to_string();
     Some(crate::policy::fingerprint(key.as_bytes()))
 }
 

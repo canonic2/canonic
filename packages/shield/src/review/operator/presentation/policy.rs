@@ -671,10 +671,14 @@ fn active_policy(value: &Value) -> String {
             plural(rules, "project rule", "project rules")
         );
     }
-    match value["pending_configuration"]
-        .as_array()
-        .map_or(0, Vec::len)
-    {
+    match value["pending_configuration_total"]
+        .as_u64()
+        .and_then(|total| usize::try_from(total).ok())
+        .unwrap_or_else(|| {
+            value["pending_configuration"]
+                .as_array()
+                .map_or(0, Vec::len)
+        }) {
         0 => {}
         waiting => {
             let _ = writeln!(

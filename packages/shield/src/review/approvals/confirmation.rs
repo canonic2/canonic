@@ -39,6 +39,7 @@ struct Row {
     text: String,
     deny: bool,
     settings: bool,
+    policy: bool,
 }
 
 fn compose(rows: &[Row]) -> String {
@@ -46,10 +47,11 @@ fn compose(rows: &[Row]) -> String {
         return single.text.clone();
     }
     let mut text = format!(
-        "Allow these {} requests, each once? {} override a deny; {} change protected agent settings. Review every request. No policy changes.\n",
+        "Allow these {} requests, each once? {} override a deny; {} change protected agent settings; {} may replace Shield's policy files. Review every request. No standing permission is created.\n",
         rows.len(),
         rows.iter().filter(|row| row.deny).count(),
-        rows.iter().filter(|row| row.settings).count()
+        rows.iter().filter(|row| row.settings).count(),
+        rows.iter().filter(|row| row.policy).count()
     );
     for (index, row) in rows.iter().enumerate() {
         let _ = write!(
@@ -88,17 +90,18 @@ fn question(
         session = origin;
         let row = match kind {
             Kind::Hook => {
-                let (text, deny, settings) =
-                    hook_approval::group_row(state, context, id).map_err(|error| match error {
-                        Error::AgentNotConnected if ids.len() > 1 => {
-                            hook_approval::not_connected_in_group(id)
-                        }
-                        error => error,
-                    })?;
+                let (text, deny, settings, policy) = hook_approval::group_row(state, context, id)
+                    .map_err(|error| match error {
+                    Error::AgentNotConnected if ids.len() > 1 => {
+                        hook_approval::not_connected_in_group(id)
+                    }
+                    error => error,
+                })?;
                 Row {
                     text,
                     deny,
                     settings,
+                    policy,
                 }
             }
             Kind::Read | Kind::Execution => Row {
@@ -109,6 +112,7 @@ fn question(
                 },
                 deny: false,
                 settings: false,
+                policy: false,
             },
         };
         if row.text.len() > hook_approval::MAX_FORM {

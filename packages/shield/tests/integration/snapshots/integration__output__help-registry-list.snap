@@ -7,6 +7,9 @@ List effective registry sources
 Usage: shield registry list [OPTIONS]
 
 Options:
+      --cursor <CURSOR>
+          Continue with the previous result's opaque cursor
+
       --project <PROJECT>
           Select a project; otherwise discover the nearest enrolled ancestor
 
@@ -21,6 +24,9 @@ Options:
 
       --json
           Print one JSON result; commands that change policy refuse JSON mode
+
+      --limit <N>
+          Maximum rows, from 1 to 100
 
       --debug-log-dir <DEBUG_LOG_DIR>
           Write private per-process diagnostics in this directory (also `SHIELD_DEBUG_LOG_DIR`)

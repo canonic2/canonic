@@ -37,40 +37,47 @@ fn capture(context: &Context, receipt: &mut Value) -> Result<(), Error> {
         existing
     } else {
         let mut captured = None;
-        store.update_checkpoint_if_changed(context, &|| Ok(()), |state| {
-            state.check_operations()?;
-            let Ok(reg) = registration(state, agent) else {
-                return Ok(false);
-            };
-            // Another hook may have captured the same tuple since our read.
-            if let Some(record) = state.session_grants.contexts.get(&key).filter(|s| {
-                super::Authority::capture(state).context_matches(&key, s)
-                    && now < s.created.saturating_add(super::RETAIN)
-            }) {
-                captured = Some(record.clone());
-                return Ok(false);
-            }
-            state.session_grants.compact(now);
-            if state.session_grants.contexts.len() >= 256 {
-                return Ok(false);
-            }
-            let record = Conversation {
-                reference: format!(
-                    "session-{}",
-                    hash(&json!([state.project_id, key, now, state.sequence]))
-                ),
-                agent: agent.into(),
-                session_id: session.into(),
-                registration: reg,
-                created: now,
-            };
-            state
-                .session_grants
-                .contexts
-                .insert(key.clone(), record.clone());
-            captured = Some(record);
-            Ok(true)
-        })?;
+        // Context is advisory metadata, not a policy mutation. Use the
+        // checkpoint-only transaction: the general update path captures all
+        // policy artifacts while holding the writer, delaying other hooks.
+        store.transition_handoff(
+            context,
+            |state| {
+                state.check_operations()?;
+                let Ok(reg) = registration(state, agent) else {
+                    return Ok((Value::Null, false));
+                };
+                // Another hook may have captured the same tuple since our read.
+                if let Some(record) = state.session_grants.contexts.get(&key).filter(|s| {
+                    super::Authority::capture(state).context_matches(&key, s)
+                        && now < s.created.saturating_add(super::RETAIN)
+                }) {
+                    captured = Some(record.clone());
+                    return Ok((Value::Null, false));
+                }
+                state.session_grants.compact(now);
+                if state.session_grants.contexts.len() >= 256 {
+                    return Ok((Value::Null, false));
+                }
+                let record = Conversation {
+                    reference: format!(
+                        "session-{}",
+                        hash(&json!([state.project_id, key, now, state.sequence]))
+                    ),
+                    agent: agent.into(),
+                    session_id: session.into(),
+                    registration: reg,
+                    created: now,
+                };
+                state
+                    .session_grants
+                    .contexts
+                    .insert(key.clone(), record.clone());
+                captured = Some(record);
+                Ok((Value::Null, true))
+            },
+            |_| (),
+        )?;
         captured
     };
     let Some(captured) = captured else {
@@ -113,6 +120,9 @@ fn eligible(receipt: &Value, original: Option<&Value>) -> bool {
         .iter()
         .any(|c| receipt["code"] == *c)
         || receipt["fixed_protection"] == true
+        // Git that may replace the policy files needs a one-time approval
+        // whose form warns about it; a reusable grant would repeat it unseen.
+        || receipt["policy_change"] == true
         || receipt["protected_path"].is_string()
         || receipt["outside_path"].is_object()
         || !["single-literal-invocation", "structured-literal-operations"]

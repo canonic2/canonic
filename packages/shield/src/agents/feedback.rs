@@ -6,7 +6,7 @@ use std::path::Path;
 mod packs;
 mod presentation;
 // Agents change policy only by proposal; the user reviews and applies it.
-const PROPOSE: &str = "If the user requests an allowance, propose a bounded reusable rule or outside-folder access with policy_propose; copy the returned apply_arguments object unchanged into policy_apply for approval.";
+const PROPOSE: &str = "If the work is needed and this denial is broader than the project intends, or the user asks for an allowance, propose a narrow rule or outside-folder access with policy_propose (see skill://shield/custom-rules/SKILL.md); copy the returned apply_arguments object unchanged into policy_apply, whose form is the user's approval.";
 // Stable marker for protected-access feedback across groups.
 const PROTECTED_ACCESS: &str = "Shield: protected path.";
 
@@ -159,7 +159,7 @@ pub(super) fn approval_note(
         note.push_str(reason.trim_end_matches('.'));
         note.push('.');
     }
-    note.push_str(" The same request will ask again unless policy changes. After the task, inspect suggestion_list for eligible recurring reviews.");
+    note.push_str(" The same request will ask again unless policy changes. If requests like it will recur, propose a narrow custom rule now with rule_add, following skill://shield/custom-rules/SKILL.md.");
     Some(note)
 }
 
@@ -272,9 +272,12 @@ fn draft(
                 &change, entry,
             )));
         }
-        let source = entry.map_or_else(String::new, |id| format!(" source_entry_id {id}."));
+        // Only policy_propose links a proposal to the refused request.
+        let source = entry.map_or_else(String::new, |id| {
+            format!(", or with policy_propose and source_entry_id {id} to link this request")
+        });
         return Some(format!(
-            "After the task, inspect suggestion_list for eligible recurring reviews and canonical authoring examples. No permission is granted.{source}"
+            "If requests like this will recur, propose a narrow custom rule now with rule_add{source}, following skill://shield/custom-rules/SKILL.md; suggestion_list returns authoring examples. No permission is granted."
         ));
     }
     let outside = outside?;

@@ -53,6 +53,10 @@ pub(super) fn call_with(
 /// The code and recovery-bearing message of a documentation failure.
 pub(super) fn error_fields(error: &DocsError) -> (&'static str, String) {
     match error {
+        DocsError::Pagination(canonic_mcp_kit::page::Error::InvalidArguments(message)) => {
+            ("invalid_input", message.clone())
+        }
+        DocsError::Pagination(paging) => (paging.code(), paging.to_string()),
         DocsError::InvalidArguments(message) => ("invalid_input", message.clone()),
         DocsError::NotFound { .. } => ("not_found", error.to_string()),
         DocsError::Cancelled => super::error_fields(&Error::Cancelled),

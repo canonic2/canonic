@@ -392,19 +392,22 @@ the checked footprint. Options may follow the operands, written as one word
 such as `--include=*.prisma`. A recursive grep needs an explicit path; `-R`, pattern
 files and other options remain unverified. Fixed `rg` forms search a pattern in explicit files or
 directories, the working directory when none is given, or list them with `--files`.
-Listed flags plus `-g`, `-t`, `-T`, context, count and depth values are modeled.
+Options are read the way ripgrep reads them, anywhere before `--`, so
+`rg -n PATTERN src -g '*.ts'` checks `src`. Options that only shape matching or
+output, such as `--sort`, `-o`, `--json` or `-e PATTERN`, need no listing.
+`-f` pattern files and `--ignore-file` files are checked like explicit files.
 Walks follow no descendant links; explicit operands still follow links and receive
 containment/exclusion checks. Content searches can honor ignore files and glob
-filters. Their footprint conservatively includes existing hidden descendants;
-excluded credential paths still block it. Native callbacks also check protected
+filters or search hidden files with `--hidden`. Their footprint conservatively
+includes existing hidden descendants; excluded credential paths still block it. Native callbacks also check protected
 state, caches and agent settings, using at most 1,024 metadata entries and 32
 directory levels. A large or ambiguous footprint requires a narrower directory.
 `--no-ignore` without glob filters supplies a visible-only footprint.
 A `--files` listing supports `--hidden` and globs and skips the native
 content check; declared policy exclusions still apply. Hidden listings retain
-the existing-entry footprint even with `--no-ignore`. Stdin, hidden content
-searches, follow overrides, pattern files and helpers remain
-unverified. `--no-config` is optional. Shield trusts ambient ripgrep configuration
+the existing-entry footprint even with `--no-ignore`. A `-` operand, helper programs (`--pre`,
+`--pre-glob`, `-z`, `--hostname-bin`), `-L`/`--follow`, informational modes such
+as `--version` and options ripgrep does not define remain unverified. `--no-config` is optional. Shield trusts ambient ripgrep configuration
 and evaluates the submitted arguments; flags injected by `RIPGREP_CONFIG_PATH`
 are outside these checks. Use `--no-config` when config-free execution is desired.
 
@@ -437,8 +440,10 @@ input leaves the edit unmodeled. `-iSUFFIX` means the same to both. Rules decide
 other read or write, so an Allow limited to project reads does not cover an
 edit. The `e` command and flag, regex addresses, blocks and GNU's `*` backup
 suffixes remain unmodeled; awk supports print statements of
-numeric fields, optionally with `-F`; jq supports field/index lookups and pipes
-through keys, length, type, sort, unique, values and tostring. Their submitted
+numeric fields, optionally with `-F`; jq supports expressions that compute only
+from their input, such as field lookups, `select`, `map`, `sort_by`, `@tsv` and
+variables from `as` or `--arg`, but not `$ENV`, `env`, `input`, modules or
+program files (`-f`, `--slurpfile`, `--rawfile`). Their submitted
 syntax does not load program files, run helpers or access the environment, and
 loads no input other than the named targets.
 Sort output files, uniq's second output operand and arbitrary programs

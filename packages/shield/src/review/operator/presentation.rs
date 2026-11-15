@@ -136,16 +136,41 @@ fn pinned_list(skipped: &[Value]) -> String {
 }
 
 /// Prints a command's concise human result.
-pub(super) fn print(command: &PublicCommand, value: &Value) {
-    print!("{}", result(command, value));
+pub(super) fn print(input: &crate::cli::Cli, value: &Value) {
+    let output = result(&input.command, value);
+    print!("{}", project_hints(output, input.project.as_deref()));
+}
+
+fn project_hints(output: String, project: Option<&std::path::Path>) -> String {
+    let Some(project) = project else {
+        return output;
+    };
+    let prefix = format!(
+        "{} ",
+        cli_command([
+            "shield".into(),
+            "--project".into(),
+            project.display().to_string()
+        ])
+    );
+    output
+        .split_inclusive('\n')
+        .map(|line| {
+            if line.starts_with("Next page: ") || line.starts_with("More ") {
+                line.replacen("shield ", &prefix, 1)
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect()
 }
 
 fn shows_pack_updates(command: &PublicCommand) -> bool {
     matches!(
         command,
-        PublicCommand::Status
+        PublicCommand::Status(_)
             | PublicCommand::Pack(crate::cli::public::Pack {
-                command: PackCommand::List
+                command: PackCommand::List { .. }
             })
     )
 }
@@ -159,6 +184,315 @@ pub(super) fn pack_update_notice(command: &PublicCommand, notice: &Value) -> Str
 }
 
 fn result(command: &PublicCommand, value: &Value) -> String {
+    let mut output = render(command, value);
+    let mut hints = std::collections::BTreeSet::new();
+    preview_hints(value, &mut hints);
+    for hint in hints {
+        if !output.ends_with('\n') {
+            output.push('\n');
+        }
+        output.push_str(&hint);
+        output.push('\n');
+    }
+    if let Some(cursor) = value["next_cursor"].as_str() {
+        if let Some(mut words) = next_command(command) {
+            words.extend(["--cursor".into(), cursor.into()]);
+            let command = cli_command(words);
+            if !output.ends_with('\n') {
+                output.push('\n');
+            }
+            output.push_str(&format!("Next page: {command}\n"));
+        }
+    }
+    output
+}
+
+fn cli_command(words: impl IntoIterator<Item = String>) -> String {
+    words
+        .into_iter()
+        .map(|word| {
+            if word
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"-_./:@=".contains(&byte))
+            {
+                word
+            } else {
+                format!(
+                    "'{}'",
+                    if cfg!(windows) {
+                        word.replace('\'', "''")
+                    } else {
+                        word.replace('\'', "'\\''")
+                    }
+                )
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn preview_hints(value: &Value, hints: &mut std::collections::BTreeSet<String>) {
+    if let Some(fields) = value.as_object() {
+        for (key, total) in fields {
+            let Some(field) = key.strip_suffix("_total") else {
+                continue;
+            };
+            let shown = fields
+                .get(field)
+                .and_then(|value| {
+                    value
+                        .as_array()
+                        .map(Vec::len)
+                        .or_else(|| value.as_object().map(serde_json::Map::len))
+                })
+                .unwrap_or_default();
+            if total.as_u64().is_none_or(|total| total <= shown as u64) {
+                continue;
+            }
+            let Some(route) = fields.get(&format!("{field}_list")) else {
+                continue;
+            };
+            if route["candidate_id"].is_string() {
+                continue;
+            }
+            let Some(tool) = route["tool"].as_str() else {
+                continue;
+            };
+            let command: &[&str] = match tool {
+                "status" => &["status"],
+                "doctor" => &["doctor"],
+                "pack_list" => &["pack", "list"],
+                "pack_info" => &["pack", "info"],
+                "rule_list" => &["rule", "list"],
+                "policy_show" => &["policy", "show"],
+                "request_list" => &["request", "list"],
+                "history_list" => &["history", "list"],
+                "history_show" => &["history", "show"],
+                "session_grant_list" => &["session-grant", "list"],
+                "policy_draft_list" => &["policy-draft", "list"],
+                _ => continue,
+            };
+            let mut words = vec!["shield".to_owned()];
+            words.extend(command.iter().map(|word| (*word).to_owned()));
+            for positional in ["reference", "proposal_id", "entry_id"] {
+                if let Some(value) = route[positional].as_str() {
+                    words.push(value.to_owned());
+                }
+            }
+            for flag in ["view", "section", "session_ref", "pack_selector"] {
+                if let Some(value) = route[flag].as_str() {
+                    words.extend([format!("--{}", flag.replace('_', "-")), value.to_owned()]);
+                }
+            }
+            words.extend(["--limit".into(), "50".into()]);
+            hints.insert(format!("More {field}: {}", cli_command(words)));
+        }
+        for field in fields.values() {
+            preview_hints(field, hints);
+        }
+    } else if let Some(rows) = value.as_array() {
+        for row in rows {
+            preview_hints(row, hints);
+        }
+    }
+}
+
+fn next_command(command: &PublicCommand) -> Option<Vec<String>> {
+    use crate::cli::public::{HistoryCommand, SessionGrantCommand};
+    let (mut words, limit) = match command {
+        PublicCommand::Status(args) | PublicCommand::Doctor(args) => {
+            let section = args.section.as_ref()?;
+            (
+                vec![
+                    "shield".into(),
+                    if matches!(command, PublicCommand::Status(_)) {
+                        "status".into()
+                    } else {
+                        "doctor".into()
+                    },
+                    "--section".into(),
+                    section.clone(),
+                ],
+                args.page.limit,
+            )
+        }
+        PublicCommand::Pack(pack) => match &pack.command {
+            PackCommand::List { page } => (
+                vec!["shield".into(), "pack".into(), "list".into()],
+                page.limit,
+            ),
+            PackCommand::Search { query, page } => (
+                vec![
+                    "shield".into(),
+                    "pack".into(),
+                    "search".into(),
+                    query.clone(),
+                ],
+                page.limit,
+            ),
+            PackCommand::Info {
+                reference,
+                view,
+                section,
+                page,
+            } => {
+                let mut words = vec![
+                    "shield".into(),
+                    "pack".into(),
+                    "info".into(),
+                    reference.clone(),
+                    "--view".into(),
+                    view.clone(),
+                ];
+                if let Some(section) = section {
+                    words.extend(["--section".into(), section.clone()]);
+                }
+                (words, page.limit)
+            }
+            _ => return None,
+        },
+        PublicCommand::Suggestion(crate::cli::public::SuggestionCommand::List {
+            session_id,
+            page,
+        }) => {
+            let mut words = vec!["shield".into(), "suggestion".into(), "list".into()];
+            if let Some(id) = session_id {
+                words.extend(["--session-id".into(), id.clone()]);
+            }
+            (
+                words,
+                Some(
+                    page.limit
+                        .unwrap_or(crate::review::page::SUGGESTIONS.default),
+                ),
+            )
+        }
+        PublicCommand::PolicyDraft(crate::cli::public::DraftCommand::List { page }) => (
+            vec!["shield".into(), "policy-draft".into(), "list".into()],
+            page.limit,
+        ),
+        PublicCommand::Rule(rule) => match &rule.command {
+            RuleCommand::List {
+                page,
+                section,
+                pack_selector,
+            } => {
+                let mut words = vec!["shield".into(), "rule".into(), "list".into()];
+                if let Some(section) = section {
+                    words.extend(["--section".into(), section.clone()]);
+                }
+                if let Some(selector) = pack_selector {
+                    words.extend(["--pack-selector".into(), selector.clone()]);
+                }
+                (words, page.limit)
+            }
+            _ => return None,
+        },
+        PublicCommand::Registry(registry) => match &registry.command {
+            RegistryCommand::List { page } => (
+                vec![
+                    "shield".into(),
+                    "registry".into(),
+                    "--scope".into(),
+                    if matches!(registry.scope, crate::cli::public::Scope::User) {
+                        "user".into()
+                    } else {
+                        "project".into()
+                    },
+                    "list".into(),
+                ],
+                page.limit,
+            ),
+            _ => return None,
+        },
+        PublicCommand::Request(request) => match &request.command {
+            RequestCommand::List { page } => (
+                vec!["shield".into(), "request".into(), "list".into()],
+                page.limit,
+            ),
+            _ => return None,
+        },
+        PublicCommand::Policy(policy) => match &policy.command {
+            PolicyCommand::Show {
+                proposal_id,
+                section,
+                page,
+            } => {
+                let mut words = vec!["shield".into(), "policy".into(), "show".into()];
+                if let Some(id) = proposal_id {
+                    words.push(id.clone());
+                }
+                if let Some(section) = section {
+                    words.extend(["--section".into(), section.clone()]);
+                }
+                (words, page.limit)
+            }
+            _ => return None,
+        },
+        PublicCommand::History(history) => match &history.command {
+            HistoryCommand::Show {
+                entry,
+                section,
+                page,
+            } => {
+                let mut words = vec![
+                    "shield".into(),
+                    "history".into(),
+                    "show".into(),
+                    entry.clone(),
+                ];
+                if let Some(section) = section {
+                    words.extend(["--section".into(), section.clone()]);
+                }
+                (words, page.limit)
+            }
+            HistoryCommand::List {
+                page,
+                denied,
+                approved,
+                agent,
+                authorization_kind,
+                grant_id,
+            } => {
+                let mut words = vec!["shield".into(), "history".into(), "list".into()];
+                if *denied {
+                    words.push("--denied".into());
+                }
+                if *approved {
+                    words.push("--approved".into());
+                }
+                for (flag, value) in [
+                    ("--agent", agent),
+                    ("--authorization-kind", authorization_kind),
+                    ("--grant-id", grant_id),
+                ] {
+                    if let Some(value) = value {
+                        words.extend([flag.into(), value.clone()]);
+                    }
+                }
+                (words, page.limit)
+            }
+            _ => return None,
+        },
+        PublicCommand::SessionGrant(grant) => match &grant.command {
+            SessionGrantCommand::List {
+                session_ref, limit, ..
+            } => {
+                let mut words = vec!["shield".into(), "session-grant".into(), "list".into()];
+                if let Some(value) = session_ref {
+                    words.extend(["--session-ref".into(), value.clone()]);
+                }
+                (words, Some(*limit))
+            }
+            _ => return None,
+        },
+        _ => return None,
+    };
+    words.extend(["--limit".into(), limit.unwrap_or(50).to_string()]);
+    Some(words)
+}
+
+fn render(command: &PublicCommand, value: &Value) -> String {
     let mut output = primary_result(command, value);
     if shows_pack_updates(command)
         && let Some(updates) = value.get("pack_updates")
@@ -204,10 +538,23 @@ fn primary_result(command: &PublicCommand, value: &Value) -> String {
             output
         }
         PublicCommand::SessionGrant(_) => session_grant(value),
-        PublicCommand::Status => activity::status(value, false),
-        PublicCommand::Doctor => activity::status(value, true),
-        PublicCommand::Docs(_) => documentation(value),
+        PublicCommand::Status(args) | PublicCommand::Doctor(args) if args.section.is_some() => format!("{}\n",serde_json::to_string_pretty(value).expect("JSON page")),
+        PublicCommand::Status(_) => activity::status(value, false),
+        PublicCommand::Doctor(_) => activity::status(value, true),
+        PublicCommand::Docs(docs) => {
+            let (name, args) = super::diagnostics::docs_arguments(&docs.command);
+            canonic_mcp_kit::docs::human(
+                &format!("shield docs {}", name.trim_start_matches("docs_")),
+                &args,
+                value,
+            )
+        }
         PublicCommand::Policy(input) => match input.command {
+            PolicyCommand::Show { proposal_id: None, .. } => policy::review(&serde_json::json!({"operation":"pending proposals","proposals":value["proposals"]})).expect("proposal list"),
+            PolicyCommand::Show { .. } => format!(
+                "{}\n",
+                serde_json::to_string_pretty(value).expect("JSON page")
+            ),
             PolicyCommand::Evaluate { .. } => format!(
                 "Decision: {}\nPolicy: {}\nPreview only; no action authorized.",
                 label(&value["decision"]),
@@ -221,13 +568,18 @@ fn primary_result(command: &PublicCommand, value: &Value) -> String {
             _ => policy::policy(value),
         },
         PublicCommand::Rule(rule) => match rule.command {
-            RuleCommand::List => policy::rules(value),
+            RuleCommand::List { section:Some(_), .. } => format!("{}\n",serde_json::to_string_pretty(value).expect("JSON page")),
+            RuleCommand::List { .. } => policy::rules(value),
             _ => policy::receipt(value),
         },
         PublicCommand::Pack(pack) => match &pack.command {
-            PackCommand::List => packs::list(value),
+            PackCommand::List { .. } => packs::list(value),
             PackCommand::Show { .. } => packs::show(value),
             PackCommand::Search { .. } => packs::search(value),
+            PackCommand::Info { view, .. } if view == "settings" => format!(
+                "{}\n",
+                serde_json::to_string_pretty(value).expect("JSON page")
+            ),
             PackCommand::Info { .. } => packs::info(value),
             PackCommand::Add { .. }
             | PackCommand::Remove { .. }
@@ -244,11 +596,11 @@ fn primary_result(command: &PublicCommand, value: &Value) -> String {
             }
         },
         PublicCommand::Registry(registry) => match registry.command {
-            RegistryCommand::List => registries::list(value),
+            RegistryCommand::List { .. } => registries::list(value),
             _ => registries::receipt(value),
         },
         PublicCommand::Request(request) => match request.command {
-            RequestCommand::List => activity::approvals(value),
+            RequestCommand::List { .. } => activity::approvals(value),
             RequestCommand::Show { .. } => activity::request(value),
             RequestCommand::Approve { .. } | RequestCommand::Deny { .. } => {
                 activity::decided(value)
@@ -256,53 +608,16 @@ fn primary_result(command: &PublicCommand, value: &Value) -> String {
         },
         PublicCommand::History(history) => match history.command {
             HistoryCommand::List { .. } => activity::history(value),
+            HistoryCommand::Show { section:Some(_), .. } => fallback(value),
             HistoryCommand::Show { .. } => activity::entry(value),
             HistoryCommand::Configure { .. } => fallback(value),
         },
+        PublicCommand::Suggestion(_) | PublicCommand::PolicyDraft(_) => format!(
+            "{}\n",
+            serde_json::to_string_pretty(value).expect("JSON page")
+        ),
         PublicCommand::Internal(_) => fallback(value),
     }
-}
-
-fn documentation(value: &Value) -> String {
-    if let Some(content) = value["content"].as_str() {
-        return content
-            .lines()
-            .map(|line| label(&Value::String(line.into())))
-            .collect::<Vec<_>>()
-            .join("\n");
-    }
-    if let Some(rows) = value["documents"].as_array() {
-        return rows
-            .iter()
-            .map(|row| {
-                format!(
-                    "{} · {} · {} lines",
-                    label(&row["path"]),
-                    label(&row["title"]),
-                    label(&row["total_lines"])
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-    }
-    if let Some(rows) = value["matches"].as_array() {
-        if rows.is_empty() {
-            return "No documentation matches.".into();
-        }
-        return rows
-            .iter()
-            .map(|row| {
-                format!(
-                    "{}:{}  {}",
-                    label(&row["path"]),
-                    label(&row["line"]),
-                    label(&row["text"])
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-    }
-    fallback(value)
 }
 
 /// Top-level facts of a result without a dedicated view. Nested data stays in
@@ -380,9 +695,37 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn next_page_command_preserves_project_filter_and_limit() {
+        use clap::Parser;
+        let input = crate::cli::Cli::try_parse_from([
+            "shield",
+            "--project",
+            "/acme/example folder",
+            "history",
+            "list",
+            "--denied",
+            "--agent",
+            "codex",
+            "--limit",
+            "7",
+        ])
+        .unwrap();
+        let output = project_hints(
+            result(
+                &input.command,
+                &json!({"entries":[],"next_cursor":"opaque"}),
+            ),
+            input.project.as_deref(),
+        );
+        assert!(output.contains("Next page: shield --project '/acme/example folder' history list --denied --agent codex --limit 7 --cursor opaque"),"{output}");
+    }
+
+    #[test]
     fn pack_updates_fresh_list_and_notice_do_not_repeat_the_release_list() {
         let command = PublicCommand::Pack(crate::cli::public::Pack {
-            command: PackCommand::List,
+            command: PackCommand::List {
+                page: Default::default(),
+            },
         });
         let value = json!({"packs":[{"id":"acme/node","version":"1.0.0","profile":"recommended"}],
         "pack_updates":{"availability":"available","fresh_total":1,"items":[{
@@ -402,7 +745,7 @@ mod tests {
         Run shield pack update to review compatible updates.
         ");
         assert_eq!(
-            pack_update_notice(&PublicCommand::Status, &notice),
+            pack_update_notice(&PublicCommand::Status(Default::default()), &notice),
             pack_update_notice(&command, &notice)
         );
     }

@@ -423,6 +423,30 @@ pub(super) fn show(context: &Context, reference: &str) -> Result<Value, Error> {
         json!({"policy_revision":current.policy_revision,"pack":rows[index],"artifact":artifact});
     value["pack_updates"] =
         super::pack_updates::inspect(context, &current, rows[index]["selector"].as_str());
+    value["artifact"]["command_set_members_total"] = json!(
+        value["artifact"]["command_sets"]
+            .as_object()
+            .into_iter()
+            .flat_map(serde_json::Map::values)
+            .filter_map(Value::as_object)
+            .map(serde_json::Map::len)
+            .sum::<usize>()
+    );
+    for field in [
+        "rules",
+        "variables",
+        "preconditions",
+        "dependencies",
+        "mcp_integrations",
+        "invocations",
+        "command_sets",
+    ] {
+        let mut route = json!({"tool":"pack_info","reference":format!("{}{}@{}",rows[index]["source_alias"].as_str().map(|alias|format!("{alias}/")).unwrap_or_default(),rows[index]["id"].as_str().unwrap_or(reference),rows[index]["version"].as_str().unwrap_or_default()),"view":"settings","section":field});
+        if field == "rules" {
+            route = json!({"tool":"rule_list"});
+        }
+        super::page::preview(&mut value["artifact"], field, route);
+    }
     Ok(value)
 }
 pub(super) fn search(context: &Context, query: &str) -> Result<Value, Error> {
@@ -479,10 +503,26 @@ pub(super) fn info(context: &Context, query: &str) -> Result<Value, Error> {
         .collect();
     result["packs"] = json!(entries);
     let selected = catalog.select(&id, version).ok_or(Error::Missing)?;
-    context.progress.stage(super::progress::Stage::Artifact);
-    let bytes = artifact(&context.fetcher, &source, selected)?;
-    let document: Value = crate::policy::parse(&bytes)?;
     result["selected_release"] = json!(selected);
+    context.progress.stage(super::progress::Stage::Artifact);
+    let bytes = registries::artifact(&context.fetcher, &source, selected)?;
+    match policy::Pack::from_yaml(&bytes) {
+        Ok(pack) => matches_entry(&pack, selected)?,
+        Err(policy::Error::Syntax | policy::Error::Contract(_)) if unsupported_release(&bytes) => {
+            // A release this Shield cannot read reports only what it requires.
+            let header = policy::parse::<ReleaseHeader>(&bytes)?;
+            let engines = if header.engines.is_null() {
+                json!({"shield":header.engine})
+            } else {
+                header.engines
+            };
+            result["compatibility"] =
+                json!({"engines":engines,"supported":false,"capabilities":header.capabilities});
+            return Ok(result);
+        }
+        Err(error) => return Err(error.into()),
+    }
+    let document: Value = crate::policy::parse(&bytes)?;
     result["description"] = document["description"].clone();
     for field in [
         "invocations",
@@ -497,20 +537,14 @@ pub(super) fn info(context: &Context, query: &str) -> Result<Value, Error> {
         }
     }
     result["compatibility"] = json!({"engines":document["engines"],"supported":true,"capabilities":document["capabilities"]});
-    result["rules"] = json!(
-        document["rules"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|row| {
-                let mut rule =
-                    crate::review::inspection::public_pack_rule(row, &json!("recommended"));
-                rule["profile_decisions"] = row["decision"].clone();
-                rule
-            })
-            .collect::<Vec<_>>()
-    );
+    result["rules"] = document["rules"].clone();
     Ok(result)
+}
+
+pub(super) fn rule_view(row: Value) -> Value {
+    let mut rule = crate::review::inspection::public_pack_rule(&row, &json!("recommended"));
+    rule["profile_decisions"] = row["decision"].clone();
+    rule
 }
 pub(super) fn rebuild(
     candidate: &Value,

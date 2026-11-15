@@ -105,12 +105,20 @@ fn change() -> Value {
     }
     json!({"oneOf":variants})
 }
-fn paging(mut properties: Value) -> Value {
-    properties["cursor"] = id();
-    properties["cursor"]["description"] = json!(
-        "Copy next_cursor from the previous result; keep the same tool, connection, filters and limit, including omitted fields."
-    );
-    properties["limit"] = json!({"type":"integer","minimum":1,"maximum":100});
+fn paging(properties: Value) -> Value {
+    paging_with(properties, canonic_mcp_kit::page::Limits::STANDARD)
+}
+fn paging_with(mut properties: Value, limits: canonic_mcp_kit::page::Limits) -> Value {
+    properties
+        .as_object_mut()
+        .expect("schema properties")
+        .extend(
+            limits
+                .properties()
+                .as_object()
+                .expect("page properties")
+                .clone(),
+        );
     properties
 }
 fn selectable(selector: &str, properties: Value, selector_type: Value) -> Value {
@@ -124,7 +132,11 @@ fn selectable(selector: &str, properties: Value, selector_type: Value) -> Value 
     schema
 }
 fn rules_selection() -> Value {
-    let mut schema = selectable("rule_ref", json!({"candidate_id":id()}), rule_ref());
+    let mut schema = selectable(
+        "rule_ref",
+        json!({"candidate_id":id(),"section":{"enum":["shared","invocations","command_sets"]},"pack_selector":id()}),
+        rule_ref(),
+    );
     schema["then"] = object(json!({"rule_ref":rule_ref(),"candidate_id":id()}), &[]);
     schema
 }
@@ -194,11 +206,22 @@ pub(super) fn tools(agent: Option<&str>) -> Value {
                 "pack_update_notice":{"type":"object","properties":{"items":{"type":"array","maxItems":3},"remaining":{"type":"integer","minimum":0},"truncated":{"type":"boolean"},"message":string(),"instruction":string()},"required":["items","remaining","truncated","message","instruction"]}
             }}));
         }
+        if schema["properties"].get("cursor").is_some() {
+            let properties=canonic_mcp_kit::page::output_properties(canonic_mcp_kit::page::Casing::Snake);
+            if let Some(data)=result_schema["properties"]["data"]["anyOf"].as_array_mut() {
+                data[0]["properties"]["next_cursor"]=properties["next_cursor"].clone();
+            } else {
+                result_schema["properties"]["data"]=nullable(json!({"type":"object","properties":properties}));
+            }
+        }
         json!({"name":name,"description":description,"inputSchema":schema,"outputSchema":result_schema,"annotations":{"readOnlyHint":!mutation,"destructiveHint":(["policy_withdraw","policy_apply","protection_set","disable","registry_remove","history_configure","policy_reject","mcp_setup"].contains(&name)),"idempotentHint":!["pack_configure","pack_add"].contains(&name),"openWorldHint":(["pack_search","pack_info","pack_add","pack_update","policy_propose","registry_add","registry_trust","mcp_setup"].contains(&name))}})
     }).chain(super::documentation::tools().into_iter().map(|mut tool| {
         // The shared definitions carry their own schemas and annotations;
         // results arrive in Shield's envelope.
-        tool["outputSchema"] = output.clone();
+        let payload_schema=tool.get("outputSchema").cloned().unwrap_or_else(|| json!({"type":"object","properties":canonic_mcp_kit::page::output_properties(canonic_mcp_kit::page::Casing::Snake)}));
+        let mut envelope=output.clone();
+        envelope["properties"]["data"]=nullable(payload_schema);
+        tool["outputSchema"] = envelope;
         tool
     })).collect::<Vec<_>>();
     json!({"tools":tools})
@@ -216,6 +239,8 @@ fn pack_updates_schema() -> Value {
                 "compatibility":{"const":"unchecked"}
             }), &["selector","id","source_identity","reference","installed_version","available_version","observed_at","expires_at","freshness","compatibility"])},
             "sources":{"type":"array","maxItems":64,"items":object(json!({"source_identity":string(),"freshness":{"enum":["fresh","stale","expired","unavailable"]},"reason":nullable(string())}), &["source_identity","freshness","reason"])},
+            "items_total":count,"sources_total":count,
+            "items_list":{"type":"object"},"sources_list":{"type":"object"},
             "excluded_pinned":count,"excluded_dependencies":count,"total":count,"fresh_total":count,
             "truncated":{"type":"boolean"},"next_action":string()
         }),
@@ -406,10 +431,22 @@ fn policy_inventory() -> Vec<Definition> {
         (
             "status",
             "Show policy status, protection coverage and cached pack update availability; compatibility is unchecked and updates require user intent",
-            || object(json!({}), &[]),
+            || {
+                object(
+                    paging(
+                        json!({"section":{"type":"string","minLength":1,"maxLength":1024,"description":"JSON Pointer from a returned collection preview."}}),
+                    ),
+                    &[],
+                )
+            },
         ),
         ("doctor", "Diagnose setup and coverage problems", || {
-            object(json!({}), &[])
+            object(
+                paging(
+                    json!({"section":{"type":"string","minLength":1,"maxLength":1024,"description":"JSON Pointer from a returned collection preview."}}),
+                ),
+                &[],
+            )
         }),
         (
             "pack_list",
@@ -426,7 +463,7 @@ fn policy_inventory() -> Vec<Definition> {
             "List the project's effective pack registries, or with scope user the user's own",
             || {
                 object(
-                    json!({"scope":{"enum":["project","user"],"default":"project"}}),
+                    paging(json!({"scope":{"enum":["project","user"],"default":"project"}})),
                     &[],
                 )
             },
@@ -459,12 +496,13 @@ fn policy_inventory() -> Vec<Definition> {
         ),
         (
             "policy_show",
-            "Show active policy, or select a proposal by proposal_id to retrieve its status and apply_arguments",
+            "List live proposal summaries, or select a proposal by proposal_id for its status, collection previews and apply_arguments; section pages authorization_events",
             || {
-                selectable(
-                    "proposal_id",
-                    json!({"agent":string(),"session_id":string(),"status":{"enum":["pending","applied","rejected","withdrawn","stale","failed"]}}),
-                    id(),
+                object(
+                    paging(
+                        json!({"proposal_id":id(),"section":{"enum":["authorization_events"]},"agent":string(),"session_id":string(),"status":{"enum":["pending","applied","rejected","withdrawn","stale","failed"]}}),
+                    ),
+                    &[],
                 )
             },
         ),
@@ -542,17 +580,15 @@ fn request_inventory() -> Vec<Definition> {
             || object(json!({"request_id":id()}), &["request_id"]),
         ),
         ("history_show", "Inspect one retained history entry", || {
-            object(json!({"entry_id":id()}), &["entry_id"])
+            object(
+                paging(json!({"entry_id":id(),"section":{"enum":["observations"]}})),
+                &["entry_id"],
+            )
         }),
         (
             "session_grant_list",
             "List retained session grants and candidates",
-            || {
-                object(
-                    json!({"session_ref":id(),"cursor":id(),"limit":{"type":"integer","minimum":1,"maximum":64,"default":16}}),
-                    &[],
-                )
-            },
+            || object(paging(json!({"session_ref":id()})), &[]),
         ),
         session_grant_show(),
         session_grant_propose(),
@@ -680,7 +716,7 @@ fn session_grant_show() -> Definition {
         "Inspect reusable session grants, pending proposals, expiry and capability. A native hook supplies session_ref; a supplied conversation name grants no authority.",
         || {
             let mut schema = object(
-                json!({"session_ref":id(),"proposal_id":id(),"grant_id":id(),"cursor":id(),"limit":{"type":"integer","minimum":1,"maximum":64,"default":16}}),
+                paging(json!({"session_ref":id(),"proposal_id":id(),"grant_id":id()})),
                 &[],
             );
             schema["if"] =
@@ -745,7 +781,7 @@ fn pack_info() -> Definition {
         || {
             let mut schema = object(
                 paging(
-                    json!({"reference":string(),"view":{"enum":["summary","rules","settings"],"default":"summary"},"query":{"type":"string","minLength":1,"maxLength":4096,"description":"Filter rule IDs and reasons in the rules view."},"rule_id":id()}),
+                    json!({"reference":string(),"view":{"enum":["summary","rules","settings"],"default":"summary"},"section":{"enum":["variables","preconditions","dependencies","mcp_integrations","invocations","command_sets","permission_groups"]},"query":{"type":"string","minLength":1,"maxLength":4096,"description":"Filter rule IDs and reasons in the rules view."},"rule_id":id()}),
                 ),
                 &["reference"],
             );
@@ -773,7 +809,7 @@ fn suggestions_tool() -> Definition {
         "Review recorded Ask requests, recurrence, coverage and next actions. Listing grants no permission.",
         || {
             object(
-                json!({"session_id":id(),"cursor":id(),"limit":{"type":"integer","minimum":1,"maximum":100}}),
+                paging_with(json!({"session_id":id()}), crate::review::page::SUGGESTIONS),
                 &[],
             )
         },

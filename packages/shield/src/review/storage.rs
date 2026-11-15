@@ -969,9 +969,10 @@ impl Store {
         lock.release()?;
         Ok(result)
     }
-    /// Publish minimum authority before the short callback, without releasing the
-    /// activation lock. A publication/release failure never restores a grant.
-    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+    /// Publish a checkpoint-only mutation before the short callback, without
+    /// releasing the activation lock. The caller either revalidates its prepared
+    /// authority or changes only advisory metadata; this path does not prepare
+    /// policy. A publication/release failure never restores a grant.
     pub(crate) fn transition_handoff<T>(
         &self,
         context: &Context,

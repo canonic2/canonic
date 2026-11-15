@@ -1306,6 +1306,7 @@ fn ripgrep_visible_trees_preserve_exclusions_without_following_descendant_links(
     let root = dir.path().canonicalize().unwrap();
     std::fs::create_dir(root.join(".aws")).unwrap();
     std::fs::create_dir(root.join("private")).unwrap();
+    std::fs::write(root.join("rules"), "!.aws\n").unwrap();
     let outside = assert_fs::TempDir::new().unwrap();
     std::os::unix::fs::symlink(outside.path(), root.join("escape")).unwrap();
     let policy = |excluded: &str| {
@@ -1329,6 +1330,13 @@ fn ripgrep_visible_trees_preserve_exclusions_without_following_descendant_links(
         (vec!["-uu", "Acme", "."], Decision::Deny),
         (vec!["--glob", "*", "Acme", "."], Decision::Deny),
         (vec!["--ignore-file", "config", "Acme", "."], Decision::Deny),
+        // --no-ignore keeps --ignore-file in force, and its `!` lines can
+        // include hidden entries, so the whole tree is checked.
+        (vec!["--ignore-file", "rules", "Acme", "."], Decision::Deny),
+        (
+            vec!["--ignore-file", "rules", "Acme", "private"],
+            Decision::Allow,
+        ),
     ] {
         req.arguments = ["--no-config", "--no-ignore"]
             .into_iter()
@@ -1355,6 +1363,156 @@ fn ripgrep_visible_trees_preserve_exclusions_without_following_descendant_links(
     std::fs::remove_dir(root.join(".aws")).unwrap();
     std::os::unix::fs::symlink(root.join("private"), root.join(".aws")).unwrap();
     assert_eq!(evaluator.evaluate(&req).unwrap().decision, Decision::Deny);
+}
+
+#[test]
+#[cfg(unix)]
+fn ripgrep_parses_options_anywhere_and_keeps_helpers_and_links_unmodeled() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::create_dir_all(root.join("models/nested")).unwrap();
+    std::fs::write(root.join("models/item.prisma"), "Acme").unwrap();
+    std::fs::write(root.join("models/nested/.hidden"), "Acme").unwrap();
+    std::fs::write(root.join("patterns"), "Acme").unwrap();
+    std::fs::create_dir(root.join(".aws")).unwrap();
+    std::fs::write(root.join(".aws/credentials"), "Acme").unwrap();
+    let outside = assert_fs::TempDir::new().unwrap();
+    let outside_file = outside.path().join("patterns");
+    std::fs::write(&outside_file, "Acme").unwrap();
+    let outside_file = outside_file.to_string_lossy().into_owned();
+    let evaluator = prepared(vec![
+        json!({"id":"search","decision":"allow","conditions":{"domain":"argv","executable":"rg","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"project"},"exclude":[{"root":"project","path":".aws"}]}}},"on_unmet":{"decision":"deny"}}),
+    ]);
+    let mut req = Request {
+        executable: "rg".into(),
+        arguments: vec![],
+        cwd: root.to_string_lossy().into_owned(),
+        project: root.to_string_lossy().into_owned(),
+    };
+    for (arguments, decision) in [
+        // Options may follow the paths, as ripgrep parses them anywhere.
+        (
+            vec!["-n", "Acme", "models", "-g", "*.prisma"],
+            Decision::Allow,
+        ),
+        (vec!["--files", "models", "-g", "*.prisma"], Decision::Allow),
+        (
+            vec!["-l", "Acme", "--max-depth", "3", "models"],
+            Decision::Allow,
+        ),
+        (vec!["-g*.prisma", "-A3", "Acme", "models"], Decision::Allow),
+        (vec!["--glob=*.prisma", "Acme", "models"], Decision::Allow),
+        // Options that only shape matching or output need no listing.
+        (
+            vec!["--sort", "path", "-n", "Acme", "models"],
+            Decision::Allow,
+        ),
+        (
+            vec!["-o", "-N", "Acme", "models/item.prisma"],
+            Decision::Allow,
+        ),
+        (vec!["-U", "--json", "Acme", "models"], Decision::Allow),
+        // Every ripgrep short flag that shapes matching, alone or clustered.
+        (vec!["-F", "Acme", "models"], Decision::Allow),
+        (vec!["-nFi", "Acme", "models"], Decision::Allow),
+        (
+            vec!["-sivxFUPSawbnN0opqHIcl", "Acme", "models"],
+            Decision::Allow,
+        ),
+        (
+            vec!["--files-without-match", "Acme", "models"],
+            Decision::Allow,
+        ),
+        (
+            vec!["--no-follow", "--no-pre", "Acme", "models"],
+            Decision::Allow,
+        ),
+        // -e and -f supply the pattern, so every operand is a path.
+        (
+            vec!["-n", "-e", "Acme", "-e", "Tag", "models"],
+            Decision::Allow,
+        ),
+        (vec!["-f", "patterns", "models"], Decision::Allow),
+        // A hidden search reads every existing descendant.
+        (vec!["--hidden", "Acme", "models"], Decision::Allow),
+        (vec!["-.", "Acme", "models"], Decision::Allow),
+        (vec!["--hidden", "Acme", "."], Decision::Deny),
+        (vec!["-g", "*", "Acme", "."], Decision::Deny),
+        // Pattern and ignore files are read like explicit files.
+        (vec!["-f", ".aws/credentials", "models"], Decision::Deny),
+        (vec!["-f", outside_file.as_str(), "models"], Decision::Deny),
+        (
+            vec!["--ignore-file", ".aws/credentials", "Acme", "models"],
+            Decision::Deny,
+        ),
+        (vec!["-f", "missing", "models"], Decision::Deny),
+        // Helper programs, link following and undefined options stay unmodeled,
+        // wherever they appear.
+        (vec!["--pre", "cat", "Acme", "models"], Decision::Deny),
+        (vec!["--pre-glob", "*", "Acme", "models"], Decision::Deny),
+        (vec!["-z", "Acme", "models"], Decision::Deny),
+        (vec!["-nz", "Acme", "models"], Decision::Deny),
+        (vec!["--search-zip", "Acme", "models"], Decision::Deny),
+        (
+            vec!["--hostname-bin", "hostname", "Acme", "models"],
+            Decision::Deny,
+        ),
+        (vec!["Acme", "models", "-L"], Decision::Deny),
+        (vec!["--follow", "Acme", "models"], Decision::Deny),
+        (vec!["--future-option", "Acme", "models"], Decision::Deny),
+        (vec!["--line-number=yes", "Acme", "models"], Decision::Deny),
+        (vec!["Acme", "models", "--glob"], Decision::Deny),
+        // After -- every word is an operand.
+        (vec!["Acme", "models", "--", "-n"], Decision::Deny),
+    ] {
+        req.arguments = arguments.into_iter().map(str::to_owned).collect();
+        assert_eq!(
+            evaluator.evaluate(&req).unwrap().decision,
+            decision,
+            "{req:?}"
+        );
+    }
+}
+
+#[test]
+fn ripgrep_attached_short_values_drop_one_equals_sign_like_ripgrep() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::create_dir(root.join("models")).unwrap();
+    std::fs::write(root.join("models/item.prisma"), "Acme").unwrap();
+    std::fs::write(root.join("patterns"), "Acme").unwrap();
+    // A planted `=.aws/credentials` must not stand in for the real file.
+    for folder in [".aws", "=.aws"] {
+        std::fs::create_dir(root.join(folder)).unwrap();
+        std::fs::write(root.join(folder).join("credentials"), "Acme").unwrap();
+    }
+    let evaluator = prepared(vec![
+        json!({"id":"search","decision":"allow","conditions":{"domain":"argv","executable":"rg","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"project"},"exclude":[{"root":"project","path":".aws"}]}}},"on_unmet":{"decision":"deny"}}),
+    ]);
+    let mut req = Request {
+        executable: "rg".into(),
+        arguments: vec![],
+        cwd: root.to_string_lossy().into_owned(),
+        project: root.to_string_lossy().into_owned(),
+    };
+    for (arguments, decision) in [
+        (vec!["-f=.aws/credentials", "models"], Decision::Deny),
+        (vec!["-if=.aws/credentials", "models"], Decision::Deny),
+        (vec!["-nf", ".aws/credentials", "models"], Decision::Deny),
+        (
+            vec!["--ignore-file=.aws/credentials", "Acme", "models"],
+            Decision::Deny,
+        ),
+        (vec!["-f=patterns", "models"], Decision::Allow),
+        (vec!["-A=3", "Acme", "models"], Decision::Allow),
+    ] {
+        req.arguments = arguments.into_iter().map(str::to_owned).collect();
+        assert_eq!(
+            evaluator.evaluate(&req).unwrap().decision,
+            decision,
+            "{req:?}"
+        );
+    }
 }
 
 #[test]
@@ -2349,16 +2507,18 @@ fn ripgrep_accepts_ordinary_searches_and_checks_visible_options_and_paths() {
         &["--no-config", "--files", "-g", "*.js"],
         &["--no-config", "--no-ignore", "-g", "*.js", "Acme", "src"],
         &["--no-config", "--no-ignore", "--glob=*.js", "Acme"],
+        // Hidden content searches read every existing descendant.
+        &["--hidden", "Acme", "src"],
+        &["--no-config", "--hidden", "Acme"],
+        // Ripgrep parses options after paths.
+        &["--no-config", "Acme", "src", "-n"],
     ] {
         assert_eq!(decide(args), Decision::Allow, "{args:?}");
     }
     for args in [
         &["--pre", "sh", "Acme"][..],
         &["--follow", "Acme", "src"],
-        &["--hidden", "Acme", "src"],
-        &["--no-config", "Acme", "src", "-n"],
         &["--no-config", "--pre", "sh", "Acme"],
-        &["--no-config", "--hidden", "Acme"],
         &["--no-config", "-g"],
         &["--no-config", "Acme", "missing"],
     ] {
@@ -2369,6 +2529,7 @@ fn ripgrep_accepts_ordinary_searches_and_checks_visible_options_and_paths() {
     std::fs::create_dir(root.join(".aws")).unwrap();
     assert_eq!(decide(&["Acme", ".aws"]), Decision::Deny);
     assert_eq!(decide(&["Acme"]), Decision::Deny);
+    assert_eq!(decide(&["--hidden", "Acme"]), Decision::Deny);
     assert_eq!(decide(&["--no-config", "--files"]), Decision::Deny);
     assert_eq!(decide(&["--files", "--hidden"]), Decision::Deny);
     assert_eq!(

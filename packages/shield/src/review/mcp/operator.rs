@@ -16,10 +16,31 @@ pub(crate) fn read_json(path: &Path) -> Result<Value, Error> {
 
 pub(crate) fn docs(name: &str, args: &Value) -> Result<Value, Error> {
     documentation::call(name, args, &|| Ok(())).map_err(|error| match error {
+        canonic_mcp_kit::docs::DocsError::Pagination(
+            canonic_mcp_kit::page::Error::InvalidCursor,
+        ) => Error::InvalidCursor,
         canonic_mcp_kit::docs::DocsError::NotFound { .. } => Error::Missing,
         canonic_mcp_kit::docs::DocsError::Cancelled => Error::Cancelled,
         _ => Error::Invalid("invalid documentation request or unavailable documentation bundle"),
     })
+}
+
+/// CLI list commands use the same handlers, limits and cursor scopes as MCP.
+pub(crate) fn list(context: &Context, name: &str, args: &Value) -> Result<Value, Error> {
+    let mut views = Views::new("operator".into());
+    let mut data = match name {
+        "pack_info" | "pack_search" => super::discovery(context, &mut views, name, args),
+        _ => super::inspection_tool(context, &mut views, name, args),
+    }?;
+    let redacted = if matches!(name, "history_list" | "history_show") {
+        crate::review::history::redact_result(&mut data)
+    } else {
+        crate::review::model::redact(&mut data)
+    };
+    if redacted {
+        data["redacted"] = json!(true);
+    }
+    Ok(data)
 }
 
 #[derive(Clone, Copy)]
@@ -124,13 +145,7 @@ mod tests {
             docs("docs_read", &json!({"path":path})).unwrap(),
             documentation::call("docs_read", &json!({"path":path}), &|| Ok(())).unwrap()
         );
-        assert!(
-            docs(
-                "docs_read",
-                &json!({"path":"../README.md","start_line":1,"limit":10})
-            )
-            .is_err()
-        );
+        assert!(docs("docs_read", &json!({"path":"../README.md","limit":10})).is_err());
         assert!(docs("docs_list", &json!({"offset":0,"limit":101})).is_err());
     }
 

@@ -163,26 +163,76 @@ pub(crate) fn show(context: &Context, args: &Value) -> Result<Value, Error> {
             let row=state.session_grants.records.values().find(|r|json!(r.id)==*id || r.grant.as_ref().is_some_and(|g|json!(g.id)==*id)).ok_or(Error::Missing)?;
             return Ok(public(row,state,now));
         }
-        let limit=usize::try_from(args.get("limit").map_or(Some(16),Value::as_u64).filter(|n|(1..=64).contains(n)).ok_or(Error::Invalid("limit must be 1-64"))?).map_err(|_|Error::Invalid("limit must be 1-64"))?;
         let selection=args.get("session_ref").and_then(Value::as_str);
         if args.get("session_ref").is_some() && selection.is_none() {return Err(Error::Invalid("session_ref must be a string"));}
+        let mut query=Value::Object(args.clone());
+        query["project_id"]=json!(state.project_id);
         let rows:Vec<_>=state.session_grants.records.values().filter(|r|selection.is_none_or(|s|r.session.reference==s)).collect();
-        let revision=super::hash(&json!([state.project_id,state.sequence,selection,limit,
-            rows.iter().map(|r|json!([r.id,r.effective(state,now)])).collect::<Vec<_>>()]));
-        let offset=match args.get("cursor") {
-            None=>0,
-            Some(Value::String(c))=>{
-                let (binding,offset)=c.split_once(':').ok_or(Error::CursorUnavailable)?;
-                if binding!=revision {return Err(Error::CursorUnavailable);}
-                offset.parse::<usize>().map_err(|_|Error::CursorUnavailable)?
-            }, _=>return Err(Error::CursorUnavailable),
-        };
-        if offset>rows.len() {return Err(Error::CursorUnavailable);}
-        let next=offset.saturating_add(limit).min(rows.len());
+        let total=rows.len();
+        let request=canonic_mcp_kit::page::Request::from_mcp(&query,canonic_mcp_kit::page::Limits::STANDARD).map_err(crate::review::page::error)?;
+        let scope=crate::review::page::scope("session_grant_list",&query);
+        let after=crate::review::page::after(&scope,&request)?;
+        let page=crate::review::page::collect("session_grant_list",&query,
+            rows.into_iter().filter(|r|after.as_ref().is_none_or(|last|r.id.as_bytes()>last.as_slice())).map(|r|(r.id.as_bytes().to_vec(),public(r,state,now))),
+            "session_grant_show")?;
         let supported=context.agent.as_deref().is_some_and(|a|super::registration(state,a).is_ok());
         Ok(json!({"supported":supported,"consumer":context.agent,"session_binding":"native host context required",
             "confirmation_available":Value::Null,"reason":if supported{Value::Null}else{json!("A registered native Claude Code or Codex integration is required.")},
-            "records":rows[offset..next].iter().map(|r|public(r,state,now)).collect::<Vec<_>>(),"total":rows.len(),
-            "next_cursor":(next<rows.len()).then(||format!("{revision}:{next}"))}))
+            "records":page.items,"total":total,
+            "next_cursor":page.next_cursor}))
     })
+}
+
+#[cfg(test)]
+mod paging_tests {
+    use super::*;
+
+    #[test]
+    fn session_grant_pages_are_stateless_and_refuse_changed_filters() {
+        let (_root, context, reference) = crate::review::session_grants::tests::fixture();
+        let offer = |index| {
+            crate::review::session_grants::propose(&context,&json!({
+            "session_ref":reference,"idempotency_key":format!("page-{index}"),
+            "scope":[{"conditions":{"domain":"argv","executable":format!("acme-{index}"),
+                "arguments":{"kind":"exact","values":["read"]},"cwd":{"within":{"root":"project"}}}}]
+        })).unwrap()
+        };
+        for index in 0..3 {
+            offer(index);
+        }
+        let first = show(&context, &json!({"session_ref":reference,"limit":1})).unwrap();
+        let first_id = first["records"][0]["proposal_id"].as_str().unwrap();
+        assert!(first["next_cursor"].is_string());
+        offer(3);
+        let mut cursor = first["next_cursor"].clone();
+        let mut seen = std::collections::BTreeSet::from([first_id.to_owned()]);
+        while cursor.is_string() {
+            let page = show(
+                &context,
+                &json!({"session_ref":reference,"limit":2,"cursor":cursor}),
+            )
+            .unwrap();
+            for row in page["records"].as_array().unwrap() {
+                let id = row["proposal_id"].as_str().unwrap();
+                assert!(id > first_id);
+                assert!(seen.insert(id.to_owned()));
+            }
+            cursor = page["next_cursor"].clone();
+        }
+        assert!(seen.len() >= 3);
+        assert!(matches!(
+            show(
+                &context,
+                &json!({"session_ref":"foreign","cursor":first["next_cursor"]})
+            ),
+            Err(Error::InvalidCursor)
+        ));
+        assert!(matches!(
+            show(&context, &json!({"cursor":"malformed"})),
+            Err(Error::InvalidCursor)
+        ));
+        for limit in [0, 101] {
+            assert!(show(&context, &json!({"limit":limit})).is_err());
+        }
+    }
 }

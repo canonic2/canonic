@@ -3,19 +3,18 @@ use super::*;
 use crate::review::mcp::documentation as bundled;
 use canonic_mcp_kit::docs::{Bundle as DocsBundle, DocsError, Documentation};
 
-/// Follows `next_start_line` from line 1 and joins every returned `content`.
-fn read_page(read: &dyn Fn(u64, u64) -> Value, limit: u64) -> String {
+/// Follows opaque cursors and joins every returned `content`.
+fn read_page(read: &dyn Fn(Option<&str>, u64) -> Value, limit: u64) -> String {
     let mut content = String::new();
-    let mut start = 1;
+    let mut cursor = None;
     loop {
-        let data = read(start, limit);
-        assert_eq!(data["start_line"], start, "{data}");
+        let data = read(cursor.as_deref(), limit);
         content.push_str(data["content"].as_str().unwrap());
-        let Some(next) = data["next_start_line"].as_u64() else {
+        let Some(next) = data["next_cursor"].as_str() else {
             return content;
         };
-        assert!(next > start, "{data}");
-        start = next;
+        assert_ne!(Some(next), cursor.as_deref(), "{data}");
+        cursor = Some(next.to_owned());
     }
 }
 
@@ -31,13 +30,13 @@ fn bundled_documentation_pages_round_trip_through_list_and_read() {
     .unwrap();
     let state = Store::open(root.path()).unwrap().read().unwrap();
     let mut paths = Vec::new();
-    let mut offset = 0;
+    let mut cursor = None;
     loop {
         let result = invoke(
             &context,
             &connection,
             "docs_list",
-            json!({"offset":offset,"limit":2}),
+            canonic_mcp_kit::page::arguments(cursor.as_deref(), Some(2)),
         );
         assert!(result["error"].is_null(), "{result}");
         assert_eq!(result["data"]["version"], env!("CARGO_PKG_VERSION"));
@@ -48,10 +47,10 @@ fn bundled_documentation_pages_round_trip_through_list_and_read() {
                 .iter()
                 .map(|row| row["path"].as_str().unwrap().to_owned()),
         );
-        let Some(next) = result["data"]["next_offset"].as_u64() else {
+        let Some(next) = result["data"]["next_cursor"].as_str() else {
             break;
         };
-        offset = next;
+        cursor = Some(next.to_owned());
     }
     assert!(paths.windows(2).all(|pair| pair[0] < pair[1]));
     assert!(paths.contains(&"policy-rules.md".to_owned()));
@@ -62,13 +61,12 @@ fn bundled_documentation_pages_round_trip_through_list_and_read() {
                 .join(&path),
         )
         .unwrap();
-        let read = |start: u64, limit: u64| {
-            let result = invoke(
-                &context,
-                &connection,
-                "docs_read",
-                json!({"path":path,"start_line":start,"limit":limit}),
-            );
+        let read = |cursor: Option<&str>, limit: u64| {
+            let result = invoke(&context, &connection, "docs_read", {
+                let mut args = canonic_mcp_kit::page::arguments(cursor, Some(limit));
+                args["path"] = json!(path);
+                args
+            });
             assert!(result["error"].is_null(), "{result}");
             assert_eq!(result["redacted"], false);
             result["data"].clone()
@@ -107,17 +105,21 @@ fn paginated_reads_reproduce_crlf_final_newlines_and_chunk_boundaries() {
     let docs = Documentation::new(bundle, "Shield", env!("CARGO_PKG_VERSION"));
     let open = || Ok(());
     for (path, text) in pages {
-        let read = |start: u64, limit: u64| {
+        let read = |cursor: Option<&str>, limit: u64| {
             bundled::call_with(
                 &docs,
                 "docs_read",
-                &json!({"path":path,"start_line":start,"limit":limit}),
+                &{
+                    let mut args = canonic_mcp_kit::page::arguments(cursor, Some(limit));
+                    args["path"] = json!(path);
+                    args
+                },
                 &open,
             )
             .unwrap()
         };
         let lines = text.split_inclusive('\n').count() as u64;
-        assert_eq!(read(1, 1)["total_lines"], lines);
+        assert_eq!(read(None, 1)["total_lines"], lines);
         for limit in [1, 2, 3, lines] {
             assert_eq!(read_page(&read, limit), text, "{path} at {limit}");
         }
@@ -176,14 +178,16 @@ fn catalog_publishes_the_shared_documentation_tools_in_shields_envelope() {
     let shared = Documentation::new(&NONE, "Shield", env!("CARGO_PKG_VERSION")).tools();
     let listing = tools();
     let listed = listing["tools"].as_array().unwrap();
-    let envelope = &listed[0]["outputSchema"];
     for tool in &shared {
         let mut entry = listed
             .iter()
             .find(|entry| entry["name"] == tool.name.as_str())
             .unwrap()
             .clone();
-        assert_eq!(&entry["outputSchema"], envelope);
+        assert_eq!(
+            entry["outputSchema"]["properties"]["data"]["anyOf"][0]["properties"]["next_cursor"],
+            canonic_mcp_kit::page::output_properties(canonic_mcp_kit::page::Casing::Snake)["next_cursor"]
+        );
         entry.as_object_mut().unwrap().remove("outputSchema");
         assert_eq!(entry, serde_json::to_value(tool).unwrap());
     }
@@ -204,25 +208,20 @@ fn documentation_search_returns_page_line_references_and_continuation() {
     assert!(search["error"].is_null(), "{search}");
     let row = &search["data"]["matches"][0];
     assert_eq!(row["path"], "project-mcp.md");
-    let read = invoke(
-        &context,
-        &connection,
-        "docs_read",
-        json!({"path":row["path"],"start_line":row["line"],"limit":1}),
-    );
+    let source = include_str!("../../../../docs/project-mcp.md");
     assert_eq!(
-        read["data"]["content"]
-            .as_str()
-            .unwrap()
-            .trim_end_matches(['\r', '\n']),
+        source
+            .lines()
+            .nth(row["line"].as_u64().unwrap() as usize - 1)
+            .unwrap(),
         row["text"]
     );
-    assert!(search["data"]["next_offset"].is_number());
+    assert!(search["data"]["next_cursor"].is_string());
     let next = invoke(
         &context,
         &connection,
         "docs_search",
-        json!({"query":"--WATCH","path":"project-mcp.md","limit":1,"offset":search["data"]["next_offset"]}),
+        json!({"query":"--WATCH","path":"project-mcp.md","limit":1,"cursor":search["data"]["next_cursor"]}),
     );
     assert_ne!(next["data"]["matches"][0]["line"], row["line"]);
 }
@@ -311,10 +310,9 @@ fn documentation_refuses_invalid_pages_bounds_and_cancellation() {
         &context,
         &connection,
         "docs_read",
-        json!({"path":"policy-rules.md","start_line":1_000_000}),
+        json!({"path":"policy-rules.md","cursor":"malformed"}),
     );
-    assert_eq!(beyond["data"]["content"], "");
-    assert!(beyond["data"]["next_start_line"].is_null());
+    assert_eq!(beyond["error"]["code"], "invalid_cursor");
     let ticks = std::cell::Cell::new(0);
     let cancelled = call(
         &context,

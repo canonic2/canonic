@@ -31,6 +31,7 @@ fn prepared(
                 overrides_deny: false,
                 deny_rules: Vec::new(),
                 settings_change: false,
+                policy_change: false,
             };
             match crate::review::hook_approval::refused(root.path(), &key, &identity, &summary)
                 .unwrap()

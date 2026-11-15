@@ -2,6 +2,33 @@
 use super::*;
 
 #[test]
+fn a_busy_protection_check_reports_contention_instead_of_invalid_authorization() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let bundle =
+        crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
+    let context = crate::review::mcp::initialize_fixture(root.path(), &bundle);
+    let root = Path::new(&context.project_root);
+    let marker = root.join(".shield/state/state.lock");
+    std::fs::write(&marker, "fixture writer").unwrap();
+    let mut receipt =
+        json!({"identity":{"project_root":root},"_observation":{"request":{"cwd":root}}});
+    assert_eq!(
+        resolve(
+            root,
+            NativeContext {
+                integration: "codex",
+                approval: NativeApproval::Fallback,
+                context_complete: true,
+                working_files: None,
+            },
+            &mut receipt
+        ),
+        Err("runtime-busy")
+    );
+    std::fs::remove_file(marker).unwrap();
+}
+
+#[test]
 fn native_dialect_sequences_preserve_protected_access_and_opaque_refusals() {
     let root = assert_fs::TempDir::new().unwrap();
     // The current state directory and its earlier name are both protected.

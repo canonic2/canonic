@@ -59,6 +59,14 @@ pub(crate) struct Summary {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) deny_rules: Vec<String>,
     pub(crate) settings_change: bool,
+    /// Git may replace the enforced policy. Omit false to preserve existing
+    /// stored request and grant bindings.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub(crate) policy_change: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 #[derive(Serialize, Deserialize)]
@@ -108,6 +116,11 @@ fn hash(value: &Value) -> String {
 }
 
 impl HookRequest {
+    pub(super) fn listed_id(&self, state: &State, time: u64) -> Option<&str> {
+        (matches!(self.status.as_str(), "pending" | "approved") && self.current(state))
+            .then(|| self.live_id(time))
+            .flatten()
+    }
     pub(super) fn id(&self) -> &str {
         &self.request_id
     }
@@ -272,7 +285,7 @@ pub(super) fn inspect_from(
             "request":{"action":row.summary.action,"tool":row.tool,"cwd":row.cwd},
             "provenance":{"agent":row.agent,"session_id":row.session_id},
             "policy":{"reason":row.summary.reason,"overrides_deny":row.summary.overrides_deny,"rules":row.summary.deny_rules},
-            "settings_change":row.summary.settings_change,"created_at_ms":row.created_at_ms,
+            "settings_change":row.summary.settings_change,"policy_change":row.summary.policy_change,"created_at_ms":row.created_at_ms,
             "pending_expires_at_ms":row.pending_expires_at_ms,
             "grant_expires_at_ms":row.grant.as_ref().map(|g|g.expires_at_ms),
             "approval_id":row.grant.as_ref().map(|g|&g.approval_id)});
@@ -766,7 +779,7 @@ pub(super) fn group_row(
     state: &State,
     context: &Context,
     id: &str,
-) -> Result<(String, bool, bool), Error> {
+) -> Result<(String, bool, bool, bool), Error> {
     let (rows, _) = selected(state, context, &json!({"request_id":id}))?;
     let row = rows.first().ok_or(Error::Missing)?;
     let mut text = String::new();
@@ -775,6 +788,7 @@ pub(super) fn group_row(
         text,
         row.summary.overrides_deny,
         row.summary.settings_change,
+        row.summary.policy_change,
     ))
 }
 
@@ -811,7 +825,7 @@ fn message(summary: &Summary, cwd: &str) -> String {
     let mut text = String::from("Allow the agent to do this once?\n\n");
     describe(&mut text, summary, cwd);
     text.push_str(
-        "\nThis allows only this exact request, once, within five minutes. It does not change your policy.",
+        "\nThis allows only this exact request, once, within five minutes. It creates no standing permission.",
     );
     text
 }
@@ -836,6 +850,12 @@ fn group_message(rows: &[&HookRequest]) -> String {
         "changes agent settings.",
         "change agent settings.",
     );
+    of_them(
+        &mut text,
+        count(|s| s.policy_change),
+        "may replace Shield's policy files.",
+        "may replace Shield's policy files.",
+    );
     for (n, row) in rows.iter().enumerate() {
         text.push_str("\n\nRequest ");
         text.push_str(&(n + 1).to_string());
@@ -845,7 +865,7 @@ fn group_message(rows: &[&HookRequest]) -> String {
         describe(&mut text, &row.summary, &row.cwd);
     }
     text.push_str(
-        "\nThis allows only these exact requests, each once, within five minutes. It does not change your policy.",
+        "\nThis allows only these exact requests, each once, within five minutes. It creates no standing permission.",
     );
     text
 }
@@ -879,6 +899,11 @@ fn describe(text: &mut String, summary: &Summary, cwd: &str) {
     if summary.settings_change {
         text.push_str(
             "\nChanging agent settings can turn off Shield's protection or the confirmation this question relies on.",
+        );
+    }
+    if summary.policy_change {
+        text.push_str(
+            "\nThis command may change your permissions or turn off Shield's protection. Approval covers the submitted command, not a frozen Git revision or a previewed policy edit.",
         );
     }
     // Folders inside the project are stored relative to it.

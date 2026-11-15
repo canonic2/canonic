@@ -233,6 +233,27 @@ fn session_capture_is_best_effort_and_existing_context_needs_no_lock() {
 }
 
 #[test]
+fn fresh_session_context_capture_does_not_prepare_policy_or_issue_authorization() {
+    let rules = crate::policy::rules::document(&[]).unwrap().to_string();
+    let (root, mut context, _) = fixture_with_rules(Some(&rules));
+    context.surface = "hook".into();
+    context.session_id = Some("acme-fresh-conversation".into());
+    // The request was already decided. Advisory context capture must neither
+    // reload policy artifacts nor hold the writer while preparing them.
+    std::fs::remove_file(root.path().join(".shield/rules.yml")).unwrap();
+    let mut allowed = json!({"code":"policy-allow","decision":"allow","disposition":"allowed"});
+    handoff(&context, &mut allowed, None).unwrap();
+    assert!(
+        allowed["session_context"]["session_ref"].is_string(),
+        "{allowed}"
+    );
+    assert_eq!(allowed["decision"], "allow");
+    assert!(allowed["authorization"].is_null());
+    let checkpoint = store(&context).unwrap().read_checkpoint().unwrap();
+    assert!(checkpoint.session_grants.records.is_empty());
+}
+
+#[test]
 fn operator_can_prepare_a_recorded_session_without_impersonating_the_agent() {
     let (_root, context, reference) = fixture();
     let mut operator = context.clone();
@@ -723,10 +744,16 @@ fn failed_requirements_and_protected_state_cannot_use_session_grants() {
     let (_root, context, reference) = fixture();
     let proposed = proposal(&context, &reference);
     apply(&context, &proposed["apply_arguments"], true).unwrap();
-    for field in ["fixed_protection", "requirements", "partial"] {
+    for field in [
+        "fixed_protection",
+        "policy_change",
+        "requirements",
+        "partial",
+    ] {
         let mut value = receipt(&context, arguments("42"));
         match field {
             "fixed_protection" => value["fixed_protection"] = json!(true),
+            "policy_change" => value["policy_change"] = json!(true),
             "requirements" => {
                 value["_shell_analysis"]["operations"][0]["evaluation"]["evaluation"]["requirement_checks"] =
                     json!([{"status":"unmet"}]);
