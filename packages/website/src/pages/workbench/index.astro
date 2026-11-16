@@ -179,6 +179,7 @@ const docsMarkdown = [
           <p>An HTML page reads its scenario from <code>html[data-wb-scenario]</code>. Match CSS on <code>html[data-wb-scenario="error"]</code>, keep an element only in some scenarios with <code>data-wb-scenario-only="error"</code>, or set a value with <code>data-wb-set-error="value=…"</code>. No scripts are added to your pages.</p>
           <CodeBlock file="workbench.yaml" code={scenariosYaml} copies="the scenarios example" />
           <p>A preview page can also declare several artboards shown together. The Feedback page, pictured here, contains Info, Success, Warning, Danger, and Autopilot artboards. These are children of one page; its variants are not scenarios in the sidebar. Each preview fills its artboard; the grid belongs to the surrounding canvas. Screenshots include the entire group at full resolution, using current retained images or loading never-started members in bounded slots. A stale or missing image for a released session requires an explicit restart.</p>
+          <p>Workbench adapts its image caches to available machine memory. Cold views can move to private local storage and return as you navigate; screenshots retain their captured detail.</p>
         <figure class="feature-media shot" slot="media">
           <img src={`${base}images/scenarios.jpg`} width="1120" height="860" loading="lazy" alt="One Feedback page containing five independently sized artboards, with the existing Workbench toolbar and sidebar.">
         </figure>

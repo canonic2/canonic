@@ -22,6 +22,15 @@ collections:
 
 Pages need nothing added for Workbench. No script tag, import, or build step.
 
+### Keeping the canvas responsive
+
+Workbench adapts its image cache to the host's available memory and keeps the
+visible parts of artboards ready to draw. Cold captured images can move to
+private local storage and return as you navigate. Routine cache management
+needs no action or memory settings, and screenshots keep their full detail.
+If an image cannot be preserved because storage is unavailable, Release keeps
+the running view and reports the failed operation.
+
 ### How pages are served
 
 The extension runs a small server on `127.0.0.1` that serves your project at
