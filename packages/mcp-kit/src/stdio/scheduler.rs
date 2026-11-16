@@ -33,6 +33,7 @@ mod tests;
 /// What a queued or running request is, independent of its work.
 #[derive(Clone)]
 struct Meta {
+    binding: super::execution::Binding,
     apps: bool,
     trace: Trace,
     reply_kind: ReplyKind,
@@ -99,6 +100,7 @@ impl ReplyKind {
 }
 
 struct Assignment {
+    binding: super::execution::Binding,
     context: Context,
     trace: Trace,
     reply_kind: ReplyKind,
@@ -180,6 +182,7 @@ struct Worker {
 }
 
 pub(crate) struct Scheduler {
+    execution: super::execution::Execution,
     elicitation_policy: ElicitationPolicy,
     lanes: Vec<LaneState>,
     workers: Vec<Worker>,
@@ -210,14 +213,34 @@ pub(crate) struct Submission {
 }
 
 impl Scheduler {
+    #[cfg(test)]
     pub(crate) fn start<H: Handler>(
         handler: &Arc<H>,
         options: &Options,
         dispatcher: Thread,
     ) -> Result<Self, ServeError> {
+        Self::start_inner(handler, options, dispatcher, None)
+    }
+
+    pub(crate) fn start_with_catalog<H: Handler>(
+        handler: &Arc<H>,
+        options: &Options,
+        dispatcher: Thread,
+        catalog: &crate::Catalog,
+    ) -> Result<Self, ServeError> {
+        Self::start_inner(handler, options, dispatcher, Some(catalog))
+    }
+
+    fn start_inner<H: Handler>(
+        handler: &Arc<H>,
+        options: &Options,
+        dispatcher: Thread,
+        catalog: Option<&crate::Catalog>,
+    ) -> Result<Self, ServeError> {
         let (finished_sender, finished) = mpsc::channel();
         let (progress_sender, progress) = mpsc::sync_channel(PROGRESS_BUFFER);
         let mut scheduler = Self {
+            execution: super::execution::Execution::new(options, catalog)?,
             elicitation_policy: options.elicitation.clone(),
             lanes: Vec::new(),
             workers: Vec::new(),
@@ -300,9 +323,24 @@ impl Scheduler {
             return out;
         }
         let timeout = admission.timeout.unwrap_or(self.timeout);
+        let binding = match self.execution.reserve(&request) {
+            Ok(binding) => binding,
+            Err(message) => {
+                refuse(
+                    session,
+                    id.as_ref(),
+                    rpc::SERVER_ERROR,
+                    message,
+                    &mut out,
+                    &trace,
+                );
+                return out;
+            }
+        };
         lane.queue.push_back(Job {
             queued: trace.span(Stage::Queue),
             meta: Meta {
+                binding,
                 apps: session.supports_apps(id.as_ref()),
                 trace,
                 reply_kind: ReplyKind::of(&request, session),
@@ -503,6 +541,7 @@ impl Scheduler {
 
     /// Applies the end-of-input rules.
     pub(crate) fn disconnect(&mut self, session: &mut Session) -> Vec<Outgoing> {
+        self.execution.close();
         let mut out = Vec::new();
         self.disconnected = true;
         if let Some(notice) = session.close() {
@@ -584,6 +623,7 @@ impl Scheduler {
 
     /// Cancels all work and joins the workers.
     pub(crate) fn shutdown(&mut self) {
+        self.execution.close();
         for running in self.running.values() {
             running.control.cancel();
         }
@@ -609,6 +649,18 @@ impl Scheduler {
             }
         }
         self.running.clear();
+    }
+
+    pub(crate) fn finish_process(&self) -> Result<(), ServeError> {
+        self.execution.finish()
+    }
+
+    pub(crate) fn publish_next(
+        &self,
+        receiver: &super::ChangeReceiver,
+        session: &mut Session,
+    ) -> Option<Result<Vec<Value>, crate::ConfigurationError>> {
+        self.execution.publish_next(receiver, session)
     }
 
     fn complete(
@@ -941,14 +993,21 @@ impl Scheduler {
                 self.sequence = sequence;
                 job.meta.trace = job.meta.trace.assigned(sequence, worker);
                 let execution = job.meta.trace.span(Stage::Worker);
-                let progress = job.meta.progress_token.clone().map(|token| Progress {
-                    token,
-                    sequence,
-                    sender: self.progress_sender.clone(),
-                    dispatcher: self.dispatcher.clone(),
-                });
+                let progress = job
+                    .meta
+                    .progress_token
+                    .clone()
+                    .map(|token| Progress::Local {
+                        token,
+                        sequence,
+                        sender: self.progress_sender.clone(),
+                        dispatcher: self.dispatcher.clone(),
+                    });
                 let assignment = Assignment {
+                    binding: job.meta.binding.clone(),
                     context: Context {
+                        #[cfg(all(feature = "worker-process", any(unix, windows)))]
+                        execution: job.meta.binding.clone(),
                         apps: job.meta.apps,
                         result_schema: job.meta.result_schema.clone(),
                         protocol: job.meta.request_context.clone(),
@@ -1007,6 +1066,7 @@ impl Scheduler {
 impl Drop for Scheduler {
     fn drop(&mut self) {
         self.shutdown();
+        let _ = self.finish_process();
     }
 }
 
@@ -1055,11 +1115,12 @@ fn work<H: Handler>(
                     });
                 match assignment.work {
                     Work::Call(Request::Resource(read)) => Outcome::Bundled(read),
-                    Work::Call(request) => handler.call(request, &context),
+                    Work::Call(request) => assignment.binding.call(handler, request, &context),
                     Work::Resume(resume, decision) => resume(decision, &context),
                     Work::ElicitResume(resume, answer) => resume(answer, &context),
                 }
             };
+            let outcome = assignment.binding.retain(outcome);
             let outcome = checked_outcome(&assignment.reply_kind, outcome);
             let outcome = match outcome {
                 Outcome::Confirm(confirm) if context.protocol.is_some() => {

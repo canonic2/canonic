@@ -3,6 +3,8 @@
 | You want to | Use |
 | --- | --- |
 | Publish tools | `Tool`, `Annotations`, `Catalog::new` |
+| Expose side-effect-free dry runs separately | `tool::preview::{append, source, normalize}`; use simple object roots without composition, references or cross-property constraints, append previews before constructing the catalog, normalize validated calls before dispatch |
+| Preserve a different dry-run field spelling | `tool::preview::{append_with_flag, normalize_with_flag}`, for example with `dryRun` |
 | Publish interactive Apps | `AppsCatalog`, `UiResource`, `ToolUi`, `UiVisibility`, `SessionOptions::apps`; see [Apps](../guides/apps.md) |
 | Request a host sandbox policy | `UiMetadata`, `UiCsp`, `UiPermissions`, `UiPermission` |
 | Inspect Apps support or page another runtime's view | `Context::supports_apps`, `RequestContext::supports_apps`, `Session::supports_apps`, `apps::client_support`, `Catalog::list_page_for_client` |
@@ -29,6 +31,9 @@
 | Return tool artifacts | `Content::resource_link`, `ResourceLink`, `Content::resource`, `ResourceContents`; see [artifact results](../guides/resources.md#return-artifacts-from-tools) |
 | Refuse an unknown resource | `Outcome::ResourceNotFound` for revision-aware replies; `resource::not_found` emits a legacy error |
 | Run a stdio server | `stdio::serve`, `stdio::Handler`, `stdio::Options` |
+| Replace implementation processes | `worker::{Frontend, Implementation, Contract, SupervisorOptions}`, `Options::worker` (feature `worker-process`); see [worker replacement](../guides/worker-replacement.md) |
+| Pin a process-backed resource or producer | `Context::worker_hold`, `Context::worker_publisher`, `worker::{Hold, Publisher}` |
+| Encode private implementation assignments | `worker::wire::{Assignment, Work, Call, Reply, Decoder, ProgressSink, encode, decode}`; prepare `Decoder` once, restore with `Call::restore`, encode supported outcomes with `Reply::terminal`; native channels/continuation tokens belong to the adapter |
 | Keep the standard streams to the protocol | `stdio::protect`, `stdio::Protocol` |
 | Run a Streamable HTTP server | `http::serve`, `http::HttpOptions`, `http::Shutdown` (feature `http-server`); see [HTTP](../guides/http.md) |
 | Issue tokens from the server | `oauth::AuthorizationServer`, `oauth::Interaction`, `oauth::GrantStore`, `oauth::MemoryStore`, `oauth::ClientResolver`, `oauth::ClientRegistrar`, `HttpOptions::authorization_server` (feature `authorization-server`); see [authorization server](../guides/authorization-server.md) |

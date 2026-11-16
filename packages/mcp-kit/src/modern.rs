@@ -288,6 +288,11 @@ pub struct RequestContext {
 }
 
 impl RequestContext {
+    #[cfg(all(feature = "worker-process", any(unix, windows)))]
+    pub(crate) fn worker_cache(&self) -> Option<CachePolicy> {
+        self.cache
+    }
+
     #[cfg(test)]
     pub(crate) fn parse(
         params: &Value,

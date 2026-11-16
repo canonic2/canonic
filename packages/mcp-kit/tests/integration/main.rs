@@ -28,3 +28,5 @@ mod skills;
 mod subscriptions;
 #[cfg(unix)]
 mod tasks;
+#[cfg(all(feature = "worker-process", any(unix, windows)))]
+mod worker;

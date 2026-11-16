@@ -53,6 +53,8 @@ See the [example source](examples/skills.rs), or follow the
   host capability checks and bounded interaction lifetimes.
 - **Request handling:** worker lanes, ordering, cancellation, deadlines, progress
   and optional Tasks.
+- **Implementation updates:** opt-in stable frontends with Process Kit cutover,
+  native adapter hooks and explicit resource holds; see [worker replacement](docs/guides/worker-replacement.md).
 - **Transport choice:** shared stdio and HTTP drivers, or an I/O-free core for
   your own transport and scheduler.
 - **HTTP access control:** bearer-token validation hooks and an optional embedded

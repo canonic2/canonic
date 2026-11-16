@@ -1334,7 +1334,7 @@ fn reserved_extension_name(method: &str) -> bool {
         .contains(&method)
 }
 
-fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
+pub(crate) fn configure(options: &mut SessionOptions) -> Result<(), ConfigurationError> {
     if !options.legacy_protocols && options.modern.is_none() {
         return Err(ConfigurationError(
             "disabling legacy protocols requires modern protocol support".into(),

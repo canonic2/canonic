@@ -235,6 +235,10 @@ pub struct Grant {
 }
 
 impl Grant {
+    #[cfg(all(feature = "worker-process", any(unix, windows)))]
+    pub(crate) fn has_extension(&self) -> bool {
+        self.extension.is_some()
+    }
     /// A grant for tokens issued to `audiences`, without scopes or expiry.
     #[must_use]
     pub fn new(audiences: Vec<String>) -> Self {
@@ -324,7 +328,7 @@ impl Grant {
         self.extension.as_deref()?.downcast_ref()
     }
 
-    fn within_bounds(&self) -> bool {
+    pub(crate) fn within_bounds(&self) -> bool {
         (1..=MAX_GRANT_AUDIENCES).contains(&self.audiences.len())
             && self
                 .audiences

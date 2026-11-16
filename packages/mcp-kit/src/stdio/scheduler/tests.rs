@@ -23,6 +23,7 @@ fn scheduler_with_progress(frames: Vec<(u64, Value)>) -> (Scheduler, Session) {
         Running {
             execution: Trace::default().span(Stage::Worker),
             meta: Meta {
+                binding: super::super::execution::Binding::default(),
                 apps: false,
                 trace: Trace::default(),
                 reply_kind: ReplyKind::Ordinary,

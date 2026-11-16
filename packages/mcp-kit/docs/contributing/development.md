@@ -3,7 +3,8 @@
 This page covers contributing to the library itself. Run the commands below
 from `packages/mcp-kit`.
 
-This is one unpublished Cargo package with a library and no binary. It uses
+This is one unpublished Cargo library package with a test-only worker fixture
+executable and no product CLI. It uses
 Rust nightly-2026-04-16 (rustc 1.97), Rust 2024, a committed `Cargo.lock`, rustfmt, strict Clippy,
 nextest, doctests, rustdoc and cargo-deny.
 
@@ -31,11 +32,15 @@ cargo install --locked cargo-nextest@0.9.146 cargo-deny@0.20.2 cargo-llvm-cov@0.
 
 ```sh
 make dev
+# Ordinary build without optional driver/dependency features:
+make dev CARGO_FEATURES=
 make test-focus FILTER='session::'
 # Build the runnable Tasks example with the existing development profile:
 make dev CARGO_FLAGS='--example tasks'
 # Integration tests:
 make test-focus FILTER='scheduling::' TEST_TARGET='--test integration'
+# Process/HTTP replacement fixtures require host access in a sandbox:
+make test-focus FILTER='worker_replacement' TEST_TARGET='--test integration'
 # Repeat the integration tests to expose races:
 make test-focus FILTER='::' TEST_TARGET='--test integration' CARGO_FLAGS='--stress-count 30 --no-fail-fast'
 ```
@@ -44,6 +49,9 @@ make test-focus FILTER='::' TEST_TARGET='--test integration' CARGO_FLAGS='--stre
 package's `target/` directory between runs. To free space, run `make prune` on
 its own while no build or test uses `target/`; it deletes incremental caches and
 test binaries untouched for more than `PRUNE_DAYS` days (default 3).
+
+After intentionally changing dependencies, `make lock` resolves the lockfile.
+Inspect its diff and preserve unrelated locked versions.
 
 ## Configuration
 
@@ -63,7 +71,9 @@ test binaries untouched for more than `PRUNE_DAYS` days (default 3).
 
 Unit tests sit in each module, or in its `tests.rs` submodule. The integration
 binary, `tests/integration/main.rs`, runs `stdio::serve` on a thread with
-in-memory pipes and a scriptable handler; it opens no sockets or processes.
+in-memory pipes and a scriptable handler. The `worker-process` fixtures also
+use loopback, private local IPC and owned frontend/worker subprocesses through
+the test-only `acme-worker-fixture` executable; use host access in a sandbox.
 Wait on recorded events with the fixture's bounded wait rather than sleeping,
 and keep deadlines short only to make expiry happen.
 

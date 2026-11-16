@@ -1,6 +1,7 @@
 # Local MCP library checks. Run `make` to list targets.
 CARGO ?= $(if $(wildcard $(HOME)/.cargo/bin/cargo),$(HOME)/.cargo/bin/cargo,$(shell command -v cargo 2>/dev/null))
 CARGO_FLAGS ?=
+CARGO_FEATURES ?= --all-features
 
 # Cargo never deletes old build output. Run prune on its own, while no build or
 # test run uses target/: a running test may still launch an old test binary.
@@ -15,7 +16,11 @@ TEST_TARGET ?= --lib
 .PHONY: dev test-focus
 
 dev: ## Build incrementally without release optimization or installation
-	"$(CARGO)" build --locked --all-features $(CARGO_FLAGS)
+	"$(CARGO)" build --locked $(CARGO_FEATURES) $(CARGO_FLAGS)
+
+.PHONY: lock
+lock: ## Resolve the lockfile after an intentional dependency change
+	"$(CARGO)" generate-lockfile $(CARGO_FLAGS)
 
 test-focus: ## Run matching library tests; FILTER is required, TEST_TARGET selects other targets
 	$(if $(strip $(FILTER)),,$(error Set FILTER to a test name or module; optionally set TEST_TARGET='--test integration'))

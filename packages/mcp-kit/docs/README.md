@@ -11,6 +11,7 @@ Start with the [quick start](getting-started.md).
 
 - [Quick start](getting-started.md) — dependency, a first tool and a stdio server.
 - [Serve over stdio](guides/stdio.md) — lanes, keys, deadlines, progress, extension methods and disconnection.
+- [Replace implementations without reconnecting](guides/worker-replacement.md) — stable frontends, native process adapters, compatible cutover and resource ownership.
 - [Serve over Streamable HTTP](guides/http.md) — the `http-server` driver, request headers, `x-mcp-header` arguments, SSE, cancellation and your own HTTP server.
 - [Protect an HTTP server with bearer tokens](guides/authorization.md) — protected-resource metadata, your token verifier, per-tool scopes and the grant your handler receives.
 - [Issue tokens from your server](guides/authorization-server.md) — the optional embedded OAuth 2.1 server: sign-in, clients, machine and enterprise users, refresh rotation and storage.

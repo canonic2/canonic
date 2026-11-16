@@ -60,6 +60,8 @@ pub mod task;
 #[cfg(test)]
 mod test_work;
 pub mod tool;
+#[cfg(all(feature = "worker-process", any(unix, windows)))]
+pub mod worker;
 
 pub use apps::{
     AppsCatalog, AppsError, ToolUi, UiCsp, UiMetadata, UiPermission, UiPermissions, UiResource,

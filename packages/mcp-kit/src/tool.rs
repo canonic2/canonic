@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 mod headers;
 mod pagination;
+pub mod preview;
 pub use headers::MAX_PARAMETER_HEADERS;
 pub(crate) use headers::{Kind as ParameterKind, ParameterHeader};
 pub use pagination::{MAX_CURSOR_BYTES, PAGE_SIZE};

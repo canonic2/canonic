@@ -348,7 +348,10 @@ impl Documentation {
     pub fn tools(&self) -> Vec<Tool> {
         let product = &self.product;
         let list = &self.list;
-        let properties = Limits::STANDARD.properties();
+        let mut properties = Limits::STANDARD.properties();
+        properties["limit"]["description"] = json!(
+            "Maximum rows to return; default 50, maximum 100. The result size limit may end a page earlier."
+        );
         let cursor = &properties["cursor"];
         let rows = &properties["limit"];
         let mut read_properties = READ_LIMITS.properties();

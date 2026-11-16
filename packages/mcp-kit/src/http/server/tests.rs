@@ -3,7 +3,7 @@
 //! POSTs, listen streams and shutdown.
 use super::*;
 use crate::{
-    ModernOptions, ServerInfo, SessionOptions, SubscriptionOptions, Tool,
+    Change, ModernOptions, ServerInfo, SessionOptions, SubscriptionOptions, Tool,
     stdio::{ChangeSender, Context, Lane, Outcome, Request},
     tool::ToolResult,
 };

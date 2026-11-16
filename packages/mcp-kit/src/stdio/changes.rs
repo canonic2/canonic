@@ -8,11 +8,18 @@ pub const CHANGE_BUFFER: usize = 16;
 /// A nonblocking producer for the connection supplied to `Handler::connected`.
 #[derive(Debug, Clone)]
 pub struct ChangeSender {
-    sender: mpsc::SyncSender<Change>,
+    sender: mpsc::SyncSender<PendingChange>,
     dispatcher: thread::Thread,
     prompts: bool,
     resources: bool,
 }
+
+pub(crate) struct PendingChange {
+    pub(crate) change: Change,
+    #[cfg(all(feature = "worker-process", any(unix, windows)))]
+    pub(crate) _pin: Option<std::sync::Arc<crate::worker::Hold>>,
+}
+pub(crate) type ChangeReceiver = mpsc::Receiver<PendingChange>;
 
 /// Publication refused before enqueueing. Each variant retains the unsent change.
 #[derive(Debug, thiserror::Error)]
@@ -35,7 +42,27 @@ impl ChangeSender {
     /// Returns the unsent change for a disabled catalog, invalid URI, full queue
     /// or closed connection.
     pub fn send(&self, change: Change) -> Result<(), SendChangeError> {
-        let invalid = match &change {
+        self.enqueue(PendingChange {
+            change,
+            #[cfg(all(feature = "worker-process", any(unix, windows)))]
+            _pin: None,
+        })
+    }
+
+    #[cfg(all(feature = "worker-process", any(unix, windows)))]
+    pub(crate) fn send_pinned(
+        &self,
+        change: Change,
+        pin: std::sync::Arc<crate::worker::Hold>,
+    ) -> Result<(), SendChangeError> {
+        self.enqueue(PendingChange {
+            change,
+            _pin: Some(pin),
+        })
+    }
+
+    fn enqueue(&self, pending: PendingChange) -> Result<(), SendChangeError> {
+        let invalid = match &pending.change {
             Change::Tools(_) => false,
             Change::Prompts(_) => !self.prompts,
             Change::Resources(_) => !self.resources,
@@ -44,18 +71,18 @@ impl ChangeSender {
             }
         };
         if invalid {
-            return Err(SendChangeError::Invalid(change));
+            return Err(SendChangeError::Invalid(pending.change));
         }
-        self.sender.try_send(change).map_err(|error| match error {
-            mpsc::TrySendError::Full(change) => SendChangeError::Full(change),
-            mpsc::TrySendError::Disconnected(change) => SendChangeError::Closed(change),
+        self.sender.try_send(pending).map_err(|error| match error {
+            mpsc::TrySendError::Full(pending) => SendChangeError::Full(pending.change),
+            mpsc::TrySendError::Disconnected(pending) => SendChangeError::Closed(pending.change),
         })?;
         self.dispatcher.unpark();
         Ok(())
     }
 }
 
-pub(crate) fn channel(options: &crate::SessionOptions) -> (ChangeSender, mpsc::Receiver<Change>) {
+pub(crate) fn channel(options: &crate::SessionOptions) -> (ChangeSender, ChangeReceiver) {
     let (sender, receiver) = mpsc::sync_channel(CHANGE_BUFFER);
     (
         ChangeSender {
@@ -160,7 +187,7 @@ mod tests {
             .unwrap(),
         );
         sender.send(Change::Resources(resources.clone())).unwrap();
-        let Change::Resources(queued) = receiver.try_recv().unwrap() else {
+        let Change::Resources(queued) = receiver.try_recv().unwrap().change else {
             panic!("resource replacement")
         };
         assert!(Arc::ptr_eq(&resources, &queued));

@@ -21,7 +21,7 @@ use crate::{
         self, CHANGE_BUFFER, Handler, Options, Outgoing, PROGRESS_BUFFER, ServeError, Trace,
         scheduler::{Scheduler, Submission},
     },
-    subscription::{Change, SUBSCRIPTION_KEY},
+    subscription::SUBSCRIPTION_KEY,
     tool::{Catalog, ToolCall},
 };
 use serde_json::{Value, json};
@@ -229,7 +229,8 @@ pub fn serve<H: Handler>(
     let session = Session::try_new(catalog, session_options)?;
     let address = listener.local_addr().map_err(ServeError::Input)?;
     let dispatcher = thread::current();
-    let scheduler = Scheduler::start(&handler, options, dispatcher.clone())?;
+    let scheduler =
+        Scheduler::start_with_catalog(&handler, options, dispatcher.clone(), session.catalog())?;
     let (events_sender, events) = mpsc::sync_channel(2 * http.max_connections + 1);
     let shared = Arc::new(Shared {
         endpoint,
@@ -287,10 +288,14 @@ pub fn serve<H: Handler>(
         server.handler.connected(sender);
     }
     server.run(&events, &shared, shutdown);
+    server.changes = None;
     server.scheduler.shutdown();
     shutdown.shutdown();
     let _ = accepting.join();
-    server.error.map_or(Ok(()), |error| Err(error.into()))
+    server
+        .error
+        .map_or(Ok(()), |error| Err(error.into()))
+        .and(server.scheduler.finish_process())
 }
 
 fn validate(http: &HttpOptions, options: &Options) -> Result<(), ServeError> {
@@ -532,7 +537,7 @@ struct Dispatcher<H> {
     handler: Arc<H>,
     session: Session,
     scheduler: Scheduler,
-    changes: Option<Receiver<Change>>,
+    changes: Option<stdio::ChangeReceiver>,
     pending: HashMap<u64, Pending>,
     limit: usize,
     stopping: bool,
@@ -796,14 +801,14 @@ impl<H: Handler> Dispatcher<H> {
 
     fn publish_changes(&mut self) {
         for _ in 0..CHANGE_BUFFER {
-            let Some(change) = self
+            let Some(frames) = self
                 .changes
                 .as_ref()
-                .and_then(|changes| changes.try_recv().ok())
+                .and_then(|changes| self.scheduler.publish_next(changes, &mut self.session))
             else {
                 break;
             };
-            match self.session.publish(change) {
+            match frames {
                 Ok(frames) => self.subscription_frames(frames),
                 Err(error) => {
                     self.error = Some(error);

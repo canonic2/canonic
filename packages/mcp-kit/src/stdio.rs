@@ -7,10 +7,12 @@
 //! [`Context`]; they never interrupt code that does not check it.
 
 mod changes;
+mod execution;
 mod observation;
 mod protect;
 mod reader;
 pub(crate) mod scheduler;
+pub(crate) use changes::ChangeReceiver;
 #[cfg(feature = "http-server")]
 pub(crate) use changes::channel as change_channel;
 pub use changes::{CHANGE_BUFFER, ChangeSender, SendChangeError};
@@ -277,6 +279,9 @@ pub type Observer = Arc<dyn Fn(Direction, &[u8]) + Send + Sync>;
 /// Server limits and scheduling.
 #[derive(Clone)]
 pub struct Options {
+    /// Opt-in process generation owner; inline Handler policy stays in this frontend.
+    #[cfg(all(feature = "worker-process", any(unix, windows)))]
+    pub worker: Option<Arc<crate::worker::Frontend>>,
     /// Round and total-time bounds for the separate rich legacy API.
     pub elicitation: ElicitationPolicy,
     /// Protocol limits and extension methods.
@@ -303,6 +308,8 @@ impl Default for Options {
     /// One worker with up to eight outstanding requests.
     fn default() -> Self {
         Self {
+            #[cfg(all(feature = "worker-process", any(unix, windows)))]
+            worker: None,
             elicitation: ElicitationPolicy::default(),
             session: SessionOptions::default(),
             lanes: vec![Lane::new("tools", 1, 8)],
@@ -325,6 +332,10 @@ pub enum ServeError {
     /// The options cannot run a server.
     #[error("invalid MCP server options: {0}")]
     Options(&'static str),
+    /// Process attachment or cleanup failed; its frontend retains status and handles.
+    #[cfg(all(feature = "worker-process", any(unix, windows)))]
+    #[error(transparent)]
+    Worker(#[from] crate::worker::Error),
     /// The HTTP endpoint path, origins or body limit are invalid.
     #[error(transparent)]
     Endpoint(#[from] crate::http::EndpointError),
@@ -344,6 +355,8 @@ pub enum ServeError {
 
 /// The context of one running request.
 pub struct Context {
+    #[cfg(all(feature = "worker-process", any(unix, windows)))]
+    execution: execution::Binding,
     apps: bool,
     protocol: Option<Arc<crate::RequestContext>>,
     grant: Option<Arc<crate::http::Grant>>,
@@ -354,11 +367,18 @@ pub struct Context {
 }
 
 #[derive(Clone)]
-struct Progress {
-    token: Value,
-    sequence: u64,
-    sender: mpsc::SyncSender<(u64, Value)>,
-    dispatcher: thread::Thread,
+enum Progress {
+    Local {
+        token: Value,
+        sequence: u64,
+        sender: mpsc::SyncSender<(u64, Value)>,
+        dispatcher: thread::Thread,
+    },
+    #[cfg(all(feature = "worker-process", any(unix, windows)))]
+    Remote {
+        sink: crate::worker::wire::ProgressSink,
+        live: Arc<std::sync::atomic::AtomicBool>,
+    },
 }
 
 /// A cloneable progress sink bound to the handler run that captured it.
@@ -385,6 +405,50 @@ impl ProgressReporter {
 }
 
 impl Context {
+    #[cfg(all(feature = "worker-process", any(unix, windows)))]
+    pub(crate) fn from_worker(
+        control: Arc<Control>,
+        protocol: Option<Arc<crate::RequestContext>>,
+        grant: Option<Arc<crate::http::Grant>>,
+        id: Option<Value>,
+        result_schema: Option<crate::ResultSchema>,
+        apps: bool,
+        progress: Option<crate::worker::wire::ProgressSink>,
+    ) -> Self {
+        Self {
+            execution: execution::Binding::remote(),
+            control,
+            protocol,
+            grant,
+            id,
+            result_schema,
+            apps,
+            progress: progress.map(|sink| Progress::Remote {
+                sink,
+                live: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            }),
+        }
+    }
+    /// Bind a subscription producer and every queued change to this process.
+    /// # Errors
+    /// Refuses a full hold budget. Returns `None` for in-process work.
+    #[cfg(all(feature = "worker-process", any(unix, windows)))]
+    pub fn worker_publisher(
+        &self,
+        sender: ChangeSender,
+    ) -> Result<Option<crate::worker::Publisher>, crate::worker::Error> {
+        Ok(self
+            .worker_hold()?
+            .map(|hold| crate::worker::Publisher::new(sender, hold)))
+    }
+    /// Pin a worker-owned resource beyond this RPC. Returns `None` in the
+    /// ordinary in-process driver. Drop after actual resource cleanup only.
+    /// # Errors
+    /// Refuses a full resource-hold budget without releasing request ownership.
+    #[cfg(all(feature = "worker-process", any(unix, windows)))]
+    pub fn worker_hold(&self) -> Result<Option<crate::worker::Hold>, crate::worker::Error> {
+        self.execution.hold()
+    }
     /// Whether this RPC's client supports Apps. Visibility never grants authority.
     #[must_use]
     pub fn supports_apps(&self) -> bool {
@@ -472,17 +536,39 @@ impl Progress {
         if control.check().is_err() {
             return false;
         }
-        let mut params = json!({"progressToken": self.token, "progress": progress});
-        if let Some(total) = total {
-            params["total"] = json!(total);
+        match self {
+            #[cfg(all(feature = "worker-process", any(unix, windows)))]
+            Self::Remote { sink, live } => {
+                live.load(std::sync::atomic::Ordering::Acquire) && sink(progress, total, message)
+            }
+            Self::Local {
+                token,
+                sequence,
+                sender,
+                dispatcher,
+            } => {
+                let mut params = json!({"progressToken": token, "progress": progress});
+                if let Some(total) = total {
+                    params["total"] = json!(total);
+                }
+                if let Some(message) = message {
+                    params["message"] = json!(message);
+                }
+                let notification = rpc::notification("notifications/progress", params);
+                let sent = sender.try_send((*sequence, notification)).is_ok();
+                dispatcher.unpark();
+                sent
+            }
         }
-        if let Some(message) = message {
-            params["message"] = json!(message);
+    }
+}
+
+#[cfg(all(feature = "worker-process", any(unix, windows)))]
+impl Drop for Context {
+    fn drop(&mut self) {
+        if let Some(Progress::Remote { live, .. }) = &self.progress {
+            live.store(false, std::sync::atomic::Ordering::Release);
         }
-        let notification = rpc::notification("notifications/progress", params);
-        let sent = self.sender.try_send((self.sequence, notification)).is_ok();
-        self.dispatcher.unpark();
-        sent
     }
 }
 
@@ -514,7 +600,12 @@ pub fn serve<H: Handler>(
     let trace = Trace::connection(options.observations.as_ref());
     let _connection = trace.span(Stage::Connection);
     let dispatcher = thread::current();
-    let scheduler = scheduler::Scheduler::start(&handler, options, dispatcher.clone())?;
+    let scheduler = scheduler::Scheduler::start_with_catalog(
+        &handler,
+        options,
+        dispatcher.clone(),
+        session.catalog(),
+    )?;
     let (frames, incoming) = mpsc::sync_channel(INPUT_BUFFER);
     let limit = options.session.max_message_bytes;
     let reader_trace = trace.clone();
@@ -546,6 +637,7 @@ pub fn serve<H: Handler>(
     }
     let result = connection.run(&incoming);
     drop(incoming);
+    connection.changes.take();
     {
         let _drain = trace.span_with_parent(Stage::Drain, Stage::Connection);
         connection.scheduler.shutdown();
@@ -560,7 +652,7 @@ pub fn serve<H: Handler>(
     }
     // A blocking read cannot be interrupted portably; after an early failure
     // the reader ends with its input or the process.
-    result
+    result.and(connection.scheduler.finish_process())
 }
 
 /// Inbound work for the scheduler: its ID, request, read-only rule and progress token.
@@ -674,7 +766,7 @@ pub(crate) fn validate(options: &Options) -> Result<(), ServeError> {
 struct Connection<H, W> {
     trace: Trace,
     streams: HashMap<String, Trace>,
-    changes: Option<mpsc::Receiver<crate::Change>>,
+    changes: Option<ChangeReceiver>,
     session: Session,
     scheduler: scheduler::Scheduler,
     handler: Arc<H>,
@@ -949,15 +1041,14 @@ impl<H: Handler, W: Write> Connection<H, W> {
 
     fn publish_changes(&mut self) -> Result<(), ServeError> {
         for _ in 0..CHANGE_BUFFER {
-            let Some(change) = self
+            let Some(frames) = self
                 .changes
                 .as_ref()
-                .and_then(|changes| changes.try_recv().ok())
+                .and_then(|changes| self.scheduler.publish_next(changes, &mut self.session))
             else {
                 break;
             };
-            let frames = self.session.publish(change)?;
-            self.subscription_frames(frames)?;
+            self.subscription_frames(frames?)?;
         }
         Ok(())
     }
