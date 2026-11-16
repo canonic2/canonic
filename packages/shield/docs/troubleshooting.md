@@ -26,6 +26,11 @@ remain available when you choose to use them directly.
 
 ## Shield says state is briefly locked
 
+Project authority and shared registry-trust acquisition wait briefly for an
+active writer. The shared trust guard retries contention for up to 500 ms
+before refusing; it checks current trust after acquiring the lock. Waiting
+does not replay a request or consume a grant.
+
 Another Shield operation held a required lock beyond this request's bounded
 wait. The command has not been dispatched, so retry the same request after the
 other operation finishes. This message is contention, not a policy Deny or a

@@ -81,6 +81,37 @@ fn serve_project_agrees_with_hooks_in_a_fresh_worktree() {
     );
 }
 
+#[cfg(not(windows))]
+#[test]
+fn fresh_worktree_mcp_enrolls_before_the_first_hook() {
+    let root = assert_fs::TempDir::new().unwrap();
+    configured(root.path());
+    fs::create_dir_all(root.path().join(".hub/mcp")).unwrap();
+    fs::write(root.path().join(".hub/config.yml"), "schema_version: 1\n").unwrap();
+    let shared = include_str!("../../fixtures/hub-shield-definition.yml");
+    fs::write(root.path().join(".hub/mcp/shield.yml"), shared).unwrap();
+    let input = ReviewContext {
+        project: root.path().into(),
+        agent: Some("codex".into()),
+        session_id: Some("acme-session".into()),
+        tool_use_id: None,
+    };
+    // MCP starts before any tool hook has opened the fresh checkout. Its
+    // connection must already own the adapter used for in-session approval.
+    let connection = review_context(&input).unwrap();
+    assert_eq!(connection.agent.as_deref(), Some("codex"));
+    assert!(connection.declared_agent.is_none());
+    assert_eq!(connection.session_id, input.session_id);
+    assert!(root.path().join(".hub/local/mcp/shield.yml").is_file());
+    assert_eq!(
+        fs::read_to_string(root.path().join(".hub/mcp/shield.yml")).unwrap(),
+        shared
+    );
+    let hook = crate::review::open(root.path()).unwrap();
+    assert_eq!(connection.project_id, hook.project_id);
+    assert!(crate::review::cli::registered(&connection, "codex").unwrap());
+}
+
 #[test]
 fn other_projects_cannot_replace_an_explicit_selection() {
     let root = assert_fs::TempDir::new().unwrap();

@@ -141,7 +141,7 @@ impl Namespace {
     /// Shared guard linearizes final policy use with exclusive head publication.
     pub(in crate::review) fn guard(&self) -> Result<File, Error> {
         self.initialize()?;
-        objects::read_lease(&self.directory)
+        objects::read_lease_wait(&self.directory)
     }
     pub(in crate::review) fn read(&self, identity: &str) -> Result<Option<Retained>, Error> {
         let _guard = self.guard()?;

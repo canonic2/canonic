@@ -94,6 +94,7 @@ fn mcp_connections_classification_and_enforcement_share_one_snapshot_load() {
             } else {
                 assert_eq!(response, json!({}));
             }
+            log.flush();
             let records = fs::read_to_string(log.path().unwrap())
                 .unwrap()
                 .lines()

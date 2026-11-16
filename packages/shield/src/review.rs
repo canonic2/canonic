@@ -392,11 +392,18 @@ pub(crate) fn open_diagnostics(project: &Path) -> Result<Context, Error> {
 /// Supported historical formats otherwise stay inspectable until actual use.
 pub(crate) fn open_connection(project: &Path) -> Result<Context, Error> {
     let store = Store::open(project)?;
-    let (state, _) = store.read_diagnostic_checkpoint()?;
+    let (state, pending) = store.read_diagnostic_checkpoint()?;
     if state.project_root != store.root() {
         return open(project);
     }
-    Ok(Context::new(state.project_id, state.project_root, "cli"))
+    let context = Context::new(state.project_id.clone(), state.project_root.clone(), "cli");
+    // Fresh runtime state already names this folder, but has no registration
+    // yet. Complete the same launcher maintenance as a hook before the MCP
+    // connection freezes its adapter. Historical state stays diagnostic until use.
+    if !pending {
+        integrations::rebind_launchers(&context, &state);
+    }
+    Ok(context)
 }
 
 /// A proposal's recorded status, closing reason, receipt and origin, read from

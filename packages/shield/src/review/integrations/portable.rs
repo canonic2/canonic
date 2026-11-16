@@ -128,6 +128,13 @@ pub(super) fn needed(state: &State) -> bool {
             .is_some_and(|owned| {
                 (owned.definition.is_none() && !owned.agents.is_empty())
                     || owned.definition.as_ref().is_some_and(|definition| {
+                        // A pin already naming this executable needs no re-pin.
+                        // Avoid rendering and decoding every host/adapter field
+                        // on each ordinary native project open.
+                        if std::env::current_exe().is_ok_and(|binary| definition.pinned_to(&binary))
+                        {
+                            return false;
+                        }
                         let defaults = crate::review::mcp::default_approved();
                         definition
                             .portable_codec(owned.approved_tools.as_deref().unwrap_or(&defaults))

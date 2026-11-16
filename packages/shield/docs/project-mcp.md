@@ -169,11 +169,15 @@ and execution requests. `request_deny` asks the user to deny a pending request
 or revoke its unused grant; consumption and revocation are mutually exclusive.
 
 Only the agent that made a native hook request can approve it, and only when
-this project has that agent's integration. A Git worktree, clone or copy
-whose Shield agent entries match a registration you set up for the same policy
-is registered for you automatically. Otherwise, or when an entry was edited,
-refusals there do not offer `request_approve`, the tool returns
-`agent_not_connected`, and listed requests show `approvable: false` with an
+this project has that agent's integration. A copy carrying Shield's runtime
+state retains its registration, including direct Claude/Codex setup, while its
+agent entries still match the recorded ownership. In a Hub or Box project, a Git
+worktree, clone or copy carrying Shield's generated MCP definition is registered
+automatically when MCP starts, before the first tool hook. The definition and
+any private binary pin must match Shield's generated configuration. A folder
+with fresh runtime state and only direct agent entries needs `shield mcp setup`.
+Without a matching registration, refusals do not offer `request_approve`, the
+tool returns `agent_not_connected`, and listed requests show `approvable: false` with an
 `approval_route`. Run `shield mcp setup` in that folder, restart the agent
 session, and repeat the refused call.
 

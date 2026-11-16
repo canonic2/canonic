@@ -43,9 +43,42 @@ pub(in crate::review) fn read_file(path: &Path) -> Result<File, Error> {
 /// Share the directory's mutex through a short final authority guard. The
 /// caller initializes and validates the private directory before acquiring.
 pub(in crate::review) fn read_lease(path: &Path) -> Result<File, Error> {
-    let file = read_file(&path.join(".objects.lock"))?;
-    file.try_lock_shared().map_err(|_| Error::Locked)?;
-    Ok(file)
+    read_lease_retry(path, || false)
+}
+
+/// Registry trust tolerates brief publication contention. SDK admission keeps
+/// using the immediate lease so its separate namespace locks cannot stack waits.
+pub(in crate::review) fn read_lease_wait(path: &Path) -> Result<File, Error> {
+    let started = std::time::Instant::now();
+    let budget = std::time::Duration::from_millis(500);
+    read_lease_retry(path, || {
+        let remaining = budget.saturating_sub(started.elapsed());
+        if remaining.is_zero() {
+            return false;
+        }
+        std::thread::sleep(remaining.min(std::time::Duration::from_millis(25)));
+        true
+    })
+}
+
+fn read_lease_retry(path: &Path, mut retry: impl FnMut() -> bool) -> Result<File, Error> {
+    let path = path.join(".objects.lock");
+    let file = read_file(&path)?;
+    loop {
+        match file.try_lock_shared() {
+            Ok(()) => {
+                // Publication may have changed the namespace while we waited.
+                checked(&path, &file)?;
+                return Ok(file);
+            }
+            Err(fs::TryLockError::WouldBlock) => {
+                if !retry() {
+                    return Err(Error::Locked);
+                }
+            }
+            Err(fs::TryLockError::Error(error)) => return Err(error.into()),
+        }
+    }
 }
 
 /// Bounded, read-only diagnostics; unsafe neighbors are never followed or fixed.
@@ -163,5 +196,51 @@ impl Directory {
             path: path.into(),
             guard,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shared_authority_waits_for_a_brief_publication() {
+        let root = assert_fs::TempDir::new().unwrap();
+        super::super::private_directory(root.path()).unwrap();
+        let mut publisher = Some(Directory::enter(root.path()).unwrap());
+        // Release only after the reader actually observes contention. This
+        // exercises retry without relying on thread scheduling or elapsed time.
+        let reader = read_lease_retry(root.path(), || {
+            drop(publisher.take().expect("one contended attempt"));
+            true
+        })
+        .unwrap();
+        assert!(publisher.is_none());
+        let other = read_lease_wait(root.path()).unwrap();
+        assert!(matches!(
+            Directory::try_enter(root.path()),
+            Err(Error::Locked)
+        ));
+        drop((reader, other));
+        Directory::try_enter(root.path()).unwrap();
+    }
+
+    #[test]
+    fn shared_authority_still_refuses_a_publisher_that_remains_busy() {
+        let root = assert_fs::TempDir::new().unwrap();
+        super::super::private_directory(root.path()).unwrap();
+        let publisher = Directory::enter(root.path()).unwrap();
+        assert!(matches!(read_lease_wait(root.path()), Err(Error::Locked)));
+        publisher.check_owner().unwrap();
+        drop(publisher);
+        read_lease(root.path()).unwrap();
+    }
+
+    #[test]
+    fn immediate_shared_authority_refuses_without_retrying() {
+        let root = assert_fs::TempDir::new().unwrap();
+        super::super::private_directory(root.path()).unwrap();
+        let _publisher = Directory::enter(root.path()).unwrap();
+        assert!(matches!(read_lease(root.path()), Err(Error::Locked)));
     }
 }
