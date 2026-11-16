@@ -25,7 +25,7 @@ pub(in crate::agents) const OFFER: &str = " The agent can ask you to allow it on
 /// The receipt fields in-session approval needs.
 pub(super) fn refusal(receipt: &Value) -> Value {
     json!({"code":receipt["code"],"fixed_protection":receipt["fixed_protection"],
-        "identity":receipt["identity"],"protected_path":receipt["protected_path"],
+        "identity":receipt["identity"],"history":receipt["history"],"protected_path":receipt["protected_path"],
         "protected_group":receipt["protected_group"],"policy_change":receipt["policy_change"],"deny_rules":receipt["deny_rules"],"mcp_match":receipt["mcp_match"],"_mcp_binding":receipt["_mcp_binding"]})
 }
 
@@ -83,6 +83,10 @@ pub(super) fn in_session(
         tool: request.tool,
         input_digest,
     };
+    let decision_requests: Vec<&str> = refusals
+        .iter()
+        .filter_map(|receipt| receipt["history"]["request_id"].as_str())
+        .collect();
     match request.event {
         Event::Before => {
             // A failed read is not a missing registration; recording the
@@ -99,7 +103,13 @@ pub(super) fn in_session(
                 );
                 return None;
             };
-            match hook_approval::refused(root, &key, &identity, &summary) {
+            match hook_approval::refused_observed(
+                root,
+                &key,
+                &identity,
+                &summary,
+                &decision_requests,
+            ) {
                 Ok(Outcome::Allowed) => Some(allowed()),
                 Ok(Outcome::Pending(id, others)) => {
                     route(reply, &id, others);
@@ -115,7 +125,7 @@ pub(super) fn in_session(
             }
         }
         // A later callback of an attempt whose grant was just consumed.
-        Event::Permission => hook_approval::followup(root, &key)
+        Event::Permission => hook_approval::followup_observed(root, &key, &decision_requests)
             .ok()
             .filter(|covered| *covered)
             .map(|_| allowed()),

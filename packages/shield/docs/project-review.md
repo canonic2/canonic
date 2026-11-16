@@ -399,6 +399,10 @@ shield history show ENTRY
 ```
 
 Entries combine request decisions, operator decisions, and reported completion.
+An identical native retry covered by a one-time approval is shown as approved
+and allowed, with its original policy evaluation and the approval IDs retained.
+Approval alone leaves execution unobserved. Older records without an explicit
+approval-to-retry link remain separate.
 Policy changes are recorded by the policy files themselves; use your version
 control to see how they changed. `shield policy show` lists recent proposal
 outcomes.

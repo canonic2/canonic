@@ -191,9 +191,9 @@ pub(super) fn resolve(
         explicit = true;
         arguments = &arguments[1..];
     }
-    arguments = arguments
-        .strip_prefix(&["--".to_owned()])
-        .unwrap_or(arguments);
+    if arguments.first().is_some_and(|argument| argument == "--") {
+        arguments = &arguments[1..];
+    }
     let [submitted] = arguments else {
         return Ok(None);
     };
@@ -263,9 +263,7 @@ pub(super) fn resolve(
     Ok(Some(Directory {
         physical: destination,
         logical,
-        previous: (!state.environment_unknown)
-            .then(|| current.logical.clone())
-            .flatten(),
+        previous: current_logical.cloned(),
         derived: true,
     }))
 }

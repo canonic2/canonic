@@ -6,74 +6,29 @@ use std::path::PathBuf;
 
 #[cfg(unix)]
 #[test]
-fn monorepo_cd_rejects_unexported_shell_local_cdpath() {
+fn monorepo_cd_uses_normal_lookup_and_preserves_native_boundaries() {
     let (_fixture, context) = fixture();
     let root = Path::new(&context.project_root);
-    let outside = assert_fs::TempDir::new().unwrap();
-    for base in [root, outside.path()] {
-        fs::create_dir_all(base.join("packages/ui")).unwrap();
-    }
+    fs::create_dir_all(root.join("packages/ui")).unwrap();
     fs::write(root.join("packages/ui/note.txt"), "Acme project note").unwrap();
-    fs::write(
-        outside.path().join("packages/ui/note.txt"),
-        "Acme outside note\n",
-    )
-    .unwrap();
-    // A startup file can establish the same unexported shell variable. The
-    // external hook process sees no CDPATH, although the command shell uses it.
-    let output = std::process::Command::new("/bin/bash")
-        .args([
-            "--noprofile",
-            "--norc",
-            "-c",
-            r#"
-unset CDPATH
-CDPATH="$1"
-export -n CDPATH
-cd packages/ui >/dev/null && /bin/cat note.txt || exit 1
-"$2" --exact agents::hook::tests::working_files::monorepo_cd_fixture --ignored --nocapture
-"#,
-            "acme-cdpath-fixture",
-        ])
-        .arg(outside.path())
-        .arg(std::env::current_exe().unwrap())
-        .current_dir(root)
-        .env_remove("BASH_ENV")
-        .env_remove("CDPATH")
-        .env("SHIELD_CD_TEST_PROJECT", root)
-        .output()
-        .unwrap();
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Acme outside note"), "{stdout}");
-    assert!(
-        output.status.success(),
-        "{stdout}\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(stdout.contains("1 passed"));
-}
-
-#[cfg(unix)]
-#[test]
-#[ignore = "run by the parent test with an isolated native environment"]
-fn monorepo_cd_fixture() {
-    assert!(std::env::var_os("CDPATH").is_none());
-    let root = PathBuf::from(std::env::var_os("SHIELD_CD_TEST_PROJECT").unwrap());
-    let root = root.as_path();
-    for agent in ["claude", "codex"] {
-        let reply = call(root, agent, "cd packages/ui && cat note.txt");
-        assert_eq!(denial_decision(&reply), "deny", "{agent}: {reply}");
-        let reply = call(root, agent, "cd ./packages/ui && cat note.txt");
-        let decision = &reply["hookSpecificOutput"]["permissionDecision"];
-        assert_ne!(decision, "deny", "{agent}: {reply}");
-        assert_ne!(decision, "ask", "{agent}: {reply}");
+    for adapter in crate::agents::ADAPTERS {
+        let agent = adapter.spec().id;
+        for source in [
+            "cd packages/ui && cat note.txt",
+            "cd ./packages/ui && cat note.txt",
+        ] {
+            let reply = shell_tool(root, agent, source);
+            let decision = denial_decision(&reply);
+            assert_ne!(decision, "deny", "{agent}: {source}: {reply}");
+            assert_ne!(decision, "ask", "{agent}: {source}: {reply}");
+        }
         // Directory handling must preserve explicit denies and source uncertainty.
         for source in [
             "cd packages/ui && git reset --hard",
             "CDPATH=/unverified/search-root; cd packages/ui && cat note.txt",
             "cd packages/ui && cat ../../../outside.txt",
         ] {
-            let reply = call(root, agent, source);
+            let reply = shell_tool(root, agent, source);
             assert_eq!(
                 denial_decision(&reply),
                 "deny",

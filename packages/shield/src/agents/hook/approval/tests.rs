@@ -263,6 +263,90 @@ fn request_approve(root: &Path, agent: &str, id: &str, confirmed: bool) -> Value
 }
 
 #[test]
+fn approved_native_retry_history_keeps_policy_and_records_the_actual_allowance() {
+    for (agent, history_enabled) in [
+        ("claude", true),
+        ("codex", true),
+        ("claude", false),
+        ("codex", false),
+    ] {
+        let (_root, context) = policy_fixture();
+        let root = Path::new(&context.project_root);
+        if !history_enabled {
+            let settings =
+                review::history_settings(&context, Some(false), None, true, &|| Ok(())).unwrap();
+            assert_eq!(settings["enabled"], false, "{settings}");
+        }
+        let command = "acme config set example";
+        let id = offered_id(&shell(root, agent, command)).unwrap();
+        assert_eq!(
+            request_approve(root, agent, &id, true)["data"]["status"],
+            "approved"
+        );
+        let retry = shell(root, agent, command);
+        assert!(agent_context(&retry).contains("allowed once"), "{retry}");
+        if agent == "codex" {
+            let followup = hook(
+                root,
+                agent,
+                Event::Permission,
+                &json!({"hook_event_name":"PermissionRequest","session_id":"acme-session","cwd":root,
+                    "tool_name":"Bash","tool_input":{"command":command,"workdir":root}}),
+            );
+            assert_eq!(
+                followup["hookSpecificOutput"]["decision"]["behavior"], "allow",
+                "{followup}"
+            );
+        }
+        // A third identical call is a separate blocked attempt, not covered by
+        // the consumed approval or joined by command text.
+        assert_eq!(
+            shell(root, agent, command)["hookSpecificOutput"]["permissionDecision"],
+            "deny"
+        );
+        let history = review::mcp::call_with_confirmation(
+            &mcp(root, agent),
+            &review::mcp::Connection::new("native-approval-history".into()),
+            "history_list",
+            &json!({"limit":100}),
+            &|| Ok(()),
+            false,
+        );
+        let entries = history["data"]["entries"].as_array().unwrap();
+        if !history_enabled {
+            assert!(entries.is_empty(), "{history}");
+            continue;
+        }
+        let allowed: Vec<_> = entries
+            .iter()
+            .filter(|entry| entry["approved"] == true)
+            .collect();
+        assert_eq!(
+            allowed.len(),
+            if agent == "codex" { 2 } else { 1 },
+            "{history}"
+        );
+        for entry in allowed {
+            assert_eq!(entry["disposition"], "allowed", "{entry}");
+            assert_eq!(entry["denied"], false, "{entry}");
+            assert_eq!(entry["code"], "one-time-approved", "{entry}");
+            assert_eq!(entry["approval"]["request_id"], id, "{entry}");
+            assert!(entry["approval"]["approval_id"].is_string(), "{entry}");
+            assert_eq!(entry["evaluation"]["decision"], "deny", "{entry}");
+            assert_eq!(entry["outcome"], "unobserved", "{entry}");
+        }
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry["denied"] == true)
+                .count(),
+            2,
+            "{history}"
+        );
+    }
+}
+
+#[test]
 fn codex_settings_change_recovers_in_the_session_once() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);

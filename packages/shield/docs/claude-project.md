@@ -381,10 +381,12 @@ Bash source retains flags, quoting and compounds for conservative shell analysis
 A literal `cd` to the already known current directory, including `cd .`, keeps
 that working-directory context and needs no extra approval unless an explicit
 command rule asks or denies it. Literal POSIX directory changes such as
-`cd ./subproject && command` use the observed target for the successful branch.
-Use `cd ./packages/ui && command` for a project-relative directory. Without
-command-shell environment metadata, `cd packages/ui` remains unresolved: the
-shell can use an unexported `CDPATH` that the hook process cannot observe.
+`cd packages/ui && command` use the observed target for the successful branch.
+Across agents, ordinary relative targets resolve from the reported working
+directory by default. A reported nonempty `CDPATH` or source-level environment
+change retains unresolved handling for directory search; `./` targets bypass
+that search. Unreported shell-local directory-search settings are outside the
+shell preview contract.
 `||` retains the failure directory, and `;` checks both possibilities. Logical
 and physical `-L`/`-P` behavior follows observed symlinks. Unknown environment,
 directory shortcuts and preceding unclassified filesystem changes retain

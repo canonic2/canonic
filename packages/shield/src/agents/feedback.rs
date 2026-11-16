@@ -24,8 +24,6 @@ fn raw_deny(code: &str) -> Reply {
         "protected-access" => format!("{PROTECTED_ACCESS} Never read or change .shield/state or the cache. Propose policy changes with policy_propose. Do not bypass protection."),
         "sensitive-read" => "Shield: settings may contain credentials; this callback cannot request read approval. Continue without them unless essential.".to_owned(),
         "policy-file-unknown" => "Shield: this Git command can change Shield's policy files in .shield/, or Shield cannot tell whether it would, and this host cannot ask the user. Ask the user to run it, or name paths that leave .shield out.".to_owned(),
-        "search-footprint-unavailable" => "Shield: the files this search reaches could not be verified. Search a narrower path with fewer entries. In a shell rg, --no-ignore without glob filters keeps hidden files out.".to_owned(),
-        "protected-search" => "Shield: this search could read protected files. Search a narrower path that excludes .shield and agent settings. In a shell rg, --files lists names only, and --no-ignore without glob filters keeps a content search to visible files.".to_owned(),
         "invalid-host-input" | "invalid-host-event" | "invalid-input" => "Shield: invalid request. Correct the tool input before retrying.".to_owned(),
         "invalid-context" => "Shield: the session's working directory is not an existing folder inside this Shield project. Work from the project folder, or ask the user to start the session there.".to_owned(),
         "runtime-busy" => "Shield: Shield state is briefly locked; retry the request.".to_owned(),
@@ -357,13 +355,8 @@ fn response(
     if let Some(reply) = sensitive_prompt(adapter, event, receipt, &path) {
         return Some(reply);
     }
-    if [
-        "sensitive-read",
-        "policy-file-unknown",
-        "protected-access",
-        "protected-search",
-    ]
-    .contains(&receipt["code"].as_str()?)
+    if ["sensitive-read", "policy-file-unknown", "protected-access"]
+        .contains(&receipt["code"].as_str()?)
     {
         let mut value = raw_deny(receipt["code"].as_str()?);
         if receipt["code"] == "protected-access"

@@ -48,10 +48,6 @@ pub(super) enum Protection {
     /// such as a patch or a stash, or from committed content that differs;
     /// the user decides.
     Undetermined,
-    /// The modeled search's bounded metadata footprint could not be verified.
-    Unverified,
-    /// A content search can reach protected state; narrow its footprint.
-    SearchBlocked,
     Blocked,
 }
 
@@ -226,8 +222,8 @@ fn access(request: &Value) -> Access {
 }
 
 /// What a command prints beyond the paths it names: a Git invocation's
-/// revision paths, patches and searches, or a recursive grep's walk, checked
-/// like a shell rg content search of the same folders.
+/// revision paths, patches and searches. Directory searches do not inspect
+/// descendants for protected files; explicitly named auxiliary reads still do.
 fn output_protection(
     request: &Value,
     root: &Path,
@@ -261,71 +257,22 @@ fn output_protection(
                 .iter()
                 .map(|s| (*s).to_owned())
                 .collect::<Vec<_>>(),
-            root,
             cwd,
-            cwd_known,
             guard,
         ),
         _ => (Protection::None, None),
     }
 }
 
-/// Use the location model's parser for both recursive footprints and auxiliary
-/// reads, including long abbreviations and attached pattern-file values.
-fn grep_protection(
-    arguments: &[String],
-    root: &Path,
-    cwd: &Path,
-    cwd_known: bool,
-    guard: Guard<'_>,
-) -> Finding {
-    if !cwd_known {
-        return (Protection::Unverified, None);
-    }
+/// Protect explicit auxiliary reads, including attached pattern-file values.
+fn grep_protection(arguments: &[String], cwd: &Path, guard: Guard<'_>) -> Finding {
     let parsed = crate::location::grep_parse(arguments, cwd);
-    let mut finding = strictest(
+    strictest(
         parsed
             .reads
             .iter()
             .map(|path| inspect_path(path, cwd, guard, Access::Read)),
-    );
-    if finding.0 == Protection::Blocked {
-        return finding;
-    }
-    if !parsed.complete {
-        return strictest([finding, (Protection::Unverified, None)].into_iter());
-    }
-    if !parsed.recursive {
-        return finding;
-    }
-    let paths: Vec<&str> = parsed
-        .operands
-        .into_iter()
-        .skip(usize::from(!parsed.pattern_given))
-        .filter(|path| *path != "-")
-        .collect();
-    let paths = if paths.is_empty() { vec!["."] } else { paths };
-    let existing: Vec<&str> = paths
-        .into_iter()
-        .filter(|path| submitted_path(path, cwd).symlink_metadata().is_ok())
-        .collect();
-    if existing.is_empty() {
-        return finding;
-    }
-    let mut search = vec!["-g", "*", "--", "shield-pattern"];
-    search.extend(existing);
-    let search = serde_json::json!({"executable":"rg","arguments":search});
-    finding = strictest(
-        [
-            finding,
-            search_protection(&search, root, cwd, cwd_known, guard, false),
-        ]
-        .into_iter(),
-    );
-    if finding.0 == Protection::Blocked {
-        finding.0 = Protection::SearchBlocked;
-    }
-    finding
+    )
 }
 
 /// An outside-location refusal: the first argument of the refused operation
@@ -558,16 +505,10 @@ fn inspect(
                 return (Protection::Blocked, None);
             }
             let access = inspected_access(value, access);
-            let piped = value["stdin"] == "pipe";
-            let mut search =
-                search_protection(&value["request"], root, cwd, cwd_known, guard, piped);
-            if search.0 == Protection::Blocked {
-                search.0 = Protection::SearchBlocked;
-            }
             let named = named_files(&value["request"], cwd, guard);
             let output = output_protection(&value["request"], root, cwd, cwd_known, guard);
             strictest(
-                [named, search, output].into_iter().chain(
+                [named, output].into_iter().chain(
                     fields
                         .iter()
                         .filter(|(key, _)| {
@@ -699,6 +640,18 @@ fn named_files(request: &Value, cwd: &Path, guard: Guard<'_>) -> Finding {
         .filter_map(Value::as_str)
         .collect();
     let mut files = crate::location::text_files(executable, &arguments).unwrap_or_default();
+    if ["rg", "/bin/rg", "/usr/bin/rg"].contains(&executable) {
+        files.extend(
+            crate::location::rg_auxiliary_reads(
+                &arguments
+                    .iter()
+                    .map(|arg| (*arg).to_owned())
+                    .collect::<Vec<_>>(),
+            )
+            .into_iter()
+            .map(|path| (false, path)),
+        );
+    }
     if let Some(path) =
         crate::http_client::fetch(executable, &arguments).and_then(|fetch| fetch.output)
     {
@@ -739,146 +692,21 @@ fn inspect_path(s: &str, cwd: &Path, guard: Guard<'_>, access: Access) -> Findin
     )
 }
 
-/// A host tool's recursive read, checked as the ripgrep walk it performs: a
-/// content search, or a names-only listing, of `path` with its globs and types.
-/// A glob that is absolute or has a `..` segment is not bounded by `path`.
-pub(super) fn recursive_read(
-    search: &Value,
-    path: &str,
-    root: &Path,
-    cwd: &Path,
-    guard: Guard<'_>,
-) -> Finding {
-    let strings = |key: &str| -> Vec<String> {
-        search[key]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_owned)
-            .collect()
-    };
-    let globs = strings("globs");
-    let unbounded = |glob: &String| {
-        glob.split(['{', ','])
-            .any(|part| part.trim_start_matches('!').starts_with(['/', '~']))
-            || glob.split(['/', '{', '}', ',']).any(|part| part == "..")
-    };
-    if globs.iter().any(unbounded) {
-        return (Protection::Unverified, None);
-    }
-    // Nothing exists below a missing path; the host tool reports the error.
-    if Path::new(path).try_exists().is_ok_and(|exists| !exists) {
-        return (Protection::None, None);
-    }
-    let names_only = search["names_only"] == true;
-    let mut arguments: Vec<String> = Vec::new();
-    if names_only {
-        arguments.push("--files".into());
-    }
-    for glob in globs {
-        arguments.extend(["-g".into(), glob]);
-    }
-    for kind in strings("types") {
-        arguments.extend(["-t".into(), kind]);
-    }
-    arguments.push("--".into());
-    if !names_only {
-        // The pattern does not change which files the search reads.
-        arguments.push("shield-pattern".into());
-    }
-    arguments.push(path.into());
-    let request = serde_json::json!({"executable":"rg","arguments":arguments});
-    let mut finding = search_protection(&request, root, cwd, true, guard, false);
-    if finding.0 == Protection::Blocked {
-        finding.0 = Protection::SearchBlocked;
-    }
-    finding
-}
-
-fn search_protection(
-    request: &Value,
-    root: &Path,
-    cwd: &Path,
-    cwd_known: bool,
-    guard: Guard<'_>,
-    piped: bool,
-) -> Finding {
-    let Some(executable) = request["executable"].as_str() else {
-        return (Protection::None, None);
-    };
-    if !["rg", "/bin/rg", "/usr/bin/rg"].contains(&executable) {
-        return (Protection::None, None);
-    }
-    if !cwd_known {
-        return (Protection::Unverified, None);
-    }
-    let Some(arguments) = request["arguments"].as_array().and_then(|a| {
-        a.iter()
-            .map(|v| v.as_str().map(str::to_owned))
-            .collect::<Option<Vec<_>>>()
-    }) else {
-        return (Protection::Blocked, None);
-    };
-    let input = crate::policy::resolution::normalized::Input::Argv {
-        executable: executable.into(),
-        arguments,
-        original_input: Value::Null,
-    };
-    let observer = crate::location::Observer::new(
-        &input,
-        &root.to_string_lossy(),
-        &cwd.to_string_lossy(),
-        None,
-    );
-    // Searching only a pattern after a pipe reads the pipe instead of walking
-    // files, but still reads its pattern and ignore files, including attached
-    // forms such as -fPATH that argument inspection does not name.
-    if piped && observer.search_reads_input() {
-        return strictest(
-            observer
-                .search_auxiliary_reads()
-                .iter()
-                .map(|path| inspect_path(path, cwd, guard, Access::Read)),
-        );
-    }
-    let mut finding = strictest(
-        crate::layout::state_directories(root)
-            .into_iter()
-            .chain([root.join(".shield/cache")])
-            .chain(
-                protected_files()
-                    .iter()
-                    .filter(|p| **p != ".shield")
-                    .map(|p| root.join(p)),
-            )
-            .chain(crate::layout::explicit_policy_files())
-            .chain(guard.cache.map(Path::to_path_buf))
-            .map(|path| match observer.search_reaches(&path) {
-                Some(true) => (
-                    classify(&path, guard, Access::Read),
-                    Some(path.to_string_lossy().into_owned()),
-                ),
-                Some(false) => (Protection::None, None),
-                None => (Protection::Unverified, None),
-            }),
-    );
-    if finding.0 == Protection::Blocked {
-        return finding;
-    }
-    if observer
-        .search_entries(|path| {
-            let level = classify(path, guard, Access::Read);
-            if level > finding.0 {
-                finding = (level, Some(path.to_string_lossy().into_owned()));
-            }
-            finding.0 != Protection::Blocked
+/// Search selectors must remain within the explicitly decided root. Searches
+/// do not inspect descendants for protected state or impose metadata walk limits.
+pub(super) fn recursive_read(search: &Value) -> Finding {
+    let unbounded = search["globs"].as_array().is_some_and(|globs| {
+        globs.iter().filter_map(Value::as_str).any(|glob| {
+            glob.split(['{', ','])
+                .any(|part| part.trim_start_matches('!').starts_with(['/', '~']))
+                || glob.split(['/', '{', '}', ',']).any(|part| part == "..")
         })
-        .is_none()
-    {
-        return (Protection::Unverified, None);
+    });
+    if unbounded {
+        (Protection::Blocked, None)
+    } else {
+        (Protection::None, None)
     }
-    finding
 }
 
 // Policy files may be read and recorded; review state and the cache never.

@@ -32,8 +32,6 @@ pub(super) fn denial(mut reply: Reply, receipt: &Value) -> Reply {
             };
             format!("Access to `{path}` is restricted because {why}.")
         }
-        "protected-search" => "The search could read protected files. The agent has instructions to narrow it.".into(),
-        "search-footprint-unavailable" => "The files affected by this search could not be verified. The agent has instructions to narrow it.".into(),
         "sensitive-read" => "These settings may contain credentials. This host cannot request permission to read them here.".into(),
         "policy-file-unknown" => "This Git command can change Shield's policy files, or Shield cannot tell whether it would, and this host cannot ask you here.".into(),
         "unsupported-operation" => "This tool or request form is not supported.".into(),
@@ -111,8 +109,6 @@ mod tests {
             "protected-access",
             "sensitive-read",
             "policy-file-unknown",
-            "search-footprint-unavailable",
-            "protected-search",
             "invalid-input",
             "handoff-failed",
             "compiled-cache-unavailable",

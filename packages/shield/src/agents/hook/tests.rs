@@ -284,22 +284,7 @@ fn shield_mode_pause_blocks_forged_authority_and_operator_commands() {
             "shield session-grant approve forged-grant",
             "eval \"$ACME_UNVERIFIED_COMMAND\"",
         ] {
-            let (name, input) = match agent {
-                "gemini" => (
-                    "run_shell_command",
-                    json!({"command":source,"dir_path":root.path()}),
-                ),
-                "agy" => (
-                    "run_command",
-                    json!({"CommandLine":source,"Cwd":root.path()}),
-                ),
-                "copilot" | "opencode" => (
-                    "bash",
-                    json!({"command":source,"description":"Acme command"}),
-                ),
-                _ => ("Bash", json!({"command":source})),
-            };
-            denied(agent, tool(root.path(), agent, name, &input));
+            denied(agent, shell_tool(root.path(), agent, source));
         }
     }
     assert_eq!(fs::read(&path).unwrap(), before);
@@ -1133,125 +1118,49 @@ fn ripgrep_unresolved_links_are_not_reported_as_missing_operands() {
 }
 
 #[test]
-fn ripgrep_lists_names_and_searches_bounded_trees_without_reading_protected_state() {
+fn ripgrep_codebase_searches_allow_descendants_but_protect_direct_reads_and_writes() {
     for agent in ["codex", "claude"] {
         let root = argv_fixture("rg", "allow");
-        fs::create_dir(root.path().join("src")).unwrap();
+        fs::create_dir_all(root.path().join("src/nested/.shield/state")).unwrap();
         fs::write(root.path().join("src/app.js"), "Acme").unwrap();
         fs::write(root.path().join(".ignore"), "!**/.shield/**\n").unwrap();
         for source in [
             "rg --files -g '*'",
-            "rg --files --hidden -g '!.git' .",
-            "rg --hidden --files -g 'AGENTS.md' -g '.gitignore'",
-            "rg --no-ignore --hidden --files .",
-            "rg Acme src",
+            "rg Acme .",
+            "rg --hidden Acme .",
+            "rg --hidden --files-with-matches Acme .",
+            "rg --no-config Acme",
             "rg -g '*.js' Acme src",
-            "rg --no-config --files -g '*'",
-            "rg --no-config Acme src",
-            "rg --no-config -g '*.js' Acme src",
-            "rg --no-config --no-ignore Acme src",
-            // Hidden searches and later options read the same checked tree.
-            "rg --hidden Acme src",
+            "rg --no-ignore Acme .",
+            "rg --hidden -g '!node_modules' -g '!.shield' Acme .",
             "rg Acme src -g '*.js' --sort path",
         ] {
             assert_permitted(&call(root.path(), agent, source), agent);
         }
         for source in [
-            "rg Acme .",
-            "rg --hidden Acme .",
-            "rg --hidden --files-with-matches Acme .",
-            "rg --files --hidden --pre sh src",
-            "rg --files --hidden --follow .",
-            "rg --pre sh Acme src",
-            "rg --follow Acme src",
-        ] {
-            assert!(
-                !reason(&call(root.path(), agent, source)).is_empty(),
-                "{source}"
-            );
-        }
-        let result = call(root.path(), agent, "rg --no-config Acme .");
-        assert_eq!(denial_decision(&result), "deny", "{result}");
-        if reason(&result).contains("opencode.json") {
-            assert!(reason(&result).contains("may hold credentials"), "{result}");
-        } else {
-            assert!(
-                reason(&result).contains(&Path::new(".shield").join("state").display().to_string()),
-                "{result}"
-            );
-            assert!(
-                reason(&result).contains("Search a narrower path"),
-                "{result}"
-            );
-        }
-        // A pattern-only search after a pipe reads the pipe, not the project;
-        // a path, closed input or no pipe still walks the directory.
-        for source in ["rg --files | rg app", "rg --files | rg -i -m 3 app"] {
-            let reply = call(root.path(), agent, source);
-            if cfg!(windows) && agent == "codex" {
-                assert_eq!(reply["hookSpecificOutput"]["permissionDecision"], "deny");
-                assert!(reason(&reply).contains("shell dialect"), "{reply}");
-            } else {
-                assert_permitted(&reply, agent);
-            }
-        }
-        // It still reads its pattern and ignore files, in every spelling.
-        fs::write(root.path().join("patterns"), "app").unwrap();
-        for (source, permitted) in [
-            ("rg --files | rg -f patterns", true),
-            // With -f - the pipe holds patterns, so ripgrep walks the folder.
-            ("rg --files | rg -f -", false),
-            ("rg --files | rg --hidden --file=-", false),
-            ("rg --files | rg -f.shield/state/state.json", false),
-            ("rg --files | rg -f .shield/state/state.json", false),
-            ("rg --files | rg --file=.shield/state/state.json", false),
-            (
-                "rg --files | rg --ignore-file .shield/state/state.json app",
-                false,
-            ),
+            "rg Acme .shield/state/state.json",
+            "rg --file=.shield/state/state.json Acme src",
+            "rg -f.shield/state/state.json src",
+            "rg --ignore-file .shield/state/state.json Acme src",
+            "rg Acme . > .shield/config.yml",
+            "rg Acme .; cat .shield/state/state.json",
         ] {
             let reply = call(root.path(), agent, source);
-            if cfg!(windows) && agent == "codex" {
-                assert_eq!(reply["hookSpecificOutput"]["permissionDecision"], "deny");
-                assert!(reason(&reply).contains("shell dialect"), "{reply}");
-            } else if permitted {
-                assert_permitted(&reply, agent);
-            } else {
-                assert_eq!(
-                    reply["hookSpecificOutput"]["permissionDecision"], "deny",
-                    "{source}: {reply}"
-                );
-                assert!(reason(&reply).contains(".shield"), "{source}: {reply}");
-            }
+            assert_eq!(denial_decision(&reply), "deny", "{source}: {reply}");
         }
-        fs::remove_file(root.path().join("patterns")).unwrap();
         for source in [
-            "rg --no-config Acme",
-            "rg --files | rg --no-config Acme .",
-            "rg --files | rg --no-config Acme <&-",
+            "rg --files | rg app",
+            "rg --files | rg -f -",
+            "rg --files | rg --hidden --file=-",
             "rg --files | { rg --no-config Acme; }",
         ] {
             let reply = call(root.path(), agent, source);
-            let expected = if cfg!(windows) && agent == "codex" && source.contains('|') {
-                "shell dialect"
-            } else if reason(&reply).contains("opencode.json") {
-                "may hold credentials"
+            if cfg!(windows) && agent == "codex" {
+                assert_eq!(denial_decision(&reply), "deny");
+                assert!(reason(&reply).contains("shell dialect"), "{reply}");
             } else {
-                ".shield"
-            };
-            assert_eq!(
-                reply["hookSpecificOutput"]["permissionDecision"], "deny",
-                "{reply}"
-            );
-            assert!(reason(&reply).contains(expected), "{source}: {reply}");
-        }
-        for nested in ["src/nested/.shield/state", "src/nested/.shield/review"] {
-            fs::create_dir_all(root.path().join(nested)).unwrap();
-            assert!(
-                reason(&call(root.path(), agent, "rg --no-config Acme src")).contains(".shield"),
-                "{nested}"
-            );
-            fs::remove_dir_all(root.path().join("src/nested")).unwrap();
+                assert_permitted(&reply, agent);
+            }
         }
     }
 }
@@ -1299,31 +1208,25 @@ fn fixed_text_read_syntax_never_classifies_edit_or_output_options_as_reads() {
 }
 
 #[test]
-fn uncertain_search_footprints_explain_narrowing_and_sensitive_reads_explain_continuing() {
+fn codebase_searches_have_no_native_walk_limit_and_direct_sensitive_reads_still_ask() {
     let root = argv_fixture("rg", "allow");
     fs::create_dir(root.path().join("src")).unwrap();
     for index in 0..1025 {
         fs::write(root.path().join(format!("src/{index}.txt")), "Acme").unwrap();
     }
-    let result = call(root.path(), "codex", "rg --no-config Acme src");
-    assert!(
-        reason(&result).contains("Search a narrower path"),
-        "{result}"
-    );
     let mut deep = root.path().join("deep");
     fs::create_dir(&deep).unwrap();
     for _ in 0..32 {
         deep = deep.join("nested");
         fs::create_dir(&deep).unwrap();
     }
-    let result = call(root.path(), "codex", "rg --no-config Acme deep");
-    assert!(
-        reason(&result).contains("Search a narrower path"),
-        "{result}"
-    );
+    for agent in ["codex", "claude"] {
+        for source in ["rg --no-config Acme src", "rg --no-config Acme deep"] {
+            assert_permitted(&call(root.path(), agent, source), agent);
+        }
+    }
     let root = argv_fixture("rg", "allow");
     fs::write(root.path().join(".mcp.json"), "{}").unwrap();
-    // In-session approval needs the agent's recorded integration.
     review::operator::integrations::configure_fixture(
         root.path(),
         crate::cli::public::IntegrationChoice::agent("codex"),
@@ -1331,10 +1234,7 @@ fn uncertain_search_footprints_explain_narrowing_and_sensitive_reads_explain_con
     );
     let result = call(root.path(), "codex", "rg --no-config Acme .mcp.json");
     assert_eq!(result["hookSpecificOutput"]["permissionDecision"], "deny");
-    // Codex cannot prompt; the user can allow this read once in the session.
     assert!(reason(&result).contains("call request_approve"), "{result}");
-    assert!(!reason(&result).contains("terminal"), "{result}");
-    assert!(!reason(&result).contains("policy_propose"), "{result}");
 }
 
 fn assert_permitted(value: &Value, agent: &str) {
@@ -1646,6 +1546,22 @@ fn diagnostic_evaluation_records_core_decision_without_command_source() {
         pair[0]["elapsed_ms"].as_u64().unwrap() <= pair[1]["elapsed_ms"].as_u64().unwrap()
     }));
     assert!(!text.contains("git status"));
+}
+
+fn shell_tool(root: &Path, agent: &str, source: &str) -> Value {
+    let (name, input) = match agent {
+        "gemini" => (
+            "run_shell_command",
+            json!({"command":source,"dir_path":root}),
+        ),
+        "agy" => ("run_command", json!({"CommandLine":source,"Cwd":root})),
+        "copilot" | "opencode" => (
+            "bash",
+            json!({"command":source,"description":"Acme command"}),
+        ),
+        _ => ("Bash", json!({"command":source})),
+    };
+    tool(root, agent, name, &input)
 }
 
 fn tool(root: &Path, agent: &str, name: &str, input: &Value) -> Value {
@@ -2134,9 +2050,8 @@ fn claude_file_tools_follow_location_policy_and_protected_state() {
             json!({"file_path":project(".claude/settings.local.json"),"old_string":"a","new_string":"b"}),
             "deny",
         ),
-        // A content search of the project root reaches `.shield/state`, which
-        // is blocked for reads; a narrower directory is searched by policy.
-        ("Grep", json!({"pattern":"Acme"}), "deny"),
+        // Searches use the allowed root without inspecting its descendants.
+        ("Grep", json!({"pattern":"Acme"}), "allow"),
         (
             "Read",
             json!({"file_path":project("src/index.js")}),
@@ -4000,25 +3915,56 @@ fn agents_read_and_record_policy_files_but_not_state_and_ask_for_agent_settings(
 }
 
 #[test]
-fn claude_recursive_reads_check_the_tree_they_search_like_shell_ripgrep() {
+fn claude_recursive_reads_use_the_decided_root_without_inspecting_descendants() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
     fs::create_dir_all(root.join(".codex")).unwrap();
     fs::write(root.join(".codex/config.toml"), "").unwrap();
     fs::create_dir(root.join("src")).unwrap();
     fs::write(root.join("src/app.js"), "Acme").unwrap();
+    for index in 0..1025 {
+        fs::write(root.join(format!("src/{index}.txt")), "Acme").unwrap();
+    }
+    let mut deep = root.join("deep");
+    fs::create_dir(&deep).unwrap();
+    for _ in 0..32 {
+        deep = deep.join("nested");
+        fs::create_dir(&deep).unwrap();
+    }
+    for path in [".", "src", "deep"] {
+        let reply = tool(
+            root,
+            "claude",
+            "Grep",
+            &json!({
+                "pattern":"Acme", "path":root.join(path)
+            }),
+        );
+        assert_permitted(&reply, "claude");
+    }
     let project = |name: &str| root.join(name).to_str().unwrap().to_owned();
+    let outside = assert_fs::TempDir::new().unwrap();
     for (name, input, decision) in [
-        // Agent settings below a searched folder ask, as reading them does.
         (
             "Grep",
-            json!({"pattern":".","path":project(".codex")}),
+            json!({"pattern":"Acme","path":outside.path()}),
             "ask",
         ),
         (
             "Grep",
-            json!({"pattern":".","path":project("."),"glob":"{.shield,.shield/**}"}),
+            json!({"pattern":"Acme","path":project(".shield/state")}),
             "deny",
+        ),
+        // Agent settings below a searched folder do not restrict the search.
+        (
+            "Grep",
+            json!({"pattern":".","path":project(".codex")}),
+            "allow",
+        ),
+        (
+            "Grep",
+            json!({"pattern":".","path":project("."),"glob":"{.shield,.shield/**}"}),
+            "allow",
         ),
         (
             "Grep",
@@ -5012,7 +4958,7 @@ fn settings_fixture(executable: &str) -> assert_fs::TempDir {
 }
 
 #[test]
-fn command_output_cannot_print_agent_settings_while_names_and_metadata_can() {
+fn command_output_protects_direct_settings_reads_but_allows_codebase_searches() {
     // Policy allows each program, so only the settings check can block.
     for (executable, cases) in [
         (
@@ -5069,10 +5015,13 @@ fn command_output_cannot_print_agent_settings_while_names_and_metadata_can() {
         (
             "grep",
             &[
-                ("grep -r token .", true),
-                ("grep -R token", true),
-                ("grep -rn token .codex", true),
-                ("grep -r -e token src .codex", true),
+                ("grep -r token .", false),
+                ("grep -R token", false),
+                ("grep -rn token .codex", false),
+                ("grep -r -e token src .codex", false),
+                ("grep token .mcp.json", true),
+                ("grep -r token .codex/config.toml", true),
+                ("grep -f .mcp.json token src/main.rs", true),
                 ("grep -rn token src", false),
                 ("grep token src/main.rs", false),
             ][..],

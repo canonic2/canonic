@@ -211,8 +211,11 @@ pub(crate) fn analyze_versioned_report_with_working_files(
             http_configuration: environment
                 .is_some_and(crate::http_client::environment_changes_request),
             inherited: environment.map(|environment| environment.keys().cloned().collect()),
+            // Ordinary agent shells use cwd-relative lookup. Hidden shell-local
+            // settings are outside this preview contract; reported CDPATH and
+            // source-level environment changes still retain uncertainty.
             cdpath_empty: environment
-                .is_some_and(|environment| environment.get("CDPATH").is_none_or(String::is_empty)),
+                .is_none_or(|environment| environment.get("CDPATH").is_none_or(String::is_empty)),
         },
         operations: Vec::new(),
         evidence_bytes: 0,

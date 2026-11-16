@@ -531,23 +531,9 @@ fn rg_argv(arguments: &[String], cwd: &Path) -> Targets {
     rg_model(arguments, cwd).0
 }
 
-/// A modeled content search naming no path, which ripgrep runs on its
-/// standard input when that is a pipe instead of walking the directory. It
-/// still reads its pattern and ignore files; see [`rg_auxiliary_reads`].
-/// With `-f -` the patterns take the standard input, so ripgrep walks the
-/// working directory instead.
-pub(super) fn rg_pattern_only(arguments: &[String], cwd: &Path) -> bool {
-    let (targets, listing) = rg_model(arguments, cwd);
-    let request = rg_parse(arguments);
-    targets.complete
-        && !listing
-        && request.pattern != RgPattern::Input
-        && request.paths().is_empty()
-}
-
 /// The files ripgrep reads besides its search paths: `-f` pattern files and
 /// `--ignore-file` files, as submitted.
-pub(super) fn rg_auxiliary_reads(arguments: &[String]) -> Vec<String> {
+pub(crate) fn rg_auxiliary_reads(arguments: &[String]) -> Vec<String> {
     rg_parse(arguments)
         .reads
         .into_iter()

@@ -204,6 +204,7 @@ fn request_entries(events: &[Value]) -> Result<BTreeMap<String, Value>, Error> {
         let kind = event["kind"].as_str().unwrap_or_default();
         if !(kind == "decision"
             || kind == "completion"
+            || kind == "native_allowance"
             || kind.starts_with("read_grant_")
             || kind.starts_with("run_grant_"))
         {
@@ -212,6 +213,9 @@ fn request_entries(events: &[Value]) -> Result<BTreeMap<String, Value>, Error> {
         let Some(id) = event["links"]["request_id"].as_str() else {
             continue;
         };
+        if kind == "native_allowance" && !entries.contains_key(id) {
+            continue;
+        }
         let entry=entries.entry(id.into()).or_insert_with(||json!({"entry_id":id,"requested_at":event["recorded_at"],"provenance":event["provenance"],"observations":[],"approved":false,"denied":false,"outcome":"unobserved","_order":order}));
         if kind.ends_with("_issued") {
             entry["approved"] = json!(true);
@@ -237,6 +241,13 @@ fn request_entries(events: &[Value]) -> Result<BTreeMap<String, Value>, Error> {
             if event["details"]["delivery_conflict"] == true {
                 entry["delivery_conflict"] = json!(true);
             }
+        }
+        if kind == "native_allowance" {
+            entry["approved"] = json!(true);
+            entry["denied"] = json!(false);
+            entry["disposition"] = json!("allowed");
+            entry["code"] = json!("one-time-approved");
+            entry["approval"] = json!({"status":"consumed","request_id":event["links"]["source_entry_id"],"approval_id":event["links"]["approval_id"]});
         }
         entry["observations"]
             .as_array_mut()
@@ -356,6 +367,36 @@ mod tests {
                 "session_id":"acme-session","host_event_name":host,"tool_use_id":tool},
             "details":{"operation":{"kind":"shell","source":"npm run dev"},
                 "evaluation":{"decision":outcome}}})
+    }
+
+    #[test]
+    fn native_allowance_requires_a_retained_request_entry() {
+        let allowance = json!({"kind":"native_allowance",
+            "links":{"request_id":"retry","source_entry_id":"grant-request","approval_id":"approval-acme"}});
+        let decision = decision("retry", "PreToolUse", &json!("acme-call"), "deny");
+        let entries = request_entries(&[decision.clone(), allowance.clone()]).unwrap();
+        assert_eq!(entries["retry"]["approved"], true);
+        assert_eq!(entries["retry"]["denied"], false);
+        assert_eq!(entries["retry"]["evaluation"]["decision"], "deny");
+        // Retention can leave the later allowance without the earlier request.
+        assert!(request_entries(&[allowance]).unwrap().is_empty());
+        assert_eq!(
+            request_entries(&[decision]).unwrap()["retry"]["denied"],
+            true
+        );
+        // Normal count-based retention removes linked events together, even
+        // when the allowance was recorded after a newer decision.
+        assert_eq!(
+            crate::review::model::retained_events(
+                &[
+                    ("decision", Some("retry")),
+                    ("decision", Some("newer")),
+                    ("native_allowance", Some("retry")),
+                ],
+                1,
+            ),
+            vec![false, true, false]
+        );
     }
 
     #[test]

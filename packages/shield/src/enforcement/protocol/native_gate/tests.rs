@@ -29,12 +29,12 @@ fn grep_searches_and_auxiliary_reads_preserve_native_protection() {
         crate::configuration::Evaluator::new(vec![(crate::policy::Scope::Project, snapshot)])
             .unwrap();
     for (source, blocked) in [
-        ("grep --rec Acme", true),
-        ("grep --recur Acme", true),
-        ("grep --dir=recurse Acme", true),
-        ("grep -d rec Acme", true),
-        ("grep --directories=recu Acme", true),
-        ("grep -d RECURSE Acme", true),
+        ("grep --rec Acme", false),
+        ("grep --recur Acme", false),
+        ("grep --dir=recurse Acme", false),
+        ("grep -d rec Acme", false),
+        ("grep --directories=recu Acme", false),
+        ("grep -d RECURSE Acme", false),
         ("grep -f.shield/state/state.json src/main.rs", true),
         ("grep -f.shield/cache/plan", true),
         (
@@ -165,7 +165,7 @@ fn native_dialect_sequences_preserve_protected_access_and_opaque_refusals() {
             },
             paths::Access::Write,
         );
-        assert!(finding.0 >= paths::Protection::SearchBlocked, "{analysis}");
+        assert_eq!(finding.0, paths::Protection::Blocked, "{analysis}");
     }
     let analysis = crate::shell::analyze(
         "node -e dangerous",

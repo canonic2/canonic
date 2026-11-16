@@ -406,9 +406,12 @@ output, such as `--sort`, `-o`, `--json` or `-e PATTERN`, need no listing.
 Walks follow no descendant links; explicit operands still follow links and receive
 containment/exclusion checks. Content searches can honor ignore files and glob
 filters or search hidden files with `--hidden`. Their footprint conservatively
-includes existing hidden descendants; excluded credential paths still block it. Native callbacks also check protected
-state, caches and agent settings, using at most 1,024 metadata entries and 32
-directory levels. A large or ambiguous footprint requires a narrower directory.
+includes existing hidden descendants; declared policy exclusions still apply.
+Native callbacks check explicitly named protected paths and auxiliary files,
+without scanning search descendants or imposing directory-size or depth limits.
+A search of an approved folder follows policy even when protected files exist
+below it. Direct reads of Shield state or caches remain blocked, and direct
+agent-settings reads retain their approval requirements.
 `--no-ignore` without glob filters supplies a visible-only footprint.
 A `--files` listing supports `--hidden` and globs and skips the native
 content check; declared policy exclusions still apply. Hidden listings retain

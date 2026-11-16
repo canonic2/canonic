@@ -16,7 +16,7 @@ use std::{
 pub(crate) mod directory;
 mod node;
 mod targets;
-pub(crate) use targets::grep_parse;
+pub(crate) use targets::{grep_parse, rg_auxiliary_reads};
 mod text;
 pub(crate) mod touch;
 #[cfg(windows)]
@@ -161,100 +161,6 @@ pub(crate) struct Observer {
     unverified: Cell<bool>,
 }
 impl Observer {
-    /// Inspect a bounded, physical directory footprint when ignore/glob rules
-    /// could expose hidden descendants. No file contents or links are followed.
-    pub(crate) fn search_entries(&self, mut visit: impl FnMut(&Path) -> bool) -> Option<()> {
-        let Input::Argv { arguments, .. } = &self.input else {
-            return None;
-        };
-        let (targets, listing) = targets::rg_model(arguments, &self.cwd);
-        if !targets.complete {
-            return None;
-        }
-        if listing {
-            return Some(());
-        }
-        let mut pending = Vec::new();
-        for target in targets.items {
-            if target.recursive && matches!(target.descendants, Descendants::Present) {
-                pending.push((target.path, 0));
-            }
-        }
-        let mut remaining = 1024;
-        while let Some((directory, depth)) = pending.pop() {
-            if depth >= 32 {
-                return None;
-            }
-            for entry in fs::read_dir(directory).ok()? {
-                if remaining == 0 {
-                    return None;
-                }
-                remaining -= 1;
-                let entry = entry.ok()?;
-                let path = entry.path();
-                if !visit(&path) {
-                    return Some(());
-                }
-                if entry.file_type().ok()?.is_dir() {
-                    pending.push((path, depth + 1));
-                }
-            }
-        }
-        Some(())
-    }
-
-    /// Whether a modeled ripgrep content search names only its pattern, so it
-    /// reads its standard input when that is a pipe.
-    pub(crate) fn search_reads_input(&self) -> bool {
-        let Input::Argv { arguments, .. } = &self.input else {
-            return false;
-        };
-        targets::rg_pattern_only(arguments, &self.cwd)
-    }
-
-    /// The pattern and ignore files a ripgrep request reads, as submitted; a
-    /// search of its standard input still reads them.
-    pub(crate) fn search_auxiliary_reads(&self) -> Vec<String> {
-        let Input::Argv { arguments, .. } = &self.input else {
-            return Vec::new();
-        };
-        targets::rg_auxiliary_reads(arguments)
-    }
-
-    /// Conservative content footprint for modeled ripgrep requests. Listings do
-    /// not read file contents; ignore files and globs may expose hidden entries.
-    pub(crate) fn search_reaches(&self, excluded: &Path) -> Option<bool> {
-        let Input::Argv { arguments, .. } = &self.input else {
-            return None;
-        };
-        let (targets, listing) = targets::rg_model(arguments, &self.cwd);
-        if !targets.complete {
-            return None;
-        }
-        if listing {
-            return Some(false);
-        }
-        for target in targets.items {
-            let path = self.observed(&target.path, target.follow)?;
-            let excluded = self.observed(excluded, target.follow)?;
-            let descendant = target.recursive && excluded.starts_with(&path)
-                && match target.descendants {
-                    Descendants::All => true,
-                    Descendants::Visible => !excluded.strip_prefix(&path).ok()?.components().any(|part| {
-                        matches!(part, Component::Normal(name) if name.as_encoded_bytes().starts_with(b"."))
-                    }),
-                    Descendants::Present => self.present(&excluded).ok()?,
-                };
-            if path.starts_with(&excluded)
-                || descendant
-                || self.same_entry(&path, &excluded).ok()?
-            {
-                return Some(true);
-            }
-        }
-        Some(false)
-    }
-
     pub(crate) fn readable_roots(
         project: &Path,
         cwd: &Path,

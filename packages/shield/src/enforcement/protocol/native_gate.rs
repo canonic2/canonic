@@ -206,7 +206,7 @@ fn footprint(value: &Value, owner: &Path, cwd: &Path, guard: paths::Guard<'_>) -
             value["_file_targets"][0].as_str(),
             value.get("_file_search"),
         ) {
-            (Some(path), Some(search)) => paths::recursive_read(search, path, owner, cwd, guard),
+            (Some(_), Some(search)) => paths::recursive_read(search),
             _ => (paths::Protection::None, None),
         },
     ]
@@ -217,13 +217,13 @@ fn footprint(value: &Value, owner: &Path, cwd: &Path, guard: paths::Guard<'_>) -
 
 /// Whether the request still reaches protected state with every operator-openable
 /// group open: review state, caches, the `.shield` folder or its ignore file, a
-/// working-folder root, the operator CLI, or a footprint Shield cannot verify.
+/// working-folder root or the operator CLI.
 fn fixed(value: &Value, owner: &Path, cwd: &Path, guard: paths::Guard<'_>) -> bool {
     let open = opened(guard);
     opaque_shell(value)
         || paths::operator_cli(&value["_shell_analysis"], cwd)
         || protected_removal(value, cwd, owner, open)
-        || footprint(value, owner, cwd, open).0 >= paths::Protection::Unverified
+        || footprint(value, owner, cwd, open).0 == paths::Protection::Blocked
 }
 
 /// The guard with every operator-openable group open: reading and changing
@@ -277,10 +277,6 @@ fn gate(
         || protection == paths::Protection::Blocked
     {
         Some("protected-access")
-    } else if protection == paths::Protection::SearchBlocked {
-        Some("protected-search")
-    } else if protection == paths::Protection::Unverified && value["decision"] != "deny" {
-        Some("search-footprint-unavailable")
     } else {
         None
     };

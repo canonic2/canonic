@@ -394,11 +394,24 @@ fn lookup(state: &State, key: &Key<'_>, time: u64) -> Result<Option<Found>, Erro
 /// Consume a live grant for this exact request, or store the refusal for the
 /// person to answer. A repeated refusal reuses its pending request without
 /// writing; consuming or storing is one writer transaction.
+#[cfg(test)]
 pub(crate) fn refused(
     root: &Path,
     key: &Key<'_>,
     identity: &Identity<'_>,
     summary: &Summary,
+) -> Result<Outcome, Error> {
+    refused_observed(root, key, identity, summary, &[])
+}
+
+/// Optional decision IDs link this exact retry to its consumed approval without
+/// reading history or making authorization depend on history availability.
+pub(crate) fn refused_observed(
+    root: &Path,
+    key: &Key<'_>,
+    identity: &Identity<'_>,
+    summary: &Summary,
+    decision_requests: &[&str],
 ) -> Result<Outcome, Error> {
     let context = super::open(root)?;
     let store = Store::open(root)?;
@@ -426,7 +439,7 @@ pub(crate) fn refused(
                     .expect("approved requests hold a grant");
                 // A copy of this folder holds the same grant; it is spent once.
                 if super::storage::authority::claim(&grant.binding, grant.expires_at_ms)? {
-                    consume(state, &context, index, time);
+                    consume(state, &context, index, time, decision_requests);
                     return Ok(json!({"allowed":true}));
                 }
                 state.hook_requests.remove(index);
@@ -503,7 +516,13 @@ fn others_pending(state: &State, key: &Key<'_>, id: &str, time: u64) -> bool {
     })
 }
 
-fn consume(state: &mut State, context: &Context, index: usize, time: u64) {
+fn consume(
+    state: &mut State,
+    context: &Context,
+    index: usize,
+    time: u64,
+    decision_requests: &[&str],
+) {
     let row = &mut state.hook_requests[index];
     row.status = "consumed".into();
     let grant = row.grant.as_mut().expect("approved requests hold a grant");
@@ -513,12 +532,51 @@ fn consume(state: &mut State, context: &Context, index: usize, time: u64) {
         "consumed_at_ms":time,"execution":"unobserved"});
     let event = state.event("hook_grant_consumed", context, links, json!({}), details);
     state.record(event);
+    record_allowance(state, context, index, decision_requests);
+}
+
+/// Optional history uses decision IDs for retention; the grant keeps its own
+/// authority ID. Record their exact link in the same writer transaction.
+fn record_allowance(
+    state: &mut State,
+    context: &Context,
+    index: usize,
+    decision_requests: &[&str],
+) {
+    let row = &state.hook_requests[index];
+    let request = row.request_id.clone();
+    let approval = row
+        .grant
+        .as_ref()
+        .expect("consumed grant")
+        .approval_id
+        .clone();
+    for id in decision_requests {
+        let event = state.event(
+            "native_allowance",
+            context,
+            json!({"request_id":id,"approval_id":approval,"source_entry_id":request}),
+            json!({}),
+            json!({"disposition":"allowed","execution":"unobserved"}),
+        );
+        state.record(event);
+    }
 }
 
 /// Whether a grant consumed moments ago covers this exact request's later
 /// permission callback in the same attempt. Each grant covers one; a callback
 /// with nothing to cover writes nothing.
+#[cfg(test)]
 pub(crate) fn followup(root: &Path, key: &Key<'_>) -> Result<bool, Error> {
+    followup_observed(root, key, &[])
+}
+
+/// Link the later permission callback to the same one-time authorization.
+pub(crate) fn followup_observed(
+    root: &Path,
+    key: &Key<'_>,
+    decision_requests: &[&str],
+) -> Result<bool, Error> {
     // Rechecked under the writer lock: the grant covers only the exact
     // request it was consumed for.
     let covering = |state: &State, time: u64| -> Result<Option<usize>, Error> {
@@ -550,6 +608,7 @@ pub(crate) fn followup(root: &Path, key: &Key<'_>) -> Result<bool, Error> {
             return Ok(json!(false));
         }
         grant.followup_used = true;
+        record_allowance(state, &context, index, decision_requests);
         Ok(json!(true))
     })?;
     Ok(value == json!(true))

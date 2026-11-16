@@ -51,7 +51,7 @@ fn commands<'a>(value: &'a Value, executable: &str) -> Vec<&'a Value> {
 }
 
 #[test]
-fn native_working_files_do_not_establish_command_shell_cdpath() {
+fn ordinary_relative_cd_uses_cwd_unless_directory_search_is_reported_or_changed() {
     let root = fixture();
     let base = root.path().canonicalize().unwrap();
     let scope = crate::location::WorkingFiles::default();
@@ -70,16 +70,19 @@ fn native_working_files_do_not_establish_command_shell_cdpath() {
     };
     let source = "cd sub && acme read";
     let reported_empty = BTreeMap::new();
-    let observed = run(source, Some(&reported_empty), true);
-    assert_eq!(observed["decision"], "allow", "{observed}");
-    assert_eq!(
-        commands(&observed, "acme")[0]["cwd"],
-        base.join("sub").to_str().unwrap()
-    );
-    let reported_search = BTreeMap::from([("CDPATH".into(), "/unverified/search-root".into())]);
-    for value in [
+    for observed in [
+        run(source, Some(&reported_empty), true),
         run(source, None, false),
         run(source, None, true),
+    ] {
+        assert_eq!(observed["decision"], "allow", "{observed}");
+        assert_eq!(
+            commands(&observed, "acme")[0]["cwd"],
+            base.join("sub").to_str().unwrap()
+        );
+    }
+    let reported_search = BTreeMap::from([("CDPATH".into(), "/unverified/search-root".into())]);
+    for value in [
         run(source, Some(&reported_search), true),
         run(
             "CDPATH=/unverified/search-root; cd sub && acme read",
@@ -91,6 +94,47 @@ fn native_working_files_do_not_establish_command_shell_cdpath() {
     ] {
         assert_ne!(value["decision"], "allow", "{value}");
     }
+}
+
+#[test]
+fn unreported_shell_local_cdpath_is_outside_the_preview_contract() {
+    let root = fixture();
+    let outside = fixture();
+    let output = std::process::Command::new("/bin/bash")
+        .args([
+            "--noprofile",
+            "--norc",
+            "-c",
+            "CDPATH=$1; export -n CDPATH; cd sub >/dev/null && /bin/pwd -P",
+            "acme-cdpath-fixture",
+        ])
+        .arg(outside.path())
+        .current_dir(root.path())
+        .env_remove("BASH_ENV")
+        .env_remove("ENV")
+        .env_remove("CDPATH")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let actual = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        Path::new(actual.trim()),
+        outside.path().join("sub").canonicalize().unwrap()
+    );
+
+    // Preview deliberately assumes normal lookup when the host supplies no
+    // command-shell metadata, even if hidden shell-local settings differ.
+    let preview = analyze("cd sub && acme read", root.path());
+    assert_eq!(preview["decision"], "allow", "{preview}");
+    assert_eq!(
+        commands(&preview, "acme")[0]["cwd"],
+        root.path()
+            .join("sub")
+            .canonicalize()
+            .unwrap()
+            .to_str()
+            .unwrap()
+    );
 }
 
 #[test]
