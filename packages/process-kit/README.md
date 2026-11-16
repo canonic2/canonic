@@ -49,6 +49,11 @@ admission quiescence, irreversible fencing and bounded file/socket copies. Your
 application coordinates durable ownership and adoption; automatic version retirement
 does not migrate running work.
 
+To keep a host connection open across implementation updates,
+[replace workers behind a stable frontend](docs/worker-replacement.md).
+The generic supervisor handles between-call cutover and retained obligations;
+your adapters supply process control, protocol compatibility and owner-loss cleanup.
+
 - [API reference](docs/reference.md): request handling, resource holds, control
   lanes, version handoff and recovery.
 - [Get started](docs/getting-started.md): the complete manager/client example.

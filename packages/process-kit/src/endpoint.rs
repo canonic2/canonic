@@ -620,6 +620,45 @@ pub fn connect(root: &Root, control: bool, timeout: Duration) -> Result<Stream> 
     Ok(stream)
 }
 
+/// Connect to a named private socket without creating files. This is for
+/// product-owned guard and transfer channels, outside the fixed manager lanes.
+/// It validates the parent, socket and actual same-user peer, and bounds connect.
+/// Unlike [`connect`], it performs no manager-lease or readiness classification.
+/// The returned stream has read/write timeouts set to the remaining budget.
+/// After the handshake, clear both with `set_read_timeout(None)` and
+/// `set_write_timeout(None)` before using blocking I/O to observe owner EOF.
+///
+/// # Errors
+/// Returns invalid options, private-path, path-length, peer or I/O failures.
+pub fn connect_local(path: &Path, timeout: Duration) -> Result<Stream> {
+    let until = Instant::now()
+        .checked_add(timeout)
+        .filter(|_| !timeout.is_zero())
+        .ok_or(Error::Options)?;
+    if !path.is_absolute() {
+        return Err(Error::PrivatePath);
+    }
+    let parent = Root::explicit(path.parent().ok_or(Error::PrivatePath)?)?;
+    let path = parent
+        .path()
+        .join(path.file_name().ok_or(Error::PrivatePath)?);
+    private_for_connect(parent.path(), false, until)?;
+    private_for_connect(&path, true, until)?;
+    let remaining = until
+        .checked_duration_since(Instant::now())
+        .filter(|d| !d.is_zero())
+        .ok_or(Error::Capacity)?;
+    let stream = connect_bounded(&path, remaining)?;
+    check_peer(&stream)?;
+    let remaining = until
+        .checked_duration_since(Instant::now())
+        .filter(|d| !d.is_zero())
+        .ok_or(Error::Capacity)?;
+    stream.set_read_timeout(Some(remaining))?;
+    stream.set_write_timeout(Some(remaining))?;
+    Ok(stream)
+}
+
 fn private_for_connect(path: &Path, socket: bool, until: Instant) -> Result<Identity> {
     #[cfg(windows)]
     {
@@ -635,6 +674,75 @@ fn private_for_connect(path: &Path, socket: bool, until: Instant) -> Result<Iden
     {
         let _ = until;
         private(path, socket)
+    }
+}
+
+#[cfg(all(test, unix))]
+mod named_local_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::os::unix::fs::PermissionsExt;
+    #[test]
+    fn named_local_deadline_exchange_can_be_reset_for_blocking_owner_reads() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = Root::explicit(temporary.path().join("private")).unwrap();
+        root.prepare().unwrap();
+        let path = root.path().join("guard.sock");
+        let listener = crate::net::Listener::bind(&path).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        let mut client = connect_local(&path, Duration::from_secs(1)).unwrap();
+        assert!(client.read_timeout().unwrap().is_some());
+        assert!(client.write_timeout().unwrap().is_some());
+        let mut peer = listener.accept().unwrap().0;
+        peer.write_all(&[1]).unwrap();
+        {
+            let mut wire =
+                crate::frame::Deadline::new(&client, Instant::now() + Duration::from_secs(1));
+            wire.read_exact(&mut [0]).unwrap();
+            wire.write_all(&[2]).unwrap();
+        }
+        assert!(client.read_timeout().unwrap().is_some());
+        assert!(client.write_timeout().unwrap().is_some());
+        client.set_read_timeout(None).unwrap();
+        client.set_write_timeout(None).unwrap();
+        assert_eq!(client.read_timeout().unwrap(), None);
+        assert_eq!(client.write_timeout().unwrap(), None);
+        peer.read_exact(&mut [0]).unwrap();
+        peer.write_all(&[3]).unwrap();
+        let mut byte = [0];
+        client.read_exact(&mut byte).unwrap();
+        assert_eq!(byte, [3]);
+        drop(peer);
+        assert_eq!(client.read(&mut byte).unwrap(), 0);
+    }
+
+    #[test]
+    fn named_local_connections_validate_privacy_peer_and_options_without_starting_anything() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = Root::explicit(temporary.path().join("private")).unwrap();
+        assert!(connect_local(&root.path().join("guard.sock"), Duration::from_millis(50)).is_err());
+        assert!(!root.path().exists());
+        root.prepare().unwrap();
+        let path = root.path().join("guard.sock");
+        let listener = crate::net::Listener::bind(&path).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        let client = connect_local(&path, Duration::from_secs(1)).unwrap();
+        let server = listener.accept().unwrap().0;
+        check_peer(&client).unwrap();
+        check_peer(&server).unwrap();
+        assert!(matches!(
+            connect_local(&path, Duration::ZERO),
+            Err(Error::Options)
+        ));
+        assert!(matches!(
+            connect_local(Path::new("guard.sock"), Duration::from_secs(1)),
+            Err(Error::PrivatePath)
+        ));
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o666)).unwrap();
+        assert!(matches!(
+            connect_local(&path, Duration::from_secs(1)),
+            Err(Error::PrivatePath)
+        ));
     }
 }
 

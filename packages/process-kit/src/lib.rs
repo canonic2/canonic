@@ -32,6 +32,8 @@ pub mod version;
 mod wakeup;
 #[cfg(windows)]
 mod windows;
+#[cfg(any(unix, windows))]
+pub mod worker;
 
 /// A typed failure at the manager boundary. Messages never contain payloads.
 #[derive(Debug, thiserror::Error)]
@@ -114,9 +116,18 @@ pub enum Error {
     /// A transport failure after sending cannot establish non-admission.
     #[error("manager outcome unknown for request {0}")]
     OutcomeUnknown(String),
-    /// A worker panicked; all other workers were joined before returning.
+    /// A runtime worker or adapter callback failed. A supervisor retains
+    /// unresolved obligations until explicit cleanup; inspect its phase.
     #[error("manager worker failed")]
     Worker,
+    /// Replacement failed and subsequent cleanup also failed. Both causes are
+    /// retained; inspect the supervisor phase and retry unresolved cleanup.
+    #[error("worker replacement failed: {cause}; cleanup failed: {cleanup}")]
+    WorkerCleanup {
+        #[source]
+        cause: Box<Error>,
+        cleanup: Box<Error>,
+    },
 }
 
 /// Result returned by fallible manager APIs.

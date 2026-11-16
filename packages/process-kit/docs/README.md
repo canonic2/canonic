@@ -12,3 +12,7 @@ describes tests and checks.
 [Build a live manager handover](live-handover.md) when updates must preserve
 running resources. It covers admission fences, standby copies, platform boundaries
 and application-owned commit/recovery.
+
+[Replace workers behind a stable frontend](worker-replacement.md) when the host
+connection must outlive implementation updates. It covers dispatch reservations,
+process-adapter callbacks, bounded deferral and shutdown/reconciliation.

@@ -16,3 +16,4 @@ mod transport;
 mod upgrades;
 #[cfg(windows)]
 mod windows_integrity;
+mod workers;

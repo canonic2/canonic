@@ -5,7 +5,7 @@
 | `core` | `Admission`, RAII `Permit` and `Hold`, `Snapshot`, `State`, `Event`, `ExitPolicy` |
 | `endpoint` | `Root`, `Home`, `Lease`, borrowing `Endpoint`, peer checks and non-launching connect |
 | `net` | Platform `Stream` and `Listener` re-exports for local socket I/O |
-| `frame` | Four-byte big-endian length prefix, bytes, JSON read/write convenience |
+| `frame` | Four-byte big-endian length prefix, bytes, JSON read/write convenience and absolute-deadline stream I/O |
 | `protocol` | `Identity`, `Control`, `Request`, `Reply`, `Code`, independent `CONTROL_VERSION = 1` |
 | `version` | Bounded semantic `Version` parsing and release precedence |
 | `launch` | `Launcher`, current-executable `Spawn`, registered `Service` activation |
@@ -14,6 +14,7 @@
 | `owner` | `Connection` holds resource responsibility while detecting owner-channel EOF |
 | `connection` | `Handoff`, product-owned `Connection`, transferable lifetime/capacity `Guard` |
 | `server` | Synchronous `serve`, `Handler`, dispatch `Context`, bounded `Options` |
+| `worker` | Stable-frontend `Supervisor`, process adapter `Worker`, `Dispatch`, replacement `Request`/`Selection`, phase/outcome and commit uncertainty |
 
 All public fallible functions document their errors in rustdoc. `Error` is a
 typed `thiserror` enum. The package exposes no CLI and writes no logs or product
@@ -40,6 +41,33 @@ lease. `Endpoint::listener() -> &net::Listener` borrows its bound listener.
 `manager.sock` for the ordinary lane or `control.sock` for the control lane,
 under the selected root. Reading that path does not establish liveness or
 transfer cleanup authority; retain the endpoint and lease guards.
+
+Products with additional private guard or candidate channels can use
+`endpoint::connect_local(path, timeout)`. It validates the absolute private
+socket path and same-user peer, connects within the supplied budget and starts
+no process. It does not acquire a manager lease or interpret readiness.
+Wrap that stream in `frame::Deadline::new(&stream, until)` for an exchange whose
+partial reads and writes share one absolute deadline. Darwin's buffered final
+reply remains readable after peer closure; deadline fallback never permits
+unbounded blocking I/O.
+Both APIs leave read/write socket timeouts set. After dropping the `Deadline`
+wrapper, call `stream.set_read_timeout(None)?` and
+`stream.set_write_timeout(None)?` before reusing the stream for blocking owner
+or EOF observation. Do not run concurrent I/O through clones while using the
+deadline wrapper: socket timeouts are shared state.
+
+## Worker replacement
+
+`worker::Supervisor` retains a domain lease, one active worker and at most one
+standby candidate. Its `enter` reservations retain the original worker through
+response delivery; `replace` pauses dispatch and waits for permits/holds before
+fencing. Adapters supply bounded launch, compatibility, writer fencing,
+activation and exact-process cleanup. No host protocol bytes are interpreted.
+`Status::active` identifies the retained dispatch slot, not proof of a running
+process. In `Reconcile` after retirement or activation failure, it can still
+identify the reaped predecessor. Inspect phase and attempt outcome together.
+See [the integration guide](worker-replacement.md) for callbacks, limits,
+monotonic attempt sequences, commit uncertainty and host disconnect handling.
 
 ## Admission and lifetime
 

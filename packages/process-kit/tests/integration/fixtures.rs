@@ -243,6 +243,7 @@ fn entry() {
     let root = Root::explicit(Path::new(&path)).unwrap();
     let mode = std::env::var("ACME_MODE").unwrap();
     match mode.as_str() {
+        mode if mode.starts_with("worker-") => super::workers::entry(&root, mode),
         "owner-client" => {
             let _connection =
                 canonic_process_kit::endpoint::connect(&root, false, Duration::from_secs(2))
