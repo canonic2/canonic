@@ -22,9 +22,10 @@ suggestion_list returns this session's asked requests with evidence and authorin
 For packs, use pack_list and pack_show to inspect installed selections, pack_update to update one reference or all tracking packs when omitted, and pack_remove to prepare removal; omit its reference to let the person select installed packs. pack_configure accepts direct edits, named variables or bare guided settings and overrides. pack_add accepts known typed settings through set. registry_add can collect omitted name/location details through a form; then call it with the returned retry_arguments for a separate trust review. Input submission cannot approve trust or policy. \
 Previews and proposals grant no authority; the policy files change only through user-approved policy_apply. A preparation Task grants no authority either: poll tasks/get, use its review_arguments with policy_propose to create a fresh review, then obtain separate human confirmation using unchanged apply_arguments. Repeating identical creation arguments recovers a lost task handle; never restart failed or cancelled work automatically. Read returned report_resources with resources/read when full comparison or retained review evidence is needed; a report does not approve a change. Keep approval and setup in this conversation through Shield tools and host confirmation; sending the user to a terminal is a product bug, not a recovery solution. \
 Follow returned request_approve routes for one-time approval, then repeat the approved call once unchanged. For a planned batch of privileged native commands, inspect session_grant_list, propose a bounded exact batch or closed argv family with session_grant_propose, then copy apply_arguments to session_grant_approve for the user's form. Prefer temporary session permission for one task and persistent policy only for future sessions. Inspect existing grants first, never repeat a declined offer automatically, and never bypass refusals. Only the person's explicit request permits session_grant_reconsider followed by fresh human confirmation. ";
+    let continuations = "For a large administrative review, review_status: more_pages means nothing has applied: call retry_tool with the exact retry_arguments to present the next human confirmation page. Never skip pages or repeat a declined review. history_list and history_show accept an explicit absolute project for an already enrolled nested worktree inside this connection's project; this is a read-only selector and cannot reach unrelated projects. ";
     let host = adapter.guidance().instructions;
     format!(
-        "{common}{} {host}Chat replies cannot replace host confirmation.",
+        "{common}{continuations}{} {host}Chat replies cannot replace host confirmation.",
         crate::proposal_draft::PACK_SETUP_GUIDANCE
     )
 }
@@ -105,6 +106,14 @@ fn primary_summary(name: &str, agent: Option<&str>, value: &Value) -> String {
         };
     }
     let data = &value["data"];
+    if data["review_status"] == "more_pages" {
+        return format!(
+            "Accepted {} of {} review pages. Nothing has applied. Call {} again with the exact retry_arguments for the next human confirmation page.",
+            data["reviewed_pages"],
+            data["total_pages"],
+            data["retry_tool"].as_str().unwrap_or(name)
+        );
+    }
     if data["unchanged"] == true {
         return "Already up to date; no proposal or approval is needed.".into();
     }

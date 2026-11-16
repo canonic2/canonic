@@ -358,7 +358,9 @@ The review lists selections, dependency/profile changes, and incoming constraint
 Confirmation writes the complete change together. `shield pack list` and
 `.shield/shield.lock` retain direct-selection flags, versions, profiles, source
 identities, digests, and dependency edges. Hand-edited files with incomplete or
-incompatible sets are invalid and make requests ask. Promoting a dependency to a direct selection requires a
+incompatible sets make policy unavailable; supported native requests then need
+[exact in-session review](project-review.md#allowing-one-blocked-request).
+Promoting a dependency to a direct selection requires a
 profile satisfying all its parents.
 
 ### Source verification

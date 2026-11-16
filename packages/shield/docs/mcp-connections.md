@@ -95,11 +95,20 @@ entries. Restart the affected connections afterwards.
 Setup does not install connectors or configure credentials.
 
 Supported host aliases start with a lowercase letter and contain lowercase
-letters, digits and underscores, up to 64 characters; repeated `__` is reserved
-by the host tool encoding; aliases cannot end in an underscore. Other aliases
-refuse instead of guessing host name
-normalization. Stable project and pack integration IDs are independent of these
-host alias restrictions.
+letters, digits, underscores and hyphens, up to 64 characters. Claude preserves
+hyphens in tool names; Codex encodes them as underscores. Shield keeps the
+original configuration key and resolves the encoded name to exactly one server.
+For example, Codex tools for `chrome-devtools` use `chrome_devtools`, without
+requiring a second definition or a rename.
+
+The encoded namespace cannot contain repeated `__` or end in an underscore;
+those spellings conflict with the host tool delimiter. Two Codex aliases such as
+`acme-browser` and `acme_browser` collide and must be renamed or removed, even
+when they appear in different configuration scopes. Host-owned plugin/app names
+cannot be claimed by a project. Unsupported spellings refuse explicitly.
+Doctor reports the original alias, its `tool_namespace`, and a `diagnostic`
+when resolution fails. Stable project and pack integration IDs are independent
+of these host alias restrictions.
 
 Stdio transports use `type: stdio`, a `command`, an `args` array and an optional
 string-valued `env` map. Argument boundaries are preserved. HTTP transports take

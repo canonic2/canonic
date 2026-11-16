@@ -99,7 +99,7 @@ pub(super) fn inspect(context: &Context, id: Option<&str>) -> Result<Value, Erro
     if let Some(request) = id {
         return request_view(context, request).map(|(_, v)| v);
     }
-    let state = super::project::checkpoint(context)?;
+    let state = super::project::authorization(context)?;
     let time = super::clock::now_ms()?;
     let mut requests = Vec::new();
     for (kind, mut value) in [
@@ -138,7 +138,7 @@ pub(super) fn inspect(context: &Context, id: Option<&str>) -> Result<Value, Erro
 
 /// Read one bounded checkpoint and build public views only for the page.
 pub(super) fn list_page(context: &Context, args: &Value) -> Result<Value, Error> {
-    let state = super::project::checkpoint(context)?;
+    let state = super::project::authorization(context)?;
     let time = super::clock::now_ms()?;
     let query = super::page::query(context, "request_list", args);
     let request =
@@ -217,7 +217,7 @@ pub(super) enum RequestKind {
 }
 
 pub(super) fn request_view(context: &Context, id: &str) -> Result<(RequestKind, Value), Error> {
-    let state = super::project::checkpoint(context)?;
+    let state = super::project::authorization(context)?;
     let time = super::clock::now_ms()?;
     if let Some((kind, value)) =
         super::hook_approval::terminal_registry(&state, time).inspect(context, id, time)
@@ -248,9 +248,9 @@ pub(super) fn request_view(context: &Context, id: &str) -> Result<(RequestKind, 
 pub(super) fn authorize(context: &Context, id: &str, deny: bool) -> Result<Value, Error> {
     let (kind, view) = request_view(context, id)?;
     if !deny && view["terminal"] == true {
-        super::project::checkpoint(context)?.check_operations()?;
+        super::project::authorization(context)?.check_operations()?;
         return super::hook_approval::terminal_registry(
-            &super::project::checkpoint(context)?,
+            &super::project::authorization(context)?,
             super::clock::now_ms()?,
         )
         .replay_operator(super::authorization_receipts::OperatorReplay {

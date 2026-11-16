@@ -17,7 +17,7 @@ pub(super) fn merge(
             serde_json::to_value(transport).map_err(|_| Error::Invalid("MCP connection encoding"))
         },
         |alias, servers| {
-            super::super::unambiguous_mcp_alias(alias, servers.keys().map(String::as_str))
+            super::super::unambiguous_mcp_alias("claude", alias, servers.keys().map(String::as_str))
         },
     )
 }

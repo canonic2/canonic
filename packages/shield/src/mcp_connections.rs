@@ -389,16 +389,11 @@ pub(crate) fn validate(connections: &Connections) -> Result<(), Error> {
             return Err(Error::Limit);
         }
         for (agent, alias) in &connection.agents {
+            let namespace = crate::agents::mcp_namespace(agent, alias)
+                .map_err(|_| Error::Contract("unsupported MCP host binding alias"))?;
             if !["claude", "codex"].contains(&agent.as_str())
                 || !valid_name(alias)
-                || alias.len() > 64
-                || !alias.as_bytes()[0].is_ascii_lowercase()
-                || alias.ends_with('_')
-                || !alias
-                    .bytes()
-                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
-                || alias.contains("__")
-                || !aliases.insert((agent, alias))
+                || !aliases.insert((agent, namespace))
             {
                 return Err(Error::Contract(
                     "MCP host bindings require unique supported agent aliases",

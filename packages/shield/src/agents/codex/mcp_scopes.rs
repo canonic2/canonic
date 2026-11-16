@@ -67,7 +67,7 @@ fn check_file(path: &Path, alias: &str) -> Result<(), Error> {
             let servers = servers
                 .as_table_like()
                 .ok_or(Error::Invalid("invalid Codex MCP scope table"))?;
-            mcp_scopes::no_alias(alias, servers.iter().map(|(name, _)| name))?;
+            mcp_scopes::no_alias("codex", alias, servers.iter().map(|(name, _)| name))?;
         }
     }
     Ok(())

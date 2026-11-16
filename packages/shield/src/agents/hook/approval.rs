@@ -18,6 +18,7 @@ const APPROVABLE: &[&str] = &[
     "sensitive-read",
     "unsupported-operation",
     "policy-file-unknown",
+    "policy-files-invalid",
 ];
 /// What the person reads when a refusal offers in-session approval.
 pub(in crate::agents) const OFFER: &str = " The agent can ask you to allow it once.";
@@ -26,7 +27,7 @@ pub(in crate::agents) const OFFER: &str = " The agent can ask you to allow it on
 pub(super) fn refusal(receipt: &Value) -> Value {
     json!({"code":receipt["code"],"fixed_protection":receipt["fixed_protection"],
         "identity":receipt["identity"],"history":receipt["history"],"protected_path":receipt["protected_path"],
-        "protected_group":receipt["protected_group"],"policy_change":receipt["policy_change"],"deny_rules":receipt["deny_rules"],"mcp_match":receipt["mcp_match"],"_mcp_binding":receipt["_mcp_binding"]})
+        "protected_group":receipt["protected_group"],"policy_change":receipt["policy_change"],"git_restoration":receipt["git_restoration"],"policy_unavailable":receipt["policy_unavailable"],"deny_rules":receipt["deny_rules"],"mcp_match":receipt["mcp_match"],"_mcp_binding":receipt["_mcp_binding"]})
 }
 
 fn approvable(refusal: &Value) -> bool {
@@ -56,26 +57,7 @@ pub(super) fn in_session(
         candidate_digest: first["identity"]["candidate_digest"].as_str()?,
     };
     let cwd = hook_approval::relative_cwd(root, request.cwd.as_ref());
-    let input_digest = if refusals.iter().any(|r| !r["mcp_match"].is_null()) {
-        crate::json::fingerprint(&(
-            input_digest(request),
-            refusals
-                .iter()
-                .map(|r| (&r["mcp_match"], &r["_mcp_binding"]))
-                .collect::<Vec<_>>(),
-        ))
-        .ok()?
-    } else {
-        input_digest(request)
-    };
-    // An older deny override may have been reviewed without the Git-policy
-    // warning. Require a fresh review that includes this consequence, while
-    // leaving every other saved grant's request binding unchanged.
-    let input_digest = if refusals.iter().any(|r| r["policy_change"] == true) {
-        crate::json::fingerprint(&(input_digest, "git-policy-change")).ok()?
-    } else {
-        input_digest
-    };
+    let input_digest = input_digest(request, refusals)?;
     let key = Key {
         agent: adapter.spec().id,
         session: request.session,
@@ -93,7 +75,14 @@ pub(super) fn in_session(
             // request below reports it with a retry.
             if enrolled(root, key.agent) == Some(false) {
                 reply.reason.push_str(" Shield's approval connection is not registered in this checkout; repair Shield setup to restore in-session approval.");
-                append(&mut reply.agent_context, NOT_CONNECTED);
+                append(
+                    &mut reply.agent_context,
+                    if refusals.iter().any(|r| r["policy_unavailable"] == true) {
+                        INVALID_POLICY_NOT_CONNECTED
+                    } else {
+                        NOT_CONNECTED
+                    },
+                );
                 return None;
             }
             let Some(summary) = summary(request, refusals) else {
@@ -136,6 +125,7 @@ pub(super) fn in_session(
 /// What the agent reads when this project records no integration for it:
 /// its MCP connection cannot ask the person, so no request is stored.
 const NOT_CONNECTED: &str = "Shield cannot ask the user to allow this here: this agent is not connected to Shield in this project. If it is needed, ask the user to run `shield mcp setup` in this project and restart this agent session, then repeat this exact call.";
+const INVALID_POLICY_NOT_CONNECTED: &str = "Shield cannot ask the user to allow this here: this agent is not connected to Shield in this project, and policy is invalid. The user must first repair the policy files themselves, for example by resolving their Git conflicts from their own terminal. Setup also needs valid policy; after repair, ask the user to run `shield mcp setup` in this project and restart the agent session. Do not edit protected files or substitute an automatic host approval.";
 
 /// Whether the project records an integration for this agent, the
 /// condition its MCP connection needs to ask the person; `None` when the
@@ -197,13 +187,47 @@ fn bound_input(request: &Request<'_>) -> Value {
     input
 }
 
-/// Binds the decided operation and every input field that affects execution.
-fn input_digest(request: &Request<'_>) -> String {
-    crate::policy::fingerprint(
+/// Binds execution input and every reviewed MCP or Git consequence, retaining
+/// the existing nesting and labels so stored requests keep their exact binding.
+fn input_digest(request: &Request<'_>, refusals: &[Value]) -> Option<String> {
+    let input_digest = crate::policy::fingerprint(
         json!([request.operation, bound_input(request)])
             .to_string()
             .as_bytes(),
-    )
+    );
+    let input_digest = if refusals.iter().any(|r| !r["mcp_match"].is_null()) {
+        crate::json::fingerprint(&(
+            input_digest,
+            refusals
+                .iter()
+                .map(|r| (&r["mcp_match"], &r["_mcp_binding"]))
+                .collect::<Vec<_>>(),
+        ))
+        .ok()?
+    } else {
+        input_digest
+    };
+    // An older deny override may have been reviewed without the Git-policy
+    // warning. Require a fresh review that includes this consequence, while
+    // leaving every other saved grant's request binding unchanged.
+    let input_digest = if refusals.iter().any(|r| r["policy_change"] == true) {
+        crate::json::fingerprint(&(input_digest, "git-policy-change")).ok()?
+    } else {
+        input_digest
+    };
+    if refusals.iter().any(|r| r["git_restoration"].is_object()) {
+        crate::json::fingerprint(&(
+            input_digest,
+            "git-restoration",
+            refusals
+                .iter()
+                .map(|r| &r["git_restoration"])
+                .collect::<Vec<_>>(),
+        ))
+        .ok()
+    } else {
+        Some(input_digest)
+    }
 }
 
 /// What the form shows, or nothing when it cannot show the action whole.
@@ -211,6 +235,12 @@ fn summary(request: &Request<'_>, refusals: &[Value]) -> Option<Summary> {
     let mut reasons: Vec<String> = Vec::new();
     let mut deny_rules: Vec<String> = Vec::new();
     for refusal in refusals {
+        if refusal["policy_unavailable"] == true {
+            let reason = "the current policy files are invalid; Shield cannot apply policy, so only your exact one-time approval can authorize this request".to_owned();
+            if !reasons.contains(&reason) {
+                reasons.push(reason);
+            }
+        }
         let reason = reason(refusal);
         if !reasons.contains(&reason) {
             reasons.push(reason);
@@ -223,11 +253,42 @@ fn summary(request: &Request<'_>, refusals: &[Value]) -> Option<Summary> {
         }
     }
     let settings = |r: &Value| {
-        r["code"] == "protected-access"
-            && !["policy"].contains(&r["protected_group"].as_str().unwrap_or("settings"))
+        r["git_restoration"]["settings_change"] == true
+            || r["code"] == "protected-access"
+                && !["policy"].contains(&r["protected_group"].as_str().unwrap_or("settings"))
     };
+    let worktrees: std::collections::BTreeSet<_> = refusals
+        .iter()
+        .flat_map(|r| {
+            r["git_restoration"]["worktrees"]
+                .as_array()
+                .into_iter()
+                .flatten()
+        })
+        .filter_map(Value::as_str)
+        .map(one_line)
+        .collect();
+    let mut action = action(request);
+    if !worktrees.is_empty() {
+        action.push_str("\n\nGit target worktrees:\n");
+        action.push_str(&worktrees.into_iter().collect::<Vec<_>>().join("\n"));
+        let calls: std::collections::BTreeSet<_> = refusals
+            .iter()
+            .flat_map(|r| {
+                r["git_restoration"]["calls"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+            })
+            .map(Value::to_string)
+            .collect();
+        action.push_str(
+            "\n\nGit restoration calls (arguments, working folder and target worktree):\n",
+        );
+        action.push_str(&calls.into_iter().collect::<Vec<_>>().join("\n"));
+    }
     let summary = Summary {
-        action: action(request),
+        action,
         reason: reasons.join("; "),
         overrides_deny: refusals.iter().any(|r| r["code"] == "policy-deny"),
         deny_rules,
@@ -249,6 +310,7 @@ fn reason(refusal: &Value) -> String {
         ("policy-file-unknown", _) => {
             "this Git command can replace Shield's policy files, or its writes to them cannot be determined".into()
         }
+        ("policy-files-invalid", _) => "the current policy files are invalid".into(),
         ("protected-access", Some(path)) if refusal["protected_group"] == "policy" => {
             format!("it changes `{path}`, a Shield policy file")
         }

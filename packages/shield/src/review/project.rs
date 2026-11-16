@@ -38,6 +38,15 @@ pub(super) fn checkpoint(context: &Context) -> Result<State, Error> {
     Ok(state)
 }
 
+/// Current authorization and settings without following or preparing policy.
+/// Exact native reviews must remain usable when those files need repair.
+pub(super) fn authorization(context: &Context) -> Result<State, Error> {
+    let state = Store::open(Path::new(&context.project_root))?.read_checkpoint()?;
+    state.check(context)?;
+    state.check_operations()?;
+    Ok(state)
+}
+
 pub(super) fn captured(context: &Context) -> Result<State, Error> {
     let state = Store::open(Path::new(&context.project_root))?.read_following_files()?;
     state.check(context)?;

@@ -67,6 +67,7 @@ pub(super) fn connection(
 ) -> Result<Option<crate::mcp_connections::Transport>, Error> {
     let doc = document(Some(source))?;
     super::super::unambiguous_mcp_alias(
+        "codex",
         alias,
         doc.get("mcp_servers")
             .and_then(Item::as_table)

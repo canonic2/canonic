@@ -362,7 +362,12 @@ impl Snapshot {
             .effective()
             .mcp_connections()
             .iter()
-            .find(|(_, c)| c.enabled && c.agents.get(agent).is_some_and(|a| a == alias))
+            .find(|(_, c)| {
+                c.enabled
+                    && c.agents.get(agent).is_some_and(|a| {
+                        crate::agents::mcp_namespace(agent, a).is_ok_and(|encoded| encoded == alias)
+                    })
+            })
             .map(|(id, c)| (id.as_str(), c))
     }
     pub(crate) fn observe_working_files(&mut self, root: Option<&crate::location::WorkingFiles>) {

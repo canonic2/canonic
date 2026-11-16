@@ -332,3 +332,190 @@ fn recovery_policy_denial_reaches_exact_approval_and_consumed_native_retry() {
         }
     }
 }
+
+#[test]
+fn git_restoration_stdio_review_keeps_both_warnings_through_decline_and_accept() {
+    for agent in ["claude", "codex"] {
+        for modern in [false, true] {
+            let (server, project) = fixture(Some(agent));
+            crate::review::operator::integrations::configure_fixture(
+                project.root.path(),
+                crate::review::integrations::IntegrationChoice::agent(agent),
+                crate::review::integrations::AskFallback::Block,
+            );
+            assert!(
+                crate::test_support::git()
+                    .current_dir(project.root.path())
+                    .args(["init", "-q"])
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+            let mut context = (*server.review()).clone();
+            context.session_id = Some("acme-session".into());
+            drop(server);
+            let transport = Transport::start(Server::for_review(context).unwrap());
+            for message in initialize(&json!({"elicitation":{"form":{}}}), agent) {
+                transport.send(&message);
+            }
+            assert!(transport.receive()["result"].is_object());
+            let input = json!({"command":"git checkout --ours -- .shield/config.yml .codex/config.toml", "workdir":project.review.project_root});
+            for action in ["decline", "accept"] {
+                let refused = native(&project, agent, "Bash", input.clone());
+                assert_eq!(
+                    refused["hookSpecificOutput"]["permissionDecision"], "deny",
+                    "{refused}"
+                );
+                let listed = transport.call(json!(10), "request_list", &json!({}));
+                let requests = listed["result"]["structuredContent"]["data"]["requests"]
+                    .as_array()
+                    .unwrap();
+                let args = json!({"request_id":requests.last().unwrap()["request_id"]});
+                let form = begin(&transport, "request_approve", &args, modern);
+                let text = form.to_string();
+                assert!(text.contains("Changing agent settings"), "{form}");
+                assert!(text.contains("replace Shield's policy files"), "{form}");
+                assert!(text.contains("Git target worktrees:"), "{form}");
+                let result = answer(&transport, "request_approve", &args, &form, action, modern);
+                assert_eq!(result["result"]["isError"], action == "decline", "{result}");
+                let retry = native(&project, agent, "Bash", input.clone());
+                assert_eq!(
+                    retry["hookSpecificOutput"]["permissionDecision"] == "deny",
+                    action == "decline",
+                    "{retry}"
+                );
+            }
+            assert_eq!(
+                native(&project, agent, "Bash", input)["hookSpecificOutput"]["permissionDecision"],
+                "deny"
+            );
+        }
+    }
+}
+
+#[test]
+fn invalid_policy_recovery_stdio_retains_diagnostics_confirmation_and_exact_retry() {
+    for agent in ["claude", "codex"] {
+        for modern in [false, true] {
+            let (server, project) = fixture(Some(agent));
+            crate::review::operator::integrations::configure_fixture(
+                project.root.path(),
+                crate::review::integrations::IntegrationChoice::agent(agent),
+                crate::review::integrations::AskFallback::Block,
+            );
+            assert!(
+                crate::test_support::git()
+                    .current_dir(project.root.path())
+                    .args(["init", "-q"])
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+            let mut context = (*server.review()).clone();
+            context.session_id = Some("acme-session".into());
+            drop(server);
+            let config = project.root.path().join(".shield/config.yml");
+            let broken = "packs: [\n";
+            std::fs::write(&config, broken).unwrap();
+            // A new connection must start while the active config is broken.
+            let transport = Transport::start(Server::for_review(context).unwrap());
+            for message in initialize(&json!({"elicitation":{"form":{}}}), agent) {
+                transport.send(&message);
+            }
+            assert!(transport.receive()["result"].is_object());
+            for tool in ["status", "doctor"] {
+                let diagnostic = transport.call(json!(20), tool, &json!({}));
+                assert_eq!(diagnostic["result"]["isError"], false, "{diagnostic}");
+            }
+            let input = json!({"command":"git checkout --ours -- .shield/config.yml .codex/config.toml", "workdir":project.review.project_root});
+            for action in ["decline", "accept"] {
+                let refused = native(&project, agent, "Bash", input.clone());
+                assert_eq!(
+                    refused["hookSpecificOutput"]["permissionDecision"], "deny",
+                    "{refused}"
+                );
+                let listed = transport.call(json!(21), "request_list", &json!({}));
+                let requests = listed["result"]["structuredContent"]["data"]["requests"]
+                    .as_array()
+                    .unwrap();
+                let args = json!({"request_id":requests.last().unwrap()["request_id"]});
+                let shield = native(
+                    &project,
+                    agent,
+                    "mcp__shield__request_approve",
+                    args.clone(),
+                );
+                assert_ne!(
+                    shield["hookSpecificOutput"]["permissionDecision"], "deny",
+                    "{shield}"
+                );
+                let form = begin(&transport, "request_approve", &args, modern);
+                for warning in [
+                    "current policy files are invalid",
+                    "Changing agent settings",
+                    "replace Shield's policy files",
+                ] {
+                    assert!(form.to_string().contains(warning), "{form}");
+                }
+                assert_eq!(std::fs::read_to_string(&config).unwrap(), broken);
+                let result = answer(&transport, "request_approve", &args, &form, action, modern);
+                assert_eq!(result["result"]["isError"], action == "decline", "{result}");
+                let retry = native(&project, agent, "Bash", input.clone());
+                assert_eq!(
+                    retry["hookSpecificOutput"]["permissionDecision"] == "deny",
+                    action == "decline",
+                    "{retry}"
+                );
+                assert_eq!(std::fs::read_to_string(&config).unwrap(), broken);
+            }
+            let replay = native(&project, agent, "Bash", input);
+            assert_eq!(
+                replay["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{replay}"
+            );
+        }
+    }
+}
+
+#[test]
+fn invalid_policy_recovery_without_forms_keeps_requests_pending() {
+    for agent in ["claude", "codex"] {
+        let (server, project) = fixture(Some(agent));
+        crate::review::operator::integrations::configure_fixture(
+            project.root.path(),
+            crate::review::integrations::IntegrationChoice::agent(agent),
+            crate::review::integrations::AskFallback::Block,
+        );
+        let config = project.root.path().join(".shield/config.yml");
+        std::fs::write(&config, "packs: [\n").unwrap();
+        let transport = Transport::start(server);
+        for message in initialize(&json!({}), agent) {
+            transport.send(&message);
+        }
+        assert!(transport.receive()["result"].is_object());
+        let input = json!({"command":"pwd","workdir":project.review.project_root});
+        let refused = native(&project, agent, "Bash", input.clone());
+        assert_eq!(
+            refused["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{refused}"
+        );
+        let listed = transport.call(json!(30), "request_list", &json!({}));
+        let args = json!({"request_id":listed["result"]["structuredContent"]["data"]["requests"][0]["request_id"]});
+        let response = transport.call(json!(31), "request_approve", &args);
+        assert_eq!(
+            response["result"]["structuredContent"]["error"]["code"], "approval_unavailable",
+            "{response}"
+        );
+        let listed = transport.call(json!(32), "request_list", &json!({}));
+        assert_eq!(
+            listed["result"]["structuredContent"]["data"]["requests"][0]["status"], "pending",
+            "{listed}"
+        );
+        let retry = native(&project, agent, "Bash", input);
+        assert_eq!(
+            retry["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{retry}"
+        );
+        assert_eq!(std::fs::read_to_string(config).unwrap(), "packs: [\n");
+    }
+}

@@ -1841,19 +1841,18 @@ fn permission_batch_aggregation_keeps_ask_and_deny_before_encoding() {
 }
 
 #[test]
-fn invalid_policy_files_make_requests_ask_and_name_the_problem() {
+fn invalid_policy_files_require_exact_review_and_name_the_problem() {
     let (root, _) = fixture();
     fs::write(
         root.path().join(".shield/config.yml"),
         "schema_version: 1\npacks: [\n",
     )
     .unwrap();
-    // Claude prompts the person; Codex's pre-tool hook cannot prompt, so it
-    // refuses with the same explanation instead of allowing.
-    for (agent, decision) in [("claude", "ask"), ("codex", "deny")] {
+    // Both hosts refuse first; only Shield's exact form can approve recovery.
+    for agent in ["claude", "codex"] {
         let value = call(root.path(), agent, "git status");
         assert_eq!(
-            value["hookSpecificOutput"]["permissionDecision"], decision,
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
             "{agent}: {value}"
         );
         assert!(
@@ -1897,7 +1896,7 @@ fn a_hand_edit_decides_the_next_request_and_a_broken_one_never_falls_back() {
 }
 
 #[test]
-fn a_pack_missing_from_this_machine_asks_and_names_the_fix() {
+fn invalid_policy_missing_artifacts_require_exact_review_and_name_the_fix() {
     let (root, _) = fixture();
     let digest = crate::policy::fingerprint(b"Acme pack this machine never stored");
     fs::write(
@@ -1907,10 +1906,10 @@ fn a_pack_missing_from_this_machine_asks_and_names_the_fix() {
         ),
     )
     .unwrap();
-    for (agent, decision) in [("claude", "ask"), ("codex", "deny")] {
+    for agent in ["claude", "codex"] {
         let value = call(root.path(), agent, "git status");
         assert_eq!(
-            value["hookSpecificOutput"]["permissionDecision"], decision,
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
             "{agent}: {value}"
         );
         assert!(
@@ -4254,20 +4253,26 @@ fn operator_path_access_opens_settings_but_never_policy_files_or_review_state() 
 }
 
 #[test]
-fn invalid_protection_setting_makes_every_native_request_ask() {
+fn invalid_protection_setting_refuses_native_requests_and_names_invalid_policy() {
     let (_root, context) = fixture();
     let root = Path::new(&context.project_root);
-    // Invalid policy files decide nothing; the user answers each request.
+    // Invalid settings supply no policy permission. Native recovery needs
+    // exact human review, including on hosts that normally support Ask.
     std::fs::write(
         root.join(".shield/config.local.yml"),
         "schema_version: 1\nprotection: {agent_settings_change: always}\n",
     )
     .unwrap();
-    // Codex cannot prompt here, so its request is refused.
-    for (agent, decision) in [("claude", "ask"), ("codex", "deny")] {
+    for agent in ["claude", "codex"] {
         let value = call(root, agent, "git status");
         assert_eq!(
-            value["hookSpecificOutput"]["permissionDecision"], decision,
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{agent}: {value}"
+        );
+        assert!(
+            value
+                .to_string()
+                .contains("policy files in .shield/ are invalid"),
             "{agent}: {value}"
         );
     }
@@ -4399,7 +4404,14 @@ fn git_commands_that_move_the_tree_ask_only_when_the_policy_files_change() {
     );
     for agent in ["claude", "codex"] {
         for source in ["git switch acme-same", "git reset --hard", "git stash"] {
-            assert_permitted(&call(root, agent, source), agent);
+            let value = call(root, agent, source);
+            assert_ne!(
+                value["hookSpecificOutput"]["permissionDecision"],
+                "ask",
+                "{agent} {source}: {value}; fixture policy diff: {}",
+                git(&["diff", "--", ".shield"])
+            );
+            assert_permitted(&value, agent);
         }
     }
     let ask = |source: &str| {
@@ -4958,6 +4970,44 @@ fn settings_fixture(executable: &str) -> assert_fs::TempDir {
 }
 
 #[test]
+fn git_global_options_keep_policy_reads_and_neighboring_writes_distinct() {
+    let root = settings_fixture("git");
+    fs::create_dir_all(root.path().join(".gate/repos/private")).unwrap();
+    for agent in ["claude", "codex"] {
+        for source in [
+            "git -C .gate/repos/private show HEAD -- .shield/config.yml",
+            "git --no-pager show HEAD -- .shield/config.yml",
+            "git -C src -C .. show HEAD -- .shield/config.yml",
+            "git -C src -C .. show HEAD -- .shield/config.yml",
+            "git -c color.ui=never show HEAD -- .shield/config.yml",
+        ] {
+            assert_permitted(&call(root.path(), agent, source), agent);
+        }
+        for source in [
+            "git --no-pager diff --output=.shield/config.yml",
+            "git -C src -C .. show HEAD --output .mcp.json",
+            "git -c alias.show='!acme' show -- .shield/config.yml",
+            "git --future-global show HEAD -- .shield/config.yml",
+            "git --no-pager show HEAD -- .shield/state/state.json",
+            "git --no-pager show HEAD -- .shield/config.yml > .mcp.json",
+            "git --no-pager show HEAD -- .shield/config.yml; printf x > .shield/config.yml",
+        ] {
+            let value = call(root.path(), agent, source);
+            assert_eq!(
+                value["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{agent} {source}: {value}"
+            );
+        }
+        let value = call(root.path(), agent, "git --no-pager show HEAD -- .mcp.json");
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"],
+            if agent == "claude" { "ask" } else { "deny" },
+            "{agent}: {value}"
+        );
+    }
+}
+
+#[test]
 fn command_output_protects_direct_settings_reads_but_allows_codebase_searches() {
     // Policy allows each program, so only the settings check can block.
     for (executable, cases) in [
@@ -5073,7 +5123,7 @@ fn unknown_git_subcommands_and_execution_overrides_keep_settings_protected() {
     for source in [
         "git -c 'alias.peek=show HEAD:.mcp.json' peek",
         "git lg",
-        "git -calias.peek=show peek",
+        "git -c alias.peek=show peek",
         "git -c core.pager=acme-pager status",
         "git -c diff.external=acme-diff diff -- src",
         "git --config-env=core.pager=ACME_PAGER status",

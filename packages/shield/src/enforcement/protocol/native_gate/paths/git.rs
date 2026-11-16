@@ -1,15 +1,19 @@
-//! Which agent settings a literal Git invocation can print: revision paths,
-//! patch output and searches, narrowed only by pathspecs Git is sure to use.
+//! Shared literal Git invocation parsing, named-path access, printed settings
+//! and protected writes. Content reach includes revision paths, patch output
+//! and searches, narrowed only by pathspecs Git is sure to use.
 //!
 //! Git output reaches tracked content, so review state and the cache, which
 //! `.shield/.gitignore` keeps out of Git, are not part of these footprints.
 //! Object IDs a command resolves itself, such as a tag naming a blob, are
 //! outside this literal model.
 use super::{Access, Finding, Guard, Protection, absolute, classify, resolve_existing, strictest};
+mod restoration;
 mod writes;
 use crate::review::integrations::protected_files;
+use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
-pub(super) use writes::policy_files;
+#[cfg(test)]
+use writes::policy_files;
 
 /// Subcommands that read the working tree and change only the repository.
 const RECORDS: &[&str] = &[
@@ -384,21 +388,21 @@ const OBJECT_TYPES: &[&str] = &["blob", "tree", "commit", "tag"];
 
 /// Named-path access: listings and status name settings without printing them.
 pub(super) fn access(arguments: &[&str]) -> Access {
-    let start = if arguments.first() == Some(&"-C")
-        && arguments.get(1).is_some_and(|p| Path::new(p).is_absolute())
-    {
-        2
-    } else {
-        0
-    };
-    let Some(&subcommand) = arguments.get(start) else {
+    let Some(invocation) = Invocation::parse(arguments) else {
         return Access::Write;
     };
-    if !RECORDS.contains(&subcommand) || arguments.iter().any(|a| a.starts_with("--output")) {
+    if restoration::paths(&invocation).is_some() {
+        return Access::Restore;
+    }
+    if invocation.execution_override
+        || invocation.elsewhere
+        || !RECORDS.contains(&invocation.subcommand)
+        || invocation.rest.iter().any(|a| a.starts_with("--output"))
+    {
         return Access::Write;
     }
-    let rest = &arguments[start + 1..];
-    match subcommand {
+    let rest = invocation.rest;
+    match invocation.subcommand {
         "ls-files" if !object_ids(rest) => Access::Metadata,
         "status" if !verbose(rest) && !status_object_ids(rest) => Access::Metadata,
         "check-ignore" => Access::Metadata,
@@ -430,22 +434,55 @@ fn status_object_ids(rest: &[&str]) -> bool {
     options(rest).any(|option| matches!(option, "--porcelain=v2" | "--porcelain=2"))
 }
 
-/// The strictest protection among the agent settings this invocation can print.
-pub(super) fn content(
+/// The strictest protection among content and writes, using one parsed invocation.
+#[cfg(test)]
+pub(super) fn footprint(
     arguments: &[&str],
     root: &Path,
     cwd: &Path,
     cwd_known: bool,
     guard: Guard<'_>,
 ) -> Finding {
+    inspected(arguments, root, cwd, cwd_known, guard).finding
+}
+
+pub(super) fn inspected(
+    arguments: &[&str],
+    root: &Path,
+    cwd: &Path,
+    cwd_known: bool,
+    guard: Guard<'_>,
+) -> super::Inspection {
     if matches!(arguments, ["--version" | "-v" | "--help" | "-h"]) {
-        return (Protection::None, None);
+        return super::Inspection::plain((Protection::None, None));
     }
-    let Some(invocation) = Invocation::parse(arguments, root, cwd, cwd_known, guard) else {
+    let Some(invocation) = Invocation::parse(arguments) else {
         // An unmodeled global option hides where the subcommand starts.
+        return super::Inspection::plain(strictest(
+            [Reach::everything(root, guard), writes::unknown(arguments)].into_iter(),
+        ));
+    };
+    let reach = invocation.reach(root, cwd, cwd_known, guard);
+    let mut result = writes::inspect(&invocation, &reach);
+    result.finding = strictest([content_of(&invocation, &reach), result.finding].into_iter());
+    result
+}
+
+#[cfg(test)]
+fn content(
+    arguments: &[&str],
+    root: &Path,
+    cwd: &Path,
+    cwd_known: bool,
+    guard: Guard<'_>,
+) -> Finding {
+    let Some(invocation) = Invocation::parse(arguments) else {
         return Reach::everything(root, guard);
     };
-    let reach = &invocation.reach;
+    content_of(&invocation, &invocation.reach(root, cwd, cwd_known, guard))
+}
+
+fn content_of(invocation: &Invocation<'_>, reach: &Reach<'_>) -> Finding {
     if invocation.execution_override {
         return reach.repository();
     }
@@ -561,65 +598,99 @@ fn revision_paths(reach: &Reach<'_>, rest: &[&str]) -> Finding {
 }
 
 struct Invocation<'a> {
+    arguments: &'a [&'a str],
     subcommand: &'a str,
     rest: &'a [&'a str],
-    reach: Reach<'a>,
+    directories: Vec<&'a str>,
+    elsewhere: bool,
     execution_override: bool,
+    /// Only directory and output globals leave fixed Git inspection equivalent.
+    ordinary: bool,
 }
 
 impl<'a> Invocation<'a> {
-    /// The subcommand after modeled global options, and the folder Git runs in.
-    fn parse(
-        arguments: &'a [&'a str],
-        root: &'a Path,
-        cwd: &Path,
-        cwd_known: bool,
-        guard: Guard<'a>,
-    ) -> Option<Self> {
-        let mut base = cwd.to_path_buf();
+    /// Interpret global options once, retaining directory changes in Git order.
+    fn parse(arguments: &'a [&'a str]) -> Option<Self> {
+        let mut directories = Vec::new();
         let mut elsewhere = false;
         let mut execution_override = false;
+        let mut ordinary = true;
         let mut index = 0;
         loop {
             let word = *arguments.get(index)?;
             let name = option_name(word);
             if word == "-C" {
-                base = absolute(arguments.get(index + 1)?, &base);
+                directories.push(*arguments.get(index + 1)?);
                 index += 2;
             } else if word == "-c" || word == "--config-env" {
                 execution_override |= overrides_execution(arguments.get(index + 1)?);
+                elsewhere |= overrides_repository(arguments.get(index + 1)?);
+                ordinary = false;
                 index += 2;
-            } else if let Some(config) = word.strip_prefix("-c").filter(|_| !word.starts_with("--"))
-            {
-                execution_override |= overrides_execution(config);
-                index += 1;
             } else if let Some(config) = word.strip_prefix("--config-env=") {
                 execution_override |= overrides_execution(config);
+                elsewhere |= overrides_repository(config);
+                ordinary = false;
                 index += 1;
             } else if VALUED_GLOBALS.contains(&word) {
+                arguments.get(index + 1)?;
                 elsewhere |= ["--git-dir", "--work-tree"].contains(&word);
+                ordinary = false;
                 index += 2;
             } else if (name != word && VALUED_GLOBALS.contains(&name))
                 || FLAG_GLOBALS.contains(&word)
                 || name == "--exec-path"
             {
                 elsewhere |= ["--git-dir", "--work-tree"].contains(&name);
+                elsewhere |= word == "--bare";
+                execution_override |= name == "--exec-path";
+                ordinary &= [
+                    "--no-pager",
+                    "-P",
+                    "-p",
+                    "--paginate",
+                    "--no-optional-locks",
+                    "--no-advice",
+                ]
+                .contains(&word);
                 index += 1;
             } else if word.starts_with('-') {
                 return None;
             } else {
                 return Some(Self {
+                    arguments,
                     subcommand: word,
                     rest: &arguments[index + 1..],
+                    directories,
+                    elsewhere,
                     execution_override,
-                    reach: Reach {
-                        root,
-                        base,
-                        guard,
-                        known: cwd_known && !elsewhere,
-                    },
+                    ordinary,
                 });
             }
+        }
+    }
+
+    fn reach<'g>(
+        &self,
+        root: &'g Path,
+        cwd: &Path,
+        cwd_known: bool,
+        guard: Guard<'g>,
+    ) -> Reach<'g> {
+        let base = self
+            .directories
+            .iter()
+            .filter(|path| !path.is_empty())
+            .fold(cwd.to_path_buf(), |base, directory| {
+                resolved(directory, &base)
+            });
+        Reach {
+            root,
+            base,
+            guard,
+            known: cwd_known && !self.elsewhere,
+            root_query: self.ordinary,
+            worktree: OnceCell::new(),
         }
     }
 }
@@ -631,6 +702,24 @@ fn overrides_execution(config: &str) -> bool {
         .unwrap_or_default()
         .to_ascii_lowercase();
     key.starts_with("alias.") || ["core.pager", "diff.external"].contains(&key.as_str())
+}
+
+fn overrides_repository(config: &str) -> bool {
+    let key = config
+        .split('=')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    key.starts_with("include.")
+        || key.starts_with("includeif.")
+        || [
+            "core.worktree",
+            "core.bare",
+            "core.repositoryformatversion",
+            "extensions.worktreeconfig",
+            "extensions.objectformat",
+        ]
+        .contains(&key.as_str())
 }
 
 /// What a footprint without pathspecs covers.
@@ -649,21 +738,84 @@ struct Reach<'a> {
     guard: Guard<'a>,
     /// Whether `base` is where Git runs and finds its repository.
     known: bool,
+    /// Whether the submitted globals permit literal top-pathspec narrowing.
+    root_query: bool,
+    worktree: OnceCell<Option<PathBuf>>,
 }
 
 impl Reach<'_> {
+    fn worktree(&self) -> Option<&Path> {
+        if !self.known {
+            return None;
+        }
+        self.worktree
+            .get_or_init(|| writes::worktree_root(&self.base))
+            .as_deref()
+    }
+
+    /// Literal pathspecs use Git's cwd, or the discovered worktree for top magic.
+    fn path(&self, spec: &str) -> Option<PathBuf> {
+        self.literal_path(spec).map(|path| resolved("", &path))
+    }
+
+    /// Keep the submitted spelling too: a settings symlink remains settings.
+    fn literal_path(&self, spec: &str) -> Option<PathBuf> {
+        if !self.known || spec.contains(['*', '?', '[']) {
+            return None;
+        }
+        if let Some(short) = spec.strip_prefix(":/")
+            && short.as_bytes().first().is_some_and(|byte| {
+                !byte.is_ascii_alphanumeric() && ![b'.', b'_', b'-'].contains(byte)
+            })
+        {
+            return None;
+        }
+        if let Some(top) = spec
+            .strip_prefix(":/")
+            .or_else(|| spec.strip_prefix(":(top)"))
+        {
+            if !self.root_query || Path::new(top).is_absolute() {
+                return None;
+            }
+            return Some(super::submitted_path(top, self.worktree()?));
+        }
+        (!spec.starts_with(':')).then(|| super::submitted_path(spec, &self.base))
+    }
+
     fn settings(root: &Path) -> impl Iterator<Item = (&'static str, PathBuf)> + '_ {
         protected_files()
             .iter()
             .filter(|name| !name.starts_with(".shield") && **name != crate::layout::GROUPED_BUNDLE)
-            .map(move |name| (*name, resolve_existing(&root.join(name))))
+            .flat_map(move |name| {
+                let path = root.join(name);
+                [(*name, path.clone()), (*name, resolve_existing(&path))]
+            })
     }
 
     fn everything(root: &Path, guard: Guard<'_>) -> Finding {
-        strictest(
-            Self::settings(root)
-                .map(|(name, path)| (classify(&path, guard, Access::Index), Some(name.to_owned()))),
-        )
+        strictest(Self::settings(root).map(|(name, path)| {
+            (
+                Self::settings_access(name, &path, guard),
+                Some(name.to_owned()),
+            )
+        }))
+    }
+
+    fn settings_access(name: &str, path: &Path, guard: Guard<'_>) -> Protection {
+        classify(Path::new(name), guard, Access::Index).max(classify(path, guard, Access::Index))
+    }
+
+    /// Settings of the repository being inspected, plus enrolled paths inside it.
+    fn reached_settings(&self) -> Vec<(&'static str, PathBuf)> {
+        let Some(worktree) = self.worktree() else {
+            return Self::settings(self.root).collect();
+        };
+        let mut settings: Vec<_> = Self::settings(worktree).collect();
+        if self.root != worktree {
+            settings
+                .extend(Self::settings(self.root).filter(|(_, path)| path.starts_with(worktree)));
+        }
+        settings
     }
 
     /// Settings at or below `folder`.
@@ -672,35 +824,47 @@ impl Reach<'_> {
             return Self::everything(self.root, self.guard);
         }
         let folder = resolve_existing(folder);
-        strictest(
-            Self::settings(self.root)
-                .filter(|(_, path)| path.starts_with(&folder))
-                .map(|(name, path)| {
-                    (
-                        classify(&path, self.guard, Access::Index),
-                        Some(name.to_owned()),
-                    )
-                }),
-        )
+        let settings = self
+            .reached_settings()
+            .into_iter()
+            .filter(|(_, path)| path.starts_with(&folder))
+            .map(|(name, path)| {
+                (
+                    Self::settings_access(name, &path, self.guard),
+                    Some(name.to_owned()),
+                )
+            });
+        let relocated = self
+            .guard
+            .working_files
+            .into_iter()
+            .flat_map(|scope| scope.protected.iter())
+            .filter(|path| path.starts_with(&folder) || resolve_existing(path).starts_with(&folder))
+            .map(|path| self.named_path(path, &path.to_string_lossy()));
+        strictest(settings.chain(relocated))
     }
 
-    /// The repository Git finds from `base`. It holds the project's settings
-    /// unless it lies beside the project.
+    /// Settings in Git's actual repository, with conservative fallback on failure.
     fn repository(&self) -> Finding {
-        let base = resolve_existing(&self.base);
-        let root = resolve_existing(self.root);
-        if !self.known || base.starts_with(&root) || root.starts_with(&base) {
-            Self::everything(self.root, self.guard)
-        } else {
-            (Protection::None, None)
+        if self.worktree().is_some() {
+            return strictest(self.reached_settings().into_iter().map(|(name, path)| {
+                (
+                    Self::settings_access(name, &path, self.guard),
+                    Some(name.to_owned()),
+                )
+            }));
         }
+        Self::everything(self.root, self.guard)
     }
 
     /// A path the command names, by its own protection.
     fn named(&self, path: &str, submitted: &str) -> Finding {
-        let path = absolute(path, &self.base);
-        let level = classify(&path, self.guard, Access::Index).max(classify(
-            &resolve_existing(&path),
+        self.named_path(&super::submitted_path(path, &self.base), submitted)
+    }
+
+    fn named_path(&self, path: &Path, submitted: &str) -> Finding {
+        let level = classify(path, self.guard, Access::Index).max(classify(
+            &resolved("", path),
             self.guard,
             Access::Index,
         ));
@@ -718,14 +882,16 @@ impl Reach<'_> {
         if path.starts_with("./") || path.starts_with("../") {
             return self.named(path, submitted);
         }
-        if !resolve_existing(&self.base).starts_with(resolve_existing(self.root)) {
+        let worktree = self.worktree();
+        if worktree.is_none()
+            && !resolve_existing(&self.base).starts_with(resolve_existing(self.root))
+        {
             return self.repository();
         }
-        Self {
-            base: self.root.to_path_buf(),
-            ..*self
-        }
-        .named(path, submitted)
+        self.named_path(
+            &super::submitted_path(path, worktree.unwrap_or(self.root)),
+            submitted,
+        )
     }
 
     fn scoped(&self, pathspecs: &[&str], scope: Scope) -> Finding {
@@ -736,20 +902,23 @@ impl Reach<'_> {
             };
         }
         strictest(pathspecs.iter().map(|spec| {
-            // Magic and wildcard pathspecs can match anywhere in the repository.
-            if spec.starts_with(':') || spec.contains(['*', '?', '[']) {
-                self.repository()
-            } else {
-                strictest(
+            match self.literal_path(spec) {
+                Some(path) => strictest(
                     [
-                        self.named(spec, spec),
-                        self.below(&absolute(spec, &self.base)),
+                        self.named_path(&path, spec),
+                        self.below(&resolved("", &path)),
                     ]
                     .into_iter(),
-                )
+                ),
+                None => self.repository(),
             }
         }))
     }
+}
+
+/// Resolve links before cleaning `..`, including nonexistent leaf destinations.
+fn resolved(path: &str, base: &Path) -> PathBuf {
+    absolute("", &resolve_existing(&super::submitted_path(path, base)))
 }
 
 /// Pathspecs Git is sure to use: every word after `--`, and earlier words that
@@ -900,6 +1069,96 @@ fn summary(rest: &[&str]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn git_global_options_match_real_git_directory_syntax() {
+        let root = assert_fs::TempDir::new().unwrap();
+        std::fs::create_dir(root.path().join("src")).unwrap();
+        for arguments in [
+            ["-C", "src", "--version"].as_slice(),
+            ["-c", "acme.setting=value", "--version"].as_slice(),
+        ] {
+            let output = crate::test_support::git()
+                .current_dir(root.path())
+                .args(arguments)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{arguments:?}: {output:?}");
+        }
+        for argument in ["-Csrc", "-cacme.setting=value"] {
+            let output = crate::test_support::git()
+                .current_dir(root.path())
+                .args([argument, "--version"])
+                .output()
+                .unwrap();
+            println!(
+                "{argument}: success={} {}",
+                output.status.success(),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(
+                !output.status.success(),
+                "attached global unexpectedly accepted: {output:?}"
+            );
+            assert!(Invocation::parse(&[argument, "show", "HEAD"]).is_none());
+        }
+    }
+
+    #[test]
+    fn git_global_options_preserve_named_path_access() {
+        for arguments in [
+            &["-C", "src", "show", "HEAD", "--", ".shield/config.yml"][..],
+            &["-C", "/acme", "-C", "src", "show", "HEAD"],
+            &["--no-pager", "-C", "src", "-C", "..", "show", "HEAD"],
+            &["-c", "color.ui=never", "show", "HEAD"],
+            &["--config-env=color.ui=ACME_COLOR", "show", "HEAD"],
+        ] {
+            assert!(access(arguments) == Access::Index, "{arguments:?}");
+        }
+        for arguments in [
+            &["-C", "src", "status", "--short", ".mcp.json"][..],
+            &["--no-pager", "-C", "src", "ls-files", ".mcp.json"],
+        ] {
+            assert!(access(arguments) == Access::Metadata, "{arguments:?}");
+        }
+        for arguments in [
+            &["-C", "src", "diff", "--output=.shield/config.yml"][..],
+            &["--no-pager", "show", "--output", ".mcp.json"],
+            &["-c", "alias.show=!acme", "show"],
+            &["-c", "diff.external=acme", "diff"],
+            &["-Csrc", "show", "HEAD"],
+            &["-cdiff.external=acme", "diff"],
+            &["--config-env=core.pager=ACME_PAGER", "show"],
+            &["--git-dir=elsewhere", "show"],
+            &["--exec-path=elsewhere", "show"],
+            &["--future-global", "show"],
+            &["-C"],
+            &["-c"],
+        ] {
+            assert!(access(arguments) == Access::Write, "{arguments:?}");
+        }
+    }
+
+    #[test]
+    fn git_global_options_resolve_directories_without_consuming_option_values_as_paths() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let root = root.path().canonicalize().unwrap();
+        let arguments = ["-C", "src", "-C", "", "-C", "..", "-c", "-C", "show"];
+        let invocation = Invocation::parse(&arguments).unwrap();
+        let guard = Guard {
+            cache: None,
+            allow: crate::review::path_access::PathAccess::default(),
+            working_files: None,
+        };
+        let reach = invocation.reach(&root, &root, true, guard);
+        assert_eq!(reach.base, root);
+        assert!(reach.known);
+        assert!(!invocation.ordinary);
+        let absolute = root.join("elsewhere");
+        let arguments = ["-C", "src", "-C", absolute.to_str().unwrap(), "status"];
+        let invocation = Invocation::parse(&arguments).unwrap();
+        assert_eq!(invocation.reach(&root, &root, true, guard).base, absolute);
+    }
 
     #[test]
     fn git_writes_of_policy_files_from_other_content_are_blocked_or_asked() {

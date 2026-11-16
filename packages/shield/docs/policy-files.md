@@ -91,8 +91,12 @@ confirm its own change: commands that change policy refuse `--json` and
 non-interactive use, and native hooks block agents from writing `.shield/`.
 
 You can also edit the files by hand. Shield reads them on the next request; an
-edit that makes them invalid makes every request ask until it is fixed, and
-`shield status` names the problem. A command writes on top of your edit rather
+edit that makes them invalid prevents policy from authorizing requests, and
+`shield status` names the problem. Supported native requests can still use an
+exact one-time review through `request_approve`; fixed protected paths stay
+closed. For Git conflict recovery, see
+[allowing one blocked request](project-review.md#allowing-one-blocked-request).
+A command writes on top of your edit rather
 than discarding it. If the files change between showing a change and your
 confirmation, Shield refuses and asks you to run the command again.
 

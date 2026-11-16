@@ -141,7 +141,7 @@ fn question(
 
 pub(crate) fn confirmation(context: &Context, args: &Value) -> Result<String, Error> {
     let (ids, list) = hook_approval::requested(args)?;
-    let state = project::checkpoint(context)?;
+    let state = project::authorization(context)?;
     if terminal(&state, context, &ids, list)?.is_some() {
         return Err(Error::Invalid("request is terminal"));
     }
@@ -154,7 +154,7 @@ pub(crate) fn confirmation(context: &Context, args: &Value) -> Result<String, Er
 
 pub(crate) fn approve(context: &Context, args: &Value, confirmed: bool) -> Result<Value, Error> {
     let (ids, list) = hook_approval::requested(args)?;
-    let before = project::checkpoint(context)?;
+    let before = project::authorization(context)?;
     if let Some(value) = terminal(&before, context, &ids, list)? {
         return Ok(value);
     }

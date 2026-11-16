@@ -167,7 +167,7 @@ fn servers(value: &Value, alias: &str) -> Result<(), Error> {
         let servers = servers
             .as_object()
             .ok_or(Error::Invalid("invalid Claude MCP scope"))?;
-        mcp_scopes::no_alias(alias, servers.keys().map(String::as_str))?;
+        mcp_scopes::no_alias("claude", alias, servers.keys().map(String::as_str))?;
     }
     Ok(())
 }

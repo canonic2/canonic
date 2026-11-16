@@ -1,4 +1,5 @@
 //! Canonical project MCP tools with connection-owned diagnostic and paging evidence.
+mod admin_pages;
 mod apply;
 mod confirmation;
 
@@ -214,12 +215,17 @@ impl From<crate::policy::Error> for Failure {
     }
 }
 
+type AdminReview = (
+    std::time::Instant,
+    String,
+    super::admin::Prepared,
+    Option<admin_pages::Pages>,
+);
+
 pub(crate) struct Connection {
     owner: Mutex<Option<super::proposal_lifecycle::Lease>>,
     views: Mutex<views::Views>,
-    admin: Mutex<
-        std::collections::BTreeMap<u64, (std::time::Instant, String, super::admin::Prepared)>,
-    >,
+    admin: Mutex<BTreeMap<u64, AdminReview>>,
     admin_sequence: std::sync::atomic::AtomicU64,
 }
 pub(crate) fn needs_runtime(name: &str, args: &Value) -> bool {
@@ -366,7 +372,16 @@ pub(crate) fn admin_confirmation(
     checkpoint()?;
     {
         let mut pending = connection.admin.lock().map_err(|_| Error::Locked)?;
-        pending.retain(|_, (created, _, _)| created.elapsed() < std::time::Duration::from_mins(5));
+        pending
+            .retain(|_, (created, _, _, _)| created.elapsed() < std::time::Duration::from_mins(5));
+        let key = admin_key(name, args);
+        if let Some((id, entry)) = pending.iter_mut().find(|(_, (_, candidate, _, pages))| {
+            *candidate == key && pages.as_ref().is_some_and(|pages| !pages.awaiting)
+        }) {
+            let message = entry.3.as_mut().expect("paged review").present()?;
+            entry.0 = std::time::Instant::now();
+            return Ok(Some((message, *id)));
+        }
         if pending.len() >= 8 {
             return Err(Error::Overloaded);
         }
@@ -379,28 +394,36 @@ pub(crate) fn admin_confirmation(
         .admin
         .lock()
         .map_err(|_| Error::Invalid("administrative review state invalid"))?;
-    pending.retain(|_, (created, _, _)| created.elapsed() < std::time::Duration::from_mins(5));
+    pending.retain(|_, (created, _, _, _)| created.elapsed() < std::time::Duration::from_mins(5));
     if pending.len() >= 8 {
         return Err(Error::Overloaded);
     }
-    let message = if reconciled {
+    let review = prepared.review();
+    let mut message = if reconciled {
         String::new()
     } else {
         format!(
             "Confirm this Shield administrative change?\n{}",
-            serde_json::to_string_pretty(&prepared.review())
+            serde_json::to_string_pretty(&review)
                 .map_err(|_| Error::Invalid("administrative review encoding"))?
         )
     };
-    if message.len() > 48 * 1024 {
-        return Err(Error::Invalid(
-            "administrative review exceeds the in-session form bound; prepare a smaller change",
-        ));
+    let mut pages = if message.len() > 48 * 1024 {
+        Some(admin_pages::Pages::new(&message)?)
+    } else {
+        None
+    };
+    if let Some(pages) = &mut pages {
+        pages.context = format!(
+            "Tool: {name}. Project: {}.",
+            review["project"].as_str().unwrap_or(&context.project_root)
+        );
+        message = pages.present()?;
     }
     let id = connection
         .admin_sequence
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    pending.insert(id, (std::time::Instant::now(), key, prepared));
+    pending.insert(id, (std::time::Instant::now(), key, prepared, pages));
     Ok((!reconciled).then_some((message, id)))
 }
 
@@ -422,12 +445,14 @@ fn admin_call(
     } else {
         let mut pending = connection.admin.lock().map_err(|_| Error::Locked)?;
         let key = admin_key(name, args);
-        let completed = pending.iter().find_map(|(id, (_, candidate, prepared))| {
-            (candidate == &key && prepared.committed_result().is_some()).then_some(*id)
-        });
+        let completed = pending
+            .iter()
+            .find_map(|(id, (_, candidate, prepared, _))| {
+                (candidate == &key && prepared.committed_result().is_some()).then_some(*id)
+            });
         completed.and_then(|id| pending.remove(&id))
     };
-    if let Some((created, key, prepared)) = retained {
+    if let Some((created, key, prepared, mut pages)) = retained {
         if !confirmed && prepared.committed_result().is_none() {
             return Err(Error::ApprovalRequired);
         }
@@ -436,6 +461,29 @@ fn admin_call(
         }
         if created.elapsed() >= std::time::Duration::from_mins(5) {
             return Err(Error::StaleSnapshot);
+        }
+        if let Some(page_state) = &mut pages {
+            if !page_state.awaiting {
+                return Err(Error::StaleSnapshot);
+            }
+            page_state.awaiting = false;
+            page_state.accepted += 1;
+            if !page_state.remaining.is_empty() {
+                checkpoint()?;
+                let result = json!({"review_status":"more_pages","applied":false,
+                    "reviewed_pages":page_state.accepted,"total_pages":page_state.total,
+                    "retry_tool":name,"retry_arguments":args,
+                    "next_action":"Call the same tool with the exact retry_arguments to present the next human confirmation page. Nothing applies until every page is accepted. Declining or cancelling discards this review."});
+                let id = connection
+                    .admin_sequence
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let mut pending = connection.admin.lock().map_err(|_| Error::Locked)?;
+                if pending.len() >= 8 {
+                    return Err(Error::Overloaded);
+                }
+                pending.insert(id, (std::time::Instant::now(), key, prepared, pages.take()));
+                return Ok(result);
+            }
         }
         return prepared.commit(context, checkpoint);
     }
@@ -480,6 +528,11 @@ pub(crate) fn call_with_bound_confirmation(
     confirmed: bool,
     binding: Option<u64>,
 ) -> Value {
+    let target = match history_target(context, name, args) {
+        Ok(target) => target,
+        Err(error) => return failure(context, &error),
+    };
+    let context = target.as_ref().unwrap_or(context);
     let normalized = if documentation::handles(name) {
         None
     } else if needs_runtime(name, args) {
@@ -1385,14 +1438,19 @@ fn history_tool(
     args: &Value,
 ) -> Result<Value, Error> {
     if name == "history_show" {
-        fields(args, &["entry_id", "section", "cursor", "limit"])?;
+        fields(args, &["project", "entry_id", "section", "cursor", "limit"])?;
         required(args, "entry_id")?;
-        return history::page(context, name, args);
+        return Ok(history_selection(
+            context,
+            args,
+            history::page(context, name, args)?,
+        ));
     }
     fields(
         args,
         &[
             "entry_id",
+            "project",
             "denied",
             "approved",
             "agent",
@@ -1404,7 +1462,59 @@ fn history_tool(
     )?;
     selector(args, "entry_id")?;
     let _ = views;
-    history::page(context, name, args)
+    Ok(history_selection(
+        context,
+        args,
+        history::page(context, name, args)?,
+    ))
+}
+
+fn history_selection(context: &Context, args: &Value, mut data: Value) -> Value {
+    if args.get("project").is_some() {
+        data["project"] = json!(context.project_root);
+        if let Some(route) = data["observations_list"].as_object_mut() {
+            route.insert("project".into(), json!(context.project_root));
+        }
+        for row in data["entries"].as_array_mut().into_iter().flatten() {
+            if let Some(route) = row["observations_list"].as_object_mut() {
+                route.insert("project".into(), json!(context.project_root));
+            }
+        }
+    }
+    data
+}
+
+/// Explicit, read-only history selection does not retarget this connection's
+/// policy, approvals, administrative operations or subsequent calls.
+fn history_target(context: &Context, name: &str, args: &Value) -> Result<Option<Context>, Error> {
+    if !["history_list", "history_show"].contains(&name) {
+        return Ok(None);
+    }
+    let Some(path) = text(args, "project")? else {
+        return Ok(None);
+    };
+    let path = std::path::Path::new(path);
+    if !path.is_absolute() {
+        return Err(Error::Invalid(
+            "project must be an absolute enrolled project root",
+        ));
+    }
+    let root = path.canonicalize()?;
+    if !root.starts_with(std::path::Path::new(&context.project_root)) {
+        return Err(Error::Invalid(
+            "history project must be inside this connection's project; connect Shield in the target project to inspect history outside that scope",
+        ));
+    }
+    let selected = super::open_diagnostics(&root)?;
+    if std::path::Path::new(&selected.project_root) != root {
+        return Err(Error::Invalid(
+            "project must name the enrolled project root exactly",
+        ));
+    }
+    let mut target = context.clone();
+    target.project_root = selected.project_root;
+    target.project_id = selected.project_id;
+    Ok(Some(target))
 }
 fn discovery(context: &Context, name: &str, args: &Value) -> Result<Value, Error> {
     super::page::validate(context, name, args)?;

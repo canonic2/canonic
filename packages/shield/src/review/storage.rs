@@ -895,6 +895,30 @@ impl Store {
     ) -> Result<Value, Error> {
         self.update_inner(context, checkpoint, operation, Self::read_checkpoint)
     }
+    /// Change exact native authorization only. No source capture, compilation,
+    /// policy publication or settings migration may stand in the way of repair.
+    /// Callers must validate their consumer, confirmation and fixed footprint;
+    /// this writer supplies the same checkpoint validation and durable transaction.
+    pub(in crate::review) fn update_authorization(
+        &self,
+        context: &Context,
+        operation: impl FnOnce(&mut State) -> Result<Value, Error>,
+    ) -> Result<Value, Error> {
+        let (lock, mut state) = self.locked_state(&|| Ok(()), Self::read_checkpoint)?;
+        state.check(context)?;
+        state.compact_authorization();
+        let result = operation(&mut state)?;
+        if crate::json::encoded_len(&result).map_err(|_| Error::Invalid("response encoding"))?
+            > 1_048_576
+        {
+            return Err(crate::policy::Error::Limit.into());
+        }
+        state.compact_authorization();
+        super::proposal_lifecycle::refresh_inspection(&mut state);
+        self.write_inner(&mut state, false)?;
+        lock.release()?;
+        Ok(result)
+    }
     /// Optional observational capture may discover under lock that nothing changed.
     pub(in crate::review) fn update_checkpoint_if_changed(
         &self,
@@ -929,9 +953,7 @@ impl Store {
         state.compact_authorization();
         checkpoint()?;
         let result = operation(&mut state)?;
-        if serde_json::to_vec(&result)
-            .map_err(|_| Error::Invalid("response encoding"))?
-            .len()
+        if crate::json::encoded_len(&result).map_err(|_| Error::Invalid("response encoding"))?
             > 1_048_576
         {
             return Err(crate::policy::Error::Limit.into());
@@ -990,10 +1012,13 @@ impl Store {
         Ok((decision, result))
     }
     fn write(&self, state: &mut State) -> Result<(), Error> {
+        self.write_inner(state, true)
+    }
+    fn write_inner(&self, state: &mut State, migrate_settings: bool) -> Result<(), Error> {
         let _trace = crate::diagnostics::trace::span("state.write");
         // Settings an earlier checkpoint held move into the policy files with
         // the first write that can; until then the checkpoint keeps them.
-        if super::settings::pending(state) {
+        if migrate_settings && super::settings::pending(state) {
             let _ = super::settings::convert(state);
         }
         let history_lock = if state.history_control {

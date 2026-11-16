@@ -14,7 +14,7 @@ remain available when you choose to use them directly.
 | A command proceeds despite a recorded Ask | [Codex Ask handling](#a-command-runs-even-though-policy-says-ask) |
 | An unexpected Allow or Deny | [Inspect the request and matching rule](#the-request-was-allowed-or-blocked-unexpectedly) |
 | A read-only GitHub GraphQL query is blocked | [Check versions, scope and query form](#a-read-only-github-graphql-query-is-blocked) |
-| A YAML edit has no effect or every request asks | [Check the policy files](#i-edited-a-rule-but-behavior-did-not-change) |
+| A YAML edit has no effect or requests report invalid policy | [Check the policy files](#i-edited-a-rule-but-behavior-did-not-change) |
 | An old proposal cannot be applied | [Stale proposals](#a-proposal-is-stale) |
 | A pack proposal reports `candidate_error` | [Inconsistent pack candidate](#a-pack-proposal-reports-candidate_error) |
 | Requests fail naming the compiled policy folder | [Compiled cache](#the-compiled-policy-cache-cannot-load) |
@@ -80,8 +80,10 @@ agent registration; run `shield mcp setup` there to connect an agent. A one-time
 approval is used once, whichever folder uses it first.
 
 A clone that lacks a pack release its lock file names fetches it from the
-registry on `shield status`. Invalid files and missing packs make every request
-ask, with the problem in the message. Corrupt state and unsupported formats are
+registry on `shield status`. Invalid files and missing packs prevent ordinary
+policy authorization. Supported native requests can use exact in-session
+review, with the problem in the message; fixed paths remain closed.
+Corrupt state and unsupported formats are
 separate problems with their own recovery.
 
 New launch entries resolve `shield` from PATH and the project from the agent's
@@ -214,8 +216,12 @@ next one. Run:
 shield status
 ```
 
-If status reports the files' error, the edit made them invalid and every
-request asks until you fix it. Otherwise inspect the request with
+If status reports the files' error, fix the invalid files. A supported native
+request can still use `request_approve` and an identical retry; supported Git
+restorations can repair conflicted policy files through that review. Direct
+policy edits, state and caches remain protected. See
+[allowing one blocked request](project-review.md#allowing-one-blocked-request).
+Otherwise inspect the request with
 `shield history list` to see which rule decided it; another rule may take precedence.
 Use `shield pack add` to acquire a new pack release rather than replacing its
 artifact by hand.

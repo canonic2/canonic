@@ -126,6 +126,22 @@ fn tree_changing_commands_ask_git_whether_the_policy_files_change() {
             &["-C", "src", "switch", "acme-branch"],
             vec![strings(&["acme-branch"])],
         ),
+        (
+            &[
+                "--no-pager",
+                "-C",
+                "src",
+                "-C",
+                "..",
+                "switch",
+                "acme-branch",
+            ],
+            vec![strings(&["acme-branch"])],
+        ),
+        (
+            &["-C", "", "switch", "acme-branch"],
+            vec![strings(&["acme-branch"])],
+        ),
     ] {
         assert_eq!(asked(&root, arguments), Ok(expected), "{arguments:?}");
     }
@@ -183,6 +199,7 @@ fn commands_that_keep_the_tree_ask_nothing_and_unpredictable_ones_ask() {
         &["-c", "core.useReplaceRefs=false", "reset", "--hard"],
         &["--no-replace-objects", "switch", "acme-branch"],
         &["--git-dir", "elsewhere.git", "switch", "acme-branch"],
+        &["--exec-path=elsewhere", "switch", "acme-branch"],
     ] {
         assert_eq!(
             asked(&root, arguments),
@@ -328,17 +345,16 @@ fn root_pathspecs_resolve_from_the_git_worktree_including_gate_entries() {
             assert!(level(&arguments) == Protection::None, "{arguments:?}");
         }
     }
-    // Whole-tree, policy and agent-settings selections still cannot bypass protection.
+    // Literal policy files require review; whole trees, unknown selections and
+    // agent settings retain their protected boundary.
     for spec in [
         ":/",
         ":/!src",
         ":/^src",
         ":/:.shield",
         ":(top)",
-        ":/.shield/config.yml",
         ":(top).shield",
         ":/.claude/settings.json",
-        ":/src/../.shield/config.yml",
         ":/src/*.txt",
         ":(icase,top)src/app.txt",
     ] {
@@ -348,9 +364,20 @@ fn root_pathspecs_resolve_from_the_git_worktree_including_gate_entries() {
             "{spec}"
         );
     }
-    // A different repository's root must not be confused with the Shield project.
+    for spec in [":/.shield/config.yml", ":/src/../.shield/config.yml"] {
+        assert_eq!(
+            level(&["-C", ".gate/repos/public", "checkout", "--ours", "--", spec]),
+            Protection::Undetermined,
+            "{spec}"
+        );
+    }
+    // A different repository's own protected paths stay protected; ordinary
+    // source is resolved there rather than against the enrolled project.
     git(&root.join("src"), &["init", "-q"]);
-    assert!(level(&["-C", "src", "checkout", "--", ":/.shield/config.yml"]) == Protection::None);
+    assert!(
+        level(&["-C", "src", "checkout", "--", ":/.shield/config.yml"]) == Protection::Undetermined
+    );
+    assert!(level(&["-C", "src", "checkout", "--", ":/app.txt"]) == Protection::None);
     // Overrides and unavailable roots retain conservative handling.
     for arguments in [
         &[
@@ -409,6 +436,224 @@ fn worktree_discovery_is_shared_by_all_queries_in_an_invocation() {
         assert_eq!(trace.recorded_count("git.inspection_processes"), processes);
         drop(scope);
         trace.finish("success");
+    }
+    for (arguments, processes) in [
+        (&["show", "HEAD:src/app.txt", "HEAD:src/other.txt"][..], 1),
+        (&["diff", "--", ":/src/a", ":/src/b"][..], 1),
+        (&["status", "--short"][..], 0),
+        (&["log", "--oneline"][..], 0),
+    ] {
+        let trace = log
+            .request("command", "git-shared-footprint", None, None)
+            .unwrap();
+        let scope = trace.enter();
+        assert_eq!(
+            super::super::footprint(arguments, &root, &root, true, guard()).0,
+            Protection::None
+        );
+        assert_eq!(trace.recorded_count("git.worktree_root_queries"), processes);
+        assert_eq!(trace.recorded_count("git.inspection_processes"), processes);
+        drop(scope);
+        trace.finish("success");
+    }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn target_worktree_paths_protect_reads_and_writes() {
+    let (_folder, root) = project();
+    let entry = root.join(".repos/private");
+    std::fs::create_dir_all(&entry).unwrap();
+    git(&entry, &["init", "-q"]);
+    git(&entry, &["config", "core.worktree", root.to_str().unwrap()]);
+    git(&entry, &["config", "extensions.worktreeConfig", "true"]);
+    std::fs::write(root.join("src/app.txt"), "Acme source\n").unwrap();
+    std::fs::write(root.join(".mcp.json"), "{}\n").unwrap();
+    git(&entry, &["add", "--", ":/.shield", ":/src", ":/.mcp.json"]);
+    git(&entry, &["commit", "-q", "-m", "Acme target fixture"]);
+    let base = git(&entry, &["rev-parse", "HEAD"]);
+    let child = linked_worktree(&root, &entry, &base);
+    let child_entry = child.join(".repos/private");
+    std::fs::rename(child_entry.join(".mcp.json"), child.join(".mcp.json")).unwrap();
+    let ordinary = root.join("ordinary");
+    std::fs::create_dir_all(ordinary.join(".shield")).unwrap();
+    std::fs::create_dir_all(ordinary.join("src")).unwrap();
+    std::fs::write(ordinary.join(".shield/config.yml"), "schema_version: 1\n").unwrap();
+    std::fs::write(ordinary.join("src/app.txt"), "Acme source\n").unwrap();
+    std::fs::write(ordinary.join(".mcp.json"), "{}\n").unwrap();
+    git(&ordinary, &["init", "-q"]);
+    git(&ordinary, &["add", "--", ".shield", "src", ".mcp.json"]);
+    git(
+        &ordinary,
+        &["commit", "-q", "-m", "Acme ordinary repository"],
+    );
+    for (cwd, target) in [
+        (&ordinary, &ordinary),
+        (&entry, &root),
+        (&child_entry, &child),
+    ] {
+        for spec in [
+            ":/.shield/config.yml",
+            ":(top).mcp.json",
+            ":/.shield/state/state.json",
+            ":/.shield/cache/acme",
+            ":/.shield/.gitignore",
+        ] {
+            let args = [
+                "-C",
+                cwd.to_str().unwrap(),
+                "checkout",
+                "--ours",
+                "--",
+                spec,
+            ];
+            let finding = policy_files(&args, &root, &root, true, guard());
+            assert_eq!(
+                finding.0,
+                if spec == ":/.shield/config.yml" {
+                    Protection::Undetermined
+                } else {
+                    Protection::Blocked
+                },
+                "{args:?}: {finding:?}"
+            );
+            assert!(
+                Path::new(finding.1.as_deref().unwrap()).starts_with(target),
+                "{finding:?}"
+            );
+        }
+        for (rest, expected) in [
+            (
+                &["show", "HEAD", "--", ":/.mcp.json"][..],
+                Protection::Sensitive,
+            ),
+            (&["show", "HEAD:.mcp.json"][..], Protection::Sensitive),
+            (
+                &["show", "HEAD", "--", ":/src/app.txt"][..],
+                Protection::None,
+            ),
+            (&["show", "HEAD:src/app.txt"][..], Protection::None),
+            (
+                &["show", "HEAD", "--", ":/.shield/state/state.json"][..],
+                Protection::Blocked,
+            ),
+            (&["checkout", "--", ":/src/app.txt"][..], Protection::None),
+        ] {
+            let mut args = vec!["-C", cwd.to_str().unwrap()];
+            args.extend_from_slice(rest);
+            assert_eq!(
+                super::super::footprint(&args, &root, &root, true, guard()).0,
+                expected,
+                "{args:?}"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn target_worktree_paths_resolve_links_before_parent_components() {
+    let (_folder, root) = project();
+    std::fs::create_dir_all(root.join(".shield/nested")).unwrap();
+    std::os::unix::fs::symlink(root.join(".shield/nested"), root.join("src/link")).unwrap();
+    git(&root, &["init", "-q"]);
+    let args = ["-C", "src/link", "-C", "..", "checkout", "--", "config.yml"];
+    assert_eq!(
+        policy_files(&args, &root, &root, true, guard()).0,
+        Protection::Undetermined
+    );
+    for spec in [":/src/link/../config.yml", ":/src/link/../new.yml"] {
+        assert_eq!(
+            policy_files(&["checkout", "--", spec], &root, &root, true, guard()).0,
+            Protection::Undetermined,
+            "{spec}"
+        );
+    }
+    std::fs::write(root.join("src/settings.txt"), "{}\n").unwrap();
+    std::os::unix::fs::symlink(root.join("src/settings.txt"), root.join(".mcp.json")).unwrap();
+    for spec in [":/.mcp.json", ":(top).mcp.json", ":/src/settings.txt"] {
+        assert_eq!(
+            super::super::footprint(&["show", "HEAD", "--", spec], &root, &root, true, guard()).0,
+            Protection::Sensitive,
+            "{spec}"
+        );
+        assert_eq!(
+            policy_files(&["checkout", "--", spec], &root, &root, true, guard()).0,
+            Protection::Blocked,
+            "{spec}"
+        );
+    }
+    for spec in [
+        ":/src/link/../state/state.json",
+        ":(top)src/link/../cache/acme",
+    ] {
+        assert_eq!(
+            super::super::footprint(&["show", "HEAD", "--", spec], &root, &root, true, guard()).0,
+            Protection::Blocked,
+            "{spec}"
+        );
+    }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn target_worktree_paths_keep_explicit_policy_and_relocated_settings_protected() {
+    let (_folder, root) = project();
+    git(&root, &["init", "-q"]);
+    std::fs::create_dir(root.join("policy")).unwrap();
+    std::fs::write(root.join("policy/acme.yml"), "schema_version: 1\n").unwrap();
+    crate::layout::bind(
+        &root.join("policy/acme.yml"),
+        crate::layout::Base::Invocation,
+    );
+    crate::layout::select(&root).unwrap();
+    let working = crate::location::WorkingFiles {
+        protected: vec![root.join("src/agent-home")],
+        ..Default::default()
+    };
+    let guard = Guard {
+        working_files: Some(&working),
+        ..guard()
+    };
+    for spec in [
+        ":/policy/acme.yml",
+        ":(top)policy",
+        ":/src/agent-home",
+        ":/src/agent-home/new.json",
+        ":/src",
+    ] {
+        assert_eq!(
+            policy_files(&["checkout", "--", spec], &root, &root, true, guard).0,
+            if spec == ":/policy/acme.yml" {
+                Protection::Undetermined
+            } else {
+                Protection::Blocked
+            },
+            "{spec}"
+        );
+    }
+    assert_eq!(
+        super::super::footprint(&["show", "HEAD", "--", ":/src"], &root, &root, true, guard).0,
+        Protection::Sensitive
+    );
+    for args in [
+        &["-C", "missing", "show", "HEAD", "--", ":/src/a", ":/src/b"][..],
+        &["--git-dir=elsewhere", "show", "HEAD:src/a"],
+        &["-c", "include.path=elsewhere", "show", "HEAD:src/a"],
+        &[
+            "-c",
+            "core.worktree=elsewhere",
+            "show",
+            "HEAD",
+            "--",
+            ":/src/a",
+        ],
+    ] {
+        assert_ne!(
+            super::super::footprint(args, &root, &root, true, guard).0,
+            Protection::None,
+            "{args:?}"
+        );
     }
 }
 
@@ -496,6 +741,67 @@ fn real_git_answers_whether_committed_content_changes_the_policy_files() {
     // Switching to a branch whose policy files match the working tree is
     // ordinary.
     assert!(level(&["switch", "acme-same"], &root) == Protection::None);
+}
+
+#[test]
+#[cfg(not(windows))]
+fn tree_queries_ignore_global_agent_homes_but_detect_relocated_worktree_settings() {
+    let (_folder, root) = project();
+    let global = assert_fs::TempDir::new().unwrap();
+    std::fs::create_dir(root.join("agent-home")).unwrap();
+    std::fs::write(root.join("agent-home/settings.json"), "{}\n").unwrap();
+    git(&root, &["init", "-q"]);
+    git(&root, &["add", "--", ".shield", "agent-home"]);
+    git(&root, &["commit", "-q", "-m", "Acme settings base"]);
+    let base = git(&root, &["rev-parse", "HEAD"]);
+    let working = crate::location::WorkingFiles {
+        protected: vec![global.path().to_path_buf(), root.join("agent-home")],
+        ..Default::default()
+    };
+    let guard = Guard {
+        working_files: Some(&working),
+        ..guard()
+    };
+    assert_eq!(
+        policy_files(&["switch", &base], &root, &root, true, guard).0,
+        Protection::None
+    );
+    std::fs::write(root.join("agent-home/settings.json"), "{\"acme\":true}\n").unwrap();
+    git(&root, &["commit", "-q", "-am", "Acme settings update"]);
+    let changed = git(&root, &["rev-parse", "HEAD"]);
+    git(&root, &["reset", "--hard", &base]);
+    assert_eq!(
+        policy_files(&["switch", &changed], &root, &root, true, guard).0,
+        Protection::Undetermined
+    );
+    assert_eq!(
+        policy_files(
+            &["checkout", "--", global.path().to_str().unwrap()],
+            &root,
+            &root,
+            true,
+            guard
+        )
+        .0,
+        Protection::Blocked
+    );
+    std::fs::write(root.join("src/app.txt"), "Acme source-only update\n").unwrap();
+    git(&root, &["add", "--", "src/app.txt"]);
+    git(&root, &["commit", "-q", "-m", "Acme source update"]);
+    let source_changed = git(&root, &["rev-parse", "HEAD"]);
+    git(&root, &["reset", "--hard", &base]);
+    let enclosing = crate::location::WorkingFiles {
+        protected: vec![root.parent().unwrap().to_path_buf()],
+        ..Default::default()
+    };
+    let guard = Guard {
+        working_files: Some(&enclosing),
+        ..guard
+    };
+    assert_eq!(
+        policy_files(&["switch", &source_changed], &root, &root, true, guard).0,
+        Protection::Undetermined
+    );
 }
 
 #[test]

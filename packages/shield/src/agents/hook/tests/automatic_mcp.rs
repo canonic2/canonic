@@ -8,6 +8,127 @@ fn automatic_mcp_matching_host_scope_fixture() {
     host_scopes::check();
 }
 
+fn accept_admin_page(
+    context: &review::Context,
+    connection: &review::mcp::Connection,
+    args: &Value,
+    binding: u64,
+) -> Value {
+    review::mcp::call_with_bound_confirmation(
+        context,
+        connection,
+        "mcp_setup",
+        args,
+        &|| Ok(()),
+        true,
+        Some(binding),
+    )
+}
+
+#[test]
+#[ignore = "run by parent with isolated agent configuration homes"]
+fn automatic_mcp_matching_large_admin_fixture() {
+    for mode in ["apply", "decline", "stale", "changed_arguments"] {
+        let (_root, mut context) = fixture("recommended");
+        context.surface = "mcp".into();
+        context.agent = Some("codex".into());
+        context.connection_id = Some(format!("paged-{mode}"));
+        context.confirmed_mcp_forms = true;
+        let root = Path::new(&context.project_root);
+        let path = root.join(".codex/config.toml");
+        let source = format!("# {}\n", "unrelated-setting-α".repeat(4000));
+        fs::write(&path, &source).unwrap();
+        let connection = review::mcp::Connection::new(format!("paged-{mode}"));
+        let args = json!({"agents":["codex"]});
+        let mut accepted = 0;
+        loop {
+            assert!(accepted < 32);
+            let (message, binding) =
+                review::mcp::admin_confirmation(&context, &connection, "mcp_setup", &args, &|| {
+                    Ok(())
+                })
+                .unwrap()
+                .unwrap();
+            assert!(message.len() < 48 * 1024);
+            assert!(message.contains(&format!("page {} of", accepted + 1)));
+            let expected = if mode == "stale" && accepted > 0 {
+                format!("{source}# concurrent edit\n")
+            } else {
+                source.clone()
+            };
+            assert_eq!(
+                fs::read_to_string(&path).unwrap(),
+                expected,
+                "no partial publication"
+            );
+            let foreign = review::mcp::Connection::new("foreign-pages".into());
+            let mut foreign_context = context.clone();
+            foreign_context.connection_id = Some("foreign-pages".into());
+            let borrowed = accept_admin_page(&foreign_context, &foreign, &args, binding);
+            assert!(
+                borrowed["error"].is_object(),
+                "page acceptance is connection-owned"
+            );
+            if mode == "changed_arguments" {
+                let changed = accept_admin_page(
+                    &context,
+                    &connection,
+                    &json!({"agents":["claude"]}),
+                    binding,
+                );
+                assert!(changed["error"].is_object());
+                assert_eq!(fs::read_to_string(&path).unwrap(), source);
+                break;
+            }
+            if mode == "decline" {
+                review::mcp::discard_admin(&connection, binding);
+                let replay = accept_admin_page(&context, &connection, &args, binding);
+                assert!(replay["error"].is_object());
+                assert_eq!(fs::read_to_string(&path).unwrap(), source);
+                break;
+            }
+            if mode == "stale" && accepted == 0 {
+                // Keep reviewing the frozen plan, but final acceptance must
+                // never overwrite this newer source.
+                fs::write(&path, format!("{source}# concurrent edit\n")).unwrap();
+            }
+            let result = accept_admin_page(&context, &connection, &args, binding);
+            accepted += 1;
+            if mode == "stale" {
+                if !result["error"].is_null() {
+                    assert!(
+                        fs::read_to_string(&path)
+                            .unwrap()
+                            .contains("# concurrent edit")
+                    );
+                    break;
+                }
+            } else {
+                assert!(result["error"].is_null(), "{result}");
+            }
+            if result["data"]["review_status"] != "more_pages" {
+                assert_eq!(mode, "apply", "{result}");
+                assert!(accepted > 1);
+                assert_ne!(fs::read_to_string(&path).unwrap(), source);
+                assert!(
+                    fs::read_to_string(&path)
+                        .unwrap()
+                        .contains("unrelated-setting-α")
+                );
+                break;
+            }
+            assert_eq!(result["data"]["applied"], false);
+            assert_eq!(result["data"]["retry_arguments"], args);
+            assert!(!result.to_string().contains("unrelated-setting-α"));
+            let replay = accept_admin_page(&context, &connection, &args, binding);
+            assert!(
+                replay["error"].is_object(),
+                "a consumed page cannot be replayed"
+            );
+        }
+    }
+}
+
 #[test]
 fn automatic_mcp_matching_callbacks_and_configuration_freshness() {
     for fixture in [
@@ -17,6 +138,7 @@ fn automatic_mcp_matching_callbacks_and_configuration_freshness() {
         "automatic_mcp_matching_default_home_fixture",
         "automatic_mcp_matching_review_fixture",
         "automatic_mcp_matching_host_scope_fixture",
+        "automatic_mcp_matching_large_admin_fixture",
     ] {
         let environment = assert_fs::TempDir::new().unwrap();
         let home = environment.path().join("home");
@@ -35,6 +157,10 @@ fn automatic_mcp_matching_callbacks_and_configuration_freshness() {
             .env_clear()
             .env("HOME", &home)
             .env("USERPROFILE", &home)
+            .env("SHIELD_ISOLATED_HOME", &home)
+            .env("TMPDIR", environment.path())
+            .env("TMP", environment.path())
+            .env("TEMP", environment.path())
             .env("CLAUDE_CONFIG_DIR", &claude)
             .env("CODEX_HOME", &codex);
         if fixture.contains("default_home") {
@@ -272,11 +398,18 @@ fn fixture(profile: &str) -> (assert_fs::TempDir, review::Context) {
 }
 
 fn configured_fixture(profile: &str, managed: bool) -> (assert_fs::TempDir, review::Context) {
+    configured_alias_fixture(profile, managed.then_some("acme"))
+}
+
+fn configured_alias_fixture(
+    profile: &str,
+    managed: Option<&str>,
+) -> (assert_fs::TempDir, review::Context) {
     let root = assert_fs::TempDir::new().unwrap();
     fs::create_dir_all(root.path().join(".codex")).unwrap();
     let mut config = json!({"schema_version":1,"packs":[{"id":"acme/connector","version":"1.0.0","profile":profile,"path":"pack.yml"}]});
-    if managed {
-        config["mcp"] = json!({"stable":{"transport":{"type":"stdio","command":"acme-connector","args":["mcp","serve"]},"agents":{"codex":"acme"},"packs":{"acme/connector":"connector"}}});
+    if let Some(alias) = managed {
+        config["mcp"] = json!({"stable":{"transport":{"type":"stdio","command":"acme-connector","args":["mcp","serve"]},"agents":{"codex":alias},"packs":{"acme/connector":"connector"}}});
     }
     let context = review::mcp::initialize_fixture(
         root.path(),
@@ -724,7 +857,7 @@ fn transport_approval_check(context: &review::Context) {
     let id = text
         .split("request_id ")
         .nth(1)
-        .unwrap()
+        .unwrap_or_else(|| panic!("native MCP denial did not offer approval: {before}"))
         .split(';')
         .next()
         .unwrap();

@@ -329,10 +329,10 @@ pub(super) fn deny(context: &Context, id: &str, confirmed: bool) -> Result<Value
                 at: now()?,
             })
     };
-    if let Some(value) = replay(&super::project::checkpoint(context)?)? {
+    if let Some(value) = replay(&super::project::authorization(context)?)? {
         return Ok(value);
     }
-    Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
+    Store::open(Path::new(&context.project_root))?.update_authorization(context, |state| {
         if let Some(value) = replay(state)? { return Ok(value); }
         let index = state.hook_requests.iter().position(|row| row.request_id == id).ok_or(Error::Missing)?;
         let row = &state.hook_requests[index];
@@ -428,7 +428,7 @@ pub(crate) fn refused_observed(
     if let Some(outcome) = found {
         return Ok(outcome);
     }
-    let value = store.update_checkpoint(&context, &|| Ok(()), |state| {
+    let value = store.update_authorization(&context, |state| {
         let time = now()?;
         state.compact_authorization_at(time);
         match lookup(state, key, time)? {
@@ -594,7 +594,7 @@ pub(crate) fn followup_observed(
     {
         return Ok(false);
     }
-    let value = store.update_checkpoint(&context, &|| Ok(()), |state| {
+    let value = store.update_authorization(&context, |state| {
         let Some(index) = covering(state, now()?)? else {
             return Ok(json!(false));
         };
@@ -958,7 +958,7 @@ fn describe(text: &mut String, summary: &Summary, cwd: &str) {
     }
     if summary.policy_change {
         text.push_str(
-            "\nThis command may change your permissions or turn off Shield's protection. Approval covers the submitted command, not a frozen Git revision or a previewed policy edit.",
+            "\nThis command may replace Shield's policy files, change your permissions or turn off Shield's protection. Approval covers the submitted command, not a frozen Git revision or a previewed policy edit.",
         );
     }
     // Folders inside the project are stored relative to it.
@@ -1002,9 +1002,8 @@ pub(crate) fn approve(context: &Context, args: &Value, confirmed: bool) -> Resul
         confirmation(context, args)?;
         return Err(Error::ApprovalRequired);
     }
-    Store::open(Path::new(&context.project_root))?.update_checkpoint(context, &|| Ok(()), |state| {
-        approve_in(state, context, args)
-    })
+    Store::open(Path::new(&context.project_root))?
+        .update_authorization(context, |state| approve_in(state, context, args))
 }
 
 pub(super) fn approve_in(

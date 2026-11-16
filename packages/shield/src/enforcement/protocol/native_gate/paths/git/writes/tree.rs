@@ -114,11 +114,11 @@ fn incoming(target: &Target, words: &[&str]) -> Plan {
         .map_or(Plan::Asks, Plan::Queries)
 }
 
-impl Target {
+impl Target<'_> {
     fn diff(&self, revisions: Vec<String>) -> Query {
         Query::Diff {
             revisions,
-            paths: self.protected.clone(),
+            paths: self.tracked_paths(),
         }
     }
 }
@@ -310,7 +310,7 @@ fn stash(target: &Target, options: &[&str]) -> Plan {
     }
     if widens(options, &["-u", "--include-untracked"], VALUED) {
         queries.push(Query::Untracked {
-            paths: target.protected.clone(),
+            paths: target.tracked_paths(),
         });
     }
     Plan::Queries(queries)
@@ -334,7 +334,7 @@ fn stash_restore(target: &Target, rest: &[&str]) -> Plan {
     }
     Plan::Queries(vec![Query::Stash {
         reference: reference.unwrap_or("refs/stash@{0}").to_owned(),
-        paths: target.protected.clone(),
+        paths: target.tracked_paths(),
     }])
 }
 

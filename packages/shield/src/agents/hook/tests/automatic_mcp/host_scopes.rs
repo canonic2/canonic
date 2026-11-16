@@ -6,6 +6,143 @@ pub(super) fn check() {
     codex();
     reserved();
     collisions();
+    hyphenated_aliases();
+    unsupported_aliases();
+}
+
+fn unsupported_aliases() {
+    for agent in ["claude", "codex"] {
+        let (_root, context) = fixture("recommended");
+        let root = Path::new(&context.project_root);
+        configure(root, agent, "Acme", "acme-connector");
+        assert_eq!(
+            call(root, agent, "Acme", "docs_search", "rename"),
+            json!({}),
+            "an unsupported unique spelling retains host permissions, never pack Allow"
+        );
+        assert_eq!(
+            call(root, agent, "acme", "docs_search", "rename"),
+            json!({}),
+            "an approximate spelling of one unsupported key cannot borrow pack Allow"
+        );
+        let doctor = review::mcp::call(
+            &context,
+            &review::mcp::Connection::new("unsupported-alias".into()),
+            "doctor",
+            &json!({}),
+            &|| Ok(()),
+        );
+        let row = doctor["data"]["coverage"]["mcp_connections"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["agent"] == agent && row["alias"] == "Acme")
+            .unwrap();
+        assert!(row["diagnostic"].is_string(), "{row}");
+        assert_ne!(
+            row["configuration"],
+            "policy matching checked on interception"
+        );
+    }
+}
+
+fn hyphenated_aliases() {
+    for agent in ["claude", "codex"] {
+        let (_root, context) = fixture("recommended");
+        let root = Path::new(&context.project_root);
+        let (path, source) = configure(root, agent, "acme-browser", "acme-connector");
+        let namespace = if agent == "codex" {
+            "acme_browser"
+        } else {
+            "acme-browser"
+        };
+        assert_decision(
+            &call(root, agent, namespace, "docs_search", "rename"),
+            agent,
+            "allow",
+        );
+        let history = review::history_events(root).unwrap();
+        let evidence = history["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|event| event.pointer("/details/mcp_match/alias"))
+            .collect::<Vec<_>>();
+        assert!(
+            evidence.iter().any(|alias| **alias == "acme-browser"),
+            "{history}"
+        );
+        assert!(
+            !evidence.iter().any(|alias| **alias == "acme_browser"),
+            "{history}"
+        );
+        let doctor = review::mcp::call(
+            &context,
+            &review::mcp::Connection::new("alias-doctor".into()),
+            "doctor",
+            &json!({}),
+            &|| Ok(()),
+        );
+        let rows = doctor["data"]["coverage"]["mcp_connections"]
+            .as_array()
+            .unwrap();
+        let row = rows
+            .iter()
+            .find(|row| row["agent"] == agent && row["alias"] == "acme-browser")
+            .unwrap();
+        assert_eq!(row["tool_namespace"], namespace);
+        assert!(row["diagnostic"].is_null());
+        if agent == "codex" {
+            let (_, other) = configure(root, agent, "acme_browser", "another-connector");
+            fs::write(&path, format!("{source}\n{other}")).unwrap();
+            assert_decision(
+                &call(root, agent, namespace, "docs_search", "rename"),
+                agent,
+                "deny",
+            );
+            let doctor = review::mcp::call(
+                &context,
+                &review::mcp::Connection::new("collision-doctor".into()),
+                "doctor",
+                &json!({}),
+                &|| Ok(()),
+            );
+            let rows = doctor["data"]["coverage"]["mcp_connections"]
+                .as_array()
+                .unwrap();
+            for row in rows.iter().filter(|row| {
+                row["agent"] == "codex"
+                    && ["acme-browser", "acme_browser"]
+                        .iter()
+                        .any(|alias| row["alias"] == *alias)
+            }) {
+                assert!(row["diagnostic"].as_str().unwrap().contains("ambiguous"));
+                assert_ne!(
+                    row["configuration"],
+                    "policy matching checked on interception"
+                );
+            }
+        }
+    }
+    let (_root, context) = configured_alias_fixture("recommended", Some("acme-browser"));
+    let root = Path::new(&context.project_root);
+    configure(root, "codex", "acme-browser", "acme-connector");
+    assert_decision(
+        &call(root, "codex", "acme_browser", "docs_search", "rename"),
+        "codex",
+        "allow",
+    );
+    let history = review::history_events(root).unwrap();
+    assert!(
+        history["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event
+                .pointer("/details/mcp_match/alias")
+                .is_some_and(|alias| alias == "acme-browser")),
+        "managed connection history retains its configured key: {history}"
+    );
 }
 
 fn collisions() {
@@ -35,11 +172,28 @@ fn collisions() {
                 value.to_string()
             };
             fs::write(&path, &combined).unwrap();
+            if agent == "claude" && collision == "acme-" {
+                // Claude preserves this supported hyphen: these are distinct
+                // namespaces, unlike Codex's encoded trailing underscore.
+                assert_decision(
+                    &call(root, agent, "acme", "docs_search", "rename"),
+                    agent,
+                    "allow",
+                );
+                continue;
+            }
             assert_decision(
                 &call(root, agent, "acme", "docs_search", "rename"),
                 agent,
                 "deny",
             );
+            if collision == "Acme" {
+                assert_decision(
+                    &call(root, agent, "Acme", "docs_search", "rename"),
+                    agent,
+                    "deny",
+                );
+            }
             // Delimiter-bearing aliases cannot borrow the shorter alias's Allow.
             if collision.starts_with("acme_") {
                 assert_decision(

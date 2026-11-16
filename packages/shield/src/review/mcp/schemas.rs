@@ -606,12 +606,18 @@ fn request_inventory() -> Vec<Definition> {
             "Ask the user to deny a pending request or revoke its unused grant",
             || object(json!({"request_id":id()}), &["request_id"]),
         ),
-        ("history_show", "Inspect one retained history entry", || {
-            object(
-                paging(json!({"entry_id":id(),"section":{"enum":["observations"]}})),
-                &["entry_id"],
-            )
-        }),
+        (
+            "history_show",
+            "Inspect one retained history entry; optional project selects an exact enrolled root inside this connection's project for this read only",
+            || {
+                object(
+                    paging(
+                        json!({"project":string(),"entry_id":id(),"section":{"enum":["observations"]}}),
+                    ),
+                    &["entry_id"],
+                )
+            },
+        ),
         (
             "session_grant_list",
             "List retained session grants and candidates",
@@ -686,11 +692,11 @@ fn rule_inventory() -> Vec<Definition> {
         ),
         (
             "history_list",
-            "List or show past requests and their decisions",
+            "List or show past requests and their decisions; optional project selects an exact enrolled root inside this connection's project for this read only",
             || {
                 selectable(
                     "entry_id",
-                    json!({"denied":{"type":"boolean"},"approved":{"type":"boolean"},"agent":string(),"authorization_kind":{"enum":["session_grant"]},"grant_id":id()}),
+                    json!({"project":string(),"denied":{"type":"boolean"},"approved":{"type":"boolean"},"agent":string(),"authorization_kind":{"enum":["session_grant"]},"grant_id":id()}),
                     id(),
                 )
             },

@@ -5,6 +5,7 @@ pub(super) fn denial(mut reply: Reply, receipt: &Value) -> Reply {
     let code = receipt["code"].as_str().unwrap_or_default();
     let resource_failure = crate::agent_message::resource_failure(&receipt["diagnostics"]);
     let explanation = match code {
+        _ if receipt["policy_unavailable"] == true && receipt["fixed_protection"] == false => "The policy files in .shield/ are invalid. Only an exact one-time review can authorize this request until they are repaired.".into(),
         _ if crate::agent_message::rewrite_detail(&receipt["diagnostics"]).is_some() => "The command could not be checked in this form. The agent has instructions to revise it.".into(),
         "policy-deny" if receipt["outside_path"]["path"].is_string() => format!(
             "`{}` is outside the approved folders. Additional folder access requires your approval.",

@@ -57,6 +57,35 @@ fn key(input: &str) -> Key<'_> {
     }
 }
 
+#[test]
+fn invalid_policy_recovery_concurrent_retries_spend_one_durable_grant() {
+    let fixture = fixture();
+    let id = pending(fixture.refuse("acme-recovery"));
+    std::fs::write(fixture.root().join(".shield/config.yml"), "packs: [\n").unwrap();
+    approve(
+        &fixture.connection("codex"),
+        &json!({"request_id":id}),
+        true,
+    )
+    .unwrap();
+    let allowed = std::thread::scope(|scope| {
+        let attempts: Vec<_> = (0..4)
+            .map(|_| scope.spawn(|| matches!(fixture.refuse("acme-recovery"), Outcome::Allowed)))
+            .collect();
+        attempts
+            .into_iter()
+            .map(|attempt| attempt.join().unwrap())
+            .filter(|allowed| *allowed)
+            .count()
+    });
+    assert_eq!(allowed, 1);
+    assert!(!matches!(fixture.refuse("acme-recovery"), Outcome::Allowed));
+    assert_eq!(
+        std::fs::read_to_string(fixture.root().join(".shield/config.yml")).unwrap(),
+        "packs: [\n"
+    );
+}
+
 /// A refused branch deletion that overrides a deny rule.
 fn deny_summary(branch: &str) -> Summary {
     Summary {
@@ -540,6 +569,39 @@ fn accepted_request_allows_the_identical_retry_once() {
     assert_ne!(pending(fixture.refuse("acme-discard")), id);
     // The answered request cannot be approved again.
     assert!(approve(&mcp, &args, true).is_err());
+}
+
+#[test]
+fn git_restoration_grant_expires_at_its_existing_deadline() {
+    let fixture = fixture();
+    let mut summary = summary();
+    summary.policy_change = true;
+    summary.settings_change = true;
+    summary.action = "Run this command:\ngit checkout --ours -- .shield/config.yml .codex/config.toml\n\nGit target worktrees:\n/workspace/acme".into();
+    let input = "acme-policy-restore";
+    let id = pending(fixture.refuse_with("acme-session", input, &summary));
+    let context = fixture.connection("codex");
+    approve(&context, &json!({"request_id":id}), true).unwrap();
+    let state = Store::open(fixture.root())
+        .unwrap()
+        .read_checkpoint()
+        .unwrap();
+    let row = state
+        .hook_requests
+        .iter()
+        .find(|row| row.request_id == id)
+        .unwrap();
+    let grant = row.grant.as_ref().unwrap();
+    assert_eq!(grant.expires_at_ms - grant.issued_at_ms, GRANT_MS);
+    assert!(matches!(
+        lookup(&state, &key(input), grant.expires_at_ms - 1).unwrap(),
+        Some(Found::Grant(_))
+    ));
+    assert!(
+        lookup(&state, &key(input), grant.expires_at_ms)
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]

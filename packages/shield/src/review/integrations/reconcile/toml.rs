@@ -231,7 +231,11 @@ pub(super) fn validate_aliases(
             continue;
         }
         if actual.contains_key(alias) {
-            crate::agents::unambiguous_mcp_alias(alias, actual.iter().map(|(key, _)| key))?;
+            crate::agents::unambiguous_mcp_alias(
+                "codex",
+                alias,
+                actual.iter().map(|(key, _)| key),
+            )?;
         }
     }
     Ok(())

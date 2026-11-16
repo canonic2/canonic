@@ -467,39 +467,88 @@ pub(crate) fn reserved_mcp_alias(alias: &str) -> bool {
     alias.starts_with("plugin_") || alias.starts_with("claude_ai_") || alias == "codex_apps"
 }
 
-/// Refuse aliases that can collapse into the same encoded tool namespace or
-/// consume the `__` delimiter. Never pick a connection by a similar name.
-pub(crate) fn unambiguous_mcp_alias<'a>(
-    alias: &str,
-    aliases: impl Iterator<Item = &'a str>,
-) -> Result<(), crate::review::Error> {
-    if reserved_mcp_alias(alias) {
+/// The host's tool namespace, distinct from its native configuration key.
+/// Codex encodes hyphens as underscores; Claude preserves them.
+pub(crate) fn mcp_namespace(agent: &str, alias: &str) -> Result<String, crate::review::Error> {
+    let namespace = if agent == "codex" {
+        alias.replace('-', "_")
+    } else {
+        alias.into()
+    };
+    if alias.is_empty()
+        || alias.len() > 64
+        || !alias.as_bytes()[0].is_ascii_lowercase()
+        || !alias
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"_-".contains(&b))
+        || namespace.contains("__")
+        || namespace.ends_with('_')
+    {
+        return Err(crate::review::Error::Invalid(
+            "unsupported MCP server alias; use lowercase letters, digits, underscores or hyphens with an unambiguous host tool namespace",
+        ));
+    }
+    if reserved_mcp_alias(&namespace) {
         return Err(crate::review::Error::Invalid(
             "host-owned MCP namespace cannot be identified by a configured server alias",
         ));
     }
-    for other in aliases.filter(|other| *other != alias) {
-        let normalized = other
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || c == '_' {
-                    c.to_ascii_lowercase()
-                } else {
-                    '_'
-                }
-            })
-            .collect::<String>();
-        if [other, normalized.as_str()].into_iter().any(|other| {
-            other == alias
-                || other == format!("{alias}_")
-                || other.starts_with(&format!("{alias}__"))
-        }) {
-            return Err(crate::review::Error::Invalid(
-                "ambiguous MCP server aliases; resolve the conflicting host namespace before setup",
-            ));
-        }
+    Ok(namespace)
+}
+
+/// Refuse aliases that can collapse into the same encoded tool namespace or
+/// consume the `__` delimiter. Never pick a connection by a similar name.
+pub(crate) fn unambiguous_mcp_alias<'a>(
+    agent: &str,
+    alias: &str,
+    aliases: impl Iterator<Item = &'a str>,
+) -> Result<(), crate::review::Error> {
+    mcp_namespace(agent, alias)?;
+    noncolliding_mcp_alias(agent, alias, aliases)
+}
+
+/// Unsupported spellings receive no policy, but only actual competing aliases
+/// prevent their calls from returning to host permissions.
+pub(crate) fn noncolliding_mcp_alias<'a>(
+    agent: &str,
+    alias: &str,
+    aliases: impl Iterator<Item = &'a str>,
+) -> Result<(), crate::review::Error> {
+    if aliases
+        .filter(|other| *other != alias)
+        .any(|other| mcp_aliases_collide(agent, alias, other))
+    {
+        return Err(crate::review::Error::Invalid(
+            "ambiguous MCP server aliases; resolve colliding configured aliases for this host before retrying",
+        ));
     }
     Ok(())
+}
+
+/// Conservative collision evidence only; this never identifies a supported
+/// connection or grants permission for an unsupported spelling.
+fn mcp_aliases_collide(agent: &str, left: &str, right: &str) -> bool {
+    let collision_key = |alias: &str| {
+        mcp_namespace(agent, alias).unwrap_or_else(|_| {
+            alias
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '_' {
+                        c.to_ascii_lowercase()
+                    } else {
+                        '_'
+                    }
+                })
+                .collect::<String>()
+        })
+    };
+    let left = collision_key(left);
+    let right = collision_key(right);
+    left == right
+        || left == format!("{right}_")
+        || left.starts_with(&format!("{right}__"))
+        || right == format!("{left}_")
+        || right.starts_with(&format!("{left}__"))
 }
 
 fn text(value: &Value, max: usize) -> Option<&str> {

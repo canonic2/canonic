@@ -1,7 +1,7 @@
 //! Git commands that write working-tree files from content other than those
 //! files: checkouts and restores of paths, index checkouts, moves, removals,
 //! patches and stashes. Covering a policy file in `.shield` they are
-//! policy-file writes, which agents never make; covering another protected
+//! policy-file writes, which require a proposal or supported restoration review; covering another protected
 //! file, such as an agent's hook settings, they follow the protected-file
 //! access the policy files set. When the paths they write cannot be
 //! determined the user decides.
@@ -11,11 +11,14 @@
 //! They follow ordinary policy while a read-only Git query finds that the
 //! tracked policy files stay as they are; when they would change, or the
 //! query cannot tell, the user decides.
-use super::{Invocation, absolute, resolve_existing};
-use crate::enforcement::protocol::native_gate::paths::{Finding, Guard, Protection};
+use super::{Access, Invocation, Reach, classify, resolve_existing};
+#[cfg(test)]
+use crate::enforcement::protocol::native_gate::paths::Guard;
+use crate::enforcement::protocol::native_gate::paths::{Finding, Protection};
 use crate::review::path_access::Change;
 use std::path::{Path, PathBuf};
 mod query;
+pub(super) use query::worktree_root;
 #[cfg(test)]
 mod tests;
 mod tree;
@@ -23,7 +26,8 @@ use tree::{Plan, Query};
 
 /// The protection a literal Git invocation needs for what it writes into the
 /// policy files.
-pub(in crate::enforcement::protocol::native_gate::paths) fn policy_files(
+#[cfg(test)]
+pub(super) fn policy_files(
     arguments: &[&str],
     root: &Path,
     cwd: &Path,
@@ -44,6 +48,7 @@ pub(in crate::enforcement::protocol::native_gate::paths) fn policy_files(
 /// unknown.
 type Ask<'a> = &'a dyn Fn(&Target, &Query) -> Option<bool>;
 
+#[cfg(test)]
 fn policy_files_with(
     arguments: &[&str],
     root: &Path,
@@ -52,15 +57,39 @@ fn policy_files_with(
     guard: Guard<'_>,
     ask: Ask<'_>,
 ) -> Finding {
-    let Some(invocation) = Invocation::parse(arguments, root, cwd, cwd_known, guard) else {
-        // An unmodeled global option hides the subcommand; a writer among the
-        // words may be it.
-        return if arguments.iter().any(|word| WRITERS.contains(word)) {
-            undetermined()
-        } else {
-            none()
-        };
+    let Some(invocation) = Invocation::parse(arguments) else {
+        return unknown(arguments);
     };
+    inspect_with(
+        &invocation,
+        &invocation.reach(root, cwd, cwd_known, guard),
+        ask,
+    )
+    .finding
+}
+
+/// An unmodeled global option can hide a writer among the submitted words.
+pub(super) fn unknown(arguments: &[&str]) -> Finding {
+    if arguments.iter().any(|word| WRITERS.contains(word)) {
+        undetermined()
+    } else {
+        none()
+    }
+}
+
+pub(super) fn inspect(invocation: &Invocation<'_>, reach: &Reach<'_>) -> super::super::Inspection {
+    inspect_with(invocation, reach, &|target, question| {
+        query::run(&target.base, reach.root, target.worktree()?, question)
+    })
+}
+
+fn inspect_with(
+    invocation: &Invocation<'_>,
+    reach: &Reach<'_>,
+    ask: Ask<'_>,
+) -> super::super::Inspection {
+    let root = reach.root;
+    let guard = reach.guard;
     // Both default bundles and an explicit selection's policy files.
     let policy: Vec<PathBuf> = [crate::layout::SHIELD, crate::layout::GROUPED_BUNDLE]
         .iter()
@@ -68,7 +97,6 @@ fn policy_files_with(
         .chain(crate::layout::explicit_policy_files())
         .collect();
     let rest = invocation.rest;
-    let globals = &arguments[..arguments.len() - rest.len() - 1];
     let target = Target {
         protected: policy
             .iter()
@@ -86,22 +114,29 @@ fn policy_files_with(
                     .map(|path| resolve_existing(&root.join(path))),
             )
             .collect(),
-        base: invocation.reach.base.clone(),
-        known: invocation.reach.known,
-        root_query: plain(globals),
-        worktree: std::cell::OnceCell::new(),
+        base: reach.base.clone(),
+        known: reach.known,
+        reach,
+        mapped: std::cell::OnceCell::new(),
         file: crate::layout::config_file(root),
     };
+    if let Some(paths) = super::restoration::paths(invocation) {
+        return if let Some(worktree) = reach.worktree().and_then(Path::to_str) {
+            target.restore(paths, worktree, invocation.arguments)
+        } else {
+            super::super::Inspection::plain(target.check(paths.iter().copied()))
+        };
+    }
     let paths = written_paths(&target, invocation.subcommand, rest);
     if paths.0 != Protection::None {
-        return paths;
+        return super::super::Inspection::plain(paths);
     }
-    settle(
+    super::super::Inspection::plain(settle(
         tree::plan(&target, invocation.subcommand, rest),
         &target,
-        plain(globals),
+        invocation.ordinary,
         ask,
-    )
+    ))
 }
 
 /// What the paths a command names, or all of them, let it write.
@@ -166,30 +201,6 @@ fn settle(plan: Plan, target: &Target, ordinary: bool, ask: Ask<'_>) -> Finding 
     none()
 }
 
-/// Whether the global options leave what Git reads as the query reads it:
-/// only `-C` and output settings. A `-c` setting or a replace-object switch
-/// could show the command other content.
-fn plain(globals: &[&str]) -> bool {
-    let mut words = globals.iter();
-    while let Some(word) = words.next() {
-        if *word == "-C" {
-            words.next();
-        } else if ![
-            "--no-pager",
-            "-P",
-            "-p",
-            "--paginate",
-            "--no-optional-locks",
-            "--no-advice",
-        ]
-        .contains(word)
-        {
-            return false;
-        }
-    }
-    true
-}
-
 /// `git update-index` changes index entries of the paths it names, from which
 /// a commit and a reset or switch rewrite the files; paths read from input
 /// are unknown.
@@ -233,7 +244,7 @@ const WRITERS: &[&str] = &[
     "filter-branch",
 ];
 
-struct Target {
+struct Target<'a> {
     /// The project's protected files and folders: the policy bundles and,
     /// unless the policy files open them, agents' settings.
     protected: Vec<PathBuf>,
@@ -241,59 +252,159 @@ struct Target {
     base: PathBuf,
     /// Whether `base` is where Git runs.
     known: bool,
-    /// Only ordinary global options permit a query with matching Git semantics.
-    root_query: bool,
-    worktree: std::cell::OnceCell<Option<PathBuf>>,
+    reach: &'a Reach<'a>,
+    mapped: std::cell::OnceCell<Vec<PathBuf>>,
     /// The file a finding names when a pathspec cannot be resolved.
     file: PathBuf,
 }
 
-impl Target {
+impl Target<'_> {
+    /// Tree operations reach relocated settings inside this worktree, while
+    /// direct path checks must also retain settings outside it.
+    fn tracked_paths(&self) -> Vec<PathBuf> {
+        let mut paths = self.protected.clone();
+        if let Some(root) = self.worktree() {
+            paths.extend(self.relocated().filter_map(|path| {
+                if path.starts_with(root) {
+                    Some(path)
+                } else if root.starts_with(&path) {
+                    Some(root.to_path_buf())
+                } else {
+                    None
+                }
+            }));
+        }
+        paths
+    }
+
+    fn relocated(&self) -> impl Iterator<Item = PathBuf> + '_ {
+        self.reach
+            .guard
+            .working_files
+            .into_iter()
+            .flat_map(|scope| scope.protected.iter())
+            .filter(|_| self.reach.guard.allow.agent_settings_change != Change::Allow)
+            .flat_map(|path| [path.clone(), resolve_existing(path)])
+    }
+
+    fn restore(
+        &self,
+        specs: &[&str],
+        worktree: &str,
+        arguments: &[&str],
+    ) -> super::super::Inspection {
+        let Some(cwd) = self.base.to_str() else {
+            return super::super::Inspection::plain((
+                Protection::Blocked,
+                Some(self.file.to_string_lossy().into_owned()),
+            ));
+        };
+        let mut result = super::super::Inspection::plain(none());
+        result.restorations.worktrees.insert(worktree.to_owned());
+        result
+            .restorations
+            .calls
+            .push(super::super::RestorationCall {
+                arguments: arguments
+                    .iter()
+                    .map(|argument| (*argument).to_owned())
+                    .collect(),
+                cwd: cwd.to_owned(),
+                worktree: worktree.to_owned(),
+            });
+        let settings: Vec<_> = Reach::settings(Path::new(worktree))
+            .chain(Reach::settings(self.reach.root))
+            .map(|(_, path)| path)
+            .collect();
+        let closed = super::super::Guard {
+            allow: crate::review::path_access::PathAccess::default(),
+            ..self.reach.guard
+        };
+        for spec in specs {
+            let mut selected = none();
+            let Some(literal) = self.reach.literal_path(spec) else {
+                result.finding = (
+                    Protection::Blocked,
+                    Some(self.file.to_string_lossy().into_owned()),
+                );
+                return result;
+            };
+            let resolved = super::resolved("", &literal);
+            for path in [&literal, &resolved] {
+                let group =
+                    super::super::group(&path.to_string_lossy(), &self.base, self.reach.guard);
+                let finding = classify(path, self.reach.guard, Access::Restore);
+                result.restorations.policy_change |= finding == Protection::Undetermined;
+                result.restorations.settings_change |= group == "settings"
+                    && classify(path, closed, Access::Restore) == Protection::Blocked;
+                result.restorations.settings_change |= settings.contains(path);
+                if finding > selected.0 {
+                    selected = (finding, Some(path.to_string_lossy().into_owned()));
+                }
+            }
+            // An ancestor or directory selection can also reach fixed state.
+            if selected.0 < Protection::Blocked
+                && (resolved.is_dir() || selected.0 == Protection::None)
+                && let Some(path) = self.covered(spec)
+            {
+                selected = (
+                    Protection::Blocked,
+                    Some(path.to_string_lossy().into_owned()),
+                );
+            }
+            result.finding = super::strictest([result.finding, selected].into_iter());
+        }
+        result
+    }
     fn worktree(&self) -> Option<&Path> {
-        self.worktree
-            .get_or_init(|| query::worktree_root(&self.base))
-            .as_deref()
+        self.reach.worktree()
+    }
+
+    fn paths(&self) -> &[PathBuf] {
+        self.mapped.get_or_init(|| {
+            let mut paths = self.protected.clone();
+            paths.extend(self.relocated());
+            if let Some(root) = self.worktree() {
+                paths.extend(
+                    crate::review::integrations::protected_files()
+                        .iter()
+                        .filter(|name| {
+                            self.reach.guard.allow.agent_settings_change != Change::Allow
+                                || [crate::layout::SHIELD, crate::layout::GROUPED_BUNDLE]
+                                    .contains(name)
+                        })
+                        .flat_map(|name| {
+                            let path = root.join(name);
+                            [path.clone(), resolve_existing(&path)]
+                        }),
+                );
+            }
+            paths.sort();
+            paths.dedup();
+            paths
+        })
     }
     /// The protected path a pathspec can select: any of them for unmodeled
     /// magic, wildcards or an unknown folder, else the one it is, lies in or holds.
-    fn covered(&self, spec: &str) -> Option<&Path> {
-        let Some(path) = self.path(spec) else {
-            return Some(&self.file);
+    fn covered(&self, spec: &str) -> Option<PathBuf> {
+        let Some(literal) = self.reach.literal_path(spec) else {
+            return Some(self.file.clone());
         };
-        self.protected
+        if classify(&literal, self.reach.guard, Access::Write) == Protection::Blocked {
+            return Some(literal);
+        }
+        let path = super::resolved("", &literal);
+        if classify(&path, self.reach.guard, Access::Write) == Protection::Blocked {
+            return Some(path);
+        }
+        self.paths()
             .iter()
             .find(|protected| protected.starts_with(&path) || path.starts_with(protected))
-            .map(PathBuf::as_path)
+            .cloned()
     }
 
     fn path(&self, spec: &str) -> Option<PathBuf> {
-        if !self.known || spec.contains(['*', '?', '[']) {
-            return None;
-        }
-        // Short-form magic can continue after '/': !/^ exclude, and ':'
-        // terminates the signature. Only admit an unambiguous literal start.
-        if let Some(short) = spec.strip_prefix(":/")
-            && short.as_bytes().first().is_some_and(|byte| {
-                !byte.is_ascii_alphanumeric() && ![b'.', b'_', b'-'].contains(byte)
-            })
-        {
-            return None;
-        }
-        let path = if let Some(top) = spec
-            .strip_prefix(":/")
-            .or_else(|| spec.strip_prefix(":(top)"))
-        {
-            if !self.root_query || Path::new(top).is_absolute() {
-                return None;
-            }
-            let root = self.worktree()?;
-            absolute(top, root)
-        } else if spec.starts_with(':') {
-            return None;
-        } else {
-            absolute(spec, &self.base)
-        };
-        Some(resolve_existing(&path))
+        self.reach.path(spec)
     }
 
     /// Every protected path the pathspecs can select.
@@ -303,9 +414,9 @@ impl Target {
             .map(|spec| self.path(spec))
             .collect::<Option<Vec<_>>>()
         else {
-            return self.protected.clone();
+            return self.paths().to_vec();
         };
-        self.protected
+        self.paths()
             .iter()
             .filter(|protected| {
                 paths

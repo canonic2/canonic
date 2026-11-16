@@ -5,8 +5,10 @@ use crate::review::{
     path_access,
 };
 mod paths;
+mod recovery;
 pub(crate) use paths::git_scope_check;
 pub(crate) use paths::read_allowed as mandatory_read_allowed;
+pub(super) use recovery::inspect as recovery;
 #[cfg(test)]
 mod tests;
 
@@ -75,7 +77,7 @@ pub(crate) fn paused(
     }
     if opaque_shell(&value)
         || protected_removal(&value, &cwd, root, guard)
-        || footprint(&value, root, &cwd, guard).0 != paths::Protection::None
+        || footprint(&value, root, &cwd, guard).finding.0 != paths::Protection::None
     {
         return Err("protected-access");
     }
@@ -141,6 +143,16 @@ pub(super) fn resolve(
         allow,
         working_files: native.working_files,
     };
+    // Recovery always uses the exact Shield form, including on hosts with a
+    // native Ask. No host fallback stands in for a review of unavailable policy.
+    let native = if value["policy_unavailable"] == true {
+        NativeContext {
+            approval: NativeApproval::Fallback,
+            ..native
+        }
+    } else {
+        native
+    };
     let result = gate(root, native, value, owner, cwd, guard);
     // A refused request records whether it touches state no approval may open,
     // so in-session approval is offered only for the groups a person can open.
@@ -186,15 +198,21 @@ fn file_access(value: &Value) -> paths::Access {
 }
 
 /// The strictest protection the request's shell, file and search footprints reach.
-fn footprint(value: &Value, owner: &Path, cwd: &Path, guard: paths::Guard<'_>) -> paths::Finding {
-    [
-        paths::protection(
-            &value["_shell_analysis"],
-            owner,
-            cwd,
-            guard,
-            paths::Access::Write,
-        ),
+fn footprint(
+    value: &Value,
+    owner: &Path,
+    cwd: &Path,
+    guard: paths::Guard<'_>,
+) -> paths::Inspection {
+    let mut result = paths::inspected(
+        &value["_shell_analysis"],
+        owner,
+        cwd,
+        guard,
+        paths::Access::Write,
+    );
+    result.finding = [
+        result.finding,
         paths::protection(
             &value["_file_targets"],
             owner,
@@ -212,7 +230,8 @@ fn footprint(value: &Value, owner: &Path, cwd: &Path, guard: paths::Guard<'_>) -
     ]
     .into_iter()
     .max_by_key(|finding| finding.0)
-    .expect("three findings")
+    .expect("three findings");
+    result
 }
 
 /// Whether the request still reaches protected state with every operator-openable
@@ -223,7 +242,7 @@ fn fixed(value: &Value, owner: &Path, cwd: &Path, guard: paths::Guard<'_>) -> bo
     opaque_shell(value)
         || paths::operator_cli(&value["_shell_analysis"], cwd)
         || protected_removal(value, cwd, owner, open)
-        || footprint(value, owner, cwd, open).0 == paths::Protection::Blocked
+        || footprint(value, owner, cwd, open).finding.0 == paths::Protection::Blocked
 }
 
 /// The guard with every operator-openable group open: reading and changing
@@ -256,15 +275,21 @@ fn gate(
         block(value, "unsupported-shell");
         return Ok(());
     }
-    let (protection, path) = footprint(value, owner, cwd, guard);
+    let inspection = footprint(value, owner, cwd, guard);
+    let (protection, path) = inspection.finding;
+    if !inspection.restorations.worktrees.is_empty() {
+        value["git_restoration"] = json!(inspection.restorations);
+    }
     // Preserve this consequence even when a policy Deny takes precedence, so
     // an in-session override cannot hide that Git may replace enforced policy.
     // A stricter finding in the same request, such as an agent-settings write,
     // can hide it; with the openable groups open it is the strictest left
     // whenever the request can still be approved.
-    if protection == paths::Protection::Undetermined
+    if value["git_restoration"]["policy_change"] == true
+        || protection == paths::Protection::Undetermined
         || protection > paths::Protection::Undetermined
-            && footprint(value, owner, cwd, opened(guard)).0 == paths::Protection::Undetermined
+            && footprint(value, owner, cwd, opened(guard)).finding.0
+                == paths::Protection::Undetermined
     {
         value["policy_change"] = json!(true);
     }

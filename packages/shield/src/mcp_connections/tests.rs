@@ -373,11 +373,20 @@ fn project_only_mcp_rules_need_no_pack_and_alias_collisions_refuse() {
         )
         .is_err()
     );
-    for alias in ["acme_", "acme__shadow", "Acme", "acme-cloud"] {
+    for alias in ["acme_", "acme__shadow", "Acme", "acme--cloud", "shield"] {
         let mut ambiguous = connection();
         ambiguous["agents"] = json!({"codex":alias});
         assert!(Candidate::from_yaml(&config(json!({"cloud":ambiguous})).to_string()).is_err());
     }
+    let mut hyphenated = connection();
+    hyphenated["agents"] = json!({"codex":"acme-cloud", "claude":"acme-cloud"});
+    assert!(Candidate::from_yaml(&config(json!({"cloud":hyphenated.clone()})).to_string()).is_ok());
+    let mut collision = connection();
+    collision["agents"] = json!({"codex":"acme_cloud"});
+    assert!(
+        Candidate::from_yaml(&config(json!({"first":hyphenated,"second":collision})).to_string())
+            .is_err()
+    );
     let mut spoofed = connection();
     spoofed["local"] = json!(true);
     let image = evaluator(&config(json!({"cloud":spoofed}))).unwrap();

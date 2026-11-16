@@ -170,7 +170,11 @@ fn json_aliases(
             continue;
         }
         if actual.contains_key(alias) {
-            crate::agents::unambiguous_mcp_alias(alias, actual.keys().map(String::as_str))?;
+            crate::agents::unambiguous_mcp_alias(
+                "claude",
+                alias,
+                actual.keys().map(String::as_str),
+            )?;
         }
     }
     Ok(())

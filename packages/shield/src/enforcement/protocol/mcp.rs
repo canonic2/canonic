@@ -26,8 +26,9 @@ impl Prepared {
             return Ok(false);
         }
         if let Some((server, connection)) = self.snapshot.mcp_connection(agent, alias) {
+            let configured = &connection.agents[agent];
             let transport = integrations::mcp_projection(root, agent, server, connection)?;
-            integrations::verify_mcp_connection_at(root, cwd, agent, alias, &transport)?;
+            integrations::verify_mcp_connection_at(root, cwd, agent, configured, &transport)?;
             let mut active = connections.clone();
             for connection in active.values_mut() {
                 connection.enabled &= connection
@@ -40,16 +41,18 @@ impl Prepared {
                 .resolve_mcp(server, &active, "project")
                 .map_err(|_| Error::Invalid("MCP policy matching failed"))?;
             self.mcp = Some(PreparedMcp {
-                alias: alias.into(),
+                namespace: alias.into(),
+                alias: configured.into(),
                 resolved: Arc::new(resolved),
                 observation: None,
             });
             return Ok(true);
         }
-        if connections
-            .values()
-            .any(|c| c.agents.get(agent).is_some_and(|a| a == alias))
-        {
+        if connections.values().any(|c| {
+            c.agents.get(agent).is_some_and(|a| {
+                crate::agents::mcp_namespace(agent, a).is_ok_and(|encoded| encoded == alias)
+            })
+        }) {
             return Err(Error::Invalid("MCP project binding is inactive"));
         }
         if !self.snapshot.has_mcp_integrations() {
@@ -61,14 +64,14 @@ impl Prepared {
         else {
             return Ok(false);
         };
-        let Some(current) = observation.get(alias)? else {
+        let Some((configured, current)) = observation.resolve(alias)? else {
             return Ok(false);
         };
         let source = current.source;
         let discovered = observation.connections(connections, agent);
         let resolved = self
             .snapshot
-            .resolve_mcp(&format!("host:{alias}"), &discovered, source)
+            .resolve_mcp(&format!("host:{configured}"), &discovered, source)
             .map_err(|_| {
                 Error::Invalid("MCP integration predicates or connector mappings conflict")
             })?;
@@ -76,7 +79,8 @@ impl Prepared {
             return Ok(false);
         }
         self.mcp = Some(PreparedMcp {
-            alias: alias.into(),
+            namespace: alias.into(),
+            alias: configured.into(),
             resolved: Arc::new(resolved),
             observation: Some(observation),
         });

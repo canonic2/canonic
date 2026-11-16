@@ -4,7 +4,9 @@ use std::path::Path;
 #[cfg(not(windows))]
 use std::time::{Duration, Instant};
 
-pub(super) fn worktree_root(base: &Path) -> Option<std::path::PathBuf> {
+pub(in crate::enforcement::protocol::native_gate::paths::git) fn worktree_root(
+    base: &Path,
+) -> Option<std::path::PathBuf> {
     #[cfg(not(windows))]
     return discover_root(base, Instant::now() + Duration::from_secs(2));
     #[cfg(windows)]

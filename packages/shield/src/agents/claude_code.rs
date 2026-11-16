@@ -83,6 +83,7 @@ impl AgentAdapter for ClaudeCode {
         let document = crate::json::parse(source.as_bytes())
             .map_err(|_| Error::Invalid("invalid MCP JSON"))?;
         super::unambiguous_mcp_alias(
+            "claude",
             alias,
             document["mcpServers"]
                 .as_object()

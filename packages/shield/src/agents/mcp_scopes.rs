@@ -83,7 +83,7 @@ impl Observation {
     }
 
     pub(crate) fn get(&self, alias: &str) -> Result<Option<&Observed>, Error> {
-        super::unambiguous_mcp_alias(alias, self.entries.keys().map(String::as_str))?;
+        super::unambiguous_mcp_alias(self.agent, alias, self.entries.keys().map(String::as_str))?;
         let Some(entry) = self.entries.get(alias) else {
             return Ok(None);
         };
@@ -92,6 +92,40 @@ impl Observation {
             .as_ref()
             .map_err(|reason| Error::Invalid(reason))?;
         Ok(Some(entry))
+    }
+
+    /// Resolve an intercepted namespace to exactly one native configuration key.
+    pub(crate) fn resolve(&self, namespace: &str) -> Result<Option<(&str, &Observed)>, Error> {
+        let mut matches = self.entries.keys().filter(|alias| {
+            super::mcp_namespace(self.agent, alias).is_ok_and(|encoded| encoded == namespace)
+        });
+        let Some(alias) = matches.next() else {
+            // Collision evidence is not a supported mapping. A single related
+            // unsupported key receives no policy; competing keys and known
+            // duplicate scopes, disabled servers or bad transports still refuse.
+            for (alias, entry) in &self.entries {
+                if !super::mcp_aliases_collide(self.agent, namespace, alias) {
+                    continue;
+                }
+                entry
+                    .transport
+                    .as_ref()
+                    .map_err(|reason| Error::Invalid(reason))?;
+                super::noncolliding_mcp_alias(
+                    self.agent,
+                    alias,
+                    self.entries.keys().map(String::as_str),
+                )?;
+            }
+            return Ok(None);
+        };
+        if matches.next().is_some() {
+            return Err(Error::Invalid(
+                "ambiguous MCP server aliases; multiple configured servers encode to the requested host namespace",
+            ));
+        }
+        self.get(alias)
+            .map(|entry| entry.map(|entry| (alias.as_str(), entry)))
     }
 
     pub(crate) fn verify(&self) -> Result<(), Error> {
@@ -200,6 +234,7 @@ pub(super) fn project_layers(root: &Path, cwd: &Path) -> Result<Vec<PathBuf>, Er
 }
 
 pub(super) fn no_alias<'a>(
+    agent: &str,
     alias: &str,
     aliases: impl Iterator<Item = &'a str>,
 ) -> Result<(), Error> {
@@ -209,5 +244,78 @@ pub(super) fn no_alias<'a>(
             "bound MCP alias is shadowed by another host scope; resolve the conflict before setup",
         ));
     }
-    super::unambiguous_mcp_alias(alias, aliases.into_iter())
+    super::unambiguous_mcp_alias(agent, alias, aliases.into_iter())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn transport() -> crate::mcp_connections::Transport {
+        serde_json::from_value(
+            serde_json::json!({"type":"stdio","command":"acme-browser","args":[],"env":{}}),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn encoded_aliases_resolve_uniquely_and_doctor_agrees() {
+        let temp = assert_fs::TempDir::new().unwrap();
+        for (agent, namespace) in [("codex", "acme_browser"), ("claude", "acme-browser")] {
+            let mut observation = Observation::new(agent, temp.path(), temp.path());
+            observation
+                .add("acme-browser", Ok(Some(transport())), "host-project")
+                .unwrap();
+            assert!(observation.get("acme-browser").unwrap().is_some());
+            assert_eq!(
+                observation.resolve(namespace).unwrap().unwrap().0,
+                "acme-browser"
+            );
+            observation
+                .add("acme_browser", Ok(Some(transport())), "host-user")
+                .unwrap();
+            if agent == "codex" {
+                assert!(observation.resolve(namespace).is_err());
+                assert!(observation.get("acme-browser").is_err());
+                assert!(observation.get("acme_browser").is_err());
+            } else {
+                assert_eq!(
+                    observation.resolve(namespace).unwrap().unwrap().0,
+                    "acme-browser"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unsupported_aliases_and_duplicate_scopes_are_not_reinterpreted() {
+        let temp = assert_fs::TempDir::new().unwrap();
+        let mut observation = Observation::new("codex", temp.path(), temp.path());
+        for alias in ["acme--browser", "Acme", "plugin_browser"] {
+            observation
+                .add(alias, Ok(Some(transport())), "host-project")
+                .unwrap();
+            assert!(observation.get(alias).is_err());
+        }
+        let mut unique = Observation::new("codex", temp.path(), temp.path());
+        unique
+            .add("Acme", Ok(Some(transport())), "host-project")
+            .unwrap();
+        assert!(unique.resolve("Acme").unwrap().is_none());
+        assert!(unique.resolve("acme").unwrap().is_none());
+        unique
+            .add("Acme", Ok(Some(transport())), "host-user")
+            .unwrap();
+        assert!(
+            unique.resolve("Acme").is_err(),
+            "unsupported spelling cannot hide duplicate scopes"
+        );
+        observation
+            .add("acme_browser", Ok(Some(transport())), "host-project")
+            .unwrap();
+        observation
+            .add("acme_browser", Ok(Some(transport())), "host-user")
+            .unwrap();
+        assert!(observation.resolve("acme_browser").is_err());
+    }
 }

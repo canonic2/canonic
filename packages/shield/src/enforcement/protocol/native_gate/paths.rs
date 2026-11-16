@@ -63,6 +63,8 @@ pub(super) enum Access {
     /// be named; review state and the cache stay closed.
     Metadata,
     Write,
+    /// A modeled Git restoration; policy replacement still requires human review.
+    Restore,
 }
 
 /// Read-only commands whose only effect on named paths is reading them.
@@ -73,6 +75,44 @@ const FIND_ACTIONS: &str = "-exec -execdir -ok -okdir -delete -fprint -fprint0 -
 /// The strictest protection found, with the submitted path that caused it when
 /// one path did.
 pub(super) type Finding = (Protection, Option<String>);
+
+#[derive(Default, serde::Serialize)]
+pub(super) struct Restorations {
+    pub(super) policy_change: bool,
+    pub(super) settings_change: bool,
+    pub(super) worktrees: std::collections::BTreeSet<String>,
+    pub(super) calls: Vec<RestorationCall>,
+}
+
+#[derive(serde::Serialize)]
+pub(super) struct RestorationCall {
+    pub(super) arguments: Vec<String>,
+    pub(super) cwd: String,
+    pub(super) worktree: String,
+}
+
+impl Restorations {
+    fn merge(&mut self, other: Self) {
+        self.policy_change |= other.policy_change;
+        self.settings_change |= other.settings_change;
+        self.worktrees.extend(other.worktrees);
+        self.calls.extend(other.calls);
+    }
+}
+
+pub(super) struct Inspection {
+    pub(super) finding: Finding,
+    pub(super) restorations: Restorations,
+}
+
+impl Inspection {
+    fn plain(finding: Finding) -> Self {
+        Self {
+            finding,
+            restorations: Restorations::default(),
+        }
+    }
+}
 
 /// These names are private operator storage, including user-wide continuity
 /// and registry authority. Project policy-edit permission never opens them.
@@ -187,6 +227,21 @@ pub(super) fn protection(
     inspect(value, root, cwd, true, guard, access)
 }
 
+pub(super) fn inspected(
+    value: &Value,
+    root: &Path,
+    cwd: &Path,
+    guard: Guard<'_>,
+    access: Access,
+) -> Inspection {
+    let mut restorations = Restorations::default();
+    let finding = inspect_recorded(value, root, cwd, true, guard, access, &mut restorations);
+    Inspection {
+        finding,
+        restorations,
+    }
+}
+
 fn access(request: &Value) -> Access {
     let Some(executable) = request["executable"].as_str() else {
         return Access::Write;
@@ -231,6 +286,24 @@ fn output_protection(
     cwd_known: bool,
     guard: Guard<'_>,
 ) -> Finding {
+    output_recorded(
+        request,
+        root,
+        cwd,
+        cwd_known,
+        guard,
+        &mut Restorations::default(),
+    )
+}
+
+fn output_recorded(
+    request: &Value,
+    root: &Path,
+    cwd: &Path,
+    cwd_known: bool,
+    guard: Guard<'_>,
+    restorations: &mut Restorations,
+) -> Finding {
     let Some(executable) = request["executable"].as_str() else {
         return (Protection::None, None);
     };
@@ -245,13 +318,11 @@ fn output_protection(
         .and_then(|s| s.to_str())
         .unwrap_or(executable);
     match leaf {
-        "git" => strictest(
-            [
-                git::content(&arguments, root, cwd, cwd_known, guard),
-                git::policy_files(&arguments, root, cwd, cwd_known, guard),
-            ]
-            .into_iter(),
-        ),
+        "git" => {
+            let result = git::inspected(&arguments, root, cwd, cwd_known, guard);
+            restorations.merge(result.restorations);
+            result.finding
+        }
         "grep" | "egrep" | "fgrep" => grep_protection(
             &arguments
                 .iter()
@@ -288,7 +359,7 @@ pub(super) struct Outside {
 
 pub(super) fn outside(operation: &Value, root: &Path, cwd: &Path) -> Option<Outside> {
     let request = &operation["request"];
-    let access = if access(request) == Access::Write {
+    let access = if matches!(access(request), Access::Write | Access::Restore) {
         "write"
     } else {
         "read"
@@ -487,6 +558,26 @@ fn inspect(
     guard: Guard<'_>,
     access: Access,
 ) -> Finding {
+    inspect_recorded(
+        value,
+        root,
+        cwd,
+        cwd_known,
+        guard,
+        access,
+        &mut Restorations::default(),
+    )
+}
+
+fn inspect_recorded(
+    value: &Value,
+    root: &Path,
+    cwd: &Path,
+    cwd_known: bool,
+    guard: Guard<'_>,
+    access: Access,
+    restorations: &mut Restorations,
+) -> Finding {
     match value {
         Value::Object(fields) => {
             let cwd = fields
@@ -506,7 +597,8 @@ fn inspect(
             }
             let access = inspected_access(value, access);
             let named = named_files(&value["request"], cwd, guard);
-            let output = output_protection(&value["request"], root, cwd, cwd_known, guard);
+            let output =
+                output_recorded(&value["request"], root, cwd, cwd_known, guard, restorations);
             strictest(
                 [named, output].into_iter().chain(
                     fields
@@ -540,27 +632,30 @@ fn inspect(
                                     return finding;
                                 }
                             }
-                            if access == Access::Output
+                            if matches!(access, Access::Output | Access::Restore)
                                 && key == "words"
                                 && let Some(words) = v.as_array()
                             {
                                 return strictest(words.iter().enumerate().map(|(index, word)| {
-                                    inspect(
+                                    inspect_recorded(
                                         word,
                                         root,
                                         cwd,
                                         cwd_known,
                                         guard,
                                         if index == 0 { Access::Write } else { access },
+                                        restorations,
                                     )
                                 }));
                             }
-                            let access = if access == Access::Output && key == "executable" {
+                            let access = if matches!(access, Access::Output | Access::Restore)
+                                && key == "executable"
+                            {
                                 Access::Write
                             } else {
                                 access
                             };
-                            inspect(v, root, cwd, cwd_known, guard, access)
+                            inspect_recorded(v, root, cwd, cwd_known, guard, access, restorations)
                         }),
                 ),
             )
@@ -568,7 +663,7 @@ fn inspect(
         Value::Array(values) => strictest(
             values
                 .iter()
-                .map(|v| inspect(v, root, cwd, cwd_known, guard, access)),
+                .map(|v| inspect_recorded(v, root, cwd, cwd_known, guard, access, restorations)),
         ),
         Value::String(s) => inspect_path(s, cwd, guard, access),
         _ => (Protection::None, None),
@@ -717,7 +812,7 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
     if user_state_root().is_some_and(|private| path.starts_with(private)) {
         return Protection::Blocked;
     }
-    if access == Access::Write
+    if matches!(access, Access::Write | Access::Restore)
         && guard.working_files.is_some_and(|scope| {
             scope
                 .write
@@ -728,11 +823,13 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
     {
         return Protection::Blocked;
     }
-    // An explicitly selected bundle's policy files are policy files like the
-    // defaults': readable, never writable, and its pack cache closed.
+    // Explicit bundles keep the same direct-write boundary and reviewed Git
+    // restoration route as defaults; their caches never open.
     if let Some(cache) = explicit_policy(path) {
         return if cache || access == Access::Write {
             Protection::Blocked
+        } else if access == Access::Restore {
+            Protection::Undetermined
         } else {
             Protection::None
         };
@@ -758,7 +855,7 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
             return Protection::None;
         }
         if configuration
-            && access != Access::Write
+            && !matches!(access, Access::Write | Access::Restore)
             && guard.working_files.is_some_and(|scope| {
                 scope
                     .read
@@ -769,8 +866,10 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
             return Protection::None;
         }
         return match access {
-            Access::Write if allowed(guard.allow.agent_settings_change) => Protection::None,
-            Access::Write => Protection::Blocked,
+            Access::Write | Access::Restore if allowed(guard.allow.agent_settings_change) => {
+                Protection::None
+            }
+            Access::Write | Access::Restore => Protection::Blocked,
             Access::Metadata => Protection::None,
             _ if guard.allow.agent_settings_read == Read::Allow => Protection::None,
             _ => Protection::Sensitive,
@@ -787,13 +886,14 @@ fn classify(path: &Path, guard: Guard<'_>, access: Access) -> Protection {
         None => Protection::Blocked,
         // The ignore file keeps review state and the cache out of Git.
         Some(part)
-            if access == Access::Write && native_name(part, std::ffi::OsStr::new(".gitignore")) =>
+            if matches!(access, Access::Write | Access::Restore)
+                && native_name(part, std::ffi::OsStr::new(".gitignore")) =>
         {
             Protection::Blocked
         }
-        // The policy files are the enforced policy: no choice or one-time
-        // approval lets an agent change them. Agents change policy by proposal.
+        // Arbitrary edits require a proposal; modeled restorations ask once.
         Some(_) if access == Access::Write => Protection::Blocked,
+        Some(_) if access == Access::Restore => Protection::Undetermined,
         Some(_) => Protection::None,
     }
 }
@@ -1144,7 +1244,13 @@ mod portable_policy_guards {
             "registries.new",
         ] {
             let path = root.path().join("developer/.shield").join(name);
-            for access in [Access::Read, Access::Write, Access::Metadata, Access::Index] {
+            for access in [
+                Access::Read,
+                Access::Write,
+                Access::Restore,
+                Access::Metadata,
+                Access::Index,
+            ] {
                 assert!(
                     classify(&path, guard, access) == Protection::Blocked,
                     "{name}"

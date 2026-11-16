@@ -18,6 +18,8 @@ pub(super) const REASON: &str = "equivalent private launcher rebind";
 /// Runtime startup may repair exact owned launchers; diagnostics never call it.
 /// Failure leaves that launcher unavailable without revoking portable policy.
 pub(in crate::review) fn resume(context: &Context, initial: &State) {
+    let _trace = crate::diagnostics::trace::span("integration.rebind");
+    crate::diagnostics::trace::count("integration.rebind_attempts", 1);
     if let Err(error) = resume_inner(context, initial) {
         eprintln!("Shield launcher maintenance unavailable ({})", error.code());
     }
@@ -50,16 +52,21 @@ fn resume_inner(context: &Context, initial: &State) -> Result<(), Error> {
     let guard =
         crate::review::publication::ProjectionLease::acquire(Path::new(&context.project_root))?;
     guard.check(context)?;
+    let root = Path::new(&context.project_root);
+    let store = Store::open(root)?;
+    // Upkeep requires valid current source. Refuse before hashing the binary
+    // when source is broken, rather than repeating that cost on every open
+    // made by an otherwise policy-independent recovery request.
+    let state = store.read_following_files()?;
+    state.check(context)?;
+    state.check_operations()?;
     // A different executable is an actual administrative change, not relocation.
     let executable = std::env::current_exe()?.canonicalize()?;
     if binary_digest(&executable)? != previous.binary_digest {
         return Ok(());
     }
-    let root = Path::new(&context.project_root);
-    let store = Store::open(root)?;
     let mut native_retry = false;
     if migrate_native {
-        let state = store.read_following_files()?;
         match portable::prepare_pin(root, &state, &executable) {
             Ok(Some(plan)) => publish(context, &store, &state, &plan, &guard)?,
             Ok(None) => {}

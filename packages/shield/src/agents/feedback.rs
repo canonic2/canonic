@@ -23,7 +23,7 @@ fn raw_deny(code: &str) -> Reply {
         "operator-cli" => "Shield's operator CLI is unavailable to agents. For diagnostics use doctor or status; for command help use docs_search or docs_read. For registrations use mcp_setup with explicit agents and repair: true to review conflicts; project may name an explicit enrolled repair target without changing this connection's project. For policy changes use policy_propose and copy apply_arguments unchanged into policy_apply. Registration and policy changes each require the user's confirmation; policy rules and session grants cannot open the operator CLI.".to_owned(),
         "protected-access" => format!("{PROTECTED_ACCESS} Never read or change .shield/state or the cache. Propose policy changes with policy_propose. Do not bypass protection."),
         "sensitive-read" => "Shield: settings may contain credentials; this callback cannot request read approval. Continue without them unless essential.".to_owned(),
-        "policy-file-unknown" => "Shield: this Git command can change Shield's policy files in .shield/, or Shield cannot tell whether it would, and this host cannot ask the user. Ask the user to run it, or name paths that leave .shield out.".to_owned(),
+        "policy-file-unknown" => "Shield: this Git command can replace Shield's policy files or its policy writes cannot be determined. Use the exact in-session approval route when offered, or name paths that leave policy files out. Direct policy-file edits require policy_propose.".to_owned(),
         "invalid-host-input" | "invalid-host-event" | "invalid-input" => "Shield: invalid request. Correct the tool input before retrying.".to_owned(),
         "invalid-context" => "Shield: the session's working directory is not an existing folder inside this Shield project. Work from the project folder, or ask the user to start the session there.".to_owned(),
         "runtime-busy" => "Shield: Shield state is briefly locked; retry the request.".to_owned(),
@@ -39,17 +39,16 @@ fn raw_deny(code: &str) -> Reply {
     }
 }
 
-/// With invalid policy files there is no policy to apply, so every request asks
-/// the person instead of being allowed or blocked.
-pub(super) fn invalid_policy_files(adapter: &dyn AgentAdapter, message: &str) -> Reply {
+/// No policy decision is available. Only structurally checked requests can
+/// receive exact approval; this message alone never opens a protected path.
+pub(super) fn invalid_policy_files(_adapter: &dyn AgentAdapter, message: &str) -> Reply {
     Reply {
-        decision: Decision::Ask,
+        decision: Decision::Deny,
         reason: format!(
-            "Shield: approval required. The policy files in .shield/ are invalid ({message}), so every request asks until they are fixed. {}",
-            adapter.spec().approval_action
+            "Shield: blocked. The policy files in .shield/ are invalid ({message}), so policy cannot authorize this request."
         ),
         agent_context: Some(format!(
-            "Shield cannot apply policy: the files in .shield/ are invalid ({message}). Tell the user; agents cannot edit .shield/ files."
+            "Shield cannot apply policy: the files in .shield/ are invalid ({message}). Use the exact in-session approval route when offered. Direct policy edits and fixed runtime paths remain protected."
         )),
     }
 }
@@ -346,6 +345,14 @@ fn response(
     if receipt["code"] == "operator-cli" {
         return Some(operator_denial(receipt));
     }
+    if receipt["policy_unavailable"] == true && receipt["fixed_protection"] == false {
+        return Some(invalid_policy_files(
+            adapter,
+            receipt["diagnostics"]["message"]
+                .as_str()
+                .unwrap_or_default(),
+        ));
+    }
     if receipt["disposition"] == "allowed" && receipt["ask_fallback"] == "allow" {
         return Some(fallback_reply(root, adapter, receipt, operation, session));
     }
@@ -544,11 +551,32 @@ fn sensitive_prompt(
     }
     if receipt["code"] == "policy-file-unknown" && adapter.approval(event) == NativeApproval::Prompt
     {
+        let settings = if receipt["git_restoration"]["settings_change"] == true {
+            " It also changes protected agent settings, which can turn off Shield's protection or its confirmation."
+        } else {
+            ""
+        };
+        let targets = receipt["git_restoration"]["worktrees"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(crate::review::hook_approval::one_line)
+            .collect::<Vec<_>>();
+        let target = if targets.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " Target worktrees: {}. Restoration arguments, working folders and targets: {}.",
+                targets.join(", "),
+                receipt["git_restoration"]["calls"]
+            )
+        };
         return Some(Reply {
             decision: Decision::Ask,
             agent_context: None,
             reason: format!(
-                "Shield: approval required. This Git command can change Shield's policy files in .shield/, or Shield cannot tell whether it would. {}",
+                "Shield: approval required. This Git command can replace Shield's policy files or its policy writes cannot be determined.{settings}{target} {}",
                 adapter.spec().approval_action
             ),
         });

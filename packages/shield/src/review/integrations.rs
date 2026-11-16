@@ -284,6 +284,8 @@ pub(in crate::review) fn read_file(root: &Path) -> Result<Option<String>, Error>
 }
 
 pub(in crate::review) fn binary_digest(binary: &Path) -> Result<String, Error> {
+    let _trace = crate::diagnostics::trace::span("integration.binary_digest");
+    crate::diagnostics::trace::count("integration.binary_hashes", 1);
     let mut bytes = Vec::new();
     fs::File::open(binary)?
         .take(128 * 1024 * 1024 + 1)

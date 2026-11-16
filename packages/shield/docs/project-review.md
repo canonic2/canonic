@@ -125,6 +125,14 @@ agents to remove, or takes `--agent`, and preserves policy, approvals, and
 history. Add `--dry-run` to see the review without writing anything. Edited owned entries report a conflict rather than
 being overwritten.
 
+In an agent session, setup uses Shield's `mcp_setup` confirmation forms. A large
+administrative review is presented in numbered pages without omitting contents.
+Accepting an intermediate page applies nothing. The agent repeats the same call
+using the returned `retry_arguments` to show the next page. Only acceptance of
+the final page applies the complete change, after checking that the reviewed
+files are still current. Declining or cancelling any page discards that review.
+An abandoned review expires after five minutes without progress.
+
 New Codex setups let valid Ask requests proceed by default, including unmatched
 requests and Strict-profile Asks. Existing Block or Allow choices are preserved;
 there is no Block picker or flag. Deny, protected files, and invalid mapped requests
@@ -145,9 +153,9 @@ shield protection set
 When policy checks are enabled, native hooks ask by default before agents read
 `.mcp.json` and agent hook settings (`.claude/settings.local.json`,
 `.claude/settings.json`, `.codex/hooks.json`, `.codex/config.toml`),
-which may hold credentials, and block agents from changing them. Agents can never
-change the `.shield` policy files, whatever you choose: those files are the
-policy, so agents change it by proposal.
+which may hold credentials, and block agents from changing them. Direct edits
+to `.shield` policy files stay blocked: agents propose policy edits, or request
+exact approval for a supported Git restoration as described below.
 
 The same settings protection covers the adapter's configured agent home,
 including a relocated home. Verified session-output reads retain their separate
@@ -181,17 +189,37 @@ Git option values do not narrow this footprint: in
 diff can include settings outside that folder. Unknown option arity also keeps
 the complete footprint rather than guessing which words are paths.
 
+Git protection follows the worktree the command actually targets, including
+linked worktrees and separate repository entry folders. When running Git from
+an entry folder, use root-relative pathspecs such as `git diff -- :/src` to select
+files from its worktree root. Both settings symlinks and their targets remain
+protected. If Shield cannot establish the target root or the command overrides
+repository selection, it keeps the conservative protection checks.
+
 `.shield/state/`, compiled caches, the `.shield` folder itself and
 `.shield/.gitignore` stay protected whatever you choose, and agents still cannot
-run Shield operator actions. Policy files are never writable by agents, in
+run Shield operator actions. Direct policy-file writes remain blocked, in
 `.shield/`, `.config/shield/` or a `--config` file's folder. Help-only requests
 follow ordinary policy. The choice is the `protection` setting, written to your
 `config.local.yml`
 ([settings](policy-files.md#settings)); agents cannot change it. `status` lists
-any group you have opened. An invalid `protection` value makes every native
-request ask until you fix it or run `protection set` again.
+any group you have opened. An invalid `protection` value makes policy unavailable;
+supported native requests then require exact in-session review until it is fixed.
 
 ### Allowing one blocked request
+
+If policy files contain conflict markers or another error, use `status` or
+`doctor` to inspect the problem. Supported native requests can still use
+`request_approve` and an identical retry. The form explains that policy is
+unavailable and warns about any settings or policy replacement. A supported Git
+restoration can repair a conflicted file this way; direct policy edits, runtime
+state and caches stay protected. Pending and approved native requests remain
+usable under their existing expiry and exact-request checks.
+
+If the agent also has no registered Shield approval connection in this
+checkout, repair the policy files yourself first, for example by resolving their
+Git conflicts in your terminal. Then run `shield mcp setup` and restart the
+agent session. Setup also requires valid policy.
 
 You don't need to change these settings to let an agent do one blocked thing.
 When Shield blocks a change to agent settings or policy files, a credentials
@@ -210,6 +238,16 @@ warns that the command may change permissions or turn off protection. You approv
 the exact submitted command once, including its options and working directory;
 the Git revision and resulting policy edit are not frozen or previewed. Direct
 file writes to Shield policy still require a policy proposal.
+
+For conflict resolution, supported `git checkout`, `git restore` and
+`git checkout-index` forms can restore explicit files after `--`, including
+policy files. For example, `git checkout --ours -- :/.mcp.json :/.shield/shield.lock`
+can request review in a known worktree. Source revisions, ours/theirs and
+supported index restoration use the same route. The form names the actual target
+worktree and warns about both policy and settings changes. Accepting authorizes
+one identical retry; changing the target or command needs fresh approval. Broad
+selections, unknown options, runtime state, caches and `.shield/.gitignore`
+keep their protected boundary. Git refs and file contents are not frozen by approval.
 
 When one task needs several blocked requests, such as deleting the same branch
 in two repositories, the agent can ask about up to eight of them in one form,
@@ -397,6 +435,21 @@ shield history list --denied
 shield history list --approved --agent claude
 shield history show ENTRY
 ```
+
+Agents use the `history_list` and `history_show` MCP tools. Their optional
+`project` argument can name the absolute root of an already enrolled worktree
+inside this connection's project, for example:
+
+```json
+{"project":"/srv/acme/.gate/worktrees/feature","agent":"codex","denied":true}
+```
+
+This selects history for that read only. Results identify the selected project,
+and observation-page routes retain it. Repeat the same project and filters for
+cursor continuation. It does not change the connection's policy or approval
+target, enroll a folder, or permit direct reads of `.shield/state`.
+For a target outside the connection's project, connect Shield in that target
+project instead; the selector does not widen the connection's filesystem scope.
 
 Entries combine request decisions, operator decisions, and reported completion.
 An identical native retry covered by a one-time approval is shown as approved

@@ -250,6 +250,7 @@ pub(crate) struct Prepared {
 }
 
 struct PreparedMcp {
+    namespace: String,
     alias: String,
     resolved: std::sync::Arc<policy::resolution::compiled::ResolvedMcp>,
     observation: Option<crate::agents::McpObservation>,
@@ -330,6 +331,7 @@ fn evaluate_with_original(
     }
     let authority = if native.is_some()
         && code == 0
+        && value["policy_unavailable"] != true
         && input
             .as_ref()
             .is_some_and(|input| !matches!(input.operation, Operation::Completion { .. }))
@@ -364,6 +366,7 @@ fn evaluate_with_original(
     if let (Some(_), Some(input)) = (native, input.as_ref())
         && matches!(input.operation, Operation::Shell { .. })
         && code == 0
+        && value["policy_unavailable"] != true
         && let Some(host) = &input.host
     {
         let result = observations::context(
@@ -606,6 +609,12 @@ fn evaluate_inner(
     let mut prepared = match prepared.map_or_else(|| Prepared::load(root, stage), Ok) {
         Ok(prepared) => prepared,
         Err(crate::runtime::Error::PolicyFiles(message)) => {
+            if let Some(native) = native {
+                return match native_gate::recovery(root, input, native, &message) {
+                    Ok(value) => (value, 0),
+                    Err(code) => (failure(id, code), 2),
+                };
+            }
             let mut value = failure(id, "policy-files-invalid");
             value["diagnostics"] = json!({"message":message});
             return (value, 2);
@@ -998,7 +1007,7 @@ fn evaluate_bound_mcp(
         unreachable!()
     };
     let id = Some(input.request_id.as_str());
-    if prepared.alias != *alias {
+    if prepared.namespace != *alias {
         return (failure(id, "mcp-binding-changed"), 2);
     }
     evaluate_mcp_policy(

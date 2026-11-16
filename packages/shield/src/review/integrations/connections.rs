@@ -258,6 +258,7 @@ fn automatic(
                 continue;
             }
             let resolution = observation.get(alias);
+            let detail = resolution.as_ref().err().map(ToString::to_string);
             let configuration = match resolution {
                 Ok(_) if entry.transport.as_ref().is_ok_and(Option::is_none) => {
                     "unsupported discovery scope; host permissions apply"
@@ -265,7 +266,13 @@ fn automatic(
                 Ok(_) => "policy matching checked on interception",
                 Err(_) => "ambiguous or unsupported configuration",
             };
+            if detail.is_some() {
+                diagnostics
+                    .push("automatic MCP alias or connection is invalid; inspect its diagnostic");
+            }
             rows.push(json!({"agent":agent,"alias":alias,"mode":"automatic","source":entry.source,
+                "tool_namespace":crate::agents::mcp_namespace(agent, alias).ok(),"diagnostic":detail,
+                "configuration_next_action":detail.as_ref().map(|_| "Resolve the reported alias or connection-settings problem in the native MCP configuration or its publisher, then reload the host. Reinstalling Shield alone does not rename third-party servers."),
                 "configuration":configuration,"matches":[],"matching":"unchecked","hooks":hooks,
                 "credential_readiness":"unverified","host_loading":"unverified","effective_connection_identity":"unverified"}));
         }

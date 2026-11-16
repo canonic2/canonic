@@ -30,6 +30,97 @@ fn fixture() -> (assert_fs::TempDir, Context, Connection) {
 }
 
 #[test]
+fn explicit_history_project_is_read_only_and_does_not_rebind_the_connection() {
+    let (_source, source, connection) = fixture();
+    let target_root = Path::new(&source.project_root).join("worktree");
+    std::fs::create_dir(&target_root).unwrap();
+    let mut target = initialize_fixture(
+        &target_root,
+        &Bundle::capture(r#"{"schema_version":1,"packs":[]}"#, &[], None).unwrap(),
+    );
+    target.agent = Some("codex".into());
+    Store::open(&target_root).unwrap().update(&target, &||Ok(()), |state| {
+        for id in ["target-one", "target-two"] {
+            for _ in 0..20 {
+                let event=state.event("decision",&target,json!({"request_id":id}),json!({}),json!({"operation":{"kind":"argv","executable":"acme","arguments":[]},"evaluation":{"decision":"deny"}}));
+                state.record(event);
+            }
+        }
+        Ok(Value::Null)
+    }).unwrap();
+    let args = json!({"project":target.project_root,"denied":true,"agent":"codex","limit":1});
+    let result = invoke(&source, &connection, "history_list", args.clone());
+    assert!(result["error"].is_null(), "{result}");
+    assert_eq!(result["project_id"], target.project_id);
+    assert_eq!(result["data"]["entries"].as_array().unwrap().len(), 1);
+    let route = &result["data"]["entries"][0]["observations_list"];
+    assert_eq!(route["project"], target.project_root);
+    let mut show = route.clone();
+    show.as_object_mut().unwrap().remove("tool");
+    let shown = invoke(&source, &connection, "history_show", show);
+    assert!(shown["error"].is_null(), "{shown}");
+    assert_eq!(shown["project_id"], target.project_id);
+    let mut wrong_cursor = args.clone();
+    wrong_cursor["cursor"] = result["data"]["next_cursor"].clone();
+    wrong_cursor["project"] = json!(source.project_root);
+    assert_eq!(
+        invoke(&source, &connection, "history_list", wrong_cursor)["error"]["code"],
+        "invalid_cursor"
+    );
+    let normal = invoke(&source, &connection, "history_list", json!({}));
+    assert_eq!(normal["project_id"], source.project_id);
+    assert!(normal["data"]["entries"].as_array().unwrap().is_empty());
+    let unauthorized = invoke(
+        &source,
+        &connection,
+        "disable",
+        json!({"project":target.project_root}),
+    );
+    assert!(unauthorized["error"].is_object());
+    let nested = target_root.join("nested");
+    std::fs::create_dir(&nested).unwrap();
+    assert!(
+        invoke(
+            &source,
+            &connection,
+            "history_list",
+            json!({"project":nested})
+        )["error"]
+            .is_object()
+    );
+    let absent = assert_fs::TempDir::new().unwrap();
+    assert!(
+        invoke(
+            &source,
+            &connection,
+            "history_list",
+            json!({"project":absent.path()})
+        )["error"]
+            .is_object()
+    );
+    assert!(!absent.path().join(".shield").exists());
+    let (_outside, outside, _) = fixture();
+    assert!(
+        invoke(
+            &source,
+            &connection,
+            "history_list",
+            json!({"project":outside.project_root})
+        )["error"]
+            .is_object()
+    );
+    assert!(
+        invoke(
+            &source,
+            &connection,
+            "history_list",
+            json!({"project":"relative"})
+        )["error"]
+            .is_object()
+    );
+}
+
+#[test]
 fn history_previews_name_a_complete_stateless_observation_route() {
     let (root, context, connection) = fixture();
     Store::open(root.path()).unwrap().update(&context, &||Ok(()), |state| {
