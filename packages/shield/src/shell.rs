@@ -1116,11 +1116,17 @@ impl Analysis<'_> {
         ),
         Error,
     > {
+        let changed = state
+            .filesystem_unknown
+            .then(|| crate::location::WorkingFiles {
+                filesystem_unknown: true,
+                ..self.working_files.cloned().unwrap_or_default()
+            });
         let evaluation = self.evaluator.evaluate_context_with_working_files(
             request,
             self.checkpoint,
             !state.cwd_unknown,
-            self.working_files,
+            changed.as_ref().or(self.working_files),
         )?;
         // The evaluator matched the command as run from the folder its declared
         // directory option chose; report that request beside the written one.

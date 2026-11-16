@@ -141,8 +141,8 @@ struct Targets {
     /// A complete model's operation reads its standard input and no file
     /// besides `items`, so no file target is missing when `items` is empty.
     reads_input: bool,
-    /// First failed search observation, retained without raw OS error text.
-    unavailable: Option<(PathBuf, &'static str)>,
+    /// Failed search observations, bounded by operands and without raw OS errors.
+    unavailable: Vec<(PathBuf, &'static str)>,
 }
 
 pub(crate) struct Observer {
@@ -564,7 +564,11 @@ impl Observer {
             .working_files
             .as_ref()
             .is_some_and(|scope| scope.sole_operation);
-        targets::collect(&self.input, &self.cwd, alone)
+        let stable = self
+            .working_files
+            .as_ref()
+            .is_none_or(|scope| !scope.filesystem_unknown);
+        targets::collect(&self.input, &self.cwd, alone, stable)
     }
 
     pub(crate) fn ensure_budget(&self) -> Result<(), Error> {
@@ -619,14 +623,18 @@ impl crate::policy::rules::resources::Resources for Observer {
             return None;
         }
         let targets = self.targets.get_or_init(|| self.collect());
-        let (path, code) = targets.unavailable.as_ref()?;
         // ENOENT alone cannot distinguish an absent operand from a dangling
-        // ancestor link. Reuse the physical resolver's request-scoped result.
-        let code = if *code == "not_found" && self.observed(path, true).is_none() {
-            "unresolved"
-        } else {
-            code
-        };
+        // ancestor link. Skip verified absences so they cannot hide a later error.
+        let (path, code) = targets.unavailable.iter().find_map(|(path, code)| {
+            let code = if *code == "not_found" {
+                self.observed(path, true)
+                    .is_none()
+                    .then_some("unresolved")?
+            } else {
+                *code
+            };
+            Some((path, code))
+        })?;
         let path = path.strip_prefix(&self.cwd).unwrap_or(path).to_str()?;
         let evidence = serde_json::json!({"resource":{"path":path,"code":code}});
         crate::json::fits(&evidence, 1024).then_some(evidence)
@@ -764,7 +772,7 @@ mod tests {
     use crate::policy::rules::resources::Resources;
 
     #[test]
-    fn ripgrep_failure_evidence_reuses_observations_without_granting_coverage() {
+    fn ripgrep_missing_operand_evidence_reuses_observations_and_retains_target() {
         let root = assert_fs::TempDir::new().unwrap();
         let input = Input::Argv {
             executable: "rg".into(),
@@ -773,21 +781,18 @@ mod tests {
         };
         let path = root.path().to_str().unwrap();
         let request = Observer::new(&input, path, path, None);
-        let expected = serde_json::json!({"resource":{"path":".agents","code":"not_found"}});
-        assert_eq!(
-            request.predicate_evidence("targets"),
-            Some(expected.clone())
-        );
+        assert!(request.predicate_evidence("targets").is_none());
         let observations = request.observations.get();
         assert!(observations > 0);
         for _ in 0..100 {
-            assert_eq!(
-                request.predicate_evidence("sources"),
-                Some(expected.clone())
-            );
+            assert!(request.predicate_evidence("sources").is_none());
         }
         assert_eq!(request.observations.get(), observations);
-        assert!(!request.targets.get().unwrap().complete);
+        let targets = request.targets.get().unwrap();
+        assert!(targets.complete);
+        assert_eq!(targets.items.len(), 1);
+        assert_eq!(targets.items[0].path, root.path().join(".agents"));
+        assert!(targets.items[0].recursive);
         assert!(request.predicate_evidence("destination").is_none());
 
         // A new request sees the corrected operand, without retaining the old

@@ -5,7 +5,8 @@ use std::{fs, path::Path};
 
 /// `alone` reports that the request runs no other operation, which lets a
 /// missing in-place input count as absent; see [`super::text::collect`].
-pub(super) fn collect(input: &Input, cwd: &Path, alone: bool) -> Targets {
+/// `stable` means shell effects have not invalidated missing-path observations.
+pub(super) fn collect(input: &Input, cwd: &Path, alone: bool, stable: bool) -> Targets {
     match input {
         Input::File {
             action,
@@ -26,7 +27,7 @@ pub(super) fn collect(input: &Input, cwd: &Path, alone: bool) -> Targets {
             executable,
             arguments,
             ..
-        } => argv(executable, arguments, cwd, alone),
+        } => argv(executable, arguments, cwd, alone, stable),
         _ => Targets {
             items: vec![],
             complete: false,
@@ -35,7 +36,7 @@ pub(super) fn collect(input: &Input, cwd: &Path, alone: bool) -> Targets {
     }
 }
 
-fn argv(executable: &str, arguments: &[String], cwd: &Path, alone: bool) -> Targets {
+fn argv(executable: &str, arguments: &[String], cwd: &Path, alone: bool, stable: bool) -> Targets {
     if let Some(file) = super::node_check_file(
         executable,
         &arguments.iter().map(String::as_str).collect::<Vec<_>>(),
@@ -67,7 +68,7 @@ fn argv(executable: &str, arguments: &[String], cwd: &Path, alone: bool) -> Targ
         return read_argv(leaf, arguments, cwd);
     }
     if leaf == "rg" {
-        return rg_argv(arguments, cwd);
+        return rg_argv(arguments, cwd, stable);
     }
     if leaf == "grep" {
         return grep_argv(arguments, cwd);
@@ -527,8 +528,8 @@ fn grep_argv(arguments: &[String], cwd: &Path) -> Targets {
 // --no-ignore, every existing descendant counts, so an existing excluded
 // directory still blocks it. Without a path, ripgrep walks the working
 // directory. Types (-t) select after hidden entries are skipped.
-fn rg_argv(arguments: &[String], cwd: &Path) -> Targets {
-    rg_model(arguments, cwd).0
+fn rg_argv(arguments: &[String], cwd: &Path, stable: bool) -> Targets {
+    rg_model(arguments, cwd, stable).0
 }
 
 /// The files ripgrep reads besides its search paths: `-f` pattern files and
@@ -749,7 +750,7 @@ fn rg_parse(arguments: &[String]) -> RgRequest<'_> {
     request
 }
 
-pub(super) fn rg_model(arguments: &[String], cwd: &Path) -> (Targets, bool) {
+pub(super) fn rg_model(arguments: &[String], cwd: &Path, stable: bool) -> (Targets, bool) {
     let request = rg_parse(arguments);
     let mut complete = cfg!(any(unix, windows)) && request.modeled;
     // A content search needs a pattern, positional or given by -e/-f.
@@ -760,7 +761,7 @@ pub(super) fn rg_model(arguments: &[String], cwd: &Path) -> (Targets, bool) {
         paths => paths,
     };
     let descendants = request.filters.descendants();
-    let mut unavailable = None;
+    let mut unavailable = Vec::new();
     let mut items = Vec::new();
     for (operand, searched) in paths
         .iter()
@@ -769,17 +770,30 @@ pub(super) fn rg_model(arguments: &[String], cwd: &Path) -> (Targets, bool) {
     {
         let path = super::join_operand(cwd, operand, &mut complete);
         let metadata = fs::metadata(&path);
-        let directory = searched && metadata.as_ref().is_ok_and(std::fs::Metadata::is_dir);
-        if let Some(code) = rg_metadata_issue(&metadata) {
-            unavailable.get_or_insert_with(|| (path.clone(), code));
+        let issue = rg_metadata_issue(&metadata);
+        let missing = issue == Some("not_found");
+        let recursive = searched && (missing || metadata.as_ref().is_ok_and(fs::Metadata::is_dir));
+        if let Some(code) = issue {
+            unavailable.push((path.clone(), code));
         }
-        complete &= operand != "-" && (directory || metadata.is_ok_and(|m| m.is_file()));
+        // Absence is usable only before shell operations can create or redirect
+        // the path. Ancestor/link checks and possible directory footprints still apply.
+        complete &= operand != "-"
+            && if missing {
+                stable
+            } else {
+                recursive || metadata.is_ok_and(|m| m.is_file())
+            };
         items.push(Target {
             action: "read",
             role: "source",
             path,
-            recursive: directory,
-            descendants,
+            recursive,
+            descendants: if searched && missing && matches!(descendants, Descendants::Present) {
+                Descendants::All
+            } else {
+                descendants
+            },
             follow: true,
         });
     }

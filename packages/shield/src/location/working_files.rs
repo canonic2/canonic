@@ -16,6 +16,8 @@ pub(crate) struct WorkingFiles {
     /// The shell analyzer found one plain text-filter invocation, so no other
     /// operation in the request can create an input first.
     pub sole_operation: bool,
+    /// An earlier or concurrent shell operation may create or redirect inputs.
+    pub filesystem_unknown: bool,
 }
 
 impl WorkingFiles {

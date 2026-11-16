@@ -319,9 +319,9 @@ fn pack_forms_cancellation_disconnect_and_busy_slot_create_no_proposals() {
 }
 
 #[test]
-fn pack_forms_timeout_withdraws_input_and_ignores_late_acceptance() {
+fn pack_forms_human_wait_outlives_execution_budget_and_still_requires_approval() {
     let mut options = test_options();
-    options.elicitation.timeout = Duration::from_millis(500);
+    options.timeout = Duration::from_secs(1);
     let (transport, project) = prepared_with_options(
         "claude",
         &json!({"elicitation":{"form":{}}}),
@@ -332,18 +332,22 @@ fn pack_forms_timeout_withdraws_input_and_ignores_late_acceptance() {
     let before = project.revision();
     let form = transport.call(json!(10), "pack_configure", &args());
     assert_eq!(form["method"], "elicitation/create", "{form}");
-    let withdrawn = transport.receive();
-    assert_eq!(
-        withdrawn["method"], "notifications/cancelled",
-        "{withdrawn}"
-    );
-    let timeout = transport.receive();
-    assert_eq!(timeout["error"]["code"], -32001, "{timeout}");
+    assert!(matches!(
+        transport.output.recv_timeout(Duration::from_millis(1100)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    ));
+    transport.send(&answer(&form, "accept", values()));
+    let proposal = transport.receive();
+    assert!(data(&proposal)["error"].is_null(), "{proposal}");
+    assert!(data(&proposal)["data"]["apply_arguments"].is_object());
+    assert_eq!(project.revision(), before);
+    assert_eq!(proposals(&project), count + 1);
+    // Repeated delivery cannot prepare another proposal or replace final approval.
     transport.send(&answer(&form, "accept", values()));
     let response = transport.call(json!(11), "status", &json!({}));
     assert_eq!(response["id"], 11, "{response}");
     assert_eq!(project.revision(), before);
-    assert_eq!(proposals(&project), count);
+    assert_eq!(proposals(&project), count + 1);
 }
 
 #[test]

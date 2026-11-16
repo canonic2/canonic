@@ -143,6 +143,7 @@ fn temporary_in(candidates: Vec<PathBuf>, home: Option<&Path>) -> WorkingFiles {
         protected: vec![],
         http_environment: false,
         sole_operation: false,
+        filesystem_unknown: false,
     }
 }
 

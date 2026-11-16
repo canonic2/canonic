@@ -104,14 +104,10 @@ fn guided_input_cross_tool_retries_revoke_state_before_discovery_or_preparation(
 }
 
 #[test]
-fn guided_registry_cancel_disconnect_and_timeout_ignore_late_answers() {
-    for scenario in ["cancel", "disconnect", "timeout"] {
+fn guided_registry_cancel_and_disconnect_ignore_late_answers() {
+    for scenario in ["cancel", "disconnect"] {
         let (server, project) = fixture(Some("claude"));
-        let mut options = test_options();
-        if scenario == "timeout" {
-            options.elicitation.timeout = Duration::from_millis(500);
-        }
-        let transport = Transport::with_options(server, options);
+        let transport = Transport::with_options(server, test_options());
         for message in initialize(&json!({"elicitation":{"form":{}}}), "claude") {
             transport.send(&message);
         }
@@ -121,13 +117,8 @@ fn guided_registry_cancel_disconnect_and_timeout_ignore_late_answers() {
         if scenario == "disconnect" {
             transport.close().1.unwrap();
         } else {
-            if scenario == "cancel" {
-                transport.send(&json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":20}}));
-            }
+            transport.send(&json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":20}}));
             assert_eq!(transport.receive()["method"], "notifications/cancelled");
-            if scenario == "timeout" {
-                assert_eq!(transport.receive()["error"]["code"], -32001);
-            }
             transport.send(&answer(
                 &form,
                 "accept",

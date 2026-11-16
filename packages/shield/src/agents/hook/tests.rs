@@ -1007,7 +1007,7 @@ fn git_permission_accepts_reported_cwd_and_keeps_policy_ask_and_deny() {
 }
 
 #[test]
-fn ripgrep_missing_operand_names_the_path_and_recovery_in_both_hook_channels() {
+fn ripgrep_missing_operands_allow_within_bounds_and_preserve_other_guards() {
     let root = assert_fs::TempDir::new().unwrap();
     let outside = assert_fs::TempDir::new().unwrap();
     let rules = json!({"schema_version":1,"kind":"custom",
@@ -1015,7 +1015,8 @@ fn ripgrep_missing_operand_names_the_path_and_recovery_in_both_hook_channels() {
         "rules":[{"id":"search","decision":"allow",
             "conditions":{"domain":"argv","executable":"rg","arguments":{"kind":"any"}},
             "requirements":{"targets":{"action":"read","all":{"within":{"root":"project"},"exclude":[{"root":"project","path":"secret"}]}}},
-            "on_unmet":{"decision":"deny","message":"Use approved paths."}}]}).to_string();
+            "on_unmet":{"decision":"deny","message":"Use approved paths."}},
+            {"id":"no-create","decision":"deny","conditions":{"domain":"argv","executable":"mkdir","arguments":{"kind":"any"}}}]}).to_string();
     let bundle = Bundle::capture(
         "schema_version: 1\npacks: []\nrules: custom.json\n",
         &[],
@@ -1032,38 +1033,61 @@ fn ripgrep_missing_operand_names_the_path_and_recovery_in_both_hook_channels() {
     )
     .unwrap();
     fs::write(root.path().join("file.txt"), "Acme").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+        symlink("workflows", root.path().join("inside-link")).unwrap();
+        symlink(outside.path(), root.path().join("outside-link")).unwrap();
+        symlink("secret", root.path().join("secret-link")).unwrap();
+        symlink("absent", root.path().join("dangling-link")).unwrap();
+    }
     for agent in ["codex", "claude"] {
-        let source = "rg --files --hidden -g '*fix-pr*' .codex workflows .agents";
-        let value = call(root.path(), agent, source);
-        assert_eq!(
-            value["hookSpecificOutput"]["permissionDecision"], "deny",
-            "{value}"
-        );
-        for field in ["permissionDecisionReason", "additionalContext"] {
-            let text = value["hookSpecificOutput"][field].as_str().unwrap();
-            assert!(
-                text.contains("Search operand `.agents` does not exist"),
-                "{text}"
-            );
-            assert!(
-                text.contains("Remove it from the search and retry"),
-                "{text}"
-            );
-            assert!(!text.contains("policy_propose"), "{text}");
+        for source in [
+            "rg --files --hidden -g '*fix-pr*' .codex workflows .agents",
+            "rg Acme workflows/missing.ts",
+            "rg Acme missing/parents/file.ts",
+            "rg Acme .agents file.txt",
+            "rg -f missing-patterns file.txt",
+            "rg --ignore-file missing-ignore Acme file.txt",
+        ] {
+            assert_permitted(&call(root.path(), agent, source), agent);
         }
-        // The corrected request retains filename listing and approved roots.
         assert_permitted(
             &call(root.path(), agent, "rg --files --hidden .codex workflows"),
             agent,
         );
         let value = call(root.path(), agent, "rg --files file.txt/child");
         assert!(reason(&value).contains("not a directory"), "{value}");
+        #[cfg(unix)]
+        {
+            assert_permitted(
+                &call(root.path(), agent, "rg Acme inside-link/missing.ts"),
+                agent,
+            );
+            for source in [
+                "rg Acme outside-link/missing.ts",
+                "rg Acme secret-link/missing.ts",
+                "rg Acme dangling-link/child",
+                "rg Acme file.txt inside-link/../../outside.ts",
+            ] {
+                let value = call(root.path(), agent, source);
+                assert_eq!(
+                    value["hookSpecificOutput"]["permissionDecision"], "deny",
+                    "{source}: {value}"
+                );
+            }
+        }
         for source in [
             format!("rg --files .agents '{}'", outside.path().display()),
+            format!("rg Acme '{}/missing.ts'", outside.path().display()),
             "rg --files .agents secret".into(),
+            "rg Acme secret/missing.ts".into(),
+            "rg -f secret/missing-patterns file.txt".into(),
+            "rg --ignore-file secret/missing-ignore Acme file.txt".into(),
             "rg --files --follow .codex".into(),
             "rg Acme .shield/state/state.json".into(),
             "rg Acme .shield/review/state.json".into(),
+            "mkdir .agents && rg --files .codex .agents".into(),
         ] {
             let value = call(root.path(), agent, &source);
             assert_eq!(
@@ -1078,17 +1102,78 @@ fn ripgrep_missing_operand_names_the_path_and_recovery_in_both_hook_channels() {
                 "{source}: {value}"
             );
         }
-        let compound = call(
-            root.path(),
-            agent,
-            "mkdir .agents && rg --files .codex .agents",
-        );
-        assert_eq!(
-            compound["hookSpecificOutput"]["permissionDecision"], "deny",
-            "{compound}"
-        );
     }
     assert!(!root.path().join(".agents").exists());
+}
+
+#[test]
+#[cfg(unix)]
+fn ripgrep_missing_operands_do_not_hide_other_metadata_failures() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = assert_fs::TempDir::new().unwrap();
+    let rules = json!({"schema_version":1,"kind":"custom",
+        "capabilities":["argument-rules-v1","location-v1","requirements-v1","structured-rules-v1"],
+        "rules":[{"id":"search","decision":"allow",
+            "conditions":{"domain":"argv","executable":"rg","arguments":{"kind":"any"}},
+            "requirements":{"targets":{"action":"read","all":{"within":{"root":"project"}}}},
+            "on_unmet":{"decision":"deny","message":"Use approved paths."}}]})
+    .to_string();
+    let bundle = Bundle::capture(
+        "schema_version: 1\npacks: []\nrules: custom.json\n",
+        &[],
+        Some(&rules),
+    )
+    .unwrap();
+    review::mcp::initialize_fixture(root.path(), &bundle);
+    fs::write(root.path().join("file.txt"), "Acme").unwrap();
+    for agent in ["codex", "claude"] {
+        for source in [
+            "rg Acme missing file.txt/child",
+            "rg Acme file.txt/child missing",
+        ] {
+            let value = call(root.path(), agent, source);
+            assert_eq!(
+                value["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{value}"
+            );
+            assert!(reason(&value).contains("not a directory"), "{value}");
+        }
+    }
+    let locked = root.path().join("locked");
+    fs::create_dir(&locked).unwrap();
+    fs::write(locked.join("file.txt"), "Acme").unwrap();
+    let permissions = fs::metadata(&locked).unwrap().permissions();
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o0)).unwrap();
+    let denied = fs::metadata(locked.join("file.txt"))
+        .is_err_and(|error| error.kind() == std::io::ErrorKind::PermissionDenied);
+    let responses: Vec<_> = if denied {
+        ["codex", "claude"]
+            .into_iter()
+            .flat_map(|agent| {
+                [
+                    "rg Acme missing locked/file.txt",
+                    "rg Acme locked/file.txt missing",
+                ]
+                .map(|source| call(root.path(), agent, source))
+            })
+            .collect()
+    } else {
+        // Privileged hosts may bypass mode bits; the deterministic case above
+        // still exercises diagnostic precedence on those hosts.
+        eprintln!("permission-denied fixture unavailable: host can traverse mode-000 directory");
+        vec![]
+    };
+    fs::set_permissions(&locked, permissions).unwrap();
+    for value in responses {
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{value}"
+        );
+        assert!(
+            reason(&value).contains("filesystem access was denied"),
+            "{value}"
+        );
+    }
 }
 
 #[test]
@@ -1099,21 +1184,29 @@ fn ripgrep_unresolved_links_are_not_reported_as_missing_operands() {
     symlink("absent", root.path().join("dangling")).unwrap();
     symlink("loop", root.path().join("loop")).unwrap();
     for operand in ["dangling", "dangling/child", "loop"] {
-        let input = crate::policy::resolution::normalized::Input::Argv {
-            executable: "rg".into(),
-            arguments: vec!["--files".into(), operand.into()],
-            original_input: json!({}),
-        };
-        let path = root.path().to_str().unwrap();
-        let observer = crate::location::Observer::new(&input, path, path, None);
-        let evidence =
-            crate::policy::rules::resources::Resources::predicate_evidence(&observer, "targets")
-                .unwrap();
-        assert_eq!(
-            evidence["resource"]["code"], "unresolved",
-            "{operand}: {evidence}"
-        );
-        assert_eq!(evidence["resource"]["path"], operand);
+        for missing_first in [false, true] {
+            let mut arguments = vec!["--files".into()];
+            if missing_first {
+                arguments.push("missing".into());
+            }
+            arguments.push(operand.into());
+            let input = crate::policy::resolution::normalized::Input::Argv {
+                executable: "rg".into(),
+                arguments,
+                original_input: json!({}),
+            };
+            let path = root.path().to_str().unwrap();
+            let observer = crate::location::Observer::new(&input, path, path, None);
+            let evidence = crate::policy::rules::resources::Resources::predicate_evidence(
+                &observer, "targets",
+            )
+            .unwrap();
+            assert_eq!(
+                evidence["resource"]["code"], "unresolved",
+                "{operand}: {evidence}"
+            );
+            assert_eq!(evidence["resource"]["path"], operand);
+        }
     }
 }
 

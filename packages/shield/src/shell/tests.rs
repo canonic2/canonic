@@ -1806,6 +1806,63 @@ fn missing_sed_inputs_are_absent_only_when_nothing_else_in_the_request_can_creat
 }
 
 #[test]
+fn missing_ripgrep_inputs_do_not_prove_containment_after_filesystem_mutation() {
+    use crate::{configuration::Candidate, policy::Scope};
+    let root = assert_fs::TempDir::new().unwrap();
+    let cwd = root.path().to_str().unwrap();
+    std::fs::write(root.path().join("existing"), "token").unwrap();
+    let rules = json!({"schema_version":1,"kind":"custom",
+        "capabilities":["argument-rules-v1","location-v1","requirements-v1","structured-rules-v1"],
+        "rules":[
+            {"id":"search","decision":"allow","conditions":{"domain":"argv","executable":"rg","arguments":{"kind":"any"}},
+                "requirements":{"targets":{"action":"read","all":{"within":{"root":"project"}}}},"on_unmet":{"decision":"deny"}},
+            {"id":"link","decision":"allow","conditions":{"domain":"argv","executable":"ln","arguments":{"kind":"any"}}},
+            {"id":"output","decision":"allow","conditions":{"domain":"file","action":"write"},
+                "requirements":{"destination":{"within":{"root":"project"}}},"on_unmet":{"decision":"deny"}}
+        ]
+    });
+    let candidate =
+        Candidate::from_yaml("schema_version: 1\npacks: []\nrules: rules.json\n").unwrap();
+    let engine = Evaluator::new(vec![(
+        Scope::Project,
+        candidate.capture(&[], Some(&rules.to_string())).unwrap(),
+    )])
+    .unwrap();
+    for dialect in [Dialect::Posix, Dialect::Bash] {
+        for (source, expected) in [
+            ("rg token missing", "allow"),
+            ("rg token existing", "allow"),
+            ("rg token missing; ln -s /outside/secret missing", "allow"),
+            ("ln -s /outside/secret missing; rg token existing", "allow"),
+            ("ln -s /outside/secret missing; rg token missing", "deny"),
+            ("ln -s /outside/secret missing && rg token missing", "deny"),
+            ("ln -s /outside/secret missing & rg token missing", "deny"),
+            ("ln -s /outside/secret missing | rg token missing", "deny"),
+            ("(ln -s /outside/secret missing); rg token missing", "deny"),
+            ("ln -s /outside ancestor; rg token ancestor/missing", "deny"),
+            (
+                "ln -s /outside/secret patterns; rg -f patterns existing",
+                "deny",
+            ),
+            (
+                "ln -s /outside/secret ignore; rg --ignore-file ignore token existing",
+                "deny",
+            ),
+            ("rg token missing > output", "deny"),
+        ] {
+            let result = analyze(source, dialect, cwd, cwd, &engine).unwrap();
+            assert_eq!(
+                result["decision"], expected,
+                "{dialect:?}: {source}: {result}"
+            );
+        }
+    }
+    // Analysis must not execute the submitted link or output operations.
+    assert!(!root.path().join("missing").exists());
+    assert!(!root.path().join("output").exists());
+}
+
+#[test]
 fn coprocess_commands_are_evaluated_and_ask() {
     for dialect in [Dialect::Posix, Dialect::Bash] {
         for (source, expected) in [

@@ -7,17 +7,17 @@ requires a pending approval or guided form to remain answerable while its owner
 can receive the answer. This roadmap records planned corrections and does not
 claim implemented support or new verification.
 
-[Server options](src/mcp.rs) inherit MCP Kit's legacy confirmation and rich-input
-deadlines. Shield independently assigns five-minute expiry to
+[Server options](src/mcp.rs) inherit MCP Kit's live-owner legacy waits and
+suspended execution budgets. Shield still assigns five-minute expiry to
 [modern confirmations](src/mcp/confirmation.rs) and
 [modern guided forms](src/mcp/elicitation.rs). The latter stores at most eight
 forms and also bounds rounds. A driver-only fix leaves modern retries affected.
 These paths serve policy/administrative decisions and guided configuration;
 waiting itself must neither grant authority nor invalidate an unchanged answer.
 
-[Preparation Tasks](src/mcp/tasks.rs) declare a one-minute input timeout but
-currently produce preparation results rather than exposing a demonstrated
-human-input wait. Review that policy during API adoption. Genuine proposal,
+[Preparation Tasks](src/mcp/tasks.rs) produce preparation results without a
+demonstrated human-input wait. Adopt shared snapshot retention helpers if task
+input is added. Genuine proposal,
 credential or grant validity must be distinguished from the transport's generic
 patience timer; retaining a prompt does not extend issued permission authority.
 
@@ -26,7 +26,13 @@ Owning contracts: [MCP transport](specs/interfaces/mcp-transport.md),
 [policy proposals](specs/project/agent-policy-proposals.md),
 [one-time approval](specs/project/one-time-approval.md) and
 [session grants](specs/project/session-grants.md). The shared correction is
-tracked in [MCP Kit's roadmap](../mcp-kit/ROADMAP_HUMAN_INPUT_LIFETIME.md).
+defined in [MCP Kit's confirmation contract](../mcp-kit/specs/confirmation.md).
+
+Integration prerequisite: land MCP Kit's human-wait suspension changes before or
+together with Shield's migrated elicitation tests. Those tests intentionally wait
+past the execution budget and cannot pass against the earlier driver contract.
+Treat a Shield-only commit of that migration as dependent work, not a standalone
+green baseline.
 
 ## Roadmap
 
@@ -37,6 +43,11 @@ tracked in [MCP Kit's roadmap](../mcp-kit/ROADMAP_HUMAN_INPUT_LIFETIME.md).
   as revocation. Preserve opaque tokens, scope/call binding, single use, bounded
   rounds and count/byte limits. Audit task-policy declarations and reachable
   wrappers for equivalent expiry, documenting external limits precisely.
+  The handler inherits `--request-timeout-ms` (5,000 ms by default, at most
+  60,000 ms), with no per-confirmation admission override. Verify slow preparation
+  plus post-approval revalidation within that shared active budget; human waiting
+  must not replenish it. Adjust a demonstrated insufficient operation budget at
+  its owner rather than restoring a fresh continuation deadline.
 
 - [ ] **2. Revalidate policy and proposal state on delayed acceptance.**
   Trace confirmation consumers and every guided-form completion through their

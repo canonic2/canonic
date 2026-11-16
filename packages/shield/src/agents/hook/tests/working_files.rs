@@ -578,6 +578,7 @@ fn working_files_resource_scope_covers_writes_but_not_read_only_or_foreign_paths
         protected: vec![],
         http_environment: false,
         sole_operation: false,
+        filesystem_unknown: false,
     };
     let evaluate = |operation: Value, scoped: bool| {
         protocol::evaluate_native(&project,
@@ -647,6 +648,7 @@ fn working_files_relocated_configuration_remains_protected_inside_temporary_root
             http_environment: false,
             home: None,
             sole_operation: false,
+            filesystem_unknown: false,
         };
         let evaluate = |operation: Value| {
             protocol::evaluate_native(

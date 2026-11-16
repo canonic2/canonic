@@ -101,6 +101,7 @@ mod tests {
             protected: vec![config.clone()],
             http_environment: false,
             sole_operation: false,
+            filesystem_unknown: false,
         };
         let evaluate = |operation: Value, scoped: bool| {
             let input = json!({"protocol_version":1,"request_id":"acme","expected_project_id":context.project_id,"cwd":project,

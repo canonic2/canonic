@@ -165,12 +165,19 @@ failed requirements can select its Ask or Deny branch.
 
 Check the host action too: Codex's Allow fallback can let a policy Ask proceed.
 
-For a blocked `rg` search, a message such as “Search operand `.agents` does not
-exist” identifies the path Shield could not inspect. Remove an unintended missing
-operand and retry the search with the intended existing paths. If the path is
-needed, correct it first. Filesystem access failures, invalid directory components
-and unresolved links have separate messages; they do not establish that a path is
-absent. Correcting one operand does not approve other paths or unsupported options.
+For `rg` searches, a missing file or directory within permitted locations can
+proceed when the request meets the other policy requirements. Shield checks its
+existing parent directories and links, and `rg` reports the missing path. For
+example, `rg clientId src/missing.ts` can pass policy even when that file is absent.
+The same checks apply to missing pattern files (`-f`) and `--ignore-file` paths.
+Missing paths outside permitted roots or under exclusions still fail policy.
+A missing search directory is also checked against excluded subtrees it could
+cover.
+
+For a blocked search, filesystem access failures, invalid directory components
+and unresolved links have separate messages. Correct the named path or its access
+before retrying. Correcting one operand does not approve other paths or
+unsupported options.
 
 If the message asks for a rewrite, submit the supported literal form it names.
 If it identifies an unsupported tool, a policy change cannot add that support.

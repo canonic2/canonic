@@ -1198,6 +1198,11 @@ fn search_models_check_paths_and_reject_explicit_helpers() {
         (
             "rg",
             vec!["--no-config", "--no-ignore", "Acme", "missing"],
+            Decision::Allow,
+        ),
+        (
+            "rg",
+            vec!["--no-config", "--no-ignore", "Acme", ".aws/missing"],
             Decision::Deny,
         ),
     ] {
@@ -1532,7 +1537,11 @@ fn ripgrep_parses_options_anywhere_and_keeps_helpers_and_links_unmodeled() {
             vec!["--ignore-file", ".aws/credentials", "Acme", "models"],
             Decision::Deny,
         ),
-        (vec!["-f", "missing", "models"], Decision::Deny),
+        (vec!["-f", "missing", "models"], Decision::Allow),
+        (
+            vec!["--ignore-file", "missing", "Acme", "models"],
+            Decision::Allow,
+        ),
         // Helper programs, link following and undefined options stay unmodeled,
         // wherever they appear.
         (vec!["--pre", "cat", "Acme", "models"], Decision::Deny),
@@ -1550,7 +1559,36 @@ fn ripgrep_parses_options_anywhere_and_keeps_helpers_and_links_unmodeled() {
         (vec!["--line-number=yes", "Acme", "models"], Decision::Deny),
         (vec!["Acme", "models", "--glob"], Decision::Deny),
         // After -- every word is an operand.
-        (vec!["Acme", "models", "--", "-n"], Decision::Deny),
+        (vec!["Acme", "models", "--", "-n"], Decision::Allow),
+    ] {
+        req.arguments = arguments.into_iter().map(str::to_owned).collect();
+        assert_eq!(
+            evaluator.evaluate(&req).unwrap().decision,
+            decision,
+            "{req:?}"
+        );
+    }
+}
+
+#[test]
+fn ripgrep_missing_search_roots_preserve_descendant_exclusions() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    let evaluator = prepared(vec![
+        json!({"id":"search","decision":"allow","conditions":{"domain":"argv","executable":"rg","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"project"},"exclude":[{"root":"project","path":"future/secret"}]}}},"on_unmet":{"decision":"deny"}}),
+    ]);
+    let mut req = Request {
+        executable: "rg".into(),
+        arguments: vec![],
+        cwd: root.to_string_lossy().into_owned(),
+        project: root.to_string_lossy().into_owned(),
+    };
+    for (arguments, decision) in [
+        (vec!["Acme", "future/file.ts"], Decision::Allow),
+        (vec!["Acme", "future/secret/missing.ts"], Decision::Deny),
+        // A missing search root could be a directory when the tool runs.
+        (vec!["--hidden", "Acme", "future"], Decision::Deny),
+        (vec!["--files", "future"], Decision::Deny),
     ] {
         req.arguments = arguments.into_iter().map(str::to_owned).collect();
         assert_eq!(
@@ -2599,6 +2637,7 @@ fn ripgrep_accepts_ordinary_searches_and_checks_visible_options_and_paths() {
         &["--no-config", "--hidden", "Acme"],
         // Ripgrep parses options after paths.
         &["--no-config", "Acme", "src", "-n"],
+        &["--no-config", "Acme", "missing"],
     ] {
         assert_eq!(decide(args), Decision::Allow, "{args:?}");
     }
@@ -2607,7 +2646,7 @@ fn ripgrep_accepts_ordinary_searches_and_checks_visible_options_and_paths() {
         &["--follow", "Acme", "src"],
         &["--no-config", "--pre", "sh", "Acme"],
         &["--no-config", "-g"],
-        &["--no-config", "Acme", "missing"],
+        &["--no-config", "Acme", ".aws/missing"],
     ] {
         assert_eq!(decide(args), Decision::Deny, "{args:?}");
     }

@@ -119,7 +119,6 @@ pub(crate) fn resource_failure(explanation: &Value) -> Option<String> {
         return None;
     }
     let detail = match resource["code"].as_str()? {
-        "not_found" => "does not exist. Remove it from the search and retry.",
         "permission_denied" => {
             "cannot be inspected because filesystem access was denied. Use an accessible path."
         }
@@ -343,11 +342,13 @@ mod tests {
     fn search_operand_failures_give_bounded_recovery_without_raw_errors() {
         let mut explanation = json!({"requirement_checks":[{
             "code":"evidence_unavailable", "status":"unknown",
-            "evidence":{"resource":{"path":".agents", "code":"not_found"}}
+            "evidence":{"resource":{"path":".agents", "code":"unresolved"}}
         }],"guidance":[{"message":"Use approved paths."}]});
         assert_eq!(
             resource_failure(&explanation).as_deref(),
-            Some("Search operand `.agents` does not exist. Remove it from the search and retry.")
+            Some(
+                "Search operand `.agents` could not be resolved. Check its path and links before retrying."
+            )
         );
         assert!(
             detail(&explanation)
