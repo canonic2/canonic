@@ -383,14 +383,21 @@ needs its own execution decision and `on_unmet` branch.
 
 ### Search files with grep and ripgrep
 
-Fixed `grep` forms model a pattern followed by explicit regular files, or with
-`-r`/`--recursive`, regular files and directories. A pattern given with `-e` or
-`--regexp` makes every operand a path. A recursive search reads every existing
-entry below each directory, hidden ones included, and follows no descendant
-links. `--include`, `--exclude` and `--exclude-dir` are accepted but do not narrow
-the checked footprint. Options may follow the operands, written as one word
-such as `--include=*.prisma`. A recursive grep needs an explicit path; `-R`, pattern
-files and other options remain unverified. Fixed `rg` forms search a pattern in explicit files or
+Shield models a bounded set of GNU and BSD `grep` options. Options that only
+shape matching or output, such as `-A1`, `-o`, `-m 3` or `--color=always`, need
+no listing. The checked paths are the files grep reads: explicit regular files,
+or with `-r`/`--recursive`, regular files and directories, plus `-f` pattern
+files and `--exclude-from` files. A pattern given with `-e` or `-f` makes every
+operand a path. A grep that names no file, such as `git show HEAD:yarn.lock |
+grep -n -A1 PATTERN`, reads only its input and meets a read requirement. A
+recursive search reads every existing entry below each directory, hidden ones
+included, and follows no descendant links; without a path it checks the working
+directory. `--include`, `--exclude` and `--exclude-dir` are accepted but do not
+narrow the checked footprint. Options may follow the operands, written as one
+word such as `--include=*.prisma`. `-R`, BSD `-S`/`-O`, a bare `-C` or `--context`
+(write `-C3` or `--context=3`), ambiguous abbreviations and options outside the
+modeled set remain unverified. `-d`/`--directories` accepts exact lowercase
+`read`, `skip` or `recurse`; other values remain unverified. Fixed `rg` forms search a pattern in explicit files or
 directories, the working directory when none is given, or list them with `--files`.
 Options are read the way ripgrep reads them, anywhere before `--`, so
 `rg -n PATTERN src -g '*.ts'` checks `src`. Options that only shape matching or

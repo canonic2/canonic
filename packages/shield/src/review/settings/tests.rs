@@ -56,6 +56,57 @@ fn an_edit_to_a_setting_applies_to_the_next_read() {
 }
 
 #[test]
+fn repeated_settings_reads_follow_replacements_invalid_files_and_layer_removal() {
+    let (root, _) = project();
+    let shared = root.child(".shield/config.yml");
+    let private = root.child(".shield/config.local.yml");
+    shared
+        .write_str("schema_version: 1\npacks: []\nhistory: {limit: 33}\n")
+        .unwrap();
+    for limit in [77, 88, 77] {
+        private
+            .write_str(&format!("schema_version: 1\nhistory: {{limit: {limit}}}\n"))
+            .unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                super::read(root.path())
+                    .unwrap()
+                    .unwrap()
+                    .values()
+                    .history_limit,
+                limit
+            );
+        }
+    }
+    private
+        .write_str("schema_version: 1\nenforcement: invalid\n")
+        .unwrap();
+    assert!(super::read(root.path()).is_err());
+    std::fs::remove_file(private.path()).unwrap();
+    assert_eq!(
+        super::read(root.path())
+            .unwrap()
+            .unwrap()
+            .values()
+            .history_limit,
+        33
+    );
+    shared
+        .write_str("schema_version: 1\npacks: []\nhistory: {limit: 44}\n")
+        .unwrap();
+    assert_eq!(
+        super::read(root.path())
+            .unwrap()
+            .unwrap()
+            .values()
+            .history_limit,
+        44
+    );
+    std::fs::remove_file(shared.path()).unwrap();
+    assert!(super::read(root.path()).unwrap().is_none());
+}
+
+#[test]
 fn unreadable_settings_keep_enforcement_on() {
     let (root, _) = project();
     root.child(".shield/config.local.yml")

@@ -35,6 +35,107 @@ fn sources() -> (String, String) {
 }
 
 #[test]
+fn finite_executable_choices_preserve_aliases_patterns_denies_and_unknown_context() {
+    let mut pack: Value = serde_json::from_str(&sources().0).unwrap();
+    pack["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("regex-v1"));
+    pack["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!(crate::policy::rules::NEGATED_SELECTORS));
+    pack["rules"] = json!([
+        {"id":"inspect","decision":"allow","reason":"Acme aliases","conditions":{"domain":"argv","executable":{"one_of":["acme","/usr/bin/acme"]},"arguments":{"kind":"prefix","values":["read"]}}},
+        {"id":"unrelated","decision":"deny","reason":"Other tool","conditions":{"domain":"argv","executable":{"one_of":["other","/usr/bin/other"]},"arguments":{"kind":"any"}}},
+        {"id":"deny-pattern","decision":"deny","reason":"Pattern restriction","conditions":{"domain":"argv","executable":{"regex":".*acme"},"arguments":{"kind":"exact","values":["read","secret"]}}},
+        {"id":"deny-inverse","decision":"deny","reason":"Inverse restriction","conditions":{"domain":"argv","executable":{"not":{"one_of":["acme","/usr/bin/acme"]}},"arguments":{"kind":"exact","values":["restricted"]}}}
+    ]);
+    let text = pack.to_string();
+    let reference = Pack::from_yaml(&text).unwrap();
+    let plan = Plan::compile(
+        vec![(Pack::from_yaml(&text).unwrap(), Profile::Recommended)],
+        None,
+        json!({}),
+    )
+    .unwrap();
+    let loaded = Plan::load(plan.bytes().to_vec()).unwrap();
+    for executable in ["acme", "/usr/bin/acme", "other", "unrelated"] {
+        for arguments in [vec!["read"], vec!["read", "secret"], vec!["restricted"]] {
+            for known in [true, false] {
+                let request = Request {
+                    executable: executable.into(),
+                    arguments: arguments.iter().map(|arg| (*arg).into()).collect(),
+                    cwd: "/acme".into(),
+                    project: "/acme".into(),
+                };
+                let expected = crate::policy::evaluate_selected_context(
+                    &[(&reference, Profile::Recommended)],
+                    &[],
+                    &request,
+                    false,
+                    &|| Ok(()),
+                    known,
+                )
+                .unwrap();
+                let actual = loaded.evaluate(&request, &|| Ok(()), known, true).unwrap();
+                assert_eq!(
+                    serde_json::to_value(actual).unwrap(),
+                    serde_json::to_value(expected).unwrap(),
+                    "{executable} {arguments:?} known={known}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn unrelated_finite_executable_rules_do_not_require_full_rule_decoding() {
+    use clap::Parser as _;
+    let mut pack: Value = serde_json::from_str(&sources().0).unwrap();
+    pack["rules"] = json!([]);
+    for index in 0..100 {
+        pack["rules"].as_array_mut().unwrap().push(json!({
+            "id":format!("other-{index}"),"decision":"deny","reason":"Unrelated command",
+            "conditions":{"domain":"argv","executable":{"one_of":[format!("other-{index}"),format!("/usr/bin/other-{index}")]},"arguments":{"kind":"any"}}
+        }));
+    }
+    pack["rules"].as_array_mut().unwrap().push(json!({
+        "id":"inspect","decision":"allow","reason":"Acme inspection",
+        "conditions":{"domain":"argv","executable":{"one_of":["acme","/usr/bin/acme"]},"arguments":{"kind":"any"}}
+    }));
+    let plan = Plan::compile(
+        vec![(
+            Pack::from_yaml(&pack.to_string()).unwrap(),
+            Profile::Recommended,
+        )],
+        None,
+        json!({}),
+    )
+    .unwrap();
+    let logs = assert_fs::TempDir::new().unwrap();
+    let cli = crate::cli::Cli::parse_from([
+        "shield",
+        "--debug-log-dir",
+        logs.path().to_str().unwrap(),
+        "status",
+    ]);
+    let log = std::sync::Arc::new(crate::diagnostics::Log::open(&cli));
+    let trace = log.request("test", "compiled", None, None).unwrap();
+    let _scope = trace.enter();
+    let request = Request {
+        executable: "acme".into(),
+        arguments: vec![],
+        cwd: "/acme".into(),
+        project: "/acme".into(),
+    };
+    let result = plan.evaluate(&request, &|| Ok(()), true, true).unwrap();
+    assert_eq!(result.decision, Decision::Allow);
+    assert_eq!(result.matches.len(), 1);
+    assert_eq!(trace.recorded_count("policy.collected_rules"), 1);
+}
+
+#[test]
 fn compiled_metadata_requires_current_policy_schema_and_document_kind() {
     let (source, custom_source) = sources();
     let plan = Plan::compile(

@@ -272,79 +272,246 @@ fn read_argv(leaf: &str, arguments: &[String], cwd: &Path) -> Targets {
     }
 }
 
-// grep reads explicit regular files; explicit operands follow their leaf links.
-// A recursive grep (-r) reads every existing descendant, hidden ones too, since
-// grep honours no ignore files; GNU and BSD walks follow no descendant links.
-// Include/exclude filters only narrow it and receive no credit. -R follows
-// links, and a recursive grep without a path differs between GNU and BSD, so
-// both stay unmodeled. A pattern given with -e makes every operand a path.
-// GNU and BSD grep move options written after operands to the front, unless
+/// grep's short flags in GNU grep 3 and BSD grep, which change only how
+/// patterns match, what is printed or how input is decoded. Digits form the
+/// `-NUM` context count. `-r` also starts a walk.
+const GREP_SHORT_FLAGS: &str = "EFGPiyvwxcLloqsbHhnTZzaIUuJMXpVr0123456789";
+/// grep's short options taking a value.
+const GREP_SHORT_VALUED: &str = "efmABCdD";
+/// grep's long options, by kind. Names not listed are unknown. GNU and BSD
+/// grep accept a unique abbreviation of any long name, so `unmodeled` names
+/// take part in abbreviation and then leave the request unmodeled.
+const GREP_LONG_FLAGS: &str = "extended-regexp fixed-strings basic-regexp perl-regexp \
+    ignore-case no-ignore-case word-regexp line-regexp null-data no-messages invert-match \
+    version help byte-offset line-buffered line-number with-filename no-filename \
+    only-matching quiet silent text count files-without-match files-with-matches \
+    initial-tab null recursive binary no-group-separator unix-byte-offsets bz2decompress \
+    decompress lzma xz mmap";
+const GREP_LONG_VALUED: &str = "regexp file max-count label after-context before-context \
+    directories devices binary-files include exclude exclude-from exclude-dir group-separator";
+/// Optional values are attached only and never take the next word.
+const GREP_LONG_OPTIONAL: &str = "color colour";
+/// `--context` takes a required value in GNU grep and an optional one in BSD
+/// grep, so only its attached form is modeled.
+/// `--dereference-recursive` follows descendant links.
+const GREP_LONG_UNMODELED: &str = "context dereference-recursive";
+
+/// grep's long option named exactly or by a unique abbreviation.
+fn grep_long(name: &str) -> Option<&'static str> {
+    let names = || {
+        [
+            GREP_LONG_FLAGS,
+            GREP_LONG_VALUED,
+            GREP_LONG_OPTIONAL,
+            GREP_LONG_UNMODELED,
+        ]
+        .into_iter()
+        .flat_map(str::split_whitespace)
+    };
+    if let Some(exact) = names().find(|item| *item == name) {
+        return Some(exact);
+    }
+    let mut prefixed = names().filter(|item| !name.is_empty() && item.starts_with(name));
+    match (prefixed.next(), prefixed.next()) {
+        (Some(only), None) => Some(only),
+        _ => None,
+    }
+}
+
+/// An option value taken from the next word. `POSIXLY_CORRECT` would make that
+/// word an operand when the option follows one, so a late option is unmodeled.
+fn grep_next<'a>(
+    arguments: &mut std::slice::Iter<'a, String>,
+    late: bool,
+    complete: &mut bool,
+) -> Option<&'a str> {
+    let value = arguments.next().map(String::as_str);
+    *complete &= !late && value.is_some();
+    value
+}
+
+/// A short option cluster's flags and its final valued option, if any, with
+/// the attached rest of the word: whether `-r` appears, whether every flag is
+/// one grep defines, and the valued option.
+fn grep_short(argument: &str) -> (bool, bool, Option<(char, &str)>) {
+    let mut recursive = false;
+    let mut known = true;
+    for (index, flag) in argument[1..].char_indices() {
+        if GREP_SHORT_VALUED.contains(flag) {
+            return (recursive, known, Some((flag, &argument[index + 2..])));
+        }
+        recursive |= flag == 'r';
+        known &= GREP_SHORT_FLAGS.contains(flag);
+    }
+    (recursive, known, None)
+}
+
+/// A grep request parsed as GNU and BSD grep parse it.
+pub(crate) struct GrepRequest<'a> {
+    pub(crate) operands: Vec<&'a str>,
+    /// Pattern and exclusion files read besides the searched paths.
+    pub(crate) reads: Vec<&'a str>,
+    pub(crate) recursive: bool,
+    pub(crate) pattern_given: bool,
+    pub(crate) complete: bool,
+}
+
+impl<'a> GrepRequest<'a> {
+    /// Records what a valued option changes; other values shape output only.
+    fn valued(&mut self, name: &str, value: Option<&'a str>) {
+        match (name, value) {
+            ("regexp", _) => self.pattern_given = true,
+            ("file", Some(file)) => {
+                self.pattern_given = true;
+                if file != "-" {
+                    self.reads.push(file);
+                }
+            }
+            ("exclude-from", Some(file)) => self.reads.push(file),
+            ("directories", Some("recurse")) => self.recursive = true,
+            ("directories", Some("read" | "skip")) => {}
+            // GNU accepts abbreviated modes and BSD accepts case variants.
+            // Neither may be mistaken for a complete stdin-only operation.
+            ("directories", _) => self.complete = false,
+            _ => {}
+        }
+    }
+}
+
+pub(crate) fn grep_parse<'a>(arguments: &'a [String], cwd: &Path) -> GrepRequest<'a> {
+    let listed = |list: &str, word: &str| list.split_whitespace().any(|item| item == word);
+    let mut request = GrepRequest {
+        operands: Vec::new(),
+        reads: Vec::new(),
+        recursive: false,
+        pattern_given: false,
+        complete: cfg!(any(unix, windows)),
+    };
+    let mut options = true;
+    let mut arguments = arguments.iter();
+    while let Some(argument) = arguments.next() {
+        if !options || argument == "-" || !argument.starts_with('-') {
+            request.operands.push(argument.as_str());
+            continue;
+        }
+        let late = !request.operands.is_empty();
+        request.complete &= !late || cwd.join(argument).symlink_metadata().is_err();
+        if argument == "--" {
+            options = false;
+        } else if let Some(long) = argument.strip_prefix("--") {
+            let (given, attached) = long
+                .split_once('=')
+                .map_or((long, None), |(name, value)| (name, Some(value)));
+            let Some(name) = grep_long(given) else {
+                request.complete = false;
+                continue;
+            };
+            if listed(GREP_LONG_FLAGS, name) {
+                request.complete &= attached.is_none();
+                request.recursive |= name == "recursive";
+            } else if listed(GREP_LONG_UNMODELED, name) {
+                request.complete &= name == "context" && attached.is_some();
+            } else if !listed(GREP_LONG_OPTIONAL, name) {
+                let value = match attached {
+                    Some(value) => Some(value),
+                    None => grep_next(&mut arguments, late, &mut request.complete),
+                };
+                request.valued(name, value);
+            }
+        } else {
+            let (recursive, known, valued) = grep_short(argument);
+            request.recursive |= recursive;
+            request.complete &= known;
+            let Some((flag, attached)) = valued else {
+                continue;
+            };
+            if flag == 'C' && attached.is_empty() {
+                // BSD grep's -C takes only an attached count; GNU's takes the
+                // next word, so a bare -C could consume the pattern or not.
+                request.complete = false;
+                continue;
+            }
+            let value = if attached.is_empty() {
+                grep_next(&mut arguments, late, &mut request.complete)
+            } else {
+                Some(attached)
+            };
+            let name = match flag {
+                'e' => "regexp",
+                'f' => "file",
+                'd' => "directories",
+                _ => "",
+            };
+            request.valued(name, value);
+        }
+    }
+    request
+}
+
+// grep reads its file operands, `-f`/`--file` pattern files and GNU
+// `--exclude-from` files; nothing else it accepts reads, writes or runs
+// anything, so every other option is parsed for its arity and allowed.
+// Explicit operands follow their leaf links. A recursive grep (-r, or
+// `-d recurse`) reads every existing descendant, hidden ones too, since grep
+// honours no ignore files; GNU and BSD walks follow no descendant links.
+// Include/exclude filters only narrow it and receive no credit. Without a
+// path, GNU walks the working directory and BSD reads its input, so the walk
+// is checked. -R, BSD -S and -O follow links and stay unmodeled, as do options
+// grep does not define. A pattern given with -e or -f makes every operand a
+// path. Without file operands grep reads only its standard input. GNU and BSD
+// grep move options written after operands to the front, unless
 // POSIXLY_CORRECT makes them operands: a later option naming an existing path,
 // or taking its value from the next word, stays unmodeled.
 fn grep_argv(arguments: &[String], cwd: &Path) -> Targets {
-    const FILTERS: &str = "--include --exclude --exclude-dir";
-    let listed = |list: &str, word: &str| list.split_whitespace().any(|item| item == word);
-    let mut operands = Vec::new();
-    let mut options = true;
-    let mut recursive = false;
-    let mut pattern_given = false;
-    let mut complete = cfg!(any(unix, windows));
-    let mut arguments = arguments.iter();
-    while let Some(argument) = arguments.next() {
-        let long = argument
-            .split_once('=')
-            .map_or(argument.as_str(), |(name, _)| name);
-        if !options || argument == "-" || !argument.starts_with('-') {
-            operands.push(argument);
-            continue;
-        }
-        let late = !operands.is_empty();
-        complete &= !late || cwd.join(argument).symlink_metadata().is_err();
-        if argument == "--" {
-            options = false;
-        } else if argument == "--recursive" {
-            recursive = true;
-        } else if argument == "-e" || argument == "--regexp" {
-            pattern_given = true;
-            complete &= !late && arguments.next().is_some();
-        } else if long == "--regexp" || (argument.starts_with("-e") && argument.len() > 2) {
-            pattern_given = true;
-        } else if listed(FILTERS, argument) {
-            complete &= !late && arguments.next().is_some();
-        } else if long == argument || !listed(FILTERS, long) {
-            recursive |= !argument.starts_with("--") && argument.contains('r');
-            complete &= portable_flags(argument, "EFGinlcqvwxHhr");
-        }
-    }
-    let paths: Vec<&String> = operands
+    let GrepRequest {
+        operands,
+        reads,
+        recursive,
+        pattern_given,
+        mut complete,
+    } = grep_parse(arguments, cwd);
+    let mut paths: Vec<&str> = operands
         .into_iter()
         .skip(usize::from(!pattern_given))
+        .filter(|operand| *operand != "-")
         .collect();
-    complete &= !paths.is_empty();
-    let items = paths
+    if recursive && paths.is_empty() {
+        paths.push(".");
+    }
+    let mut items: Vec<Target> = reads
         .into_iter()
-        .map(|operand| {
-            let path = super::join_operand(cwd, operand, &mut complete);
-            let metadata = fs::metadata(&path);
-            let directory = recursive && metadata.as_ref().is_ok_and(std::fs::Metadata::is_dir);
-            complete &= operand != "-" && (directory || metadata.is_ok_and(|m| m.is_file()));
-            Target {
-                action: "read",
-                role: "source",
-                path,
-                recursive: directory,
-                descendants: if directory {
-                    Descendants::Present
-                } else {
-                    Descendants::Visible
-                },
-                follow: true,
-            }
+        .map(|file| Target {
+            action: "read",
+            role: "source",
+            path: super::join_operand(cwd, file, &mut complete),
+            recursive: false,
+            descendants: Descendants::Visible,
+            follow: true,
         })
         .collect();
+    let reads_input = paths.is_empty();
+    for operand in paths {
+        let path = super::join_operand(cwd, operand, &mut complete);
+        let metadata = fs::metadata(&path);
+        let directory = recursive && metadata.as_ref().is_ok_and(std::fs::Metadata::is_dir);
+        complete &= directory || metadata.is_ok_and(|m| m.is_file());
+        items.push(Target {
+            action: "read",
+            role: "source",
+            path,
+            recursive: directory,
+            descendants: if directory {
+                Descendants::Present
+            } else {
+                Descendants::Visible
+            },
+            follow: true,
+        });
+    }
     Targets {
         items,
         complete,
+        reads_input,
         ..Targets::default()
     }
 }
@@ -635,6 +802,7 @@ pub(super) fn rg_model(arguments: &[String], cwd: &Path) -> (Targets, bool) {
             items,
             complete,
             unavailable,
+            ..Targets::default()
         },
         request.files,
     )

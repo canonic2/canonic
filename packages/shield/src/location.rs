@@ -16,6 +16,7 @@ use std::{
 pub(crate) mod directory;
 mod node;
 mod targets;
+pub(crate) use targets::grep_parse;
 mod text;
 pub(crate) mod touch;
 #[cfg(windows)]
@@ -137,6 +138,9 @@ enum Descendants {
 struct Targets {
     items: Vec<Target>,
     complete: bool,
+    /// A complete model's operation reads its standard input and no file
+    /// besides `items`, so no file target is missing when `items` is empty.
+    reads_input: bool,
     /// First failed search observation, retained without raw OS error text.
     unavailable: Option<(PathBuf, &'static str)>,
 }
@@ -561,7 +565,7 @@ impl Observer {
         patterns: &dyn Provider,
     ) -> Result<Option<&'static str>, Error> {
         let targets = self.targets.get_or_init(|| self.collect());
-        if !targets.complete || targets.items.is_empty() {
+        if !targets.complete || (targets.items.is_empty() && !targets.reads_input) {
             self.unverified.set(true);
         }
         if key == "targets" {
@@ -570,6 +574,14 @@ impl Observer {
                 .map_or_else(|| vec![predicate], |v| v.iter().collect());
             for item in predicates {
                 let action = item["action"].as_str().ok_or(Error::Syntax)?;
+                // Every file such a request reads is within any bound.
+                if targets.complete
+                    && targets.reads_input
+                    && targets.items.is_empty()
+                    && item.get("all").is_some()
+                {
+                    continue;
+                }
                 if let Some(failure) = self.quantified(
                     item,
                     targets.items.iter().filter(|t| t.action == action),
@@ -663,7 +675,7 @@ impl Observer {
     pub(crate) fn coverage(&self, predicates: &[&Value]) -> bool {
         let targets = self.targets.get_or_init(|| self.collect());
         targets.complete
-            && !targets.items.is_empty()
+            && (targets.reads_input || !targets.items.is_empty())
             && targets.items.iter().all(|item| {
                 predicates.iter().any(|p| {
                     let selected = &p["targets"];

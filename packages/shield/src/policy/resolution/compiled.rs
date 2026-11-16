@@ -490,14 +490,14 @@ impl Plan {
             }
             let mut q = query(0, &request.executable);
             for length in 0..=request.arguments.len() {
-                self.collect(&q, &mut packs, &mut custom, checkpoint)?;
+                self.collect(&q, &mut packs, &mut custom, checkpoint, None)?;
                 if let Some(arg) = request.arguments.get(length) {
                     q.extend(arg.as_bytes());
                     q.push(0);
                 }
             }
             q[0] = 1;
-            self.collect(&q, &mut packs, &mut custom, checkpoint)?;
+            self.collect(&q, &mut packs, &mut custom, checkpoint, None)?;
         }
         let domain = match facts.input {
             normalized::Input::Argv { .. } => "argv",
@@ -508,7 +508,13 @@ impl Plan {
             normalized::Input::Unknown { .. } => "unknown",
         };
         for domain in [domain, "exact_request"] {
-            self.collect(&query(8, domain), &mut packs, &mut custom, checkpoint)?;
+            self.collect(
+                &query(8, domain),
+                &mut packs,
+                &mut custom,
+                checkpoint,
+                (domain == "argv").then_some(request.executable.as_str()),
+            )?;
         }
         if matches!(facts.input, normalized::Input::Mcp { .. }) {
             let empty = BTreeMap::new();
@@ -574,12 +580,23 @@ impl Plan {
         packs: &mut [(Pack, Profile)],
         custom: &mut Option<CustomRules>,
         checkpoint: &dyn Fn() -> Result<(), Error>,
+        executable: Option<&str>,
     ) -> Result<(), Error> {
         for position in self.bound(query, false)?..self.bound(query, true)? {
             checkpoint()?;
             let entry = self.entry(position)?;
-            let mut rule: Rule = serde_json::from_slice(&self.bytes[entry.key_end..entry.end])
-                .map_err(|_| Error::Syntax)?;
+            let bytes = &self.bytes[entry.key_end..entry.end];
+            if let Some(executable) = executable
+                && !executable_candidate(bytes, executable)?
+            {
+                continue;
+            }
+            crate::diagnostics::trace::count("policy.collected_rules", 1);
+            crate::diagnostics::trace::count(
+                "policy.collected_bytes",
+                (entry.end - entry.key_end) as u64,
+            );
+            let mut rule: Rule = serde_json::from_slice(bytes).map_err(|_| Error::Syntax)?;
             rule.prepare();
             if let Some((pack, _)) = packs.get_mut(entry.owner) {
                 pack.document.rules.push(rule);
@@ -807,6 +824,45 @@ fn scope_key(rule: &Rule) -> Vec<u8> {
         query(8, c["domain"].as_str().unwrap_or_default())
     }
 }
+/// Broad postings include finite executable choices. Decode only their small
+/// selector before allocating the complete rule and its argument grammar.
+/// Every unrecognized selector stays a candidate for the ordinary resolver.
+fn executable_candidate(bytes: &[u8], executable: &str) -> Result<bool, Error> {
+    #[derive(Deserialize)]
+    struct Row {
+        conditions: Conditions,
+    }
+    #[derive(Deserialize)]
+    struct Conditions {
+        #[serde(default)]
+        domain: Option<String>,
+        #[serde(default)]
+        executable: serde_json::Value,
+    }
+    let row: Row = serde_json::from_slice(bytes).map_err(|_| Error::Syntax)?;
+    if row.conditions.domain.as_deref() != Some("argv") {
+        return Ok(true);
+    }
+    let selector = &row.conditions.executable;
+    if let Some(literal) = selector.as_str() {
+        return Ok(literal == executable);
+    }
+    let Some(fields) = selector.as_object().filter(|fields| fields.len() == 1) else {
+        return Ok(true);
+    };
+    if let Some(literal) = fields.get("exact").and_then(serde_json::Value::as_str) {
+        return Ok(literal == executable);
+    }
+    if let Some(choices) = fields.get("one_of").and_then(serde_json::Value::as_array)
+        && choices.iter().all(serde_json::Value::is_string)
+    {
+        return Ok(choices
+            .iter()
+            .any(|choice| choice.as_str() == Some(executable)));
+    }
+    Ok(true)
+}
+
 fn number(bytes: &mut Vec<u8>, value: usize) -> Result<(), Error> {
     bytes.extend(
         u32::try_from(value)

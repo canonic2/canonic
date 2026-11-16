@@ -1167,8 +1167,15 @@ fn search_models_check_paths_and_reject_explicit_helpers() {
         ("grep", vec!["Acme", ".aws/credentials"], Decision::Deny),
         ("grep", vec!["Acme", "."], Decision::Deny),
         ("grep", vec!["-r", "Acme", "."], Decision::Deny),
-        ("grep", vec!["-f", "item", "item"], Decision::Deny),
-        ("grep", vec!["Acme"], Decision::Deny),
+        // A pattern file is read like an explicit file.
+        ("grep", vec!["-f", "item", "item"], Decision::Allow),
+        (
+            "grep",
+            vec!["-f", ".aws/credentials", "item"],
+            Decision::Deny,
+        ),
+        // Without file operands grep reads only its standard input.
+        ("grep", vec!["Acme"], Decision::Allow),
         ("grep", vec!["Acme", "item", "-f/outside"], Decision::Deny),
         (
             "rg",
@@ -1195,6 +1202,76 @@ fn search_models_check_paths_and_reject_explicit_helpers() {
         ),
     ] {
         req.executable = executable.into();
+        req.arguments = arguments.into_iter().map(str::to_owned).collect();
+        assert_eq!(
+            evaluator.evaluate(&req).unwrap().decision,
+            decision,
+            "{req:?}"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn grep_parses_its_option_table_and_checks_only_what_it_reads() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::write(root.join("item"), "Acme").unwrap();
+    std::fs::create_dir(root.join(".aws")).unwrap();
+    std::fs::write(root.join(".aws/credentials"), "Acme").unwrap();
+    let evaluator = prepared(vec![
+        json!({"id":"search","decision":"allow","conditions":{"domain":"argv","executable":"grep","arguments":{"kind":"any"}},"requirements":{"targets":{"action":"read","all":{"within":{"root":"project"},"exclude":[{"root":"project","path":".aws"}]}}},"on_unmet":{"decision":"deny"}}),
+    ]);
+    let mut req = Request {
+        executable: "grep".into(),
+        arguments: vec![],
+        cwd: root.to_string_lossy().into_owned(),
+        project: root.to_string_lossy().into_owned(),
+    };
+    for (arguments, decision) in [
+        // Output and matching options need no listing, alone or clustered,
+        // with separate or attached values that are never taken as patterns.
+        (vec!["-n", "-A1", "Acme", "item"], Decision::Allow),
+        (vec!["-nA1", "Acme", "item"], Decision::Allow),
+        (vec!["-A", "1", "Acme", "item"], Decision::Allow),
+        (
+            vec!["-ob", "-m", "3", "--color=always", "Acme", "item"],
+            Decision::Allow,
+        ),
+        (
+            vec!["-P", "-5", "--label", "Acme", "Acme", "item"],
+            Decision::Allow,
+        ),
+        (vec!["--after-context=2", "Acme", "item"], Decision::Allow),
+        // Unique abbreviations name their option, as getopt_long does.
+        (vec!["--after", "2", "Acme", "item"], Decision::Allow),
+        (vec!["--context=3", "-C3", "Acme", "item"], Decision::Allow),
+        // A piped search reads only its input; its pattern is no path.
+        (vec!["-n", "-A1", "^\"acme@"], Decision::Allow),
+        (vec!["-e", "Acme", "-"], Decision::Allow),
+        (vec!["-f", "-", "item"], Decision::Allow),
+        (vec!["-d", "read", "Acme"], Decision::Allow),
+        (vec!["--directories=skip", "Acme"], Decision::Allow),
+        // Unsupported directory modes must not become stdin-only success.
+        (vec!["-d", "rec", "Acme"], Decision::Deny),
+        (vec!["--directories=recu", "Acme"], Decision::Deny),
+        (vec!["-d", "RECURSE", "Acme"], Decision::Deny),
+        (vec!["--directories=unknown", "Acme"], Decision::Deny),
+        (vec!["-d", "recurse", "Acme"], Decision::Deny),
+        // The files named by options or operands are still checked.
+        (vec!["-A1", "Acme", ".aws/credentials"], Decision::Deny),
+        (vec!["--file=.aws/credentials"], Decision::Deny),
+        (vec!["-f.aws/credentials", "item"], Decision::Deny),
+        // GNU and BSD grep parse a bare context option differently.
+        (vec!["-C", "3", "Acme", "item"], Decision::Deny),
+        (vec!["--context", "3", "Acme", "item"], Decision::Deny),
+        // Ambiguous or unknown options, and link-following walks, are unmodeled.
+        (vec!["--re", "Acme", "item"], Decision::Deny),
+        (vec!["--deref", "Acme", "item"], Decision::Deny),
+        (vec!["-S", "Acme", "item"], Decision::Deny),
+        (vec!["--acme", "Acme", "item"], Decision::Deny),
+        (vec!["--count=1", "Acme", "item"], Decision::Deny),
+    ] {
         req.arguments = arguments.into_iter().map(str::to_owned).collect();
         assert_eq!(
             evaluator.evaluate(&req).unwrap().decision,
@@ -1279,13 +1356,23 @@ fn recursive_grep_checks_existing_descendants_without_following_links() {
         // An explicit operand still follows its own link.
         (vec!["-r", "Acme", "linked"], Decision::Deny),
         (vec!["-R", "Acme", "models"], Decision::Deny),
+        // Without a path the walk of the working directory is checked.
         (vec!["-r", "Acme"], Decision::Deny),
         (
             vec!["-r", "-f", "models/item.prisma", "models"],
+            Decision::Allow,
+        ),
+        (
+            vec!["-r", "-f", ".aws/credentials", "models"],
             Decision::Deny,
         ),
         (
-            vec!["-r", "--directories=recurse", "Acme", "models"],
+            vec!["--directories=recurse", "Acme", "models"],
+            Decision::Allow,
+        ),
+        (vec!["-d", "recurse", "Acme", "secrets"], Decision::Deny),
+        (
+            vec!["-r", "--exclude-from=.aws/credentials", "Acme", "models"],
             Decision::Deny,
         ),
         (vec!["-r", "Acme", "missing"], Decision::Deny),

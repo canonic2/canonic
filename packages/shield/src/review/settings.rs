@@ -8,12 +8,22 @@ use crate::configuration::settings::{
 };
 use canonic_registry_kit::registrations::Registrations;
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, path::Path, sync::Mutex};
 
 #[cfg(test)]
 mod tests;
 
 const LOCAL: &str = "config.local.yml";
+
+struct Parsed {
+    shared: String,
+    local: Option<String>,
+    layer: Layer,
+}
+// A single bounded pure decode, never file metadata or authority. Every use
+// still reads both current files, including while holding the writer lock.
+static LAST_PARSED: Mutex<Option<Parsed>> = Mutex::new(None);
+const PARSED_BYTES: usize = 64 * 1024;
 
 /// The settings of the policy files under `root`, local layer applied, or
 /// `None` for a folder without `config.yml`.
@@ -28,14 +38,37 @@ pub(in crate::review) fn read(root: &Path) -> Result<Option<Layer>, Error> {
     let Some(shared) = text(&selection.file)? else {
         return Ok(None);
     };
-    let shared: Layer = crate::policy::parse(&shared)?;
-    shared.validate()?;
-    let local = match text(&selection.bundle().join(LOCAL))? {
-        Some(local) => crate::policy::parse(&local)?,
+    let local = text(&selection.bundle().join(LOCAL))?;
+    if let Some(parsed) = LAST_PARSED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .as_ref()
+        .filter(|parsed| parsed.shared == shared && parsed.local == local)
+    {
+        return Ok(Some(parsed.layer.clone()));
+    }
+    let shared_layer: Layer = crate::policy::parse(&shared)?;
+    shared_layer.validate()?;
+    let local_layer = match &local {
+        Some(local) => crate::policy::parse(local)?,
         None => Layer::default(),
     };
-    local.validate()?;
-    Ok(Some(shared.under(&local)))
+    local_layer.validate()?;
+    let layer = shared_layer.under(&local_layer);
+    if shared
+        .len()
+        .saturating_add(local.as_ref().map_or(0, String::len))
+        <= PARSED_BYTES
+    {
+        *LAST_PARSED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Parsed {
+            shared,
+            local,
+            layer: layer.clone(),
+        });
+    }
+    Ok(Some(layer))
 }
 
 fn text(path: &Path) -> Result<Option<String>, Error> {

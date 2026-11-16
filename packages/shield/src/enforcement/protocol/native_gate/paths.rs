@@ -256,74 +256,53 @@ fn output_protection(
             ]
             .into_iter(),
         ),
-        "grep" | "egrep" | "fgrep" => match recursive_grep(&arguments, cwd) {
-            Some(search) => {
-                let mut finding = search_protection(&search, root, cwd, cwd_known, guard, false);
-                if finding.0 == Protection::Blocked {
-                    finding.0 = Protection::SearchBlocked;
-                }
-                finding
-            }
-            None => (Protection::None, None),
-        },
+        "grep" | "egrep" | "fgrep" => grep_protection(
+            &arguments
+                .iter()
+                .map(|s| (*s).to_owned())
+                .collect::<Vec<_>>(),
+            root,
+            cwd,
+            cwd_known,
+            guard,
+        ),
         _ => (Protection::None, None),
     }
 }
 
-/// A recursive grep as the rg content search that reads every existing entry
-/// below the same folders; grep honours no ignore files. Missing folders hold
-/// nothing to read. None when the grep is not recursive.
-fn recursive_grep(arguments: &[&str], cwd: &Path) -> Option<Value> {
-    const VALUED_SHORT: &str = "efmABCdD";
-    const VALUED_LONG: &str = "--regexp --file --max-count --after-context --before-context \
-        --context --include --exclude --exclude-dir --exclude-from --label --binary-files \
-        --devices --directories --group-separator";
-    let listed = |list: &str, word: &str| list.split_whitespace().any(|item| item == word);
-    let mut recursive = false;
-    let mut pattern_given = false;
-    let mut operands = Vec::new();
-    let mut options = true;
-    let mut words = arguments.iter();
-    while let Some(&word) = words.next() {
-        if !options || word == "-" || !word.starts_with('-') {
-            operands.push(word);
-        } else if word == "--" {
-            options = false;
-        } else if let Some(long) = word.strip_prefix("--") {
-            let (name, value) = long
-                .split_once('=')
-                .map_or((long, None), |(name, value)| (name, Some(value)));
-            let value = if value.is_none() && listed(VALUED_LONG, word) {
-                words.next().copied()
-            } else {
-                value
-            };
-            recursive |= ["recursive", "dereference-recursive"].contains(&name)
-                || (name == "directories" && value == Some("recurse"));
-            pattern_given |= ["regexp", "file"].contains(&name);
-        } else {
-            for (index, flag) in word.char_indices().skip(1) {
-                recursive |= flag == 'r' || flag == 'R';
-                if VALUED_SHORT.contains(flag) {
-                    let attached = &word[index + flag.len_utf8()..];
-                    let value = if attached.is_empty() {
-                        words.next().copied()
-                    } else {
-                        Some(attached)
-                    };
-                    pattern_given |= flag == 'e' || flag == 'f';
-                    recursive |= flag == 'd' && value == Some("recurse");
-                    break;
-                }
-            }
-        }
+/// Use the location model's parser for both recursive footprints and auxiliary
+/// reads, including long abbreviations and attached pattern-file values.
+fn grep_protection(
+    arguments: &[String],
+    root: &Path,
+    cwd: &Path,
+    cwd_known: bool,
+    guard: Guard<'_>,
+) -> Finding {
+    if !cwd_known {
+        return (Protection::Unverified, None);
     }
-    if !recursive {
-        return None;
+    let parsed = crate::location::grep_parse(arguments, cwd);
+    let mut finding = strictest(
+        parsed
+            .reads
+            .iter()
+            .map(|path| inspect_path(path, cwd, guard, Access::Read)),
+    );
+    if finding.0 == Protection::Blocked {
+        return finding;
     }
-    let paths: Vec<&str> = operands
+    if !parsed.complete {
+        return strictest([finding, (Protection::Unverified, None)].into_iter());
+    }
+    if !parsed.recursive {
+        return finding;
+    }
+    let paths: Vec<&str> = parsed
+        .operands
         .into_iter()
-        .skip(usize::from(!pattern_given))
+        .skip(usize::from(!parsed.pattern_given))
+        .filter(|path| *path != "-")
         .collect();
     let paths = if paths.is_empty() { vec!["."] } else { paths };
     let existing: Vec<&str> = paths
@@ -331,11 +310,22 @@ fn recursive_grep(arguments: &[&str], cwd: &Path) -> Option<Value> {
         .filter(|path| submitted_path(path, cwd).symlink_metadata().is_ok())
         .collect();
     if existing.is_empty() {
-        return None;
+        return finding;
     }
     let mut search = vec!["-g", "*", "--", "shield-pattern"];
     search.extend(existing);
-    Some(serde_json::json!({"executable":"rg","arguments":search}))
+    let search = serde_json::json!({"executable":"rg","arguments":search});
+    finding = strictest(
+        [
+            finding,
+            search_protection(&search, root, cwd, cwd_known, guard, false),
+        ]
+        .into_iter(),
+    );
+    if finding.0 == Protection::Blocked {
+        finding.0 = Protection::SearchBlocked;
+    }
+    finding
 }
 
 /// An outside-location refusal: the first argument of the refused operation
