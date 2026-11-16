@@ -607,6 +607,9 @@ pub(super) fn capabilities(value: &Value, domain: &str, result: &mut BTreeSet<St
                     if v["operation"] == "mutation" {
                         result.insert("graphql-mutations-v1".into());
                     }
+                    if crate::graphql::has_subtree(v) {
+                        result.insert("graphql-subtree-v1".into());
+                    }
                     for selector in crate::graphql::selectors(v) {
                         capabilities(selector, domain, result);
                     }

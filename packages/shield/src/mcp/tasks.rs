@@ -21,7 +21,6 @@ pub(super) fn policy() -> TaskOptions {
         max_running: 2,
         max_input_rounds: 1,
         execution_timeout: Duration::from_mins(1),
-        input_timeout: Duration::from_mins(1),
     }
 }
 

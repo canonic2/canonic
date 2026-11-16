@@ -14,9 +14,13 @@ pub(crate) fn definitions() -> Value {
         ]}
     }});
     let field = json!({"type":"object","additionalProperties":false,"properties":{
-        "select":{"type":"string","minLength":1,"maxLength":64},"leaf":{"const":true},
+        "select":{"type":"string","minLength":1,"maxLength":64},"leaf":{"const":true},"subtree":{"const":true},
         "arguments":{"type":"object","maxProperties":64,"additionalProperties":argument}
-    },"oneOf":[{"required":["select"],"not":{"required":["leaf"]}},{"required":["leaf"],"not":{"required":["select"]}}]});
+    },"oneOf":[
+        {"required":["select"],"not":{"anyOf":[{"required":["leaf"]},{"required":["subtree"]}]}},
+        {"required":["leaf"],"not":{"anyOf":[{"required":["select"]},{"required":["subtree"]}]}},
+        {"required":["subtree"],"not":{"anyOf":[{"required":["select"]},{"required":["leaf"]}]}}
+    ]});
     let state = json!({"type":"object","required":["types","fields"],"additionalProperties":false,"properties":{
         "types":{"type":"array","minItems":1,"maxItems":64,"uniqueItems":true,"items":{"type":"string","minLength":1}},
         "fields":named(256,field)

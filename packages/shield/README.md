@@ -169,6 +169,7 @@ See [connecting Claude and Codex](docs/claude-project.md),
 
 ## Documentation
 
+- [Release notes](CHANGELOG.md)
 - [What is Shield?](docs/introduction.md)
 - [Your first project](docs/getting-started.md)
 - [Policy decisions](docs/policy-decisions.md)

@@ -21,7 +21,7 @@ use std::{
 /// The plan format this engine writes and loads. Change it whenever compiled
 /// bytes would decide differently, such as how patterns are prepared, so
 /// plans written before the change are rebuilt instead of loaded.
-pub(crate) const FORMAT: &str = "SHPLAN15";
+pub(crate) const FORMAT: &str = "SHPLAN16";
 const MAGIC: &[u8] = FORMAT.as_bytes();
 const HEADER: usize = 16;
 const ENTRY: usize = 16;

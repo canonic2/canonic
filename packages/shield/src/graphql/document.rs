@@ -683,7 +683,8 @@ impl Document {
                 return Ok(Some(Failure::new("selection", "required argument missing")));
             }
             if rule["leaf"] == true && !field.selection_set.items.is_empty()
-                || rule.get("select").is_some() && field.selection_set.items.is_empty()
+                || (rule.get("select").is_some() || rule["subtree"] == true)
+                    && field.selection_set.items.is_empty()
             {
                 return Ok(Some(Failure::new(
                     "selection",
@@ -707,6 +708,21 @@ impl Document {
                     )));
                 }
             } else if let q::Value::Object(object) = value {
+                if self.paginate {
+                    let mut variables = BTreeSet::new();
+                    input_value(value, 0, &mut variables, visits, checkpoint)?;
+                    if variables.contains("endCursor") {
+                        return Ok(Some(Failure::new(
+                            "pagination",
+                            "cursor changes a non-cursor argument",
+                        )));
+                    }
+                }
+                // Classification and open query subtrees assert no descendant
+                // argument scope. The document pass already checked structure.
+                if declaration.is_none() && self.kind == Kind::Query {
+                    continue;
+                }
                 // Object literals pass only through a declared object matcher.
                 let Some(fields) = rule.and_then(|r| r["match"].get("object")) else {
                     return Ok(Some(Failure::new(

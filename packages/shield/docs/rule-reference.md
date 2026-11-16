@@ -204,21 +204,29 @@ used only in cursor arguments. Supported output flags are `--silent`,
 `--include`/`-i` and paginated `--slurp`; explicit method/hostname are limited to
 `POST` and `github.com`. Known conflicting host context fails verification.
 
-File/stdin input, typed placeholders, object/list values, mutations,
+File/stdin input, typed placeholders, object-valued variables, list values, mutations,
 custom headers, alternate endpoints/hosts, `--jq`, templates and unknown syntax
 do not satisfy a query predicate; [mutation predicates](#graphql-mutations)
 admit reviewed mutations and their input objects. A query classification
-without `selection` asserts
+without `selection` accepts structurally valid object argument literals and asserts
 no repository scope. Source names and related metadata checks do not attest the
 actual network destination or immutable repository identity.
 
 An optional `selection` has `root` and `states`. Each state declares accepted
 fragment `types` and a `fields` map. A field has either `leaf: true` or
-`select: STATE`, plus optional `arguments`. Each argument declares `match` as
+`select: STATE`, plus optional `arguments`. Query-root fields can instead use
+`subtree: true` with `graphql-subtree-v1`: their own arguments are checked, but
+all descendant fields, arguments and fragment types are unrestricted. A subtree
+requires a child selection and can appear only in the root state with exactly
+`types: [Query]`. It permits related objects outside the named repository.
+Document, variable, directive and resource checks still apply; descendant object
+argument literals are accepted within the existing input-depth bounds, while
+list inputs and object-valued variables remain unsupported.
+Each argument declares `match` as
 `{text: SELECTOR}`, `{exact: SCALAR}` or `{scalar: string|integer|number|boolean|enum}`,
 with optional `required`, `nullable` and `cursor` booleans defaulting to false.
-Every field and argument must be declared; aliases do not replace actual field
-names. Missing required scope values and unknown traversals fail. A cursor
+Every modeled field and argument must be declared; aliases do not replace actual
+field names. Missing required scope values and unknown modeled traversals fail. A cursor
 declaration must be optional, nullable and `{scalar: string}`. Pack text selectors
 can use prepared variable projections. Source models contain no executable code
 or live schema queries. Invalid models make the policy files invalid; exhausted analysis
@@ -254,6 +262,11 @@ The query `{ repository(owner:"acme", name:"web") { nameWithOwner } }` satisfies
 this model; adding `parent { nameWithOwner }` does not. Use a Deny unmet branch
 when failure must block rather than follow Ask fallback. See
 [conditions and requirements](policy-rules.md#conditions-versus-requirements).
+
+For a root-only boundary, replace `select: repository` with `subtree: true`
+and omit the `repository` state. Every root must still be declared and match
+its arguments, including roots inside fragments and conditional selections.
+Nested reads such as `parent { nameWithOwner }` then pass without a field inventory.
 
 ### GraphQL mutations
 
@@ -342,6 +355,7 @@ Declare exactly the capabilities used anywhere in the document, once each.
 | `argument-paths-v1` | Explicit argument-path checks. |
 | `graphql-v1` | Parsed inline GitHub GraphQL query predicates and finite selection models. |
 | `graphql-mutations-v1` | GraphQL predicates with `operation: mutation`. |
+| `graphql-subtree-v1` | Query-root fields with unrestricted descendant selections. |
 | `field-paths-v1` | Explicit path checks on MCP JSON fields. |
 | `glob-v1`, `regex-v1` | Their respective text selectors. |
 | `location-v1` | Path references/predicates, cwd, file domains, or targets. |

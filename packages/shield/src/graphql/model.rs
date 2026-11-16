@@ -83,10 +83,10 @@ pub(crate) fn validate_model(model: &Value) -> Result<(), Error> {
         return Err(Error::Contract("unknown GraphQL root state"));
     }
     let mut total = 0;
-    for (name, state) in states {
-        if name.is_empty()
-            || name.len() > 64
-            || !name
+    for (state_name, state) in states {
+        if state_name.is_empty()
+            || state_name.len() > 64
+            || !state_name
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b"._:-".contains(&b))
         {
@@ -112,13 +112,16 @@ pub(crate) fn validate_model(model: &Value) -> Result<(), Error> {
             if !self::name(name) {
                 return Err(Error::Contract("invalid GraphQL field name"));
             }
-            text::fields(field, &["arguments", "select", "leaf"])?;
-            match (field.get("select"), field.get("leaf")) {
-                (Some(next), None) if next.as_str().is_some_and(|n| states.contains_key(n)) => {}
-                (None, Some(Value::Bool(true))) => {}
+            text::fields(field, &["arguments", "select", "leaf", "subtree"])?;
+            match (field.get("select"), field.get("leaf"), field.get("subtree")) {
+                (Some(next), None, None)
+                    if next.as_str().is_some_and(|n| states.contains_key(n)) => {}
+                (None, Some(Value::Bool(true)), None) => {}
+                (None, None, Some(Value::Bool(true)))
+                    if state_name == root && types.len() == 1 && types[0] == "Query" => {}
                 _ => {
                     return Err(Error::Contract(
-                        "GraphQL field needs a valid select or leaf true",
+                        "GraphQL field needs select, leaf true, or query-root subtree true",
                     ));
                 }
             }
@@ -148,6 +151,14 @@ pub(crate) fn validate_model(model: &Value) -> Result<(), Error> {
         return Err(Error::Contract("unused GraphQL model state"));
     }
     Ok(())
+}
+
+pub(crate) fn has_subtree(predicate: &Value) -> bool {
+    let model = &predicate["selection"];
+    model["root"]
+        .as_str()
+        .and_then(|root| model["states"][root]["fields"].as_object())
+        .is_some_and(|fields| fields.values().any(|field| field["subtree"] == true))
 }
 
 /// Admit one field's argument map, or one object matcher's input fields at

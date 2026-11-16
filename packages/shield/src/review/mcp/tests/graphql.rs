@@ -3,13 +3,27 @@ use super::*;
 
 #[test]
 fn graphql_proposal_schema_admission_preview_and_inspection_preserve_activation() {
+    graphql_proposal(false);
+    graphql_proposal(true);
+}
+
+fn graphql_proposal(subtree: bool) {
     let (root, context, connection) = fixture();
-    let selection = json!({"root":"query","states":{
+    let mut selection = json!({"root":"query","states":{
         "query":{"types":["Query"],"fields":{"repository":{"select":"repository","arguments":{
             "owner":{"required":true,"match":{"text":"acme"}},"name":{"required":true,"match":{"text":"web"}}
         }}}},
         "repository":{"types":["Repository"],"fields":{"nameWithOwner":{"leaf":true}}}
     }});
+    if subtree {
+        selection["states"]
+            .as_object_mut()
+            .unwrap()
+            .remove("repository");
+        let field = &mut selection["states"]["query"]["fields"]["repository"];
+        field.as_object_mut().unwrap().remove("select");
+        field["subtree"] = json!(true);
+    }
     let row = json!({"id":"github-read","decision":"allow","conditions":{
         "domain":"argv","executable":"gh","arguments":{"kind":"prefix","values":["api"]}},
         "requirements":{"graphql":{"carrier":"gh-api","operation":"query","selection":selection}},
@@ -32,11 +46,16 @@ fn graphql_proposal_schema_admission_preview_and_inspection_preserve_activation(
     assert!(proposed["error"].is_null(), "{proposed}");
     let after = proposed["data"]["after_candidate_id"].clone();
     for (owner, expected) in [("acme", "allow"), ("other", "deny")] {
+        let fields = if subtree {
+            "futureScalar parent{name}"
+        } else {
+            "nameWithOwner"
+        };
         let argv = json!([
             "api",
             "graphql",
             "-f",
-            format!("query={{repository(owner:\"{owner}\",name:\"web\"){{nameWithOwner}}}}")
+            format!("query={{repository(owner:\"{owner}\",name:\"web\"){{{fields}}}}}")
         ]);
         let input = json!({"candidate_id":after,"input":{"kind":"argv","executable":"gh","arguments":argv,"original_input":{}},"context":{"cwd":context.project_root,"environment":{}}});
         let result = invoke(&context, &connection, "policy_evaluate", input);

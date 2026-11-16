@@ -36,6 +36,224 @@ fn request(query: &str) -> Request {
         project: "/workspace".into(),
     }
 }
+
+fn root_model() -> Value {
+    json!({"root":"query","states":{
+        "query":{"types":["Query"],"fields":{"repository":{"subtree":true,"arguments":{
+            "owner":{"required":true,"match":{"text":"acme"}},
+            "name":{"required":true,"match":{"text":"web"}}
+        }}}}
+    }})
+}
+
+const SUBTREE_CASES: &[(&str, &[&str], Decision)] = &[
+    (
+        r#"{repository(owner:"acme",name:"web"){pullRequest(number:12){reviewThreads(first:100){nodes{comments(first:100){nodes{outdated diffHunk commit{oid}}}}}}}}"#,
+        &[],
+        Decision::Allow,
+    ),
+    (
+        r#"{repository(owner:"acme",name:"web"){owner{repositories(first:10){nodes{name}}} parent{name} future(filter:{enabled:true}){newField}}}"#,
+        &[],
+        Decision::Allow,
+    ),
+    (
+        r#"{...Roots} fragment Roots on Query{a:repository(owner:"acme",name:"web"){...Data} b:repository(owner:"acme",name:"web"){... on Repository{unknown}}} fragment Data on Repository{newField}"#,
+        &[],
+        Decision::Allow,
+    ),
+    (
+        r#"query($owner:String!="acme",$endCursor:String){repository(owner:$owner,name:"web"){anything(after:$endCursor){nodes{newField}}}}"#,
+        &["--paginate"],
+        Decision::Allow,
+    ),
+    (
+        r#"{repository(owner:"other",name:"web"){name}}"#,
+        &[],
+        Decision::Deny,
+    ),
+    (
+        r#"{repository(owner:"acme",name:"other"){name}}"#,
+        &[],
+        Decision::Deny,
+    ),
+    (
+        r#"{repository(owner:"acme",name:"web"){name} ...Bad} fragment Bad on Query{repository(owner:"other",name:"web") @skip(if:true){name}}"#,
+        &[],
+        Decision::Deny,
+    ),
+    (
+        r#"{repository(owner:"acme",name:"web"){...Shared} ...Shared} fragment Shared on Query{viewer{login}}"#,
+        &[],
+        Decision::Deny,
+    ),
+    (r"{repository:viewer{login}}", &[], Decision::Deny),
+    (
+        r#"{repository(owner:"acme",name:"web"){name} search(query:"all"){nodes{id}}}"#,
+        &[],
+        Decision::Deny,
+    ),
+    (r#"{repository(owner:"acme"){name}}"#, &[], Decision::Deny),
+    (
+        r#"{repository(owner:"acme",name:"web",extra:1){name}}"#,
+        &[],
+        Decision::Deny,
+    ),
+    (
+        r#"mutation{repository(owner:"acme",name:"web"){name}}"#,
+        &[],
+        Decision::Deny,
+    ),
+    (
+        r#"subscription{repository(owner:"acme",name:"web"){name}}"#,
+        &[],
+        Decision::Deny,
+    ),
+    (
+        r#"{repository(owner:"acme",name:"web"){future @unknown}}"#,
+        &[],
+        Decision::Deny,
+    ),
+    (
+        r#"{repository(owner:"acme",name:"web"){...Missing}}"#,
+        &[],
+        Decision::Deny,
+    ),
+    (
+        r#"{repository(owner:"acme",name:"web"){...Cycle}} fragment Cycle on Repository{...Cycle}"#,
+        &[],
+        Decision::Deny,
+    ),
+    (
+        r#"{repository(owner:"acme",name:"web"){future(filter:{x:1,x:2})}}"#,
+        &[],
+        Decision::Deny,
+    ),
+    (
+        r#"query($endCursor:String){repository(owner:$endCursor,name:"web"){name}}"#,
+        &["--paginate"],
+        Decision::Deny,
+    ),
+];
+
+#[test]
+fn graphql_subtree_checks_every_root_without_a_descendant_inventory() {
+    let source = json!({"schema_version":1,"kind":"custom",
+        "capabilities":["structured-rules-v1","argument-rules-v1","requirements-v1","graphql-v1","graphql-subtree-v1"],
+        "rules":[{"id":"read","conditions":{"domain":"argv","executable":"gh","arguments":{"kind":"prefix","values":["api"]}},
+            "requirements":{"graphql":{"carrier":"gh-api","operation":"query","selection":root_model()}},
+            "decision":"allow","on_unmet":{"decision":"deny"}}]
+    });
+    let rules = CustomRules::from_yaml(&source.to_string()).unwrap();
+    let plan = policy::resolution::compiled::Plan::compile(vec![], Some(rules.clone()), json!({}))
+        .unwrap();
+    let plan = policy::resolution::compiled::Plan::load(plan.bytes().to_vec()).unwrap();
+    for &(query, extra, expected) in SUBTREE_CASES {
+        let mut request = request(query);
+        request
+            .arguments
+            .extend(extra.iter().copied().map(str::to_owned));
+        let reference =
+            policy::evaluate(&[], Some(&rules), policy::Profile::Recommended, &request).unwrap();
+        assert_eq!(reference.decision, expected, "{query}");
+        let compiled = plan.evaluate(&request, &|| Ok(()), true, true).unwrap();
+        assert_eq!(json!(compiled), json!(reference), "{query}");
+    }
+    let mut undeclared = source;
+    undeclared["capabilities"].as_array_mut().unwrap().pop();
+    assert!(CustomRules::from_yaml(&undeclared.to_string()).is_err());
+}
+
+#[test]
+fn graphql_subtree_admission_is_explicit_and_query_root_only() {
+    let valid = json!({"carrier":"gh-api","operation":"query","selection":root_model()});
+    assert!(validate(&valid).is_ok());
+    for (key, value) in [
+        ("leaf", json!(true)),
+        ("select", json!("query")),
+        ("subtree", json!(false)),
+    ] {
+        let mut invalid = valid.clone();
+        invalid["selection"]["states"]["query"]["fields"]["repository"][key] = value;
+        assert!(validate(&invalid).is_err());
+    }
+    let mut nested = json!({"carrier":"gh-api","operation":"query","selection":model()});
+    nested["selection"]["states"]["repository"]["fields"]["new"] = json!({"subtree":true});
+    assert!(validate(&nested).is_err());
+    let mut mutation = json!({"carrier":"gh-api","operation":"mutation","root_fields":["repository"],"selection":root_model()});
+    mutation["selection"]["states"]["query"]["types"] = json!(["Mutation"]);
+    assert!(validate(&mutation).is_err());
+}
+
+#[test]
+fn graphql_query_classification_accepts_structural_object_literals_without_asserting_scope() {
+    let plan = policy::resolution::compiled::Plan::compile(vec![], None, json!({})).unwrap();
+    let carrier = carrier::decode(
+        &request(r#"{repository(owner:"acme",name:"web"){future(filter:{enabled:true}){name}}}"#)
+            .arguments,
+        None,
+    )
+    .unwrap();
+    let mut visits = 0;
+    let document = document::parse(&carrier, &mut visits, &|| Ok(()))
+        .unwrap()
+        .unwrap();
+    assert!(
+        document
+            .check(&read(None), &plan, &mut visits, &|| Ok(()))
+            .unwrap()
+            .is_none()
+    );
+}
+#[test]
+fn graphql_pagination_rejects_cursor_references_inside_query_objects() {
+    for selection in [None, Some(root_model())] {
+        let mut predicate = json!({"carrier":"gh-api","operation":"query"});
+        let mut capabilities = vec![
+            "structured-rules-v1",
+            "argument-rules-v1",
+            "requirements-v1",
+            "graphql-v1",
+        ];
+        if let Some(model) = selection {
+            predicate["selection"] = model;
+            capabilities.push("graphql-subtree-v1");
+        }
+        let rules = CustomRules::from_yaml(&json!({"schema_version":1,"kind":"custom","capabilities":capabilities,
+            "rules":[{"id":"read","conditions":{"domain":"argv","executable":"gh","arguments":{"kind":"prefix","values":["api"]}},
+                "requirements":{"graphql":predicate},"decision":"allow","on_unmet":{"decision":"deny"}}]
+        }).to_string()).unwrap();
+        let plan =
+            policy::resolution::compiled::Plan::compile(vec![], Some(rules.clone()), json!({}))
+                .unwrap();
+        let plan = policy::resolution::compiled::Plan::load(plan.bytes().to_vec()).unwrap();
+        for (filter, paginate, expected) in [
+            ("{createdBy:$endCursor}", true, Decision::Deny),
+            ("{nested:{createdBy:$endCursor}}", true, Decision::Deny),
+            ("{after:$endCursor}", true, Decision::Deny),
+            ("{createdBy:$actor}", true, Decision::Allow),
+            ("{createdBy:$endCursor}", false, Decision::Allow),
+        ] {
+            let query = format!(
+                r#"query($endCursor:String,$actor:String="acme"){{repository(owner:"acme",name:"web"){{issues(filterBy:{filter},after:$endCursor){{nodes{{id}}}}}}}}"#
+            );
+            let mut request = request(&query);
+            if paginate {
+                request.arguments.push("--paginate".into());
+            }
+            let reference =
+                policy::evaluate(&[], Some(&rules), policy::Profile::Recommended, &request)
+                    .unwrap();
+            assert_eq!(
+                reference.decision, expected,
+                "{query} paginate={paginate} predicate={predicate}"
+            );
+            let compiled = plan.evaluate(&request, &|| Ok(()), true, true).unwrap();
+            assert_eq!(json!(compiled), json!(reference));
+        }
+    }
+}
+
 #[test]
 fn graphql_policy_admits_reads_and_rejects_neighboring_scope_escapes() {
     let rules = custom();

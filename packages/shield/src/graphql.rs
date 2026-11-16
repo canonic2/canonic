@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
-pub(crate) use model::{selectors, selectors_mut, validate, validate_model};
+pub(crate) use model::{has_subtree, selectors, selectors_mut, validate, validate_model};
 pub(crate) use schema::definitions as schema;
 pub(crate) type Shared = Rc<RefCell<Analysis>>;
 
