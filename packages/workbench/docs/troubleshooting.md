@@ -335,6 +335,7 @@ See [Storybook troubleshooting](storybook.md#troubleshooting).
 | Screenshots of one page fail with a message | The page contains an `iframe`, `object`, or `embed`, or a canvas or video loaded from another origin without CORS. These pages can't be captured. |
 | A font or image is missing in the first screenshot after loading | The runtime's copy was still loading assets. Take it again. |
 | Screenshots fail with an error | Read **Workbench: Show Log**. |
+| A preserved view says its storage was lost after the server restarted | Disk-only captured state belonged to the previous server session. Workbench reconnects for new work, but cannot restore that lost copy. **Restart** the artboard to start fresh; its previous interactions will not be restored. Images still held in memory remain usable. |
 | Screenshots say this copy of Workbench has no browser runtime | This release ships the browser runtime only in the Intel macOS (`darwin-x64`) package; other packages take no screenshots, handoff images or exports. See [The browser runtime](extension.md#the-browser-runtime). |
 | Screenshots say the browser runtime needs a display on Linux | Run VS Code in a desktop session, with `DISPLAY` or `WAYLAND_DISPLAY` set. |
 
