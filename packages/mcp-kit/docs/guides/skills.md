@@ -292,7 +292,7 @@ A modern handler can construct a yes/no interim result with
 `RequestContext::confirmation(message, state)` and return `Outcome::InputRequired`.
 The host retries with a new request ID, echoed `requestState` and
 `inputResponses`. The consumer must authenticate that state, bind it to the
-operation and authorization scope, enforce expiry and any single-use rule,
+operation and authorization scope, recheck domain validity and any single-use rule,
 then inspect `confirmation_decision()`. The library checks the envelope and
 the retry's current form capability; it never grants authority from echoed data.
 

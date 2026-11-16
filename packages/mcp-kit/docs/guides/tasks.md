@@ -58,11 +58,13 @@ The tiny executor runs after durable input consumption; longer work belongs
 on your own execution service.
 
 Close stdin, rerun the same command with the same directory and poll the ID
-again. Unexpired questions and terminal results remain available. A crash
+again. Pending questions and unexpired terminal results remain available. A crash
 after input consumption but before result commitment is recovered as `failed`
 with an uncertainty message; the example never replays report generation.
-Records expire after ten minutes from creation. New creates reclaim expired
-records, and reopening prunes them. Reads do not extend retention.
+Records retain ten minutes of time from creation excluding human waits. A
+question remains answerable while retained, with `ttlMs: null` in its wire
+metadata. New creates and reopening reclaim expired non-input records. Reads
+do not extend retention.
 
 For an ordinary result, call `acme_report` with `deferred: false` or omit the
 argument. That preview also works with existing legacy clients. A modern
@@ -73,7 +75,7 @@ creating a record.
 
 Enable `SessionOptions::tasks` together with `SessionOptions::modern`. Supply
 an explicit `task::TaskOptions` value: retained-record and byte quotas,
-execution capacity, input-round limit, execution timeout and input timeout.
+execution capacity, input-round limit and active execution timeout.
 All limits must be positive and finite; there are no library policy defaults.
 Your storage/execution service enforces them. `TaskOptions::admit` checks a
 proposed reservation, but does not reserve storage or synchronize writers.
@@ -107,7 +109,9 @@ Use `RequestContext::encode_task` for wire replies; it omits this marker.
 `Snapshot::restore` validates stored values without authenticating the store
 or recovering execution.
 `Timestamp::from_unix_millis` converts a supplied clock reading without reading
-the clock itself. TTL is measured from creation, not completion or last access.
+the clock itself. TTL is measured from creation excluding human waits, not
+completion or last access. Persisted TTL is finite; wire replies use null while
+input is required so a client does not expire the question independently.
 
 ## Handle management calls
 
@@ -151,15 +155,23 @@ infer the producing schema from a task ID. See the
 
 The basic input kind is the existing yes/no form. Create a `Question`
 using the originating request context. Persist its meaning, authority scope,
-expiry and lifetime-unique key. `InputHistory` helps reject key reuse and
+domain validity and lifetime-unique key. `InputHistory` helps reject key reuse and
 enforces your input-round limit; persist it with the question and count its
 bytes in your quota. Do not remove consumed or superseded keys prematurely.
 
-Use `Snapshot::input_decision` against a validated update. It checks expiry,
+Use `Snapshot::input_decision` against a validated update. It checks lifetime,
 task identity, pending input and current form capability. Unknown or consumed
 keys are ignored; malformed known answers fail without consuming input.
 Commit consumption and continuation intent before acknowledging. Revalidate
 authority and action identity before effects; a host answer alone grants none.
+
+Use `Snapshot::ensure_live(now)` for access, recovery and pruning: it retains
+pending questions regardless of elapsed time. Build a successor with
+`snapshot.updated_metadata(now)` to preserve the remaining TTL while leaving
+the wait. Persist that metadata with consumed input and continuation intent.
+Use the same helper for partial input and cancellation; never update metadata
+on polling. A metadata-only expiry check cannot distinguish a parked question.
+Execution time must also pause while waiting and resume with its remainder.
 
 For several questions, fields or URL consent, use
 `State::RichInputRequired(elicitation::Requests)` and `Snapshot::input_answers`.
@@ -174,6 +186,33 @@ retry of the original tool. Sampling is outside the supported task-input profile
 
 ## Recovery and retention
 
+If you lose task IDs, call the example's `acme_task_list` tool with optional
+`cursor` and `limit` (default 50, maximum 100). It returns compact `items` with
+`taskId` and `status`, ordered by task ID, and nullable `nextCursor`. Follow the
+cursor to the end. It is scoped to the selected private store and remains
+available when task creation is full. Inspect a recovered ID with `tasks/get`,
+then explicitly cancel abandoned work with `tasks/cancel`. Cancelled records
+retain their results for the unspent TTL; subsequent creation or reopening
+reclaims them after expiry. Other pending questions remain untouched.
+
+For example, send this modern request to recover the first page:
+
+```json
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"acme_task_list","arguments":{"limit":10},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}
+```
+
+Use a returned `TASK_ID` to cancel work you no longer need:
+
+```json
+{"jsonrpc":"2.0","id":5,"method":"tasks/cancel","params":{"taskId":"TASK_ID","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{"extensions":{"io.modelcontextprotocol/tasks":{}}}}}}
+```
+
+`acme_task_list` is an example-owned tool, not an MCP Tasks protocol method.
+Every durable server needs an abandonment policy: authenticated owner/scope
+retirement, or authorized discovery and explicit cancellation after reconnect.
+Keep that route usable at capacity. A lost connection alone does not retire a
+durable owner, and a question's age alone is not grounds to discard it.
+
 Published tasks outlive the connection, not automatically the server process.
 Persist enough state to reopen them or delegate execution to an owner that
 survives process exit. On recovery, reconcile unfinished jobs or settle them
@@ -187,7 +226,7 @@ execution guarantee.
 
 Reserve capacity for terminal results and bounded failure settlement before
 starting effects. Refuse creation at capacity rather than evicting unexpired
-records. At expiry, reject input and access, and retain internal ownership
+records or pending questions. At non-input expiry, reject access and retain internal ownership
 information if cleanup still needs it. Deleting a handle does not stop a job.
 
 ## Limits and runtime integration
@@ -197,7 +236,7 @@ information if cleanup still needs it. Deleting a handle does not stop a job.
 | Task ID or input key | 1–128 UTF-8 bytes; no control characters |
 | Status message | 4096 UTF-8 bytes |
 | UTC RFC 3339 timestamp | 64 UTF-8 bytes |
-| TTL and optional polling interval | Positive safe JSON integer milliseconds; null TTL is outside this profile |
+| Persisted TTL and optional polling interval | Positive safe JSON integer milliseconds; wire TTL is null while input is pending |
 | Pending input | One basic yes/no question or up to eight rich questions; map at most 64 KiB and 32 containers deep |
 | Input response map | 16 KiB and 32 containers deep |
 | Detailed snapshot | 1 MiB encoded JSON and 64 containers deep |

@@ -5,16 +5,12 @@ use canonic_mcp_kit::{
     stdio::{self, Context, Elicit, Handler, Options, Outcome, Request},
 };
 use serde_json::{Value, json};
-use std::{
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::sync::{Arc, Mutex};
 
 struct Pending {
     token: String,
     arguments: Value,
     tool: String,
-    expires: Instant,
     rounds: u8,
 }
 
@@ -75,7 +71,7 @@ impl Handler for Acme {
             Ok(requests) => requests,
             Err(error) => return Outcome::Method(Err(error)),
         };
-        // A private retained token binds exact arguments, operation and expiry. It grants no authority.
+        // Connection-owned state binds exact arguments and operation, never authority.
         let mut pending = self.pending.lock().expect("Acme retry state");
         let make_interim = |state: &str| {
             context
@@ -87,12 +83,10 @@ impl Handler for Acme {
                 state.token == *token
                     && state.tool == call.name
                     && state.arguments == call.arguments
-                    && state.expires > Instant::now()
-                    && state.rounds < 8
             }) else {
                 return Outcome::Method(Err(RpcError::new(
                     -32602,
-                    "Invalid, expired or consumed Acme state",
+                    "Invalid or consumed Acme state",
                 )));
             };
             let answers = match context.elicitation_answers(&requests) {
@@ -100,6 +94,13 @@ impl Handler for Acme {
                 Err(error) => return Outcome::Method(Err(error)),
             };
             let Some(answer) = answers.get("details") else {
+                if state.rounds >= 8 {
+                    *pending = None;
+                    return Outcome::Method(Err(RpcError::new(
+                        -32603,
+                        "Acme input round limit exceeded",
+                    )));
+                }
                 state.rounds += 1;
                 return make_interim(&state.token);
             };
@@ -113,10 +114,7 @@ impl Handler for Acme {
                 "Acme input requires its issued state",
             )));
         }
-        if pending
-            .as_ref()
-            .is_some_and(|state| state.expires > Instant::now())
-        {
+        if pending.is_some() {
             return Outcome::Method(Err(RpcError::new(
                 -32000,
                 "One Acme interaction is already pending",
@@ -132,7 +130,6 @@ impl Handler for Acme {
                 token,
                 arguments: call.arguments,
                 tool: call.name,
-                expires: Instant::now() + Duration::from_mins(5),
                 rounds: 1,
             });
         }
@@ -204,4 +201,71 @@ fn token() -> Result<String, RpcError> {
             ]
         })
         .collect())
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[path = "../tests/integration/fixture.rs"]
+mod fixture;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn human_input_lifetime_example_last_round_accepts_or_releases_exhausted_state() {
+        for accepted in [true, false] {
+            let report = Question::form(
+                "Choose?",
+                Form::new(json!({"type":"object","properties":{}})).unwrap(),
+            )
+            .unwrap();
+            let server = Acme {
+                pending: Mutex::new(Some(Pending {
+                    token: "issued-state".into(),
+                    arguments: json!({}),
+                    tool: "acme_report".into(),
+                    rounds: 8,
+                })),
+                connect: report.clone(),
+                report,
+            };
+            let catalog = Arc::new(
+                Catalog::new(vec![Tool::new(
+                    "acme_report",
+                    "Preview report",
+                    json!({"type":"object"}),
+                )])
+                .unwrap(),
+            );
+            let mut options = Options::default();
+            options.session.modern = Some(ModernOptions::new(ServerInfo::new("acme", "1")));
+            let host = fixture::Host::start_with(Arc::new(server), catalog, options);
+            let call = |id, retry| {
+                let mut params = json!({"name":"acme_report","arguments":{},"_meta":{
+                    "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+                    "io.modelcontextprotocol/clientCapabilities":{"elicitation":{"form":{}}}}});
+                if retry {
+                    params["requestState"] = json!("issued-state");
+                    params["inputResponses"] = if accepted {
+                        json!({"details":{"action":"accept","content":{}}})
+                    } else {
+                        json!({})
+                    };
+                }
+                json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":params})
+            };
+            host.send(&call(1, true));
+            let reply = host.recv();
+            if accepted {
+                assert!(fixture::result_text(&reply).starts_with("Acme report preview:"));
+            } else {
+                assert_eq!(reply["error"]["code"], -32603);
+            }
+            // Neither a consumed answer nor round exhaustion leaves the slot occupied.
+            host.send(&call(2, false));
+            assert_eq!(host.recv()["result"]["resultType"], "input_required");
+            host.finish().0.unwrap();
+        }
+    }
 }

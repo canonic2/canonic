@@ -6,7 +6,7 @@
 //! during I/O. Recovery never replays a possibly executed report operation.
 
 use canonic_mcp_kit::{
-    Content, Decision, RequestContext, RpcError, ToolResult, json,
+    Content, Decision, RequestContext, RpcError, ToolResult, json, page,
     task::{
         self, InputHistory, Metadata, Question, Snapshot, State, TaskId, TaskOptions, TaskRequest,
         Timestamp,
@@ -18,6 +18,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
+    ops::Bound::{Excluded, Unbounded},
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -62,6 +63,10 @@ fn storage(error: impl std::fmt::Display) -> RpcError {
     RpcError::new(-32603, "Acme task storage is unavailable.")
 }
 
+pub(crate) fn paging(error: &page::Error) -> RpcError {
+    RpcError::new(-32602, error.to_string()).with_data(serde_json::json!({"code":error.code()}))
+}
+
 /// The example always reserves a full bounded result slot and failure bookkeeping.
 pub(crate) fn policy() -> TaskOptions {
     TaskOptions {
@@ -70,7 +75,6 @@ pub(crate) fn policy() -> TaskOptions {
         max_running: 8,
         max_input_rounds: 1,
         execution_timeout: std::time::Duration::from_mins(1),
-        input_timeout: std::time::Duration::from_mins(10),
     }
 }
 
@@ -124,7 +128,7 @@ impl Store {
                 return Err(io::Error::other("Acme record identity mismatch"));
             }
             // Clock regression is an error, not grounds to delete a live record.
-            match record.snapshot.metadata().ensure_live(now) {
+            match record.snapshot.ensure_live(now) {
                 Ok(()) => {}
                 Err(task::TaskError::Expired) => {
                     fs::remove_file(entry.path())?;
@@ -180,6 +184,65 @@ impl Store {
         Ok(self.record(id, scope, now)?.snapshot)
     }
 
+    /// Scoped recovery inventory, available even when creation capacity is full.
+    pub(crate) fn list(
+        &self,
+        scope: &str,
+        request: &page::Request,
+        now: &Timestamp,
+    ) -> Result<page::Page, RpcError> {
+        let mut query = self.root.as_os_str().as_encoded_bytes().to_vec();
+        query.push(0);
+        query.extend_from_slice(scope.as_bytes());
+        let binding = page::Scope::new("acme-task-list", page::digest(&query));
+        let after = request
+            .cursor
+            .as_deref()
+            .map(|cursor| {
+                let page::Position::Keyset(key) =
+                    binding.decode(cursor).map_err(|error| paging(&error))?
+                else {
+                    return Err(paging(&page::Error::InvalidCursor));
+                };
+                String::from_utf8(key)
+                    .ok()
+                    .filter(|id| hex_id(id))
+                    .ok_or_else(|| paging(&page::Error::InvalidCursor))
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let records = self.records.lock().map_err(storage)?;
+        if records.unavailable {
+            return Err(storage("Previous write was uncertain; reopen the store."));
+        }
+        let mut output = page::Builder::new(
+            &binding,
+            request.limit,
+            page::Limits::STANDARD,
+            task::MAX_SNAPSHOT_BYTES,
+            "tasks/get",
+        )
+        .map_err(|error| paging(&error))?;
+        for (id, record) in records.entries.range((Excluded(after), Unbounded)) {
+            if record.scope != scope {
+                continue;
+            }
+            match record.snapshot.ensure_live(now) {
+                Ok(()) => {}
+                Err(task::TaskError::Expired) => continue,
+                Err(error) => return Err(storage(error)),
+            }
+            let item = serde_json::json!({"taskId":id,"status":record.snapshot.status()});
+            if !output
+                .push(item, &page::Position::Keyset(id.as_bytes().to_vec()))
+                .map_err(|error| paging(&error))?
+            {
+                break;
+            }
+        }
+        Ok(output.finish(false))
+    }
+
     fn record(&self, id: &TaskId, scope: &str, now: &Timestamp) -> Result<Record, RpcError> {
         let records = self.records.lock().map_err(storage)?;
         if records.unavailable {
@@ -192,7 +255,6 @@ impl Store {
             .ok_or_else(task::not_found)?;
         record
             .snapshot
-            .metadata()
             .ensure_live(now)
             .map_err(|_| task::not_found())?;
         Ok(record.clone())
@@ -265,9 +327,7 @@ impl Store {
         next.snapshot = Snapshot::new(
             record
                 .snapshot
-                .metadata()
-                .clone()
-                .updated(now.clone(), record.snapshot.metadata().ttl_ms())
+                .updated_metadata(now.clone())
                 .map_err(storage)?,
             State::Working,
         )
@@ -306,9 +366,7 @@ impl Store {
         next.snapshot = Snapshot::new(
             record
                 .snapshot
-                .metadata()
-                .clone()
-                .updated(now.clone(), record.snapshot.metadata().ttl_ms())
+                .updated_metadata(now.clone())
                 .map_err(storage)?,
             if now
                 .elapsed_millis_since(record.snapshot.metadata().updated_at())
@@ -336,9 +394,7 @@ impl Store {
         next.snapshot = Snapshot::new(
             record
                 .snapshot
-                .metadata()
-                .clone()
-                .updated(now.clone(), record.snapshot.metadata().ttl_ms())
+                .updated_metadata(now.clone())
                 .map_err(storage)?,
             State::Cancelled,
         )
@@ -380,7 +436,7 @@ impl Store {
                 + usize::from(old.is_none());
             self.policy
                 .admit(total, total * RECORD_BYTES, total)
-                .map_err(|_| RpcError::new(-32000, "Acme task capacity is full."))?;
+                .map_err(|_| RpcError::new(-32000, "Acme task capacity is full; use acme_task_list, inspect with tasks/get and cancel abandoned tasks with tasks/cancel. Terminal records are reclaimed after retention expires."))?;
             records.writing.insert(id.clone());
         }
         let written = write_record(&self.root, &id, &bytes);
@@ -404,7 +460,7 @@ impl Store {
                 .filter(|(id, record)| {
                     !records.writing.contains(*id)
                         && matches!(
-                            record.snapshot.metadata().ensure_live(now),
+                            record.snapshot.ensure_live(now),
                             Err(task::TaskError::Expired)
                         )
                 })

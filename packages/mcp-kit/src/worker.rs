@@ -66,10 +66,9 @@ pub struct Contract {
     session: SessionOptions,
     lanes: Vec<stdio::Lane>,
     timeout: Duration,
-    confirmation_timeout: Duration,
     disconnect_grace: Duration,
     output: usize,
-    elicitation: (u8, Duration),
+    elicitation: u8,
     resident: Value,
 }
 
@@ -94,10 +93,9 @@ impl Contract {
             session: options.session.clone(),
             lanes: options.lanes.clone(),
             timeout: options.timeout,
-            confirmation_timeout: options.confirmation_timeout,
             disconnect_grace: options.disconnect_grace,
             output: options.max_output_bytes,
-            elicitation: (options.elicitation.max_rounds, options.elicitation.timeout),
+            elicitation: options.elicitation.max_rounds,
             resident,
         })
     }
@@ -106,10 +104,9 @@ impl Contract {
             && self.session == options.session
             && self.lanes == options.lanes
             && self.timeout == options.timeout
-            && self.confirmation_timeout == options.confirmation_timeout
             && self.disconnect_grace == options.disconnect_grace
             && self.output == options.max_output_bytes
-            && self.elicitation == (options.elicitation.max_rounds, options.elicitation.timeout)
+            && self.elicitation == options.elicitation.max_rounds
     }
     fn changed(&mut self, change: &Change) {
         match change {

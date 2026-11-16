@@ -88,6 +88,13 @@ for frame in frames {
   [stdio guide](stdio.md) describes the driver's
   choices if you want to match them.
 
+Keep a pending human question live until answer, cancellation or owner loss.
+Suspend its active budget in your scheduler and outer watchdogs; resume only
+with the time left. The pure core starts no wait timer and cannot tell whether
+the client's prompt is visible. Modern `input_required` replies settle their
+RPC: retained workflow cancellation and revalidation belong to your consumer,
+not cancellation of that completed RPC ID.
+
 For legacy tool calls, capture `Catalog::result_schema(&call.name)` at admission
 and use `ResultSchema::encode_legacy` to validate and encode the result within
 an output limit. Modern calls capture their contract in `RequestContext`;

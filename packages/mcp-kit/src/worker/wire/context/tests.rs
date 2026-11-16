@@ -47,7 +47,6 @@ fn fixture(modern: bool, progress: bool) -> Fixture {
             max_running: 2,
             max_input_rounds: 3,
             execution_timeout: Duration::from_secs(30),
-            input_timeout: Duration::from_mins(1),
         }),
         ..SessionOptions::default()
     };

@@ -5,7 +5,7 @@ mod store;
 
 use canonic_mcp_kit::{
     Catalog, Client, Content, ModernOptions, RpcError, ServerInfo, SessionOptions, Tool,
-    ToolResult,
+    ToolResult, page,
     stdio::{self, Admission, Context, Handler, Lane, Outcome, Request},
     task::{TaskRequest, TaskResult, Timestamp},
 };
@@ -36,7 +36,10 @@ impl Handler for Acme {
     }
     fn admit(&self, request: &Request) -> Admission {
         Admission {
-            lane: usize::from(!matches!(request, Request::Task(TaskRequest::Get { .. }))),
+            lane: usize::from(
+                !(matches!(request, Request::Task(TaskRequest::Get { .. }))
+                    || matches!(request, Request::Tool(call) if call.name == "acme_task_list")),
+            ),
             ..Admission::default()
         }
     }
@@ -48,6 +51,20 @@ impl Handler for Acme {
             Ok(now) => now,
             Err(error) => return Outcome::Method(Err(error)),
         };
+        if let Request::Tool(call) = &request
+            && call.name == "acme_task_list"
+        {
+            return match page::Request::from_mcp(&call.arguments, page::Limits::STANDARD)
+                .map_err(|error| store::paging(&error))
+                .and_then(|request| self.0.list(SCOPE, &request, &now))
+            {
+                Ok(page) => Outcome::Tool(ToolResult::structured(
+                    page.render(page::Casing::Camel),
+                    false,
+                )),
+                Err(error) => Outcome::Method(Err(error)),
+            };
+        }
         if let Request::Tool(call) = &request
             && !call.arguments["deferred"].as_bool().unwrap_or(false)
         {
@@ -88,7 +105,7 @@ impl Handler for Acme {
 }
 
 fn identity() -> ServerInfo {
-    ServerInfo::new("acme","1.0").with_instructions("Use acme_report for a preview, or deferred: true to request report generation with user confirmation. Poll returned task IDs and answer pending input through Tasks; tools grant no authority.")
+    ServerInfo::new("acme","1.0").with_instructions("Use acme_report for a preview, or deferred: true to request report generation with user confirmation. Poll returned task IDs and answer pending input through Tasks. Use acme_task_list to recover IDs, inspect them with tasks/get and explicitly cancel abandoned work with tasks/cancel; tools grant no authority.")
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -101,7 +118,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "acme_report",
         "Return a preview or start a report task that asks for user confirmation.",
         json!({"type":"object","properties":{"deferred":{"type":"boolean","default":false}},"additionalProperties":false}),
-    )])?;
+    ), Tool::new(
+        "acme_task_list",
+        "List this private store's task IDs and statuses for inspection and explicit cancellation.",
+        json!({"type":"object","properties":page::Limits::STANDARD.properties(),"additionalProperties":false}),
+    ).with_annotations(canonic_mcp_kit::Annotations { read_only_hint: Some(true), ..Default::default() })])?;
     let options = stdio::Options {
         session: SessionOptions {
             modern: Some(ModernOptions::new(identity())),

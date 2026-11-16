@@ -721,7 +721,6 @@ fn observation_oversized_task_payload_records_encoding_failure_but_validation_do
         max_running: 1,
         max_input_rounds: 1,
         execution_timeout: Duration::from_mins(1),
-        input_timeout: Duration::from_mins(1),
     });
     let snapshot = Snapshot::new(
         Metadata::new(
@@ -863,10 +862,9 @@ fn observation_running_deadline_settles_before_late_worker_release() {
 }
 
 #[test]
-fn observation_unavailable_and_expired_confirmation_have_distinct_waits() {
+fn observation_unavailable_and_cancelled_confirmation_have_distinct_waits() {
     for forms in [false, true] {
-        let (mut options, receiver) = observed();
-        options.confirmation_timeout = std::time::Duration::from_millis(20);
+        let (options, receiver) = observed();
         let host = Host::ready(
             Script::new(|_, _| {
                 Outcome::Confirm(Confirm::new("Continue Acme?", |_, _| text("done")))
@@ -881,8 +879,8 @@ fn observation_unavailable_and_expired_confirmation_have_distinct_waits() {
         host.call(1, "acme_echo", json!({}));
         if forms {
             assert_eq!(host.recv()["method"], "elicitation/create");
+            host.cancel(1);
             assert_eq!(host.recv()["method"], "notifications/cancelled");
-            assert_eq!(host.recv()["error"]["code"], rpc::DEADLINE_EXCEEDED);
         } else {
             assert_eq!(host.recv()["id"], 1);
         }
@@ -892,7 +890,7 @@ fn observation_unavailable_and_expired_confirmation_have_distinct_waits() {
         settled_once(
             &call,
             if forms {
-                Settlement::Deadline
+                Settlement::Cancelled
             } else {
                 Settlement::Reply
             },

@@ -609,6 +609,14 @@ impl Session {
         self.outstanding.remove(&id.to_string())
     }
 
+    /// Returns the server request ID occupying the legacy human-input slot.
+    /// Independent runtimes can distinguish a busy slot from unsupported input
+    /// before requesting another confirmation or elicitation.
+    #[must_use]
+    pub fn pending_question(&self) -> Option<&Value> {
+        self.confirmation.as_ref()
+    }
+
     /// Starts a form confirmation that shows `message` to the host's user.
     ///
     /// Returns the request's ID and the request to send. Its answer arrives as

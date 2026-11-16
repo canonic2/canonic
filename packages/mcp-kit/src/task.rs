@@ -65,10 +65,8 @@ pub struct TaskOptions {
     pub max_running: usize,
     /// Maximum input rounds over one task's lifetime.
     pub max_input_rounds: u64,
-    /// Consumer-owned execution deadline, separate from RPC deadlines.
+    /// Consumer-owned active execution budget, excluding human waits and RPC deadlines.
     pub execution_timeout: Duration,
-    /// Consumer-owned input-wait deadline.
-    pub input_timeout: Duration,
 }
 
 impl TaskOptions {
@@ -82,11 +80,8 @@ impl TaskOptions {
             || self.max_running == 0
             || self.max_input_rounds == 0
             || self.max_input_rounds > MAX_MILLIS
-            || [self.execution_timeout, self.input_timeout]
-                .iter()
-                .any(|timeout| {
-                    timeout.as_millis() == 0 || timeout.as_millis() > u128::from(MAX_MILLIS)
-                })
+            || self.execution_timeout.as_millis() == 0
+            || self.execution_timeout.as_millis() > u128::from(MAX_MILLIS)
         {
             return Err(TaskError::Invalid("policy"));
         }
@@ -241,13 +236,14 @@ impl Metadata {
         self.ttl_ms
     }
 
-    /// The persisted update time, for the consumer's execution/input deadlines.
+    /// The persisted update time, including the start of a pending human wait.
     #[must_use]
     pub fn updated_at(&self) -> &Timestamp {
         &self.last_updated_at
     }
 
-    /// Checks retention using an explicit consumer clock value.
+    /// Checks metadata retention using an explicit consumer clock value.
+    /// Use [`Snapshot::ensure_live`] for state-aware access and pruning of human input.
     ///
     /// # Errors
     /// Returns expiry at or beyond creation plus TTL, or a clock regression error.
@@ -506,6 +502,43 @@ impl Snapshot {
         matches!(self.status(), "completed" | "failed" | "cancelled")
     }
 
+    /// Checks retention with the consumer's clock. Pending human input suspends TTL.
+    /// Consumers must use this snapshot check when retaining or pruning questions.
+    ///
+    /// # Errors
+    /// Returns expiry for non-input states or an error if the clock regresses.
+    pub fn ensure_live(&self, now: &Timestamp) -> Result<(), TaskError> {
+        if now < self.metadata.updated_at() {
+            return Err(TaskError::Transition);
+        }
+        if self.status == Status::InputRequired {
+            return Ok(());
+        }
+        self.metadata.ensure_live(now)
+    }
+
+    /// Prepares metadata for a successor, preserving retention time across a human wait.
+    /// Persist it with the answer and continuation intent under the consumer's owner guard.
+    /// Polling must not update metadata or move the start of the pending wait.
+    ///
+    /// # Errors
+    /// Returns expiry, clock regression or an unrepresentable retention duration.
+    pub fn updated_metadata(&self, now: Timestamp) -> Result<Metadata, TaskError> {
+        self.ensure_live(&now)?;
+        let mut metadata = self.metadata.clone();
+        if self.status == Status::InputRequired {
+            let waiting = u64::try_from(now.elapsed_ms(metadata.updated_at()))
+                .map_err(|_| TaskError::Invalid("duration"))?;
+            metadata.ttl_ms = metadata
+                .ttl_ms
+                .checked_add(waiting)
+                .ok_or(TaskError::Invalid("duration"))?;
+            millis(metadata.ttl_ms)?;
+        }
+        let ttl = metadata.ttl_ms;
+        metadata.updated(now, ttl)
+    }
+
     /// The pending question's key, if any.
     #[must_use]
     pub fn pending_key(&self) -> Option<&str> {
@@ -531,8 +564,8 @@ impl Snapshot {
     /// # Errors
     /// Refuses expired, identity-changing, time-regressing or terminal rewrites.
     pub fn validate_successor(&self, next: &Self, now: &Timestamp) -> Result<(), TaskError> {
-        self.metadata.ensure_live(now)?;
-        next.metadata.ensure_live(now)?;
+        self.ensure_live(now)?;
+        next.ensure_live(now)?;
         if self.metadata.task_id != next.metadata.task_id
             || self.metadata.created_at != next.metadata.created_at
             || next.metadata.last_updated_at < self.metadata.last_updated_at
@@ -573,7 +606,7 @@ impl Snapshot {
                 "Task update does not match its request context",
             ));
         }
-        self.metadata.ensure_live(now).map_err(|_| not_found())?;
+        self.ensure_live(now).map_err(|_| not_found())?;
         if request.id() != self.metadata.id() {
             return Err(not_found());
         }
@@ -616,7 +649,7 @@ impl Snapshot {
         if !context.task_request_matches(request) {
             return Err(modern::invalid("Task update context mismatch"));
         }
-        self.metadata.ensure_live(now).map_err(|_| not_found())?;
+        self.ensure_live(now).map_err(|_| not_found())?;
         if request.id() != self.metadata.id() {
             return Err(not_found());
         }
@@ -652,6 +685,9 @@ impl Snapshot {
     pub(crate) fn creation_value(&self) -> Value {
         let mut value = serde_json::to_value(&self.metadata).expect("serializable metadata");
         value["status"] = json!(self.status);
+        if self.status == Status::InputRequired {
+            value["ttlMs"] = Value::Null;
+        }
         value
     }
 
@@ -659,6 +695,9 @@ impl Snapshot {
         let mut value = serde_json::to_value(self)?;
         if let Some(fields) = value.as_object_mut() {
             fields.remove("inputKind");
+        }
+        if self.status == Status::InputRequired {
+            value["ttlMs"] = Value::Null;
         }
         Ok(value)
     }

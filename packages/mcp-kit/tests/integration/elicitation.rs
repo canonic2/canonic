@@ -77,12 +77,48 @@ fn legacy_elicitation_multiround_keeps_worker_free_and_invalid_distinct() {
 }
 
 #[test]
-fn legacy_elicitation_caps_total_time_cancellation_eof_and_overflow() {
+fn human_input_lifetime_multiround_pauses_active_time_and_frees_the_worker() {
+    use crate::fixture::{Events, tool_name};
+    use canonic_mcp_kit::stdio::Handler;
+    let waiting = Events::new();
+    let reports = rich();
+    let script = Script::new(move |request, context| {
+        if tool_name(&request) == "acme_echo" {
+            return text("unrelated read");
+        }
+        reports.call(request, context)
+    });
+    let host = Host::ready(
+        script,
+        Options::default(),
+        json!({"elicitation":{"form":{}}}),
+    );
+    host.call(1, "acme_change", json!({"timeoutMs":1000,"key":"report"}));
+    let first = host.recv();
+    assert_eq!(waiting.none_within(Duration::from_millis(1100)), None);
+    host.call(2, "acme_echo", json!({"key":"other"}));
+    assert_eq!(result_text(&host.recv()), "unrelated read");
+    answer(
+        &host,
+        &first,
+        json!({"action":"accept","content":{"format":"md"}}),
+    );
+    let second = host.recv();
+    assert_eq!(waiting.none_within(Duration::from_millis(1100)), None);
+    host.assert_quiet();
+    answer(
+        &host,
+        &second,
+        json!({"action":"accept","content":{"format":"json"}}),
+    );
+    assert!(result_text(&host.recv()).starts_with("second: Response"));
+    host.finish().0.unwrap();
+}
+
+#[test]
+fn legacy_elicitation_caps_rounds_and_preserves_cancellation_eof_and_overflow() {
     let options = Options {
-        elicitation: ElicitationPolicy {
-            max_rounds: 1,
-            timeout: Duration::from_secs(2),
-        },
+        elicitation: ElicitationPolicy { max_rounds: 1 },
         ..Options::default()
     };
     let host = Host::ready(rich(), options, json!({"elicitation":{}}));
@@ -114,30 +150,6 @@ fn legacy_elicitation_caps_total_time_cancellation_eof_and_overflow() {
     assert!(rest.iter().any(|reply| reply["id"] == 3
         && reply["error"]["code"] == -32800
         && reply["error"]["message"] == "Connection closed before elicitation"));
-
-    let host = Host::ready(
-        rich(),
-        Options {
-            elicitation: ElicitationPolicy {
-                max_rounds: 8,
-                timeout: Duration::from_millis(30),
-            },
-            ..Options::default()
-        },
-        json!({"elicitation":{}}),
-    );
-    host.call(1, "acme_change", json!({}));
-    let first = host.recv();
-    if first["method"] == "elicitation/create" {
-        assert_eq!(host.recv()["method"], "notifications/cancelled");
-        let expired = host.recv();
-        assert_eq!(expired["error"]["code"], -32001);
-        assert_eq!(expired["error"]["message"], "Elicitation deadline exceeded");
-    } else {
-        // The same total deadline may expire before the first question is issued.
-        assert_eq!(first["error"]["code"], -32001);
-    }
-    host.finish().0.unwrap();
 
     let script = Script::new(|_, _| {
         Outcome::Elicit(Elicit::new(
@@ -310,13 +322,13 @@ fn rich_wait_and_confirmation_share_one_legacy_pending_slot() {
     host.call(1, "acme_echo", json!({}));
     let pending = host.recv();
     host.call(2, "acme_change", json!({}));
-    assert_eq!(result_text(&host.recv()), "Unavailable");
+    assert_eq!(host.recv()["error"]["data"]["requestId"], 1);
     answer(&host, &pending, json!({"action":"decline"}));
     assert_eq!(result_text(&host.recv()), "Declined");
     host.call(3, "acme_change", json!({}));
     let pending = host.recv();
     host.call(4, "acme_echo", json!({}));
-    assert_eq!(result_text(&host.recv()), "Unavailable");
+    assert_eq!(host.recv()["error"]["data"]["requestId"], 3);
     answer(&host, &pending, json!({"action":"cancel"}));
     assert!(result_text(&host.recv()).contains("Cancel"));
     host.finish().0.unwrap();
@@ -346,24 +358,10 @@ fn rich_elicitation_reports_the_unsupported_legacy_confirmation_transition() {
 }
 
 #[test]
-fn invalid_rich_lifetime_policy_refuses_before_serving() {
+fn invalid_rich_round_policy_refuses_before_serving() {
     for policy in [
-        ElicitationPolicy {
-            max_rounds: 0,
-            timeout: Duration::from_secs(1),
-        },
-        ElicitationPolicy {
-            max_rounds: 65,
-            timeout: Duration::from_secs(1),
-        },
-        ElicitationPolicy {
-            max_rounds: 8,
-            timeout: Duration::ZERO,
-        },
-        ElicitationPolicy {
-            max_rounds: 8,
-            timeout: Duration::from_secs(86401),
-        },
+        ElicitationPolicy { max_rounds: 0 },
+        ElicitationPolicy { max_rounds: 65 },
     ] {
         let options = Options {
             elicitation: policy,
@@ -468,7 +466,6 @@ fn rich_tasks_reopen_consumer_records_and_do_not_reapply_consumed_input() {
         max_running: 1,
         max_input_rounds: 8,
         execution_timeout: Duration::from_mins(1),
-        input_timeout: Duration::from_mins(1),
     });
     let start = |path: PathBuf| records::start(path, options.clone());
     let send = |host: &Host, id, method, params| {

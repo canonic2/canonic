@@ -35,21 +35,33 @@ fn call(&self, request: Request, context: &Context) -> Outcome {
   yields `Unavailable`, so offer an alternative such as running the command
   in a terminal. Malformed modern confirmation retries instead return an
   invalid-params error.
-- The host must declare form elicitation. Otherwise, and while another
-  confirmation is pending, the continuation runs with `Unavailable` and no
-  form is shown. Tell the agent what the user can do instead.
+- The host must declare form elicitation. Otherwise the continuation runs
+  with `Unavailable` and no form is shown. Tell the agent what the user can do instead.
+- While another legacy question is pending, the driver returns RPC error
+  `-32000` with `data.code: "human_input_busy"` and its originating `requestId`.
+  Answer that question or cancel its request with `notifications/cancelled`,
+  then retry. The competing continuation does not run and the original stays live.
+  Independent runtimes can inspect `Session::pending_question()` to distinguish
+  a busy slot from unsupported input.
 - If the encoded form exceeds `Options::max_output_bytes`, no form is sent
   and the continuation receives `Unavailable`.
-- The worker is free while the user decides. The confirmation has its own
-  deadline (`Options::confirmation_timeout`, five minutes by default); the
-  continuation then gets a fresh request deadline.
+- The worker is free while the user decides. The question has no response
+  deadline while the request and connection remain live. Human waiting pauses
+  the active request budget; the continuation receives only the time left.
 - The continuation keeps the request's key, so no other request with that key
   runs between the question and the answer. State can still change through
   other means: recheck what you are about to change before acting.
-- The continuation never runs when the request is cancelled, the
-  confirmation expires or the host disconnects.
+- The continuation never runs when the request is cancelled or the host
+  disconnects. Late or duplicate answers are ignored.
 - A continuation cannot ask a second time.
 
 The library does not authenticate the user or the host. A confirmation is the
 host's report of its user's choice; your server decides whether that is
 enough for the action.
+
+Client capability declarations do not prove that the prompt is visible. The
+driver relies on the live pending request and connection, and stops waiting on
+explicit cancellation or disconnect. A host may impose its own deadline;
+report that boundary and offer a fresh review when needed. Before effects,
+revalidate the exact proposal and current permissions. If it materially changed,
+obtain a new decision rather than applying the old answer to different work.

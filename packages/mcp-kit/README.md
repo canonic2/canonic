@@ -50,7 +50,7 @@ See the [example source](examples/skills.rs), or follow the
 - **Tools and content:** validated argument/result schemas, resources, templates,
   prompts, skills and optional MCP Apps.
 - **User interaction:** confirmation, structured input and URL consent, with
-  host capability checks and bounded interaction lifetimes.
+  host capability checks and questions retained until answered or cancelled.
 - **Request handling:** worker lanes, ordering, cancellation, deadlines, progress
   and optional Tasks.
 - **Implementation updates:** opt-in stable frontends with Process Kit cutover,

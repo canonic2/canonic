@@ -6,6 +6,11 @@ sessions, no GET stream and no initialization. The same `stdio::Handler` serves
 both transports, so lanes, keys, deadlines, progress and cancellation behave as
 in [stdio](stdio.md).
 
+Human input uses modern `input_required` replies: the POST ends and a later
+answer arrives on a new request. Retained workflow state and cancellation are
+consumer-owned; do not keep the original POST open for the human wait or apply
+its execution deadline to the retained question. See [richer input](elicitation.md).
+
 Without [bearer token protection](authorization.md), the server authenticates
 no one: bind a loopback address. The server has no TLS; terminate it in front
 of the server before exposing it further.

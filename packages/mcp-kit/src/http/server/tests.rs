@@ -26,6 +26,7 @@ struct Acme {
     started: AtomicUsize,
     keyed: AtomicUsize,
     keyed_peak: AtomicUsize,
+    pending_input: AtomicBool,
 }
 
 impl Handler for Acme {
@@ -65,6 +66,38 @@ impl Handler for Acme {
         let text =
             |text: &str| Outcome::Tool(ToolResult::success(vec![crate::Content::text(text)]));
         match call.name.as_str() {
+            "acme_echo" if call.arguments["confirm"] == true => {
+                let request = context.request_context().unwrap();
+                if let Some(state) = request.request_state.as_deref() {
+                    let decision = match request.confirmation_decision() {
+                        Ok(Some(decision)) => decision,
+                        Ok(None) => {
+                            return Outcome::Method(Err(RpcError::new(-32602, "Missing answer")));
+                        }
+                        Err(error) => return Outcome::Method(Err(error)),
+                    };
+                    if state != "acme-confirmation"
+                        || !self.pending_input.swap(false, Ordering::SeqCst)
+                    {
+                        return Outcome::Method(Err(RpcError::new(
+                            -32602,
+                            "Invalid or consumed question",
+                        )));
+                    }
+                    return text(&format!("{decision:?}"));
+                }
+                if self.pending_input.swap(true, Ordering::SeqCst) {
+                    return Outcome::Method(Err(RpcError::new(
+                        -32000,
+                        "Answer the pending question",
+                    )));
+                }
+                Outcome::InputRequired(
+                    request
+                        .confirmation("Continue Acme?", "acme-confirmation")
+                        .unwrap(),
+                )
+            }
             "acme_echo" if call.arguments["empty"] == true => {
                 Outcome::Tool(ToolResult::success(vec![]))
             }
@@ -195,6 +228,7 @@ impl Server {
             started: AtomicUsize::new(0),
             keyed: AtomicUsize::new(0),
             keyed_peak: AtomicUsize::new(0),
+            pending_input: AtomicBool::new(false),
         });
         let catalog = catalog_with_apps(options.session.apps.is_some());
         let shutdown = Shutdown::new();
@@ -434,6 +468,44 @@ fn json_requests_reply_with_their_own_ids_and_statuses() {
     request.extend_from_slice(notification);
     let accepted = server.exchange(&request);
     assert_eq!((accepted.status, accepted.body.len()), (202, 0));
+}
+
+#[test]
+fn human_input_lifetime_http_interim_releases_the_post_and_keeps_retry_independent() {
+    let options = Options {
+        timeout: Duration::from_secs(1),
+        session: SessionOptions {
+            modern: Some(ModernOptions::new(ServerInfo::new("acme", "1"))),
+            ..SessionOptions::default()
+        },
+        lanes: vec![Lane::new("tools", 1, 1)],
+        ..Options::default()
+    };
+    let server = Server::configured(http(), options);
+    let mut params = json!({"name":"acme_echo","arguments":{"confirm":true},
+        "_meta":{"io.modelcontextprotocol/clientCapabilities":{"elicitation":{"form":{}}}}});
+    let initial = server.exchange(&post("tools/call", &json!(1), params.clone(), ""));
+    assert_eq!(initial.status, 200);
+    assert_eq!(initial.header("connection"), Some("close"));
+    assert_eq!(initial.json()["result"]["resultType"], "input_required");
+    assert!(matches!(
+        server
+            .events
+            .lock()
+            .unwrap()
+            .recv_timeout(Duration::from_millis(1100)),
+        Err(mpsc::RecvTimeoutError::Timeout)
+    ));
+    // A separate call fits the only lane slot after the first POST has closed.
+    let read = server.exchange(&call(&json!(2), "acme_echo", &json!({}), ""));
+    assert_eq!(read.status, 200);
+    assert!(read.json().get("result").is_some());
+    params["requestState"] = initial.json()["result"]["requestState"].clone();
+    params["inputResponses"] = json!({"confirmation":{"action":"accept"}});
+    let resumed = server.exchange(&post("tools/call", &json!(3), params.clone(), ""));
+    assert_eq!(resumed.json()["result"]["content"][0]["text"], "Accepted");
+    let replay = server.exchange(&post("tools/call", &json!(4), params, ""));
+    assert_eq!(replay.json()["error"]["code"], -32602);
 }
 
 #[test]
@@ -889,6 +961,7 @@ fn serve_requires_modern_options_and_valid_limits() {
             started: AtomicUsize::new(0),
             keyed: AtomicUsize::new(0),
             keyed_peak: AtomicUsize::new(0),
+            pending_input: AtomicBool::new(false),
         });
         let options = Options {
             session,

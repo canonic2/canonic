@@ -42,8 +42,6 @@ use std::{
 
 /// The default request deadline.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
-/// The default time a host's user has to answer a confirmation.
-pub const DEFAULT_CONFIRMATION_TIMEOUT: Duration = Duration::from_mins(5);
 /// The default time running mutations keep after the input closes.
 pub const DEFAULT_DISCONNECT_GRACE: Duration = Duration::from_millis(250);
 /// The default limit on one encoded output frame, in bytes.
@@ -199,21 +197,16 @@ impl Elicit {
     }
 }
 
-/// Bounds for a rich legacy workflow, including all its waits and execution rounds.
+/// Round bound for a rich legacy workflow. Human waits have no time limit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ElicitationPolicy {
     /// Maximum rich questions issued for one original RPC, within 1..=64.
     pub max_rounds: u8,
-    /// Total time from admission, positive and at most 24 hours.
-    pub timeout: Duration,
 }
 
 impl Default for ElicitationPolicy {
     fn default() -> Self {
-        Self {
-            max_rounds: 8,
-            timeout: Duration::from_mins(5),
-        }
+        Self { max_rounds: 8 }
     }
 }
 
@@ -237,7 +230,7 @@ pub struct Admission {
     pub lane: usize,
     /// Requests with the same key in one lane run one at a time, in admission order.
     pub key: Option<String>,
-    /// The deadline from admission; [`Options::timeout`] when `None`.
+    /// Active budget from admission, excluding human waits; [`Options::timeout`] when `None`.
     pub timeout: Option<Duration>,
 }
 
@@ -282,16 +275,14 @@ pub struct Options {
     /// Opt-in process generation owner; inline Handler policy stays in this frontend.
     #[cfg(all(feature = "worker-process", any(unix, windows)))]
     pub worker: Option<Arc<crate::worker::Frontend>>,
-    /// Round and total-time bounds for the separate rich legacy API.
+    /// Round bound for the separate rich legacy API.
     pub elicitation: ElicitationPolicy,
     /// Protocol limits and extension methods.
     pub session: SessionOptions,
     /// Worker lanes; [`Admission::lane`] indexes this list.
     pub lanes: Vec<Lane>,
-    /// The default request deadline.
+    /// The default active request budget, including queueing but excluding human waits.
     pub timeout: Duration,
-    /// How long a confirmation may wait for the user.
-    pub confirmation_timeout: Duration,
     /// How long running mutations continue after the input closes before
     /// they are cancelled.
     pub disconnect_grace: Duration,
@@ -314,7 +305,6 @@ impl Default for Options {
             session: SessionOptions::default(),
             lanes: vec![Lane::new("tools", 1, 8)],
             timeout: DEFAULT_TIMEOUT,
-            confirmation_timeout: DEFAULT_CONFIRMATION_TIMEOUT,
             disconnect_grace: DEFAULT_DISCONNECT_GRACE,
             max_output_bytes: DEFAULT_MAX_OUTPUT_BYTES,
             observer: None,
@@ -735,12 +725,9 @@ pub(crate) fn encode_frame(value: &Value, limit: usize) -> Result<Vec<u8>, Optio
 }
 
 pub(crate) fn validate(options: &Options) -> Result<(), ServeError> {
-    if !(1..=64).contains(&options.elicitation.max_rounds)
-        || options.elicitation.timeout.is_zero()
-        || options.elicitation.timeout > crate::control::MAX_TIMEOUT
-    {
+    if !(1..=64).contains(&options.elicitation.max_rounds) {
         return Err(ServeError::Options(
-            "rich elicitation requires finite round and time limits",
+            "rich elicitation requires a round limit within 1..=64",
         ));
     }
     if options.lanes.is_empty() {
@@ -982,16 +969,12 @@ impl<H: Handler, W: Write> Connection<H, W> {
                 self.output.send(outgoing)
             }
             Inbound::Confirmation { id, decision } => {
-                let outgoing =
-                    self.scheduler
-                        .confirmed(&mut self.session, &id, decision, &self.output.trace);
-                self.output.send(outgoing)
+                self.scheduler.confirmed(&id, decision, &self.output.trace);
+                Ok(())
             }
             Inbound::Elicitation { id, answer } => {
-                let outgoing =
-                    self.scheduler
-                        .elicited(&mut self.session, &id, answer, &self.output.trace);
-                self.output.send(outgoing)
+                self.scheduler.elicited(&id, answer, &self.output.trace);
+                Ok(())
             }
             Inbound::Ignored
             | Inbound::Completion { .. }

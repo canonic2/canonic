@@ -18,6 +18,7 @@
 | `-32603` | Response exceeds output limit | A result larger than `Options::max_output_bytes` | Page or shorten the result |
 | `-32602` | Invalid subscription filter | Malformed, unknown or over-budget subscription parameters | Send only supported filters and bounded absolute resource URIs |
 | `-32000` | Subscription capacity exceeded | The connection already holds its configured number of streams | Cancel an unused stream or wait for expiry |
+| `-32000` | Human input is already pending; answer or cancel the pending request, then retry | A legacy question occupies the connection's single slot; `data.code` is `human_input_busy` and `data.requestId` names its originating request | Answer that question or cancel the identified request, then retry; the competing continuation did not run |
 | `-32603` | Subscription acknowledgement/notification/result exceeds output limit | A stream frame cannot fit the output budget | Reduce selected URIs or server metadata, or increase the frame budget; the affected stream ID is released |
 | `-32603` | Tool result does not match its output schema | Missing or invalid structured data, or incompatible legacy data | Fix the handler's result; validation cannot undo effects |
 | `-32603` | Tool result exceeds schema validation limits | Structured data exceeds validation bytes, depth or work limits | Reduce the data or its validation cost; effects may already have happened |
@@ -42,7 +43,6 @@
 | `-32000` | Server request capacity reached | The lane is full | Retry later or raise `Lane::capacity` |
 | `-32000` | Session message limit reached | `SessionOptions::max_messages` was exceeded | The connection ends |
 | `-32001` | Request deadline exceeded (before dispatch) | The deadline passed in the queue or while running | Inspect state before retrying a mutation |
-| `-32001` | Confirmation deadline exceeded | The user did not answer in time | Ask again if still needed |
 | `-32002` | Resource not found | The consumer refused an unknown or inaccessible URI | Check the address and authorization; `data.uri` identifies the resource |
 | `-32021` | Client lacks form elicitation | A modern operation needs unsupported user input | Provide form capability on that request or handle the unavailable path |
 | `-32021` | Client lacks Tasks support | A task operation requires the current request's Tasks declaration | Declare the extension or use the server's ordinary fallback before starting work |

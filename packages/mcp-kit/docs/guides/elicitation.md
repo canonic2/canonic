@@ -28,8 +28,8 @@ tool and arguments:
 ```
 
 The example returns the selected preview without changing configuration. Its
-private single-use state expires after five minutes, allows eight rounds and
-is revoked on restart. Only one interaction can be pending. The `acme_connect`
+private single-use state stays live for the connection, allows eight rounds and
+is revoked on restart. Answer or cancel it before starting another. The `acme_connect`
 tool demonstrates URL consent with `elicitation.url`; its `example.com` page
 is illustrative and no external connection is established. See the
 [complete source](../../examples/elicitation.rs).
@@ -65,11 +65,11 @@ Every required mode must be in this RPC's client capabilities. Missing mode
 support returns `-32021` before dependent effects.
 
 On retry, authenticate or privately look up the state first. Bind it to the
-exact operation, arguments, questions, scope, expiry and round. Then call
+exact operation, arguments, questions, scope, domain validity and round. Then call
 `RequestContext::elicitation_answers` with those retained questions. Never
 construct a schema from submitted input. All known answers are validated before
 any are returned. Missing answers remain absent; bounded unknown keys are
-ignored. You may request missing answers again within your finite round/expiry
+ignored. You may request missing answers again within your finite round
 policy. Atomically consume single-use state before effects or retain an
 idempotent outcome: validation itself does not consume anything or prevent replay.
 
@@ -87,11 +87,13 @@ Return `Outcome::Elicit(Elicit::new(question, continuation))`. It receives an
 The response's `Action` distinguishes accept, decline and cancel. Refusal and
 dismissal expose no accepted content. The worker is free during the user wait.
 
-Successive rich questions obey `Options::elicitation`: eight rounds and five
-minutes total by default. The total deadline begins at admission and does not
-reset on resume; execution/per-wait deadlines also apply. One pending question
-shares the legacy confirmation slot. Competing or oversized unsent questions
-resolve unavailable. Cancellation, expiry and EOF destroy the continuation;
+Successive rich questions obey `Options::elicitation`: eight rounds by default.
+Human waits have no response deadline and pause the active request budget;
+every continuation receives only the remaining time. One pending question
+shares the legacy confirmation slot. A competing question receives RPC error
+`-32000` with `data.code: "human_input_busy"` and the pending `requestId`;
+answer or cancel that request, then retry. Oversized unsent questions resolve
+unavailable. Cancellation and EOF destroy the continuation;
 late answers cannot resume it. For a final confirmation inside a rich workflow,
 use a rich empty form rather than switching into the single-round `Confirm` API.
 
@@ -131,7 +133,8 @@ questions share a 64 KiB/32-level request map. Answer maps allow 16 KiB/32 level
 keys allow 128 UTF-8 bytes without controls. URLs allow 4096 bytes. Frame/output
 limits also count escaping and enclosing envelopes; overflow is never truncated.
 
-Modern round count, expiry and retained storage limits are consumer policy.
-Legacy `ElicitationPolicy` allows 1–64 rounds and a positive timeout up to
-24 hours. Protocol fixtures do not establish a particular host's rendering;
+Modern round count, revocation and retained storage limits are consumer policy.
+Keep a live question answerable regardless of age, and revalidate its meaning
+and any genuine external validity constraint before effects.
+Legacy `ElicitationPolicy` allows 1–64 rounds. Protocol fixtures do not establish a particular host's rendering;
 verify its declared modes and intended UI separately.

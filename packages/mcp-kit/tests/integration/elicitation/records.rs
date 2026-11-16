@@ -32,7 +32,8 @@ pub(super) fn open(path: &Path) -> Snapshot {
 
 pub(super) fn start(path: PathBuf, options: Options) -> Host {
     let retained = Mutex::new(open(&path));
-    let now = Timestamp::parse("2026-10-31T12:00:00Z").expect("fixture clock");
+    let now = Timestamp::parse("2026-11-01T12:00:00Z")
+        .expect("fixture clock after a day of human waiting");
     Host::start(
         Script::new(move |request, context| {
             let mut snapshot = retained.lock().expect("record owner");
@@ -52,7 +53,9 @@ pub(super) fn start(path: PathBuf, options: Options) -> Host {
                         if let Some(answer) = answers.get("report") {
                             let content = answer.content.clone().expect("accepted form data");
                             let done = Snapshot::new(
-                                snapshot.metadata().clone(),
+                                snapshot
+                                    .updated_metadata(now.clone())
+                                    .expect("resume retained input"),
                                 State::Completed(ToolResult::structured(content, false)),
                             )
                             .expect("terminal record");

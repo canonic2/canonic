@@ -21,9 +21,11 @@ stdio::serve(server, catalog, std::io::BufReader::new(protocol.input), protocol.
 ```
 
 On Unix, afterwards standard input reads end of input and standard output goes
-to stderr, for your code and every child it starts. On Windows the streams
-stay where they are: there, never print to standard output from code a request
-can reach.
+to stderr, for your code and every child it starts. Windows with `worker-process`
+enabled redirects both native and CRT standard streams through Process Kit and
+retains non-inherited protocol handles. Without that feature Windows keeps the
+standard handles in place, so code reachable from a request must never print to
+standard output.
 
 ## Lanes
 
@@ -72,8 +74,13 @@ Admission {
 
 ## Deadlines
 
-Every request has a deadline from admission: `Admission::timeout`, or
-`Options::timeout`. When it passes, the host gets `-32001` and the request's
+Every request has an active budget from admission: `Admission::timeout`, or
+`Options::timeout`. Queue time counts. Human confirmation and rich-input waits
+pause it without scheduling a response timer. An answered continuation gets the
+remaining budget; a new round does not reset it. Cancellation or connection
+loss withdraws the question and prevents a late answer from resuming work.
+
+When the active budget runs out, the host gets `-32001` and the request's
 context is cancelled. Check the context at safe points and stop when it fails:
 
 ```rust,ignore

@@ -117,6 +117,7 @@ fn create(host: &Host, id: u64) -> TaskId {
     let reply = host.recv();
     assert_eq!(reply["result"]["resultType"], "task", "{reply}");
     assert!(reply["result"].get("task").is_none());
+    assert_eq!(reply["result"].get("ttlMs"), Some(&Value::Null));
     TaskId::new(reply["result"]["taskId"].as_str().expect("task ID string")).expect("valid task ID")
 }
 
@@ -368,24 +369,133 @@ fn tasks_expiry_scope_and_capacity_are_consumer_owned() {
         store.get(&ids[0], "scope-b", &clock()).unwrap_err(),
         task::not_found()
     );
-    let expired = Timestamp::parse("2026-10-30T12:10:00Z").unwrap();
+    let later = Timestamp::parse("2026-10-30T12:10:00Z").unwrap();
+    // A live question is not evicted to reclaim capacity, even past its TTL.
     assert_eq!(
-        store.get(&ids[0], "scope-a", &expired).unwrap_err(),
-        task::not_found()
-    );
-    assert_eq!(
-        store.cancel(&ids[0], "scope-a", &expired).unwrap_err(),
-        task::not_found()
-    );
-    // A capacity refusal preserved all unexpired records; expiry reclaims slots.
-    assert_eq!(
-        store.get(&ids[0], "scope-a", &clock()).unwrap().status(),
+        store.get(&ids[0], "scope-a", &later).unwrap().status(),
         "input_required"
     );
+    assert!(store.create(&context, "scope-a", &later).is_err());
+    store.cancel(&ids[0], "scope-a", &later).unwrap();
+    assert_eq!(
+        store.get(&ids[0], "scope-a", &later).unwrap().status(),
+        "cancelled"
+    );
+    let expired = Timestamp::parse("2026-10-30T12:20:00Z").unwrap();
+    // Only settled retention is reclaimed; other unanswered questions survive.
     assert!(store.create(&context, "scope-a", &expired).is_ok());
     assert_eq!(
         store.get(&ids[0], "scope-a", &expired).unwrap_err(),
         task::not_found()
+    );
+    assert_eq!(
+        store.get(&ids[1], "scope-a", &expired).unwrap().status(),
+        "input_required"
+    );
+}
+
+#[test]
+fn human_input_lifetime_tasks_reopen_and_accept_after_a_day_without_replay() {
+    let root = Folder::new();
+    let store = store::Store::open(&root.0, &clock()).unwrap();
+    let snapshot = store.create(&tool_context(), "scope-a", &clock()).unwrap();
+    let id = snapshot.metadata().id().clone();
+    drop(store);
+    let later = Timestamp::parse("2026-10-31T12:00:00Z").unwrap();
+    let store = Arc::new(store::Store::open(&root.0, &later).unwrap());
+    assert_eq!(store.get(&id, "scope-a", &later).unwrap(), snapshot);
+    let host = host(store.clone(), Arc::new(Mutex::new(later.clone())));
+    host.send(&frame(3, "tasks/get", value!({"taskId":id})));
+    assert_eq!(host.recv()["result"].get("ttlMs"), Some(&Value::Null));
+    let answer = value!({"taskId":id,"inputResponses":{"report-approval":{"action":"accept"}}});
+    host.send(&frame(1, "tasks/update", answer.clone()));
+    assert_eq!(host.recv()["result"]["resultType"], "complete");
+    let settled = store.get(&id, "scope-a", &later).unwrap();
+    assert_eq!(settled.status(), "completed");
+    host.send(&frame(2, "tasks/update", answer));
+    assert_eq!(host.recv()["result"]["resultType"], "complete");
+    assert_eq!(store.get(&id, "scope-a", &later).unwrap(), settled);
+    host.finish().0.unwrap();
+    assert!(
+        store
+            .get(
+                &id,
+                "scope-a",
+                &Timestamp::parse("2026-10-31T12:10:00Z").unwrap()
+            )
+            .is_err()
+    );
+}
+
+#[test]
+fn tasks_abandoned_questions_are_discoverable_and_explicitly_cancelled_at_capacity() {
+    use canonic_mcp_kit::page;
+    let root = Folder::new();
+    let store = store::Store::open(&root.0, &clock()).unwrap();
+    let context = tool_context();
+    let mut expected = Vec::new();
+    for _ in 1..store::policy().max_records {
+        expected.push(
+            store
+                .create(&context, "scope-a", &clock())
+                .unwrap()
+                .metadata()
+                .id()
+                .clone(),
+        );
+    }
+    let other = store.create(&context, "scope-b", &clock()).unwrap();
+    drop(store);
+    let later = Timestamp::parse("2026-10-31T12:00:00Z").unwrap();
+    let store = store::Store::open(&root.0, &later).unwrap();
+    assert!(store.create(&context, "scope-a", &later).is_err());
+    let mut arguments = value!({"limit":1});
+    let mut found = Vec::new();
+    loop {
+        let request = page::Request::from_mcp(&arguments, page::Limits::STANDARD).unwrap();
+        let result = store.list("scope-a", &request, &later).unwrap();
+        for item in result.items {
+            assert_eq!(item["status"], "input_required");
+            found.push(TaskId::new(item["taskId"].as_str().unwrap()).unwrap());
+        }
+        let Some(cursor) = result.next_cursor else {
+            break;
+        };
+        arguments["cursor"] = value!(cursor);
+        let foreign = page::Request::from_mcp(&arguments, page::Limits::STANDARD).unwrap();
+        assert_eq!(
+            store
+                .list("scope-b", &foreign, &later)
+                .unwrap_err()
+                .data
+                .unwrap()["code"],
+            "invalid_cursor"
+        );
+    }
+    expected.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+    assert_eq!(found, expected);
+    for id in &found {
+        store.cancel(id, "scope-a", &later).unwrap();
+        assert_eq!(
+            store.get(id, "scope-a", &later).unwrap().status(),
+            "cancelled"
+        );
+    }
+    assert_eq!(
+        store.get(other.metadata().id(), "scope-b", &later).unwrap(),
+        other
+    );
+    // Explicit cancellation ends the wait; normal terminal retention then reclaims it.
+    let expired = Timestamp::parse("2026-10-31T12:10:00Z").unwrap();
+    assert!(store.create(&context, "scope-a", &expired).is_ok());
+    for id in found {
+        assert!(store.get(&id, "scope-a", &expired).is_err());
+    }
+    assert_eq!(
+        store
+            .get(other.metadata().id(), "scope-b", &expired)
+            .unwrap(),
+        other
     );
 }
 

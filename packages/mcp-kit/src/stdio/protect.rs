@@ -4,9 +4,9 @@
 //! descriptors 0 and 1, then points descriptor 0 at `/dev/null` and descriptor
 //! 1 at stderr: code that prints, and children that inherit the standard
 //! streams, can neither consume protocol input nor corrupt protocol output,
-//! and prompts find no terminal. On Windows it returns copies of the standard
-//! handles and leaves them in place, so a stray print there still reaches the
-//! protocol.
+//! and prompts find no terminal. Windows with `worker-process` also redirects
+//! native and CRT standard streams through Process Kit. Without that feature,
+//! Windows returns private copies but leaves the standard handles in place.
 
 use std::{fs::File, io};
 
@@ -45,7 +45,7 @@ pub fn protect() -> io::Result<Protocol> {
 ///
 /// # Errors
 /// Returns the operating system's error when a stream cannot be copied.
-#[cfg(windows)]
+#[cfg(all(windows, not(feature = "worker-process")))]
 pub fn protect() -> io::Result<Protocol> {
     use std::os::windows::io::AsHandle;
     // Copies are not inherited by children.
@@ -55,6 +55,16 @@ pub fn protect() -> io::Result<Protocol> {
         input: File::from(input),
         output: File::from(output),
     })
+}
+
+/// Retains private protocol handles and redirects both native and CRT standard
+/// streams when the native process adapter is enabled.
+/// # Errors
+/// Returns native duplication or redirection failures before serving.
+#[cfg(all(windows, feature = "worker-process"))]
+pub fn protect() -> io::Result<Protocol> {
+    let (input, output) = canonic_process_kit::launch::protect_stdio()?;
+    Ok(Protocol { input, output })
 }
 
 #[cfg(test)]
@@ -105,7 +115,7 @@ mod tests {
         let stdout = String::from_utf8_lossy(&output.stdout);
         // The child's own input is the protocol's, and standard input reads empty.
         assert!(stdout.contains("echo:frame:0"), "{stdout}");
-        if cfg!(unix) {
+        if cfg!(any(unix, all(windows, feature = "worker-process"))) {
             assert!(!stdout.contains("stray print"), "{stdout}");
             assert!(
                 String::from_utf8_lossy(&output.stderr).contains("stray print"),

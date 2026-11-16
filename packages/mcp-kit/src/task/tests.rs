@@ -17,7 +17,6 @@ fn options() -> TaskOptions {
         max_running: 2,
         max_input_rounds: 2,
         execution_timeout: Duration::from_mins(1),
-        input_timeout: Duration::from_secs(30),
     }
 }
 fn metadata() -> Metadata {
@@ -409,6 +408,59 @@ fn tasks_snapshots_restore_and_refuse_contradictions() {
             serde_json::to_value(Snapshot::new(metadata(), State::Working).unwrap()).unwrap();
         value[extra] = json!({});
         assert!(Snapshot::restore(&value).is_err());
+    }
+}
+
+#[test]
+fn human_input_lifetime_task_retention_pauses_without_replenishing_active_time() {
+    use crate::elicitation::{Form, Request, Requests};
+    let ctx = context("tools/call", None);
+    let entered = time("2026-10-30T12:00:10Z");
+    let answered = time("2026-10-31T12:00:10Z");
+    let states = [
+        State::InputRequired(Question::new(&ctx, "approve", "Continue?").unwrap()),
+        State::RichInputRequired(
+            Requests::new(vec![(
+                "choose".into(),
+                Request::form(
+                    "Choose?",
+                    Form::new(json!({"type":"object","properties":{}})).unwrap(),
+                )
+                .unwrap(),
+            )])
+            .unwrap(),
+        ),
+    ];
+    for state in states {
+        let waiting =
+            Snapshot::new(metadata().updated(entered.clone(), 60_000).unwrap(), state).unwrap();
+        assert!(waiting.ensure_live(&answered).is_ok());
+        assert!(waiting.ensure_live(&now()).is_err());
+        assert!(waiting.updated_metadata(now()).is_err());
+        assert_eq!(
+            waiting.protocol_value().unwrap().get("ttlMs"),
+            Some(&Value::Null)
+        );
+        assert_eq!(waiting.creation_value().get("ttlMs"), Some(&Value::Null));
+        // Persistence keeps the finite budget and original pending interval.
+        assert_eq!(Snapshot::restore(&json!(waiting)).unwrap(), waiting);
+        let resumed = Snapshot::new(
+            waiting.updated_metadata(answered.clone()).unwrap(),
+            State::Working,
+        )
+        .unwrap();
+        waiting.validate_successor(&resumed, &answered).unwrap();
+        assert_eq!(resumed.metadata().ttl_ms(), 86_460_000);
+        assert!(resumed.ensure_live(&time("2026-10-31T12:00:59Z")).is_ok());
+        assert_eq!(
+            resumed.ensure_live(&time("2026-10-31T12:01:00Z")),
+            Err(TaskError::Expired)
+        );
+        assert!(
+            resumed
+                .updated_metadata(time("2026-10-31T12:01:00Z"))
+                .is_err()
+        );
     }
 }
 

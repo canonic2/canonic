@@ -264,6 +264,7 @@ fn confirmations_need_form_elicitation_and_match_their_reply() {
         &json!({"elicitation":{"form":{}}}),
     );
     let (id, request) = session.request_confirmation("Remove Acme data?").unwrap();
+    assert_eq!(session.pending_question(), Some(&id));
     assert_eq!(request["method"], "elicitation/create");
     assert_eq!(request["params"]["mode"], "form");
     assert_eq!(request["params"]["message"], "Remove Acme data?");
@@ -281,6 +282,7 @@ fn confirmations_need_form_elicitation_and_match_their_reply() {
             decision: Decision::Accepted
         }
     );
+    assert_eq!(session.pending_question(), None);
     assert_eq!(session.receive(&accept), Inbound::Ignored);
 
     for (reply, decision) in [
@@ -481,7 +483,6 @@ fn reserved_extension_names_are_refused_for_requests_and_notifications() {
             max_running: 1,
             max_input_rounds: 1,
             execution_timeout: Duration::from_secs(1),
-            input_timeout: Duration::from_secs(1),
         }),
         ..modern.clone()
     };

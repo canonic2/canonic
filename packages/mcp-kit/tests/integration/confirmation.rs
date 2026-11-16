@@ -98,7 +98,7 @@ fn hosts_without_forms_resume_as_unavailable() {
 }
 
 #[test]
-fn a_second_confirmation_waits_for_none_and_resumes_as_unavailable() {
+fn a_second_confirmation_reports_busy_and_can_retry_after_answer_or_cancellation() {
     let events = Events::new();
     let options = Options {
         lanes: vec![canonic_mcp_kit::stdio::Lane::new("tools", 2, 8)],
@@ -111,9 +111,25 @@ fn a_second_confirmation_waits_for_none_and_resumes_as_unavailable() {
     host.call(2, "acme_change", json!({}));
     let second = host.recv();
     assert_eq!(second["id"], 2);
-    assert_eq!(result_text(&second), "Unavailable");
+    assert_eq!(second["error"]["data"]["code"], "human_input_busy");
+    assert_eq!(second["error"]["data"]["requestId"], 1);
+    assert_eq!(events.none_within(Duration::ZERO), None);
     answer(&host, &request, json!({"action":"accept"}));
     assert_eq!(result_text(&host.recv()), "Accepted");
+    assert_eq!(events.next(), "Accepted");
+    host.call(3, "acme_change", json!({}));
+    let pending = host.recv();
+    assert_eq!(pending["method"], "elicitation/create");
+    host.call(4, "acme_change", json!({}));
+    assert_eq!(host.recv()["error"]["data"]["requestId"], 3);
+    host.cancel(3);
+    assert_eq!(host.recv()["params"]["requestId"], pending["id"]);
+    host.call(5, "acme_change", json!({}));
+    let pending = host.recv();
+    assert_eq!(pending["method"], "elicitation/create");
+    answer(&host, &pending, json!({"action":"accept"}));
+    assert_eq!(result_text(&host.recv()), "Accepted");
+    assert_eq!(events.next(), "Accepted");
 }
 
 #[test]
@@ -132,56 +148,41 @@ fn cancelling_a_waiting_request_withdraws_its_form() {
 }
 
 #[test]
-fn an_unanswered_form_expires_without_resuming() {
+fn human_input_lifetime_outlives_the_active_request_budget() {
     let events = Events::new();
-    let options = Options {
-        confirmation_timeout: Duration::from_millis(30),
-        ..Options::default()
-    };
-    let host = Host::ready(confirming(&events), options, form());
-    host.call(1, "acme_change", json!({}));
+    let host = Host::ready(confirming(&events), Options::default(), form());
+    host.call(1, "acme_change", json!({"timeoutMs":1000}));
     let request = host.recv();
-    let notice = host.recv();
-    assert_eq!(notice["method"], "notifications/cancelled");
-    assert_eq!(notice["params"]["requestId"], request["id"]);
-    let expired = host.recv();
-    assert_eq!(expired["id"], 1);
-    assert_eq!(
-        expired["error"]["message"],
-        "Confirmation deadline exceeded"
-    );
-    assert_eq!(events.none_within(Duration::from_millis(50)), None);
+    assert_eq!(events.none_within(Duration::from_millis(1100)), None);
+    host.assert_quiet();
+    answer(&host, &request, json!({"action":"accept"}));
+    assert_eq!(result_text(&host.recv()), "Accepted");
+    assert_eq!(events.next(), "Accepted");
+    answer(&host, &request, json!({"action":"accept"}));
+    host.assert_quiet();
+    host.finish().0.unwrap();
 }
 
 #[test]
-fn an_answer_read_after_the_deadline_does_not_resume() {
+fn human_input_lifetime_includes_answer_delivery_without_expiry() {
     let events = Events::new();
-    let timeout = Duration::from_millis(100);
-    // Holding the dispatcher on the answer frame lets the deadline pass
-    // after the last sweep but before the answer is processed.
+    // Delay the answer in the real input path beyond the active budget.
     let observer: Observer = Arc::new(move |direction, frame: &[u8]| {
         if direction == Direction::Input && frame.windows(8).any(|window| window == b"\"action\"") {
-            thread::sleep(timeout + Duration::from_millis(50));
+            thread::sleep(Duration::from_millis(1100));
         }
     });
     let options = Options {
-        confirmation_timeout: timeout,
         observer: Some(observer),
         ..Options::default()
     };
     let host = Host::ready(confirming(&events), options, form());
-    host.call(1, "acme_change", json!({}));
+    host.call(1, "acme_change", json!({"timeoutMs":1000}));
     let request = host.recv();
     answer(&host, &request, json!({"action":"accept"}));
-    let expired = host.recv();
-    assert_eq!(expired["id"], 1);
-    assert_eq!(expired["error"]["code"], -32001);
-    assert_eq!(
-        expired["error"]["message"],
-        "Confirmation deadline exceeded"
-    );
+    assert_eq!(result_text(&host.recv()), "Accepted");
     host.assert_quiet();
-    assert_eq!(events.none_within(Duration::from_millis(50)), None);
+    assert_eq!(events.next(), "Accepted");
 }
 
 #[test]
