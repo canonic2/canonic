@@ -99,13 +99,8 @@ fn registration(
     let Some(before) = storage::read(&destination.path)? else {
         return Ok(None);
     };
-    let (current, _) = document::edit(
-        &before,
-        destination.format,
-        destination.key,
-        &context.product,
-        None,
-    )?;
+    let document = document::Prepared::parse(before.as_str(), destination.format)?;
+    let current = document.entry(destination.key, &context.product)?;
     // Migrate the observed entry, never the record's intent: an interrupted
     // setup's other changes stay unapplied, and an absent entry stays absent.
     let Some(root) = previous_root.to_str() else {
@@ -131,13 +126,7 @@ fn registration(
     if current != record.desired && !recovering {
         return Ok(None);
     }
-    let (_, after) = document::edit(
-        &before,
-        destination.format,
-        destination.key,
-        &context.product,
-        Some(&desired),
-    )?;
+    let (_, after) = document.edit(destination.key, &context.product, Some(&desired))?;
     Ok(Some(Change {
         kind: Kind::Server,
         agents: destination.surfaces,

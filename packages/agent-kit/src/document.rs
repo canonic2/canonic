@@ -4,10 +4,28 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::ops::Range;
+use std::rc::Rc;
 
 pub(crate) struct Prepared {
-    source: String,
+    /// Shared with the command's file snapshot rather than copied.
+    source: Rc<str>,
     parsed: Parsed,
+}
+
+#[cfg(test)]
+thread_local! {
+    static EDITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn count_edit() {
+    #[cfg(test)]
+    EDITS.with(|edits| edits.set(edits.get() + 1));
+}
+
+/// Complete edited documents produced on this thread, for work-count regressions.
+#[cfg(test)]
+pub(crate) fn edits() -> usize {
+    EDITS.with(std::cell::Cell::get)
 }
 
 enum Parsed {
@@ -17,7 +35,8 @@ enum Parsed {
 }
 
 impl Prepared {
-    pub(crate) fn parse(source: String, format: Format) -> Result<Self> {
+    pub(crate) fn parse(source: impl Into<Rc<str>>, format: Format) -> Result<Self> {
+        let source = source.into();
         let parsed = match format {
             Format::Json | Format::Jsonc => {
                 Parsed::Json(Parser::parse(&source, format == Format::Json)?)
@@ -44,12 +63,36 @@ impl Prepared {
         self.edit_path(&[key], name, desired)
     }
 
+    /// The current named entry, with the same validation as [`Self::edit`] but
+    /// without producing an edited document.
+    pub(crate) fn entry(&self, key: &str, name: &str) -> Result<Option<Value>> {
+        match &self.parsed {
+            Parsed::Json(root) => Ok(json_group(root, &[key])?
+                .ok()
+                .and_then(|group| group.members.iter().find(|m| m.key == name))
+                .map(|entry| entry.node.to_value())),
+            Parsed::Toml(document) => toml_entry(document, key, name),
+            Parsed::Yaml(root) => yaml_entry(root, key, name),
+        }
+    }
+
+    /// The current `permissions.allow` rules, validated as [`Self::allow_list`] does.
+    pub(crate) fn allowed(&self) -> Result<Vec<String>> {
+        let Parsed::Json(root) = &self.parsed else {
+            return Err(Error::invalid(
+                "Permission rules require JSON configuration",
+            ));
+        };
+        Ok(allow_nodes(root)?.2)
+    }
+
     fn edit_path(
         &self,
         path: &[&str],
         name: &str,
         desired: Option<&Value>,
     ) -> Result<(Option<Value>, String)> {
+        count_edit();
         match (&self.parsed, path) {
             (Parsed::Json(root), _) => json_edit(&self.source, root, path, name, desired),
             (Parsed::Toml(document), [key]) => {
@@ -67,6 +110,7 @@ impl Prepared {
         remove: &[String],
         add: &[String],
     ) -> Result<(Vec<String>, String)> {
+        count_edit();
         let Parsed::Json(root) = &self.parsed else {
             return Err(Error::invalid(
                 "Permission rules require JSON configuration",
@@ -106,8 +150,9 @@ impl Prepared {
     }
 
     pub(crate) fn replace_hook_groups(&self, event: &str, groups: &[Value]) -> Result<String> {
+        count_edit();
         if self.hook_groups(event)? == groups {
-            return Ok(self.source.clone());
+            return Ok(self.source.to_string());
         }
         let Parsed::Json(root) = &self.parsed else {
             return Err(Error::invalid("Hooks require JSON configuration"));
@@ -116,7 +161,7 @@ impl Prepared {
         let after = serde_json::json!(groups);
         match (hooks, list) {
             (_, Some(list)) => {
-                let mut result = self.source.clone();
+                let mut result = self.source.to_string();
                 result.replace_range(
                     list.node.range.clone(),
                     &serde_json::to_string_pretty(&after)
@@ -174,7 +219,21 @@ pub fn edit(
     name: &str,
     desired: Option<&Value>,
 ) -> Result<(Option<Value>, String)> {
-    Prepared::parse(source.to_owned(), format)?.edit(key, name, desired)
+    Prepared::parse(source, format)?.edit(key, name, desired)
+}
+
+fn yaml_entry(root: &Value, key: &str, name: &str) -> Result<Option<Value>> {
+    let object = root
+        .as_object()
+        .ok_or_else(|| Error::invalid("YAML configuration must be an object"))?;
+    let Some(group) = object.get(key) else {
+        return Ok(None);
+    };
+    Ok(group
+        .as_object()
+        .ok_or_else(|| Error::invalid("YAML extensions must be a mapping"))?
+        .get(name)
+        .cloned())
 }
 
 fn yaml_edit(
@@ -184,18 +243,21 @@ fn yaml_edit(
     name: &str,
     desired: Option<&Value>,
 ) -> Result<(Option<Value>, String)> {
-    let mut root = root.clone();
-    let object = root
-        .as_object_mut()
-        .ok_or_else(|| Error::invalid("YAML configuration must be an object"))?;
-    let group = object.entry(key).or_insert_with(|| serde_json::json!({}));
-    let group = group
-        .as_object_mut()
-        .ok_or_else(|| Error::invalid("YAML extensions must be a mapping"))?;
-    let before = group.get(name).cloned();
+    // Validate and compare before cloning the whole document.
+    let before = yaml_entry(root, key, name)?;
     if before.as_ref() == desired {
         return Ok((before, source.into()));
     }
+    let mut root = root.clone();
+    let group = root
+        .as_object_mut()
+        .and_then(|object| {
+            object
+                .entry(key)
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+        })
+        .expect("yaml_entry validated the root and collection");
     if let Some(desired) = desired {
         group.insert(name.into(), desired.clone());
     } else {
@@ -473,7 +535,7 @@ pub fn edit_path(
     name: &str,
     desired: Option<&Value>,
 ) -> Result<(Option<Value>, String)> {
-    Prepared::parse(source.to_owned(), format)?.edit_path(path, name, desired)
+    Prepared::parse(source, format)?.edit_path(path, name, desired)
 }
 
 /// Add or remove `item` in the top-level string list `key` of a JSON object.
@@ -521,9 +583,9 @@ fn json_edit(
     name: &str,
     desired: Option<&Value>,
 ) -> Result<(Option<Value>, String)> {
-    let mut group = root;
-    for (depth, key) in path.iter().enumerate() {
-        let Some(member) = group.members.iter().find(|m| m.key == *key) else {
+    let group = match json_group(root, path)? {
+        Ok(group) => group,
+        Err((depth, parent)) => {
             // Create the missing levels around the new entry.
             let Some(value) = desired else {
                 return Ok((None, source.into()));
@@ -532,13 +594,9 @@ fn json_edit(
                 serde_json::json!({name: value}),
                 |inner, key| serde_json::json!({*key: inner}),
             );
-            return Ok((None, insert(source, group, key, &nested)?));
-        };
-        if !member.node.value.is_object() {
-            return Err(Error::invalid("MCP server collection must be an object"));
+            return Ok((None, insert(source, parent, path[depth], &nested)?));
         }
-        group = &member.node;
-    }
+    };
     let Some((index, entry)) = group
         .members
         .iter()
@@ -578,15 +636,26 @@ fn json_edit(
     Ok((Some(before), result))
 }
 
-fn toml_edit(
-    source: &str,
-    document: &toml_edit::DocumentMut,
-    key: &str,
-    name: &str,
-    desired: Option<&Value>,
-) -> Result<(Option<Value>, String)> {
-    use toml_edit::{Item, Table, value};
-    let before = document
+/// The object at `path`, or the depth and parent object of its first missing level.
+fn json_group<'a>(
+    root: &'a Node,
+    path: &[&str],
+) -> Result<std::result::Result<&'a Node, (usize, &'a Node)>> {
+    let mut group = root;
+    for (depth, key) in path.iter().enumerate() {
+        let Some(member) = group.members.iter().find(|m| m.key == *key) else {
+            return Ok(Err((depth, group)));
+        };
+        if !member.node.value.is_object() {
+            return Err(Error::invalid("MCP server collection must be an object"));
+        }
+        group = &member.node;
+    }
+    Ok(Ok(group))
+}
+
+fn toml_entry(document: &toml_edit::DocumentMut, key: &str, name: &str) -> Result<Option<Value>> {
+    document
         .get(key)
         .and_then(|g| g.get(name))
         .map(|entry| {
@@ -597,7 +666,18 @@ fn toml_edit(
                 0,
             )
         })
-        .transpose()?;
+        .transpose()
+}
+
+fn toml_edit(
+    source: &str,
+    document: &toml_edit::DocumentMut,
+    key: &str,
+    name: &str,
+    desired: Option<&Value>,
+) -> Result<(Option<Value>, String)> {
+    use toml_edit::{Item, Table, value};
+    let before = toml_entry(document, key, name)?;
     if before.as_ref() == desired {
         return Ok((before, source.into()));
     }
@@ -774,7 +854,7 @@ pub fn hook_group(
     group: &Value,
     present: bool,
 ) -> Result<(bool, String)> {
-    let document = Prepared::parse(source.to_owned(), Format::Json)?;
+    let document = Prepared::parse(source, Format::Json)?;
     let current = document.hook_groups(event)?;
     let was = current.contains(group);
     if was == present {
@@ -800,15 +880,11 @@ pub fn allow_list(
     remove: &[String],
     add: &[String],
 ) -> Result<(Vec<String>, String)> {
-    Prepared::parse(source.to_owned(), Format::Json)?.allow_list(remove, add)
+    Prepared::parse(source, Format::Json)?.allow_list(remove, add)
 }
 
-fn edit_allow_list(
-    source: &str,
-    root: &Node,
-    remove: &[String],
-    add: &[String],
-) -> Result<(Vec<String>, String)> {
+/// The `permissions` and `permissions.allow` members and the current rules.
+fn allow_nodes(root: &Node) -> Result<(Option<&Member>, Option<&Member>, Vec<String>)> {
     let permissions = root.members.iter().find(|m| m.key == "permissions");
     let allow = permissions.and_then(|p| p.node.members.iter().find(|m| m.key == "allow"));
     if permissions.is_some_and(|p| !p.node.value.is_object()) {
@@ -819,6 +895,16 @@ fn edit_allow_list(
             .map_err(|_| Error::invalid("Permission rules must be a list of strings"))?,
         None => Vec::new(),
     };
+    Ok((permissions, allow, current))
+}
+
+fn edit_allow_list(
+    source: &str,
+    root: &Node,
+    remove: &[String],
+    add: &[String],
+) -> Result<(Vec<String>, String)> {
+    let (permissions, allow, current) = allow_nodes(root)?;
     let mut after: Vec<String> = current
         .iter()
         .filter(|rule| !remove.contains(rule))
@@ -944,6 +1030,52 @@ mod tests {
     }
 
     #[test]
+    fn entry_lookup_matches_removal_edit_values_and_refusals_without_editing() {
+        let cases = [
+            (
+                Format::Json,
+                r#"{"s":{"acme":{"command":"acme"},"other":1}}"#,
+            ),
+            (Format::Json, r#"{"s":{"other":1}}"#),
+            (Format::Json, r#"{"other":1}"#),
+            (Format::Json, r#"{"s":[1]}"#),
+            (
+                Format::Toml,
+                "[s.acme]\ncommand = \"acme\"\n[s.other]\ncommand = \"x\"\n",
+            ),
+            (Format::Toml, "[s]\nacme = 1\n"),
+            (Format::Toml, "s = 1\n"),
+            (Format::Yaml, "s:\n  acme:\n    command: acme\n"),
+            (Format::Yaml, "other: 1\n"),
+            (Format::Yaml, "s: [1]\n"),
+            (Format::Yaml, "- 1\n"),
+        ];
+        for (format, source) in cases {
+            let prepared = Prepared::parse(source, format).unwrap();
+            let start = edits();
+            let entry = prepared.entry("s", "acme").map_err(|e| e.to_string());
+            assert_eq!(edits(), start, "{source}");
+            let removed = prepared
+                .edit("s", "acme", None)
+                .map(|(previous, _)| previous)
+                .map_err(|e| e.to_string());
+            assert_eq!(entry, removed, "{format:?} {source}");
+        }
+        let settings = Prepared::parse(r#"{"permissions":{"allow":["a"]}}"#, Format::Json).unwrap();
+        assert_eq!(settings.allowed().unwrap(), ["a"]);
+        for source in [r#"{"permissions":1}"#, r#"{"permissions":{"allow":[1]}}"#] {
+            let prepared = Prepared::parse(source, Format::Json).unwrap();
+            assert_eq!(
+                prepared.allowed().map_err(|e| e.to_string()),
+                prepared
+                    .allow_list(&[], &[])
+                    .map(|(rules, _)| rules)
+                    .map_err(|e| e.to_string())
+            );
+        }
+    }
+
+    #[test]
     fn prepared_strict_json_rejects_jsonc_and_invalid_syntax() {
         for text in [
             "{\"x\":1,}",
@@ -957,16 +1089,10 @@ mod tests {
             "{\"x\":\"\\q\"}",
             "{\u{b}\"x\":1}",
         ] {
-            assert!(
-                Prepared::parse(text.into(), Format::Json).is_err(),
-                "{text}"
-            );
+            assert!(Prepared::parse(text, Format::Json).is_err(), "{text}");
         }
         for text in ["{\"x\":1,}", "{\"x\":[1,]}", "{/* comment */}"] {
-            assert!(
-                Prepared::parse(text.into(), Format::Jsonc).is_ok(),
-                "{text}"
-            );
+            assert!(Prepared::parse(text, Format::Jsonc).is_ok(), "{text}");
         }
     }
 }

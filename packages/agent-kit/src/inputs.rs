@@ -10,7 +10,8 @@ use std::{
 type ParseResult = std::result::Result<Rc<Prepared>, String>;
 
 struct Snapshot {
-    source: Option<String>,
+    /// Shared with every prepared codec of this file.
+    source: Option<Rc<str>>,
     parsed: RefCell<Vec<(Format, ParseResult)>>,
 }
 
@@ -33,7 +34,7 @@ impl Inputs {
             *self.reads.borrow_mut().entry(path.to_owned()).or_default() += 1;
         }
         let snapshot = Rc::new(Snapshot {
-            source: storage::read(path)?,
+            source: storage::read(path)?.map(Rc::from),
             parsed: RefCell::default(),
         });
         self.files
@@ -42,8 +43,14 @@ impl Inputs {
         Ok(snapshot)
     }
 
+    /// An owned copy of the observed bytes, for a plan's review binding.
     pub(crate) fn read(&self, path: &Path) -> Result<Option<String>> {
-        Ok(self.snapshot(path)?.source.clone())
+        Ok(self.snapshot(path)?.source.as_deref().map(str::to_owned))
+    }
+
+    /// Whether the file existed when first observed, without copying it.
+    pub(crate) fn exists(&self, path: &Path) -> Result<bool> {
+        Ok(self.snapshot(path)?.source.is_some())
     }
 
     pub(crate) fn document(&self, path: &Path, format: Format) -> Result<Rc<Prepared>> {
@@ -54,7 +61,7 @@ impl Inputs {
         }
         let source = snapshot.source.clone().unwrap_or_else(|| {
             if format == Format::Toml {
-                String::new()
+                "".into()
             } else {
                 "{}\n".into()
             }
@@ -68,6 +75,14 @@ impl Inputs {
             .map_err(|e| e.to_string());
         parsed.push((format, result.clone()));
         result.map_err(Error::invalid)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn counts(&self, path: &Path) -> (usize, usize) {
+        let count = |counts: &RefCell<BTreeMap<PathBuf, usize>>| {
+            counts.borrow().get(path).copied().unwrap_or_default()
+        };
+        (count(&self.reads), count(&self.parses))
     }
 }
 
@@ -104,7 +119,7 @@ mod tests {
         inputs
             .document(&path, Format::Json)
             .unwrap()
-            .edit("mcpServers", "acme", None)
+            .entry("mcpServers", "acme")
             .unwrap();
         let options = crate::Options {
             agents: vec!["claude".into(), "copilot-cli".into(), "claude".into()],

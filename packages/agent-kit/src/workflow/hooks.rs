@@ -111,7 +111,7 @@ pub(super) fn codex(
     // Codex also loads inline `[[hooks.UserPromptSubmit]]` from the same layer's
     // config.toml. An equal inline group already runs, so it stays unowned and
     // is not duplicated; the same command with other fields conflicts.
-    let inline = if inputs.read(&destination.path)?.is_some() {
+    let inline = if inputs.exists(&destination.path)? {
         inputs
             .document(&destination.path, Format::Toml)?
             .hook_groups(EVENT)?

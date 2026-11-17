@@ -11,6 +11,8 @@ use std::{
 };
 mod hooks;
 mod portability;
+#[cfg(test)]
+mod tests;
 pub use portability::relocate_project;
 
 /// What a change owns in its file: the product's server entry, or the
@@ -186,10 +188,12 @@ impl Plan {
         Ok(())
     }
     fn publish(&self, change: &Change) -> Result<()> {
-        Self::validate(change)?;
+        // Apply already checked fresh bytes under the lock; a change that
+        // writes nothing needs no second identical read.
         if change.before == change.after && change.ownership_unchanged && !self.remove {
             return Ok(());
         }
+        Self::validate(change)?;
         let mut record = change.record.clone();
         record.pending = true;
         let pending =
@@ -399,18 +403,18 @@ fn other_scope(context: &Context, id: &str, scope: Scope, inputs: &Inputs) -> Op
         Scope::Project
     };
     let other = agents::destination(context, id, other_scope).ok()?;
-    let status = match inputs.read(&other.path) {
-        Ok(Some(_)) => {
+    let status = match inputs.exists(&other.path) {
+        Ok(true) => {
             match inputs
                 .document(&other.path, other.format)
-                .and_then(|doc| doc.edit(other.key, &context.product, None))
+                .and_then(|doc| doc.entry(other.key, &context.product))
             {
-                Ok((Some(_), _)) => "registration exists; host scope precedence applies",
-                Ok(_) => "no registration",
+                Ok(Some(_)) => "registration exists; host scope precedence applies",
+                Ok(None) => "no registration",
                 Err(_) => "invalid configuration; host loading may fail",
             }
         }
-        Ok(None) => return None,
+        Ok(false) => return None,
         Err(_) => "unreadable configuration; host loading is unverified",
     };
     Some(json!({"agent":id,"scope":other_scope,"path":other.path,"status":status}))
@@ -425,8 +429,11 @@ fn server_change(
     inputs: &Inputs,
 ) -> Result<Option<Change>> {
     let before = inputs.read(&destination.path)?;
-    let document = inputs.document(&destination.path, destination.format)?;
-    let (current, _) = document.edit(destination.key, &context.product, None)?;
+    let desired = (!options.remove).then_some(destination.entry);
+    // One edit yields both the observed entry and the reviewed result.
+    let (current, after) = inputs
+        .document(&destination.path, destination.format)?
+        .edit(destination.key, &context.product, desired.as_ref())?;
     let ledger = ledger(context, &destination.path);
     let ledger_before = inputs.read(&ledger)?;
     let owned = ownership(context, &destination.path, ledger_before.as_deref())?;
@@ -448,8 +455,6 @@ fn server_change(
             destination.path.display()
         )));
     }
-    let desired = (!options.remove).then_some(destination.entry);
-    let (_, after) = document.edit(destination.key, &context.product, desired.as_ref())?;
     // An absent removal is a genuine no-op, including no ownership file.
     if options.remove && current.is_none() && owned.is_none() {
         return Ok(None);
@@ -568,12 +573,10 @@ fn claude_other_rules(
     inputs: &Inputs,
 ) -> Result<(Vec<String>, Vec<String>)> {
     let path = agents::claude_settings(context, options.scope);
-    let Some(_) = inputs.read(&path)? else {
+    if !inputs.exists(&path)? {
         return Ok((Vec::new(), Vec::new()));
-    };
-    let (current, _) = inputs
-        .document(&path, agents::Format::Json)?
-        .allow_list(&[], &[])?;
+    }
+    let current = inputs.document(&path, agents::Format::Json)?.allowed()?;
     let ledger_before = inputs.read(&ledger(context, &path))?;
     // As in claude_approvals: an interrupted publication may own either side.
     let owned: Vec<String> = ownership(context, &path, ledger_before.as_deref())?
@@ -665,11 +668,7 @@ fn approved(context: &Context, options: &Options, inputs: &Inputs) -> (Vec<Strin
 fn current_approvals(context: &Context, options: &Options, inputs: &Inputs) -> Option<Vec<String>> {
     if let Some(host) = options.agents.iter().find_map(|a| agents::config_host(a))
         && let Ok(path) = agents::definition_path(host, context, options.scope, options.remove)
-        && inputs
-            .read(&ledger(context, &path))
-            .ok()
-            .flatten()
-            .is_some()
+        && inputs.exists(&ledger(context, &path)).unwrap_or(false)
         && let Ok(Some(source)) = inputs.read(&path)
     {
         // Setup's own format: one `    "tool": allow` line per approved tool.
@@ -683,10 +682,10 @@ fn current_approvals(context: &Context, options: &Options, inputs: &Inputs) -> O
     }
     if options.agents.iter().any(|a| a == "codex")
         && let Ok(destination) = agents::destination(context, "codex", options.scope)
-        && let Ok(Some(_)) = inputs.read(&destination.path)
-        && let Ok((Some(entry), _)) = inputs
+        && inputs.exists(&destination.path).unwrap_or(false)
+        && let Ok(Some(entry)) = inputs
             .document(&destination.path, destination.format)
-            .and_then(|doc| doc.edit(destination.key, &context.product, None))
+            .and_then(|doc| doc.entry(destination.key, &context.product))
         && let Some(tools) = entry["tools"].as_object()
     {
         return Some(
@@ -699,12 +698,13 @@ fn current_approvals(context: &Context, options: &Options, inputs: &Inputs) -> O
     }
     if options.agents.iter().any(|a| a == "claude") {
         let path = agents::claude_settings(context, options.scope);
-        inputs.read(&ledger(context, &path)).ok().flatten()?;
-        inputs.read(&path).ok()??;
-        let (rules, _) = inputs
+        if !inputs.exists(&ledger(context, &path)).ok()? || !inputs.exists(&path).ok()? {
+            return None;
+        }
+        let rules = inputs
             .document(&path, agents::Format::Json)
             .ok()?
-            .allow_list(&[], &[])
+            .allowed()
             .ok()?;
         return Some(
             context
@@ -1056,11 +1056,11 @@ fn inspect_inputs(
     if let Some(host) = agents::config_host(id) {
         match agents::definition_path(host, context, scope, remove) {
             Ok(path) => {
-                choice.detail = match inputs.read(&path) {
-                    Ok(Some(_)) => {
+                choice.detail = match inputs.exists(&path) {
+                    Ok(true) => {
                         format!("defined for {}; ownership checked on review", host.name)
                     }
-                    Ok(None) => format!("{} publishes it to each developer's agents", host.name),
+                    Ok(false) => format!("{} publishes it to each developer's agents", host.name),
                     Err(_) => "unreadable definition".into(),
                 };
             }
@@ -1070,16 +1070,16 @@ fn inspect_inputs(
     }
     match agents::destination(context, id, scope) {
         Ok(dest) => {
-            choice.detail = match inputs.read(&dest.path) {
-                Ok(Some(_)) => match inputs
+            choice.detail = match inputs.exists(&dest.path) {
+                Ok(true) => match inputs
                     .document(&dest.path, dest.format)
-                    .and_then(|doc| doc.edit(dest.key, &context.product, None))
+                    .and_then(|doc| doc.entry(dest.key, &context.product))
                 {
-                    Ok((Some(_), _)) => "configured; ownership checked on review",
-                    Ok(_) => "not registered",
+                    Ok(Some(_)) => "configured; ownership checked on review",
+                    Ok(None) => "not registered",
                     Err(_) => "invalid configuration",
                 },
-                Ok(None) => "not registered",
+                Ok(false) => "not registered",
                 Err(_) => "unreadable configuration",
             }
             .into();
