@@ -233,6 +233,9 @@ pub(crate) fn summary(updates: &Value) -> String {
         .collect();
     let text = if rows.is_empty() {
         match updates["availability"].as_str() {
+            Some("none") if updates["direct_total"] == 0 => {
+                "No direct pack selections to check.".to_owned()
+            }
             Some("none") => "No newer pack releases observed in the checked scope.".to_owned(),
             _ => "Pack update availability is unknown; refresh registry metadata to check."
                 .to_owned(),

@@ -94,8 +94,10 @@ explains these rules in detail.
 
 ## Check for pack updates
 
-`shield status` and `shield pack list` show cached availability for unpinned
-direct selections. A newer advertised release may need a newer Shield engine,
+`shield status` and `shield pack list` show cached availability for all direct
+selections, including pinned packs. Pins keep the installed version fixed until
+an explicit reviewed update; they do not hide newer releases.
+A newer advertised release may need a newer Shield engine,
 different settings or compatible dependencies; `shield pack update` prepares the
 actual candidate and shows permission changes for approval.
 
@@ -112,8 +114,8 @@ status/list requests and hooks make no update-related network requests.
 
 Metadata stays fresh for 24 hours, bounded by its signed expiration. Missing or
 old metadata means availability is unknown. Inspection retains observation times
-and distinguishes stale evidence from fresh releases. Pins and dependency-only
-selections do not produce notices.
+and distinguishes stale evidence from fresh releases. Dependency-only selections
+do not produce notices. An empty scope reports “No direct pack selections to check.”
 
 Interactive status/list and completed pack changes may also print a short notice
 on stderr. Notices are limited to once per project per day; the same installed

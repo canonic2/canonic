@@ -463,10 +463,13 @@ Retrieving it performs no acquisition, proposal creation or approval; the
 
 `status`, `pack_list` and `pack_show` return cached `data.pack_updates` with
 `availability` (`available`, `none`, `partial` or `unknown`), up to eight release
-rows, source freshness, excluded pin/dependency counts, total/fresh counts and
-truncation. Rows name the installed `selector`, source identity, installed and
+rows, source freshness, direct-selection and excluded-dependency counts,
+total/fresh counts and truncation. Rows name the installed `selector`, source identity, installed and
 advertised versions, observation/expiry times and `compatibility: unchecked`.
 The reference form of `pack_list` restricts this inspection to that selection.
+Pinned direct selections participate in inspection and notices. `direct_total`
+counts direct selections in scope; zero means there are no direct selections to
+check. A pin keeps the installed version fixed until an explicit reviewed update.
 
 A successful `status` or `pack_list` can additionally carry
 `data.pack_update_notice`, with up to three rows, a remaining count, message and

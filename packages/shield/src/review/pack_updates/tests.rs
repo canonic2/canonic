@@ -104,7 +104,7 @@ fn pack_updates_truncation_preserves_fresh_notices_after_eight_stale_candidates(
 }
 
 #[test]
-fn pack_updates_only_advertise_newer_stable_tracking_roots_and_keep_unknown_honest() {
+fn pack_updates_advertise_newer_stable_direct_selections_and_keep_unknown_honest() {
     let (_root, context, mut state, source) = fixture();
     let now = DAY_MS * 10;
     assert_eq!(
@@ -136,8 +136,7 @@ fn pack_updates_only_advertise_newer_stable_tracking_roots_and_keep_unknown_hone
     );
     state.operator["installed"][0]["pinned"] = json!(true);
     let pinned = inspect_at(&context, &state, None, now);
-    assert_eq!(pinned["excluded_pinned"], 1);
-    assert_eq!(pinned["items"], json!([]));
+    assert_eq!(pinned, view, "pinning does not hide newer releases");
     state.operator["installed"][0]["direct"] = json!(false);
     assert_eq!(
         inspect_at(&context, &state, None, now)["excluded_dependencies"],
@@ -149,6 +148,70 @@ fn pack_updates_only_advertise_newer_stable_tracking_roots_and_keep_unknown_hone
     assert_eq!(
         inspect_at(&context, &state, None, now)["availability"],
         "none"
+    );
+}
+
+#[test]
+fn pack_updates_pinned_selections_keep_coverage_honest_and_produce_notices() {
+    let (root, context, mut state, source) = fixture();
+    state.operator["installed"][0]["pinned"] = json!(true);
+    let before = state.operator.clone();
+    let checkpoint = root.path().join(".shield/state/state.json");
+    let bytes = fs::read(&checkpoint).unwrap();
+    let now = DAY_MS * 10;
+    assert_eq!(
+        inspect_at(&context, &state, None, now)["availability"],
+        "unknown"
+    );
+    retain_at(
+        &context,
+        &source,
+        &catalog(&source, 1, &[("acme/node", "2.0.0")]),
+        now,
+    )
+    .unwrap();
+    let view = inspect_at(&context, &state, Some("pack:acme-node"), now);
+    assert_eq!(view["availability"], "available");
+    assert_eq!(view["direct_total"], 1);
+    assert!(inspection_summary(&view).contains("1.0.0 → 2.0.0"));
+    let notice = pending(&context, "cli", &view).expect("pinned release produces a notice");
+    assert_eq!(notice.value["items"][0]["selector"], "pack:acme-node");
+    drop(notice);
+    assert_eq!(
+        inspect_at(&context, &state, None, now + DAY_MS)["availability"],
+        "unknown"
+    );
+    state.operator["installed"][0]["source"]["location"] = json!(".shield");
+    let ineligible = inspect_at(&context, &state, None, now);
+    assert_eq!(ineligible["availability"], "unknown");
+    assert_eq!(ineligible["sources"][0]["reason"], "source_ineligible");
+    state.operator = before;
+    state.operator["installed"][0]["version"] = json!("2.0.0");
+    state.operator["installed"][0]["digest"] = json!("b".repeat(64));
+    assert_eq!(
+        inspect_at(&context, &state, None, now)["availability"],
+        "none"
+    );
+    assert_eq!(fs::read(checkpoint).unwrap(), bytes);
+}
+
+#[test]
+fn pack_updates_empty_and_dependency_only_scopes_are_explicit() {
+    let (_root, context, mut state, _source) = fixture();
+    state.operator["installed"][0]["direct"] = json!(false);
+    let dependencies = inspect_at(&context, &state, None, DAY_MS * 10);
+    assert_eq!(dependencies["excluded_dependencies"], 1);
+    assert_eq!(dependencies["direct_total"], 0);
+    assert_eq!(
+        inspection_summary(&dependencies),
+        "No direct pack selections to check."
+    );
+    state.operator["installed"] = json!([]);
+    let empty = inspect_at(&context, &state, None, DAY_MS * 10);
+    assert_eq!(empty["availability"], "none");
+    assert_eq!(
+        inspection_summary(&empty),
+        "No direct pack selections to check."
     );
 }
 

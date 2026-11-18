@@ -241,14 +241,14 @@ fn pack_updates_schema() -> Value {
             "sources":{"type":"array","maxItems":64,"items":object(json!({"source_identity":string(),"freshness":{"enum":["fresh","stale","expired","unavailable"]},"reason":nullable(string())}), &["source_identity","freshness","reason"])},
             "items_total":count,"sources_total":count,
             "items_list":{"type":"object"},"sources_list":{"type":"object"},
-            "excluded_pinned":count,"excluded_dependencies":count,"total":count,"fresh_total":count,
+            "direct_total":count,"excluded_dependencies":count,"total":count,"fresh_total":count,
             "truncated":{"type":"boolean"},"next_action":string()
         }),
         &[
             "availability",
             "items",
             "sources",
-            "excluded_pinned",
+            "direct_total",
             "excluded_dependencies",
             "total",
             "fresh_total",

@@ -28,8 +28,10 @@ stale. Refresh it before deciding anything:
   each other source's alias the same way.
 - `pack_list` again shows `pack_updates` from the fresh metadata.
 
-`availability: unknown` or stale evidence means the refresh did not happen or
-failed. Never report packs as current from it.
+Pinned direct selections participate in availability checks and notices.
+When `direct_total` is zero, no direct selections were checked. `availability: unknown`,
+`partial` or stale evidence does not establish that all installed packs are current.
+Never report packs as current from missing or incomplete coverage.
 
 ## 3. Prepare one update
 

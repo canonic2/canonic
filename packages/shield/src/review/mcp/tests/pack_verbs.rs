@@ -4,74 +4,93 @@ use clap::CommandFactory;
 
 #[test]
 fn pack_updates_search_seeds_offline_cli_and_mcp_inspection_without_policy_changes() {
-    let (root, context, connection) = fixture();
-    let source = dependency_registry(&root, &context, &json!([]), false);
-    commit_pack_change(
-        &context,
-        &connection,
-        json!({"kind":"pack_add","reference":"acme-dependencies/acme/parent"}),
-        "install",
-    );
-    registry_release(&source, "acme/parent", "1.1.0", None);
-    let searched = invoke(
-        &context,
-        &connection,
-        "pack_search",
-        json!({"query":"acme-dependencies/"}),
-    );
-    assert!(searched["error"].is_null(), "{searched}");
-    std::fs::remove_file(source.path().join("catalog.json")).unwrap();
-    let checkpoint = root.path().join(".shield/state/state.json");
-    let before = std::fs::read(&checkpoint).unwrap();
-    let cli = crate::review::packs::list(&context).unwrap();
-    let listed = invoke(&context, &connection, "pack_list", json!({}));
-    assert_eq!(listed["data"]["pack_updates"], cli["pack_updates"]);
-    assert_eq!(
-        listed["data"]["pack_updates"]["availability"], "available",
-        "{listed}"
-    );
-    assert_eq!(
-        listed["data"]["pack_updates"]["items"][0]["available_version"],
-        "1.1.0"
-    );
-    let status = invoke(&context, &connection, "status", json!({}));
-    for field in ["availability", "items", "sources", "total", "fresh_total"] {
-        assert_eq!(
-            status["data"]["pack_updates"][field], cli["pack_updates"][field],
-            "{status}"
+    for pinned in [false, true] {
+        let (root, context, connection) = fixture();
+        let source = dependency_registry(&root, &context, &json!([]), false);
+        commit_pack_change(
+            &context,
+            &connection,
+            json!({"kind":"pack_add","reference":if pinned {
+                "acme-dependencies/acme/parent@1.0.0"
+            } else {
+                "acme-dependencies/acme/parent"
+            }}),
+            "install",
         );
+        registry_release(&source, "acme/parent", "1.1.0", None);
+        let searched = invoke(
+            &context,
+            &connection,
+            "pack_search",
+            json!({"query":"acme-dependencies/"}),
+        );
+        assert!(searched["error"].is_null(), "{searched}");
+        std::fs::remove_file(source.path().join("catalog.json")).unwrap();
+        let checkpoint = root.path().join(".shield/state/state.json");
+        let before = std::fs::read(&checkpoint).unwrap();
+        let cli = crate::review::packs::list(&context).unwrap();
+        let listed = invoke(&context, &connection, "pack_list", json!({}));
+        assert_eq!(listed["data"]["pack_updates"], cli["pack_updates"]);
+        assert_eq!(
+            listed["data"]["pack_updates"]["availability"], "available",
+            "{listed}"
+        );
+        assert_eq!(
+            listed["data"]["pack_updates"]["items"][0]["available_version"],
+            "1.1.0"
+        );
+        let status = invoke(&context, &connection, "status", json!({}));
+        for field in ["availability", "items", "sources", "total", "fresh_total"] {
+            assert_eq!(
+                status["data"]["pack_updates"][field], cli["pack_updates"][field],
+                "{status}"
+            );
+        }
+        assert_eq!(status["data"]["pack_updates"]["items_total"], 1);
+        assert_eq!(
+            status["data"]["pack_updates"]["items_list"]["tool"],
+            "status"
+        );
+        let selected = invoke(
+            &context,
+            &connection,
+            "pack_list",
+            json!({"reference":"acme/parent"}),
+        );
+        assert_eq!(selected["data"]["pack_updates"], cli["pack_updates"]);
+        let shown = invoke(
+            &context,
+            &connection,
+            "pack_show",
+            json!({"reference":"acme/parent"}),
+        );
+        assert_eq!(shown["data"]["pack_updates"], cli["pack_updates"]);
+        let catalog = crate::mcp::catalog(None).unwrap();
+        for (name, value) in [
+            ("pack_list", &listed),
+            ("status", &status),
+            ("pack_list", &selected),
+            ("pack_show", &shown),
+        ] {
+            catalog
+                .result_schema(name)
+                .unwrap()
+                .validate(&canonic_mcp_kit::ToolResult {
+                    meta: None,
+                    content: Vec::new(),
+                    structured_content: Some(value.clone()),
+                    is_error: false,
+                })
+                .unwrap();
+        }
+        assert_eq!(std::fs::read(&checkpoint).unwrap(), before);
+        assert!(listed["data"]["proposal_id"].is_null());
+        assert_eq!(cli["pack_updates"]["direct_total"], 1);
+        let notice =
+            crate::review::pack_updates::pending(&context, "mcp", &listed["data"]["pack_updates"])
+                .expect("both pin modes produce an MCP notice");
+        assert_eq!(notice.value["items"][0]["available_version"], "1.1.0");
     }
-    assert_eq!(status["data"]["pack_updates"]["items_total"], 1);
-    assert_eq!(
-        status["data"]["pack_updates"]["items_list"]["tool"],
-        "status"
-    );
-    let selected = invoke(
-        &context,
-        &connection,
-        "pack_list",
-        json!({"reference":"acme/parent"}),
-    );
-    assert_eq!(selected["data"]["pack_updates"], cli["pack_updates"]);
-    let catalog = crate::mcp::catalog(None).unwrap();
-    for (name, value) in [
-        ("pack_list", &listed),
-        ("status", &status),
-        ("pack_list", &selected),
-    ] {
-        catalog
-            .result_schema(name)
-            .unwrap()
-            .validate(&canonic_mcp_kit::ToolResult {
-                meta: None,
-                content: Vec::new(),
-                structured_content: Some(value.clone()),
-                is_error: false,
-            })
-            .unwrap();
-    }
-    assert_eq!(std::fs::read(&checkpoint).unwrap(), before);
-    assert!(listed["data"]["proposal_id"].is_null());
 }
 
 #[test]

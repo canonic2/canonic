@@ -76,7 +76,7 @@ fn inspect_at(context: &Context, state: &State, selector: Option<&str>, now: u64
     let mut items = Vec::new();
     let mut sources = Vec::new();
     let mut eligible: BTreeMap<&str, Vec<&Value>> = BTreeMap::new();
-    let mut pinned = 0;
+    let mut direct = 0;
     let mut dependencies = 0;
     for row in state.operator["installed"]
         .as_array()
@@ -86,9 +86,10 @@ fn inspect_at(context: &Context, state: &State, selector: Option<&str>, now: u64
     {
         if row["direct"] == false {
             dependencies += 1;
-        } else if row["pinned"] == true {
-            pinned += 1;
-        } else if let Some(id) = row["source_identity"].as_str() {
+            continue;
+        }
+        direct += 1;
+        if let Some(id) = row["source_identity"].as_str() {
             eligible.entry(id).or_default().push(row);
         }
     }
@@ -97,12 +98,13 @@ fn inspect_at(context: &Context, state: &State, selector: Option<&str>, now: u64
     for (identity, rows) in &eligible {
         let source = effective.as_ref().and_then(|e| e.by_identity(identity));
         let usable = source.filter(|(_, source, _)| {
+            let source = json!(source);
             state.operator["installed"]
                 .as_array()
                 .into_iter()
                 .flatten()
                 .filter(|row| row["source_identity"] == *identity)
-                .all(|row| row["source"] == json!(source))
+                .all(|row| row["source"] == source)
         });
         let snapshot = usable.and_then(|(_, source, _)| cache::load(context, source).ok());
         let snapshot = snapshot
@@ -132,11 +134,10 @@ fn inspect_at(context: &Context, state: &State, selector: Option<&str>, now: u64
         .iter()
         .filter(|row| row["freshness"] == "fresh")
         .count();
-    let available = fresh_total > 0;
     items.truncate(8);
     let mut value = json!({"availability":if eligible.is_empty() { "none" } else if covered == 0 { "unknown" }
-        else if covered < eligible.len() { "partial" } else if available { "available" } else { "none" },
-        "items":items,"sources":sources,"excluded_pinned":pinned,"excluded_dependencies":dependencies,
+        else if covered < eligible.len() { "partial" } else if fresh_total > 0 { "available" } else { "none" },
+        "items":items,"sources":sources,"direct_total":direct,"excluded_dependencies":dependencies,
         "total":total,"fresh_total":fresh_total,"truncated":total > 8,
         "next_action":"Availability is cached and compatibility is unchecked. Refresh with pack search for the relevant enrolled source. Only prepare pack_update when the user requested updates; review before applying."});
     bound_output(&mut value);

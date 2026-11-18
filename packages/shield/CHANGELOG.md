@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Include pinned direct packs in status/list update availability and CLI/MCP
+  notices. Replace `pack_updates.excluded_pinned` with `direct_total`, and report
+  “No direct pack selections to check.” when the inspected scope has none.
 - Make explicit pack updates include pinned selections, preserving profiles and
   pin mode at the reviewed versions. Exact update versions and recovered
   project-file selections no longer require a separate reinstall workflow.
