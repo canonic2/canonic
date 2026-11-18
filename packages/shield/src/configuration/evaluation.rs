@@ -267,8 +267,28 @@ impl Evaluator {
         now: &str,
         checkpoint: &dyn Fn() -> Result<(), Error>,
     ) -> Result<NormalizedEvaluation, Error> {
+        self.evaluate_normalized_report_mcp(
+            input, context, project, executable, now, None, checkpoint,
+        )
+    }
+
+    /// Evaluate with a connection the caller resolved, such as an observed host server.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "mirrors evaluate_normalized_report plus one connection"
+    )]
+    pub(crate) fn evaluate_normalized_report_mcp(
+        &self,
+        input: &policy::resolution::normalized::Input,
+        context: &policy::resolution::normalized::Context,
+        project: &str,
+        executable: Option<&str>,
+        now: &str,
+        mcp: Option<&policy::resolution::compiled::ResolvedMcp>,
+        checkpoint: &dyn Fn() -> Result<(), Error>,
+    ) -> Result<NormalizedEvaluation, Error> {
         use policy::resolution::normalized::Input;
-        let resolved = self.mcp_resolution(input, None)?;
+        let resolved = self.mcp_resolution(input, mcp)?;
         let resolved = resolved.as_deref();
         let bound = Self::mcp_input(input, resolved);
         let input = bound.as_ref();

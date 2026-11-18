@@ -553,6 +553,9 @@ impl Rule {
             result.insert("agent-outputs-v1".into());
         }
         for value in std::iter::once(&self.conditions).chain(self.requirements.as_ref()) {
+            if value["url"].get("subdomains").is_some() {
+                result.insert("url-subdomains-v1".into());
+            }
             capabilities(value, domain, result);
         }
     }

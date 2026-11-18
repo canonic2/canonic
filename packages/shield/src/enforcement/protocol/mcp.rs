@@ -58,20 +58,13 @@ impl Prepared {
         if !self.snapshot.has_mcp_integrations() {
             return Ok(false);
         }
-        let Some(observation) = crate::agents::find(agent)
-            .ok_or(Error::Invalid("unknown MCP agent"))?
-            .discover_mcp(root, cwd)?
+        let Some(host) = crate::agents::mcp_host_server(agent, root, cwd, alias, connections)?
         else {
             return Ok(false);
         };
-        let Some((configured, current)) = observation.resolve(alias)? else {
-            return Ok(false);
-        };
-        let source = current.source;
-        let discovered = observation.connections(connections, agent);
         let resolved = self
             .snapshot
-            .resolve_mcp(&format!("host:{configured}"), &discovered, source)
+            .resolve_mcp(&host.server(), &host.connections, host.source)
             .map_err(|_| {
                 Error::Invalid("MCP integration predicates or connector mappings conflict")
             })?;
@@ -80,9 +73,9 @@ impl Prepared {
         }
         self.mcp = Some(PreparedMcp {
             namespace: alias.into(),
-            alias: configured.into(),
+            alias: host.alias,
             resolved: Arc::new(resolved),
-            observation: Some(observation),
+            observation: Some(host.observation),
         });
         Ok(true)
     }

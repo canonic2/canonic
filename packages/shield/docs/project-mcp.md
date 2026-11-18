@@ -901,6 +901,16 @@ path. Unknown context cannot establish an exact allowance. Broader file/web effe
 matching and complete semantic comparison have incomplete coverage and do not
 manufacture permission. Powershell/Cmd analysis is unsupported.
 
+For `mcp` input, `server` is the server name the calling agent uses, such as
+`acme` for its `mcp__acme__search` tool. When an installed pack matches that
+server automatically, Shield reads the calling agent's MCP settings from the
+request's cwd, applies the pack's rules as the agent's hook does and returns the
+match in `data.mcp_match`: the configured alias, the settings scope and the
+matched pack, version, profile and integration. The match reflects the settings
+file only; it does not confirm that the agent loaded that server. Without a
+match, `mcp_match` is absent and only rules for project-managed connections and
+the literal server name apply.
+
 `policy_compare` selects two handles and `sample`, `literal_argv` or
 `supported_semantic`. Only sample accepts input/context. A sample is one witness;
 matching sample decisions cannot prove whole-policy equivalence. Unsupported

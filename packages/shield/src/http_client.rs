@@ -1,6 +1,6 @@
 //! Recognizes the read-only curl and wget forms that a web fetch and an
 //! optional file write describe completely, without executing them.
-//! Any other option, a second URL or an unusual URL leaves the command to
+//! Any other option or an unusual URL leaves the command to
 //! argv policy.
 use std::{borrow::Cow, collections::BTreeMap};
 
@@ -31,9 +31,16 @@ pub(crate) struct Fetch<'a> {
 /// The recognized fetch for a literal command, or None when any part of it is
 /// outside the read-only subset.
 pub(crate) fn fetch<'a>(executable: &str, arguments: &[&'a str]) -> Option<Fetch<'a>> {
+    let mut found = fetches(executable, arguments)?;
+    (found.len() == 1).then(|| found.remove(0))
+}
+
+/// Every transfer in a supported command. curl batches share request options;
+/// its single output option applies to the first transfer only.
+pub(crate) fn fetches<'a>(executable: &str, arguments: &[&'a str]) -> Option<Vec<Fetch<'a>>> {
     match executable {
         "curl" | "/bin/curl" | "/usr/bin/curl" => curl(arguments),
-        "wget" | "/bin/wget" | "/usr/bin/wget" => wget(arguments),
+        "wget" | "/bin/wget" | "/usr/bin/wget" => wget(arguments).map(|fetch| vec![fetch]),
         _ => None,
     }
 }
@@ -62,8 +69,9 @@ pub(crate) fn environment_entry_changes_request(name: &str, nonempty: bool) -> b
         .contains(&name)
 }
 
-fn curl<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {
+fn curl<'a>(arguments: &[&'a str]) -> Option<Vec<Fetch<'a>>> {
     let mut url = None;
+    let mut urls = Vec::new();
     let mut output = None;
     let mut head = false;
     let mut request = None;
@@ -77,7 +85,7 @@ fn curl<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {
         let argument = arguments[position];
         position += 1;
         if !options || argument == "-" || !argument.starts_with('-') {
-            set_once(&mut url, argument)?;
+            urls.push(argument);
         } else if argument == "--" {
             options = false;
         } else if position == 1 && argument == "-q" {
@@ -134,20 +142,36 @@ fn curl<'a>(arguments: &[&'a str]) -> Option<Fetch<'a>> {
     if !query.is_empty() && !get {
         return None;
     }
+    if let Some(url) = url {
+        // Mixing --url with positional URLs has ordering-sensitive output
+        // assignment; leave that form to argv policy.
+        if !urls.is_empty() {
+            return None;
+        }
+        urls.push(url);
+    }
+    if urls.is_empty() || urls.len() > 64 {
+        return None;
+    }
     let method = match (head, request) {
         (true, Some("GET")) => return None,
         (true, _) | (false, Some("HEAD")) => "HEAD",
         (false, _) => "GET",
     };
-    Some(Fetch {
-        client: Client::Curl,
-        url: query_url(literal_url(url?)?, &query)?,
-        method,
-        redirects: if follow { "follow" } else { "none" },
-        output: output.filter(|path| !["-", "/dev/null"].contains(path)),
-        skips_config,
-        reads_netrc: false,
-    })
+    urls.into_iter()
+        .enumerate()
+        .map(|(index, url)| {
+            Some(Fetch {
+                client: Client::Curl,
+                url: query_url(literal_url(url)?, &query)?,
+                method,
+                redirects: if follow { "follow" } else { "none" },
+                output: output.filter(|path| index == 0 && !["-", "/dev/null"].contains(path)),
+                skips_config,
+                reads_netrc: false,
+            })
+        })
+        .collect()
 }
 
 /// Inline data-urlencode forms only. Before `=`, names are already encoded;
@@ -391,6 +415,29 @@ mod tests {
     }
 
     const URL: &str = "https://registry.example.com/catalog.json";
+
+    #[test]
+    fn curl_batches_preserve_transfer_order_and_first_output() {
+        let found = fetches(
+            "curl",
+            &["-q", "-o", "result.json", URL, "https://other.example.com/"],
+        )
+        .unwrap();
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].url, URL);
+        assert_eq!(found[0].output, Some("result.json"));
+        assert_eq!(found[1].url, "https://other.example.com/");
+        assert_eq!(found[1].output, None);
+        for arguments in [
+            vec![URL, "ftp://other.example.com/"],
+            vec![URL, "--url", URL],
+            vec![URL, "--next", URL],
+            vec![URL, "-o", "a", "-o", "b", URL],
+        ] {
+            assert!(fetches("curl", &arguments).is_none(), "{arguments:?}");
+        }
+        assert!(fetches("curl", &vec![URL; 65]).is_none());
+    }
 
     #[test]
     fn curl_downloads_are_a_fetch_and_an_output_write() {

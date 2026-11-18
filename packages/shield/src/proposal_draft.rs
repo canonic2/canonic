@@ -90,9 +90,8 @@ pub(crate) fn web_search() -> Value {
 /// Loopback names a local development server answers on.
 const LOOPBACK: [&str; 3] = ["localhost", "127.0.0.1", "[::1]"];
 
-/// A rule allowing fetches from this URL's scheme and host, and its explicit
-/// port when it names one. A loopback URL allows shell downloads from every
-/// local server instead.
+/// A rule for the URL's site and subdomains on any port, without endpoint or
+/// query restrictions. Loopback URLs share a local-server allowance.
 pub(crate) fn web_fetch(url: &str) -> Option<Value> {
     fetch(url, local_fetch)
 }
@@ -110,17 +109,28 @@ fn fetch(url: &str, local: fn() -> Value) -> Option<Value> {
     if !matches!(scheme, "http" | "https") {
         return None;
     }
-    if LOOPBACK.contains(&host) {
+    if LOOPBACK.contains(&host) || host.ends_with(".localhost") {
         return Some(local());
     }
-    let mut url = json!({"schemes":[scheme],"hosts":[host]});
-    if let Some(port) = parsed.port() {
-        url["ports"] = json!([port]);
+    let domain = if matches!(parsed.host(), Some(url::Host::Domain(_))) {
+        psl::domain_str(host)
+    } else {
+        None
+    };
+    let site = domain.unwrap_or(host);
+    let mut url = json!({"schemes":["http","https"],"hosts":[site]});
+    if domain.is_some() {
+        url["subdomains"] = json!(true);
     }
+    let scope = if domain.is_some() {
+        " and its subdomains"
+    } else {
+        ""
+    };
     Some(json!({"kind":"rule_add","rule":{
-        "id":identifier("allow-fetch", host),
+        "id":identifier("allow-fetch", site),
         "decision":"allow",
-        "reason":format!("Allow fetching pages from {host} without asking."),
+        "reason":format!("Allow HTTP(S) fetches from {site}{scope} on any port without asking."),
         "conditions":{"domain":"web","action":"fetch","url":url}}}))
 }
 
@@ -129,10 +139,10 @@ fn local_fetch() -> Value {
     json!({"kind":"rule_add","rule":{
         "id":"allow-fetch-localhost",
         "decision":"allow",
-        "reason":"Allow GET/HEAD requests to local servers on any port without following redirects.",
+        "reason":"Allow GET/HEAD requests to localhost and its subdomains on any port without following redirects.",
         "conditions":{"domain":"web","action":"fetch",
             "request_fields":{"/client":{"exact":"shell"},"/redirects":{"exact":"none"}},
-            "url":{"schemes":["http","https"],"hosts":LOOPBACK}}}})
+            "url":{"schemes":["http","https"],"hosts":LOOPBACK,"subdomains":true}}}})
 }
 
 /// Agent web-tool fetches from local servers. Shell downloads keep their own
@@ -141,10 +151,10 @@ fn local_host_fetch() -> Value {
     json!({"kind":"rule_add","rule":{
         "id":"allow-agent-fetch-localhost",
         "decision":"allow",
-        "reason":"Allow the agent's web tool to fetch pages from local servers on any port without asking.",
+        "reason":"Allow the agent's web tool to fetch pages from localhost and its subdomains on any port without asking.",
         "conditions":{"domain":"web","action":"fetch",
             "request_fields":{"/client":{"exact":"agent"}},
-            "url":{"schemes":["http","https"],"hosts":LOOPBACK}}}})
+            "url":{"schemes":["http","https"],"hosts":LOOPBACK,"subdomains":true}}}})
 }
 
 /// An extra readable or writable folder outside the project.
@@ -267,6 +277,48 @@ mod tests {
     }
 
     #[test]
+    fn web_site_drafts_cover_site_boundaries_without_endpoints_or_ports() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let cwd = root.path().to_str().unwrap();
+        for (source, site, allowed, refused) in [
+            (
+                "https://api.example.co.uk:8443/v1?q=x",
+                "example.co.uk",
+                "http://docs.example.co.uk:9000/other?q=y",
+                "https://other.co.uk/",
+            ),
+            (
+                "https://api.alice.github.io/v1",
+                "alice.github.io",
+                "https://alice.github.io/other",
+                "https://bob.github.io/",
+            ),
+            (
+                "https://docs.example.com/guide",
+                "example.com",
+                "https://api.example.com/other",
+                "https://example.com.evil.test/",
+            ),
+        ] {
+            let change = host_web_fetch(source).unwrap();
+            assert_eq!(change["rule"]["conditions"]["url"]["hosts"], json!([site]));
+            assert!(change["rule"]["conditions"]["url"].get("path").is_none());
+            assert!(change["rule"]["conditions"]["url"].get("ports").is_none());
+            let evaluator = evaluator(&change);
+            assert_eq!(host_fetch(&evaluator, cwd, allowed), "allow");
+            assert_eq!(host_fetch(&evaluator, cwd, refused), "ask");
+        }
+        let ip = host_web_fetch("http://192.0.2.1:8080/").unwrap();
+        assert!(ip["rule"]["conditions"]["url"].get("subdomains").is_none());
+        let bare_suffix = host_web_fetch("https://github.io/").unwrap();
+        assert!(
+            bare_suffix["rule"]["conditions"]["url"]
+                .get("subdomains")
+                .is_none()
+        );
+    }
+
+    #[test]
     fn loopback_host_fetch_drafts_cover_agent_web_tools_only() {
         let root = assert_fs::TempDir::new().unwrap();
         let cwd = root.path().to_str().unwrap();
@@ -275,6 +327,9 @@ mod tests {
         for (url, expected) in [
             ("http://localhost:3000/health", "allow"),
             ("http://127.0.0.1:8080/", "allow"),
+            ("http://auth.workspace.localhost:51075/csrf-token", "allow"),
+            ("http://notlocalhost:51075/", "ask"),
+            ("http://localhost.evil.test/", "ask"),
             ("https://example.com/", "ask"),
         ] {
             assert_eq!(host_fetch(&evaluator, cwd, url), expected, "{url}");
@@ -308,6 +363,12 @@ mod tests {
         for (source, expected) in [
             ("curl -q http://localhost:3000/health", "allow"),
             ("curl -q -I http://127.0.0.1:8080/health", "allow"),
+            (
+                "curl -q http://auth.workspace.localhost:51075/csrf-token",
+                "allow",
+            ),
+            ("curl -q http://notlocalhost:51075/", "ask"),
+            ("curl -q http://localhost.evil.test/", "ask"),
             ("curl -q -L http://localhost:3000/health", "ask"),
             ("curl -q https://example.com/", "ask"),
             ("curl -q -X POST http://localhost:3000/health", "ask"),
@@ -359,14 +420,17 @@ mod tests {
         let fetch = web_fetch("https://docs.example.com/guide?q=1").unwrap();
         assert_eq!(
             fetch["rule"]["conditions"]["url"]["hosts"],
-            json!(["docs.example.com"])
+            json!(["example.com"])
         );
-        // An explicit port stays part of the rule; a loopback URL covers
-        // every local server, on any port.
+        // Site allowances cover every port and omit endpoints and queries.
         let ported = web_fetch("https://docs.example.com:8443/").unwrap();
-        assert_eq!(ported["rule"]["conditions"]["url"]["ports"], json!([8443]));
+        assert_eq!(ported, fetch);
         let local = web_fetch("http://localhost:3000/health").unwrap();
         assert_eq!(local, web_fetch("http://127.0.0.1:8080/").unwrap());
+        assert_eq!(
+            local,
+            web_fetch("http://grafana.workspace.localhost:51075/api?q=x").unwrap()
+        );
         assert_eq!(local["rule"]["conditions"]["url"].get("ports"), None);
         for change in [npm, web_search(), fetch, ported, local] {
             let rule: crate::policy::resolution::normalized::Rule =

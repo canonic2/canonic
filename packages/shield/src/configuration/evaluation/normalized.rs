@@ -235,13 +235,7 @@ fn launcher(operation: &Operation) -> Option<&str> {
                 .next()
                 .unwrap_or(&request.executable)
         })
-        .filter(|name| {
-            [
-                "eval", "exec", "command", "builtin", "xargs", "env", "nohup", "nice", "timeout",
-                "gtimeout", "stdbuf", "time",
-            ]
-            .contains(name)
-        })
+        .filter(|name| crate::shell::LAUNCHERS.contains(name))
 }
 fn unwrapped(wrapper: &Operation, operations: &[Operation]) -> bool {
     let Some((start, end)) = wrapper.span() else {

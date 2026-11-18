@@ -374,6 +374,9 @@ pub(crate) struct State {
     /// Advisory session review suppression, never execution authorization.
     #[serde(default)]
     pub(crate) dismissed_reviews: Vec<String>,
+    /// Non-authorizing, session-scoped web save offers, independent of history.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) web_reviews: Vec<super::web_reviews::Entry>,
     pub(crate) events: Vec<Value>,
     /// The configuration change log earlier releases kept; dropped by the
     /// one conversion.

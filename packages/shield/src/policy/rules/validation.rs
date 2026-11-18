@@ -315,7 +315,10 @@ fn quantified(value: &Value, allow: bool) -> Result<(), Error> {
     quantifier(value, allow)
 }
 fn url_predicate(value: &Value) -> Result<(), Error> {
-    selectors::fields(value, &["schemes", "hosts", "ports", "path"])?;
+    selectors::fields(value, &["schemes", "hosts", "ports", "path", "subdomains"])?;
+    if value.get("subdomains").is_some_and(|v| !v.is_boolean()) {
+        return Err(Error::Syntax);
+    }
     selectors::strings(&value["schemes"], true, true)?;
     selectors::strings(&value["hosts"], true, true)?;
     for scheme in value["schemes"].as_array().ok_or(Error::Syntax)? {

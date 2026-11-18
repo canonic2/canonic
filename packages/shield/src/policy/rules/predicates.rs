@@ -379,7 +379,16 @@ fn url_matches(
         .as_array()
         .ok_or(Error::Syntax)?
         .iter()
-        .any(|s| s.as_str() == url.host_str());
+        .filter_map(Value::as_str)
+        .any(|base| {
+            url.host_str() == Some(base)
+                || predicate["subdomains"] == true
+                    && matches!(url::Host::parse(base), Ok(url::Host::Domain(_)))
+                    && url.host_str().is_some_and(|host| {
+                        host.strip_suffix(base)
+                            .is_some_and(|prefix| prefix.ends_with('.'))
+                    })
+        });
     let port = predicate.get("ports").is_none_or(|p| {
         p.as_array().is_some_and(|v| {
             v.iter()

@@ -285,6 +285,45 @@ fn http_client_evaluator(fetch: &Value, explicit: Option<&str>) -> Evaluator {
 const REGISTRY_FETCH: &str = r#"{"domain":"web","action":"fetch","url":{"schemes":["https"],"hosts":["registry.example.com"]}}"#;
 
 #[test]
+fn curl_batches_check_every_host_and_the_output_before_allowing() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let cwd = root.path().to_str().unwrap();
+    let fetch = serde_json::from_str(REGISTRY_FETCH).unwrap();
+    let evaluator = http_client_evaluator(&fetch, None);
+    for (suffix, expected) in [
+        ("https://registry.example.com/b", "allow"),
+        ("https://other.example.com/", "ask"),
+        ("https://blocked.example.com/", "deny"),
+        (
+            "https://other.example.com/ https://blocked.example.com/",
+            "deny",
+        ),
+        ("https://registry.example.com/b -o ../outside.json", "deny"),
+        ("https://registry.example.com/b -d @notes.txt", "ask"),
+        (
+            "https://registry.example.com/b --next https://registry.example.com/c",
+            "ask",
+        ),
+    ] {
+        let source = format!(
+            "curl -s -m 20 -w '%{{http_code}} %{{time_total}}s %{{size_download}}B %{{url_effective}}\\n' https://registry.example.com/a {suffix}"
+        );
+        let result = analyze(&source, Dialect::Bash, cwd, cwd, &evaluator).unwrap();
+        assert_eq!(result["decision"], expected, "{source}: {result}");
+    }
+    let explicit = http_client_evaluator(&fetch, Some("ask"));
+    let result = analyze(
+        "curl https://registry.example.com/a https://registry.example.com/b",
+        Dialect::Bash,
+        cwd,
+        cwd,
+        &explicit,
+    )
+    .unwrap();
+    assert_eq!(result["decision"], "ask");
+}
+
+#[test]
 fn curl_query_fetches_keep_web_output_and_upload_boundaries() {
     let root = assert_fs::TempDir::new().unwrap();
     let cwd = root.path().to_str().unwrap();
@@ -3727,6 +3766,70 @@ fn indirect_tool_execution_retains_only_guaranteed_project_restrictions() {
                 .iter()
                 .any(|operation| operation["request"]["arguments"] == json!(["write", "write"]))
         );
+    }
+}
+
+#[test]
+fn explicit_container_programs_take_their_own_policy_decision() {
+    use crate::{configuration::Candidate, policy::Scope};
+    let candidate =
+        Candidate::from_yaml("schema_version: 1\npacks: []\nrules: rules.json\n").unwrap();
+    let allow = |id: &str, executable: &str, kind: &str, values: &[&str]| {
+        json!({"id":id,"decision":"allow","reason":"Acme routine","conditions":{"domain":"argv",
+            "executable":executable,"arguments":{"kind":kind,"values":values}}})
+    };
+    let rules = crate::policy::rules::document(&[
+        allow("exec", "docker", "prefix", &["exec"]),
+        allow("run", "docker", "prefix", &["run"]),
+        allow("read", "acme", "exact", &["read"]),
+        json!({"id":"env","decision":"allow","reason":"Acme routine","conditions":{"domain":"argv",
+            "executable":"env","arguments":{"kind":"any"}}}),
+        json!({"id":"git","decision":"allow","reason":"Acme routine","conditions":{"domain":"argv",
+            "executable":"git","arguments":{"kind":"any"}}}),
+    ])
+    .unwrap()
+    .to_string();
+    let evaluator = Evaluator::new(vec![(
+        Scope::Project,
+        candidate.capture(&[], Some(&rules)).unwrap(),
+    )])
+    .unwrap();
+    let indirect = |result: &serde_json::Value| {
+        result["operations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|operation| operation["coverage"] == "indirect-execution")
+    };
+    for (source, decision, uninspected) in [
+        ("docker exec acme-container acme read", "allow", false),
+        ("docker exec acme-container acme write", "ask", false),
+        ("docker exec acme-container env acme write", "ask", true),
+        (
+            "docker exec acme-container sh -c 'acme write'",
+            "ask",
+            false,
+        ),
+        // The image's own entrypoint receives these words.
+        ("docker run acme-image acme read", "ask", true),
+        (
+            "docker run --entrypoint=acme acme-image read",
+            "allow",
+            false,
+        ),
+        ("git bisect run acme read", "allow", false),
+        ("git bisect run acme write", "ask", false),
+        ("git -c alias.st=status st", "allow", false),
+        // Configured repositories lie outside the project.
+        (
+            "git for-each-repo --config=maintenance.repo status",
+            "ask",
+            true,
+        ),
+    ] {
+        let result = analyze(source, Dialect::Posix, "/acme", "/acme", &evaluator).unwrap();
+        assert_eq!(result["decision"], decision, "{source}");
+        assert_eq!(indirect(&result), uninspected, "{source}");
     }
 }
 

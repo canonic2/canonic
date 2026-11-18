@@ -26,6 +26,19 @@ use crate::{
 #[cfg(test)]
 use report::ReportCoverage;
 pub(crate) use report::{Coverage, Operation, PolicyRequest, Report, SourceUnit};
+
+/// Programs whose arguments are another command line that argv policy alone
+/// does not unwrap.
+pub(crate) const LAUNCHERS: [&str; 12] = [
+    "eval", "exec", "command", "builtin", "xargs", "env", "nohup", "nice", "timeout", "gtimeout",
+    "stdbuf", "time",
+];
+
+/// One evaluated invocation and the normalized request it was decided as, if any.
+type Evaluated = (
+    crate::configuration::CandidateEvaluation,
+    Option<PolicyRequest>,
+);
 use report::{Data, Facts as ReportFacts, Invocation, Parent as SourceParent, Transition};
 use serde_json::{Value, json};
 use state::{FunctionBinding, State, state_effect, taint};
@@ -1105,17 +1118,7 @@ impl Analysis<'_> {
         Ok(decision.max(indirect))
     }
 
-    fn contextual_evaluation(
-        &self,
-        request: &Request,
-        state: &State,
-    ) -> Result<
-        (
-            crate::configuration::CandidateEvaluation,
-            Option<PolicyRequest>,
-        ),
-        Error,
-    > {
+    fn contextual_evaluation(&self, request: &Request, state: &State) -> Result<Evaluated, Error> {
         let changed = state
             .filesystem_unknown
             .then(|| crate::location::WorkingFiles {
@@ -1150,29 +1153,13 @@ impl Analysis<'_> {
                     .collect::<Vec<_>>(),
             )
         {
-            use crate::policy::resolution::normalized::{Context, Input};
-            let input = Input::File {
-                action: "read".into(),
-                sources: vec![file.into()],
-                destination: None,
-                recursive: false,
-                original_input: json!(request),
-            };
-            let context = Context {
-                cwd: request.cwd.clone(),
-                environment: None,
-                working_files: self.working_files.cloned(),
-            };
-            let read =
-                self.evaluator
-                    .evaluate_resource(request, &input, &context, self.checkpoint)?;
-            return Ok((read, Some(PolicyRequest::Normalized(input))));
+            return self.read_evaluation(request, vec![file.into()]);
         }
         if !state.cwd_unknown
             && !state.environment_unknown
             && !self.clients.http_configuration
             && evaluation.fallback_only_ask()
-            && let Some(fetch) = crate::http_client::fetch(
+            && let Some(fetches) = crate::http_client::fetches(
                 &request.executable,
                 &request
                     .arguments
@@ -1180,9 +1167,23 @@ impl Analysis<'_> {
                     .map(String::as_str)
                     .collect::<Vec<_>>(),
             )
-            && !self.http_client_config(&fetch)
+            && let Some(first) = fetches.first()
+            && !self.http_client_config(first)
         {
-            return self.http_fetch_evaluation(request, &fetch);
+            // The batch takes its strictest fetch's decision.
+            let mut selected: Option<Evaluated> = None;
+            for fetch in &fetches {
+                let evaluated = self.http_fetch_evaluation(request, fetch)?;
+                if selected
+                    .as_ref()
+                    .is_none_or(|(previous, _)| evaluated.0.decision > previous.decision)
+                {
+                    selected = Some(evaluated);
+                }
+            }
+            if let Some(selected) = selected {
+                return Ok(selected);
+            }
         }
         if !state.cwd_unknown && evaluation.fallback_only_ask() {
             let arguments: Vec<_> = request.arguments.iter().map(String::as_str).collect();
@@ -1190,26 +1191,32 @@ impl Analysis<'_> {
                 && let Some(files) = crate::location::text_files(&request.executable, &arguments)
                 && !files.is_empty()
             {
-                use crate::policy::resolution::normalized::{Context, Input};
-                let input = Input::File {
-                    action: "read".into(),
-                    sources: files.into_iter().map(|(_, path)| path).collect(),
-                    destination: None,
-                    recursive: false,
-                    original_input: json!(request),
-                };
-                let context = Context {
-                    cwd: request.cwd.clone(),
-                    environment: None,
-                    working_files: self.working_files.cloned(),
-                };
-                let read =
-                    self.evaluator
-                        .evaluate_resource(request, &input, &context, self.checkpoint)?;
-                return Ok((read, Some(PolicyRequest::Normalized(input))));
+                let sources = files.into_iter().map(|(_, path)| path).collect();
+                return self.read_evaluation(request, sources);
             }
         }
         Ok((evaluation, None))
+    }
+
+    /// Decide a read-only command as the file read it performs.
+    fn read_evaluation(&self, request: &Request, sources: Vec<String>) -> Result<Evaluated, Error> {
+        use crate::policy::resolution::normalized::{Context, Input};
+        let input = Input::File {
+            action: "read".into(),
+            sources,
+            destination: None,
+            recursive: false,
+            original_input: json!(request),
+        };
+        let context = Context {
+            cwd: request.cwd.clone(),
+            environment: None,
+            working_files: self.working_files.cloned(),
+        };
+        let read = self
+            .evaluator
+            .evaluate_resource(request, &input, &context, self.checkpoint)?;
+        Ok((read, Some(PolicyRequest::Normalized(input))))
     }
 
     /// Whether the client would load a configuration or credentials file.
@@ -1237,13 +1244,7 @@ impl Analysis<'_> {
         &self,
         request: &Request,
         fetch: &crate::http_client::Fetch<'_>,
-    ) -> Result<
-        (
-            crate::configuration::CandidateEvaluation,
-            Option<PolicyRequest>,
-        ),
-        Error,
-    > {
+    ) -> Result<Evaluated, Error> {
         use crate::policy::resolution::normalized::{Context, Input};
         let context = Context {
             cwd: request.cwd.clone(),
@@ -1455,17 +1456,32 @@ impl Analysis<'_> {
             launch.variables.clear();
             launch.positionals = None;
             launch.arg0 = None;
-            self.record(
-                Operation::new(
-                    Coverage::IndirectExecution,
-                    Decision::Ask,
-                    Data::Indirect {
-                        nested: nested.into(),
-                    },
-                )
-                .at(span),
-            )?;
-            decision = decision.max(Decision::Ask);
+            // The argv of these kinds is exactly the program that runs where the
+            // outer command runs, such as `docker exec <container> curl …`; it is
+            // evaluated below as its own request and takes that decision. Shell
+            // source, launchers, words an image's own entrypoint receives and
+            // commands run in other repositories (`git for-each-repo`) stay uninspected.
+            let explicit = matches!(
+                nested.kind,
+                "container-exec" | "container-command" | "git-bisect-run" | "git-command-alias"
+            );
+            let launcher = nested.argv.first().is_some_and(|program| {
+                let name = program.rsplit('/').next().unwrap_or(program);
+                name == "sudo" || LAUNCHERS.contains(&name)
+            });
+            if !explicit || nested.source.is_some() || nested.argv.is_empty() || launcher {
+                self.record(
+                    Operation::new(
+                        Coverage::IndirectExecution,
+                        Decision::Ask,
+                        Data::Indirect {
+                            nested: nested.into(),
+                        },
+                    )
+                    .at(span),
+                )?;
+                decision = decision.max(Decision::Ask);
+            }
             if let Some(source) = &nested.source {
                 if !source.trim().is_empty() {
                     if nested.kind == "git-shell-alias" {
@@ -1498,7 +1514,7 @@ impl Analysis<'_> {
                 self.record(
                     Operation::new(
                         Coverage::Partial,
-                        evaluation.decision.max(Decision::Ask),
+                        evaluation.decision,
                         Data::Invocation {
                             request,
                             evaluation: Box::new(evaluation),

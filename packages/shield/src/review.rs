@@ -40,6 +40,7 @@ mod settings;
 mod storage;
 #[cfg(test)]
 mod tests;
+pub(crate) mod web_reviews;
 
 use crate::{configuration, policy};
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
@@ -128,6 +129,8 @@ pub(crate) enum Error {
     AgentNotConnected,
     #[error("proposal requires operator approval")]
     ApprovalRequired,
+    #[error("this site's save review was already offered in this session; do not repeat it")]
+    WebReviewOffered,
     #[error("policy or review state changed; reload and evaluate the request again")]
     StaleSnapshot,
     /// The folder's review state was recreated after this context was opened.
@@ -231,6 +234,7 @@ impl Error {
             Self::Missing => "not-found",
             Self::AgentNotConnected => "agent-not-connected",
             Self::ApprovalRequired => "approval-required",
+            Self::WebReviewOffered => "web-review-offered",
             Self::StaleSnapshot => "stale-snapshot",
             Self::StateRecreated => "state-recreated",
             Self::CandidateUnavailable => "candidate_unavailable",

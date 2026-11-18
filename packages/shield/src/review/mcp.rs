@@ -48,8 +48,9 @@ pub(crate) fn apply_confirmation(
 ) -> Result<Option<String>, Error> {
     let normalized = runtime_context(context)?;
     let context = &normalized;
-    if crate::agents::review::for_context(context).confirmation()
-        == crate::agents::review::Confirmation::ToolPermission
+    let confirmation = crate::agents::review::for_context(context).confirmation();
+    let tool_permission = confirmation == crate::agents::review::Confirmation::ToolPermission;
+    if tool_permission
         && connection
             .views
             .lock()
@@ -68,10 +69,7 @@ pub(crate) fn apply_confirmation(
         return Ok(None);
     };
     let changed = super::publication::mcp_changed(&proposal.base_candidate, &proposal.candidate)?;
-    if !changed
-        && crate::agents::review::for_context(context).confirmation()
-            != crate::agents::review::Confirmation::Form
-    {
+    if !changed && confirmation != crate::agents::review::Confirmation::Form {
         return Ok(None);
     }
     let mut message = confirmation::message(proposal, &proposal.apply_arguments());
@@ -94,7 +92,69 @@ pub(crate) fn apply_confirmation(
             "policy review exceeds form bound; prepare a smaller change for in-session approval",
         ));
     }
+    // A tool-permission host's own prompt carries the save offer, and its hook
+    // claimed it before dispatch; this connection form must not claim it again.
+    if !tool_permission {
+        super::web_reviews::claim(context, &id)?;
+    }
     Ok(Some(message))
+}
+
+/// Tool-permission hosts show their review before dispatching MCP. Check the
+/// retained proposal and claim its web save offer at that native boundary.
+/// `true` is an exact replay of an already applied review, needing no new prompt.
+pub(crate) fn claim_native_web_review(
+    context: &Context,
+    agent: &str,
+    args: &Value,
+    session: Option<&str>,
+) -> Result<bool, Error> {
+    let store = super::storage::Store::open(std::path::Path::new(&context.project_root))?;
+    let state = store.read_checkpoint()?;
+    let adapter = crate::agents::find(agent).ok_or(Error::Invalid("unknown agent"))?;
+    let Some(row) = state
+        .proposals
+        .iter()
+        .find(|p| adapter.review().identifies(args, &p.id))
+    else {
+        return Ok(false);
+    };
+    if state.web_reviews.is_empty() {
+        return Ok(false);
+    }
+    let mut context = context.clone();
+    context.surface = "mcp".into();
+    context.agent = Some(agent.into());
+    context.session_id = row.provenance["session_id"].as_str().map(str::to_owned);
+    context.connection_id = row.provenance["connection_id"].as_str().map(str::to_owned);
+    let (state, id) = apply::validate(&context, args)?;
+    if let Some(applied) = state
+        .proposals
+        .iter()
+        .find(|p| p.id == id && p.status == "applied")
+    {
+        return Ok(state
+            .web_reviews
+            .iter()
+            .any(|entry| super::web_reviews::linked(entry, applied)));
+    }
+    let row = state
+        .proposals
+        .iter()
+        .find(|row| row.id == id)
+        .ok_or(Error::Missing)?;
+    // Only the validated row carries its changes; a proposal without web
+    // allowances or review links has no save offer to claim.
+    if !super::web_reviews::concerns(row) {
+        return Ok(false);
+    }
+    if let Some(session) = session {
+        super::web_reviews::link_native(&context, session, &id, &row.apply_arguments()["changes"])?;
+    }
+    if adapter.review().confirmation() == crate::agents::review::Confirmation::ToolPermission {
+        super::web_reviews::claim(&context, &id)?;
+    }
+    Ok(false)
 }
 
 /// Present the exact stored request whose pending decision or unused grant is revoked.
@@ -621,8 +681,10 @@ pub(crate) fn settle_apply_failure(
 ) -> Option<Value> {
     let unsupported = crate::agents::review::for_context(context).confirmation()
         == crate::agents::review::Confirmation::Terminal;
-    if matches!(error, Error::Missing | Error::Locked | Error::Io(_))
-        || matches!(error, Error::ApprovalRequired) && !unsupported
+    if matches!(
+        error,
+        Error::Missing | Error::Locked | Error::Io(_) | Error::WebReviewOffered
+    ) || matches!(error, Error::ApprovalRequired) && !unsupported
     {
         return None;
     }
@@ -1056,6 +1118,10 @@ fn static_fields(error: &Error) -> Option<(&'static str, &'static str)> {
             "The requested record is unavailable. List current records before selecting another ID",
         ),
         Error::AgentNotConnected => ("agent_not_connected", super::hook_approval::NOT_CONNECTED),
+        Error::WebReviewOffered => (
+            "web_review_offered",
+            "This domain's save review was already offered in this session. Do not open another save prompt, including a narrower rule for this domain. Keep following active policy; exact one-time approval remains available, and the user can add a rule with `shield rule add`",
+        ),
         // Replaced by the resolved adapter's guidance in `failure`.
         Error::ApprovalRequired => (
             "operator_review_required",

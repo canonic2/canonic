@@ -150,6 +150,11 @@ pub(super) fn approval_note(
         return None;
     }
     let explanation = crate::review::observations::asked_explanation(root, session, id)?;
+    if let Some(change) = web_change(&explanation["guidance"][0], &Value::Null)
+        && crate::review::web_reviews::suppressed(root, adapter.spec().id, session, &change)
+    {
+        return Some("Shield: this Ask call completed through the host; that alone does not prove individual approval. The saved-domain review was already offered in this session; do not offer it again. Policy is unchanged unless a review was applied.".into());
+    }
     Some(completed_ask_note(&explanation))
 }
 
@@ -174,25 +179,29 @@ fn completed_ask_note(explanation: &Value) -> String {
 /// spellings. The agent must inspect project routing before expanding hosts.
 fn web_offer(guidance: &Value, operation: &Value, entry: Option<&str>) -> Option<String> {
     use crate::proposal_draft;
-    let change = if operation["kind"] == "web" {
-        if operation["action"] == "search" {
-            return Some(proposal_draft::offer(&proposal_draft::arguments(
-                &proposal_draft::web_search(),
-                entry,
-            )));
-        }
+    if operation["kind"] == "web" && operation["action"] == "search" {
+        return Some(proposal_draft::offer(&proposal_draft::arguments(
+            &proposal_draft::web_search(),
+            entry,
+        )));
+    }
+    let change = web_change(guidance, operation)?;
+    Some(format!(
+        "Before retrying, prepare a reusable domain allowance and call policy_apply to prompt the user now. Do not wait for recurrence or ask for preliminary chat approval. Inspect rule_list/rule_edit and skill://shield/custom-rules/SKILL.md; edit an existing allowance when appropriate and group related hosts. Cover the domain, all paths and queries, and any port; never create a rule per endpoint or temporary hostname. If the user already declined this unchanged allowance, do not offer it again; use the exact one-time approval route only for a request still needed. {}",
+        proposal_draft::offer(&proposal_draft::arguments(&change, entry))
+    ))
+}
+
+fn web_change(guidance: &Value, operation: &Value) -> Option<Value> {
+    if operation["kind"] == "web" && operation["action"] == "fetch" {
         operation["url"]
             .as_str()
-            .and_then(proposal_draft::host_web_fetch)
+            .and_then(crate::proposal_draft::host_web_fetch)
     } else {
         guidance["fetch_url"]
             .as_str()
-            .and_then(proposal_draft::web_fetch)
-    }?;
-    Some(format!(
-        "For recurring web access, use rule_list/rule_edit and skill://shield/custom-rules/SKILL.md to review a reusable web allowance. {}",
-        proposal_draft::offer(&proposal_draft::arguments(&change, entry))
-    ))
+            .and_then(crate::proposal_draft::web_fetch)
+    }
 }
 
 /// Native permission prompts address the user. Alternatives and proposal payloads
@@ -229,6 +238,51 @@ fn approval_prompt(
         ));
     }
     value
+}
+
+/// Return URL Asks to the agent before execution so the next interaction can
+/// review reusable permission, rather than repeatedly approving one command.
+fn web_review(
+    root: &Path,
+    adapter: &dyn AgentAdapter,
+    receipt: &Value,
+    operation: &Value,
+    session: &str,
+) -> Option<Reply> {
+    let guidance = &receipt["diagnostics"]["guidance"][0];
+    if !(operation["kind"] == "web" && operation["action"] == "fetch"
+        || guidance["fetch_url"].is_string())
+    {
+        return None;
+    }
+    let change = web_change(guidance, operation)?;
+    // Suppressing a save offer, or failing to record one, never grants network
+    // permission. Keep the normal host Ask (or exact one-time approval on a blocking host).
+    let Ok(crate::review::web_reviews::Offer::Pending { id, proposal }) =
+        crate::review::web_reviews::offer(root, adapter.spec().id, session, &change)
+    else {
+        return Some(approval(adapter));
+    };
+    let mut offer = web_offer(
+        guidance,
+        operation,
+        receipt["history"]["request_id"].as_str(),
+    )?;
+    if let Some(proposal) = proposal {
+        offer = format!(
+            "This domain already has pending proposal {proposal}. Inspect it with policy_show and copy its apply_arguments unchanged to policy_apply. Do not prepare another proposal for this domain."
+        );
+    } else {
+        offer = format!(
+            "{offer} Include review_ids [\"{id}\"] in policy_propose so Shield tracks this domain's save review for this session."
+        );
+    }
+    Some(Reply {
+        decision: Decision::Deny,
+        reason: "Shield: a reusable site allowance needs your review before this request runs."
+            .into(),
+        agent_context: Some(offer),
+    })
 }
 
 /// Agent-facing Ask feedback when the host cannot open a permission prompt.
@@ -327,6 +381,8 @@ pub(super) fn respond(
         && receipt["fixed_protection"] != true
         && receipt["code"] != "operator-cli"
         && receipt["authorization"]["kind"] != "session_grant"
+        && !(operation["kind"] == "web" && operation["action"] == "fetch"
+            || receipt["diagnostics"]["guidance"][0]["fetch_url"].is_string())
         && let Some(reference) = receipt["session_context"]["session_ref"].as_str()
     {
         let hint = format!(
@@ -401,6 +457,9 @@ fn response(
         return Some(value);
     }
     if receipt["decision"] == "ask" || receipt["code"] == "approval-required" {
+        if let Some(reply) = web_review(root, adapter, receipt, operation, session) {
+            return Some(reply);
+        }
         return rewrite(receipt).or_else(|| {
             Some(if adapter.approval(event) == NativeApproval::Prompt {
                 approval_prompt(root, adapter, receipt, operation)
@@ -610,6 +669,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn web_approval_exposes_permanent_review_without_granting_it() {
+        let root = assert_fs::TempDir::new().unwrap();
+        let bundle =
+            crate::configuration::Bundle::capture("schema_version: 1\npacks: []\n", &[], None)
+                .unwrap();
+        crate::review::mcp::initialize_fixture(root.path(), &bundle);
+        let adapter = crate::agents::find("claude").unwrap();
+        let receipt = json!({"decision":"ask","code":"approval-required",
+            "diagnostics":{"guidance":[{"message":"Fetch requires approval.",
+                "fetch_url":"http://acme.workspace.localhost:51075/"}]}});
+        let reply = respond(
+            root.path(),
+            adapter,
+            Event::Before,
+            &receipt,
+            &json!({"kind":"shell"}),
+            "acme-session",
+        )
+        .unwrap();
+        assert!(reply.decision == Decision::Deny);
+        assert!(reply.reason.contains("review"));
+        let context = reply.agent_context.unwrap();
+        assert!(context.contains("call policy_apply to prompt the user now"));
+        assert!(context.contains("policy_propose") && context.contains("policy_apply"));
+        assert!(context.contains("localhost") && !context.contains("acme.workspace.localhost"));
+    }
+
+    #[test]
     fn completed_web_asks_offer_reusable_project_scope_for_human_review() {
         let note = completed_ask_note(&json!({"guidance":[{
             "message":"Fetch requires approval.",
@@ -621,7 +708,7 @@ mod tests {
             "skill://shield/custom-rules/SKILL.md",
             "policy_apply",
             "\"domain\":\"web\"",
-            "prometheus.workspace.localhost",
+            "localhost",
         ] {
             assert!(note.contains(expected), "{expected}: {note}");
         }

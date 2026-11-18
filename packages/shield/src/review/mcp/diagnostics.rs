@@ -60,6 +60,8 @@ pub(super) fn evaluate(
     struct Report<'a> {
         #[serde(flatten)]
         evaluation: configuration::NormalizedEvaluation,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        mcp_match: Option<Value>,
         candidate_id: &'a str,
         policy_revision: &'a str,
     }
@@ -70,10 +72,12 @@ pub(super) fn evaluate(
         None => views.active(context)?,
     };
     let captured = views.prepare(context, &id)?;
-    let evaluation = evaluate_captured(context, &captured, &input, &request_context, checkpoint)?;
+    let (evaluation, mcp_match) =
+        evaluate_captured(context, &captured, &input, &request_context, checkpoint)?;
     checkpoint()?;
     let report = Report {
         evaluation,
+        mcp_match,
         candidate_id: &id,
         policy_revision: captured.evaluator()?.revision(),
     };
@@ -171,8 +175,8 @@ fn sample_compare(
     context
         .progress
         .stage(crate::review::progress::Stage::ComparePolicy);
-    let a = evaluate_captured(context, &before, &input, &ctx, checkpoint)?;
-    let b = evaluate_captured(context, &after, &input, &ctx, checkpoint)?;
+    let (a, _) = evaluate_captured(context, &before, &input, &ctx, checkpoint)?;
+    let (b, _) = evaluate_captured(context, &after, &input, &ctx, checkpoint)?;
     let relation = match b.decision.cmp(&a.decision) {
         std::cmp::Ordering::Equal => "equivalent",
         std::cmp::Ordering::Greater => "restrictive",
@@ -230,18 +234,65 @@ fn evaluate_captured(
     input: &Input,
     ctx: &RequestContext,
     checkpoint: Checkpoint<'_>,
-) -> Result<configuration::NormalizedEvaluation, Error> {
+) -> Result<(configuration::NormalizedEvaluation, Option<Value>), Error> {
+    let evaluator = captured.evaluator()?;
     let executable = resolve(input, ctx);
-    let mut value = captured.evaluator()?.evaluate_normalized_report(
-        input,
+    let host = host_mcp(context, evaluator, input, ctx)?;
+    let mut value = evaluator.evaluate_normalized_report_mcp(
+        host.as_ref().map_or(input, |(bound, _, _)| bound),
         ctx,
         &context.project_root,
         executable.as_deref(),
         &crate::review::model::now(),
+        host.as_ref().map(|(_, resolved, _)| resolved),
         checkpoint,
     )?;
     value.annotate_rule_references(&selectors(&captured.metadata));
-    Ok(value)
+    let matched = host.map(|(_, resolved, alias)| {
+        json!({"alias":alias,"source":resolved.source,"matches":resolved.matches,
+            "effective_connection_identity":"unverified"})
+    });
+    Ok((value, matched))
+}
+
+/// Match an MCP server the calling agent configured to installed pack
+/// integrations, as the agent's hook does. Project-managed connection IDs and
+/// unmatched servers keep the plain evaluation.
+fn host_mcp(
+    context: &Context,
+    evaluator: &configuration::Evaluator,
+    input: &Input,
+    ctx: &RequestContext,
+) -> Result<Option<(Input, policy::resolution::compiled::ResolvedMcp, String)>, Error> {
+    let Input::Mcp { server, .. } = input else {
+        return Ok(None);
+    };
+    let Some(agent) = context.agent.as_deref() else {
+        return Ok(None);
+    };
+    let managed = evaluator.effective().mcp_connections();
+    if !evaluator.has_mcp_integrations() || managed.contains_key(server) {
+        return Ok(None);
+    }
+    let Some(host) = crate::agents::mcp_host_server(
+        agent,
+        Path::new(&context.project_root),
+        Path::new(&ctx.cwd),
+        server,
+        managed,
+    )?
+    else {
+        return Ok(None);
+    };
+    let resolved = evaluator.resolve_mcp(&host.server(), &host.connections, host.source)?;
+    if resolved.matches.is_empty() {
+        return Ok(None);
+    }
+    let mut bound = input.clone();
+    if let Input::Mcp { server, .. } = &mut bound {
+        *server = host.server();
+    }
+    Ok(Some((bound, resolved, host.alias)))
 }
 fn resolve(input: &Input, ctx: &RequestContext) -> Option<String> {
     let executable = match input {

@@ -482,6 +482,7 @@ impl Store {
             proposals: vec![],
             policy_drafts: vec![],
             dismissed_reviews: vec![],
+            web_reviews: vec![],
             events: vec![],
             retired_configuration_changes: None,
             authorization_events: vec![],
@@ -772,6 +773,7 @@ impl Store {
         super::run_approval::validate(state)?;
         super::hook_approval::validate(state)?;
         super::session_grants::validate(state)?;
+        super::web_reviews::validate(state)?;
         state.terminal_receipts.validate()?;
         Ok(())
     }

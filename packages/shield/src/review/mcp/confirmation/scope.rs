@@ -88,8 +88,13 @@ fn headline(change: &Value, local: &str) -> String {
             None => " on any port".to_owned(),
             Some(ports) => format!(" on port {}", text(&Value::Array(ports.clone()))),
         };
+        let subdomains = if conditions["url"]["subdomains"] == true {
+            " and their subdomains"
+        } else {
+            ""
+        };
         return format!(
-            "{action} {}{ports}{local}.",
+            "{action} {}{subdomains}{ports}{local}.",
             text(&Value::Array(hosts.clone()))
         );
     }
@@ -303,9 +308,14 @@ fn list(value: &Value, describe: fn(&Value) -> String) -> String {
 
 fn url(value: &Value) -> String {
     format!(
-        "URL schemes: {}; hosts: {}; ports: {}; URL path: {}",
+        "URL schemes: {}; hosts: {}{}; ports: {}; URL path: {}",
         list(&value["schemes"], text),
         list(&value["hosts"], text),
+        if value["subdomains"] == true {
+            " and their subdomains"
+        } else {
+            ""
+        },
         value
             .get("ports")
             .map_or_else(|| "any".into(), |v| list(v, text)),

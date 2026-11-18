@@ -305,7 +305,7 @@ fn reason(refusal: &Value) -> String {
     match (refusal["code"].as_str().unwrap_or_default(), path) {
         ("policy-deny", _) => "the active policy denies it".into(),
         ("approval-required", _) => {
-            "the active policy requires your approval and this agent cannot ask you directly".into()
+            "the active policy requires your approval".into()
         }
         ("policy-file-unknown", _) => {
             "this Git command can replace Shield's policy files, or its writes to them cannot be determined".into()

@@ -20,6 +20,7 @@ pub(super) fn denial(mut reply: Reply, receipt: &Value) -> Reply {
         ),
         "policy-deny" => crate::agent_message::denial_detail(&receipt["diagnostics"]).unwrap_or_else(|| "The active policy does not allow this request. Inspect the matching rule before proposing a policy change.".into()),
         "request-rewrite" => "The command could not be checked in this form. The agent has instructions to revise it.".into(),
+        "approval-required" => "A reusable site allowance needs your review before this request runs. The agent has instructions to open the review.".into(),
         "protected-access" if receipt["protected_path"].as_str().is_none() => "This request reaches protected files or directories.".into(),
         "protected-access" => {
             let path = receipt["protected_path"]

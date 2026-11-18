@@ -183,6 +183,49 @@ impl Observation {
     }
 }
 
+/// The host-configured server behind one tool namespace, with the connections
+/// automatic pack matching evaluates. Matching itself stays with the caller's policy.
+pub(crate) struct HostServer {
+    pub(crate) alias: String,
+    pub(crate) source: &'static str,
+    pub(crate) connections: crate::mcp_connections::Connections,
+    pub(crate) observation: Observation,
+}
+
+impl HostServer {
+    /// The connection ID automatic matching assigns to this server.
+    pub(crate) fn server(&self) -> String {
+        format!("host:{}", self.alias)
+    }
+}
+
+/// Observe the agent's MCP settings and find the server a tool namespace names.
+pub(crate) fn host_server(
+    agent: &str,
+    root: &Path,
+    cwd: &Path,
+    namespace: &str,
+    managed: &crate::mcp_connections::Connections,
+) -> Result<Option<HostServer>, Error> {
+    let Some(observation) = super::find(agent)
+        .ok_or(Error::Invalid("unknown MCP agent"))?
+        .discover_mcp(root, cwd)?
+    else {
+        return Ok(None);
+    };
+    let Some((alias, current)) = observation.resolve(namespace)? else {
+        return Ok(None);
+    };
+    let (alias, source) = (alias.to_owned(), current.source);
+    let connections = observation.connections(managed, agent);
+    Ok(Some(HostServer {
+        alias,
+        source,
+        connections,
+        observation,
+    }))
+}
+
 pub(super) fn read(path: &Path) -> Result<Option<String>, Error> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,

@@ -64,13 +64,18 @@ Keep the scope as small as the need:
   for a temporary need.
 - Pass `"layer":"local"` for a personal preference that should not be shared.
 
-For recurring development-server fetches, inspect the project's instructions
-and service routing and edit its existing web allowance when possible. Choose
-the reusable host group and redirect boundary justified by that configuration.
-Use a web rule shared across query strings and curl spellings; do not add one
-command rule per request or one rule per temporary hostname. An observed URL
-alone does not authorize other hosts. Propose the reviewed scope now and let
-`policy_apply` collect the user's confirmation.
+When Shield returns a fetch for domain review, open `policy_apply` confirmation
+before retrying; do not wait for recurrence or preliminary chat approval. Inspect
+the project's instructions, service routing and existing web allowances; edit
+an existing allowance when appropriate. Use the site's domain and subdomains
+across paths, query strings and ports. Shield's draft uses the Public Suffix
+List and groups localhost service names. Keep its redirect boundary. Never add
+one rule per endpoint, command spelling or temporary hostname. A draft grants
+nothing until confirmed. If the user declined the unchanged saved allowance,
+do not offer it again; request exact one-time approval only for work still needed.
+Include the hook's `review_ids` unchanged when preparing its domain proposal.
+Shield tracks pending and offered reviews durably. Reuse a pending proposal;
+do not create another automatic save offer for a site already reviewed in this session.
 
 An exact command in the project:
 

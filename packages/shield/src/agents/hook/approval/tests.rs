@@ -288,6 +288,271 @@ fn request_approve(root: &Path, agent: &str, id: &str, confirmed: bool) -> Value
     )
 }
 
+fn web_review_ids(value: &Value) -> Value {
+    let advice = agent_context(value);
+    let start =
+        advice.find("Include review_ids ").expect("web review IDs") + "Include review_ids ".len();
+    let end = start + advice[start..].find(']').unwrap() + 1;
+    serde_json::from_str(&advice[start..end]).unwrap()
+}
+
+#[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one native session from offer through decline to suppressed retries"
+)]
+fn web_reviews_decline_suppresses_save_offers_in_ten_native_calls() {
+    let (_folder, context) = fixture();
+    let root = Path::new(&context.project_root);
+    let first = shell(
+        root,
+        "claude",
+        "curl -q http://grafana.workspace.localhost:51075/api",
+    );
+    assert_eq!(first["hookSpecificOutput"]["permissionDecision"], "deny");
+    let context = mcp(root, "claude");
+    let connection = review::mcp::Connection::new("declined-local-site".into());
+    let proposed = review::mcp::call(
+        &context,
+        &connection,
+        "policy_propose",
+        &json!({
+            "change":crate::proposal_draft::web_fetch("http://grafana.workspace.localhost:51075/api").unwrap()
+        }),
+        &|| Ok(()),
+    );
+    assert!(proposed["error"].is_null(), "{proposed}");
+    let args = &proposed["data"]["apply_arguments"];
+    // The agent omitted review_ids. The native session and retained rule scope
+    // still let Shield attach the correct domain record before its form opens.
+    let before_form = hook(
+        root,
+        "claude",
+        Event::Before,
+        &json!({
+        "hook_event_name":"PreToolUse","tool_name":"mcp__shield__policy_apply",
+        "tool_use_id":"save-local-site","session_id":"acme-session","cwd":root,"tool_input":args}),
+    );
+    assert_eq!(
+        before_form["hookSpecificOutput"]["permissionDecision"], "allow",
+        "{before_form}"
+    );
+    assert!(
+        review::mcp::apply_confirmation(&context, &connection, args)
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(
+        review::mcp::policy_outcome(&context, args, "approval_declined")["error"]["code"],
+        "approval_declined"
+    );
+    for index in 0..10 {
+        let source = format!(
+            "curl -q 'http://service-{index}.other-workspace.localhost:{}/endpoint?query={index}'",
+            3000 + index
+        );
+        let asked = shell(root, "claude", &source);
+        assert_eq!(
+            asked["hookSpecificOutput"]["permissionDecision"], "ask",
+            "{asked}"
+        );
+        for instruction in ["policy_propose", "policy_apply", "review_ids"] {
+            assert!(!agent_context(&asked).contains(instruction), "{asked}");
+        }
+    }
+    let completed = hook(
+        root,
+        "claude",
+        Event::Completed,
+        &json!({
+            "hook_event_name":"PostToolUse","tool_name":"Bash","tool_use_id":"acme-call",
+            "session_id":"acme-session","cwd":root,
+            "tool_input":{"command":"curl -q 'http://service-9.other-workspace.localhost:3009/endpoint?query=9'"},
+            "tool_response":{}
+        }),
+    );
+    assert!(
+        agent_context(&completed).contains("save")
+            && !agent_context(&completed).contains("policy_propose"),
+        "{completed}"
+    );
+    let suggestions = review::mcp::call(
+        &context,
+        &connection,
+        "suggestion_list",
+        &json!({"session_id":"acme-session"}),
+        &|| Ok(()),
+    );
+    assert!(
+        suggestions["data"]["requests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| {
+                row["decided_as"] == "web_fetch"
+                    && row["review_status"] == "deferred"
+                    && row["eligible_for_offer"] == false
+            }),
+        "{suggestions}"
+    );
+    let repeated = review::mcp::call(
+        &context,
+        &connection,
+        "policy_propose",
+        &json!({
+            "change":crate::proposal_draft::web_fetch("http://auth.other-workspace.localhost:3000/").unwrap(),
+            "idempotency_key":"another-unlinked-save-attempt"
+        }),
+        &|| Ok(()),
+    );
+    assert!(repeated["error"].is_null(), "{repeated}");
+    let blocked = hook(
+        root,
+        "claude",
+        Event::Before,
+        &json!({
+        "hook_event_name":"PreToolUse","tool_name":"mcp__shield__policy_apply",
+        "tool_use_id":"save-local-site-again","session_id":"acme-session","cwd":root,
+        "tool_input":repeated["data"]["apply_arguments"]}),
+    );
+    assert_eq!(
+        blocked["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{blocked}"
+    );
+}
+
+#[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one native session from domain review through one-time approval"
+)]
+fn web_domain_review_precedes_execution_and_keeps_one_time_permission_separate() {
+    for agent in ["claude", "codex"] {
+        let (_folder, context) = fixture();
+        let root = Path::new(&context.project_root);
+        let source = "curl -q -s 'http://grafana.workspace.localhost:51075/api?q=one'";
+        let refused = shell(root, agent, source);
+        assert_eq!(
+            refused["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{refused}"
+        );
+        let advice = agent_context(&refused);
+        let reviews = web_review_ids(&refused);
+        assert!(
+            advice.contains("call policy_apply to prompt the user now"),
+            "{advice}"
+        );
+        assert!(!advice.contains("grafana.workspace.localhost"), "{advice}");
+        let id = offered_id(&refused).expect("one-time review remains available");
+        assert_eq!(
+            request_approve(root, agent, &id, true)["data"]["status"],
+            "approved"
+        );
+        let once = shell(root, agent, source);
+        assert!(agent_context(&once).contains("allowed once"), "{once}");
+        assert_eq!(
+            shell(root, agent, source)["hookSpecificOutput"]["permissionDecision"],
+            "deny"
+        );
+
+        let context = mcp(root, agent);
+        let connection = review::mcp::Connection::new("acme-web-review".into());
+        let change =
+            crate::proposal_draft::web_fetch("http://grafana.workspace.localhost:51075/api?q=one")
+                .unwrap();
+        let proposed = review::mcp::call(
+            &context,
+            &connection,
+            "policy_propose",
+            &json!({"change":change,"review_ids":reviews,"agent_reason":"Save the local development domain allowance."}),
+            &|| Ok(()),
+        );
+        assert!(proposed["error"].is_null(), "{proposed}");
+        let arguments = &proposed["data"]["apply_arguments"];
+        assert!(arguments.is_object(), "{proposed}");
+        // Preparing a reusable rule grants nothing.
+        assert_eq!(
+            shell(root, agent, source)["hookSpecificOutput"]["permissionDecision"],
+            "deny"
+        );
+        if agent == "claude" {
+            assert!(
+                review::mcp::apply_confirmation(&context, &connection, arguments)
+                    .unwrap()
+                    .is_some()
+            );
+        } else {
+            let call = json!({"hook_event_name":"PreToolUse","tool_name":"mcp__shield__policy_apply",
+                "tool_use_id":"save-site","session_id":"acme-session","cwd":root,"tool_input":arguments});
+            assert_eq!(hook(root, agent, Event::Before, &call), json!({}));
+            let duplicate = hook(root, agent, Event::Before, &call);
+            assert_eq!(
+                duplicate["hookSpecificOutput"]["permissionDecision"], "deny",
+                "{duplicate}"
+            );
+        }
+        let applied = review::mcp::call_with_confirmation(
+            &context,
+            &connection,
+            "policy_apply",
+            arguments,
+            &|| Ok(()),
+            true,
+        );
+        assert_eq!(applied["data"]["status"], "applied", "{applied}");
+        if agent == "codex" {
+            let replay = hook(
+                root,
+                agent,
+                Event::Before,
+                &json!({
+                "hook_event_name":"PreToolUse","tool_name":"mcp__shield__policy_apply",
+                "tool_use_id":"save-site-retry","session_id":"acme-session","cwd":root,"tool_input":arguments}),
+            );
+            assert!(
+                agent_context(&replay).contains("already applied"),
+                "{replay}"
+            );
+        }
+        for source in [
+            source,
+            "curl -q 'http://auth.another-workspace.localhost:3000/csrf-token?fresh=yes'",
+            "curl -q http://graphql.workspace.localhost:51075/openapi.json http://127.0.0.1:51075/__hub/ready",
+        ] {
+            let allowed = shell(root, agent, source);
+            if agent == "claude" {
+                assert_eq!(
+                    allowed["hookSpecificOutput"]["permissionDecision"], "allow",
+                    "{source}: {allowed}"
+                );
+            } else {
+                assert!(
+                    allowed["hookSpecificOutput"]
+                        .get("permissionDecision")
+                        .is_none(),
+                    "{source}: {allowed}"
+                );
+                assert!(!agent_context(&allowed).is_empty(), "{allowed}");
+            }
+        }
+        for source in [
+            "curl -q -L http://auth.workspace.localhost:3000/",
+            "curl -q https://localhost.evil.test/",
+            "curl -q https://example.com/",
+        ] {
+            assert_eq!(
+                shell(root, agent, source)["hookSpecificOutput"]["permissionDecision"],
+                if agent == "claude" && source.contains(" -L ") {
+                    "ask"
+                } else {
+                    "deny"
+                },
+                "{source}"
+            );
+        }
+    }
+}
+
 #[test]
 fn approved_native_retry_history_keeps_policy_and_records_the_actual_allowance() {
     for (agent, history_enabled) in [

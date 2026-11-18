@@ -188,7 +188,7 @@ fn arguments() -> Value {
 }
 fn domains() -> Value {
     let url = object(
-        json!({"schemes":{"type":"array","minItems":1,"items":{"enum":["http","https"]}},"hosts":{"type":"array","minItems":1,"maxItems":256,"items":nonempty(4096)},"ports":{"type":"array","minItems":1,"maxItems":256,"items":{"type":"integer","minimum":1,"maximum":65535}},"path":reference("text")}),
+        json!({"schemes":{"type":"array","minItems":1,"items":{"enum":["http","https"]}},"hosts":{"type":"array","minItems":1,"maxItems":256,"items":nonempty(4096)},"ports":{"type":"array","minItems":1,"maxItems":256,"items":{"type":"integer","minimum":1,"maximum":65535}},"path":reference("text"),"subdomains":{"type":"boolean"}}),
         &["schemes", "hosts"],
     );
     let common = json!({"cwd":reference("path"),"environment":reference("environment")});

@@ -328,6 +328,7 @@ pub(super) fn propose(
         )?;
         return Ok(present(row));
     }
+    super::web_reviews::check_proposal(&before, context, &input.review_ids)?;
     checkpoint()?;
     context
         .progress
@@ -460,6 +461,7 @@ pub(super) fn propose(
             } else { Err(Error::Invalid("idempotency key reused with changed input")) };
         }
         if input.supersedes_proposal_id.as_ref().is_some_and(|id| !state.proposals.iter().any(|p| p.id == *id)) { return Err(Error::Missing); }
+        super::web_reviews::check_proposal(state, context, &input.review_ids)?;
         for previous in &mut state.proposals {
             if super::proposal_lifecycle::owns(previous, context) {
                 super::proposal_lifecycle::close(previous, "withdrawn", "superseded");
@@ -468,6 +470,7 @@ pub(super) fn propose(
         super::proposal_lifecycle::reclaim(state);
         capacity(&state.proposals)?;
         let id = state.id("proposal");
+        super::web_reviews::attach(state, context, &input.review_ids, &id)?;
         let (kind, rule_id) = match changes.as_slice() {
             [change] => (json!(change)["kind"].as_str().unwrap_or_default().to_owned(), match change { Change::RuleAdd { rule, .. } | Change::RuleEdit { rule, .. } => rule.id.clone(), Change::RuleRemove { rule_id, .. } => rule_id.clone(), _ => String::new() }),
             _ => ("batch".to_owned(), String::new()),

@@ -52,6 +52,7 @@ pub const MAX_DOCUMENT_BYTES: usize = 256 * 1024 * 1024;
 /// was written for a different Shield version.
 pub(crate) const CAPABILITIES: &[&str] = &[
     "structured-rules-v1",
+    "url-subdomains-v1",
     "historical-matchers-v1",
     "historical-normalized-v1",
     "argument-rules-v1",

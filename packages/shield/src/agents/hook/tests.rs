@@ -667,6 +667,47 @@ fn native_downloads_to_the_null_device_need_only_fetch_permission() {
     }
 }
 
+#[test]
+fn curl_batches_offer_web_review_and_preserve_protected_output_guards() {
+    let root = assert_fs::TempDir::new().unwrap();
+    let bundle = Bundle::capture("schema_version: 1\npacks: []\n", &[], None).unwrap();
+    let context = review::mcp::initialize_fixture(root.path(), &bundle);
+    let project = Path::new(&context.project_root);
+    let source = "curl -s -m 20 -o /dev/null -w '%{http_code} %{time_total}s %{size_download}B %{url_effective}\\n' http://acme.workspace.localhost:51075/ http://auth.workspace.localhost:51075/csrf-token http://graphql.workspace.localhost:51075/openapi.json http://127.0.0.1:51075/__hub/ready";
+    let value = unscoped_shell(project, "claude", source);
+    let output = &value["hookSpecificOutput"];
+    assert_eq!(output["permissionDecision"], "deny", "{value}");
+    assert!(reason(&value).contains("review"), "{value}");
+    let advice = output["additionalContext"].as_str().unwrap();
+    assert!(
+        advice.contains("policy_propose") && advice.contains("policy_apply"),
+        "{value}"
+    );
+    assert!(
+        advice.contains("localhost") && !advice.contains("acme.workspace.localhost"),
+        "{value}"
+    );
+    assert!(advice.contains("group related hosts"), "{value}");
+    let (protected, _) = fixture();
+    for output in [".shield/state/state.json", ".shield/custom.json"] {
+        let source =
+            format!("curl -o {output} https://docs.example.com/a https://docs.example.com/b");
+        let value = unscoped_shell(protected.path(), "claude", &source);
+        assert_eq!(
+            value["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{value}"
+        );
+    }
+    assert_permitted(
+        &unscoped_shell(
+            protected.path(),
+            "claude",
+            "curl -o /dev/null https://docs.example.com/a https://docs.example.com/b",
+        ),
+        "claude",
+    );
+}
+
 /// Stored record lines of the current history generation, oldest segment
 /// first, without segment headers: the raw bytes Shield keeps on disk.
 fn journal(root: &Path) -> String {
@@ -2507,8 +2548,14 @@ fn host_fetches_are_the_agent_client_for_web_rules() {
         "curl -fsS https://docs.example.com/guide",
     );
     assert_eq!(
-        value["hookSpecificOutput"]["permissionDecision"], "ask",
+        value["hookSpecificOutput"]["permissionDecision"], "deny",
         "{value}"
+    );
+    assert!(
+        value["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap()
+            .contains("policy_apply")
     );
 }
 
@@ -4791,7 +4838,7 @@ fn refusals_offer_command_drafting_guidance_or_non_command_proposals() {
     let arguments = propose_offered(&web, reason(&value));
     assert_eq!(
         arguments["change"]["rule"]["conditions"]["url"],
-        json!({"schemes":["https"],"hosts":["registry.example.com"]})
+        json!({"schemes":["http","https"],"hosts":["example.com"],"subdomains":true})
     );
     // An explicit deny rule stays a refusal without a ready-made override.
     let value = call(root, "codex", "git reset --hard");

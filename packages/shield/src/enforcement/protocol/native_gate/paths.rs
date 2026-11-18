@@ -747,8 +747,8 @@ fn named_files(request: &Value, cwd: &Path, guard: Guard<'_>) -> Finding {
             .map(|path| (false, path)),
         );
     }
-    if let Some(path) =
-        crate::http_client::fetch(executable, &arguments).and_then(|fetch| fetch.output)
+    if let Some(path) = crate::http_client::fetches(executable, &arguments)
+        .and_then(|fetches| fetches.into_iter().find_map(|fetch| fetch.output))
     {
         files.push((true, path.to_owned()));
     }

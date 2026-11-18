@@ -40,6 +40,7 @@ pub(super) fn checkpoint(bytes: &[u8]) -> Result<State, Error> {
                 "session_grants",
                 "policy_drafts",
                 "dismissed_reviews",
+                "web_reviews",
                 "enforcement",
             ]
             .iter()
@@ -86,6 +87,7 @@ fn historical(bytes: &[u8]) -> Result<(Value, State), Error> {
                 "session_grants",
                 "policy_drafts",
                 "dismissed_reviews",
+                "web_reviews",
                 "enforcement",
                 "terminal_receipts",
                 "configuration_changes",
@@ -103,6 +105,7 @@ fn historical(bytes: &[u8]) -> Result<(Value, State), Error> {
             "session_grants",
             "policy_drafts",
             "dismissed_reviews",
+            "web_reviews",
             "enforcement",
             "history_owner",
             "terminal_receipts",

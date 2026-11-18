@@ -14,7 +14,7 @@ mod hook;
 mod json_mcp;
 mod mcp_scopes;
 mod opencode;
-pub(crate) use mcp_scopes::Observation as McpObservation;
+pub(crate) use mcp_scopes::{Observation as McpObservation, host_server as mcp_host_server};
 pub(crate) mod review;
 pub(crate) mod setup;
 mod working_files;

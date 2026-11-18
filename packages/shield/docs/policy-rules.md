@@ -557,14 +557,17 @@ This pair allows any search and fetches from one documentation host, and needs
   on_unmet: {decision: ask}
 ```
 
-Hosts match exactly; list each subdomain. A search can carry project text in
+Hosts match exactly by default. Set `subdomains: true` in the URL predicate to
+include a domain's subdomains; this requires `url-subdomains-v1`. IP addresses
+still match exactly. A search can carry project text in
 its query, so allowing every search is a choice to make deliberately.
 
 Fetch rules also decide plain `curl` and `wget` downloads in shell commands.
 With the `docs` rule above and a writable project folder,
 `curl -fsS -o guide.html https://docs.example.com/guide` is allowed: Shield
 checks the fetch against web rules and the output file against file rules.
-This covers GET and HEAD requests with one literal URL, inspection options
+This covers GET and HEAD requests with literal URLs (up to 64 for curl, one for
+wget), inspection options
 such as `-fsSL`, timeouts, retries and `-o` for curl, and `-q`, `--spider` and `-O` for
 wget. wget must also pass `--no-hsts`, because otherwise it rewrites
 `~/.wget-hsts`; without `-O` or `--spider` it is excluded. curl long-option values
@@ -580,7 +583,13 @@ an existing `~/.curlrc`, `~/.wgetrc`, or `~/.netrc` for wget without
 your argv rules, as do explicit argv rules for curl or wget. Fetches carry
 `client` (`agent` for WebFetch and Codex opens, `shell` for curl and wget) and,
 for shell clients, `redirects` (`follow` or `none`), so a rule can cover only
-one of them:
+one of them. Every URL in a curl batch must pass web policy; one denied host
+blocks the command. A single `-o` applies to the first URL, with later bodies
+going to stdout, following [curl's output rules](https://curl.se/docs/manpage.html#--output).
+Repeated output options, mixed `--url` and positional URLs, and `--next` remain
+outside this model.
+
+For example:
 
 ```yaml
 - id: docs-downloads
@@ -602,7 +611,7 @@ to follow a redirect to another host:
   conditions:
     domain: web
     action: fetch
-    url: {schemes: [http, https], hosts: [localhost, "127.0.0.1", "[::1]"]}
+    url: {schemes: [http, https], hosts: [localhost, "127.0.0.1", "[::1]"], subdomains: true}
     request_fields:
       /client: {exact: shell}
       /redirects: {exact: none}
@@ -610,7 +619,28 @@ to follow a redirect to another host:
 
 Ordinary curl GET/HEAD requests match this rule. `curl -L` and wget requests
 that follow redirects require another matching rule or approval.
-Shield's generated localhost suggestion uses this same scope.
+This includes service names such as `auth.workspace.localhost` on every port.
+Shield's generated localhost suggestion uses this same scope and requires
+`url-subdomains-v1` in the custom document's capabilities.
+
+When a modeled fetch needs permission, Shield returns it to the agent before
+execution and directs it to open a reusable domain review with `policy_apply`.
+The draft covers HTTP and HTTPS, all paths, query strings and ports, and the
+site's subdomains. Shield uses a bundled Public Suffix List to choose the site:
+`api.example.co.uk` suggests `example.co.uk`; `alice.github.io` stays separate
+from `bob.github.io`. IP addresses remain exact. All localhost service names
+share the local-server draft above. Existing explicit policy rules still decide
+their matching requests, and a configured automatic Ask fallback still applies.
+
+Review the proposed scope before confirming it. Preparing a proposal grants
+nothing. If you choose not to save permission, the agent can request exact
+one-time approval through `request_approve`; that does not save a domain rule.
+Shield offers saving once per domain, agent and session. Declining, dismissing
+or cancelling the confirmation suppresses further save offers for that domain
+in the session, including after reconnecting, and the agent cannot propose any
+other allow rule for that domain in that session, even a narrower one. To add
+one anyway, run `shield rule add` yourself. Later requests still follow
+policy and can need one-time approval. A new session can offer saving again.
 
 ## Directory options
 

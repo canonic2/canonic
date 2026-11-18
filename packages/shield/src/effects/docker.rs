@@ -302,10 +302,14 @@ fn docker_runtime(hints: &mut Hints, start: usize, exec: bool) {
             .push("image-entrypoint-or-container-program");
     } else {
         hints.nested.push(NestedExecution {
+            // Without `--entrypoint`, `run`/`create` pass these words to the
+            // image's own entrypoint, which the arguments do not reveal.
             kind: if exec {
                 "container-exec"
-            } else {
+            } else if entrypoint.is_some() {
                 "container-command"
+            } else {
+                "image-command"
             },
             source: None,
             argv: program,

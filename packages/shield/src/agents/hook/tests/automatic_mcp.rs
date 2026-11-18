@@ -139,6 +139,7 @@ fn automatic_mcp_matching_callbacks_and_configuration_freshness() {
         "automatic_mcp_matching_review_fixture",
         "automatic_mcp_matching_host_scope_fixture",
         "automatic_mcp_matching_large_admin_fixture",
+        "automatic_mcp_matching_preview_fixture",
     ] {
         let environment = assert_fs::TempDir::new().unwrap();
         let home = environment.path().join("home");
@@ -177,6 +178,52 @@ fn automatic_mcp_matching_callbacks_and_configuration_freshness() {
         if fixture.contains("cost") {
             eprint!("{}", String::from_utf8_lossy(&output.stderr));
         }
+    }
+}
+
+#[test]
+#[ignore = "run by parent with isolated agent configuration homes"]
+fn automatic_mcp_matching_preview_fixture() {
+    let (_root, mut context) = fixture("recommended");
+    let root = Path::new(&context.project_root).to_path_buf();
+    let preview = |context: &review::Context, server: &str, tool: &str, query: &str| {
+        let args = json!({"input":{"kind":"mcp","server":server,"tool":tool,
+            "arguments":{"query":query},"original_input":{}},"context":{"cwd":root}});
+        review::mcp::call(
+            context,
+            &review::mcp::Connection::new("automatic-preview".into()),
+            "policy_evaluate",
+            &args,
+            &|| Ok(()),
+        )["data"]
+            .clone()
+    };
+    for (agent, settings, other) in [
+        ("claude", ".mcp.json", "codex"),
+        ("codex", ".codex/config.toml", "claude"),
+    ] {
+        configure(&root, agent, "acme", "acme-connector");
+        context.agent = Some(agent.into());
+        for (tool, query, expected) in [
+            ("docs_search", "rename", "allow"),
+            ("docs_search", "other", "deny"),
+            ("delete", "", "deny"),
+            ("review", "", "ask"),
+        ] {
+            assert_decision(&call(&root, agent, "acme", tool, query), agent, expected);
+            let data = preview(&context, "acme", tool, query);
+            assert_eq!(data["decision"], expected, "{agent} {tool}: {data}");
+            assert_eq!(data["mcp_match"]["alias"], "acme");
+            assert_eq!(data["mcp_match"]["matches"][0]["integration"], "connector");
+        }
+        // A server the agent did not configure, or another agent's settings,
+        // gains no pack rules.
+        assert!(preview(&context, "other", "docs_search", "rename")["mcp_match"].is_null());
+        context.agent = Some(other.into());
+        fs::remove_file(root.join(settings)).unwrap();
+        let data = preview(&context, "acme", "docs_search", "rename");
+        assert!(data["mcp_match"].is_null(), "{agent}: {data}");
+        assert_ne!(data["decision"], "allow");
     }
 }
 

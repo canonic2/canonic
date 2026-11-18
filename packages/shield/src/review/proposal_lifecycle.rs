@@ -199,6 +199,7 @@ pub(super) fn refresh_inspection(state: &mut State) {
 fn refresh_inner(state: &mut State, exact: bool) {
     let now = clock::best_effort_ms();
     drafts::reclaim(&mut state.policy_drafts, now);
+    super::web_reviews::reclaim(&mut state.web_reviews, now);
     for row in &mut state.proposals {
         if row.status != "pending" {
             // Stable original timestamps let even a full legacy checkpoint age

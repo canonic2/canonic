@@ -94,7 +94,7 @@ pub(super) fn list_page(context: &Context, args: &Value) -> Result<Value, Error>
             }
         }
         let mut page = [row];
-        annotate(&mut page, &state, session);
+        annotate(&mut page, &state, session, context.agent.as_deref());
         let [row] = page;
         row
     })
@@ -104,19 +104,30 @@ fn annotate(
     rows: &mut [Value],
     state: &Result<crate::review::model::State, Error>,
     session: Option<&str>,
+    agent: Option<&str>,
 ) {
+    let offered = state
+        .as_ref()
+        .ok()
+        .map(|state| super::super::web_reviews::Offered::new(state, agent));
     for row in rows {
         let ids = row
             .as_object_mut()
             .and_then(|row| row.remove("invocations"))
             .unwrap_or_default();
         row["intentional_invocations"] = json!(ids.as_array().map_or(0, Vec::len));
-        let dismissed = state.as_ref().is_ok_and(|state| {
-            state
-                .dismissed_reviews
-                .iter()
-                .any(|id| row["review_id"] == *id)
+        let web_offered = offered.as_ref().is_some_and(|offered| {
+            row["session_id"]
+                .as_str()
+                .is_some_and(|session| offered.contains(session, &row["suggested_change"]))
         });
+        let dismissed = web_offered
+            || state.as_ref().is_ok_and(|state| {
+                state
+                    .dismissed_reviews
+                    .iter()
+                    .any(|id| row["review_id"] == *id)
+            });
         let proposal = state.as_ref().ok().and_then(|state| {
             state.proposals.iter().find(|proposal| {
                 proposal.links["review_ids"]
@@ -149,7 +160,7 @@ fn annotate(
             json!({"tool":"policy_show","arguments":{"proposal_id":proposal.id},
                 "instruction":"Inspect the existing outcome if needed. Do not repeat an unchanged offer or retry declined/cancelled approval."})
         } else if dismissed {
-            json!({"instruction":"Continue the task. This review is deferred for this session."})
+            json!({"instruction":if web_offered {"This domain's save review was already offered in this session. Do not repeat it; requests still follow active policy."} else {"Continue the task. This review is deferred for this session."}})
         } else if row["decided_as"] == "unresolved" {
             json!({"tool":"history_list","arguments":{"entry_id":row["source_entry_id"]},
                 "instruction":"Inspect the recorded source and effects. Partial analysis is evidence, not an executable rule draft."})

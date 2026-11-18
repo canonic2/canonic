@@ -483,6 +483,17 @@ Runtime ownership enforcement requires a runner that owns the child process.
 
 ### Suggestions and history
 
+Fetches that need permission return to the agent for a reusable domain review
+before execution. The agent prepares `policy_apply` confirmation covering the
+site and its subdomains, all paths, queries and ports. Localhost service names
+share one allowance. If you decline saving permission, exact one-time approval
+remains available. Explicit policy rules and configured automatic fallback keep
+their decisions. See [web allowances](policy-rules.md#allow-searches-and-documentation-fetches).
+Shield remembers a save offer per domain and session. Declining or cancelling
+it suppresses further save offers in that session; individual requests keep
+their existing permission requirements. This survives reconnecting and does
+not depend on request history being enabled.
+
 Native agents can receive an initial pack suggestion when a retained catalog
 advertises the analyzed command. One pack can advertise several executable names;
 multiple matches are alternatives to inspect, rather than a single chosen pack.

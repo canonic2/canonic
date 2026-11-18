@@ -261,7 +261,7 @@ fn handle(
         return Some(paused_reply(adapter, request, &paused));
     }
     if let Some(name) = request.shield_tool {
-        return Some(shield_tool_reply(adapter, request, name, log));
+        return Some(shield_tool_reply(&context, adapter, request, name, log));
     }
     log.event("hook_stage", || json!({"stage":"registration_ready"}));
     if request.operation.is_none() && request.harmless && request.event == Event::Permission {
@@ -461,6 +461,7 @@ fn blocks(adapter: &dyn AgentAdapter, event: Event, reply: &Reply) -> bool {
 }
 
 fn shield_tool_reply(
+    context: &crate::review::Context,
     adapter: &dyn AgentAdapter,
     request: &Request<'_>,
     name: &str,
@@ -474,6 +475,18 @@ fn shield_tool_reply(
         return adapter.completion(request.event_name, None);
     }
     if name == "policy_apply" {
+        if request.event == Event::Before {
+            match crate::review::mcp::claim_native_web_review(context, adapter.spec().id, request.input, Some(request.session)) {
+                Ok(true) => return allow(adapter, request.event, "Shield: this exact saved-site review is already applied.".into()),
+                Err(crate::review::Error::WebReviewOffered) => return adapter.reply(request.event, &Reply {
+                decision: Decision::Deny,
+                reason: "Shield: this saved-site review cannot be opened again.".into(),
+                agent_context: Some("Inspect the existing proposal outcome. Do not repeat a save offer for this domain in this session. Requests still follow active policy and may use exact one-time approval.".into()),
+                }),
+                // Other failures reach the MCP server, which validates again and reports them.
+                Ok(false) | Err(_) => {},
+            }
+        }
         // A tool-permission review needs the host's own prompt at either hook
         // event. Form review remains owned by the MCP server.
         return if adapter.review().confirmation() == super::review::Confirmation::ToolPermission {

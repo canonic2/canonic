@@ -1,6 +1,6 @@
 [package]
 name = "canonic-shield"
-version = "0.41.0"
+version = "0.42.0"
 edition = "2024"
 rust-version = "1.97"
 publish = false
@@ -50,6 +50,8 @@ globset = "0.4.20"
 graphql-parser = "0.4.1"
 regex-automata = "0.4.18"
 url = "2.5.8"
+# Offline site boundaries for reusable web permission drafts.
+psl = "=2.1.250"
 ring = "0.17.14"
 thiserror = "2.0"
 # Enforce the patched TLS provider floor for registry acquisition.

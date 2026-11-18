@@ -3,6 +3,24 @@ use super::*;
 use serde_json::json;
 
 #[test]
+fn web_subdomains_are_visible_in_the_confirmation_headline_and_scope() {
+    let change = json!({"change":"added","rule":{
+        "id":"local-web","decision":"allow","conditions":{"domain":"web","action":"fetch",
+            "url":{"schemes":["http","https"],"hosts":["localhost"],"subdomains":true}}}});
+    let lines = rule_lines(&change, "");
+    assert!(
+        lines[0].contains("localhost and their subdomains on any port"),
+        "{lines:?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.contains("hosts: localhost and their subdomains")),
+        "{lines:?}"
+    );
+}
+
+#[test]
 fn confirmation_names_exact_commands_before_rule_metadata() {
     for (decision, expected) in [
         ("allow", "Allow `npm test` without asking."),

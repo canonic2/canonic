@@ -1135,6 +1135,65 @@ fn web_rules_parse_url_authority_and_typed_fields() {
 }
 
 #[test]
+fn web_subdomains_require_a_declared_capability_and_a_dns_label_boundary() {
+    let rule = json!({"id":"site","decision":"allow","conditions":{"domain":"web","action":"fetch",
+        "url":{"schemes":["https"],"hosts":["example.com","127.0.0.1"],"subdomains":true}}});
+    let document = document(std::slice::from_ref(&rule)).unwrap();
+    assert!(
+        document["capabilities"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("url-subdomains-v1"))
+    );
+    let mut undeclared = document.clone();
+    undeclared["capabilities"] = json!(["structured-rules-v1"]);
+    assert!(CustomRules::from_yaml(&undeclared.to_string()).is_err());
+    for bad in [json!("true"), json!([]), Value::Null] {
+        let mut invalid = rule.clone();
+        invalid["conditions"]["url"]["subdomains"] = bad;
+        assert!(super::document(&[invalid]).is_err());
+    }
+    let evaluator = prepared(vec![rule]);
+    let context = Context {
+        cwd: request(&[]).cwd,
+        environment: None,
+        working_files: None,
+    };
+    for (url, expected) in [
+        ("https://example.com/a", "allow"),
+        ("https://api.example.com:8443/b", "allow"),
+        ("https://deep.api.example.com/", "allow"),
+        ("https://notexample.com/", "ask"),
+        ("https://example.com.evil.test/", "ask"),
+        ("https://127.0.0.1/", "allow"),
+        ("https://evil.127.0.0.1/", "ask"),
+    ] {
+        let input = Input::Web {
+            action: "fetch".into(),
+            url: Some(url.into()),
+            query: None,
+            method: Some("GET".into()),
+            conditions: json!({}),
+            original_input: json!({}),
+        };
+        assert_eq!(
+            evaluator
+                .evaluate_normalized(
+                    &input,
+                    &context,
+                    &context.cwd,
+                    None,
+                    &crate::evidence::now(),
+                    &|| Ok(())
+                )
+                .unwrap()["decision"],
+            expected,
+            "{url}"
+        );
+    }
+}
+
+#[test]
 fn pack_profiles_cover_both_outcomes_and_keep_custom_authority() {
     let row = json!({"id":"required","decision":{"loose":"allow","recommended":"ask","strict":"deny"},"conditions":{"domain":"argv","executable":"acme"},"requirements":{"arguments":{"kind":"exact","values":["inspect"]}},"on_unmet":{"decision":{"loose":"ask","recommended":"deny","strict":"deny"}}});
     let source = json!({"schema_version":1,"kind":"pack","id":"acme/inspect","version":"1.0.0","description":"Acme inspection","license":"MIT","maintainers":["Acme"],"engines":{"shield":"*"},"capabilities":["structured-rules-v1","argument-rules-v1","requirements-v1"],"rules":[row]});

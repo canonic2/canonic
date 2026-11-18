@@ -90,6 +90,9 @@ impl From<Error> for RuntimeError {
             Error::CacheUnavailable => Self::CacheUnavailable,
             Error::PolicyFiles(message) => Self::PolicyFiles(message),
             Error::ApprovalRequired => Self::Invalid("operator approval is required"),
+            Error::WebReviewOffered => {
+                Self::Invalid("site save review already offered in this session")
+            }
             Error::AgentNotConnected => {
                 Self::Invalid("this agent is not connected to Shield in this project")
             }
